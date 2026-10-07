@@ -55,7 +55,7 @@ type "functype//wir_issue6_circular_struct_variant.wado/$cm_export__run" = fn();
 
 type "functype//wir_issue6_circular_struct_variant.wado/run$cold0" = fn(i32);  // TypeId(18)
 
-type "functype//wir_issue6_circular_struct_variant.wado/sum_tree$scalar" = fn(ref "wir_issue6_circular_struct_variant.wado//Tree") -> i32;  // TypeId(19)
+type "functype//wir_issue6_circular_struct_variant.wado/sum_tree$sroa$t.value" = fn(ref "wir_issue6_circular_struct_variant.wado//Tree") -> i32;  // TypeId(19)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
 
@@ -69,7 +69,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
@@ -108,7 +108,7 @@ fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
     let $local_8: ref "core:prelude/string.wado//String";
     let is_negative: bool;
     let x: i64;
-    if @unlikely(local.tee total("wir_issue6_circular_struct_variant.wado/sum_tree$scalar"(global:wir_issue6_circular_struct_variant.wado::$const_obj_4)) != 6) {
+    if @unlikely(local.tee total("wir_issue6_circular_struct_variant.wado/sum_tree$sroa$t.value"(global:wir_issue6_circular_struct_variant.wado::$const_obj_4)) != 6) {
         cold_path;
         "wir_issue6_circular_struct_variant.wado/run$cold0"(total);
         unreachable;
@@ -116,7 +116,7 @@ fn "wir_issue6_circular_struct_variant.wado/run"() with Stdout {
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(total); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_8, is_negative, total);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_8, is_negative, total);
     "core:prelude/primitive.wado/write_decimal_digits"($local_8.repr, is_negative, x, total);
     total = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative = builtin::i32_wrap_i64(x >> 32_i64);
@@ -144,22 +144,22 @@ fn "wir_issue6_circular_struct_variant.wado/run$cold0"(total) with Stdout {
     "core:rt/panic"($local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(120), used: 0 }; if @unlikely(local.tee new_used_16(0 + 67) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_16);
-    }; start_17 = $local_6.used; $local_6.used = new_used_16; builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_17, global:wir_issue6_circular_struct_variant.wado::$const_obj_12, 0, 20); new_used_16 = start_17 + 20; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_11, 0, 3); new_used_16 = start_17 + 23; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_10, 0, 4); new_used_16 = start_17 + 27; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_9, 0, 39); start_17 = start_17 + 66; builtin::array_copy<u8>($load_2, start_17, global:wir_issue6_circular_struct_variant.wado::$const_obj_8, 0, 1); start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_115($local_6), 0, 2); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, start_17, 36_i64, 2); if @unlikely(local.tee start_17($local_6.used + 30) > builtin::array_len($local_6.repr)) {
+    }; start_17 = $local_6.used; $local_6.used = new_used_16; builtin::array_copy<u8>(local.tee $load_2($local_6.repr), start_17, global:wir_issue6_circular_struct_variant.wado::$const_obj_12, 0, 20); new_used_16 = start_17 + 20; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_11, 0, 3); new_used_16 = start_17 + 23; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_10, 0, 4); new_used_16 = start_17 + 27; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_9, 0, 39); start_17 = start_17 + 66; builtin::array_copy<u8>($load_2, start_17, global:wir_issue6_circular_struct_variant.wado::$const_obj_8, 0, 1); start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_115($local_6), 0, 2); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, start_17, 36_i64, 2); if @unlikely(local.tee start_17($local_6.used + 30) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, start_17);
-    }; new_used_16 = $local_6.used; $local_6.used = start_17; builtin::array_copy<u8>(local.tee $load_2($local_6.repr), new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_7, 0, 23); new_used_16 = new_used_16 + 23; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_6, 0, 7); $sroa_$f_buf_115 = $local_6; new_used_16 = total < 0; total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_76(x_76 = builtin::i64_extend_i32_s(total); select i64(x_76 < 0_i64, 0_i64 - x_76, x_76))); new_used_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_115, new_used_16, total); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, new_used_16, x_76, total); if @unlikely(local.tee total($local_6.used + 1) > builtin::array_len($local_6.repr)) {
+    }; new_used_16 = $local_6.used; $local_6.used = start_17; builtin::array_copy<u8>(local.tee $load_2($local_6.repr), new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_7, 0, 23); new_used_16 = new_used_16 + 23; builtin::array_copy<u8>($load_2, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_6, 0, 7); $sroa_$f_buf_115 = $local_6; new_used_16 = total < 0; total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_76(x_76 = builtin::i64_extend_i32_s(total); select i64(x_76 < 0_i64, 0_i64 - x_76, x_76))); new_used_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_115, new_used_16, total); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, new_used_16, x_76, total); if @unlikely(local.tee total($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, total);
     }; new_used_16 = $local_6.used; $local_6.used = total; builtin::array_copy<u8>($local_6.repr, new_used_16, global:wir_issue6_circular_struct_variant.wado::$const_obj_5, 0, 1); $local_6);
     unreachable;
 }
 
-fn "wir_issue6_circular_struct_variant.wado/sum_tree$scalar"(t) {
+fn "wir_issue6_circular_struct_variant.wado/sum_tree$sroa$t.value"(t) {
     let n: ref "wir_issue6_circular_struct_variant.wado//Node";
     return (if ref.test "wir_issue6_circular_struct_variant.wado//Tree::Leaf"(t) -> i32 {
         ref.cast "wir_issue6_circular_struct_variant.wado//Tree::Leaf"(t).payload_0;
     } else {
-        "wir_issue6_circular_struct_variant.wado/sum_tree$scalar"(local.tee n(ref.cast "wir_issue6_circular_struct_variant.wado//Tree::Branch"(t).payload_0).left) + "wir_issue6_circular_struct_variant.wado/sum_tree$scalar"(n.right);
+        "wir_issue6_circular_struct_variant.wado/sum_tree$sroa$t.value"(local.tee n(ref.cast "wir_issue6_circular_struct_variant.wado//Tree::Branch"(t).payload_0).left) + "wir_issue6_circular_struct_variant.wado/sum_tree$sroa$t.value"(n.right);
     });
 }
 
@@ -337,7 +337,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

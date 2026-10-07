@@ -39,7 +39,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
@@ -193,7 +193,7 @@ fn "newtype_link_impl_inherited.wado/run"() with Stdout {
     self_33 = local.tee $sroa_$f_buf_394($local_6);
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:newtype_link_impl_inherited.wado::$const_obj_4;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self_33, $mv_arg_6.repr, $mv_arg_6.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self_33, $mv_arg_6.repr, $mv_arg_6.used);
     if @unlikely(local.tee new_used_512($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_512);
@@ -203,7 +203,7 @@ fn "newtype_link_impl_inherited.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_6.repr, start_513, global:newtype_link_impl_inherited.wado::$const_obj_5, 0, 1);
     $sroa_$f_buf_394 = $local_6;
     $mv_arg_6 = global:newtype_link_impl_inherited.wado::$const_obj_4;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_394, $mv_arg_6.repr, $mv_arg_6.used);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_394, $mv_arg_6.repr, $mv_arg_6.used);
     start_513 = builtin::i32_wrap_i64(local.tee packed_90("wasi/stream-new"()));
     new_used_512 = builtin::i32_wrap_i64(packed_90 >> 32_i64);
     start_513 = "newtype_link_impl_inherited.wado/$cm_binding__Stdout_write_via_stream"(start_513);
@@ -326,7 +326,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, $mv$content$repr, $mv$content$used) {
     let new_used_19: i32;
     let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {

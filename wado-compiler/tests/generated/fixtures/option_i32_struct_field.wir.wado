@@ -69,6 +69,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:option_i32_struct_field.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 119, 105, 100, 116, 104), used: 8 };
 global global:option_i32_struct_field.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 104, 111, 117, 108, 100, 32, 110, 111, 116, 32, 112, 114, 105, 110, 116), used: 16 };
 global global:option_i32_struct_field.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 116, 104, 58, 32, 52, 50), used: 9 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "option_i32_struct_field.wado/run"() with Stdout {
     let packed_50: i64;
@@ -82,7 +83,7 @@ fn "option_i32_struct_field.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$spec0"(tx_52, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_51);
     let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
-    if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 0 })) {
+    if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0)) {
         drop(ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0);
         rx_51 = builtin::i32_wrap_i64(local.tee packed_50("wasi/stream-new"()));
         tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);

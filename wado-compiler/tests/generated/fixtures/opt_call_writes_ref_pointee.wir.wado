@@ -85,7 +85,7 @@ type "functype//opt_call_writes_ref_pointee.wado/$cm_export__run" = fn();  // Ty
 
 type "functype//opt_call_writes_ref_pointee.wado/$initialize_module" = fn();  // TypeId(34)
 
-type "functype//opt_call_writes_ref_pointee.wado/through_held_ref$scalar" = fn(ref "opt_call_writes_ref_pointee.wado//P", bool) -> i32;  // TypeId(35)
+type "functype//opt_call_writes_ref_pointee.wado/through_held_ref$sroa$h.p" = fn(ref "opt_call_writes_ref_pointee.wado//P", bool) -> i32;  // TypeId(35)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(36)
 
@@ -99,7 +99,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(41)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(42)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(42)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(43)
 
@@ -285,7 +285,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/through_ref"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -296,7 +296,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/through_mut_ref"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -307,7 +307,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/across_call_with_mut_arg"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -317,7 +317,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/stored_then_call"(global:opt_call_writes_ref_pointee.wado::G)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -328,7 +328,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/condition_across_call"(global:opt_call_writes_ref_pointee.wado::G)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -337,9 +337,9 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_31);
     global:opt_call_writes_ref_pointee.wado::G.x = 1;
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/through_held_ref$scalar"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
+    is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/through_held_ref$sroa$h.p"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -350,7 +350,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/via_mut_holder"(p, m, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -361,7 +361,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/via_value_holder"(p, struct.new "opt_call_writes_ref_pointee.wado//M" { p: p }, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_4_4, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($local_4_4.repr, is_negative_37, x_41, self_31);
     self_31 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     is_negative_37 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -373,7 +373,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $sroa_$f_buf_441 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     is_negative_37 = local.tee self_31("opt_call_writes_ref_pointee.wado/across_unrelated_write"(p, l, c)) < 0;
     self_31 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(self_31); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_441, is_negative_37, self_31);
+    is_negative_37 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_441, is_negative_37, self_31);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_441.repr, is_negative_37, x_41, self_31);
     if @unlikely(local.tee self_31($local_4_4.used + 1) > builtin::array_len($local_4_4.repr)) {
         cold_path;
@@ -385,7 +385,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $sroa_$f_buf_441 = $local_4_4;
     self_31 = local.tee is_negative_37(p.y) < 0;
     is_negative_37 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(is_negative_37); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    self_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_441, self_31, is_negative_37);
+    self_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_441, self_31, is_negative_37);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_441.repr, self_31, x_41, is_negative_37);
     is_negative_37 = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     self_31 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -396,7 +396,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $sroa_$f_buf_441 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     self_31 = local.tee is_negative_37("opt_call_writes_ref_pointee.wado/across_opaque"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
     is_negative_37 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(is_negative_37); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    self_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_441, self_31, is_negative_37);
+    self_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_441, self_31, is_negative_37);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_441.repr, self_31, x_41, is_negative_37);
     if @unlikely(local.tee is_negative_37($local_4_4.used + 1) > builtin::array_len($local_4_4.repr)) {
         cold_path;
@@ -408,7 +408,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $sroa_$f_buf_441 = $local_4_4;
     self_31 = local.tee c("opt_call_writes_ref_pointee.wado/across_opaque_caller"(global:opt_call_writes_ref_pointee.wado::G, c)) < 0;
     c = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_41(x_41 = builtin::i64_extend_i32_s(c); select i64(x_41 < 0_i64, 0_i64 - x_41, x_41)));
-    self_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_441, self_31, c);
+    self_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_441, self_31, c);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_441.repr, self_31, x_41, c);
     c = builtin::i32_wrap_i64(local.tee x_41("wasi/stream-new"()));
     self_31 = builtin::i32_wrap_i64(x_41 >> 32_i64);
@@ -436,7 +436,7 @@ fn "opt_call_writes_ref_pointee.wado/$initialize_module"() {
     global:opt_call_writes_ref_pointee.wado::G = struct.new "opt_call_writes_ref_pointee.wado//P" { x: 1, y: 0 };
 }
 
-fn "opt_call_writes_ref_pointee.wado/through_held_ref$scalar"(h, c) {
+fn "opt_call_writes_ref_pointee.wado/through_held_ref$sroa$h.p"(h, c) {
     let s: i32;
     s = 0;
     if c {
@@ -615,7 +615,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

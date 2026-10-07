@@ -127,7 +127,7 @@ pub fn display_function_name(name: &str) -> String {
 }
 
 /// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$scalar`. A clone's suffix names no
+/// `core:prelude/string.wado/String::grow$sroa$self.repr`. A clone's suffix names no
 /// function an author wrote, and the span already carries the module path.
 ///
 /// An effect default spells its interface with the same separator and is left
@@ -159,17 +159,36 @@ pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
 
-/// The name of `sroa_param`'s `ordinal`-th scalarized clone of `original`
-/// (from 1). A clone takes a field where the original took the struct around
-/// it; the original is left standing for whatever still needs that shape.
+/// One parameter `sroa_param` narrowed to a field: the parameter, the fields
+/// it was projected through, outermost first, and whether it holds the last
+/// one as `&mut`.
+pub struct NarrowedParam<'a> {
+    pub param: &'a str,
+    pub fields: Vec<&'a str>,
+    pub mutable: bool,
+}
+
+/// The name of `sroa_param`'s clone of `original` that takes each `narrowed`
+/// parameter's field where the original took the struct around it, the
+/// parameters in declaration order: `f$sroa$self.used`, `g$sroa$&mut o.inner.x`.
+/// The name spells everything that makes the clone one, so two runs arriving
+/// at the same clone arrive at the same name.
 #[must_use]
-pub fn sroa_param_name(original: &str, ordinal: usize) -> String {
-    assert!(ordinal >= 1, "clone ordinals count from 1");
-    if ordinal == 1 {
-        format!("{original}$scalar")
-    } else {
-        format!("{original}$scalar{ordinal}")
+pub fn sroa_param_name(original: &str, narrowed: &[NarrowedParam<'_>]) -> String {
+    assert!(!narrowed.is_empty(), "a clone narrows a parameter at least");
+    let mut name = format!("{original}{INTERNAL_PREFIX}sroa");
+    for n in narrowed {
+        name.push_str(INTERNAL_PREFIX);
+        if n.mutable {
+            name.push_str("&mut ");
+        }
+        name.push_str(n.param);
+        for field in &n.fields {
+            name.push('.');
+            name.push_str(field);
+        }
     }
+    name
 }
 
 /// The WIR local holding one field of an aggregate the multi-value ABI took
@@ -2379,7 +2398,7 @@ mod tests {
     #[test]
     fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
         assert_eq!(
-            diagnostic_function_name("core:prelude/string.wado/String::grow$scalar"),
+            diagnostic_function_name("core:prelude/string.wado/String::grow$sroa$&mut self.repr"),
             "String::grow"
         );
         assert_eq!(diagnostic_function_name("main.wado/run"), "run");

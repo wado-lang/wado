@@ -246,19 +246,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32, i32);  // TypeId(67)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar" = fn(ref "core:prelude/string.wado//String", i32, i32, char);  // TypeId(68)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(68)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(69)
+type "functype//tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf" = fn(ref "tagged_template_format_equiv.wado//Pt", ref "core:prelude/string.wado//String");  // TypeId(69)
 
-type "functype//tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "tagged_template_format_equiv.wado//Pt", ref "core:prelude/string.wado//String");  // TypeId(70)
+type "functype//core:prelude/primitive.wado/f64::fmt_into$sroa$self.value" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(70)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed$sroa$self.value" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(71)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar" = fn(f64, i32, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa$self.value" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(72)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(73)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa$self.buf.repr" = fn(ref Array<u8>, i32, i32, char);  // TypeId(73)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(74)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(74)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(75)
 
@@ -350,7 +350,7 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
     tagged = "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_format_equiv.wado/$tmpl$8c07fa04581871ff,[f64,i32,i32,i32,i32,i32,i32,core:prelude/string.wado/String,core:prelude/string.wado/String,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Meters,&core:prelude/string.wado/String,&core:prelude/string.wado/String,bool,char,i32]>"(struct.new "tagged_template_format_equiv.wado//$tmpl$8c07fa04581871ff" { h0: pi, h1: n_1, h2: 255, h3: 255, h4: 5, h5: 8, h6: 1200, h7: s_2, h8: s_2, h9: p, h10: p, h11: p, h12: $hole_0_12, h13: s_2, h14: s_2, h15: 1, h16: 99, h17: n_1 });
     $local_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(305), used: 0 };
     f_49 = local.tee $local_31(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: $local_30 });
-    "core:prelude/primitive.wado/f64::fmt_into$scalar"(pi, f_49);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(pi, f_49);
     if @unlikely(local.tee new_used_60($local_30.used + 1) > builtin::array_len($local_30.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_30, new_used_60);
@@ -463,7 +463,7 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
     $local_30.used = start_61;
     builtin::array_copy<u8>($local_30.repr, new_used_60, global:tagged_template_format_equiv.wado::$const_obj_31, 0, 1);
     $local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_30 };
-    "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(p, $local_31.buf);
+    "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(p, $local_31.buf);
     if @unlikely(local.tee new_used_60($local_30.used + 1) > builtin::array_len($local_30.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_30, new_used_60);
@@ -490,7 +490,7 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
     $local_30.used = new_used_60;
     builtin::array_copy<u8>($local_30.repr, start_61, global:tagged_template_format_equiv.wado::$const_obj_31, 0, 1);
     f_49 = local.tee $local_31(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_30 });
-    "core:prelude/primitive.wado/f64::fmt_into$scalar"(2.5, f_49);
+    "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(2.5, f_49);
     if @unlikely(local.tee start_61($local_30.used + 1) > builtin::array_len($local_30.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_30, start_61);
@@ -581,9 +581,9 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
         break $inline_core_prelude_array_wado_seq_eq_u8__159: 1;
     }) == 0) {
         cold_path;
-        "core:rt/panic"(start_385 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee s_2("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(150)), 61); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tagged_template_format_equiv.wado"), used: 33 }, 33); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385 + 60, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1); $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(s_2); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(29, $local_31); start_385 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(s_2, 36); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:rt/panic"(start_385 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee s_2("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(150)), 61); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 117, 110), used: 3 }, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385 + 23, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385 + 27, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tagged_template_format_equiv.wado"), used: 33 }, 33); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385 + 60, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1); $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(s_2); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa$self.value"(29, $local_31); start_385 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(s_2, 36); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: tagged == plain
-"), used: 28 }, 28); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385 + 28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tagged: "), used: 8 }, 8); $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(s_2); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(tagged, $local_31); start_385 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(s_2, 8); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(s_2.repr, start_385 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("plain: "), used: 7 }, 7); $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(s_2); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_30, $local_31); $local_30 = global:tagged_template_format_equiv.wado::$const_obj_29; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(s_2, $local_30.repr, $local_30.used); s_2);
+"), used: 28 }, 28); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385 + 28, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tagged: "), used: 8 }, 8); $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(s_2); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(tagged, $local_31); start_385 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(s_2, 8); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(s_2.repr, start_385 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("plain: "), used: 7 }, 7); $local_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(s_2); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_30, $local_31); $local_30 = global:tagged_template_format_equiv.wado::$const_obj_29; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(s_2, $local_30.repr, $local_30.used); s_2);
         unreachable;
     }
     $inline_core_prelude_string_wado_String__internal_push_string_165: block {
@@ -1360,7 +1360,7 @@ fn "core:prelude/primitive.wado/write_int_exp"(f, is_negative, abs_value) {
     }
     buf_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     total = "core:prelude/primitive.wado/count_digits_u64"(abs_value);
-    i_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(buf_20, 0, total);
+    i_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(buf_20, 0, total);
     "core:prelude/primitive.wado/write_decimal_digits"(buf_20.repr, i_15, abs_value, total);
     total = buf_20.used - 1;
     i_15 = local.tee $load_3(f.buf).used;
@@ -1434,7 +1434,7 @@ fn "core:prelude/primitive.wado/write_int_exp"(f, is_negative, abs_value) {
     $load_3 = f.buf;
     precision = $sroa_exponent_value_139 < 0;
     $sroa_exponent_value_139 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_value(abs_value = builtin::i64_extend_i32_s($sroa_exponent_value_139); select i64(abs_value < 0_i64, 0_i64 - abs_value, abs_value)));
-    precision = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($load_3, precision, $sroa_exponent_value_139);
+    precision = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($load_3, precision, $sroa_exponent_value_139);
     "core:prelude/primitive.wado/write_decimal_digits"($load_3.repr, precision, abs_value, $sroa_exponent_value_139);
     if f.width > 0 {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(f, i_15);
@@ -1676,7 +1676,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b183;
                                                                         };
                                                                         self_47 = t.h1;
@@ -1769,7 +1769,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b183;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b183;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -1778,7 +1778,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b183;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b183;
                         };
                         $mv_arg_3 = t.h13;
@@ -1847,7 +1847,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b215;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -1939,7 +1939,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b215;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b215;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -1948,7 +1948,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b215;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b215;
                         };
                         $mv_arg_3 = t.h13;
@@ -2017,7 +2017,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b247;
                                                                         };
                                                                         self_47 = t.h1;
@@ -2109,7 +2109,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b247;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b247;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -2118,7 +2118,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b247;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b247;
                         };
                         $mv_arg_3 = t.h13;
@@ -2187,7 +2187,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b279;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -2279,7 +2279,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b279;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b279;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -2288,7 +2288,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b279;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b279;
                         };
                         $mv_arg_3 = t.h13;
@@ -2357,7 +2357,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b311;
                                                                         };
                                                                         self_47 = t.h1;
@@ -2449,7 +2449,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b311;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b311;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -2458,7 +2458,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b311;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b311;
                         };
                         $mv_arg_3 = t.h13;
@@ -2527,7 +2527,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b343;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -2619,7 +2619,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b343;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b343;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -2628,7 +2628,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b343;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b343;
                         };
                         $mv_arg_3 = t.h13;
@@ -2697,7 +2697,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b375;
                                                                         };
                                                                         self_47 = t.h1;
@@ -2789,7 +2789,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b375;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b375;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -2798,7 +2798,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b375;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b375;
                         };
                         $mv_arg_3 = t.h13;
@@ -2867,7 +2867,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b407;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -2959,7 +2959,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b407;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b407;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -2968,7 +2968,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b407;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b407;
                         };
                         $mv_arg_3 = t.h13;
@@ -3037,7 +3037,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b439;
                                                                         };
                                                                         self_47 = t.h1;
@@ -3129,7 +3129,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b439;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b439;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -3138,7 +3138,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b439;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b439;
                         };
                         $mv_arg_3 = t.h13;
@@ -3207,7 +3207,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b471;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -3299,7 +3299,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b471;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b471;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -3308,7 +3308,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b471;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b471;
                         };
                         $mv_arg_3 = t.h13;
@@ -3377,7 +3377,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b503;
                                                                         };
                                                                         self_47 = t.h1;
@@ -3469,7 +3469,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b503;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b503;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -3478,7 +3478,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b503;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b503;
                         };
                         $mv_arg_3 = t.h13;
@@ -3547,7 +3547,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b535;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -3639,7 +3639,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b535;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b535;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -3648,7 +3648,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b535;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b535;
                         };
                         $mv_arg_3 = t.h13;
@@ -3718,7 +3718,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b567;
                                                                         };
                                                                         self_47 = t.h1;
@@ -3810,7 +3810,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b567;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b567;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -3819,7 +3819,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b567;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b567;
                         };
                         $mv_arg_3 = t.h13;
@@ -3888,7 +3888,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b599;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -3980,7 +3980,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b599;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b599;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -3989,7 +3989,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b599;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b599;
                         };
                         $mv_arg_3 = t.h13;
@@ -4058,7 +4058,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b631;
                                                                         };
                                                                         self_47 = t.h1;
@@ -4150,7 +4150,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b631;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b631;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -4159,7 +4159,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b631;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b631;
                         };
                         $mv_arg_3 = t.h13;
@@ -4228,7 +4228,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b663;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -4320,7 +4320,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b663;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b663;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -4329,7 +4329,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b663;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b663;
                         };
                         $mv_arg_3 = t.h13;
@@ -4398,7 +4398,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b695;
                                                                         };
                                                                         self_47 = t.h1;
@@ -4490,7 +4490,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, self_47);
                                             break b695;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b695;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -4499,7 +4499,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b695;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b695;
                         };
                         $mv_arg_3 = t.h13;
@@ -4568,7 +4568,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                                                             };
                                                                             self_45 = t.h0;
                                                                             f_46 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: f_40.buf };
-                                                                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(self_45, f_46);
+                                                                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self_45, f_46);
                                                                             break b727;
                                                                         };
                                                                         is_negative_53 = t.h1;
@@ -4660,7 +4660,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                             "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(f_46, repr_2849, 0, is_negative_53);
                                             break b727;
                                         };
-                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(t.h9, f_40.buf);
+                                        "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(t.h9, f_40.buf);
                                         break b727;
                                     };
                                     "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h10, f_40);
@@ -4669,7 +4669,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_for
                                 "core:prelude/traits.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Inspect::inspect"(t.h11, struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: f_40.buf });
                                 break b727;
                             };
-                            "core:prelude/primitive.wado/f64::fmt_into$scalar"(t.h12.value, f_40);
+                            "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(t.h12.value, f_40);
                             break b727;
                         };
                         $mv_arg_3 = t.h13;
@@ -4768,11 +4768,11 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let new_used_581: i32;
     let start_582: i32;
     let $hfs_used_906: i32;
-    self_11 = $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: block -> i32 {
+    self_11 = $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision_0: block -> i32 {
         if local.tee self_11(f.precision) == -2 {
-            break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: 256;
+            break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision_0: 256;
         }
-        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: self_11;
+        break $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_sroa_self_precision_0: self_11;
     };
     if @unlikely(local.tee new_used_156(local.tee self_12(f.buf).used + 1) > builtin::array_len(self_12.repr)) {
         cold_path;
@@ -5173,13 +5173,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     "core:rt/panic"($local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 }; if @unlikely(local.tee new_used_12(0 + 64) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_12);
-    }; start_13 = $local_4.used; $local_4.used = new_used_12; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_13, global:core:prelude/list.wado::$const_obj_283, 0, 20); new_used_12 = start_13 + 20; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_282, 0, 17); new_used_12 = start_13 + 37; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_281, 0, 4); new_used_12 = start_13 + 41; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_280, 0, 22); start_13 = start_13 + 63; builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_279, 0, 1); start_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_153($local_4), 0, 3); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, start_13, 359_i64, 3); if @unlikely(local.tee start_13($local_4.used + 58) > builtin::array_len($local_4.repr)) {
+    }; start_13 = $local_4.used; $local_4.used = new_used_12; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_13, global:core:prelude/list.wado::$const_obj_283, 0, 20); new_used_12 = start_13 + 20; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_282, 0, 17); new_used_12 = start_13 + 37; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_281, 0, 4); new_used_12 = start_13 + 41; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_280, 0, 22); start_13 = start_13 + 63; builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_279, 0, 1); start_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_153($local_4), 0, 3); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, start_13, 359_i64, 3); if @unlikely(local.tee start_13($local_4.used + 58) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_13);
-    }; new_used_12 = $local_4.used; $local_4.used = start_13; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), new_used_12, global:core:prelude/traits.wado::$const_obj_66, 0, 2); start_13 = new_used_12 + 2; builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_277, 0, 19); start_13 = new_used_12 + 21; builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_276, 0, 30); new_used_12 = new_used_12 + 51; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_275, 0, 7); $sroa_$f_buf_153 = $local_4; new_used_12 = index < 0; index = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s(index); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80))); new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_153, new_used_12, index); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, new_used_12, x_80, index); if @unlikely(local.tee index($local_4.used + 12) > builtin::array_len($local_4.repr)) {
+    }; new_used_12 = $local_4.used; $local_4.used = start_13; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), new_used_12, global:core:prelude/traits.wado::$const_obj_66, 0, 2); start_13 = new_used_12 + 2; builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_277, 0, 19); start_13 = new_used_12 + 21; builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_276, 0, 30); new_used_12 = new_used_12 + 51; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_275, 0, 7); $sroa_$f_buf_153 = $local_4; new_used_12 = index < 0; index = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s(index); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80))); new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_153, new_used_12, index); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, new_used_12, x_80, index); if @unlikely(local.tee index($local_4.used + 12) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, index);
-    }; new_used_12 = $local_4.used; $local_4.used = index; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), new_used_12, global:core:prelude/list.wado::$const_obj_272, 0, 1); new_used_12 = new_used_12 + 1; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_273, 0, 11); $sroa_$f_buf_153 = $local_4; new_used_12 = $v1 < 0; $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s($v1); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80))); new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_153, new_used_12, $v1); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, new_used_12, x_80, $v1); if @unlikely(local.tee $v1($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+    }; new_used_12 = $local_4.used; $local_4.used = index; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), new_used_12, global:core:prelude/list.wado::$const_obj_272, 0, 1); new_used_12 = new_used_12 + 1; builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_273, 0, 11); $sroa_$f_buf_153 = $local_4; new_used_12 = $v1 < 0; $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s($v1); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80))); new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_153, new_used_12, $v1); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, new_used_12, x_80, $v1); if @unlikely(local.tee $v1($local_4.used + 1) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, $v1);
     }; new_used_12 = $local_4.used; $local_4.used = $v1; builtin::array_copy<u8>($local_4.repr, new_used_12, global:core:prelude/list.wado::$const_obj_272, 0, 1); $local_4);
@@ -5192,7 +5192,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_slow"(self, start_pos) {
     let $load_0: ref "core:prelude/string.wado//String";
-    let $load_19: ref "core:prelude/string.wado//String";
+    let $load_20: ref "core:prelude/string.wado//String";
     let content_bytes_2: i32;
     let count: i32;
     let i_16: i32;
@@ -5257,7 +5257,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
                 continue l828;
             };
         };
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar"(self.buf, self_17, count, 48);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa$self.buf.repr"(self.buf.repr, self_17, count, 48);
         return;
     }
     self_17 = self.align;
@@ -5275,17 +5275,17 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
     } else if self_17 == 1 {
         self_17 = count / 2;
         i_16 = count - self_17;
-        value_58 = self_17 * $inline_char__len_utf8_scalar_19: block -> i32 {
+        value_58 = self_17 * $inline_char__len_utf8_sroa_self_value_19: block -> i32 {
             if start_54 < 128 {
-                break $inline_char__len_utf8_scalar_19: 1;
+                break $inline_char__len_utf8_sroa_self_value_19: 1;
             }
             if start_54 < 2048 {
-                break $inline_char__len_utf8_scalar_19: 2;
+                break $inline_char__len_utf8_sroa_self_value_19: 2;
             }
             if start_54 < 65536 {
-                break $inline_char__len_utf8_scalar_19: 3;
+                break $inline_char__len_utf8_sroa_self_value_19: 3;
             }
-            break $inline_char__len_utf8_scalar_19: 4;
+            break $inline_char__len_utf8_sroa_self_value_19: 4;
         };
         $inline_core_prelude_string_wado_String__append_byte_filled_20: block {
             break_if $inline_core_prelude_string_wado_String__append_byte_filled_20 value_58 <= 0;
@@ -5298,9 +5298,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
             builtin::array_fill<u8>($load_0.repr, start_96, 0, value_58);
         };
         start_96 = content_bytes_2 - 1;
-        $load_19 = self.buf;
+        $load_20 = self.buf;
         value_58 = start_pos + value_58;
-        $licm_repr_162 = $load_19.repr;
+        $licm_repr_162 = $load_20.repr;
         b837: block {
             l838: loop {
                 break_if b837 start_96 < 0;
@@ -5311,29 +5311,29 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
                 continue l838;
             };
         };
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar"($load_19, start_pos, self_17, start_54);
-        $load_19 = self.buf;
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa$self.buf.repr"($load_20.repr, start_pos, self_17, start_54);
+        $load_20 = self.buf;
         self_17 = 0;
         b839: block {
             l840: loop {
                 break_if b839 self_17 >= i_16;
-                "core:prelude/string.wado/core:prelude/string.wado/String::push"($load_19, start_54);
+                "core:prelude/string.wado/core:prelude/string.wado/String::push"($load_20, start_54);
                 self_17 = self_17 + 1;
                 continue l840;
             };
         };
     } else {
-        i_16 = count * $inline_char__len_utf8_scalar_29: block -> i32 {
+        i_16 = count * $inline_char__len_utf8_sroa_self_value_29: block -> i32 {
             if start_54 < 128 {
-                break $inline_char__len_utf8_scalar_29: 1;
+                break $inline_char__len_utf8_sroa_self_value_29: 1;
             }
             if start_54 < 2048 {
-                break $inline_char__len_utf8_scalar_29: 2;
+                break $inline_char__len_utf8_sroa_self_value_29: 2;
             }
             if start_54 < 65536 {
-                break $inline_char__len_utf8_scalar_29: 3;
+                break $inline_char__len_utf8_sroa_self_value_29: 3;
             }
-            break $inline_char__len_utf8_scalar_29: 4;
+            break $inline_char__len_utf8_sroa_self_value_29: 4;
         };
         $inline_core_prelude_string_wado_String__append_byte_filled_30: block {
             break_if $inline_core_prelude_string_wado_String__append_byte_filled_30 i_16 <= 0;
@@ -5359,7 +5359,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::apply_padding_s
                 continue l846;
             };
         };
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar"($load_0, start_pos, count, start_54);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa$self.buf.repr"($load_0.repr, start_pos, count, start_54);
     }
 }
 
@@ -6300,70 +6300,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar"(self, at, n, c) {
-    let fill_len: i32;
-    let fill_byte: u8;
-    let j_6: i32;
-    let encoded: ref "core:prelude/string.wado//String";
-    let k: i32;
-    let $licm_repr_47: ref Array<u8>;
-    let $licm_repr_49: ref Array<u8>;
-    let $licm_arith_50: i32;
-    if local.tee fill_len($inline_char__len_utf8_scalar_0: block -> i32 {
-        if c < 128 {
-            break $inline_char__len_utf8_scalar_0: 1;
-        }
-        if c < 2048 {
-            break $inline_char__len_utf8_scalar_0: 2;
-        }
-        if c < 65536 {
-            break $inline_char__len_utf8_scalar_0: 3;
-        }
-        break $inline_char__len_utf8_scalar_0: 4;
-    }) == 1 {
-        fill_byte = c & 255;
-        j_6 = 0;
-        $licm_repr_47 = self.repr;
-        b992: block {
-            l993: loop {
-                break_if b992 j_6 >= n;
-                builtin::array_set_u8($licm_repr_47, at + j_6, fill_byte);
-                j_6 = j_6 + 1;
-                continue l993;
-            };
-        };
-        return;
-    }
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
-    c = 0;
-    $licm_repr_47 = encoded.repr;
-    $licm_repr_49 = self.repr;
-    b994: block {
-        l995: loop {
-            break_if b994 c >= n;
-            k = 0;
-            $licm_arith_50 = at + (c * fill_len);
-            b996: block {
-                l997: loop {
-                    break_if b996 k >= fill_len;
-                    j_6 = $licm_arith_50 + k;
-                    fill_byte = builtin::array_get_value<u8>($licm_repr_47, k);
-                    builtin::array_set_u8($licm_repr_49, j_6, fill_byte);
-                    k = k + 1;
-                    continue l997;
-                };
-            };
-            c = c + 1;
-            continue l995;
-        };
-    };
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa$&mut self.repr"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
-fn "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+fn "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:prelude/traits.wado/Display::fmt$sroa$f.buf"(self, f) {
     let $local_2: ref "core:prelude/string.wado//String";
     let new_used_17: i32;
     let start_18: i32;
@@ -6381,7 +6322,7 @@ fn "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:
     $sroa_$f_buf_101 = $local_2;
     new_used_17 = local.tee start_18(self.x) < 0;
     start_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s(start_18); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
-    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_101, new_used_17, start_18);
+    new_used_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_101, new_used_17, start_18);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_101.repr, new_used_17, x_31, start_18);
     if @unlikely(local.tee start_18($local_2.used + 2) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -6393,7 +6334,7 @@ fn "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:
     $sroa_$f_buf_101 = $local_2;
     start_18 = local.tee new_used_17(self.y) < 0;
     new_used_17 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_31(x_31 = builtin::i64_extend_i32_s(new_used_17); select i64(x_31 < 0_i64, 0_i64 - x_31, x_31)));
-    start_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_101, start_18, new_used_17);
+    start_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_101, start_18, new_used_17);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_101.repr, start_18, x_31, new_used_17);
     if @unlikely(local.tee new_used_17($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -6414,7 +6355,7 @@ fn "tagged_template_format_equiv.wado/tagged_template_format_equiv.wado/Pt^core:
     };
 }
 
-fn "core:prelude/primitive.wado/f64::fmt_into$scalar"(self, f) {
+fn "core:prelude/primitive.wado/f64::fmt_into$sroa$self.value"(self, f) {
     let start_29: i32;
     let bits: u64;
     let is_neg_48: bool;
@@ -6422,7 +6363,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into$scalar"(self, f) {
     let $sroa_slot_54: "core:prelude/fpfmt.wado//enum:SpecialKind";
     let $av_59: i32;
     if local.tee $av_59(f.precision) >= 0 {
-        "core:prelude/primitive.wado/f64::fmt_fixed$scalar"(self, $av_59, f);
+        "core:prelude/primitive.wado/f64::fmt_fixed$sroa$self.value"(self, $av_59, f);
         return;
     }
     $av_59 = 0;
@@ -6490,7 +6431,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into$scalar"(self, f) {
     }
 }
 
-fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar"(self, precision, f) {
+fn "core:prelude/primitive.wado/f64::fmt_fixed$sroa$self.value"(self, precision, f) {
     let start_98: i32;
     let bits: u64;
     let is_neg_117: bool;
@@ -6613,7 +6554,7 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed$scalar"(self, precision, f) {
     }
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa$self.value"(self, f) {
     let is_negative: bool;
     let x: i64;
     is_negative = self < 0;
@@ -6626,7 +6567,63 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa$self.buf.repr"(self, at, n, c) {
+    let fill_len: i32;
+    let fill_byte: u8;
+    let j_6: i32;
+    let encoded: ref "core:prelude/string.wado//String";
+    let k: i32;
+    let $licm_repr_48: ref Array<u8>;
+    let $licm_arith_50: i32;
+    if local.tee fill_len($inline_char__len_utf8_sroa_self_value_0: block -> i32 {
+        if c < 128 {
+            break $inline_char__len_utf8_sroa_self_value_0: 1;
+        }
+        if c < 2048 {
+            break $inline_char__len_utf8_sroa_self_value_0: 2;
+        }
+        if c < 65536 {
+            break $inline_char__len_utf8_sroa_self_value_0: 3;
+        }
+        break $inline_char__len_utf8_sroa_self_value_0: 4;
+    }) == 1 {
+        fill_byte = c & 255;
+        j_6 = 0;
+        b1028: block {
+            l1029: loop {
+                break_if b1028 j_6 >= n;
+                builtin::array_set_u8(self, at + j_6, fill_byte);
+                j_6 = j_6 + 1;
+                continue l1029;
+            };
+        };
+        return;
+    }
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
+    c = 0;
+    $licm_repr_48 = encoded.repr;
+    b1030: block {
+        l1031: loop {
+            break_if b1030 c >= n;
+            k = 0;
+            $licm_arith_50 = at + (c * fill_len);
+            b1032: block {
+                l1033: loop {
+                    break_if b1032 k >= fill_len;
+                    j_6 = $licm_arith_50 + k;
+                    fill_byte = builtin::array_get_value<u8>($licm_repr_48, k);
+                    builtin::array_set_u8(self, j_6, fill_byte);
+                    k = k + 1;
+                    continue l1033;
+                };
+            };
+            c = c + 1;
+            continue l1031;
+        };
+    };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

@@ -86,7 +86,7 @@ type "functype//effect_handler_bundled.wado/effect_handler_bundled.wado/$Closure
 
 type "functype//effect_handler_bundled.wado/effect_handler_bundled.wado/$Closure_1::$call" = fn(ref "effect_handler_bundled.wado//$Closure_1") -> i32;  // TypeId(30)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(31)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(31)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
@@ -198,7 +198,7 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     $sroa_$f_buf_150 = $local_2_18;
     $load_5 = $local_2_21 < 0;
     $local_2_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($local_2_21); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
-    $load_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_150, $load_5, $local_2_21);
+    $load_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_150, $load_5, $local_2_21);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, $load_5, x_56, $local_2_21);
     if @unlikely(local.tee $local_2_21($local_2_18.used + 5) > builtin::array_len($local_2_18.repr)) {
         cold_path;
@@ -210,7 +210,7 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     $sroa_$f_buf_150 = $local_2_18;
     $load_5 = $local_2_24 < 0;
     $local_2_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($local_2_24); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
-    $load_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_150, $load_5, $local_2_24);
+    $load_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_150, $load_5, $local_2_24);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_150.repr, $load_5, x_56, $local_2_24);
     $local_2_24 = builtin::i32_wrap_i64(local.tee x_56("wasi/stream-new"()));
     $load_5 = builtin::i32_wrap_i64(x_56 >> 32_i64);
@@ -229,7 +229,7 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_2_18.repr, $load_5, global:effect_handler_bundled.wado::$const_obj_4, 0, 12);
     $local_2_24 = local.tee $load_5(h.count) < 0;
     $load_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_56(x_56 = builtin::i64_extend_i32_s($load_5); select i64(x_56 < 0_i64, 0_i64 - x_56, x_56)));
-    $local_2_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_2_18, $local_2_24, $load_5);
+    $local_2_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_2_18, $local_2_24, $load_5);
     "core:prelude/primitive.wado/write_decimal_digits"($local_2_18.repr, $local_2_24, x_56, $load_5);
     $load_5 = builtin::i32_wrap_i64(local.tee x_56("wasi/stream-new"()));
     $local_2_24 = builtin::i32_wrap_i64(x_56 >> 32_i64);
@@ -447,7 +447,7 @@ fn "effect_handler_bundled.wado/effect_handler_bundled.wado/$Closure_1::$call"(s
     return self_1.count;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

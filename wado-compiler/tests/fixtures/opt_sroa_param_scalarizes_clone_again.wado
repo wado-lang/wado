@@ -7,9 +7,9 @@
 // reduced that parameter to its one field when the clone was minted. Every
 // call then built the wrapper only to pass it.
 //
-// The second clone is a clone of `Urls::serialize`, numbered beside the first,
-// not `$scalar$scalar`: a clone is identified by its original and the types it
-// takes, and its name only has to be unique.
+// The clone that narrows both parameters is named for `Urls::serialize` and
+// both narrowings, however many rounds it took to reach: the name spells what
+// makes the clone one.
 
 use { println, Stdout } from "core:cli";
 use { to_string } from "core:json";
@@ -35,10 +35,10 @@ __DATA__
 {
     "stdout": "{\"description\":{\"urls\":[1,2]},\"url\":{\"urls\":[3]}}\n",
     "wir_expect:O2": [
-        "fn \"core:serde/opt_sroa_param_scalarizes_clone_again.wado/Urls^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar2\"("
+        "fn \"core:serde/opt_sroa_param_scalarizes_clone_again.wado/Urls^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa$self.urls$s.buf\"("
     ],
     "wir_not_expect:O2": [
         "struct.new \"core:json//JsonSerializer\"",
-        "$scalar$scalar"
+        "$sroa$self.urls$sroa"
     ]
 }

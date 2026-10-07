@@ -58,12 +58,6 @@ pub struct NirPackage {
     /// callers in a later round, so its current call sites are not its whole
     /// contract. Identity, not a name test — see the declaration-identity WEP.
     pub sroa_param_clones: IndexMap<FuncId, FuncId>,
-    /// Each of those clones by what makes it one: its original, and for every
-    /// parameter the type it takes and the fields it was projected through. The
-    /// type alone is not enough, since two fields can share one. A run arriving
-    /// at a clone some earlier run minted, by whatever chain of clones, reuses
-    /// it.
-    pub sroa_param_clone_ids: IndexMap<(FuncId, Vec<SroaParamShape>), FuncId>,
     /// For each of those clones, which of its locals holds a scalarized field,
     /// and the fields it was projected through, outermost first: the last names
     /// the field the local is now, and a clone of a clone carries its source's
@@ -167,12 +161,9 @@ pub struct SroaParamProjection {
     pub struct_key: (String, ModuleSource),
     /// The field's declaration index in it.
     pub field_index: u32,
+    /// Whether the parameter holds the field as `&mut` rather than by value.
+    pub mutable: bool,
 }
-
-/// A parameter of an `optimize/sroa_param` clone as its identity sees it: the
-/// type it takes and the fields it was projected through, none for a parameter
-/// taken as the original took it.
-pub type SroaParamShape = (TypeId, Vec<SroaParamProjection>);
 
 impl NirPackage {
     /// Default short-string inline threshold (UTF-8 bytes), used for build

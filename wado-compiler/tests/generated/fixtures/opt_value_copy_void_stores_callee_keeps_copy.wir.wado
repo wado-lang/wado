@@ -76,7 +76,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_cop
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>::grow" = fn(ref "core:prelude//List<opt_value_copy_void_stores_callee_keeps_copy.wado/Item>");  // TypeId(28)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(29)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(29)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
@@ -266,7 +266,7 @@ fn "opt_value_copy_void_stores_callee_keeps_copy.wado/$cm_export__run"() {
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative = local.tee self_9("opt_value_copy_void_stores_callee_keeps_copy.wado/build"()) < 0;
     self_9 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_9); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_0, is_negative, self_9);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_0, is_negative, self_9);
     "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative, x, self_9);
     self_9 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative = builtin::i32_wrap_i64(x >> 32_i64);
@@ -459,7 +459,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_void_store
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

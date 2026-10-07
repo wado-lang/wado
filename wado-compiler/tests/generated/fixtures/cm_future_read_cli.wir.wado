@@ -86,6 +86,7 @@ import fn wasi/future-write:s32 from "wasi/future-write:s32";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:cm_future_read_cli.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "cm_future_read_cli.wado/run"() with Stdout {
     let result: ref "core:prelude/types.wado//Option<i32>";
@@ -161,7 +162,7 @@ fn "cm_future_read_cli.wado/$cm_future_read_i32"(handle) {
         "wasi/waitable-set-drop"(ws);
         status_2 = status_9;
     }
-    result = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
+    result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
     if (status_2 & 15) == 0 {
         result = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: builtin::load_i32(ptr) };
     }

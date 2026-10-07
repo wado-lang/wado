@@ -35,6 +35,8 @@ import memory (1) from "mem/memory";
 import fn wasi/resource-drop:cm_optional_resource_return.wado#device from "wasi/resource-drop:cm_optional_resource_return.wado#device";
 import fn wasi/task-return from "wasi/task-return";
 
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0: ref "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
+
 fn "cm_optional_resource_return.wado/$cm_binding__Gfx_get_device"() with Gfx {
     return "wasi/wasi:demo/Gfx::get_device"();
 }
@@ -45,7 +47,7 @@ fn "cm_optional_resource_return.wado/$cm_binding__Device_adapter"(self) with Dev
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:demo/Device::adapter"(self, $outptr);
     self = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>" { 0 };
+    $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>$0;
     if self != 0 {
         $option_result = struct.new "core:prelude/types.wado//Option<cm_optional_resource_return.wado/Adapter>::Some" { discriminant: 1, payload_0: builtin::load_i32($outptr + 4) };
     }

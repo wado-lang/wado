@@ -32,6 +32,8 @@ import fn wasi/wasi:demo/Gfx::pick from "wasi/wasi:demo/Gfx::pick";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
+global global:core:builtin::$unit_case$cm_variant_with_own_payload_param.wado//Target$1: ref "cm_variant_with_own_payload_param.wado//Target" = struct.new "cm_variant_with_own_payload_param.wado//Target" { 1 };
+
 fn "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(target) with Gfx {
     let $target_p0: i32;
     $target_p0 = 0;
@@ -48,7 +50,7 @@ fn "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device"() with G
 
 fn "cm_variant_with_own_payload_param.wado/$cm_export__run"() {
     drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(struct.new "cm_variant_with_own_payload_param.wado//Target::Dev" { discriminant: 0, payload_0: "cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_get_device"() }));
-    drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(struct.new "cm_variant_with_own_payload_param.wado//Target" { 1 }));
+    drop("cm_variant_with_own_payload_param.wado/$cm_binding__Gfx_pick"(global:core:builtin::$unit_case$cm_variant_with_own_payload_param.wado//Target$1));
     "wasi/task-return"(0);
 }
 

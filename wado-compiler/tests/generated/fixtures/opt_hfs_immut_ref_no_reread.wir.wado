@@ -40,7 +40,7 @@ type "functype//opt_hfs_immut_ref_no_reread.wado/run$cold0" = fn(i32);  // TypeI
 
 type "functype//opt_hfs_immut_ref_no_reread.wado/run$cold1" = fn(i32);  // TypeId(15)
 
-type "functype//opt_hfs_immut_ref_no_reread.wado/read_x$scalar" = fn(i32) -> i32;  // TypeId(16)
+type "functype//opt_hfs_immut_ref_no_reread.wado/read_x$sroa$c.x" = fn(i32) -> i32;  // TypeId(16)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
@@ -52,7 +52,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
 
@@ -107,7 +107,7 @@ fn "opt_hfs_immut_ref_no_reread.wado/run"() {
                 break b0;
             }
             $hfs_x_10 = $hfs_x_10 + 1;
-            total = local.tee total(local.tee total(total + $hfs_x_10) + $hfs_x_10) + "opt_hfs_immut_ref_no_reread.wado/read_x$scalar"($hfs_x_10);
+            total = local.tee total(local.tee total(total + $hfs_x_10) + $hfs_x_10) + "opt_hfs_immut_ref_no_reread.wado/read_x$sroa$c.x"($hfs_x_10);
             i = i + 1;
             continue l1;
         };
@@ -152,7 +152,7 @@ fn "opt_hfs_immut_ref_no_reread.wado/run$cold0"($v0) {
     builtin::array_copy<u8>($load_2, new_used_16, global:opt_hfs_immut_ref_no_reread.wado::$const_obj_8, 0, 32);
     start_17 = start_17 + 59;
     builtin::array_copy<u8>($load_2, start_17, global:opt_hfs_immut_ref_no_reread.wado::$const_obj_7, 0, 1);
-    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_115($local_8), 0, 2);
+    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_115($local_8), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, start_17, 38_i64, 2);
     if @unlikely(local.tee start_17($local_8.used + 26) > builtin::array_len($local_8.repr)) {
         cold_path;
@@ -166,7 +166,7 @@ fn "opt_hfs_immut_ref_no_reread.wado/run$cold0"($v0) {
     $sroa_$f_buf_115 = $local_8;
     new_used_16 = $v0 < 0;
     $v0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_76(x_76 = builtin::i64_extend_i32_s($v0); select i64(x_76 < 0_i64, 0_i64 - x_76, x_76)));
-    new_used_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_115, new_used_16, $v0);
+    new_used_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_115, new_used_16, $v0);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, new_used_16, x_76, $v0);
     if @unlikely(local.tee $v0($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
@@ -202,7 +202,7 @@ fn "opt_hfs_immut_ref_no_reread.wado/run$cold1"(total) {
     builtin::array_copy<u8>($load_2, new_used_16, global:opt_hfs_immut_ref_no_reread.wado::$const_obj_8, 0, 32);
     start_17 = start_17 + 59;
     builtin::array_copy<u8>($load_2, start_17, global:opt_hfs_immut_ref_no_reread.wado::$const_obj_7, 0, 1);
-    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_115($local_6), 0, 2);
+    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_115($local_6), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, start_17, 37_i64, 2);
     if @unlikely(local.tee start_17($local_6.used + 31) > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -216,7 +216,7 @@ fn "opt_hfs_immut_ref_no_reread.wado/run$cold1"(total) {
     $sroa_$f_buf_115 = $local_6;
     new_used_16 = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_76(x_76 = builtin::i64_extend_i32_s(total); select i64(x_76 < 0_i64, 0_i64 - x_76, x_76)));
-    new_used_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_115, new_used_16, total);
+    new_used_16 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_115, new_used_16, total);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_115.repr, new_used_16, x_76, total);
     if @unlikely(local.tee total($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -229,7 +229,7 @@ fn "opt_hfs_immut_ref_no_reread.wado/run$cold1"(total) {
     unreachable;
 }
 
-fn "opt_hfs_immut_ref_no_reread.wado/read_x$scalar"(c) {
+fn "opt_hfs_immut_ref_no_reread.wado/read_x$sroa$c.x"(c) {
     return c;
 }
 
@@ -403,7 +403,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

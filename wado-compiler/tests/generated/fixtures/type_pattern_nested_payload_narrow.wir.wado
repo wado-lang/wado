@@ -90,7 +90,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^cor
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(31)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
@@ -126,6 +126,7 @@ global global:core:prelude/list.wado::$const_obj_12: ref Array<u8> = array.new_f
 global global:core:prelude/list.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
 global global:core:prelude/list.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101);
 global global:core:prelude/list.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>$0: ref "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" = struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 0 };
 
 fn "type_pattern_nested_payload_narrow.wado/$cm_callback__call"(key) {
     let self_2: ref "core:prelude//List<fn()->()>";
@@ -203,7 +204,7 @@ fn "type_pattern_nested_payload_narrow.wado/$cm_export__run"() {
     } else {
         0;
     }));
-    drop((if ref.test "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"(local.tee $local_2_2(struct.new "tuple//[core:prelude/types.wado/Option<dep:../../../package-web/src/dom.wado/Element>, i32]" { 0: struct.new "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>" { 0 }, 1: 0 }.0)) -> i32 {
+    drop((if ref.test "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"(local.tee $local_2_2(struct.new "tuple//[core:prelude/types.wado/Option<dep:../../../package-web/src/dom.wado/Element>, i32]" { 0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>$0, 1: 0 }.0)) -> i32 {
         el_1 = ref.cast "core:prelude/types.wado//Option<dep:../../../package-web/src/dom.wado/Element>::Some"($local_2_2).payload_0;
         ((4782822804267466752_i64 <=u el_1) & (el_1 <u 4783948704174309376_i64)) & 1;
     } else {
@@ -397,7 +398,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/tr
     builtin::array_copy<u8>($load_2, new_used_12, global:core:prelude/list.wado::$const_obj_12, 0, 22);
     start_13 = start_13 + 63;
     builtin::array_copy<u8>($load_2, start_13, global:core:prelude/list.wado::$const_obj_11, 0, 1);
-    start_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_153($local_4), 0, 3);
+    start_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_153($local_4), 0, 3);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, start_13, 359_i64, 3);
     if @unlikely(local.tee start_13($local_4.used + 58) > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -415,7 +416,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/tr
     $sroa_$f_buf_153 = $local_4;
     new_used_12 = index < 0;
     index = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s(index); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80)));
-    new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_153, new_used_12, index);
+    new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_153, new_used_12, index);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, new_used_12, x_80, index);
     if @unlikely(local.tee index($local_4.used + 12) > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -429,7 +430,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/tr
     $sroa_$f_buf_153 = $local_4;
     new_used_12 = $v1 < 0;
     $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_80(x_80 = builtin::i64_extend_i32_s($v1); select i64(x_80 < 0_i64, 0_i64 - x_80, x_80)));
-    new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_153, new_used_12, $v1);
+    new_used_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_153, new_used_12, $v1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_153.repr, new_used_12, x_80, $v1);
     if @unlikely(local.tee $v1($local_4.used + 1) > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -454,7 +455,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

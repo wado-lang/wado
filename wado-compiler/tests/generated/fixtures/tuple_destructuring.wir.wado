@@ -100,9 +100,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(36)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(36)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(37)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(37)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
@@ -150,6 +150,7 @@ global global:tuple_destructuring.wado::$const_obj_38: ref Array<u8> = array.new
 global global:tuple_destructuring.wado::$const_obj_40: ref Array<u8> = array.new_fixed<u8>(110, 117, 109, 115, 58, 32);
 global global:tuple_destructuring.wado::$const_obj_42: ref Array<u8> = array.new_fixed<u8>(98, 111, 111, 108, 115, 58, 32);
 global global:tuple_destructuring.wado::$const_obj_67: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50, 44, 32, 104, 101, 108, 108, 111), used: 9 };
+global global:core:builtin::$unit_case$tuple_destructuring.wado//TupleValue$0: ref "tuple_destructuring.wado//TupleValue" = struct.new "tuple_destructuring.wado//TupleValue" { 0 };
 
 fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
     let $load_3: i32;
@@ -359,7 +360,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
     let is_negative_66: bool;
     let packed_127: i64;
     let $sroa_$f_buf_175: ref "core:prelude/string.wado//String";
-    offset_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_175(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 })), 0, 2);
+    offset_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_175(local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 })), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_175.repr, offset_24, 10_i64, 2);
     if @unlikely(local.tee offset_24($local_7.used + 2) > builtin::array_len($local_7.repr)) {
         cold_path;
@@ -368,7 +369,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
     start_38 = $local_7.used;
     $local_7.used = offset_24;
     builtin::array_copy<u8>($local_7.repr, start_38, global:tuple_destructuring.wado::$const_obj_14, 0, 2);
-    start_38 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_175($local_7), 0, 2);
+    start_38 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_175($local_7), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_175.repr, start_38, 20_i64, 2);
     start_38 = builtin::i32_wrap_i64(local.tee packed_127("wasi/stream-new"()));
     offset_24 = builtin::i32_wrap_i64(packed_127 >> 32_i64);
@@ -382,7 +383,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
         $sroa_$f_buf_175 = local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 });
         is_negative_66 = start_38 < 0;
         start_38 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_127(packed_127 = builtin::i64_extend_i32_s(start_38); select i64(packed_127 < 0_i64, 0_i64 - packed_127, packed_127)));
-        is_negative_66 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_175, is_negative_66, start_38);
+        is_negative_66 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_175, is_negative_66, start_38);
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_175.repr, is_negative_66, packed_127, start_38);
         if @unlikely(local.tee start_38($local_7.used + 2) > builtin::array_len($local_7.repr)) {
             cold_path;
@@ -394,7 +395,7 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
         $sroa_$f_buf_175 = $local_7;
         is_negative_66 = offset_24 < 0;
         offset_24 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_127(packed_127 = builtin::i64_extend_i32_s(offset_24); select i64(packed_127 < 0_i64, 0_i64 - packed_127, packed_127)));
-        is_negative_66 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_175, is_negative_66, offset_24);
+        is_negative_66 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_175, is_negative_66, offset_24);
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_175.repr, is_negative_66, packed_127, offset_24);
         offset_24 = builtin::i32_wrap_i64(local.tee packed_127("wasi/stream-new"()));
         is_negative_66 = builtin::i32_wrap_i64(packed_127 >> 32_i64);
@@ -462,7 +463,7 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     start_24 = $local_2.used;
     $local_2.used = new_used_23;
     builtin::array_copy<u8>($local_2.repr, start_24, global:tuple_destructuring.wado::$const_obj_23, 0, 8);
-    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_159($local_2), 0, 2);
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_159($local_2), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_159.repr, start_24, 10_i64, 2);
     if @unlikely(local.tee start_24($local_2.used + 2) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -471,7 +472,7 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     new_used_23 = $local_2.used;
     $local_2.used = start_24;
     builtin::array_copy<u8>($local_2.repr, new_used_23, global:tuple_destructuring.wado::$const_obj_14, 0, 2);
-    new_used_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_159($local_2), 0, 2);
+    new_used_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_159($local_2), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_159.repr, new_used_23, 20_i64, 2);
     new_used_23 = builtin::i32_wrap_i64(local.tee packed_65("wasi/stream-new"()));
     start_24 = builtin::i32_wrap_i64(packed_65 >> 32_i64);
@@ -486,7 +487,7 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     start_24 = $local_2.used;
     $local_2.used = new_used_23;
     builtin::array_copy<u8>($local_2.repr, start_24, global:tuple_destructuring.wado::$const_obj_21, 0, 7);
-    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_159($local_2), 0, 3);
+    start_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_159($local_2), 0, 3);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_159.repr, start_24, 100_i64, 3);
     if @unlikely(local.tee start_24($local_2.used + 2) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -495,7 +496,7 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     new_used_23 = $local_2.used;
     $local_2.used = start_24;
     builtin::array_copy<u8>($local_2.repr, new_used_23, global:tuple_destructuring.wado::$const_obj_14, 0, 2);
-    new_used_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_159($local_2), 0, 3);
+    new_used_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_159($local_2), 0, 3);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_159.repr, new_used_23, 200_i64, 3);
     new_used_23 = builtin::i32_wrap_i64(local.tee packed_65("wasi/stream-new"()));
     start_24 = builtin::i32_wrap_i64(packed_65 >> 32_i64);
@@ -511,7 +512,7 @@ fn "tuple_destructuring.wado/destruct_nested"() with Stdout {
     let start_36: i32;
     let packed: i64;
     let $sroa_$f_buf_102: ref "core:prelude/string.wado//String";
-    offset_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_102(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 })), 0, 1);
+    offset_22 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_102(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 })), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, offset_22, 1_i64, 1);
     if @unlikely(local.tee offset_22($local_3.used + 2) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -520,7 +521,7 @@ fn "tuple_destructuring.wado/destruct_nested"() with Stdout {
     start_36 = $local_3.used;
     $local_3.used = offset_22;
     builtin::array_copy<u8>($local_3.repr, start_36, global:tuple_destructuring.wado::$const_obj_14, 0, 2);
-    start_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_102($local_3), 0, 1);
+    start_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_102($local_3), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, start_36, 2_i64, 1);
     if @unlikely(local.tee start_36($local_3.used + 2) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -549,7 +550,7 @@ fn "tuple_destructuring.wado/destruct_wildcard"() with Stdout {
     let start_35: i32;
     let packed: i64;
     let $sroa_$f_buf_72: ref "core:prelude/string.wado//String";
-    offset_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_72(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 })), 0, 1);
+    offset_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_72(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 })), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, offset_21, 1_i64, 1);
     if @unlikely(local.tee offset_21($local_2.used + 2) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -558,7 +559,7 @@ fn "tuple_destructuring.wado/destruct_wildcard"() with Stdout {
     start_35 = $local_2.used;
     $local_2.used = offset_21;
     builtin::array_copy<u8>($local_2.repr, start_35, global:tuple_destructuring.wado::$const_obj_14, 0, 2);
-    start_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_72($local_2), 0, 1);
+    start_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_72($local_2), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, start_35, 3_i64, 1);
     start_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     offset_21 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -616,7 +617,7 @@ fn "tuple_destructuring.wado/destruct_match"() with Stdout {
     let start_46: i32;
     let packed_66: i64;
     let $sroa_$f_buf_141: ref "core:prelude/string.wado//String";
-    offset_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_141(local.tee $local_14(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 })), 0, 1);
+    offset_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_141(local.tee $local_14(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 })), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_141.repr, offset_32, 5_i64, 1);
     if @unlikely(local.tee offset_32($local_14.used + 2) > builtin::array_len($local_14.repr)) {
         cold_path;
@@ -625,7 +626,7 @@ fn "tuple_destructuring.wado/destruct_match"() with Stdout {
     start_46 = $local_14.used;
     $local_14.used = offset_32;
     builtin::array_copy<u8>($local_14.repr, start_46, global:tuple_destructuring.wado::$const_obj_14, 0, 2);
-    start_46 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_141($local_14), 0, 2);
+    start_46 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $sroa_$f_buf_141($local_14), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_141.repr, start_46, 10_i64, 2);
     start_46 = builtin::i32_wrap_i64(local.tee packed_66("wasi/stream-new"()));
     offset_32 = builtin::i32_wrap_i64(packed_66 >> 32_i64);
@@ -714,7 +715,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, text_47.repr, text_47.used);
         if @unlikely(local.tee x_7($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_7);
@@ -728,7 +729,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, text_47.repr, text_47.used);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Number"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Number"($load_1) -> i32 {
         x_9 = ref.cast "tuple_destructuring.wado//TupleValue::Number"($load_0).payload_0;
@@ -748,7 +749,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         text_47 = $local_8_13;
         start_40 = x_9 < 0;
         x_9 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(x_9); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(text_47, start_40, x_9);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, start_40, x_9);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_$f_buf_893(text_47).repr, start_40, x_92, x_9);
         if @unlikely(local.tee x_9($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
@@ -760,7 +761,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         text_47 = $local_8_13;
         start_40 = y_10 < 0;
         y_10 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(y_10); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(text_47, start_40, y_10);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, start_40, y_10);
         "core:prelude/primitive.wado/write_decimal_digits"(text_47.repr, start_40, x_92, y_10);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) -> i32 {
@@ -823,7 +824,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
         if @unlikely(local.tee x_165($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_165);
@@ -837,7 +838,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Number"($load_1) & ref.test "tuple_destructuring.wado//TupleValue::Number"($load_0) -> i32 {
         x_167 = ref.cast "tuple_destructuring.wado//TupleValue::Number"($load_1).payload_0;
@@ -857,7 +858,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         $sroa_$f_buf_893 = $local_8_13;
         start_40 = x_167 < 0;
         x_167 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(x_167); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, start_40, x_167);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, start_40, x_167);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee text_47($sroa_$f_buf_893).repr, start_40, x_92, x_167);
         if @unlikely(local.tee x_167($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
@@ -869,7 +870,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         $sroa_$f_buf_893 = $local_8_13;
         start_40 = y_168 < 0;
         y_168 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(y_168); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, start_40, y_168);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, start_40, y_168);
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_893.repr, start_40, x_92, y_168);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) -> i32 {
@@ -905,7 +906,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     $sroa_x_used_838 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"($sroa_x_used_838);
     "core:rt/write_string_to_stream$spec0"(start_40, $local_8_13.repr, $local_8_13.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_x_used_838);
-    $local_8_13 = (if $load_0 = local.tee $match_scrut_0(struct.new "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]" { 0: struct.new "tuple_destructuring.wado//TupleValue" { 0 }, 1: struct.new "tuple_destructuring.wado//TupleValue" { 0 } }).0; $load_1 = $match_scrut_0.1; ($load_0.discriminant == 0) & ($load_1.discriminant == 0) -> ref "core:prelude/string.wado//String" {
+    $local_8_13 = (if $load_0 = local.tee $match_scrut_0(struct.new "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]" { 0: global:core:builtin::$unit_case$tuple_destructuring.wado//TupleValue$0, 1: global:core:builtin::$unit_case$tuple_destructuring.wado//TupleValue$0 }).0; $load_1 = $match_scrut_0.1; ($load_0.discriminant == 0) & ($load_1.discriminant == 0) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("both null"), used: 9 };
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Bool"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Bool"($load_1) -> i32 {
         x_323 = ref.cast "tuple_destructuring.wado//TupleValue::Bool"($load_0).payload_0;
@@ -928,7 +929,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, text_47.repr, text_47.used);
         if @unlikely(local.tee x_323($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_323);
@@ -942,7 +943,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, text_47.repr, text_47.used);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Number"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Number"($load_1) -> i32 {
         x_325 = ref.cast "tuple_destructuring.wado//TupleValue::Number"($load_0).payload_0;
@@ -962,7 +963,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         text_47 = $local_8_13;
         start_40 = x_325 < 0;
         x_325 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(x_325); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(text_47, start_40, x_325);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, start_40, x_325);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_$f_buf_893(text_47).repr, start_40, x_92, x_325);
         if @unlikely(local.tee x_325($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
@@ -974,7 +975,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         text_47 = $local_8_13;
         start_40 = y_326 < 0;
         y_326 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(y_326); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(text_47, start_40, y_326);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, start_40, y_326);
         "core:prelude/primitive.wado/write_decimal_digits"(text_47.repr, start_40, x_92, y_326);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) -> i32 {
@@ -1033,7 +1034,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
         if @unlikely(local.tee x_481($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_481);
@@ -1047,7 +1048,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, $sroa_$f_buf_893.repr, $sroa_$f_buf_893.used);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Number"($load_1) & ref.test "tuple_destructuring.wado//TupleValue::Number"($load_0) -> i32 {
         x_483 = ref.cast "tuple_destructuring.wado//TupleValue::Number"($load_1).payload_0;
@@ -1067,7 +1068,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         $sroa_$f_buf_893 = $local_8_13;
         start_40 = x_483 < 0;
         x_483 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(x_483); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, start_40, x_483);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, start_40, x_483);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee text_47($sroa_$f_buf_893).repr, start_40, x_92, x_483);
         if @unlikely(local.tee x_483($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
@@ -1079,7 +1080,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         $sroa_$f_buf_893 = $local_8_13;
         start_40 = y_484 < 0;
         y_484 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(y_484); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, start_40, y_484);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, start_40, y_484);
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_893.repr, start_40, x_92, y_484);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) -> i32 {
@@ -1138,7 +1139,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, text_47.repr, text_47.used);
         if @unlikely(local.tee x_639($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8_13, x_639);
@@ -1152,7 +1153,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
         });
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_893, text_47.repr, text_47.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_893, text_47.repr, text_47.used);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Number"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Number"($load_1) -> i32 {
         x_641 = ref.cast "tuple_destructuring.wado//TupleValue::Number"($load_0).payload_0;
@@ -1172,7 +1173,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         text_47 = $local_8_13;
         start_40 = x_641 < 0;
         x_641 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(x_641); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(text_47, start_40, x_641);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, start_40, x_641);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee $sroa_$f_buf_893(text_47).repr, start_40, x_92, x_641);
         if @unlikely(local.tee x_641($local_8_13.used + 1) > builtin::array_len($local_8_13.repr)) {
             cold_path;
@@ -1184,7 +1185,7 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
         text_47 = $local_8_13;
         start_40 = y_642 < 0;
         y_642 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(y_642); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(text_47, start_40, y_642);
+        start_40 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(text_47, start_40, y_642);
         "core:prelude/primitive.wado/write_decimal_digits"(text_47.repr, start_40, x_92, y_642);
         $local_8_13;
     } else if (if ref.test "tuple_destructuring.wado//TupleValue::Text"($load_0) & ref.test "tuple_destructuring.wado//TupleValue::Text"($load_1) -> i32 {
@@ -1430,7 +1431,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, n_2);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
@@ -1451,7 +1452,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return start_29;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, $mv$content$repr, $mv$content$used) {
     let new_used_19: i32;
     let start_20: i32;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {

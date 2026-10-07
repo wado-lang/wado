@@ -25,7 +25,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
-use crate::nir_package::{NirPackage, SroaParamProjection, SroaParamShape};
+use crate::nir_package::{NirPackage, SroaParamProjection};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -34,7 +34,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
 use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
-use crate::name::sroa_param_name;
+use crate::name::{NarrowedParam, sroa_param_name};
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
 use crate::optimize::dae::is_dae_sroa_eligible;
@@ -895,6 +895,7 @@ fn mint_scalarized_clones(
         by_fn.entry(*key).or_default().push(*pi);
     }
 
+    let field_table = build_field_table_index(project);
     let mut clones: IndexMap<FnKey, FnKey> = IndexMap::default();
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
@@ -915,35 +916,9 @@ fn mint_scalarized_clones(
                 .push(SroaParamProjection {
                     struct_key: info.struct_key.clone(),
                     field_index: info.field_index,
+                    mutable: info.form == FieldForm::Mutable,
                 });
         }
-        let shapes: Vec<SroaParamShape> = clone
-            .params
-            .iter()
-            .enumerate()
-            .map(|(pi, param)| {
-                let ty = candidates
-                    .get(&(*key, pi))
-                    .map_or(param.type_id, |info| info.scalar_type_id);
-                let chain = chains.get(&param.local_index).cloned().unwrap_or_default();
-                (ty, chain)
-            })
-            .collect();
-        // This pass runs once per fixpoint iteration, and reaches a clone by more
-        // than one chain of clones, so the one this run wants may already stand.
-        if let Some(&existing) = project
-            .sroa_param_clone_ids
-            .get(&(original, shapes.clone()))
-        {
-            clones.insert(*key, existing);
-            continue;
-        }
-        let ordinal = project
-            .sroa_param_clones
-            .values()
-            .filter(|&&o| o == original)
-            .count()
-            + 1;
         let (original_name, original_method) = {
             let f = project.functions[original.index()].borrow();
             (
@@ -951,17 +926,23 @@ fn mint_scalarized_clones(
                 f.method_info.as_ref().map(|m| m.method_name.clone()),
             )
         };
-        let name = sroa_param_name(&original_name, ordinal);
+        let narrowed = narrowed_params(&clone, &chains, &field_table);
+        let name = sroa_param_name(&original_name, &narrowed);
+        let method_name = original_method.map(|m| sroa_param_name(&m, &narrowed));
+        drop(narrowed);
         clone.name.clone_from(&name);
-        if let (Some(info), Some(method)) = (&mut clone.method_info, original_method) {
-            info.method_name = sroa_param_name(&method, ordinal);
+        if let (Some(info), Some(method)) = (&mut clone.method_info, method_name) {
+            info.method_name = method;
         }
+        // The name spells the clone's identity, and this pass runs once per
+        // fixpoint iteration and reaches one clone by more than one chain of
+        // clones, so the one this run wants may already stand under it.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
-        assert!(
-            !project.func_index.contains_key(&func_key),
-            "[NIR] sroa_param: the clone name {name} is taken"
-        );
+        if let Some(&existing) = project.func_index.get(&func_key) {
+            clones.insert(*key, existing);
+            continue;
+        }
         let id = FuncId::new(next_id);
         next_id += 1;
         clone.id = Some(id);
@@ -1001,7 +982,6 @@ fn mint_scalarized_clones(
 
         project.func_index.insert(func_key, id);
         project.sroa_param_clones.insert(id, original);
-        project.sroa_param_clone_ids.insert((original, shapes), id);
         project.sroa_param_clone_fields.insert(id, chains);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
@@ -1012,6 +992,35 @@ fn mint_scalarized_clones(
         project.functions.push(f);
     }
     clones
+}
+
+/// Each parameter of `clone` its `chains` narrow, in declaration order, with
+/// the names of the fields it was projected through.
+fn narrowed_params<'a>(
+    clone: &'a NirFunction,
+    chains: &'a IndexMap<u32, Vec<SroaParamProjection>>,
+    field_table: &'a FieldTableIndex,
+) -> Vec<NarrowedParam<'a>> {
+    clone
+        .params
+        .iter()
+        .filter_map(|param| {
+            let chain = chains.get(&param.local_index)?;
+            let last = chain.last().expect("a chain records one field at least");
+            Some(NarrowedParam {
+                param: &param.name,
+                fields: chain
+                    .iter()
+                    .map(|p| {
+                        field_table[&p.struct_key][p.field_index as usize]
+                            .0
+                            .as_str()
+                    })
+                    .collect(),
+                mutable: last.mutable,
+            })
+        })
+        .collect()
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
@@ -1338,7 +1347,7 @@ fn plan_call_site(
 ///
 /// A clone's own scalarized parameter is the reason to ask. Unwrapping chains:
 /// `Formatter::write(&mut self)` reading only `self.buf` becomes
-/// `write$scalar(buf: &mut String)`, and a later round scalarizes that `String`
+/// `write$sroa$self.buf(buf: &mut String)`, and a later round scalarizes that `String`
 /// in turn. A caller already holding the inner `String` must not have
 /// `Formatter`'s `buf` projected onto it a second time.
 fn classify_arg(

@@ -63,7 +63,7 @@ type "functype//core:rt/write_string_to_stream$spec0" = fn(i32, ref Array<u8>, i
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
@@ -109,7 +109,7 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
         $mv$$vr_2$1 = r.1;
         $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
         $mv$$vr_2$0 = "core:prelude/primitive.wado/count_digits_u64"($mv$$vr_2$1);
-        offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_2, 0, $mv$$vr_2$0);
+        offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_2, 0, $mv$$vr_2$0);
         "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, offset, $mv$$vr_2$1, $mv$$vr_2$0);
         $mv$$vr_2$0 = builtin::i32_wrap_i64(local.tee $mv$$vr_2$1("wasi/stream-new"()));
         offset = builtin::i32_wrap_i64($mv$$vr_2$1 >> 32_i64);
@@ -402,7 +402,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

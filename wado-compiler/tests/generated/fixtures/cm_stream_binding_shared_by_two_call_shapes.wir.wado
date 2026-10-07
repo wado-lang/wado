@@ -76,9 +76,9 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to" = fn(ref "core:prelude//List<u32>", i32);  // TypeId(27)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$scalar" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(28)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa$self.value$f.buf" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(28)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(29)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(29)
 
 type "functype//wasi/stream-new:val-u32" = fn() -> i64;  // TypeId(30)
 
@@ -160,7 +160,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     $sroa_$f_buf_111 = local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
     new_used_97 = local.tee rx_11(chunk_2.items.used) < 0;
     rx_11 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_10(packed_10 = builtin::i64_extend_i32_s(rx_11); select i64(packed_10 < 0_i64, 0_i64 - packed_10, packed_10)));
-    new_used_97 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_111, new_used_97, rx_11);
+    new_used_97 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_111, new_used_97, rx_11);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_111.repr, new_used_97, packed_10, rx_11);
     if @unlikely(local.tee rx_11($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -170,7 +170,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     $local_6.used = rx_11;
     builtin::array_copy<u8>($local_6.repr, new_used_97, global:cm_stream_binding_shared_by_two_call_shapes.wado::$const_obj_0, 0, 1);
     $sroa_$f_buf_111 = $local_6;
-    "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$scalar"(chunk_2.result, $sroa_$f_buf_111);
+    "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa$self.value$f.buf"(chunk_2.result, $sroa_$f_buf_111);
     if @unlikely(local.tee new_used_97($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_97);
@@ -181,7 +181,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     $sroa_$f_buf_111 = $local_6;
     new_used_97 = local.tee rx_11(all.used) < 0;
     rx_11 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_10(packed_10 = builtin::i64_extend_i32_s(rx_11); select i64(packed_10 < 0_i64, 0_i64 - packed_10, packed_10)));
-    new_used_97 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_111, new_used_97, rx_11);
+    new_used_97 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_111, new_used_97, rx_11);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_111.repr, new_used_97, packed_10, rx_11);
     rx_11 = builtin::i32_wrap_i64(local.tee packed_10("wasi/stream-new"()));
     new_used_97 = builtin::i32_wrap_i64(packed_10 >> 32_i64);
@@ -476,7 +476,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to"(self, min_
     self.repr = new_repr;
 }
 
-fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
+fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa$self.value$f.buf"(self, f) {
     let $load_3: ref Array<u8>;
     let new_used_23: i32;
     let start_24: i32;
@@ -565,7 +565,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/tra
     }
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

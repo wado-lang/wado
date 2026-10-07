@@ -68,9 +68,9 @@ type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspec
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.wado/P^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.wado/P^core:prelude/traits.wado/Inspect::inspect$sroa$self.v$spec0$sroa$f.buf" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
@@ -345,7 +345,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<assoc_defa
                 self_7.used = new_used_21;
                 builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_51, 0, 2);
             }
-            "core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.wado/P^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar"(builtin::array_get_value<ref "assoc_default_body_ref_assoc_type_selects_ref_impl.wado//P">(repr, i).v, self_7);
+            "core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.wado/P^core:prelude/traits.wado/Inspect::inspect$sroa$self.v$spec0$sroa$f.buf"(builtin::array_get_value<ref "assoc_default_body_ref_assoc_type_selects_ref_impl.wado//P">(repr, i).v, self_7);
             start_68 = start_68 + 1;
             i = i + 1;
             continue l38;
@@ -391,7 +391,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
@@ -412,7 +412,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return start_29;
 }
 
-fn "core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.wado/P^core:prelude/traits.wado/Inspect::inspect$scalar$spec0$scalar"(self, f) {
+fn "core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.wado/P^core:prelude/traits.wado/Inspect::inspect$sroa$self.v$spec0$sroa$f.buf"(self, f) {
     let $load_3: ref Array<u8>;
     let new_used_21: i32;
     let start_22: i32;
@@ -447,7 +447,7 @@ fn "core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.
     builtin::array_copy<u8>(f.repr, new_used_21, global:core:prelude/traits.wado::$const_obj_58, 0, 2);
     new_used_21 = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
-    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, new_used_21, self);
+    new_used_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(f, new_used_21, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.repr, new_used_21, x, self);
     if @unlikely(local.tee self(f.used + 2) > builtin::array_len(f.repr)) {
         cold_path;

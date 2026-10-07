@@ -43,7 +43,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
@@ -83,7 +83,7 @@ fn "effect_trait_head_bare_is_open.wado/run"() with Stdout, Stderr {
     $mv_arg_2 = global:effect_trait_head_bare_is_open.wado::$const_obj_6;
     "core:rt/write_string_to_stream"(tx_106, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_105);
-    rx_105 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_3, 0, 1);
+    rx_105 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, rx_105, 1_i64, 1);
     rx_105 = builtin::i32_wrap_i64(local.tee packed_104("wasi/stream-new"()));
     tx_106 = builtin::i32_wrap_i64(packed_104 >> 32_i64);
@@ -97,14 +97,14 @@ fn "effect_trait_head_bare_is_open.wado/run"() with Stdout, Stderr {
     $mv_arg_2 = global:effect_trait_head_bare_is_open.wado::$const_obj_5;
     "core:rt/write_string_to_stream"(tx_106, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_105);
-    rx_105 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_3, 0, 1);
+    rx_105 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, rx_105, 2_i64, 1);
     rx_105 = builtin::i32_wrap_i64(local.tee packed_104("wasi/stream-new"()));
     tx_106 = builtin::i32_wrap_i64(packed_104 >> 32_i64);
     rx_105 = "effect_trait_head_bare_is_open.wado/$cm_binding__Stdout_write_via_stream"(rx_105);
     "core:rt/write_string_to_stream"(tx_106, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_105);
-    rx_105 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }), 0, 1);
+    rx_105 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(local.tee $local_3(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, rx_105, 3_i64, 1);
     rx_105 = builtin::i32_wrap_i64(local.tee packed_104("wasi/stream-new"()));
     tx_106 = builtin::i32_wrap_i64(packed_104 >> 32_i64);
@@ -226,7 +226,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

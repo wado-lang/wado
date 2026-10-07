@@ -77,7 +77,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
@@ -114,7 +114,7 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_32 = local.tee self_18((local.tee g_24(ref.as_non_null($sroa_$sroa_e1_value_116_2_126)).alternatives.used * 10) + 1) < 0;
     self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_18); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_3, is_negative_32, self_18);
+    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, is_negative_32, self_18);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_32, x_36, self_18);
     self_18 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
     is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
@@ -124,21 +124,21 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     g_24 = struct.new "opt_ref_elim_rebound_local.wado//GroupElement" { alternatives: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 } };
     $sroa_$sroa_e2_value_119_3_131 = struct.new "opt_ref_elim_rebound_local.wado//RepeatElement" { element: local.tee element(struct.new "opt_ref_elim_rebound_local.wado//Element::Group" { discriminant: 1, payload_0: g_24 }) };
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_32 = local.tee self_18($inline_process_scalar_24: block -> i32 {
-        if ref.is_null(local.tee alts_58($inline_extract_scalar_25: block -> ref null "core:prelude//List<i32>" {
+    is_negative_32 = local.tee self_18($inline_process_sroa_elem_value_24: block -> i32 {
+        if ref.is_null(local.tee alts_58($inline_extract_sroa_elem_value_25: block -> ref null "core:prelude//List<i32>" {
             if ref.test "opt_ref_elim_rebound_local.wado//Element::Group"(local.tee element($sroa_$sroa_e2_value_119_3_131.element)) {
-                break $inline_extract_scalar_25: local.tee g_24(ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(element).payload_0).alternatives;
+                break $inline_extract_sroa_elem_value_25: local.tee g_24(ref.cast "opt_ref_elim_rebound_local.wado//Element::Group"(element).payload_0).alternatives;
             } else {
             }
-            break $inline_extract_scalar_25: ref.null none;
+            break $inline_extract_sroa_elem_value_25: ref.null none;
         })) == 0 {
-            break $inline_process_scalar_24: (alts_58.used * 10) + 1;
+            break $inline_process_sroa_elem_value_24: (alts_58.used * 10) + 1;
         } else {
         }
-        break $inline_process_scalar_24: -1;
+        break $inline_process_sroa_elem_value_24: -1;
     }) < 0;
     self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_18); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_3, is_negative_32, self_18);
+    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, is_negative_32, self_18);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_32, x_36, self_18);
     self_18 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
     is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
@@ -146,15 +146,15 @@ fn "opt_ref_elim_rebound_local.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(is_negative_32, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_18);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_32 = local.tee self_18($inline_process_scalar_38: block -> i32 {
+    is_negative_32 = local.tee self_18($inline_process_sroa_elem_value_38: block -> i32 {
         if ref.is_null(ref.null none) == 0 {
-            break $inline_process_scalar_38: (ref.null none.used * 10) + 1;
+            break $inline_process_sroa_elem_value_38: (ref.null none.used * 10) + 1;
         } else {
         }
-        break $inline_process_scalar_38: -1;
+        break $inline_process_sroa_elem_value_38: -1;
     }) < 0;
     self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_36(x_36 = builtin::i64_extend_i32_s(self_18); select i64(x_36 < 0_i64, 0_i64 - x_36, x_36)));
-    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_3, is_negative_32, self_18);
+    is_negative_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($local_3, is_negative_32, self_18);
     "core:prelude/primitive.wado/write_decimal_digits"($local_3.repr, is_negative_32, x_36, self_18);
     self_18 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
     is_negative_32 = builtin::i32_wrap_i64(x_36 >> 32_i64);
@@ -333,7 +333,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

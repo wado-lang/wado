@@ -59,6 +59,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:core:builtin::$unit_case$./variant_in_struct_match_module.wado//Align$1: ref "./variant_in_struct_match_module.wado//Align" = struct.new "./variant_in_struct_match_module.wado//Align" { 1 };
+global global:core:builtin::$unit_case$./variant_in_struct_match_module.wado//Align$0: ref "./variant_in_struct_match_module.wado//Align" = struct.new "./variant_in_struct_match_module.wado//Align" { 0 };
+
 fn "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
@@ -68,7 +71,7 @@ fn "variant_import_mut.wado/$cm_export__run"() {
     let packed_7: i64;
     let rx_8: i32;
     let tx_9: i32;
-    message_1 = (if struct.new "./variant_in_struct_match_module.wado//Align" { 1 }.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    message_1 = (if global:core:builtin::$unit_case$./variant_in_struct_match_module.wado//Align$1.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 101, 102, 116), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };
@@ -78,7 +81,7 @@ fn "variant_import_mut.wado/$cm_export__run"() {
     rx_8 = "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
     "core:rt/write_string_to_stream"(tx_9, message_1.repr, message_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
-    message_1 = (if struct.new "./variant_in_struct_match_module.wado//Align" { 0 }.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    message_1 = (if global:core:builtin::$unit_case$./variant_in_struct_match_module.wado//Align$0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 101, 102, 116), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("right"), used: 5 };

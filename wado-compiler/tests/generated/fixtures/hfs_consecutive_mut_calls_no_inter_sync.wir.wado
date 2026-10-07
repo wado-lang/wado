@@ -52,7 +52,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
@@ -124,7 +124,7 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     $sroa_$f_buf_72 = local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     $hfs_v_75 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(sum); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
-    $hfs_v_75 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_72, $hfs_v_75, sum);
+    $hfs_v_75 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_72, $hfs_v_75, sum);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, $hfs_v_75, x_25, sum);
     if @unlikely(local.tee sum($local_6.used + 1) > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -136,7 +136,7 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     $sroa_$f_buf_72 = $local_6;
     sum = local.tee $hfs_v_75(b.v) < 0;
     $hfs_v_75 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s($hfs_v_75); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
-    sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_72, sum, $hfs_v_75);
+    sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"($sroa_$f_buf_72, sum, $hfs_v_75);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_72.repr, sum, x_25, $hfs_v_75);
     $hfs_v_75 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
     sum = builtin::i32_wrap_i64(x_25 >> 32_i64);
@@ -315,7 +315,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa$self.buf"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

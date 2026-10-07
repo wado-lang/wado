@@ -286,6 +286,9 @@ import fn wasi/future-write from "wasi/future-write";
 global global:http_routing.wado::$const_obj_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
 global global:http_routing.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(47, 99, 114, 101, 97, 116, 101, 100);
 global global:http_routing.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(47, 110, 111, 116, 45, 102, 111, 117, 110, 100);
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0: ref "core:prelude/types.wado//Result<(),()>" = struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1: ref "core:prelude/types.wado//Result<(),()>" = struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
 
 fn "http_routing.wado/$cm_binding__Request_get_path_with_query"(self) with Request {
     let $outptr: i32;
@@ -355,7 +358,7 @@ fn "http_routing.wado/$cm_task_entry__handle"(request) {
     path = "http_routing.wado/$cm_binding__Request_get_path_with_query"(request);
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx = "http_routing.wado/$cm_binding__Response_new"("http_routing.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, rx).0;
+    rx = "http_routing.wado/$cm_binding__Response_new"("http_routing.wado/$cm_binding__Fields_new"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, rx).0;
     if ref.is_null(path) == 0 {
         p = ref.as_non_null(path);
         if $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: block -> bool {
@@ -768,17 +771,17 @@ fn "http_routing.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelu
 
 fn "http_routing.wado/$cm_binding__Response_set_status_code$spec0"(self, status_code) with Response {
     return (if local.tee self("wasi/wasi:http/Response::set_status_code"(self, 404)) == 0 -> ref "core:prelude/types.wado//Result<(),()>" {
-        struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
+        global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0;
     } else {
-        struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
+        global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1;
     });
 }
 
 fn "http_routing.wado/$cm_binding__Response_set_status_code$spec1"(self, status_code) with Response {
     return (if local.tee self("wasi/wasi:http/Response::set_status_code"(self, 201)) == 0 -> ref "core:prelude/types.wado//Result<(),()>" {
-        struct.new "core:prelude/types.wado//Result<(),()>" { 0 };
+        global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$0;
     } else {
-        struct.new "core:prelude/types.wado//Result<(),()>" { 1 };
+        global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),()>$1;
     });
 }
 
