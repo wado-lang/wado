@@ -46,7 +46,8 @@ rather than exports: the consumer provides that one.
 
 A composed component may export more than one default interface. A function
 name two of them share is left out of the module, so neither shadows the other,
-and each is called through its interface. A function the component's world
+and each is called through its interface. Importing one by bare name is an
+error that names the interfaces declaring it. A function the component's world
 exports directly keeps its name over an interface function of the same name.
 
 ### The interface stays importable

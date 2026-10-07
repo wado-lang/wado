@@ -832,13 +832,13 @@ pub fn compile_lib_world(
 
 /// The function `name` in `iface`, or `None` where `iface` exports none.
 pub fn lookup_func(
-    store: &mut Store<WasiState>,
+    mut store: impl AsContextMut,
     instance: &Instance,
     iface: &ComponentExportIndex,
     name: &str,
 ) -> Option<Func> {
-    let (_, idx) = instance.get_export(&mut *store, Some(iface), name)?;
-    instance.get_func(&mut *store, idx)
+    let (_, idx) = instance.get_export(&mut store, Some(iface), name)?;
+    instance.get_func(&mut store, idx)
 }
 
 /// The interface `iface_fq` a component exports, as a library exports its
@@ -877,10 +877,9 @@ pub fn lib_func(
     iface_fq: &str,
     name: &str,
 ) -> Func {
-    let idx = interface_export(&mut store, instance, iface_fq, name);
-    instance
-        .get_func(&mut store, idx)
-        .unwrap_or_else(|| panic!("`{name}` is not a function"))
+    let iface = interface_index(&mut store, instance, iface_fq);
+    lookup_func(&mut store, instance, &iface, name)
+        .unwrap_or_else(|| panic!("`{name}` not exported by `{iface_fq}`"))
 }
 
 /// Backward-compat alias

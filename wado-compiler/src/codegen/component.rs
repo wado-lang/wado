@@ -131,18 +131,16 @@ pub fn build_component(
     // (e.g. `point`) referenced by both a future/stream payload and an export
     // signature is defined once. The interface hint resolves lib-local named
     // types against the package's own default-interface FQ.
-    let lib_iface_fq = component_plan
-        .world_exports
-        .iter()
-        .find(|e| e.is_lib)
-        .and_then(|e| e.from_interface_fq.clone());
     let mut lib_type_gen = component_plan
         .world_exports
         .iter()
-        .any(|e| e.is_lib)
-        .then(|| match lib_iface_fq.as_deref() {
-            Some(fq) => CmTypeGen::with_interface_hint(fq),
-            None => CmTypeGen::new(),
+        .find(|e| e.is_lib)
+        .map(|e| {
+            CmTypeGen::with_interface_hint(
+                e.from_interface_fq
+                    .as_deref()
+                    .expect("a library export sits in its default interface"),
+            )
         });
 
     // Define named record types referenced by `Value(Named)` future/stream
@@ -2086,8 +2084,8 @@ fn emit_world_exports(
         );
 
         // Interface exports go in an instance export (added by
-        // `append_interface_instance_exports`), not bare; only freestanding world
-        // functions (kiln `generate`) are exported bare here.
+        // `append_interface_instance_exports`), not bare; only a function the
+        // world exports directly, outside any interface, is exported bare here.
         if export.from_interface_fq.is_none() {
             builder.export(
                 cm_name,

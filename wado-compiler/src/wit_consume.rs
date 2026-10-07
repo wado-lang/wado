@@ -70,7 +70,7 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
 /// excluded via the module's host-leaf import list. Empty for a core-wasm
 /// asset, whose decls carry `#[canonical(...)]`.
 pub fn exported_interfaces(module: &Module) -> impl Iterator<Item = (&InterfaceDecl, &CmImport)> {
-    let imports = module_host_leaf_imports(module);
+    let imports: hashmap::IndexSet<String> = module_host_leaf_imports(module).into_iter().collect();
     module.items.iter().filter_map(move |item| match item {
         Item::Interface(decl) => cm_import_of(&decl.attrs)
             .filter(|cm| !imports.contains(&cm.interface_path()))

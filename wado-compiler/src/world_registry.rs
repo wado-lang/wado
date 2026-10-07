@@ -168,12 +168,11 @@ pub struct WorldInfo {
 
 impl WorldInfo {
     /// Whether this world exports the WASI HTTP handler — a handler-instance
-    /// export whose interface is in the `http` package. Gates HTTP-specific
-    /// behavior (importing `wasi:http/types`, the free-list allocator), so the
-    /// package check keeps a non-HTTP handler-shaped export (e.g. a future
-    /// `acme:widget/handler`) out of the HTTP path. The generic instance-export
-    /// wrapping for all interface exports lives in
-    /// `append_interface_instance_exports`.
+    /// export whose interface is in the `http` package. Picks the free-list
+    /// allocator for an HTTP service, so the package check keeps a non-HTTP
+    /// handler-shaped export (e.g. a future `acme:widget/handler`) on the
+    /// default. The generic instance-export wrapping for all interface exports
+    /// lives in `append_interface_instance_exports`.
     pub fn has_http_handler_export(&self) -> bool {
         self.exports.iter().any(|e| {
             e.is_handler_instance_export()

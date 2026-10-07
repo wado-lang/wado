@@ -171,6 +171,14 @@ pub enum AnalyzeError {
         name: String,
         span: Span,
     },
+    /// An operation more than one of a component's default interfaces
+    /// declares, imported by bare name.
+    SharedDefaultOperation {
+        module_source: ModuleSource,
+        name: String,
+        interfaces: Vec<String>,
+        span: Span,
+    },
     /// Duplicate top-level definition within a single module.
     ///
     /// `span` is the location of the duplicate; `first` is the location of
@@ -277,6 +285,21 @@ impl AnalyzeError {
             } => (
                 Code::ImportNotFound,
                 format!("symbol '{name}' not found in module '{module_source}'"),
+                *span,
+            ),
+            AnalyzeError::SharedDefaultOperation {
+                module_source,
+                name,
+                interfaces,
+                span,
+            } => (
+                Code::ImportNotFound,
+                format!(
+                    "symbol '{name}' is in more than one default interface of module \
+                     '{module_source}' ({}); name it through one, as `{}::{name}`",
+                    interfaces.join(", "),
+                    interfaces[0],
+                ),
                 *span,
             ),
             AnalyzeError::DuplicateDefinition { name, span, first } => (
@@ -431,6 +454,9 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// [`resolve_use_decl_source`] so analyze-phase imports get
     /// canonicalized identities.
     interner: Rc<RefCell<ModuleSourceInterner>>,
+    /// The operations a component's default interfaces share, which no bare
+    /// name imports, each with the interfaces that declare it.
+    shared_default_ops: hashmap::IndexMap<(ModuleSource, String), Vec<String>>,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -443,6 +469,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             entry_module_source: ModuleSource::entry_point_uninitialized(),
             invocations: InvocationIndex::new(),
             interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
+            shared_default_ops: hashmap::IndexMap::default(),
         }
     }
 
@@ -1082,30 +1109,32 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// A component's default interface is its binding module itself: each
     /// operation is also a module-level name, as a source library's `export fn`
-    /// is, so the two consume alike. A name two default interfaces share stays
-    /// reachable only through each interface; one the module declares itself
-    /// resolves to that declaration, which a re-export never overrides.
+    /// is, so the two consume alike. A name the module declares itself, or one
+    /// two default interfaces share, stays behind its interface.
     fn reexport_default_interface(&mut self, module: &Module, module_source: &ModuleSource) {
-        let defaults: Vec<&InterfaceDecl> = exported_interfaces(module)
-            .filter(|(_, cm)| cm.is_package_default())
-            .map(|(iface, _)| iface)
-            .collect();
-        let mut uses: hashmap::IndexMap<&str, usize> = hashmap::IndexMap::default();
-        for op in defaults.iter().flat_map(|iface| &iface.methods) {
-            *uses.entry(op.name.as_str()).or_default() += 1;
-        }
-        for iface in defaults {
+        let mut owners: hashmap::IndexMap<&str, Vec<&InterfaceDecl>> = hashmap::IndexMap::default();
+        for (iface, _) in exported_interfaces(module).filter(|(_, cm)| cm.is_package_default()) {
             for op in &iface.methods {
-                if uses[op.name.as_str()] > 1 {
-                    continue;
+                owners.entry(op.name.as_str()).or_default().push(iface);
+            }
+        }
+        for (op, ifaces) in owners {
+            match ifaces.as_slice() {
+                [iface] if !self.symbols.is_defined_in_module(module_source, op) => {
+                    self.symbols.register_reexport(
+                        module_source,
+                        op,
+                        module_source,
+                        &mangle_local_method(&iface.name, op),
+                        iface.visibility,
+                    );
                 }
-                self.symbols.register_reexport(
-                    module_source,
-                    &op.name,
-                    module_source,
-                    &mangle_local_method(&iface.name, &op.name),
-                    iface.visibility,
-                );
+                [_] => {}
+                shared => {
+                    let names = shared.iter().map(|iface| iface.name.clone()).collect();
+                    self.shared_default_ops
+                        .insert((module_source.clone(), op.to_string()), names);
+                }
             }
         }
     }
@@ -1203,14 +1232,21 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         visibility: Visibility,
     ) -> Result<(), Bail> {
         let Some(symbol) = self.symbols.lookup_in_module(module_source, lookup_name) else {
-            return self.logger.error_in(
-                from,
-                AnalyzeError::ImportNotFound {
+            let key = (module_source.clone(), lookup_name.to_string());
+            let error = match self.shared_default_ops.get(&key) {
+                Some(interfaces) => AnalyzeError::SharedDefaultOperation {
+                    module_source: module_source.clone(),
+                    name: lookup_name.to_string(),
+                    interfaces: interfaces.clone(),
+                    span: name_span,
+                },
+                None => AnalyzeError::ImportNotFound {
                     module_source: module_source.clone(),
                     name: lookup_name.to_string(),
                     span: name_span,
                 },
-            );
+            };
+            return self.logger.error_in(from, error);
         };
         let key = symbol.defined_at;
         self.check_import_visibility(from, module_source, lookup_name, name_span)?;
