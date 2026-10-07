@@ -1824,11 +1824,7 @@ fn rewrite_callees(
 ) {
     for (&key, cand) in candidates {
         let mut func = project.functions[key.index()].borrow_mut();
-        project
-            .reshapes
-            .entry(key)
-            .or_insert_with(|| Reshape::root(&func))
-            .reshape_return(ReturnShape::Scalarized);
+        Reshape::of(&mut project.reshapes, &func).reshape_return(ReturnShape::Scalarized);
         func.scalarized_from = Some(cand.variant_type);
         func.return_type = cand.layout.tuple_type;
         let span = func.span;

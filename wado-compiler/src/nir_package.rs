@@ -181,7 +181,7 @@ struct Spelled {
 }
 
 /// What became of one root parameter.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum ParamShape {
     Kept,
     /// Taken as a field instead, projected through each step, outermost first.
@@ -218,6 +218,13 @@ impl Reshape {
             params,
             ret: ReturnShape::Kept,
         }
+    }
+
+    /// The record of `func` in `reshapes`, made for it as its own root where it
+    /// has none yet.
+    pub fn of<'r>(reshapes: &'r mut IndexMap<FuncId, Reshape>, func: &NirFunction) -> &'r mut Self {
+        let id = func.id.expect("a function in the store has an id");
+        reshapes.entry(id).or_insert_with(|| Self::root(func))
     }
 
     /// This shape, under a name that already spells all of it: a `param_spec`

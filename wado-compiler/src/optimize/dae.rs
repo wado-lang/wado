@@ -264,11 +264,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
         if let Some(id) = func.id
             && let Some(dead) = confirmed.get(&id)
         {
-            project
-                .reshapes
-                .entry(id)
-                .or_insert_with(|| Reshape::root(&func))
-                .drop_params(dead);
+            Reshape::of(&mut project.reshapes, &func).drop_params(dead);
             shrink_params_and_renumber(&mut func, dead);
             touched.insert(i);
         }

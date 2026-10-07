@@ -216,7 +216,8 @@ impl ValidateCtx<'_> {
 
 /// Applies the rewrites and returns the indices of every function whose body or
 /// signature changed (converted callees + callers whose call sites were
-/// retyped), so the caller can mark exactly those dirty in the gate.
+/// retyped or retargeted), so the caller can mark exactly those dirty in the
+/// gate.
 fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
     // Step A: convert each confirmed candidate to void return. The candidate
@@ -224,14 +225,10 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
     // pure expression, so dropping its value is observably equivalent.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        let Some(id) = func.id.filter(|id| confirmed.contains(id)) else {
+        if !func.id.is_some_and(|id| confirmed.contains(&id)) {
             continue;
-        };
-        project
-            .reshapes
-            .entry(id)
-            .or_insert_with(|| Reshape::root(&func))
-            .reshape_return(ReturnShape::Dropped);
+        }
+        Reshape::of(&mut project.reshapes, &func).reshape_return(ReturnShape::Dropped);
         func.return_type = TypeTable::UNIT;
         if let Some(body) = func.body.as_mut() {
             void_returns(body);
