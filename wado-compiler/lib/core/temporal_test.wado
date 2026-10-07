@@ -14,6 +14,7 @@ use { Instant as ClockInstant, SystemClock } from "wasi:clocks";
 use { to_string, from_string } from "core:json";
 use { to_bytes, from_bytes } from "core:cbor";
 use { DeserializeErrorKind } from "core:serde";
+use { Value, from_value } from "core:value";
 
 test "Instant construction and field access" {
     let i = Instant { seconds: 1_700_000_000, nanoseconds: 123_456_789 };
@@ -1499,6 +1500,28 @@ test "Instant decodes a CBOR epoch-seconds tag 1 number as UTC" {
     let bytes: List<u8> = [0xc1, 0x1a, 0x65, 0x53, 0xf1, 0x00];
     let inst = from_bytes::<Instant, ByteList>(bytes as ByteList).expect("decode epoch");
     assert inst == Instant { seconds: 1_700_000_000, nanoseconds: 0 };
+}
+
+test "an epoch number past the range is an overflow, in any integer width" {
+    let items: List<ByteList> = [
+        b"\x1b\xff\xff\xff\xff\xff\xff\xff\xff",  // u64 past i64
+        b"\x3b\xff\xff\xff\xff\xff\xff\xff\xff",  // -2^64, an i128
+        b"\xc2\x50\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",  // a u128 bignum
+    ];
+    for let item of items {
+        assert from_bytes::<Instant, ByteList>(item).unwrap_err().kind == DeserializeErrorKind::Overflow;
+        assert from_bytes::<ZonedDateTime, ByteList>(item).unwrap_err().kind == DeserializeErrorKind::Overflow;
+    }
+    let zdt = from_bytes::<ZonedDateTime, ByteList>(b"\x05").expect("decode a small epoch number");
+    assert zdt.to_instant() == Instant { seconds: 5, nanoseconds: 0 };
+    assert from_bytes::<Instant, ByteList>(b"\x41\x01") matches { Err(_) };
+}
+
+test "an unsigned epoch number in range decodes" {
+    let inst = from_value::<Instant>(&Value::UInt(5)).expect("decode u64");
+    assert inst == Instant { seconds: 5, nanoseconds: 0 };
+    let zdt = from_value::<ZonedDateTime>(&Value::UInt(5)).expect("decode u64");
+    assert zdt.to_instant() == inst;
 }
 
 test "Instant decoded from a zoned string collapses to the same instant" {

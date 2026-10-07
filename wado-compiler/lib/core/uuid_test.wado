@@ -272,6 +272,31 @@ test "equality compares all 128 bits" {
     }
 }
 
+test "a UUID orders equal to itself and displays in canonical form" {
+    let nil = Uuid::nil();
+    assert nil.cmp(&Uuid::nil()) == Ordering::Equal;
+    assert `${nil}` == "00000000-0000-0000-0000-000000000000";
+}
+
+test "a CBOR item that is not a UUID's string or bytes is refused" {
+    let items: List<ByteList> = [
+        b"\x1b\xff\xff\xff\xff\xff\xff\xff\xff",  // u64 past i64
+        b"\x3b\xff\xff\xff\xff\xff\xff\xff\xff",  // -2^64, an i128
+        b"\xc2\x50\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",  // a u128 bignum
+        b"\xf7",  // undefined
+        b"\xf5",  // true
+        b"\xf6",  // null
+        b"\xf9\x3c\x00",  // 1.0
+        b"\x80",  // []
+        b"\xa0",  // {}
+        b"\x41\x01",  // one byte
+    ];
+    for let item of items {
+        assert from_bytes::<Uuid>(item) matches { Err(_) };
+    }
+    assert from_bytes::<Uuid>(b"\xf0", false) matches { Err(_) };  // an unassigned simple value
+}
+
 test "ParseError renders its reason" {
     assert `${Uuid::from_str("nope").unwrap_err()}` == "not a UUID-shaped length";
     assert `${Uuid::from_str("550e8400+e29b+41d4+a716+446655440000").unwrap_err()}` == "hyphens, braces or the `urn:uuid:` prefix are misplaced";
