@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791370625241,
+  "lastUpdate": 1791371905317,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64913,6 +64913,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c1488ba812f6a752105d7efcd963dac1e6d52efa"
         },
         "date": 1791370624076,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20667,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "14012c0eb756bf026f46c5fb9866a81e059d0883",
+          "message": "Merge pull request #2300 from wado-lang/todo/17-builtin\n\ndocs(spec)!: define `builtin::`, reject `reactive`, drop `unique`",
+          "timestamp": "2026-10-07T19:37:27+09:00",
+          "tree_id": "3ab44c2e05b74d2eb37e152b9617a700112ce7cb",
+          "url": "https://github.com/wado-lang/wado/commit/14012c0eb756bf026f46c5fb9866a81e059d0883"
+        },
+        "date": 1791371904133,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
