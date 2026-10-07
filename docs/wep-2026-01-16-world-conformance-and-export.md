@@ -186,6 +186,8 @@ export(Command::run, Daemon::run) fn run() {
 - `export(…)` is honoured only in the entry module.
 - The world and export checks run when the component is built, so `wado check`
   and the language service do not report them, and their errors carry no span.
+- The language service answers neither hover nor go-to-definition on a target
+  in `export(…)`.
 
 ## References
 
