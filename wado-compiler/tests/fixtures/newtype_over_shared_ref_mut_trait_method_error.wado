@@ -1,0 +1,34 @@
+// Test: a newtype over `&T` reaches `T`'s trait methods, but not one that
+// takes `&mut self`, however its binding is declared: the write would land
+// behind a shared reference.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+trait Bump with () {
+    fn bump(&mut self, by: &Counter) -> i32;
+}
+
+impl Bump for Counter {
+    fn bump(&mut self, by: &Counter) -> i32 {
+        self.n += by.n;
+        return self.n;
+    }
+}
+
+type View = &Counter;
+
+export fn run() with Stdout {
+    let c = Counter { n: 1 };
+    let d = Counter { n: 2 };
+    let mut v = &c as View;
+    println(`${v.bump(&d)}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `bump` through immutable reference"
+}
