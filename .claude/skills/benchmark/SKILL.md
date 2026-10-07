@@ -16,9 +16,9 @@ mise run on-task-started
 - `vendor/wasmtime` submodule must exist (the SessionStart hook handles it;
   otherwise `git submodule update --init --recommend-shallow vendor/wasmtime`).
 - http-routing needs `oha` (`cargo install oha`); `bun` is mise-managed.
-- gale-gen's and sqlite-parse's ANTLR4 references need `java` (sqlite-parse also
-  needs `javac`); the jar is fetched to `~/.cache/gale`. Those rows are skipped
-  if the tool is absent.
+- gale-gen's and sqlite-parse's ANTLR4 references need `java` and `javac`, which
+  `benchmark/mise.toml` provides; the jar is fetched to `~/.cache/gale`. Those
+  rows are skipped if the tool is absent.
 - wasm-size needs `rustup target add wasm32-wasip1` and Moonbit
   (`curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash`, then
   `moon update` in each `wasm-size/*` dir).

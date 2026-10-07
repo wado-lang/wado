@@ -11,7 +11,7 @@ compiler for every run.
 ## Setup
 
 ```sh
-mise install  # node, bun
+mise install  # node, bun, java
 ```
 
 C compiler (`cc`) and Rust (`cargo`) are expected from the system.
