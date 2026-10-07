@@ -53,10 +53,15 @@ pub struct NirPackage {
     /// Which `$value_copy$` helper copies each type — the one join, so a
     /// consumer holding a `TypeId` asks here rather than re-deriving the key.
     pub value_copy_helpers: ValueCopyHelpers<FuncId>,
-    /// Functions `optimize/sroa_param` minted. A clone may gain callers in a
-    /// later round, so its current call sites are not its whole contract.
-    /// Identity, not a name test — see the declaration-identity WEP.
-    pub sroa_param_clones: IndexSet<FuncId>,
+    /// Functions `optimize/sroa_param` minted, each mapped to the original it
+    /// derives from, through however many clones of clones. A clone may gain
+    /// callers in a later round, so its current call sites are not its whole
+    /// contract. Identity, not a name test — see the declaration-identity WEP.
+    pub sroa_param_clones: IndexMap<FuncId, FuncId>,
+    /// Each of those clones by what makes it one: its original and the type of
+    /// every parameter it takes. A run arriving at a signature some earlier
+    /// run minted, by whatever chain of clones, reuses that clone.
+    pub sroa_param_clone_ids: IndexMap<(FuncId, Vec<TypeId>), FuncId>,
     /// For each of those clones, which of its locals holds a scalarized field,
     /// and the structs it was unwrapped from, outermost first: the last holds
     /// the field the local is now, and a clone of a clone carries its source's

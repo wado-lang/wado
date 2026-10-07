@@ -6,6 +6,10 @@
 // `JsonSerializer` around the output buffer, because inlining had not yet
 // reduced that parameter to its one field when the clone was minted. Every
 // call then built the wrapper only to pass it.
+//
+// The second clone is a clone of `Urls::serialize`, numbered beside the first,
+// not `$scalar$scalar`: a clone is identified by its original and the types it
+// takes, and its name only has to be unique.
 
 use { println, Stdout } from "core:cli";
 use { to_string } from "core:json";
@@ -30,7 +34,11 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "{\"description\":{\"urls\":[1,2]},\"url\":{\"urls\":[3]}}\n",
+    "wir_expect:O2": [
+        "fn \"core:serde/opt_sroa_param_scalarizes_clone_again.wado/Urls^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar2\"("
+    ],
     "wir_not_expect:O2": [
-        "struct.new \"core:json//JsonSerializer\""
+        "struct.new \"core:json//JsonSerializer\"",
+        "$scalar$scalar"
     ]
 }

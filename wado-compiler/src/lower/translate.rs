@@ -227,7 +227,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
                 method_info: None,
             })
         }),
-        sroa_param_clones: IndexSet::default(),
+        sroa_param_clones: IndexMap::default(),
+        sroa_param_clone_ids: IndexMap::default(),
         sroa_param_clone_fields: IndexMap::default(),
     };
     // Finalize the born-resolved callee ids: append the interned extern stubs,

@@ -901,27 +901,50 @@ fn mint_scalarized_clones(
     for (key, positions) in &by_fn {
         let mut clone = project.functions[key.index()].borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
-        let name = sroa_param_name(&clone.name);
-        clone.name.clone_from(&name);
-        if let Some(info) = &mut clone.method_info {
-            info.method_name = sroa_param_name(&info.method_name);
-        }
-        // This pass runs once per fixpoint iteration, so a clone it minted on an
-        // earlier one already stands under this name. Reuse it rather than mint
-        // a second function with the same identity — but only when this run
-        // arrives at the same signature. A body another pass has since changed
-        // can resolve a different field, or a different set of positions, and
-        // retargeting calls to a clone shaped by the earlier answer passes it
-        // arguments it does not take. Leaving them on the original is always
-        // sound: the original still has the shape they pass.
-        let func_key =
-            FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
-        if let Some(&existing) = project.func_index.get(&func_key) {
-            if standing_clone_matches(project, existing, &clone, *key, candidates) {
-                clones.insert(*key, existing);
-            }
+        let original = project.sroa_param_clones.get(key).copied().unwrap_or(*key);
+        let signature: Vec<TypeId> = clone
+            .params
+            .iter()
+            .enumerate()
+            .map(|(pi, param)| {
+                candidates
+                    .get(&(*key, pi))
+                    .map_or(param.type_id, |info| info.scalar_type_id)
+            })
+            .collect();
+        // This pass runs once per fixpoint iteration, and reaches a signature by
+        // more than one chain of clones, so a clone taking it may already stand.
+        if let Some(&existing) = project
+            .sroa_param_clone_ids
+            .get(&(original, signature.clone()))
+        {
+            clones.insert(*key, existing);
             continue;
         }
+        let ordinal = project
+            .sroa_param_clones
+            .values()
+            .filter(|&&o| o == original)
+            .count()
+            + 1;
+        let (original_name, original_method) = {
+            let f = project.functions[original.index()].borrow();
+            (
+                f.name.clone(),
+                f.method_info.as_ref().map(|m| m.method_name.clone()),
+            )
+        };
+        let name = sroa_param_name(&original_name, ordinal);
+        clone.name.clone_from(&name);
+        if let (Some(info), Some(method)) = (&mut clone.method_info, original_method) {
+            info.method_name = sroa_param_name(&method, ordinal);
+        }
+        let func_key =
+            FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
+        assert!(
+            !project.func_index.contains_key(&func_key),
+            "[NIR] sroa_param: the clone name {name} is taken"
+        );
         let id = FuncId::new(next_id);
         next_id += 1;
         clone.id = Some(id);
@@ -960,6 +983,10 @@ fn mint_scalarized_clones(
         }
 
         project.func_index.insert(func_key, id);
+        project.sroa_param_clones.insert(id, original);
+        project
+            .sroa_param_clone_ids
+            .insert((original, signature), id);
         let mut chains = project
             .sroa_param_clone_fields
             .get(key)
@@ -977,35 +1004,10 @@ fn mint_scalarized_clones(
         minted.push(Rc::new(RefCell::new(clone)));
     }
     for f in minted {
-        let id = f.borrow().id.expect("a minted clone is stamped with an id");
         touched.insert(project.functions.len());
-        project.sroa_param_clones.insert(id);
         project.functions.push(f);
     }
     clones
-}
-
-/// Whether the clone already standing under this name is the one this run would
-/// mint: same return type, same arity, and the same type at every position — the
-/// scalar type where this run scalarizes, the original's elsewhere.
-fn standing_clone_matches(
-    project: &NirPackage,
-    existing: FnKey,
-    fresh: &NirFunction,
-    key: FnKey,
-    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
-    let standing = project.functions[existing.index()].borrow();
-    standing.return_type == fresh.return_type
-        && standing.params.len() == fresh.params.len()
-        && standing.params.iter().enumerate().all(|(pi, param)| {
-            // `fresh` is still the original's copy here, so its type is what a
-            // position this run does not scalarize keeps.
-            let want = candidates
-                .get(&(key, pi))
-                .map_or(fresh.params[pi].type_id, |info| info.scalar_type_id);
-            param.type_id == want
-        })
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed: DCE

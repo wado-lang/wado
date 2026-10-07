@@ -159,12 +159,17 @@ pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
 
-/// The name of `sroa_param`'s scalarized clone of `original`. The clone takes a
-/// field where the original took the struct around it; the original is left
-/// standing for whatever still needs that shape.
+/// The name of `sroa_param`'s `ordinal`-th scalarized clone of `original`
+/// (from 1). A clone takes a field where the original took the struct around
+/// it; the original is left standing for whatever still needs that shape.
 #[must_use]
-pub fn sroa_param_name(original: &str) -> String {
-    format!("{original}$scalar")
+pub fn sroa_param_name(original: &str, ordinal: usize) -> String {
+    assert!(ordinal >= 1, "clone ordinals count from 1");
+    if ordinal == 1 {
+        format!("{original}$scalar")
+    } else {
+        format!("{original}$scalar{ordinal}")
+    }
 }
 
 /// The WIR local holding one field of an aggregate the multi-value ABI took
