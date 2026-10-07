@@ -4631,11 +4631,6 @@ fn decompose_type_for_method_name(
         ResolvedType::Function { .. } => {
             (Receiver::Type(tt.fn_receiver_name(resolved)), false, vec![])
         }
-        ResolvedType::Reactive(inner) => (
-            Receiver::Type(FqTypeName::builtin("Reactive")),
-            false,
-            vec![tt.fq_type_name(*inner)],
-        ),
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (
             Receiver::Ref(RefKind::from_resolved(resolved).expect("ref classify")),
             false,
@@ -4850,9 +4845,7 @@ fn scalar_order_stmts(
             TirStmtKind::Let {
                 name: String::from(name),
                 local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: ty,
+                is_mut: false,                type_id: ty,
                 value,
                 storage: LetStorage::Planned,
             },
@@ -5243,9 +5236,7 @@ fn build_struct_ord_body(
             TirStmtKind::Let {
                 name: "c".to_string(),
                 local_index: local_idx,
-                is_mut: false,
-                is_reactive: false,
-                type_id: ordering_type,
+                is_mut: false,                type_id: ordering_type,
                 value: cmp_result,
                 storage: LetStorage::Planned,
             },

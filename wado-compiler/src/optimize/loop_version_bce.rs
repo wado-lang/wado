@@ -1139,9 +1139,7 @@ fn alloc_local_set(engine: &mut Engine, l: u32, value: Operand, span: Span) -> S
         StmtKind::Let {
             name,
             local_index: l,
-            is_mut,
-            is_reactive: false,
-            type_id: ty,
+            is_mut,            type_id: ty,
             value,
             skip_value_copy: true,
         },

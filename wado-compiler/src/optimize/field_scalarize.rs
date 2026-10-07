@@ -600,9 +600,7 @@ fn scalarize_loop(
             StmtKind::Let {
                 name: c.new_local_name.clone(),
                 local_index: c.new_local_index,
-                is_mut: true,
-                is_reactive: false,
-                type_id: c.type_id,
+                is_mut: true,                type_id: c.type_id,
                 value: field.into(),
                 skip_value_copy: true,
             },
@@ -2017,9 +2015,7 @@ fn bind_temp(
         StmtKind::Let {
             name: tmp_name.clone(),
             local_index: tmp_idx,
-            is_mut: false,
-            is_reactive: false,
-            type_id,
+            is_mut: false,            type_id,
             value,
             skip_value_copy: true,
         },

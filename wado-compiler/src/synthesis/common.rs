@@ -215,9 +215,7 @@ pub fn let_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExpr) -
         TirStmtKind::Let {
             name: name.to_string(),
             local_index,
-            is_mut: false,
-            is_reactive: false,
-            type_id,
+            is_mut: false,            type_id,
             value,
             storage: LetStorage::Planned,
         },
@@ -231,9 +229,7 @@ pub fn let_mut_stmt(name: &str, local_index: u32, type_id: TypeId, value: TirExp
         TirStmtKind::Let {
             name: name.to_string(),
             local_index,
-            is_mut: true,
-            is_reactive: false,
-            type_id,
+            is_mut: true,            type_id,
             value,
             storage: LetStorage::Planned,
         },

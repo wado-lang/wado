@@ -464,17 +464,10 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                 }
                 wado_compiler::symbol::SymbolKind::BuiltinType => "builtin type".to_string(),
                 wado_compiler::symbol::SymbolKind::Variable(v) => {
-                    let mut flags = Vec::new();
                     if v.is_mut {
-                        flags.push("mut");
-                    }
-                    if v.is_reactive {
-                        flags.push("reactive");
-                    }
-                    if flags.is_empty() {
-                        "var".to_string()
+                        "var(mut)".to_string()
                     } else {
-                        format!("var({})", flags.join(", "))
+                        "var".to_string()
                     }
                 }
                 wado_compiler::symbol::SymbolKind::Resource(r) => {
@@ -548,9 +541,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
                         wado_compiler::tir::ResolvedType::Ref(_) => "ref",
                         wado_compiler::tir::ResolvedType::MutRef(_) => "mut_ref",
                         wado_compiler::tir::ResolvedType::Function { .. } => "fn",
-                        wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",
-                        wado_compiler::tir::ResolvedType::Reactive(_) => "reactive",
-                        wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
+                        wado_compiler::tir::ResolvedType::BuiltinArray(_) => "builtin_array",                        wado_compiler::tir::ResolvedType::TypeParam { .. } => "type_param",
                         wado_compiler::tir::ResolvedType::AssocParam { .. } => "assoc_param",
                         wado_compiler::tir::ResolvedType::GenericInstance { .. } => {
                             "generic_instance"

@@ -2609,12 +2609,14 @@ impl Parser {
         let id = self.alloc_ast_id();
         let attrs = self.parse_attributes()?;
 
-        let is_reactive = if self.check(&TokenKind::Reactive) {
-            self.advance();
-            true
-        } else {
-            false
-        };
+        if self.check(&TokenKind::Reactive) {
+            return Err(ParseError {
+                message: "`reactive` is reserved for reactive signals, which are not in the \
+                    language yet"
+                    .to_string(),
+                span: self.peek().span,
+            });
+        }
 
         self.expect(&TokenKind::Let)?;
 
@@ -2677,7 +2679,6 @@ impl Parser {
             pattern,
             name_span,
             is_mut,
-            is_reactive,
             ty,
             value,
             else_block,

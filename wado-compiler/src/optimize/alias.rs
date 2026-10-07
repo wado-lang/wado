@@ -464,7 +464,7 @@ impl<'a> CallImmutability<'a> {
                 }
             }
             // `&mut T`, `Box`/`List` (as `GenericInstance`), raw arrays,
-            // resources, reactive cells, variants, generics, type params, and
+            // resources, variants, generics, type params, and
             // unknowns may all carry shared mutable state — conservative.
             _ => false,
         };
@@ -1018,9 +1018,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             | ResolvedType::Resource { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_)
-            | ResolvedType::TypeParam { .. }
+            | ResolvedType::Function { .. }            | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
             | ResolvedType::AssocTypeProjection { .. }
@@ -1127,9 +1125,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericResource { .. }
-        | ResolvedType::Function { .. }
-        | ResolvedType::Reactive(_)
-        | ResolvedType::TypeParam { .. }
+        | ResolvedType::Function { .. }        | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
         | ResolvedType::AssocTypeProjection { .. }

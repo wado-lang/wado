@@ -149,9 +149,12 @@ as        assert    async     break     const     continue  effect
 else      enum      export    false     fn        for       global
 if        impl      import    in        interface internal  let
 loop      match     matches   mut       null      pub       reactive
-resource  return    struct    trait     true      unique    use
-variant   while     with      world
+resource  return    struct    trait     true      use       variant
+while     with      world
 ```
+
+`reactive` is reserved for reactive signals, which are not in the language yet,
+so a program that writes it is rejected.
 
 ## Contextual Keywords
 

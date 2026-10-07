@@ -711,9 +711,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
     }
     match type_table.get(ty) {
         ResolvedType::Ref(inner)
-        | ResolvedType::MutRef(inner)
-        | ResolvedType::Reactive(inner)
-        | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
+        | ResolvedType::MutRef(inner)        | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
         ResolvedType::Struct { type_args, .. }
         | ResolvedType::GenericInstance { type_args, .. }
         | ResolvedType::GenericResource { type_args, .. } => type_args
@@ -1835,9 +1833,7 @@ impl Rewriter<'_, '_> {
                     // slots are single-assignment (reassignment goes through
                     // `push` / `index_assign` on the same binding), so the `Let`
                     // must agree.
-                    is_mut: false,
-                    is_reactive: false,
-                    type_id: field.list_type,
+                    is_mut: false,                    type_id: field.list_type,
                     value: init.into(),
                     skip_value_copy: false,
                 },
@@ -2284,9 +2280,7 @@ fn spill(
         StmtKind::Let {
             name: name.clone(),
             local_index,
-            is_mut: false,
-            is_reactive: false,
-            type_id,
+            is_mut: false,            type_id,
             value: op,
             // The temporary carries the element to its one use, as the
             // argument it replaces did.

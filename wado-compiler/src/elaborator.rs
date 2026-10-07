@@ -1432,9 +1432,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let symbol = Symbol {
             name: name.to_string(),
             kind: SymbolKind::Variable(VariableSymbol {
-                is_mut,
-                is_reactive: false,
-            }),
+                is_mut,            }),
             defined_at: def_id,
             module: self.current_module_source.clone(),
             visibility: Visibility::Private,

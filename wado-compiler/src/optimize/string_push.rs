@@ -534,9 +534,7 @@ fn let_stmt(
         StmtKind::Let {
             name,
             local_index: local,
-            is_mut: false,
-            is_reactive: false,
-            type_id,
+            is_mut: false,            type_id,
             value,
             skip_value_copy: true,
         },

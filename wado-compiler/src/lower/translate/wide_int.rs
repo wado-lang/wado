@@ -92,9 +92,7 @@ pub(super) fn build_if_chain(
                     TirStmtKind::Let {
                         name: name.clone(),
                         local_index: *local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: *type_id,
+                        is_mut: false,                        type_id: *type_id,
                         value: scrutinee.clone(),
                         storage: LetStorage::Aliased,
                     },

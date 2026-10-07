@@ -705,9 +705,7 @@ fn apply_field_materialise(
         StmtKind::Let {
             name: name.clone(),
             local_index: av,
-            is_mut: false,
-            is_reactive: false,
-            type_id: id_ty,
+            is_mut: false,            type_id: id_ty,
             value: Operand::Value(rep),
             skip_value_copy: true,
         },
@@ -810,9 +808,7 @@ fn apply_value_freeze(
             StmtKind::Let {
                 name,
                 local_index: av,
-                is_mut: false,
-                is_reactive: false,
-                type_id: id_ty,
+                is_mut: false,                type_id: id_ty,
                 value: Operand::Value(rep),
                 skip_value_copy: true,
             },

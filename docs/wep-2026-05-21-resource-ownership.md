@@ -509,8 +509,8 @@ receiver is spelled bare `self` (scoped to resources, so it never contradicts
 value semantics — see [Move-only resources](#move-only-resources)). `unique`
 as a `struct` modifier only matters for a move-only type that carries no
 resource — a resource-bearing aggregate is already move-only by composition, and
-no use case has appeared. Current state: `move` is not tokenized; `unique` is
-lexed to `TokenKind::Unique` but never parsed. If revived, `unique struct`
+no use case has appeared. Current state: neither `move` nor `unique` is a
+keyword. If revived, `unique struct`
 reuses the same move-check machinery, resources being its first client.
 
 ## Amendments to earlier WEPs

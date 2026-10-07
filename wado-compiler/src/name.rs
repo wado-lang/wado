@@ -1847,8 +1847,6 @@ pub enum TypeNameInfo {
     Option(String),
     /// `Array<T>` (raw Wasm GC array, NOT the user-facing `List<T>` struct)
     BuiltinArray(String),
-    /// `Reactive<T>` with inner type name
-    Reactive(String),
     /// A reference type - formats as inner type (references stripped)
     Ref(String),
     /// Never, Unknown, or Error types
@@ -1868,9 +1866,7 @@ pub fn format_type_name(info: TypeNameInfo) -> String {
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
         TypeNameInfo::Option(inner) => mangle_option_type(&inner),
-        TypeNameInfo::BuiltinArray(elem) => mangle_builtin_array_type(&elem),
-        TypeNameInfo::Reactive(inner) => mangle_generic_name("Reactive", &[inner]),
-        TypeNameInfo::Ref(inner) => inner,
+        TypeNameInfo::BuiltinArray(elem) => mangle_builtin_array_type(&elem),        TypeNameInfo::Ref(inner) => inner,
         TypeNameInfo::Unknown => "unknown".to_string(),
     }
 }

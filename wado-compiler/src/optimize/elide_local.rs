@@ -204,9 +204,7 @@ mod tests {
             kind: StmtKind::Let {
                 name: "x".to_string(),
                 local_index: 0,
-                is_mut: false,
-                is_reactive: false,
-                type_id: TypeTable::I32,
+                is_mut: false,                type_id: TypeTable::I32,
                 value: Operand::Value(one),
                 skip_value_copy: false,
             },
@@ -263,9 +261,7 @@ mod tests {
             kind: StmtKind::Let {
                 name: "x".to_string(),
                 local_index: 0,
-                is_mut: false,
-                is_reactive: false,
-                type_id: TypeTable::I32,
+                is_mut: false,                type_id: TypeTable::I32,
                 value: Operand::Expr(call),
                 skip_value_copy: false,
             },

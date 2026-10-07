@@ -286,9 +286,7 @@ impl ResourceScan<'_> {
                 }
             }
             ResolvedType::Ref(t)
-            | ResolvedType::MutRef(t)
-            | ResolvedType::Reactive(t)
-            | ResolvedType::BuiltinArray(t) => {
+            | ResolvedType::MutRef(t)            | ResolvedType::BuiltinArray(t) => {
                 self.collect(*t, out, visited);
             }
             ResolvedType::Function {

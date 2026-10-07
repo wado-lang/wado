@@ -120,8 +120,6 @@ pub struct NewtypeSymbol {
 pub struct VariableSymbol {
     /// Whether the variable is mutable
     pub is_mut: bool,
-    /// Whether the variable is reactive
-    pub is_reactive: bool,
 }
 
 /// Global variable symbol data

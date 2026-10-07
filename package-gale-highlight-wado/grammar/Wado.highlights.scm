@@ -110,7 +110,6 @@
 (identifier "import" @variable)
 (identifier "export" @variable)
 (identifier "reactive" @variable)
-(identifier "unique" @variable)
 (identifier "forward" @variable)
 (identifier "trap" @variable)
 (identifier "effect" @variable)
@@ -211,7 +210,6 @@
 "trait" @keyword
 "trap" @keyword
 "type" @keyword
-"unique" @keyword
 "use" @keyword
 "variant" @keyword
 "while" @keyword

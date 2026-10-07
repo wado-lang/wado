@@ -621,9 +621,7 @@ fn rebox_call(
         kind: StmtKind::Let {
             name: name.clone(),
             local_index,
-            is_mut: false,
-            is_reactive: false,
-            type_id: layout.tuple_type,
+            is_mut: false,            type_id: layout.tuple_type,
             value: Operand::Expr(call_node),
             skip_value_copy: true,
         },
@@ -960,9 +958,7 @@ fn slot_shape(payload: TypeId, type_table: &TypeTable) -> Option<SlotShape> {
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
-        | ResolvedType::AssocTypeProjection { .. }
-        | ResolvedType::Reactive(_)
-        | ResolvedType::Unknown
+        | ResolvedType::AssocTypeProjection { .. }        | ResolvedType::Unknown
         | ResolvedType::Error => None,
         ResolvedType::InferVar(var) => panic!("{var} reached SROA slot shaping"),
     }
@@ -989,9 +985,7 @@ fn is_gc_ref(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
-        | ResolvedType::AssocTypeProjection { .. }
-        | ResolvedType::Reactive(_)
-        | ResolvedType::Unknown
+        | ResolvedType::AssocTypeProjection { .. }        | ResolvedType::Unknown
         | ResolvedType::Error => false,
         ResolvedType::InferVar(var) => panic!("{var} reached SROA gc-ref test"),
     }
@@ -2540,9 +2534,7 @@ fn hoist_call_scrutinees(
             kind: StmtKind::Let {
                 name,
                 local_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: call_type,
+                is_mut: false,                type_id: call_type,
                 value: Operand::Expr(call),
                 // A call result is fresh; nothing aliases it.
                 skip_value_copy: true,
@@ -2953,9 +2945,7 @@ fn bind_payload_before(
         kind: StmtKind::Let {
             name: cx.names[binding_local as usize].clone(),
             local_index: binding_local,
-            is_mut: false,
-            is_reactive: false,
-            type_id: init_type,
+            is_mut: false,            type_id: init_type,
             value: init,
             // The payload already went through whatever value copy `lower`
             // decided when it was a variant payload; this read introduces none.

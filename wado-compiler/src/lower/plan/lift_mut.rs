@@ -69,9 +69,7 @@ impl MutBindingLifter {
             TirStmtKind::Let {
                 name: name.to_string(),
                 local_index: original,
-                is_mut: true,
-                is_reactive: false,
-                type_id,
+                is_mut: true,                type_id,
                 value: TirExpr::new(
                     TirExprKind::Local {
                         index: fresh,

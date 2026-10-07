@@ -284,10 +284,6 @@ impl SubstitutionContext {
                     type_args: new_args,
                 })
             }
-            ResolvedType::Reactive(inner) => {
-                let new_inner = self.substitute(inner, type_table);
-                type_table.intern(ResolvedType::Reactive(new_inner))
-            }
             // Other types don't contain type parameters
             _ => type_id,
         }
@@ -592,7 +588,6 @@ pub enum ResolvedType {
         return_type: TypeId,
         effects: Vec<EffectRef>,
     },
-    Reactive(TypeId),
     /// Type parameter (e.g., `T` in `struct Box<T>`) — a *rigid* variable.
     ///
     /// It stands for whatever a caller instantiates the binding item with, so
@@ -1399,8 +1394,7 @@ impl TypeTable {
             ResolvedType::Struct { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Variant { .. }
-            | ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_) => Some(self.type_key(ty)),
+            | ResolvedType::Function { .. } => Some(self.type_key(ty)),
             ResolvedType::GenericInstance { .. } => {
                 Some(self.type_key(self.monomorphized_or_self(ty)))
             }
@@ -1790,7 +1784,6 @@ impl TypeTable {
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericResource { .. }
             | ResolvedType::Function { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
@@ -2306,7 +2299,6 @@ impl TypeTable {
                     }
                     ResolvedType::Ref(inner)
                     | ResolvedType::MutRef(inner)
-                    | ResolvedType::Reactive(inner)
                     | ResolvedType::BuiltinArray(inner) => components.push(*inner),
                     ResolvedType::Function {
                         params,
@@ -4618,18 +4610,6 @@ impl TypeTable {
                     )
                 }
             }
-            // `Reactive` wraps an inner type, so substitute it recursively.
-            // Defensive: reactive bindings are typed with the underlying value
-            // type today, so the wrapper never reaches monomorphize — but the
-            // contract is "rewrite every embedded parameter", and it embeds one.
-            ResolvedType::Reactive(inner) => {
-                let new_inner = self.subst_rec(inner, leaves);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.intern(ResolvedType::Reactive(new_inner))
-                }
-            }
             ResolvedType::Newtype {
                 def,
                 type_args,
@@ -5196,8 +5176,7 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => f(*inner),
+            | ResolvedType::MutRef(inner) => f(*inner),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -5471,9 +5450,7 @@ impl TypeTable {
                     self.head_name(*def, qualified),
                     arg_names.join(", ")
                 )
-            }
-            ResolvedType::Reactive(inner) => format!("Reactive<{}>", type_name(*inner)),
-            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
+            }            ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
                 name.clone()
             }
             ResolvedType::InferVar(var) => self.infer_var_name(*var),
@@ -6012,9 +5989,7 @@ impl TypeTable {
                     name: self.def_name(*def).to_string(),
                     args,
                 }
-            }
-            ResolvedType::Reactive(inner) => TypeNameInfo::Reactive(self.mangle_type_name(*inner)),
-            ResolvedType::AssocTypeProjection {
+            }            ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
                 args,
@@ -7084,7 +7059,6 @@ pub enum TirStmtKind {
         name: String,
         local_index: u32,
         is_mut: bool,
-        is_reactive: bool,
         type_id: TypeId,
         value: TirExpr,
         /// Whose storage the binding holds.
@@ -7737,7 +7711,6 @@ impl TypeTable {
             | ResolvedType::Resource { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::GenericResource { .. }
-            | ResolvedType::Reactive(_)
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
@@ -7916,9 +7889,7 @@ impl TypeTable {
         };
         match (self.get(a), self.get(b)) {
             (ResolvedType::Ref(x), ResolvedType::Ref(y))
-            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
-            | (ResolvedType::Reactive(x), ResolvedType::Reactive(y))
-            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
                 Some(all(&[*x], &[*y]))
             }
             (
@@ -7996,7 +7967,6 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner)
             | ResolvedType::BuiltinArray(inner) => inside(&[*inner]),
             ResolvedType::Function {
                 params,
