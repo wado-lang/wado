@@ -378,9 +378,9 @@ fn reject_world_name_clash(pkg_name: &str, flat_reexports: &[(String, Vec<String
     let (worlds, items) = flat_reexports
         .iter()
         .partition::<Vec<_>, _>(|(module, _)| module == "worlds");
-    let world_names = worlds.iter().flat_map(|(_, names)| names);
-    if let Some(clash) = world_names
-        .into_iter()
+    if let Some(clash) = worlds
+        .iter()
+        .flat_map(|(_, names)| names)
         .find(|world| items.iter().any(|(_, names)| names.contains(*world)))
     {
         bail!("world `{clash}` in package {pkg_name} shares its name with an interface item");
