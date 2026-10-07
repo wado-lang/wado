@@ -36,9 +36,20 @@ const gh = (path) => {
     }
   }
 };
+// A day of runs on one branch, or the jobs of one run, never fills a page.
+const onePage = (page, key) => {
+  if (page.total_count > page[key].length) throw new Error(`${page.total_count} ${key} do not fit one page`);
+  return page[key];
+};
+// `new Date` reads 2026-02-30 as March 2 and 2026-9-1 as local time.
+const day = (s) => {
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) throw new Error(`not a YYYY-MM-DD date: ${s}`);
+  return d;
+};
 const secs = (o) => (o?.started_at && o?.completed_at ? Math.round((new Date(o.completed_at) - new Date(o.started_at)) / 1000) : "-");
 const jobRe = new RegExp(opt.job);
-const jobsOf = (runId) => gh(`repos/${opt.repo}/actions/runs/${runId}/jobs?per_page=100`).jobs.filter((j) => jobRe.test(j.name)).sort((a, b) => a.name.localeCompare(b.name));
+const jobsOf = (runId) => onePage(gh(`repos/${opt.repo}/actions/runs/${runId}/jobs?per_page=100`), "jobs").filter((j) => jobRe.test(j.name)).sort((a, b) => a.name.localeCompare(b.name));
 const workflowRuns = `repos/${opt.repo}/actions/workflows/${opt.workflow}/runs`;
 
 if (opt.sha) {
@@ -57,9 +68,9 @@ if (opt.run) {
   // A run listing over a long range comes back incomplete and out of order, so
   // ask one day at a time.
   const runs = [];
-  for (let d = new Date(opt.since); d <= new Date(opt.until); d.setUTCDate(d.getUTCDate() + 1)) {
-    const day = d.toISOString().slice(0, 10);
-    runs.push(...gh(`${workflowRuns}?branch=${opt.branch}&event=${opt.event}&created=${day}&per_page=100`).workflow_runs);
+  for (let d = day(opt.since); d <= day(opt.until); d.setUTCDate(d.getUTCDate() + 1)) {
+    const created = d.toISOString().slice(0, 10);
+    runs.push(...onePage(gh(`${workflowRuns}?branch=${opt.branch}&event=${opt.event}&created=${created}&per_page=100`), "workflow_runs"));
   }
   const stepRe = opt.step && new RegExp(opt.step);
   for (const run of runs.sort((a, b) => a.created_at.localeCompare(b.created_at))) {
