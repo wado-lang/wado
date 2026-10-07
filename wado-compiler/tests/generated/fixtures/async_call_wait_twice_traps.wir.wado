@@ -63,17 +63,17 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(21)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
-type "functype//core:prelude/types.wado/cm_subtask_settled$cold0" = fn(i32);  // TypeId(23)
+type "functype//core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]" = fn(i32);  // TypeId(23)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::ensure_live$cold0" = fn();  // TypeId(24)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::ensure_live$cold0$dae[self]" = fn();  // TypeId(24)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<()>");  // TypeId(26)
 
-type "functype//async_call_wait_twice_traps.wado/async_call_wait_twice_traps.wado/$Closure_0::$call" = fn(i32);  // TypeId(27)
+type "functype//async_call_wait_twice_traps.wado/async_call_wait_twice_traps.wado/$Closure_0::$call$dae[self]" = fn(i32);  // TypeId(27)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
@@ -284,7 +284,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
+fn "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"($v0) {
     let $load_2: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let new_used_11: i32;
@@ -307,7 +307,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_10, 0, 23);
     start_12 = start_12 + 65;
     builtin::array_copy<u8>($load_2, start_12, global:core:prelude/types.wado::$const_obj_9, 0, 1);
-    start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_140($local_3), 0, 3);
+    start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_140($local_3), 0, 3);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, start_12, 386_i64, 3);
     if @unlikely(local.tee start_12($local_3.used + 55) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -321,7 +321,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     $sroa_$f_buf_140 = $local_3;
     new_used_11 = $v0 < 0;
     $v0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_71(x_71 = builtin::i64_extend_i32_s($v0); select i64(x_71 < 0_i64, 0_i64 - x_71, x_71)));
-    new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_140, new_used_11, $v0);
+    new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_140, new_used_11, $v0);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, new_used_11, x_71, $v0);
     if @unlikely(local.tee $v0($local_3.used + 19) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -332,7 +332,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     builtin::array_copy<u8>(local.tee $load_2($local_3.repr), new_used_11, global:core:prelude/types.wado::$const_obj_4, 0, 1);
     new_used_11 = new_used_11 + 1;
     builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/types.wado::$const_obj_5, 0, 18);
-    new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_140($local_3), 0, 1);
+    new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_140($local_3), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, new_used_11, 1_i64, 1);
     if @unlikely(local.tee new_used_11($local_3.used + 1) > builtin::array_len($local_3.repr)) {
         cold_path;
@@ -345,7 +345,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     unreachable;
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::ensure_live$cold0"() {
+fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::ensure_live$cold0$dae[self]"() {
     let $mv_arg_1: ref "core:prelude/string.wado//String";
     "core:rt/panic"(local.tee $mv_arg_1(global:core:prelude/types.wado::$const_obj_14).repr, $mv_arg_1.used);
     unreachable;
@@ -372,7 +372,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"(self) w
     let payload: i32;
     if @unlikely(local.tee $load_0(self.__cm_ended).value) {
         cold_path;
-        "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::ensure_live$cold0"();
+        "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::ensure_live$cold0$dae[self]"();
         unreachable;
     }
     $load_0.value = 1;
@@ -388,7 +388,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"(self) w
                 drop("mem/realloc"(out_ptr, 8, 4, 0));
                 if @unlikely(code != 1) {
                     cold_path;
-                    "core:prelude/types.wado/cm_subtask_settled$cold0"(code);
+                    "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"(code);
                     unreachable;
                 }
                 break_if b39 payload >u 1;
@@ -404,11 +404,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<()>::wait"(self) w
     return nop;
 }
 
-fn "async_call_wait_twice_traps.wado/async_call_wait_twice_traps.wado/$Closure_0::$call"($outptr) {
+fn "async_call_wait_twice_traps.wado/async_call_wait_twice_traps.wado/$Closure_0::$call$dae[self]"($outptr) {
     "async_call_wait_twice_traps.wado/$cm_lift__MonotonicClock_wait_for"($outptr);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
@@ -430,7 +430,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/async_call_wait_twice_traps.wado/$closure_wrapper_0"($env, $p0) {
-    "async_call_wait_twice_traps.wado/async_call_wait_twice_traps.wado/$Closure_0::$call"($p0);
+    "async_call_wait_twice_traps.wado/async_call_wait_twice_traps.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 export fn "async_call_wait_twice_traps.wado/$cm_export__run" as "run"
