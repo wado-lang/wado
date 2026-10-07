@@ -782,6 +782,7 @@ pub struct "AsyncCall<core:prelude/types.wado/Result<(),()>>" {
     __cm_size: i32,
     __cm_align: i32,
     __cm_lift: fn(i32) -> Result<(), ()>,
+    __cm_ended: Box<bool>,
 }
 
 pub struct "Slice<fn()->()>" {
@@ -1847,6 +1848,14 @@ pub struct "SliceValueIter<fn()->()>" {
     end: i32,
 }
 
+pub struct "StructField<core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>,&mut bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
 pub struct "StructField<core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>,fn(i32)->core:prelude/types.wado/Result<(),()>>" {
     index: i32,
     field_name: String,
@@ -2015,16 +2024,16 @@ pub struct "VariantCase<core:prelude/types.wado/Option<i32>,[(),i32]>" {
     is_unit: bool,
 }
 
+pub struct "Box<bool>" {
+    value: bool,
+}
+
 pub struct "Box<f16>" {
     value: f16,
 }
 
 pub struct "Box<bf16>" {
     value: bf16,
-}
-
-pub struct "Box<bool>" {
-    value: bool,
 }
 
 pub struct "Box<char>" {
@@ -2469,6 +2478,10 @@ pub struct "Box<core:prelude/types.wado/Option<&Array<u8>>>" {
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>>" {
     value: Option<CopyResult>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<&mut bool>>" {
+    value: Option<Box<bool>>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>>" {
@@ -6611,6 +6624,13 @@ pub fn "$field_get$core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Res
 pub fn "$field_get$core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>$fn(i32)->core:prelude/types.wado/Result<(),()>"(v: &AsyncCall<core:prelude/types.wado/Result<(),()>>, index: i32) -> fn(i32) -> Result<(), ()> {
     return match index {
         4 => v.__cm_lift,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>$&mut bool"(v: &AsyncCall<core:prelude/types.wado/Result<(),()>>, index: i32) -> Box<bool> {
+    return match index {
+        5 => v.__cm_ended,
         _ => core::builtin::unreachable(),
     };
 }
@@ -10974,6 +10994,44 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/types.wado/Copy
     return $variant_tag(self.value);
 }
 
+pub fn "$case_extract$core:prelude/types.wado/Option<&mut bool>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Box<bool>>>, index: i32) {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&mut bool>$()"(payload: (), index: i32) -> Option<Box<bool>> {
+    return match index {
+        0 => Option<Box<bool>>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<&mut bool>$&mut bool"(v: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Box<bool>>>, index: i32) -> Box<bool> {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&mut bool>$&mut bool"(payload: Box<bool>, index: i32) -> Option<Box<bool>> {
+    return match index {
+        1 => Option<Box<bool>>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<&mut bool>"(self: Box<core:prelude/types.wado/Option<core:prelude/types.wado/Box<bool>>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/fpfmt.wado/SpecialKind>>, index: i32) {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -12733,7 +12791,7 @@ fn "$value_copy$core:prelude/slice.wado/Slice<fn()->()>"(v: Slice<fn()->()>) -> 
 }
 
 fn "$value_copy$core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>"(v: AsyncCall<core:prelude/types.wado/Result<(),()>>) -> AsyncCall<core:prelude/types.wado/Result<(),()>> {
-    return AsyncCall<core:prelude/types.wado/Result<(),()>> { __cm_packed: v.__cm_packed, __cm_outptr: v.__cm_outptr, __cm_size: v.__cm_size, __cm_align: v.__cm_align, __cm_lift: v.__cm_lift };
+    return AsyncCall<core:prelude/types.wado/Result<(),()>> { __cm_packed: v.__cm_packed, __cm_outptr: v.__cm_outptr, __cm_size: v.__cm_size, __cm_align: v.__cm_align, __cm_lift: v.__cm_lift, __cm_ended: v.__cm_ended };
 }
 
 // retains: v

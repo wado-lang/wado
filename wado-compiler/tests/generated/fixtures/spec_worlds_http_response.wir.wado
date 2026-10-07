@@ -510,10 +510,10 @@ fn "spec_worlds_http_response.wado/$cm_task_entry__handle"(request) {
     let $cond_2: bool;
     let $local_10: ref "core:prelude/string.wado//String";
     let $local_11: ref "core:prelude/format.wado//Formatter";
-    let packed_188: i64;
-    let tx_190: i32;
-    let rx_192: i32;
-    let tx_193: i32;
+    let packed_189: i64;
+    let tx_191: i32;
+    let rx_193: i32;
+    let tx_194: i32;
     headers = "spec_worlds_http_response.wado/$cm_binding__Fields_new"();
     if @unlikely(local.tee $cond_2(ref.is_null("spec_worlds_http_response.wado/$cm_binding__Fields_append"(headers, global:spec_worlds_http_response.wado::$const_obj_8, global:spec_worlds_http_response.wado::$const_obj_9))) == 0) {
         cold_path;
@@ -536,12 +536,12 @@ condition: headers.append(\"content-type\" as FieldName, b\"text/plain\") matche
         "core:rt/panic"($local_10.repr, $local_10.used);
         unreachable;
     }
-    $cond_2 = builtin::i32_wrap_i64(local.tee packed_188("wasi/stream-new"()));
-    tx_190 = builtin::i32_wrap_i64(packed_188 >> 32_i64);
-    rx_192 = builtin::i32_wrap_i64(local.tee packed_188("wasi/future-new"()));
-    tx_193 = builtin::i32_wrap_i64(packed_188 >> 32_i64);
-    rx_192 = "spec_worlds_http_response.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $cond_2 }, rx_192).0;
-    if @unlikely(local.tee $cond_2("spec_worlds_http_response.wado/$cm_binding__Response_set_status_code"(rx_192, 201).discriminant == 0) == 0) {
+    $cond_2 = builtin::i32_wrap_i64(local.tee packed_189("wasi/stream-new"()));
+    tx_191 = builtin::i32_wrap_i64(packed_189 >> 32_i64);
+    rx_193 = builtin::i32_wrap_i64(local.tee packed_189("wasi/future-new"()));
+    tx_194 = builtin::i32_wrap_i64(packed_189 >> 32_i64);
+    rx_193 = "spec_worlds_http_response.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: $cond_2 }, rx_193).0;
+    if @unlikely(local.tee $cond_2("spec_worlds_http_response.wado/$cm_binding__Response_set_status_code"(rx_193, 201).discriminant == 0) == 0) {
         cold_path;
         $cond_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_10("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(133)), 61);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $cond_2, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -557,11 +557,11 @@ condition: headers.append(\"content-type\" as FieldName, b\"text/plain\") matche
         unreachable;
     }
     $cond_2 = 0;
-    $cond_2 = rx_192;
+    $cond_2 = rx_193;
     "wasi/task-return:handle"(0, $cond_2, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_190, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: global:spec_worlds_http_response.wado::$const_obj_5, used: 7, index: 0 }));
-    "wasi/stream-drop-writable"(tx_190);
-    "spec_worlds_http_response.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_193, global:spec_worlds_http_response.wado::$const_obj_4);
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_191, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: global:spec_worlds_http_response.wado::$const_obj_5, used: 7, index: 0 }));
+    "wasi/stream-drop-writable"(tx_191);
+    "spec_worlds_http_response.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_194, global:spec_worlds_http_response.wado::$const_obj_4);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 

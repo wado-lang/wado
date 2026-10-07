@@ -527,10 +527,10 @@ fn "http_base64_decode.wado/$cm_task_entry__handle"(request) {
     let $cond: bool;
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_14: ref "core:prelude/format.wado//Formatter";
-    let packed_193: i64;
-    let tx_195: i32;
-    let rx_197: i32;
-    let tx_198: i32;
+    let packed_194: i64;
+    let tx_196: i32;
+    let rx_198: i32;
+    let tx_199: i32;
     if @unlikely(local.tee $cond((if ref.is_null(local.tee result(block -> ref null "core:prelude//List<u8>" {
         let $mv_arg_1: ref "core:prelude/slice.wado//Slice<u8>";
         global:http_base64_decode.wado::$const_obj_13 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: global:http_base64_decode.wado::$const_obj_14 = array.new_fixed<u8>(89, 87, 74, 106); global:http_base64_decode.wado::$const_obj_14, start: 0, end: 4 };
@@ -562,14 +562,14 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
         "core:rt/panic"($local_13.repr, $local_13.used);
         unreachable;
     }
-    $cond = builtin::i32_wrap_i64(local.tee packed_193("wasi/future-new"()));
-    tx_195 = builtin::i32_wrap_i64(packed_193 >> 32_i64);
-    rx_197 = builtin::i32_wrap_i64(local.tee packed_193("wasi/stream-new"()));
-    tx_198 = builtin::i32_wrap_i64(packed_193 >> 32_i64);
-    $cond = "http_base64_decode.wado/$cm_binding__Response_new"("http_base64_decode.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: rx_197 }, $cond).0;
-    rx_197 = 0;
-    rx_197 = $cond;
-    "wasi/task-return:handle"(0, rx_197, 0, 0_i64, 0, 0, 0, 0);
+    $cond = builtin::i32_wrap_i64(local.tee packed_194("wasi/future-new"()));
+    tx_196 = builtin::i32_wrap_i64(packed_194 >> 32_i64);
+    rx_198 = builtin::i32_wrap_i64(local.tee packed_194("wasi/stream-new"()));
+    tx_199 = builtin::i32_wrap_i64(packed_194 >> 32_i64);
+    $cond = "http_base64_decode.wado/$cm_binding__Response_new"("http_base64_decode.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: rx_198 }, $cond).0;
+    rx_198 = 0;
+    rx_198 = $cond;
+    "wasi/task-return:handle"(0, rx_198, 0, 0_i64, 0, 0, 0, 0);
     $local_13 = (if @unlikely(ref.is_null(local.tee result(block -> ref null "core:prelude//List<u8>" {
         global:http_base64_decode.wado::$const_obj_10 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: global:http_base64_decode.wado::$const_obj_11 = array.new_fixed<u8>(89, 87, 74, 106); global:http_base64_decode.wado::$const_obj_11, start: 0, end: 4 };
         "core:base64/decode_impl"(local.tee $mv_arg_1(global:http_base64_decode.wado::$const_obj_10).repr, $mv_arg_1.start, $mv_arg_1.end, global:core:base64::DECODE_TABLE);
@@ -579,21 +579,21 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
             $mv_arg_1 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee bytes_2("core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<u8>^core:prelude/traits.wado/Iterator::collect<core:prelude/list.wado/List<u8>>"(struct.new "core:prelude/slice.wado//SliceValueIter<u8>" { repr: bytes_2.repr, index: 0, end: bytes_2.used })).repr, start: 0, end: bytes_2.used };
             let $mv$$local_8$1: ref null "core:prelude/string.wado//String";
             let $mv$$local_8$2: ref null "core:prelude/string.wado//Utf8Error";
-            multivalue_bind [rx_197, $mv$$local_8$1, $mv$$local_8$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"($mv_arg_1);
-            if @likely(rx_197 == 0) {
+            multivalue_bind [rx_198, $mv$$local_8$1, $mv$$local_8$2] = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_slice"($mv_arg_1);
+            if @likely(rx_198 == 0) {
                 break $inline_core_prelude_string_wado_String__from_utf8_lossy_core_prelude_bytes_wado_ByteList__7: local.tee $local_13(ref.as_non_null($mv$$local_8$1));
             } else {
             }
             cold_path;
-            $local_13 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(local.tee rx_197("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len"($mv_arg_1)));
+            $local_13 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(local.tee rx_198("core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len"($mv_arg_1)));
             $cond = 0;
             b7: block {
                 l8: loop {
-                    break_if b7 $cond >= rx_197;
+                    break_if b7 $cond >= rx_198;
                     let $mv$scalar$code: u32;
                     let $mv$scalar$advance: i32;
                     let $mv$scalar$valid: bool;
-                    multivalue_bind [$mv$scalar$code, $mv$scalar$advance, $mv$scalar$valid] = "core:prelude/string.wado/decode_utf8_scalar"($mv_arg_1, $cond, rx_197);
+                    multivalue_bind [$mv$scalar$code, $mv$scalar$advance, $mv$scalar$valid] = "core:prelude/string.wado/decode_utf8_scalar"($mv_arg_1, $cond, rx_198);
                     if $mv$scalar$valid {
                         "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_13, "core:prelude/primitive.wado/char::from_u32_unchecked"($mv$scalar$code));
                     } else {
@@ -608,9 +608,9 @@ condition: result matches { Some(bytes) && bytes.len() == 3 }
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 65, 73, 76), used: 4 };
     });
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_198, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_13.repr, used: $local_13.used, index: 0 }));
-    "wasi/stream-drop-writable"(tx_198);
-    "http_base64_decode.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_195, global:http_base64_decode.wado::$const_obj_9);
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_199, "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_13.repr, used: $local_13.used, index: 0 }));
+    "wasi/stream-drop-writable"(tx_199);
+    "http_base64_decode.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_196, global:http_base64_decode.wado::$const_obj_9);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 

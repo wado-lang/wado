@@ -395,45 +395,45 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     let $load_10: i32;
     let chunks: ref "core:prelude//List<core:prelude/list.wado/List<u8>>";
     let elements: ref "Array<core:prelude/list.wado/List<u8>>";
-    let value_196: ref "core:prelude//List<u8>";
+    let value_197: ref "core:prelude//List<u8>";
     let used: i32;
-    let packed_203: i64;
-    let $sroa_$pattern_temp_0_0_216: i32;
-    $sroa_$pattern_temp_0_0_216 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
-    $sroa_$pattern_temp_0_0_216 = "stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_216).0;
+    let packed_204: i64;
+    let $sroa_$pattern_temp_0_0_217: i32;
+    $sroa_$pattern_temp_0_0_217 = builtin::i32_wrap_i64("wasi/future-new:transmission-wasi/http/types.wado#error-code"());
+    $sroa_$pattern_temp_0_0_217 = "stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0_217).0;
     chunks = struct.new "core:prelude//List<core:prelude/list.wado/List<u8>>" { repr: local.tee elements(array.new_fixed<ref "core:prelude//List<u8>">()), used: 0 };
     b1: block {
         l2: loop {
             let $mv$chunk_6$items: ref "core:prelude//List<u8>";
-            multivalue_bind [$mv$chunk_6$items, request] = "core:rt/cm_stream_read_u8"($sroa_$pattern_temp_0_0_216, 4096);
-            value_196 = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $mv$chunk_6$items.repr; $load_2 = $mv$chunk_6$items.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
+            multivalue_bind [$mv$chunk_6$items, request] = "core:rt/cm_stream_read_u8"($sroa_$pattern_temp_0_0_217, 4096);
+            value_197 = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $mv$chunk_6$items.repr; $load_2 = $mv$chunk_6$items.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
             if @unlikely(local.tee used(chunks.used) >= builtin::array_len(chunks.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<u8>>::grow"(chunks);
             }
-            builtin::array_set<ref "core:prelude//List<u8>">(chunks.repr, used, value_196);
+            builtin::array_set<ref "core:prelude//List<u8>">(chunks.repr, used, value_197);
             chunks.used = used + 1;
             break_if b1 request != 0;
             continue l2;
         };
     };
-    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_216);
-    $sroa_$pattern_temp_0_0_216 = builtin::i32_wrap_i64(local.tee packed_203("wasi/future-new"()));
-    $load_2 = builtin::i32_wrap_i64(packed_203 >> 32_i64);
-    request = builtin::i32_wrap_i64(local.tee packed_203("wasi/stream-new"()));
-    used = builtin::i32_wrap_i64(packed_203 >> 32_i64);
-    $sroa_$pattern_temp_0_0_216 = "stream_http_echo.wado/$cm_binding__Response_new"("stream_http_echo.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: request }, $sroa_$pattern_temp_0_0_216).0;
+    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_217);
+    $sroa_$pattern_temp_0_0_217 = builtin::i32_wrap_i64(local.tee packed_204("wasi/future-new"()));
+    $load_2 = builtin::i32_wrap_i64(packed_204 >> 32_i64);
+    request = builtin::i32_wrap_i64(local.tee packed_204("wasi/stream-new"()));
+    used = builtin::i32_wrap_i64(packed_204 >> 32_i64);
+    $sroa_$pattern_temp_0_0_217 = "stream_http_echo.wado/$cm_binding__Response_new"("stream_http_echo.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: request }, $sroa_$pattern_temp_0_0_217).0;
     request = 0;
-    request = $sroa_$pattern_temp_0_0_216;
+    request = $sroa_$pattern_temp_0_0_217;
     "wasi/task-return:handle"(0, request, 0, 0_i64, 0, 0, 0, 0);
     request = chunks.used;
     elements = chunks.repr;
-    $sroa_$pattern_temp_0_0_216 = 0;
+    $sroa_$pattern_temp_0_0_217 = 0;
     b4: block {
         l5: loop {
-            break_if b4 $sroa_$pattern_temp_0_0_216 >= request;
-            $mv$chunk_6$items = struct.new "core:prelude//List<u8>" { repr: $array_clone_dst_2 = local.tee $mv$chunk_6$items(builtin::array_get_value<ref "core:prelude//List<u8>">(elements, $sroa_$pattern_temp_0_0_216)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_10($mv$chunk_6$items.used))), 0, $array_clone_dst_2, 0, $load_10); $array_clone_src_1, used: $load_10 };
-            $sroa_$pattern_temp_0_0_216 = $sroa_$pattern_temp_0_0_216 + 1;
+            break_if b4 $sroa_$pattern_temp_0_0_217 >= request;
+            $mv$chunk_6$items = struct.new "core:prelude//List<u8>" { repr: $array_clone_dst_2 = local.tee $mv$chunk_6$items(builtin::array_get_value<ref "core:prelude//List<u8>">(elements, $sroa_$pattern_temp_0_0_217)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_10($mv$chunk_6$items.used))), 0, $array_clone_dst_2, 0, $load_10); $array_clone_src_1, used: $load_10 };
+            $sroa_$pattern_temp_0_0_217 = $sroa_$pattern_temp_0_0_217 + 1;
             "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(used, $mv$chunk_6$items);
             continue l5;
         };

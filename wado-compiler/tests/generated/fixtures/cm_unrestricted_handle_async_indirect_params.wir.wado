@@ -4,83 +4,90 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct core:prelude/types.wado//Box<bool> {  // TypeId(1)
+    mut value: bool,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct cm_unrestricted_handle_async_indirect_params.wado//$Closure_0 {  // TypeId(3)}
+struct cm_unrestricted_handle_async_indirect_params.wado//$Closure_0 {  // TypeId(4)}
 
-struct core:prelude/types.wado//AsyncCall<i32> {  // TypeId(4)
+struct core:prelude/types.wado//AsyncCall<i32> {  // TypeId(5)
     mut __cm_packed: i32,
     mut __cm_outptr: i32,
     mut __cm_size: i32,
     mut __cm_align: i32,
     mut __cm_lift: ref struct,
+    mut __cm_ended: ref "core:prelude/types.wado//Box<bool>",
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(5)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32) -> i32;  // TypeId(6)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(6)
+struct canonical//CanonicalClosure_0 {  // TypeId(7)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(11)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/example:demo/Dom::touch" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//wasi/example:demo/Dom::touch" = fn(i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/example:demo/Dom::root" = fn() -> f64;  // TypeId(14)
+type "functype//wasi/example:demo/Dom::root" = fn() -> f64;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_root" = fn() -> u64;  // TypeId(16)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_root" = fn() -> u64;  // TypeId(17)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch" = fn(u64, i32, i32, i32, i32) -> ref "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(17)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch" = fn(u64, i32, i32, i32, i32) -> ref "core:prelude/types.wado//AsyncCall<i32>";  // TypeId(18)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__Dom_touch" = fn(i32) -> i32;  // TypeId(18)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__Dom_touch" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_export__run" = fn();  // TypeId(19)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(21)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(22)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
-type "functype//core:prelude/types.wado/cm_subtask_settled$cold0" = fn(i32);  // TypeId(24)
+type "functype//core:prelude/types.wado/cm_subtask_settled$cold0" = fn(i32);  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::ensure_live$cold0" = fn();  // TypeId(26)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<i32>");  // TypeId(26)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//cm_unrestricted_handle_async_indirect_params.wado/cm_unrestricted_handle_async_indirect_params.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(27)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<i32>");  // TypeId(28)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
+type "functype//cm_unrestricted_handle_async_indirect_params.wado/cm_unrestricted_handle_async_indirect_params.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(32)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(33)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(34)
+
+type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(35)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -107,6 +114,7 @@ global global:core:prelude/types.wado::$const_obj_10: ref Array<u8> = array.new_
 global global:core:prelude/types.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
 global global:core:prelude/types.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(99, 109, 95, 115, 117, 98, 116, 97, 115, 107, 95, 115, 101, 116, 116, 108, 101, 100);
 global global:core:prelude/types.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global global:core:prelude/types.wado::$const_obj_14: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(65, 115, 121, 110, 99, 67, 97, 108, 108, 32, 117, 115, 101, 100, 32, 97, 102, 116, 101, 114, 32, 119, 97, 105, 116, 32, 111, 114, 32, 99, 97, 110, 99, 101, 108), used: 35 };
 
 fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_root"() with Dom {
     return builtin::i64_reinterpret_f64("wasi/example:demo/Dom::root"());
@@ -121,7 +129,7 @@ fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_binding__Dom_touch"(n,
     builtin::store_i32($params_buf + 12, b);
     builtin::store_i32($params_buf + 16, c);
     builtin::store_i32($params_buf + 20, d);
-    return struct.new "core:prelude/types.wado//AsyncCall<i32>" { __cm_packed: "wasi/example:demo/Dom::touch"($params_buf, $async_outptr), __cm_outptr: $async_outptr, __cm_size: 4, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_unrestricted_handle_async_indirect_params.wado//$Closure_0" {  }, func: ref.func "closure/cm_unrestricted_handle_async_indirect_params.wado/$closure_wrapper_0" } };
+    return struct.new "core:prelude/types.wado//AsyncCall<i32>" { __cm_packed: "wasi/example:demo/Dom::touch"($params_buf, $async_outptr), __cm_outptr: $async_outptr, __cm_size: 4, __cm_align: 4, __cm_lift: struct.new "canonical//CanonicalClosure_0" { env: struct.new "cm_unrestricted_handle_async_indirect_params.wado//$Closure_0" {  }, func: ref.func "closure/cm_unrestricted_handle_async_indirect_params.wado/$closure_wrapper_0" }, __cm_ended: struct.new "core:prelude/types.wado//Box<bool>" { value: 0 } };
 }
 
 fn "cm_unrestricted_handle_async_indirect_params.wado/$cm_lift__Dom_touch"($outptr) {
@@ -352,6 +360,12 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0"($v0) {
     unreachable;
 }
 
+fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::ensure_live$cold0"() {
+    let $mv_arg_1: ref "core:prelude/string.wado//String";
+    "core:rt/panic"(local.tee $mv_arg_1(global:core:prelude/types.wado::$const_obj_14).repr, $mv_arg_1.used);
+    unreachable;
+}
+
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
     let $load_0: ref Array<u8>;
     let capacity: i32;
@@ -365,16 +379,23 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"(self) with Subtask, WaitableSet {
+    let $load_0: ref "core:prelude/types.wado//Box<bool>";
     let handle_1: i32;
     let ws_3: i32;
     let out_ptr: i32;
     let code: i32;
     let payload: i32;
+    if @unlikely(local.tee $load_0(self.__cm_ended).value) {
+        cold_path;
+        "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::ensure_live$cold0"();
+        unreachable;
+    }
+    $load_0.value = 1;
     if local.tee handle_1(self.__cm_packed >>u 4) != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b38: block {
-            l39: loop {
+        b39: block {
+            l40: loop {
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
@@ -385,8 +406,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"(self) 
                     "core:prelude/types.wado/cm_subtask_settled$cold0"(code);
                     unreachable;
                 }
-                break_if b38 payload >u 1;
-                continue l39;
+                break_if b39 payload >u 1;
+                continue l40;
             };
         };
         "wasi/subtask-drop"(handle_1);
