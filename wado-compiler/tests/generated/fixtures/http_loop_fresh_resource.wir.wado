@@ -295,6 +295,11 @@ import fn wasi/future-write from "wasi/future-write";
 global global:http_loop_fresh_resource.wado::$const_obj_2: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
 global global:http_loop_fresh_resource.wado::$const_obj_3: ref "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(120), used: 1 };
 global global:http_loop_fresh_resource.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
+global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$0: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 0 };
+global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$1: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 1 };
+global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$2: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 2 };
+global global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$3: ref "wasi:http/types.wado//HeaderError" = struct.new "wasi:http/types.wado//HeaderError" { 3 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 
 fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append"(self, name, value) with Fields {
     let $name_packed: i64;
@@ -336,13 +341,13 @@ fn "http_loop_fresh_resource.wado/$cm_binding__Fields_append"(self, name, value)
     $result_val = (if local.tee self(builtin::load_u8(self_16)) == 0 -> ref null "wasi:http/types.wado//HeaderError" {
         ref.null none;
     } else if local.tee self(builtin::load_u8(self_16 + 4)) == 0 -> ref "wasi:http/types.wado//HeaderError" {
-        struct.new "wasi:http/types.wado//HeaderError" { 0 };
+        global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$0;
     } else if self == 1 -> ref "wasi:http/types.wado//HeaderError" {
-        struct.new "wasi:http/types.wado//HeaderError" { 1 };
+        global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$1;
     } else if self == 2 -> ref "wasi:http/types.wado//HeaderError" {
-        struct.new "wasi:http/types.wado//HeaderError" { 2 };
+        global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$2;
     } else if self == 3 -> ref "wasi:http/types.wado//HeaderError" {
-        struct.new "wasi:http/types.wado//HeaderError" { 3 };
+        global:core:builtin::$unit_case$wasi:http/types.wado//HeaderError$3;
     } else {
         self = builtin::load_u8((self_16 + 4) + 4);
         $local_11 = ref.null none;
@@ -410,7 +415,7 @@ fn "http_loop_fresh_resource.wado/$cm_task_entry__handle"(request) {
     };
     i = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     scratch = builtin::i32_wrap_i64(packed >> 32_i64);
-    i = "http_loop_fresh_resource.wado/$cm_binding__Response_new"("http_loop_fresh_resource.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, i).0;
+    i = "http_loop_fresh_resource.wado/$cm_binding__Response_new"("http_loop_fresh_resource.wado/$cm_binding__Fields_new"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, i).0;
     $tv_1 = 0;
     $tv_1 = i;
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);

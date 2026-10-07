@@ -90,7 +90,7 @@ The stdlib tests aim at 100% coverage of the stdlib, whatever the fixtures
 cover. `mise run test-stdlib-coverage` holds the stdlib to
 `scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
 a difference either way. New code gets a test, or `#[coverage(off)]` where no
-test can reach it. Remove what a new test covers with
+test can reach it. Remove what the tests now reach with
 `mise run update-stdlib-coverage-baseline`; never add to it.
 
 `builtin::select` evaluates both operands and hands one back, so it is planned

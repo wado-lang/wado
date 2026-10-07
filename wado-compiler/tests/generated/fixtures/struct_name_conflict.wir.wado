@@ -33,7 +33,7 @@ type "functype//struct_name_conflict.wado/$cm_export__run" = fn();  // TypeId(12
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
@@ -76,13 +76,13 @@ fn "struct_name_conflict.wado/run"() with Stdout {
     rx_46 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:struct_name_conflict.wado::$const_obj_9;
-    "core:rt/write_string_to_stream"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_46);
     rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
     tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
     rx_46 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
     $mv_arg_2 = global:struct_name_conflict.wado::$const_obj_8;
-    "core:rt/write_string_to_stream"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_46);
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(66), used: 0 };
     if @unlikely(local.tee rx_46(0 + 14) > builtin::array_len($mv_arg_2.repr)) {
@@ -130,7 +130,7 @@ fn "struct_name_conflict.wado/run"() with Stdout {
     rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
     tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
     rx_46 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
-    "core:rt/write_string_to_stream"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_46);
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
     if @unlikely(local.tee rx_46(0 + 15) > builtin::array_len($mv_arg_2.repr)) {
@@ -164,7 +164,7 @@ fn "struct_name_conflict.wado/run"() with Stdout {
     rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
     tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
     rx_46 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
-    "core:rt/write_string_to_stream"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_47, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_46);
 }
 
@@ -199,7 +199,7 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

@@ -31,15 +31,15 @@ type "functype//opt_bce_len_minus_non_length_field.wado/$cm_binding__Stdout_writ
 
 type "functype//opt_bce_len_minus_non_length_field.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//opt_bce_len_minus_non_length_field.wado/f$cold0" = fn();  // TypeId(13)
+type "functype//opt_bce_len_minus_non_length_field.wado/f$cold0$dae[s]" = fn();  // TypeId(13)
 
-type "functype//opt_bce_len_minus_non_length_field.wado/f$scalar" = fn(i32);  // TypeId(14)
+type "functype//opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]" = fn(i32);  // TypeId(14)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(18)
 
@@ -47,7 +47,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
@@ -81,26 +81,26 @@ fn "opt_bce_len_minus_non_length_field.wado/$cm_export__run"() {
     let $sroa_t_n_2: i32;
     $sroa_t_n_2 = black_box(5);
     drop(black_box(3));
-    "opt_bce_len_minus_non_length_field.wado/f$scalar"($sroa_t_n_2);
+    "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"($sroa_t_n_2);
     $sroa_t_n_2 = black_box(-2147483648);
     drop(black_box(3));
-    "opt_bce_len_minus_non_length_field.wado/f$scalar"($sroa_t_n_2);
+    "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"($sroa_t_n_2);
     "wasi/task-return"(0);
 }
 
-fn "opt_bce_len_minus_non_length_field.wado/f$cold0"() with Stdout {
+fn "opt_bce_len_minus_non_length_field.wado/f$cold0$dae[s]"() with Stdout {
     "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wrapped"), used: 7 });
     unreachable;
 }
 
-fn "opt_bce_len_minus_non_length_field.wado/f$scalar"(s) with Stdout {
+fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Stdout {
     let idx: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let start_21: i32;
     let x: i64;
     if @unlikely(local.tee idx(s - 1) >= s) {
         cold_path;
-        "opt_bce_len_minus_non_length_field.wado/f$cold0"();
+        "opt_bce_len_minus_non_length_field.wado/f$cold0$dae[s]"();
         unreachable;
     }
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
@@ -113,12 +113,12 @@ fn "opt_bce_len_minus_non_length_field.wado/f$scalar"(s) with Stdout {
     builtin::array_copy<u8>($local_2.repr, start_21, global:opt_bce_len_minus_non_length_field.wado::$const_obj_7, 0, 3);
     start_21 = idx < 0;
     idx = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(idx); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_2, start_21, idx);
+    start_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, start_21, idx);
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, start_21, x, idx);
     idx = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     start_21 = builtin::i32_wrap_i64(x >> 32_i64);
     idx = "opt_bce_len_minus_non_length_field.wado/$cm_binding__Stdout_write_via_stream"(idx);
-    "core:rt/write_string_to_stream"(start_21, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_21, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(idx);
     return;
 }
@@ -206,7 +206,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -224,7 +224,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -297,7 +297,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

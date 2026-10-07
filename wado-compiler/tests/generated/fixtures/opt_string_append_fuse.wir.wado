@@ -31,7 +31,7 @@ type "functype//opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream
 
 type "functype//opt_string_append_fuse.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
 
@@ -99,7 +99,7 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     i = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
     start_85 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
     i = "opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream"(i);
-    "core:rt/write_string_to_stream"(start_85, buf_0.repr, buf_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_85, buf_0.repr, buf_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i);
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
     if @unlikely(3 > builtin::array_len(buf_0.repr)) {
@@ -120,7 +120,7 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     i = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
     start_85 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
     i = "opt_string_append_fuse.wado/$cm_binding__Stdout_write_via_stream"(i);
-    "core:rt/write_string_to_stream"(start_85, buf_0.repr, buf_0.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_85, buf_0.repr, buf_0.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i);
 }
 
@@ -133,7 +133,7 @@ fn "opt_string_append_fuse.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

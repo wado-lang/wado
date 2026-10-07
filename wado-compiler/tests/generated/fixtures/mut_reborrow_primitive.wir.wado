@@ -39,7 +39,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
@@ -107,7 +107,7 @@ fn "mut_reborrow_primitive.wado/run"() with Stdout {
     start_23 = builtin::i32_wrap_i64(local.tee x_36("wasi/stream-new"()));
     new_used_22 = builtin::i32_wrap_i64(x_36 >> 32_i64);
     start_23 = "mut_reborrow_primitive.wado/$cm_binding__Stdout_write_via_stream"(start_23);
-    "core:rt/write_string_to_stream"(new_used_22, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_22, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_23);
 }
 
@@ -203,7 +203,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

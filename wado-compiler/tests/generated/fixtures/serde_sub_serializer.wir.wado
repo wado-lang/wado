@@ -95,7 +95,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(28)
 
@@ -105,11 +105,11 @@ type "functype//serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSe
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "serde_sub_serializer.wado//SerializeError";  // TypeId(32)
+type "functype//serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string$sroa[&mut(self.buf)]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref null "serde_sub_serializer.wado//SerializeError";  // TypeId(32)
 
-type "functype//serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$scalar" = fn(ref "serde_sub_serializer.wado//TextStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "serde_sub_serializer.wado//SerializeError";  // TypeId(33)
+type "functype//serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$sroa[value.value]" = fn(ref "serde_sub_serializer.wado//TextStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "serde_sub_serializer.wado//SerializeError";  // TypeId(33)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(34)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
@@ -232,7 +232,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     start_31 = builtin::i32_wrap_i64(local.tee packed_150("wasi/stream-new"()));
     start_148 = builtin::i32_wrap_i64(packed_150 >> 32_i64);
     start_31 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(start_31);
-    "core:rt/write_string_to_stream"(start_148, self_24.repr, self_24.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_148, self_24.repr, self_24.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_31);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if @unlikely(local.tee start_31(local.tee self_24(ser.buf).used + 1) > builtin::array_len(self_24.repr)) {
@@ -247,7 +247,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
         struct.new "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(st.1) };
     })) {
         drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<core:prelude/string.wado/String>"(local.tee $local_13(ref.cast "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"($match_15).payload_0), global:serde_sub_serializer.wado::$const_obj_12, global:serde_sub_serializer.wado::$const_obj_13));
-        drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$scalar"($local_13, global:serde_sub_serializer.wado::$const_obj_11, 30));
+        drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$sroa[value.value]"($local_13, global:serde_sub_serializer.wado::$const_obj_11, 30));
         if @unlikely(local.tee start_148(local.tee self_24($local_13.parent.buf).used + 1) > builtin::array_len(self_24.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_24, start_148);
@@ -274,7 +274,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     start_31 = builtin::i32_wrap_i64(local.tee packed_150("wasi/stream-new"()));
     new_used_30 = builtin::i32_wrap_i64(packed_150 >> 32_i64);
     start_31 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(start_31);
-    "core:rt/write_string_to_stream"(new_used_30, self_24.repr, self_24.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_30, self_24.repr, self_24.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(start_31);
 }
 
@@ -370,7 +370,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -486,7 +486,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         name.used = start_41;
         builtin::array_copy<u8>(name.repr, new_used_18, out_11.repr, 0, start_19);
     };
-    drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string$scalar"(local.tee out_11(self.parent.buf), value));
+    drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string$sroa[&mut(self.buf)]"(local.tee out_11(self.parent.buf), value));
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -507,7 +507,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:pre
     };
 }
 
-fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string$scalar"(self, v) {
+fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string$sroa[&mut(self.buf)]"(self, v) {
     let $load_3: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let self_21: i32;
@@ -538,7 +538,7 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub
     return ref.null none;
 }
 
-fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$scalar"(self, name, value) {
+fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$sroa[value.value]"(self, name, value) {
     let $load_10: ref Array<u8>;
     let out_11: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
@@ -577,12 +577,12 @@ fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^ser
         name.used = start_41;
         builtin::array_copy<u8>(name.repr, new_used_18, out_11.repr, 0, start_19);
     };
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee out_11(self.parent.buf), out_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; start_19 = value < 0; value = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(value); select i64(x < 0_i64, 0_i64 - x, x))); start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(out_11, start_19, value); "core:prelude/primitive.wado/write_decimal_digits"(out_11.repr, start_19, x, value); out_11);
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee out_11(self.parent.buf), out_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; start_19 = value < 0; value = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(value); select i64(x < 0_i64, 0_i64 - x, x))); start_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(out_11, start_19, value); "core:prelude/primitive.wado/write_decimal_digits"(out_11.repr, start_19, x, value); out_11);
     self.count = self.count + 1;
     return ref.null none;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

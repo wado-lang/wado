@@ -128,6 +128,12 @@ pub struct DocType {
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub methods: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub trait_impls: Vec<DocTraitImpl>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -278,7 +284,7 @@ pub fn extract_doc_filtered(
         match item {
             Item::Trait(t) => traits.push(build_doc_trait(t, trivia)),
             Item::Struct(s) => structs.push(build_doc_struct(s, &impls, trivia, include_private)),
-            Item::Newtype(t) => types.push(build_doc_type(t, trivia)),
+            Item::Newtype(t) => types.push(build_doc_type(t, &impls, trivia, include_private)),
             Item::Global(g) => globals.push(build_doc_global(g, trivia)),
             Item::Enum(e) => enums.push(build_doc_enum(e, trivia)),
             Item::Variant(v) => variants.push(build_doc_variant(v, trivia)),
@@ -416,7 +422,12 @@ fn build_doc_struct(
     }
 }
 
-fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
+fn build_doc_type(
+    t: &Newtype,
+    impls: &[&ImplBlock],
+    trivia: &TriviaMap,
+    include_private: bool,
+) -> DocType {
     let mut sig = String::new();
     if t.visibility.is_public() {
         sig.push_str("pub ");
@@ -426,11 +437,16 @@ fn build_doc_type(t: &Newtype, trivia: &TriviaMap) -> DocType {
     sig.push_str(" = ");
     sig.push_str(&render_type(&t.ty));
 
+    let (methods, trait_impls) =
+        collect_impl_methods_for_type(&t.name, impls, trivia, include_private);
     DocType {
         name: t.name.clone(),
         base_type: render_type(&t.ty),
         signature: sig,
         doc: extract_doc_comment(trivia, t.id, &t.span),
+        constants: collect_impl_constants_for_type(&t.name, impls, trivia, include_private),
+        methods,
+        trait_impls,
     }
 }
 

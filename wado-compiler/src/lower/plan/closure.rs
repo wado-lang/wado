@@ -789,18 +789,6 @@ impl ClosureLowerer {
             let call_method_rc = Rc::new(RefCell::new(call_method));
             self.generated_functions.push(Rc::clone(&call_method_rc));
 
-            self.functor_infos.push(ClosureFunctor {
-                module_source: self.module_source.clone(),
-                id: collected.id,
-                struct_name: struct_name.clone(),
-                struct_type_id,
-                ref_type_id: self_ref_type,
-                call_method: call_method_rc,
-                captures: collected.captures.clone(),
-                canonical_user_params: collected.params.clone(),
-                canonical_return: return_type,
-            });
-
             // Synthesize a per-functor `Inspect` impl, so trait dispatch on a
             // specialised `&$Closure_N` writes the per-literal signature and
             // unparsed source. Template expansion
@@ -829,8 +817,21 @@ impl ClosureLowerer {
                 type_table,
                 collected.span,
             );
-            self.generated_functions
-                .push(Rc::new(RefCell::new(inspect)));
+            let inspect_method_rc = Rc::new(RefCell::new(inspect));
+            self.generated_functions.push(Rc::clone(&inspect_method_rc));
+
+            self.functor_infos.push(ClosureFunctor {
+                module_source: self.module_source.clone(),
+                id: collected.id,
+                struct_name: struct_name.clone(),
+                struct_type_id,
+                ref_type_id: self_ref_type,
+                call_method: call_method_rc,
+                inspect_method: inspect_method_rc,
+                captures: collected.captures.clone(),
+                canonical_user_params: collected.params.clone(),
+                canonical_return: return_type,
+            });
         }
     }
 

@@ -1,0 +1,33 @@
+// Test: a payload-less case of a boxed variant is built once, not per use.
+//
+// `Option<i64>` boxes its payload, so its `None` is an object holding only the
+// discriminant. A derived deserializer returns one for every absent field; the
+// object is immutable, so every construction reads one shared global instead
+// of allocating.
+
+use { println, Stdout } from "core:cli";
+
+fn pick(n: i64) -> Option<i64> {
+    if n > 0 {
+        return Option::Some(n);
+    }
+    return null;
+}
+
+export fn run() with Stdout {
+    let a = pick(builtin::black_box(0_i64));
+    let b = pick(builtin::black_box(-1_i64));
+    let c = pick(builtin::black_box(5_i64));
+    println(`${a:?} ${b:?} ${c:?}`);
+}
+
+__DATA__
+{
+    "stdout": "Option::None Option::None Option::Some(5)\n",
+    "wir_expect:O2": [
+        "global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0"
+    ],
+    "wir_not_expect:O2": [
+        "    struct.new \"core:prelude/types.wado//Option<i64>\" { 0 }"
+    ]
+}

@@ -1,0 +1,49 @@
+// Test: a one-call forwarder on a call cycle is spliced into its callers.
+//
+// `entry` forwards to `scalar`, whose rare paths re-enter `entry`, so all
+// three lie on one cycle. The inliner bars every function on a cycle, which
+// left each hot call through `entry` a call. `entry` is a bridge: splicing it
+// exposes `scalar`, which makes more than one call and stays barred, so the
+// expansion stops after one step. `core:json` reads a quoted number the same
+// way, through `T::deserialize`, and every scalar it read paid that call.
+
+use { println, Stdout } from "core:cli";
+
+fn entry(x: i32) -> i32 {
+    return scalar(x);
+}
+
+fn scalar(x: i32) -> i32 {
+    if x < 0 {
+        return negated(x);
+    }
+    if x > 1000 {
+        return reduced(x);
+    }
+    return x * 2;
+}
+
+fn negated(x: i32) -> i32 {
+    return entry(-x) + 1;
+}
+
+fn reduced(x: i32) -> i32 {
+    return entry(x / 1000) + 2;
+}
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let i of -2..<builtin::black_box(3) {
+        total += entry(i);
+    }
+    total += entry(builtin::black_box(5000));
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "26\n",
+    "wir_not_expect:O2": [
+        "\"opt_inline_cycle_bridge.wado/entry\"("
+    ]
+}

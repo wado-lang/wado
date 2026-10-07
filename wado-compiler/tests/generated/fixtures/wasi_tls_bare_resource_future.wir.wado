@@ -43,7 +43,7 @@ type "functype//wasi_tls_bare_resource_future.wado/$cm_export__run" = fn();  // 
 
 type "functype//wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/Option<wasi:tls/types.wado/Error>" = fn(i32, ref "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>");  // TypeId(15)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(16)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
@@ -78,20 +78,21 @@ import fn wasi/future-write:val-option<own<wasi/tls/types.wado#error>> from "was
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:wasi_tls_bare_resource_future.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 115, 111, 117, 114, 99, 101, 32, 102, 117, 116, 117, 114, 101, 32, 119, 114, 105, 116, 116, 101, 110), used: 23 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:tls/types.wado/Error>$0: ref "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>" = struct.new "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>" { 0 };
 
 fn "wasi_tls_bare_resource_future.wado/run"() with Stdout, Connector, Error {
     let packed_3: i64;
     let rx_4: i32;
     let tx_13: i32;
     rx_4 = builtin::i32_wrap_i64(local.tee packed_3("wasi/future-new:val-option<own<wasi/tls/types.wado#error>>"()));
-    "wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/Option<wasi:tls/types.wado/Error>"(builtin::i32_wrap_i64(packed_3 >> 32_i64), struct.new "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>" { 0 });
+    "wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/Option<wasi:tls/types.wado/Error>"(builtin::i32_wrap_i64(packed_3 >> 32_i64), global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:tls/types.wado/Error>$0);
     "wasi/future-drop-readable:val-option<own<wasi/tls/types.wado#error>>"(rx_4);
     rx_4 = builtin::i32_wrap_i64(local.tee packed_3("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed_3 >> 32_i64);
     rx_4 = "wasi_tls_bare_resource_future.wado/$cm_binding__Stdout_write_via_stream"(rx_4);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasi_tls_bare_resource_future.wado::$const_obj_0;
-    "core:rt/write_string_to_stream"(tx_13, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_13, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_4);
 }
 
@@ -116,7 +117,7 @@ fn "wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/
     drop("wasi/future-write:val-option<own<wasi/tls/types.wado#error>>"(handle, ptr));
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

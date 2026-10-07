@@ -1068,6 +1068,39 @@ test "sibling containers do not accumulate depth" {
     assert r matches { Ok(_) };
 }
 
+struct Holder {
+    items: List<List<i32>>,
+    inner: Empty,
+    last: i32,
+}
+
+struct Empty {
+}
+
+test "an entry after an empty nested container takes its comma" {
+    let lists = from_string::<List<List<i32>>>("[[],[1],[],[]]").unwrap();
+    assert lists == [
+        [],
+        [1],
+        [],
+        [],
+    ];
+    let h = from_string::<Holder>(`{"items":[[]],"inner":{},"last":3}`).unwrap();
+    assert h.items.len() == 1 && h.items[0].is_empty() && h.last == 3;
+}
+
+test "an entry after an empty nested container without its comma is refused" {
+    assert from_string::<List<List<i32>>>("[[] [1]]") matches { Err(_) };
+    assert from_string::<List<List<i32>>>("[[1] []]") matches { Err(_) };
+    assert from_string::<Holder>(`{"items":[],"inner":{} "last":3}`) matches { Err(_) };
+}
+
+test "a container is entered no deeper than its nesting after empty siblings" {
+    let text = "[[],[],[[]]]";
+    assert from_bytes::<List<List<List<i32>>>, String>(text, 3) matches { Ok(_) };
+    assert from_bytes::<List<List<List<i32>>>, String>(text, 2) matches { Err(_) };
+}
+
 struct Dup {
     a: i32,
     b: i32 = 9,

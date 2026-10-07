@@ -65,19 +65,19 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(21)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(24)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(24)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(26)
 
-type "functype//closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(27)
+type "functype//closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(28)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
@@ -143,7 +143,7 @@ fn "closure_body_locals_own_frame.wado/run"() with Stdout {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_0"(f_3)).env, 5);
     }) < 0;
     self_35 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_45(x_45 = builtin::i64_extend_i32_s(self_35); select i64(x_45 < 0_i64, 0_i64 - x_45, x_45)));
-    is_negative_41 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_170, is_negative_41, self_35);
+    is_negative_41 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_170, is_negative_41, self_35);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_170.repr, is_negative_41, x_45, self_35);
     if @unlikely(local.tee self_35($local_4_4.used + 1) > builtin::array_len($local_4_4.repr)) {
         cold_path;
@@ -157,17 +157,17 @@ fn "closure_body_locals_own_frame.wado/run"() with Stdout {
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_0"(f_3)).env, 6);
     }) < 0;
     is_negative_41 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_45(x_45 = builtin::i64_extend_i32_s(is_negative_41); select i64(x_45 < 0_i64, 0_i64 - x_45, x_45)));
-    self_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_170, self_35, is_negative_41);
+    self_35 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_170, self_35, is_negative_41);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_170.repr, self_35, x_45, is_negative_41);
     is_negative_41 = builtin::i32_wrap_i64(local.tee x_45("wasi/stream-new"()));
     self_35 = builtin::i32_wrap_i64(x_45 >> 32_i64);
     is_negative_41 = "closure_body_locals_own_frame.wado/$cm_binding__Stdout_write_via_stream"(is_negative_41);
-    "core:rt/write_string_to_stream"(self_35, $local_4_4.repr, $local_4_4.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_35, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_41);
     local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(56), used: 0 }).used = 2;
     builtin::array_copy<u8>($local_4_4.repr, 0, global:closure_body_locals_own_frame.wado::$const_obj_2, 0, 2);
     f_103 = local.tee $local_7(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 });
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0"(a.repr, a.used, f_103, 256);
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(a.repr, a.used, f_103, 256);
     if @unlikely(local.tee is_negative_41($local_4_4.used + 3) > builtin::array_len($local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, is_negative_41);
@@ -176,7 +176,7 @@ fn "closure_body_locals_own_frame.wado/run"() with Stdout {
     $local_4_4.used = is_negative_41;
     builtin::array_copy<u8>($local_4_4.repr, self_35, global:closure_body_locals_own_frame.wado::$const_obj_1, 0, 3);
     f_103 = local.tee $local_7(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 });
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0"($array_clone_dst_2, 1, f_103, 256);
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"($array_clone_dst_2, 1, f_103, 256);
     if @unlikely(local.tee self_35($local_4_4.used + 3) > builtin::array_len($local_4_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, self_35);
@@ -185,11 +185,11 @@ fn "closure_body_locals_own_frame.wado/run"() with Stdout {
     $local_4_4.used = self_35;
     builtin::array_copy<u8>($local_4_4.repr, is_negative_41, global:closure_body_locals_own_frame.wado::$const_obj_0, 0, 3);
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 };
-    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0"($sroa_h_v_149.repr, $sroa_h_v_149.used, $local_7, 256);
+    "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"($sroa_h_v_149.repr, $sroa_h_v_149.used, $local_7, 256);
     is_negative_41 = builtin::i32_wrap_i64(local.tee x_45("wasi/stream-new"()));
     self_35 = builtin::i32_wrap_i64(x_45 >> 32_i64);
     is_negative_41 = "closure_body_locals_own_frame.wado/$cm_binding__Stdout_write_via_stream"(is_negative_41);
-    "core:rt/write_string_to_stream"(self_35, $local_4_4.repr, $local_4_4.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_35, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_41);
 }
 
@@ -285,7 +285,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -351,7 +351,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0"(repr, end, f, limit) {
+fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0"(repr, end, f, limit) {
     let i_6: i32;
     let self_7: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
@@ -555,7 +555,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closure_0::$call"(n) {
+fn "closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closure_0::$call$dae[self]"(n) {
     let $load_4: i32;
     let c: ref "core:prelude//List<i32>";
     let elements_5: ref Array<i32>;
@@ -590,7 +590,7 @@ fn "closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closu
     }; builtin::array_set<i32>($sroa_s_v_41.repr, $load_4, n); $sroa_s_v_41.used = $load_4 + 1; $sroa_s_v_41.used;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
@@ -612,7 +612,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/closure_body_locals_own_frame.wado/$closure_wrapper_0"($env, $p0) {
-    return "closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closure_0::$call"($p0);
+    return "closure_body_locals_own_frame.wado/closure_body_locals_own_frame.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 export fn "closure_body_locals_own_frame.wado/$cm_export__run" as "run"

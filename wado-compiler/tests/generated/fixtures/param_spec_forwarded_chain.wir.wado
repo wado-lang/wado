@@ -31,11 +31,11 @@ type "functype//param_spec_forwarded_chain.wado/$cm_binding__Stdout_write_via_st
 
 type "functype//param_spec_forwarded_chain.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//param_spec_forwarded_chain.wado/outer$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(13)
+type "functype//param_spec_forwarded_chain.wado/outer$spec0$dae[st]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(13)
 
-type "functype//param_spec_forwarded_chain.wado/inner$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(14)
+type "functype//param_spec_forwarded_chain.wado/inner$spec0$dae[st]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
@@ -70,12 +70,12 @@ fn "param_spec_forwarded_chain.wado/run"() with Stdout {
     let packed: i64;
     let rx_9: i32;
     let tx_10: i32;
-    "param_spec_forwarded_chain.wado/outer$spec0"(local.tee out(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }), global:param_spec_forwarded_chain.wado::$const_obj_2);
-    "param_spec_forwarded_chain.wado/outer$spec0"(out, global:param_spec_forwarded_chain.wado::$const_obj_1);
+    "param_spec_forwarded_chain.wado/outer$spec0$dae[st]"(local.tee out(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 }), global:param_spec_forwarded_chain.wado::$const_obj_2);
+    "param_spec_forwarded_chain.wado/outer$spec0$dae[st]"(out, global:param_spec_forwarded_chain.wado::$const_obj_1);
     rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_9 = "param_spec_forwarded_chain.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
-    "core:rt/write_string_to_stream"(tx_10, out.repr, out.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_10, out.repr, out.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_9);
 }
 
@@ -88,7 +88,7 @@ fn "param_spec_forwarded_chain.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "param_spec_forwarded_chain.wado/outer$spec0"(out, word) {
+fn "param_spec_forwarded_chain.wado/outer$spec0$dae[st]"(out, word) {
     let new_used_10: i32;
     let start_11: i32;
     if @unlikely(local.tee new_used_10(out.used + 1) > builtin::array_len(out.repr)) {
@@ -98,7 +98,7 @@ fn "param_spec_forwarded_chain.wado/outer$spec0"(out, word) {
     start_11 = out.used;
     out.used = new_used_10;
     builtin::array_set_u8(out.repr, start_11, 91);
-    "param_spec_forwarded_chain.wado/inner$spec0"(out, word);
+    "param_spec_forwarded_chain.wado/inner$spec0$dae[st]"(out, word);
     if @unlikely(local.tee start_11(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_11);
@@ -108,7 +108,7 @@ fn "param_spec_forwarded_chain.wado/outer$spec0"(out, word) {
     builtin::array_set_u8(out.repr, new_used_10, 93);
 }
 
-fn "param_spec_forwarded_chain.wado/inner$spec0"(out, word) {
+fn "param_spec_forwarded_chain.wado/inner$spec0$dae[st]"(out, word) {
     let i: i32;
     let b: u8;
     let new_used_46: i32;
@@ -134,7 +134,7 @@ fn "param_spec_forwarded_chain.wado/inner$spec0"(out, word) {
     };
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

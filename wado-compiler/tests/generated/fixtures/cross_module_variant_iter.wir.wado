@@ -72,11 +72,11 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(22)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
 
-type "functype//./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$scalar" = fn(ref "./sub/cross_module_variant_iter_helper.wado//Counter", ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(24)
+type "functype//./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]" = fn(ref "./sub/cross_module_variant_iter_helper.wado//Counter", ref "./sub/cross_module_variant_iter_helper.wado//Choice");  // TypeId(24)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
@@ -113,7 +113,7 @@ global global:cross_module_variant_iter.wado::$const_obj_14: ref Array<u8> = arr
 fn "cross_module_variant_iter.wado/$cm_export__run"() {
     let result: i32;
     let counter: ref "./sub/cross_module_variant_iter_helper.wado//Counter";
-    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$scalar"(local.tee counter(struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 }), struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } }, struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } }), used: 2 } } });
+    "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]"(local.tee counter(struct.new "./sub/cross_module_variant_iter_helper.wado//Counter" { total: 0 }), struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::A" { discriminant: 0, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//AData" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 111, 111, 116), used: 4 }, children: struct.new "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>" { repr: array.new_fixed<ref "./sub/cross_module_variant_iter_helper.wado//Choice">(struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 10 } }, struct.new "./sub/cross_module_variant_iter_helper.wado//Choice::B" { discriminant: 1, payload_0: struct.new "./sub/cross_module_variant_iter_helper.wado//BData" { value: 20 } }), used: 2 } } });
     if @unlikely(local.tee result(counter.total) != 30) {
         cold_path;
         "cross_module_variant_iter.wado/run$cold0"(result);
@@ -147,7 +147,7 @@ fn "cross_module_variant_iter.wado/run$cold0"(result) {
     builtin::array_copy<u8>($load_2, new_used_13, global:cross_module_variant_iter.wado::$const_obj_11, 0, 30);
     start_14 = start_14 + 57;
     builtin::array_copy<u8>($load_2, start_14, global:cross_module_variant_iter.wado::$const_obj_10, 0, 1);
-    start_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_169($local_5), 0, 1);
+    start_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_169($local_5), 0, 1);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_48($sroa_$f_buf_169).repr, start_14, 6_i64, 1);
     if @unlikely(local.tee start_14($local_5.used + 2) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -166,7 +166,7 @@ fn "cross_module_variant_iter.wado/run$cold0"(result) {
     builtin::array_copy<u8>(self_48.repr, start_14, global:cross_module_variant_iter.wado::$const_obj_8, 0, 17);
     start_14 = result < 0;
     new_used_13 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_89(x_89 = builtin::i64_extend_i32_s(result); select i64(x_89 < 0_i64, 0_i64 - x_89, x_89)));
-    start_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self_48, start_14, new_used_13);
+    start_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self_48, start_14, new_used_13);
     "core:prelude/primitive.wado/write_decimal_digits"(self_48.repr, start_14, x_89, new_used_13);
     $inline_core_prelude_string_wado_String__internal_push_string_33: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_33 local.tee new_used_13(self_48.used) == 0;
@@ -190,7 +190,7 @@ fn "cross_module_variant_iter.wado/run$cold0"(result) {
     $sroa_$f_buf_169 = $local_5;
     start_100 = result < 0;
     result = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_89(x_89 = builtin::i64_extend_i32_s(result); select i64(x_89 < 0_i64, 0_i64 - x_89, x_89)));
-    start_100 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_169, start_100, result);
+    start_100 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_169, start_100, result);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_169.repr, start_100, x_89, result);
     if @unlikely(local.tee result($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
@@ -361,7 +361,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$scalar"(h, c) {
+fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]"(h, c) {
     let b: ref "./sub/cross_module_variant_iter_helper.wado//BData";
     let self_7: ref "core:prelude//List<./sub/cross_module_variant_iter_helper.wado/Choice>";
     let end: i32;
@@ -377,7 +377,7 @@ fn "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_
                 break_if b40 $sroa_$iter_0_index_19 >= end;
                 ref_val = builtin::array_get_value<ref "./sub/cross_module_variant_iter_helper.wado//Choice">($sroa_$iter_0_repr_18, $sroa_$iter_0_index_19);
                 $sroa_$iter_0_index_19 = $sroa_$iter_0_index_19 + 1;
-                "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$scalar"(h, ref_val);
+                "./sub/cross_module_variant_iter_helper.wado/./sub/cross_module_variant_iter_helper.wado/walk<./sub/cross_module_variant_iter_helper.wado/Counter>$sroa[c.value]"(h, ref_val);
                 continue l41;
             };
         };
@@ -399,7 +399,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

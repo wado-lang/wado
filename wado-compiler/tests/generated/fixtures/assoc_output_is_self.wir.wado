@@ -47,7 +47,7 @@ type "functype//assoc_output_is_self.wado/$cm_export__run" = fn();  // TypeId(16
 
 type "functype//assoc_output_is_self.wado/run$cold0" = fn();  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(18)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(19)
 
@@ -108,9 +108,9 @@ fn "assoc_output_is_self.wado/run"() with Stdout {
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
-    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
-        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $cond_2(text.used) == 0;
+    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
+        $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+            break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $cond_2(text.used) == 0;
             if @unlikely(local.tee new_used_77(0 + $cond_2) > builtin::array_len($local_6_6.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6_6, new_used_77);
@@ -119,12 +119,12 @@ fn "assoc_output_is_self.wado/run"() with Stdout {
             $local_6_6.used = new_used_77;
             builtin::array_copy<u8>($local_6_6.repr, start_78, text.repr, 0, $cond_2);
         };
-        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
+        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
     $cond_2 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     start_78 = builtin::i32_wrap_i64(packed >> 32_i64);
     $cond_2 = "assoc_output_is_self.wado/$cm_binding__Stdout_write_via_stream"($cond_2);
-    "core:rt/write_string_to_stream"(start_78, $local_6_6.repr, $local_6_6.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_78, $local_6_6.repr, $local_6_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($cond_2);
 }
 
@@ -144,7 +144,7 @@ condition: xs.iter_value().sum() matches { Some(t) && t.v == 5 }
     unreachable;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -162,7 +162,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;

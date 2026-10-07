@@ -27,7 +27,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//assert_inspect_if.wado/$cm_export__run" = fn();  // TypeId(10)
 
-type "functype//assert_inspect_if.wado/run$cold0" = fn();  // TypeId(11)
+type "functype//assert_inspect_if.wado/run$cold0$dae[x,limit,$v1,$v2]" = fn();  // TypeId(11)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(12)
 
@@ -73,12 +73,12 @@ global global:assert_inspect_if.wado::$const_obj_18: ref Array<u8> = array.new_f
 
 fn "assert_inspect_if.wado/$cm_export__run"() {
     cold_path;
-    "assert_inspect_if.wado/run$cold0"();
+    "assert_inspect_if.wado/run$cold0$dae[x,limit,$v1,$v2]"();
     unreachable;
     "wasi/task-return"(0);
 }
 
-fn "assert_inspect_if.wado/run$cold0"() {
+fn "assert_inspect_if.wado/run$cold0$dae[x,limit,$v1,$v2]"() {
     let $load_2: ref Array<u8>;
     let $local_5_5: ref "core:prelude/string.wado//String";
     let new_used_15: i32;
@@ -133,7 +133,7 @@ fn "assert_inspect_if.wado/run$cold0"() {
     start_16 = start_16 + 1;
     builtin::array_copy<u8>($load_2, start_16, global:assert_inspect_if.wado::$const_obj_10, 0, 7);
     $sroa_$f_buf_481 = $local_5_5;
-    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
+    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         if @unlikely(local.tee start_16($sroa_$f_buf_481.used + 4) > builtin::array_len($sroa_$f_buf_481.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_481, start_16);
@@ -141,7 +141,7 @@ fn "assert_inspect_if.wado/run$cold0"() {
         new_used_15 = $sroa_$f_buf_481.used;
         $sroa_$f_buf_481.used = start_16;
         builtin::array_copy<u8>($sroa_$f_buf_481.repr, new_used_15, global:assert_inspect_if.wado::$const_obj_9, 0, 4);
-        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
+        break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
     if @unlikely(local.tee new_used_15($local_5_5.used + 32) > builtin::array_len($local_5_5.repr)) {
         cold_path;

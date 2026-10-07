@@ -1371,6 +1371,11 @@ fn build_clone(
 
     let key = FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
     project.func_index.insert(key, id);
+    if let Some(reshape) = project.reshapes.get(&site.callee) {
+        let method_name = clone.method_info.as_ref().map(|m| m.method_name.clone());
+        let respelled = reshape.respelled(name.clone(), method_name);
+        project.reshapes.insert(id, respelled);
+    }
     copy_function_strings(project, &origin, (clone.module_source.clone(), name));
 
     Clone {

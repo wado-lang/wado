@@ -225,6 +225,12 @@ A reference does not interrupt the chain. A call on `&W`, where `W` is a newtype
 over `Inner`, visits `&W`, then `W`, then `&Inner`, then `Inner`. Within one
 level the reference precedes its pointee.
 
+A newtype over a reference continues to the pointee. A call on `H`, where
+`type H = &mut T`, visits `H`, then `&mut T`, then `T`, so `T`'s impls answer it
+as they answer a call on `&mut T`. Only a reference a newtype wraps continues
+the chain this way. See
+[A Newtype over a Reference](./spec-types.md#a-newtype-over-a-reference).
+
 How many positions a head impl pins is not part of its generality, so
 `impl<T> Tr for Pair<T, i32>` and `impl<A, B> Tr for Pair<A, B>` tie at
 `Pair<String, i32>`.

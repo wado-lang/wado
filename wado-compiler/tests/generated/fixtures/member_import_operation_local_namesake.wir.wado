@@ -55,7 +55,7 @@ type "functype//member_import_operation_local_namesake.wado/$cm_binding__Stdout_
 
 type "functype//member_import_operation_local_namesake.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
@@ -63,9 +63,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(24)
+type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(24)
 
-type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(25)
+type "functype//member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call$dae[self]" = fn() -> ref "core:prelude/string.wado//String";  // TypeId(25)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
@@ -126,7 +126,7 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     rx_18 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
-    "core:rt/write_string_to_stream"(tx_19, $local_3_14.repr, $local_3_14.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_19, $local_3_14.repr, $local_3_14.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
     global:member_import_operation_local_namesake.wado::$effect_Greeting = local.tee $local_2_13(struct.new "member_import_operation_local_namesake.wado//$Dispatch_Greeting" { outer: local.tee $local_1_12(global:member_import_operation_local_namesake.wado::$effect_Greeting), op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "member_import_operation_local_namesake.wado//$Closure_0" {  }, func: ref.func "closure/member_import_operation_local_namesake.wado/$closure_wrapper_0" }, op_bye: struct.new "canonical//CanonicalClosure_1" { env: struct.new "member_import_operation_local_namesake.wado//$Closure_1" {  }, func: ref.func "closure/member_import_operation_local_namesake.wado/$closure_wrapper_1" } });
     name_11 = $inline__effect_dispatch__Greeting__hello_8: block -> ref "core:prelude/string.wado//String" {
@@ -151,14 +151,14 @@ fn "member_import_operation_local_namesake.wado/run"() with Stdout {
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     rx_18 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
-    "core:rt/write_string_to_stream"(tx_19, name_11.repr, name_11.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_19, name_11.repr, name_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
     global:member_import_operation_local_namesake.wado::$effect_Greeting = $local_1_12;
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     rx_18 = "member_import_operation_local_namesake.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
     name_11 = global:member_import_operation_local_namesake.wado::$const_obj_5;
-    "core:rt/write_string_to_stream"(tx_19, name_11.repr, name_11.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_19, name_11.repr, name_11.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_18);
 }
 
@@ -171,7 +171,7 @@ fn "member_import_operation_local_namesake.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -264,7 +264,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call"(name) {
+fn "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call$dae[self]"(name) {
     let $local_1: ref "core:prelude/string.wado//String";
     let n_23: i32;
     let new_used_27: i32;
@@ -281,16 +281,16 @@ fn "member_import_operation_local_namesake.wado/member_import_operation_local_na
     }, $local_1;
 }
 
-fn "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call"() {
+fn "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call$dae[self]"() {
     return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 89, 69), used: 3 };
 }
 
 fn "closure/member_import_operation_local_namesake.wado/$closure_wrapper_0"($env, $p0) {
-    return "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call"($p0);
+    return "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 fn "closure/member_import_operation_local_namesake.wado/$closure_wrapper_1"($env) {
-    return "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call"();
+    return "member_import_operation_local_namesake.wado/member_import_operation_local_namesake.wado/$Closure_1::$call$dae[self]"();
 }
 
 export fn "member_import_operation_local_namesake.wado/$cm_export__run" as "run"

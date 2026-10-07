@@ -581,7 +581,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && link != base_type_id
                 && info.owner == MethodOwner::Receiver
             {
-                info.owner = MethodOwner::InheritedFrom(link);
+                info.owner = if self.tysys.link_behind_reference(base_type_id, link) {
+                    MethodOwner::Referent(link)
+                } else {
+                    MethodOwner::InheritedFrom(link)
+                };
             }
             method_info = Some(info);
             trait_impl_module_source = Some(trait_match.impl_module_source);

@@ -74,7 +74,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(25)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
 
@@ -84,7 +84,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = 
 
 type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_0::$call" = fn(ref "effect_with_clause_renamed_import.wado//$Closure_0", u64) -> ref "core:prelude//List<u8>";  // TypeId(30)
 
-type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call" = fn() -> u64;  // TypeId(31)
+type "functype//effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]" = fn() -> u64;  // TypeId(31)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
@@ -159,7 +159,7 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     self_13 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_24 = builtin::i32_wrap_i64(x >> 32_i64);
     self_13 = "effect_with_clause_renamed_import.wado/$cm_binding__Stdout_write_via_stream"(self_13);
-    "core:rt/write_string_to_stream"(is_negative_24, $local_1_1.repr, $local_1_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_24, $local_1_1.repr, $local_1_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_13);
     global:effect_with_clause_renamed_import.wado::$effect_Random = $save_Random;
 }
@@ -290,7 +290,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -397,7 +397,7 @@ fn "effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wad
     }, out;
 }
 
-fn "effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call"() {
+fn "effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]"() {
     return unreachable;
 }
 
@@ -406,7 +406,7 @@ fn "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0"($env, $p0
 }
 
 fn "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1"($env) {
-    return "effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call"();
+    return "effect_with_clause_renamed_import.wado/effect_with_clause_renamed_import.wado/$Closure_1::$call$dae[self]"();
 }
 
 export fn "effect_with_clause_renamed_import.wado/$cm_export__run" as "run"

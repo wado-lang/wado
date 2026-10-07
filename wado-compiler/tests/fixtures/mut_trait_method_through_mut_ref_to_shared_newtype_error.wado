@@ -1,0 +1,39 @@
+// Test: a `&mut self` trait method cannot be called through `&mut View`,
+// where `type View = &T`: the write lands behind the `&T` the newtype wraps.
+//
+// The check read only the outermost reference, so `poke` mutated the
+// immutable `c`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+trait Bump with () {
+    fn bump(&mut self) -> i32;
+}
+
+impl Bump for Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+type View = &Counter;
+
+fn poke(v: &mut View) -> i32 {
+    return v.bump();
+}
+
+export fn run() with Stdout {
+    let c = Counter { n: 0 };
+    let mut h = &c as View;
+    println(`${poke(&mut h)} ${c.n}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `bump` through immutable reference"
+}

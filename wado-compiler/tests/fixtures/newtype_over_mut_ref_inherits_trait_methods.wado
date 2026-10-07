@@ -1,0 +1,69 @@
+// Test: a newtype over `&mut T` calls `T`'s trait methods, as the reference
+// does, and an impl written for the newtype itself comes first.
+//
+// The trait search walked the newtype to its base `&mut T` and stopped there,
+// since a reference has no newtype base, so `h.bump(&d)` was "no method".
+// Such a method is the reference's own call, so it re-types nothing to the
+// newtype: `snap` returns a `Counter`, a copy, not a second handle onto `c`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+trait Bump with () {
+    fn bump(&mut self, by: &Counter) -> i32;
+    fn snap(&self) -> Counter;
+}
+
+impl Bump for Counter {
+    fn bump(&mut self, by: &Counter) -> i32 {
+        self.n += by.n;
+        return self.n;
+    }
+
+    fn snap(&self) -> Counter {
+        return *self;
+    }
+}
+
+trait Name with () {
+    fn name(&self) -> String;
+}
+
+impl Name for Counter {
+    fn name(&self) -> String {
+        return "counter";
+    }
+}
+
+type Handle = &mut Counter;
+
+impl Name for Handle {
+    fn name(&self) -> String {
+        return "handle";
+    }
+}
+
+type Plain = &mut Counter;
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 1 };
+    let d = Counter { n: 2 };
+    let h = &mut c as Handle;
+    assert h.bump(&d) == 3 && c.n == 3;   // writes through to `c`
+    let mut copy = h.snap();              // a `Counter`, not a `Handle`
+    copy.n = 100;
+    assert c.n == 3;
+
+    let mut e = Counter { n: 0 };
+    assert (&mut c as Handle).name() == "handle";   // its own impl first
+    assert (&mut e as Plain).name() == "counter";   // else `Counter`'s
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

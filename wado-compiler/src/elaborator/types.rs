@@ -2898,6 +2898,10 @@ pub(super) enum MethodOwner {
     /// Inherited through the receiver's newtype chain from the type that
     /// declares it — the innermost such type for a chained newtype.
     InheritedFrom(TypeId),
+    /// Reached through the reference a newtype wraps (`type H = &mut T`), from
+    /// the referent `T` that declares it. The call is the reference's, so
+    /// nothing re-types to the receiver.
+    Referent(TypeId),
     /// Inherited through the receiver's `extends` chain from the resource that
     /// declares it. `Self` stays that resource, so nothing re-types to the
     /// receiver ([Resource Inheritance](../../docs/wep-2026-04-28-resource-inheritance.md)).
@@ -2910,7 +2914,7 @@ impl MethodOwner {
     pub(super) fn declaring(self, receiver: TypeId) -> TypeId {
         match self {
             Self::Receiver => receiver,
-            Self::InheritedFrom(owner) | Self::Ancestor(owner) => owner,
+            Self::InheritedFrom(owner) | Self::Referent(owner) | Self::Ancestor(owner) => owner,
         }
     }
 
@@ -2918,16 +2922,18 @@ impl MethodOwner {
     pub(super) fn inherited(self) -> Option<TypeId> {
         match self {
             Self::Receiver => None,
-            Self::InheritedFrom(owner) | Self::Ancestor(owner) => Some(owner),
+            Self::InheritedFrom(owner) | Self::Referent(owner) | Self::Ancestor(owner) => {
+                Some(owner)
+            }
         }
     }
 
     /// The newtype base whose signature re-types to the receiver — `Point::add`
-    /// called on a `Location` takes and returns `Location`. An `extends`
-    /// ancestor does not: its `Self` is fixed at the declaring resource.
+    /// called on a `Location` takes and returns `Location`. Neither a referent
+    /// nor an `extends` ancestor does: its `Self` is fixed at the declaring type.
     pub(super) fn newtype_base(self) -> Option<TypeId> {
         match self {
-            Self::Receiver | Self::Ancestor(_) => None,
+            Self::Receiver | Self::Referent(_) | Self::Ancestor(_) => None,
             Self::InheritedFrom(owner) => Some(owner),
         }
     }

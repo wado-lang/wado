@@ -41,25 +41,25 @@ type "functype//wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_
 
 type "functype//wir_optimize_vcopy_return_struct.wado/$cm_export__run" = fn();  // TypeId(14)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$spec0" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(15)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec0$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(15)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$spec1" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(16)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Outer", ref null "core:prelude/string.wado//String"];  // TypeId(16)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec0" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(17)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec0$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(17)
 
-type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$spec1" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(18)
+type "functype//wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec1$dae[v]" = fn() -> [i32, ref null "wir_optimize_vcopy_return_struct.wado//Inner", ref null "core:prelude/string.wado//String"];  // TypeId(18)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(20)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(24)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
@@ -96,13 +96,13 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
     let $mv$r$0: i32;
     let $mv$r$1: ref null "wir_optimize_vcopy_return_struct.wado//Outer";
     let $mv$r$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$spec0"();
+    multivalue_bind [$mv$r$0, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec0$dae[v]"();
     if $mv$r$0 == 0 {
         o = ref.as_non_null($mv$r$1);
         $sroa_$f_buf_102 = local.tee $local_4_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 });
         is_negative_21 = local.tee $mv$r$0(o.inner.value) < 0;
         $mv$r$0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s($mv$r$0); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
-        is_negative_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_102, is_negative_21, $mv$r$0);
+        is_negative_21 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_102, is_negative_21, $mv$r$0);
         "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_26($sroa_$f_buf_102).repr, is_negative_21, x_25, $mv$r$0);
         if @unlikely(local.tee $mv$r$0($local_4_4.used + 1) > builtin::array_len($local_4_4.repr)) {
             cold_path;
@@ -126,22 +126,22 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
         $sroa_$f_buf_102 = $local_4_4;
         start_44 = local.tee is_negative_21(o.tag) < 0;
         is_negative_21 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_25(x_25 = builtin::i64_extend_i32_s(is_negative_21); select i64(x_25 < 0_i64, 0_i64 - x_25, x_25)));
-        start_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_102, start_44, is_negative_21);
+        start_44 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_102, start_44, is_negative_21);
         "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_102.repr, start_44, x_25, is_negative_21);
         is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
         start_44 = builtin::i32_wrap_i64(x_25 >> 32_i64);
         is_negative_21 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_via_stream"(is_negative_21);
-        "core:rt/write_string_to_stream"(start_44, $local_4_4.repr, $local_4_4.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(start_44, $local_4_4.repr, $local_4_4.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
     } else {
     }
-    multivalue_bind [is_negative_21, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$spec1"();
+    multivalue_bind [is_negative_21, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"();
     if is_negative_21 == 1 {
         $local_4_4 = ref.as_non_null($mv$r$2);
         is_negative_21 = builtin::i32_wrap_i64(local.tee x_25("wasi/stream-new"()));
         start_44 = builtin::i32_wrap_i64(x_25 >> 32_i64);
         is_negative_21 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__Stdout_write_via_stream"(is_negative_21);
-        "core:rt/write_string_to_stream"(start_44, $local_4_4.repr, $local_4_4.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(start_44, $local_4_4.repr, $local_4_4.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative_21);
     } else {
     }
@@ -156,33 +156,33 @@ fn "wir_optimize_vcopy_return_struct.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_outer$spec0"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec0$dae[v]"() {
     let i: ref "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$0: i32;
     let $mv$$vr_4$1: ref null "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$spec0"();
+    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec0$dae[v]"();
     i = ref.as_non_null($mv$$vr_4$1);
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Outer" { inner: i, tag: 50 }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_outer$spec1"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"() {
     let e: ref "core:prelude/string.wado//String";
     let inner: ref "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$0: i32;
     let $mv$$vr_4$1: ref null "wir_optimize_vcopy_return_struct.wado//Inner";
     let $mv$$vr_4$2: ref null "core:prelude/string.wado//String";
-    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$spec1"();
+    multivalue_bind [$mv$$vr_4$0, $mv$$vr_4$1, $mv$$vr_4$2] = "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec1$dae[v]"();
     e = ref.as_non_null($mv$$vr_4$2);
     inner = return 1, ref.null none, e;
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Outer" { inner: inner, tag: -10 }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec0"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec0$dae[v]"() {
     return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Inner" { value: 5, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_5"), used: 6 } }, ref.null none;
 }
 
-fn "wir_optimize_vcopy_return_struct.wado/make_inner$spec1"() {
+fn "wir_optimize_vcopy_return_struct.wado/make_inner$sroa[return]$spec1$dae[v]"() {
     return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
 }
 
@@ -269,7 +269,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -347,7 +347,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

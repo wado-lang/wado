@@ -66,7 +66,7 @@ type "functype//single_module_variant_iter.wado/$cm_export__run" = fn();  // Typ
 
 type "functype//single_module_variant_iter.wado/run$cold0" = fn(i32);  // TypeId(20)
 
-type "functype//single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$scalar" = fn(ref "single_module_variant_iter.wado//Counter", ref "single_module_variant_iter.wado//Choice");  // TypeId(21)
+type "functype//single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$sroa[c.value]" = fn(ref "single_module_variant_iter.wado//Counter", ref "single_module_variant_iter.wado//Choice");  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(22)
 
@@ -78,7 +78,7 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(27)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(27)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
 
@@ -116,7 +116,7 @@ global global:single_module_variant_iter.wado::$const_obj_14: ref Array<u8> = ar
 fn "single_module_variant_iter.wado/run"() {
     let result: i32;
     let counter: ref "single_module_variant_iter.wado//Counter";
-    "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$scalar"(local.tee counter(struct.new "single_module_variant_iter.wado//Counter" { total: 0 }), global:single_module_variant_iter.wado::$const_obj_4);
+    "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$sroa[c.value]"(local.tee counter(struct.new "single_module_variant_iter.wado//Counter" { total: 0 }), global:single_module_variant_iter.wado::$const_obj_4);
     if @unlikely(local.tee result(counter.total) != 30) {
         cold_path;
         "single_module_variant_iter.wado/run$cold0"(result);
@@ -154,7 +154,7 @@ fn "single_module_variant_iter.wado/run$cold0"(result) {
     builtin::array_copy<u8>($load_2, new_used_16, global:single_module_variant_iter.wado::$const_obj_11, 0, 31);
     start_17 = start_17 + 58;
     builtin::array_copy<u8>($load_2, start_17, global:single_module_variant_iter.wado::$const_obj_10, 0, 1);
-    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_172($local_8), 0, 2);
+    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_172($local_8), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee self_51($sroa_$f_buf_172).repr, start_17, 52_i64, 2);
     if @unlikely(local.tee start_17($local_8.used + 2) > builtin::array_len($local_8.repr)) {
         cold_path;
@@ -173,7 +173,7 @@ fn "single_module_variant_iter.wado/run$cold0"(result) {
     builtin::array_copy<u8>(self_51.repr, start_17, global:single_module_variant_iter.wado::$const_obj_8, 0, 17);
     start_17 = result < 0;
     new_used_16 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(result); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self_51, start_17, new_used_16);
+    start_17 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self_51, start_17, new_used_16);
     "core:prelude/primitive.wado/write_decimal_digits"(self_51.repr, start_17, x_92, new_used_16);
     $inline_core_prelude_string_wado_String__internal_push_string_33: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_33 local.tee new_used_16(self_51.used) == 0;
@@ -197,7 +197,7 @@ fn "single_module_variant_iter.wado/run$cold0"(result) {
     $sroa_$f_buf_172 = $local_8;
     start_103 = result < 0;
     result = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_92(x_92 = builtin::i64_extend_i32_s(result); select i64(x_92 < 0_i64, 0_i64 - x_92, x_92)));
-    start_103 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_172, start_103, result);
+    start_103 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_172, start_103, result);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_172.repr, start_103, x_92, result);
     if @unlikely(local.tee result($local_8.used + 1) > builtin::array_len($local_8.repr)) {
         cold_path;
@@ -210,7 +210,7 @@ fn "single_module_variant_iter.wado/run$cold0"(result) {
     unreachable;
 }
 
-fn "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$scalar"(h, c) {
+fn "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$sroa[c.value]"(h, c) {
     let b: ref "single_module_variant_iter.wado//BData";
     let self_7: ref "core:prelude//List<single_module_variant_iter.wado/Choice>";
     let end: i32;
@@ -226,7 +226,7 @@ fn "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_
                 break_if b8 $sroa_$iter_0_index_19 >= end;
                 ref_val = builtin::array_get_value<ref "single_module_variant_iter.wado//Choice">($sroa_$iter_0_repr_18, $sroa_$iter_0_index_19);
                 $sroa_$iter_0_index_19 = $sroa_$iter_0_index_19 + 1;
-                "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$scalar"(h, ref_val);
+                "single_module_variant_iter.wado/single_module_variant_iter.wado/walk<single_module_variant_iter.wado/Counter>$sroa[c.value]"(h, ref_val);
                 continue l9;
             };
         };
@@ -406,7 +406,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

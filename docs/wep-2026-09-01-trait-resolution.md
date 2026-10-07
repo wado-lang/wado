@@ -221,6 +221,13 @@ a newtype of `List<u8>` therefore takes the newtype's own impl where it has one
 and the base's `impl<T> IntoIterator for &List<T>` where it does not
 (`newtype_for_of_iteration.wado`).
 
+A newtype over a reference (`type H = &mut T`) goes on past its base to `T`,
+since a call on it is the reference's call. Inherent methods already reached
+`T`, so stopping at `&mut T` left the trait methods alone unreachable
+(`newtype_over_mut_ref_inherits_trait_methods.wado`). Only a reference a newtype
+wraps leads on: the solver's chain for `&&T` ends at the inner `&`, and
+dereferencing a receiver stays the method call's own pass.
+
 A blanket's depth is measured over the whole derivation, not just its first
 step. Take `impl<T: Base> Derived for T` answering `T: Derived`. That bound sits
 at the depth the blanket's own bound holds at. A chained blanket therefore does

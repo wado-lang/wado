@@ -1,0 +1,32 @@
+// Test: a newtype over `&T` cannot call a `&mut self` method, however its
+// binding is declared.
+//
+// The check read the newtype as an owned value and asked only whether its
+// binding was `mut`, so a `let mut` let the method write through the shared
+// reference.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+type View = &Counter;
+
+export fn run() with Stdout {
+    let c = Counter { n: 0 };
+    let mut h = &c as View;
+    println(`${h.bump()}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `bump` through immutable reference"
+}

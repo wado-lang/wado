@@ -45,7 +45,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
@@ -73,6 +73,7 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:let_else_basic.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "let_else_basic.wado/run"() with Stdout {
     let packed_25: i64;
@@ -84,13 +85,13 @@ fn "let_else_basic.wado/run"() with Stdout {
     rx_26 = "let_else_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:let_else_basic.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"(tx_27, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_27, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_26);
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     tx_27 = local.tee rx_26($inline_describe_17: block -> i32 {
         cold_path;
         let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(struct.new "core:prelude/types.wado//Option<i32>" { 0 })) {
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0)) {
             break $inline_describe_17: local.tee rx_26(ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0) * 2;
         } else {
             break $inline_describe_17: -1;
@@ -118,7 +119,7 @@ fn "let_else_basic.wado/run"() with Stdout {
     rx_26 = builtin::i32_wrap_i64(local.tee packed_25("wasi/stream-new"()));
     tx_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
     rx_26 = "let_else_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
-    "core:rt/write_string_to_stream"(tx_27, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_27, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_26);
 }
 
@@ -214,7 +215,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

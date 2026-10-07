@@ -39,9 +39,16 @@ is the last of the editing rather than a phase after it, so one full test run at
 the end answers for the change and for what `/distill` edited. A run on either
 side of it is the same full run spent twice.
 
+The full run is `mise run test`, `mise run test-wado`, then
+`mise run update-stdlib-coverage-baseline`. CI fails on any difference from the
+baseline, a region a test now reaches included, so commit the update;
+`wado-compiler/AGENTS.md` says what it may change.
+
 Having invoked `/distill` on this branch earlier is not a reason to skip the
-next one. The scope is the whole branch every time, and what the commits since
-then made stale is spread across everything the branch touched.
+next one, and answering review findings calls for another. The scope is the
+whole branch every time, and what the commits since then made stale is spread
+across everything the branch touched. An extra run costs nothing, so run it the
+moment you wonder whether you should.
 
 ### Common Development Tasks
 
@@ -95,7 +102,6 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - An unexplained failure indicts the measurement as often as the change: re-run the exact command by hand before believing it, and never revert a design over one. zsh does not word-split `$VAR`, so a flag list in one variable reaches a command as one argument.
 - A CI-only timeout in a test that reads `wasi:clocks`, once it passes on the merged tree, is the runner's slowness, not the branch.
 - Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
-- Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should. §"The Cycle" says where it sits.
 
 ## The Wado Language
 

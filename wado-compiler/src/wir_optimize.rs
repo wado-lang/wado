@@ -22,6 +22,7 @@ mod nullable_ref;
 mod peephole;
 mod prune_dead_data;
 mod reuse_loads;
+mod share_unit_cases;
 mod sroa_variant_return;
 mod util;
 
@@ -49,6 +50,7 @@ use local_nullability::relax_unset_nonnull_locals;
 use nullable_ref::lower_nullable_refs;
 use peephole::run_peephole;
 use prune_dead_data::prune_dead_data;
+use share_unit_cases::share_unit_cases;
 use sroa_variant_return::flatten_variant_slots;
 
 /// What a pass run's passes are called: `wir/<pass>` for the main package,
@@ -249,6 +251,10 @@ fn optimize_scoped(
     });
     wir_pass(scope, "cleanup_global_inits", module, profiler, |m| {
         cleanup_global_inits(m);
+    });
+    // Before the dedupe, so a user global holding the same case merges in.
+    wir_pass(scope, "share_unit_cases", module, profiler, |m| {
+        share_unit_cases(m);
     });
     // Merge identical immutable const globals now that they are immutable.
     wir_pass(scope, "dedupe_const_globals", module, profiler, |m| {
