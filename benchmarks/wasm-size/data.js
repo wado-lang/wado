@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791407678039,
+  "lastUpdate": 1791415441053,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65089,6 +65089,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de37f2a5c9c32bddf07cdb55b8ff5de752d8b795"
         },
         "date": 1791407677452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eaffe29d42a5b653e5224f1cb94cc3cf6c2c3f48",
+          "message": "Merge pull request #2305 from wado-lang/todo/18-async\n\nfeat(async): trap AsyncCall reuse and a second task return, reject ? in export async fn",
+          "timestamp": "2026-10-08T08:02:27+09:00",
+          "tree_id": "a668771e2d0ee9f442b679f027665e6af63f85ed",
+          "url": "https://github.com/wado-lang/wado/commit/eaffe29d42a5b653e5224f1cb94cc3cf6c2c3f48"
+        },
+        "date": 1791415439996,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
