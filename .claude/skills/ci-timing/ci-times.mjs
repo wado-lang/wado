@@ -68,7 +68,8 @@ if (opt.run) {
   // A run listing over a long range comes back incomplete and out of order, so
   // ask one day at a time.
   const runs = [];
-  for (let d = day(opt.since); d <= day(opt.until); d.setUTCDate(d.getUTCDate() + 1)) {
+  const until = day(opt.until);
+  for (let d = day(opt.since); d <= until; d.setUTCDate(d.getUTCDate() + 1)) {
     const created = d.toISOString().slice(0, 10);
     runs.push(...onePage(gh(`${workflowRuns}?branch=${opt.branch}&event=${opt.event}&created=${created}&per_page=100`), "workflow_runs"));
   }
