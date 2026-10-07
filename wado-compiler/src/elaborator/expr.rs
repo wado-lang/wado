@@ -5096,6 +5096,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::TryInAsync { span: qm.span });
             return payload;
         }
+        if ctx.in_handler_method {
+            let _ = self.emit(TypeError::TryInHandler { span: qm.span });
+            return payload;
+        }
         let mismatch = match (is_option, ret_is_option, ret_is_result) {
             (true, true, _) | (false, _, true) => None,
             (true, false, true) => Some("cannot use ? on Option in a function returning Result"),

@@ -299,6 +299,8 @@ impl TcpSocket for MinimalTcp {
 
 `resume` is a control flow expression similar to `return`. It passes a value to the computation and transfers control. The expression `resume` itself evaluates to `()`.
 
+A handler always resumes its caller: Wado has no abort. So every path through a handler method ends in a `resume` or diverges, and `return`, `?`, and falling off the end are compile errors, even for an operation that returns `()`: there is no implicit `resume ()`.
+
 ```wado
 impl Stdin for MockStdin {
     fn read_line(&self) -> String {

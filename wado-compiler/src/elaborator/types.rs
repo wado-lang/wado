@@ -1344,6 +1344,23 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `return` in a handler method, which answers the caller with `resume`.
+    ReturnInHandler {
+        span: Span,
+    },
+
+    /// `?` in a handler method: it returns its error, which only `resume` can
+    /// hand to the caller.
+    TryInHandler {
+        span: Span,
+    },
+
+    /// A handler method with a path that reaches its end without `resume`.
+    MissingResume {
+        function: String,
+        span: Span,
+    },
+
     /// `with E => h do { ... }` clause where the handler value's type
     /// does not implement effect `E`.
     HandlerEffectNotImplemented {
@@ -2734,6 +2751,24 @@ impl TypeError {
             TypeError::ResumeOutsideHandler { span } => (
                 Code::UnsupportedFeature,
                 "`resume` is only valid inside an effect handler method body".to_string(),
+                *span,
+            ),
+            TypeError::ReturnInHandler { span } => (
+                Code::InvalidSyntax,
+                "cannot use `return` in an effect handler method; use `resume` instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::TryInHandler { span } => (
+                Code::InvalidSyntax,
+                "cannot use `?` in an effect handler method; hand the error over with `resume` \
+                 instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::MissingResume { function, span } => (
+                Code::MissingReturn,
+                format!("handler method `{function}` can reach its end without `resume`"),
                 *span,
             ),
             TypeError::AsyncUserEffectHandlerUnsupported {

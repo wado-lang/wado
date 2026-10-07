@@ -645,7 +645,30 @@ A handler method may declare effects in a `with` clause, like any function.
 
 ### `resume`
 
-`resume value` hands `value` to the operation's caller and ends the handler method, as `return` would. The value is checked against the operation's return type. A method for an operation that returns `()` may end without one.
+`resume value` hands `value` to the operation's caller and ends the handler method. The value is checked against the operation's return type.
+
+Every path through a handler method ends in a `resume` or diverges. A path that reaches the end of the body is a compile error, even for an operation that returns `()`, which writes `resume ()`. `return` and `?` are compile errors in a handler method, since each would end it without a `resume`.
+
+<!-- {"fixture":"effect_handler_return_err.wado"} -->
+
+```wado
+impl A for H {
+    fn a_op() -> i32 {
+        return 1;                       // error: `return`
+    }
+
+    fn b_op() -> Result<i32, String> {
+        let v = parse()?;               // error: `?`
+        resume Ok(v)
+    }
+
+    fn c_op() {                         // error: the `else` path ends without `resume`
+        if builtin::black_box(true) {
+            resume ()
+        }
+    }
+}
+```
 
 `resume` is valid only in a handler method's body. Anywhere else it is a compile error, including in a closure written inside a handler method. A caller is resumed at most once: continuations are one-shot.
 

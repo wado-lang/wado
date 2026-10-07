@@ -149,6 +149,7 @@ impl Stream<u8> for Inputs {
 
     fn drop(&mut self, this: &Stream<u8>) {
         let _ = this;
+        resume ();
     }
 
     ..trap
@@ -162,6 +163,7 @@ impl KilnHost for Host {
     fn emit_diagnostic(&mut self, diagnostic: KilnDiagnostic) {
         assert diagnostic.span matches { None };
         self.diagnostics.push(`${diagnostic.level}: ${diagnostic.message}`);
+        resume ();
     }
 }
 

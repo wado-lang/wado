@@ -1527,7 +1527,7 @@ fn main() {
 }
 ```
 
-`resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
+`resume value` (only valid inside a handler) hands `value` back to the caller of the operation. Every path through a handler method ends in one, `resume ()` included; `return` and `?` are errors there.
 
 An `interface` is a trait with a different dispatch story, so its members are written as a trait's are. An operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
 

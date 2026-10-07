@@ -63,6 +63,7 @@ impl StreamWritable<u8> for MockStdio {
     }
 
     fn drop(&mut self, this: &StreamWritable<u8>) {
+        resume ();
     }
 
     ..trap
@@ -70,6 +71,7 @@ impl StreamWritable<u8> for MockStdio {
 
 impl Future<Result<(), ErrorCode>> for MockStdio {
     fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
+        resume ();
     }
 
     ..trap

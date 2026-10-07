@@ -1,0 +1,47 @@
+// A handler method answers the operation's caller with `resume`, on every
+// path. `return` and `?` would end it without one, and so would reaching the
+// end of the body, even for an operation returning `()`.
+
+interface A {
+    fn a_op() -> i32;
+    fn b_op() -> Result<i32, String>;
+    fn c_op();
+}
+
+struct H {}
+
+impl A for H {
+    fn a_op() -> i32 {
+        return 1;                       // error: `return`
+    }
+
+    fn b_op() -> Result<i32, String> {
+        let v = parse()?;               // error: `?`
+        resume Ok(v)
+    }
+
+    fn c_op() {                         // error: the `else` path ends without `resume`
+        if builtin::black_box(true) {
+            resume ()
+        }
+    }
+}
+
+fn parse() -> Result<i32, String> {
+    return Ok(1);
+}
+
+fn use_a() -> i32 with A {
+    A::c_op();
+    return A::a_op() + A::b_op().unwrap();
+}
+
+export fn run() {
+    let mut h = H {};
+    with &mut h do {
+        use_a();
+    }
+}
+
+__DATA__
+{"compile_error": ":15:9: analysis error: cannot use `return` in an effect handler method; use `resume` instead; 19:17: cannot use `?` in an effect handler method; hand the error over with `resume` instead; 23:5: handler method `c_op` can reach its end without `resume`", "compile_error_codes": ["INVALID_SYNTAX", "INVALID_SYNTAX", "MISSING_RETURN"]}
