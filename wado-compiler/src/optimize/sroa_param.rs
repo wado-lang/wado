@@ -897,7 +897,6 @@ fn mint_scalarized_clones(
 
     let field_table = build_field_table_index(project);
     let mut clones: IndexMap<FnKey, FnKey> = IndexMap::default();
-    let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
     for (key, positions) in &by_fn {
         let mut clone = project.functions[key.index()].borrow().clone();
@@ -926,21 +925,28 @@ fn mint_scalarized_clones(
                 f.method_info.as_ref().map(|m| m.method_name.clone()),
             )
         };
-        let narrowed = narrowed_params(&clone, &chains, &field_table);
-        let name = sroa_param_name(&original_name, &narrowed);
-        let method_name = original_method.map(|m| sroa_param_name(&m, &narrowed));
-        drop(narrowed);
+        let (name, method_name) = {
+            let narrowed = narrowed_params(&clone, &chains, &field_table);
+            (
+                sroa_param_name(&original_name, &narrowed),
+                original_method.map(|m| sroa_param_name(&m, &narrowed)),
+            )
+        };
         clone.name.clone_from(&name);
         if let (Some(info), Some(method)) = (&mut clone.method_info, method_name) {
             info.method_name = method;
         }
-        // The name spells the clone's identity, and this pass runs once per
+        // The name spells the clone as minted, and this pass runs once per
         // fixpoint iteration and reaches one clone by more than one chain of
-        // clones, so the one this run wants may already stand under it.
+        // clones, so the one this run wants may already stand under it. `dae`
+        // may since have dropped a parameter from it in place, and then the
+        // calls stay on their source, which still has the shape they pass.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
-            clones.insert(*key, existing);
+            if takes_wanted_params(project, existing, &clone, *key, candidates) {
+                clones.insert(*key, existing);
+            }
             continue;
         }
         let id = FuncId::new(next_id);
@@ -985,13 +991,42 @@ fn mint_scalarized_clones(
         project.sroa_param_clone_fields.insert(id, chains);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
-        minted.push(Rc::new(RefCell::new(clone)));
-    }
-    for f in minted {
-        touched.insert(project.functions.len());
-        project.functions.push(f);
+        // Pushed now, so a later source in this run reaching the same clone
+        // finds it standing.
+        assert_eq!(
+            id.index(),
+            project.functions.len(),
+            "a FuncId is its position"
+        );
+        touched.insert(id.index());
+        project.functions.push(Rc::new(RefCell::new(clone)));
     }
     clones
+}
+
+/// Whether the standing clone `existing` takes what this run's clone of `key`
+/// would: the scalar type where this run scalarizes, `source`'s elsewhere.
+fn takes_wanted_params(
+    project: &NirPackage,
+    existing: FnKey,
+    source: &NirFunction,
+    key: FnKey,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+) -> bool {
+    let standing = project.functions[existing.index()].borrow();
+    let types = project.type_table.borrow();
+    standing.params.len() == source.params.len()
+        && standing
+            .params
+            .iter()
+            .zip(&source.params)
+            .enumerate()
+            .all(|(pi, (param, from))| {
+                let wanted = candidates
+                    .get(&(key, pi))
+                    .map_or(from.type_id, |info| info.scalar_type_id);
+                types.type_key(param.type_id) == types.type_key(wanted)
+            })
 }
 
 /// Each parameter of `clone` its `chains` narrow, in declaration order, with
