@@ -19,6 +19,7 @@ const ALLOWED = new Map([
   ["__cm_size", "a field lib/core/prelude/types.wado declares"],
   ["__cm_align", "a field lib/core/prelude/types.wado declares"],
   ["__cm_lift", "a field lib/core/prelude/types.wado declares"],
+  ["__cm_ended", "a field lib/core/prelude/types.wado declares"],
   ["__wado_query__", "a synthetic module path, not an identifier"],
   ["__wado_probe__", "a synthetic module path, not an identifier"],
   ["__wasm_import_dce_entry__", "a test's synthetic module path"],
