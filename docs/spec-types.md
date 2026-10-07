@@ -748,14 +748,16 @@ base. See [The Order](./spec-traits.md#the-order).
 ### A Newtype over a Reference
 
 A newtype whose base is a reference (`type H = &mut T`) is called as that
-reference is. Its inherent and trait methods are `T`'s, and a trait impl written
-for `H` itself still comes first.
+reference is. A trait method is looked up on `H`, then on `&mut T`, then on `T`,
+and the first that answers is called. An impl written for `&mut T` is the
+newtype's base's, inherited as any newtype inherits from its base. The inherent
+methods are `T`'s.
 
-Such a method is the reference's own call, so nothing in its signature is
+A method of `T` is the reference's own call, so nothing in its signature is
 substituted with the newtype. A method of `T` returning `T` returns a `T`, a
-copy, not an `H` onto the same place. A method taking `&mut self` needs the
-newtype's base to be `&mut`: through `type V = &T` it is an error, however the
-binding is declared.
+copy, not an `H` onto the same place. A method taking `&mut self` needs every
+reference on the way to `T` to be `&mut`: through `type V = &T`, or through
+`&H`, it is an error, however the binding is declared.
 
 <!-- {"fixture":"newtype_over_mut_ref_inherits_trait_methods.wado"} -->
 

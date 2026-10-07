@@ -380,7 +380,7 @@ mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
 
 Prerequisites: `cc` and `cargo` (system); `node`, `bun` and `java` (managed by
 `mise install`). The ANTLR4 reference rows (gale-gen, sqlite-parse) fetch the
-jar to `~/.cache/gale`, and are skipped if `java` is absent.
+jar to `~/.cache/gale`, and are skipped if `java` or `javac` is absent.
 
 ### GC heap size
 
