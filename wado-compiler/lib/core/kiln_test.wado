@@ -1,7 +1,58 @@
-use { Error } from "core:kiln";
+use { Error, read_all, read_text } from "core:kiln";
 
 test "Error renders its reason" {
     assert `${Error::InvalidSchema("bad token")}` == "invalid schema: bad token";
     assert `${Error::Unsupported("streaming input")}` == "unsupported: streaming input";
     assert `${Error::Other("boom")}` == "boom";
+}
+
+/// An input stream that hands over its chunks one read at a time, the last
+/// with the writer's drop.
+struct ScriptedInput {
+    chunks: List<List<u8>>,
+    at: i32 = 0,
+    dropped: bool = false,
+}
+
+impl Stream<u8> for ScriptedInput {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+        let items = self.chunks[self.at];
+        self.at += 1;
+        let result = if self.at == self.chunks.len() { CopyResult::Dropped } else { CopyResult::Completed };
+        resume StreamChunk { items, result };
+    }
+
+    fn drop(&mut self, this: &Stream<u8>) {
+        self.dropped = true;
+    }
+
+    ..trap
+}
+
+test "read_all drains every chunk and drops the stream" {
+    let mut input = ScriptedInput { chunks: [[1, 2], [], [3]] };
+    with &mut input do {
+        assert read_all(0 as Stream<u8>) == [1, 2, 3] as ByteList;
+    };
+    assert input.dropped;
+}
+
+test "read_text decodes a character split across chunks" {
+    // U+00E9 is 0xC3 0xA9.
+    let mut input = ScriptedInput { chunks: [[0x61, 0xc3], [0xa9, 0x62]] };
+    with &mut input do {
+        assert read_text(0 as Stream<u8>) == Result::Ok("a\u{e9}b");
+    };
+    assert input.dropped;
+}
+
+test "read_text reports where the text stops being UTF-8" {
+    let mut input = ScriptedInput { chunks: [[0x61, 0x62], [0x63, 0xff]] };
+    with &mut input do {
+        assert read_text(0 as Stream<u8>) == Result::Err(Utf8Error::invalid(3, 1));
+    };
+    input = ScriptedInput { chunks: [[0x61, 0xc3]] };
+    with &mut input do {
+        assert read_text(0 as Stream<u8>) == Result::Err(Utf8Error::incomplete(1));
+    };
 }

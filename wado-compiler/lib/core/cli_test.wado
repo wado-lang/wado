@@ -1,5 +1,5 @@
 use { println, eprintln, print, eprint, print_bytes, args, program_name, cwd, env } from "core:cli";
-use { Stdout, Stderr } from "core:cli";
+use { Stdout, Stderr, exit, exit_error, exit_success, Exit } from "core:cli";
 use { ErrorCode } from "wasi:cli";
 
 // Captures what the helpers write. `write_via_stream` records which of the two
@@ -44,12 +44,10 @@ impl Stream<u8> for MockStdio {
 
 impl StreamWritable<u8> for MockStdio {
     fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+        // Only `print_bytes` writes a list, and it writes to stdout.
+        assert !self.to_stderr;
         let count = data.len();
-        if self.to_stderr {
-            self.err.extend(&data);
-        } else {
-            self.out.extend(&data);
-        }
+        self.out.extend(&data);
         resume StreamWrite { count, result: CopyResult::Completed };
     }
 
@@ -126,4 +124,43 @@ test "the program name is this file, and args holds nothing after it" {
 
 test "cwd answers without trapping" {
     let _ = cwd();
+}
+
+/// Stops the test where the host would stop the program. An exit does not
+/// return, so the handler traps rather than resume.
+struct ExitProbe {
+}
+
+impl Exit for ExitProbe {
+    fn exit(&self, status: Result<(), ()>) {
+        panic(`exit ${status:?}`);
+    }
+
+    fn exit_with_code(&self, code: u8) {
+        panic(`exit ${code}`);
+    }
+}
+
+#[expect_trap]
+test "exit_success asks the host to exit" {
+    let probe = ExitProbe {};
+    with Exit => &probe do {
+        exit_success();
+    };
+}
+
+#[expect_trap]
+test "exit_error asks the host to exit" {
+    let probe = ExitProbe {};
+    with Exit => &probe do {
+        exit_error();
+    };
+}
+
+#[expect_trap]
+test "exit asks the host to exit with the code" {
+    let probe = ExitProbe {};
+    with Exit => &probe do {
+        exit(3);
+    };
 }

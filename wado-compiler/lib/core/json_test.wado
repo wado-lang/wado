@@ -1741,7 +1741,8 @@ variant Signal {
 impl Deserialize for Signal {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Signal, DeserializeError> {
         let mut access = d.begin_variant("Signal", 2)?;
-        let signal = if access.is_unit()? { Signal::Stop } else { Signal::Go(access.payload::<i32>()?) };
+        // JSON reads the shape with the tag, so asking for it cannot fail.
+        let signal = if access.is_unit().unwrap() { Signal::Stop } else { Signal::Go(access.payload::<i32>()?) };
         access.end()?;
         return Result::Ok(signal);
     }
@@ -1750,6 +1751,9 @@ impl Deserialize for Signal {
 test "is_unit tells a bare tag from a tag with a payload" {
     assert from_string::<Signal>(`"Stop"`) == Result::Ok(Signal::Stop);
     assert from_string::<Signal>(`{"Go":3}`) == Result::Ok(Signal::Go(3));
+    assert from_string::<Signal>(`1`) matches { Err(_) };
+    assert from_string::<Signal>(`{"Go":"x"}`) matches { Err(_) };
+    assert from_string::<Signal>(`{"Go":3,"Stop":1}`) matches { Err(_) };
 }
 
 test "a Value reads every JSON value kind" {

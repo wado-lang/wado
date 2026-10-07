@@ -1,4 +1,5 @@
 use { eval, EvalError, Status, TrapKind } from "core:eval";
+use { EvalHost, Outcome } from "core:eval/eval_host.wado";
 
 test "output written before a trap is kept" {
     let out = eval(`use { println, Stdout } from "core:cli";
@@ -67,4 +68,49 @@ test "Display renders each outcome" {
     assert `${Status::OutOfFuel}` == "ran out of fuel";
     assert `${EvalError::CompileTimedOut}` == "the compile ran past its time limit";
     assert `${EvalError::Unavailable("wasi:random/random@0.3.0")}` == "the program imports `wasi:random/random@0.3.0`, which eval does not link";
+    assert `${Status::OutOfMemory}` == "ran out of memory";
+    let result = eval(`export fn run() { let x: i32 = "text"; }`);
+    let Err(CompileFailed(failure)) = result else {
+        panic(`expected a compile failure, got ${result:?}`);
+    };
+    assert `${result.unwrap_err()}` == failure.rendered;
+}
+
+test "Display renders every trap kind" {
+    let kinds: List<[TrapKind, String]> = [
+        [TrapKind::Unreachable, "unreachable"],
+        [TrapKind::StackOverflow, "stack overflow"],
+        [TrapKind::MemoryOutOfBounds, "memory access out of bounds"],
+        [TrapKind::TableOutOfBounds, "table access out of bounds"],
+        [TrapKind::IndirectCallToNull, "indirect call to null"],
+        [TrapKind::BadSignature, "indirect call signature mismatch"],
+        [TrapKind::IntegerOverflow, "integer overflow"],
+        [TrapKind::IntegerDivisionByZero, "integer division by zero"],
+        [TrapKind::BadConversionToInteger, "invalid conversion to integer"],
+        [TrapKind::NullReference, "null reference"],
+        [TrapKind::ArrayOutOfBounds, "array access out of bounds"],
+        [TrapKind::AllocationTooLarge, "allocation too large"],
+        [TrapKind::CastFailure, "cast failure"],
+        [TrapKind::Other, "other trap"],
+    ];
+    for let [kind, text] of kinds {
+        assert `${kind}` == text;
+    }
+}
+
+/// A host whose every compile runs out of time.
+struct SlowHost {
+}
+
+impl EvalHost for SlowHost {
+    fn run(&self, source: String, fuel: u64) -> Outcome {
+        resume Outcome::CompileTimedOut;
+    }
+}
+
+test "a compile past the host's time limit never runs" {
+    let host = SlowHost {};
+    with EvalHost => &host do {
+        assert eval("") matches { Err(CompileTimedOut) };
+    };
 }

@@ -4,6 +4,7 @@ use {
     Serialize,
     Serializer,
     SerializeMap,
+    SerializeVariant,
     SerializeError,
     SerializeErrorKind,
     Deserialize,
@@ -1142,4 +1143,22 @@ test "a Value read under a last-wins policy keeps the last repeated key" {
     let r: Result<ReadLastWins<Value>, DeserializeError> = from_string(`{"a":1,"b":2,"a":3}`);
     let expected: Value = { a: 3.0, b: 2.0 };
     assert r matches { Ok(v) && v.value == expected };
+}
+
+/// A case written with two payloads, which no derived impl writes.
+struct TwoPayloads {
+}
+
+impl Serialize for TwoPayloads {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        let mut v = s.begin_variant("Pair", "Both", 0).unwrap();
+        v.payload(&1).unwrap();
+        v.payload(&2).unwrap();
+        return v.end();
+    }
+}
+
+test "a case with more than one payload holds them as a list" {
+    let both = obj([["Both", Value::List([Value::Int(1), Value::Int(2)])]]);
+    assert to_value(&TwoPayloads {}) == Result::Ok(Value::Object(both));
 }
