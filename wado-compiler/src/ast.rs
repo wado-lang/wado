@@ -2378,6 +2378,8 @@ pub struct Function {
     pub visibility: Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
+    /// The world exports `export(World::name, …)` names this function as.
+    pub export_targets: Vec<ExportTarget>,
     /// Whether this is an async function (`export async fn`).
     /// Async functions use `task return` instead of `return` to deliver results
     /// without terminating the function.
@@ -2396,6 +2398,18 @@ pub struct Function {
     pub effects_inherited: bool,
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
     pub body: Option<Block>,
+    pub span: Span,
+}
+
+/// One `World::name` in `export(…)`: the world export a function provides.
+#[derive(Debug, Clone)]
+pub struct ExportTarget {
+    /// The reference site of the world name.
+    pub id: AstId,
+    /// The namespace in `ns::World::name`.
+    pub namespace: Option<String>,
+    pub world: String,
+    pub name: String,
     pub span: Span,
 }
 

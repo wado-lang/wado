@@ -1,0 +1,15 @@
+// `export(Command::run)` provides the world export `run` under another name.
+// The function stays callable from Wado by its own name.
+use { Command } from "wasi:cli";
+use { println, Stdout } from "core:cli";
+
+export(Command::run) fn main() with Stdout {
+    println(greeting());
+}
+
+fn greeting() -> String {
+    return "mapped";
+}
+
+__DATA__
+{"stdout": "mapped\n"}

@@ -269,6 +269,23 @@ fn fq_name_from_attrs(attrs: &[Attribute]) -> Option<String> {
     cm_import_of(attrs).map(CmImport::bare_path)
 }
 
+/// The key [`WorldRegistry`] files `world` under: its `#[cm("…")]` name, or
+/// failing that its own.
+pub fn world_key(world: &WorldDecl) -> String {
+    fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone())
+}
+
+/// A function `export(World::name)` names as the export `name` of `world`.
+#[derive(Debug, Clone)]
+pub struct ExportMapping {
+    /// The [`world_key`] of the target world.
+    pub world: String,
+    /// The world export it provides.
+    pub export_name: String,
+    /// The Wado function providing it.
+    pub function: String,
+}
+
 impl WorldRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
@@ -285,7 +302,7 @@ impl WorldRegistry {
         lookup_interface_export: impl Fn(&str) -> Option<InterfaceExportLookup>,
         lookup_interface_import: impl Fn(&str) -> Option<String>,
     ) {
-        let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
+        let fq_name = world_key(world);
 
         assert!(
             !self.worlds.contains_key(&fq_name),

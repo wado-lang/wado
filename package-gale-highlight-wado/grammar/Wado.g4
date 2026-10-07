@@ -12,7 +12,15 @@ item
     ;
 
 itemModifiers
-    : 'internal'? 'pub'? 'export'? 'async'?
+    : 'internal'? 'pub'? ('export' exportTargets?)? 'async'?
+    ;
+
+exportTargets
+    : '(' exportTarget (',' exportTarget)* ','? ')'
+    ;
+
+exportTarget
+    : identifier '::' identifier ('::' identifier)?
     ;
 
 itemKind

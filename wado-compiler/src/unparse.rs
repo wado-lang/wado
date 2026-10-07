@@ -147,13 +147,27 @@ fn emit_visibility_into(visibility: Visibility, output: &mut String) {
 }
 
 /// Leading keyword for a function declaration; `export` implies `pub` and is
-/// emitted alone.
-fn function_decl_keyword(is_export: bool, visibility: Visibility) -> &'static str {
-    if is_export {
-        "export "
-    } else {
-        visibility.keyword()
+/// emitted alone, with the world exports it names.
+fn function_decl_keyword_into(f: &Function, output: &mut String) {
+    if !f.is_export {
+        output.push_str(f.visibility.keyword());
+        return;
     }
+    output.push_str("export");
+    if !f.export_targets.is_empty() {
+        let targets: Vec<String> = f
+            .export_targets
+            .iter()
+            .map(|t| match &t.namespace {
+                Some(ns) => format!("{ns}::{}::{}", t.world, t.name),
+                None => format!("{}::{}", t.world, t.name),
+            })
+            .collect();
+        output.push('(');
+        output.push_str(&targets.join(", "));
+        output.push(')');
+    }
+    output.push(' ');
 }
 
 /// Number of blank lines the formatter emits between two source lines.
@@ -871,8 +885,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_function(&mut self, f: &Function) {
         self.emit_outer_attrs(&f.attrs);
-        self.output
-            .push_str(function_decl_keyword(f.is_export, f.visibility));
+        function_decl_keyword_into(f, &mut self.output);
         self.emit_kw_if(f.is_async, "async ");
 
         self.output.push_str("fn ");
@@ -4128,7 +4141,7 @@ pub fn unparse_attributes(attrs: &[Attribute]) -> Vec<String> {
 }
 
 pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
-    output.push_str(function_decl_keyword(f.is_export, f.visibility));
+    function_decl_keyword_into(f, output);
     emit_kw_if_into(f.is_async, "async ", output);
     output.push_str("fn ");
     output.push_str(&f.name);

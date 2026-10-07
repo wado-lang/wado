@@ -1609,6 +1609,7 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
+    let export_mappings = sem.export_mappings();
     let semantics::Semantics {
         entry_module_source,
         symbols,
@@ -1698,6 +1699,7 @@ fn compile_after_load<H: CompilerHost>(
 
     // Apply options to package (must be before synthesis)
     let mut package = package;
+    package.export_mappings = export_mappings;
     // Last-use spans (WEP 2026-05-21) drive value-copy elision downstream.
     package.moved_local_spans = liveness.moved_spans;
     if let Some(world) = options.target_world {
@@ -2189,6 +2191,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         sem.is_complete().then(|| sem.tir_modules.clone());
     let assert_plan_text = sem.assert_plan_text();
+    let export_mappings = sem.export_mappings();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,
@@ -2231,6 +2234,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Apply target world override (must be before synthesis)
             let mut package = package;
             package.moved_local_spans = moved_local_spans;
+            package.export_mappings = export_mappings;
             if let Some(world) = target_world {
                 package.target_world = world.to_string();
             }

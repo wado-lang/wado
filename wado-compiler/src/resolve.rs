@@ -649,6 +649,16 @@ impl Resolver<'_> {
             .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
+    /// `ns::member` through a namespace import, which registers each member
+    /// under its `ns$member` alias.
+    fn namespace_member(&self, namespace: &str, member: &str) -> Resolution {
+        self.symbols
+            .imported(self.module, &namespace_member_alias(namespace, member))
+            .map_or(Resolution::Unresolved, |sym| {
+                Resolution::Def(self.defs.def_at(sym.defined_at))
+            })
+    }
+
     fn resolve_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
@@ -978,6 +988,13 @@ impl AstVisitor for Resolver<'_> {
     /// The parameters and the body's own bindings share one scope, so a `let`
     /// taking a parameter's name redeclares it.
     fn visit_function(&mut self, func: &ast::Function) {
+        for target in &func.export_targets {
+            let answer = match &target.namespace {
+                Some(ns) => self.namespace_member(ns, &target.world),
+                None => self.resolve_name(&target.world),
+            };
+            self.record(target.id, answer);
+        }
         self.in_scope(&func.type_params, None, |s| {
             s.in_frame(|s| {
                 for param in &func.params {
@@ -1263,15 +1280,7 @@ impl AstVisitor for Resolver<'_> {
                 // different declaration that happens to share the name.
                 let answer = match self.binder(&ns.namespace) {
                     Some(base) => Resolution::Projection(base),
-                    None => self
-                        .symbols
-                        .imported(
-                            self.module,
-                            &namespace_member_alias(&ns.namespace, &ns.name),
-                        )
-                        .map_or(Resolution::Unresolved, |sym| {
-                            Resolution::Def(self.defs.def_at(sym.defined_at))
-                        }),
+                    None => self.namespace_member(&ns.namespace, &ns.name),
                 };
                 self.record(ns.id, answer);
                 for arg in &ns.args {

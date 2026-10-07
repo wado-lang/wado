@@ -1,0 +1,18 @@
+// `export(Service::handle)` maps an async function onto the service's entry
+// point, which then delivers its response as `handle` would.
+use { Service, Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
+
+export(Service::handle) async fn serve(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    assert response.set_status_code(204) matches { Ok(_) };
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{
+    "wasi:http/service": {
+        "status": 204
+    }
+}

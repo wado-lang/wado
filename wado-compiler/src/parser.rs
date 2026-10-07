@@ -8,7 +8,7 @@ use crate::ast::{
     ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
     ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EnumCase, EnumDecl, ErrorExpr,
-    ErrorItem, ErrorStmt, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt,
+    ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt,
     ForStmt, FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl,
     HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
@@ -1176,6 +1176,11 @@ impl Parser {
         } else {
             false
         };
+        let export_targets = if has_export && self.check(&TokenKind::LParen) {
+            self.parse_export_targets()?
+        } else {
+            Vec::new()
+        };
         if has_export && self.check(&TokenKind::Use) {
             self.errors.push(ParseError {
                 message: "a re-export is not lowered at the component boundary, so a `use` \
@@ -1221,11 +1226,25 @@ impl Parser {
             return self.parse_test_decl(attrs).map(Item::Test);
         }
 
+        if !export_targets.is_empty() && !self.check(&TokenKind::Fn) {
+            return Err(ParseError {
+                message: "`export(…)` names the world export a function provides, \
+                    so a `fn` must follow it"
+                    .to_string(),
+                span: self.peek().span,
+            });
+        }
+
         match self.peek_kind() {
             TokenKind::Use => self.parse_use_decl(visibility, attrs).map(Item::Use),
             TokenKind::Fn => self
                 .parse_function(visibility, has_export, is_async, attrs, false)
-                .map(Item::Function),
+                .map(|func| {
+                    Item::Function(Function {
+                        export_targets,
+                        ..func
+                    })
+                }),
             TokenKind::Interface => self
                 .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
@@ -2010,6 +2029,7 @@ impl Parser {
             name_span,
             visibility,
             is_export,
+            export_targets: Vec::new(),
             is_async,
             type_params,
             attrs,
@@ -2021,6 +2041,48 @@ impl Parser {
             body,
             span,
         })
+    }
+
+    /// `(World::name, ns::World::name, …)` after `export`: the world exports
+    /// the function provides.
+    fn parse_export_targets(&mut self) -> ParseResult<Vec<ExportTarget>> {
+        self.expect(&TokenKind::LParen)?;
+        let targets = self.parse_comma_separated(&TokenKind::RParen, |p| {
+            let start = p.peek().span;
+            let mut segments = vec![p.consume_ident()?];
+            while p.check(&TokenKind::ColonColon) {
+                p.advance();
+                segments.push(p.consume_ident()?);
+            }
+            let span = start.merge(&p.previous().span);
+            let (namespace, world, name) = match <[String; 2]>::try_from(segments) {
+                Ok([world, name]) => (None, world, name),
+                Err(segments) => match <[String; 3]>::try_from(segments) {
+                    Ok([namespace, world, name]) => (Some(namespace), world, name),
+                    Err(_) => {
+                        return Err(p.error_at_span(
+                            span,
+                            "an export target is `World::name` or `ns::World::name`",
+                        ));
+                    }
+                },
+            };
+            Ok(ExportTarget {
+                id: p.alloc_ast_id(),
+                namespace,
+                world,
+                name,
+                span,
+            })
+        })?;
+        self.expect(&TokenKind::RParen)?;
+        if targets.is_empty() {
+            return Err(self.error_at_span(
+                self.previous().span,
+                "`export(…)` names at least one world export",
+            ));
+        }
+        Ok(targets)
     }
 
     fn parse_param_list(&mut self) -> ParseResult<Vec<Param>> {

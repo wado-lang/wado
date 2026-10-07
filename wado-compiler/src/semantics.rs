@@ -31,7 +31,7 @@ use crate::symbol_notation::SymbolNotation;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
-use crate::world_registry::WorldRegistry;
+use crate::world_registry::{ExportMapping, WorldRegistry, world_key};
 use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.
@@ -206,6 +206,44 @@ impl Semantics {
     #[must_use]
     pub(crate) fn resolutions(&self) -> Option<&Resolutions> {
         self.state.as_ref().map(|s| &*s.tysys.resolutions)
+    }
+
+    /// What each `export(World::name)` in the entry module names. Elaboration
+    /// has rejected a target that names no world.
+    pub(crate) fn export_mappings(&self) -> Vec<ExportMapping> {
+        let Some(resolutions) = self.resolutions() else {
+            return Vec::new();
+        };
+        let worlds: IndexMap<AstId, &ast::WorldDecl> = self
+            .modules
+            .values()
+            .flat_map(|module| &module.items)
+            .filter_map(|item| match item {
+                Item::World(world) => Some((world.id, world)),
+                _ => None,
+            })
+            .collect();
+        self.modules
+            .get(&self.entry_module_source)
+            .into_iter()
+            .flat_map(|module| &module.items)
+            .filter_map(|item| match item {
+                Item::Function(func) => Some(func),
+                _ => None,
+            })
+            .flat_map(|func| {
+                func.export_targets.iter().map(|target| {
+                    let def = resolutions
+                        .declared(target.id)
+                        .expect("elaboration rejects an export target naming no world");
+                    ExportMapping {
+                        world: world_key(worlds[&resolutions.defs().ast_id(def)]),
+                        export_name: target.name.clone(),
+                        function: func.name.clone(),
+                    }
+                })
+            })
+            .collect()
     }
 
     /// The resolved `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface
