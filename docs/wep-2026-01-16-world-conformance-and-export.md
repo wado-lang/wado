@@ -83,6 +83,12 @@ export(Command::run, Daemon::run) fn shared_run() { ... }
 
 If signature matches, a single `export fn` can satisfy multiple worlds without explicit mapping.
 
+A target in a world other than the selected one exports nothing and is checked
+against that world's signature, so a module serving two worlds learns of a
+mismatch whichever one it is compiled for. The mapped function is exported only
+under the mapped name. A second provider of the same export, mapped or named,
+is an error rather than a precedence rule.
+
 ### Type Export
 
 Types can be exported with the same syntax:
@@ -173,9 +179,13 @@ export(Command::run, Daemon::run) fn run() {
 
 ## Known gaps
 
-- `export(World::name)` mapping and type export do not parse.
-- What `export(World::name)` means when `World` is not the selected world is
-  undecided.
+- Type export, `export(World::Type) struct`, does not parse.
+- Only a standard library world can be named in `export(…)`: a world a package
+  declares is not registered, so the compiler reports it as one no compilation
+  can target.
+- `export(…)` is honoured only in the entry module.
+- The world and export checks run when the component is built, so `wado check`
+  and the language service do not report them, and their errors carry no span.
 
 ## References
 

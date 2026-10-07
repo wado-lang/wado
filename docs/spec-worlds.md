@@ -135,6 +135,25 @@ fn run() with Stdout {
 
 The entry point's signature must match what the world declares.
 
+`export(World::name)` makes a function of any name provide the world export
+`name`. The host calls it as `name`, and Wado code calls it by its own name:
+
+<!-- {"fixture":"export_mapping_command_run.wado", "assert": false} -->
+
+```wado
+export(Command::run) fn main() with Stdout {
+    println(greeting());
+}
+```
+
+`World` is a world in scope, and `name` one of its exports. A list,
+`export(A::run, B::run)`, names one export in each of several worlds. A target
+in the selected world makes the function that world's export and no other. A
+target in another world exports nothing; it only holds the signature to that
+world's. Both are checked as the entry point's signature is. Two functions
+providing one export do not compile, and neither does an `export fn name` beside
+a function mapped to `name`.
+
 ## `wasi:cli/command`
 
 `wasi:cli/command` is the world of a command-line program. `wado run` compiles a
