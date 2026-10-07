@@ -9,7 +9,7 @@
 //! provider.export → hlc.import, export hlc's `wrap`, then call it: the host
 //! calls `wrap`, hlc calls its `highlight` import, the provider runs.
 
-use crate::common::compile_source_with_compiler_options;
+use crate::common::{compile_source_with_compiler_options, interface_export};
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -178,8 +178,9 @@ export fn go(code: String, lang: String) -> String {
         .instantiate(&mut store, &component)
         .expect("instantiate");
 
+    let go = interface_export(&mut store, &instance, "test:consumer/consumer@0.1.0", "go");
     let go = instance
-        .get_typed_func::<(&str, &str), (String,)>(&mut store, "go")
+        .get_typed_func::<(&str, &str), (String,)>(&mut store, &go)
         .expect("go export (code, lang) -> string");
     let (text,) = go
         .call(&mut store, ("y", "wado"))

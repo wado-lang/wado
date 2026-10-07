@@ -7,7 +7,7 @@
 //!
 //! See `docs/wep-2026-06-26-wasm-cm-component-import.md` (Phase 9).
 
-use crate::common::compile_source_with_compiler_options;
+use crate::common::{compile_source_with_compiler_options, interface_export};
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -55,8 +55,9 @@ export fn go(source: String) -> String {
     let instance = linker
         .instantiate(&mut store, &component)
         .expect("instantiate");
+    let go = interface_export(&mut store, &instance, "test:consumer/consumer@0.1.0", "go");
     let go = instance
-        .get_typed_func::<(&str,), (String,)>(&mut store, "go")
+        .get_typed_func::<(&str,), (String,)>(&mut store, &go)
         .expect("go export (source) -> string");
     let (text,) = go
         .call(&mut store, ("x",))
@@ -114,8 +115,9 @@ export fn go(source: String) -> String {
     let instance = linker
         .instantiate(&mut store, &component)
         .expect("instantiate");
+    let go = interface_export(&mut store, &instance, "test:consumer/consumer@0.1.0", "go");
     let go = instance
-        .get_typed_func::<(&str,), (String,)>(&mut store, "go")
+        .get_typed_func::<(&str,), (String,)>(&mut store, &go)
         .expect("go export");
     let (text,) = go
         .call(&mut store, ("x",))

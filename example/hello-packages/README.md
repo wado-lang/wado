@@ -5,7 +5,7 @@ dependency:
 
 - [`wado-lang:cm-catalog`](../../package-cm-catalog) — a Component Model
   **library** pulled from an OCI registry by `wado fetch`, imported by its
-  coordinate and exercised through its `CmCatalog::id_*` identity functions.
+  coordinate and exercised through its `id_*` identity functions.
 - [`gale`](../../package-gale) — a Kiln **generator** that turns `src/Calc.g4`
   into a calculator parser at compile time; `main.wado` parses `1 + 2 * 3`
   through it.
@@ -15,8 +15,9 @@ dependency:
 Both dependencies are consumed from the OCI registry:
 
 - cm-catalog is a `[dependencies]` **library**, pulled by `wado fetch`.
-  `use { CmCatalog } from "wado-lang:cm-catalog"` imports it across the
-  Component Model boundary, as a prebuilt component.
+  `use { id_u32 } from "wado-lang:cm-catalog"` imports it across the
+  Component Model boundary, as a prebuilt component, by the same names a source
+  dependency would offer.
 - gale is a `[build-dependencies]` **generator** (`module: "wado-lang:gale"`).
   `wado compile` resolves the coordinate against the registry, pulls the
   `core:kiln/generator` component at its world sub-path, and reads its options

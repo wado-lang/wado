@@ -66,8 +66,8 @@ pub struct CompileOptions {
     /// `export fn`s and exports each one as a Component Model function.
     pub lib_world: Option<String>,
     /// `--implement <fq>`: build a provider component — a library world whose
-    /// exports are forced into the interface named by `lib_world`, so the
-    /// artifact satisfies another component's import of that interface.
+    /// exports land in the foreign interface `lib_world` names, so the artifact
+    /// satisfies another component's import of that interface.
     pub lib_interface_export: bool,
     /// The entry came from a manifest (no path argument, or a directory
     /// argument), so the build is the package's declared artifact and carries

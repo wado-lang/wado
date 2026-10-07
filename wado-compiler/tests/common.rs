@@ -12,7 +12,9 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use wasmtime::component::{Component, ComponentExportIndex, Func, Instance, Linker, ResourceTable};
-use wasmtime::{Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store};
+use wasmtime::{
+    AsContextMut, Config, Engine, InstanceAllocationStrategy, PoolingAllocationConfig, Store,
+};
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{
     Error as HttpError, RequestOptions, WasiBody, WasiHttpCtx, WasiHttpCtxView, WasiHttpHooks,
@@ -828,34 +830,45 @@ pub fn compile_lib_world(
         .wasm
 }
 
-/// Resolve `name` in `iface`, falling back to a bare top-level export: a
-/// library groups its exports into an interface only when it has named types.
+/// Resolve `name` in `iface`, or among the top-level exports with none.
 pub fn lookup_func(
     store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     name: &str,
 ) -> Option<Func> {
-    iface
-        .and_then(|i| instance.get_export(&mut *store, Some(i), name))
-        .or_else(|| instance.get_export(&mut *store, None, name))
-        .map(|(_, idx)| idx)
-        .and_then(|idx| instance.get_func(&mut *store, idx))
+    let (_, idx) = instance.get_export(&mut *store, iface, name)?;
+    instance.get_func(&mut *store, idx)
 }
 
-/// [`lookup_func`] against the `world_fq` library world's instance export,
-/// panicking where the export is not there.
+/// The export `name` of the interface `iface_fq` a component exports, as a
+/// library exports every function, panicking where it is not there.
+pub fn interface_export(
+    mut store: impl AsContextMut,
+    instance: &Instance,
+    iface_fq: &str,
+    name: &str,
+) -> ComponentExportIndex {
+    let (_, iface) = instance
+        .get_export(&mut store, None, iface_fq)
+        .unwrap_or_else(|| panic!("interface `{iface_fq}` not exported"));
+    let (_, idx) = instance
+        .get_export(&mut store, Some(&iface), name)
+        .unwrap_or_else(|| panic!("`{name}` not exported by `{iface_fq}`"));
+    idx
+}
+
+/// The function `name` of the `world_fq` library world's interface.
 pub fn lib_func(
     store: &mut Store<WasiState>,
     instance: &Instance,
     world_fq: &str,
     name: &str,
 ) -> Func {
-    let iface = instance
-        .get_export(&mut *store, None, world_fq)
-        .map(|(_, idx)| idx);
-    lookup_func(store, instance, iface.as_ref(), name)
-        .unwrap_or_else(|| panic!("`{name}` export not found"))
+    let idx = interface_export(&mut *store, instance, world_fq, name);
+    instance
+        .get_func(&mut *store, idx)
+        .unwrap_or_else(|| panic!("`{name}` is not a function"))
 }
 
 /// Backward-compat alias

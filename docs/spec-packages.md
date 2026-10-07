@@ -367,8 +367,10 @@ named after the world with `:` and `/` written as `-`:
 
 A registry package is a prebuilt component. Its specifier imports the
 interfaces the component exports, as a `use` of a component file does
-([Components](./spec-modules.md#components)). A `pub` item the component does
-not export does not reach the consumer. Whether a registry package will also
+([Components](./spec-modules.md#components)). The package's `export` items sit
+in its default interface, so they import by bare name, as from a source
+dependency. A `pub` item the component does not export does not reach the
+consumer. Whether a registry package will also
 carry its `pub` items to a Wado consumer is undecided
 ([WEP: Provider Metadata](./wep-2026-07-26-provider-metadata.md)):
 
@@ -376,14 +378,14 @@ carry its `pub` items to a Wado consumer is undecided
 
 ```wado
 use { println, Stdout } from "core:cli";
-use { CmCatalog } from "wado-lang:cm-catalog";
+use { id_list_u8, id_string, id_u32 } from "wado-lang:cm-catalog";
 ```
 
 <!-- {"source": "example/hello-packages/src/main.wado"} -->
 
 ```wado
-let n = CmCatalog::id_u32(42);
-let s = CmCatalog::id_string("hello");
+let n = id_u32(42);
+let s = id_string("hello");
 ```
 
 ## The Library World
@@ -524,9 +526,11 @@ a dependency never resolves against them.
 
 ### The Library World as a Component
 
-Built on its own, the library world is a component. Its interface carries the
-entry module's `export` items and no `pub`-only item. The interface is named
-after the package, `<namespace>:<name>/<name>@<version>`, so building it needs
+Built on its own, the library world is a component. It exports one interface,
+the package's default interface, which carries every `export` item of the entry
+module and no `pub`-only item. Its functions never become world-level exports,
+whatever their signatures name. The interface is named after the package,
+`<namespace>:<name>/<name>@<version>`, so building it needs
 `[package].namespace`. The world itself is named `root`, so no package may take
 that name, in any letter case. An entry module that exports nothing gives the
 component no interface, and building it is an error.

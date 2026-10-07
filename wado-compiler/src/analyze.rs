@@ -6,8 +6,8 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes, Item, Module,
-    UseDecl, UseItem, Visibility, WorldExport, cm_import_of, for_each_function,
+    AstId, AstVisitor, CmImport, Function, FunctionSite, GenericParam, ImportAttributes, Item,
+    Module, UseDecl, UseItem, Visibility, WorldExport, cm_import_of, for_each_function,
     walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};

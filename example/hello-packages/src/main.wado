@@ -7,7 +7,7 @@
 //     `wado-lang:gale` (the published `core:kiln/generator` world).
 
 use { println, Stdout } from "core:cli";
-use { CmCatalog } from "wado-lang:cm-catalog";
+use { id_list_u8, id_string, id_u32 } from "wado-lang:cm-catalog";
 use calc from "./Calc.g4"
     with {
         generator: {
@@ -19,12 +19,12 @@ use calc from "./Calc.g4"
 // carries no field defaults — so every field is supplied explicitly.
 
 
-export fn run() with (Stdout, CmCatalog) {
+export fn run() with Stdout {
     // 1. Round-trip values through the cm-catalog registry component.
-    let n = CmCatalog::id_u32(42);
-    let s = CmCatalog::id_string("hello");
+    let n = id_u32(42);
+    let s = id_string("hello");
     let bytes: List<u8> = [1, 2, 3];
-    let back = CmCatalog::id_list_u8(bytes);
+    let back = id_list_u8(bytes);
 
     println(`id_u32(42)      = ${n}`);
     println(`id_string       = ${s}`);
