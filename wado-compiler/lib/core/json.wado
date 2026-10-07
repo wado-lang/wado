@@ -1201,13 +1201,7 @@ fn read_number_text<T: Deserialize>(text: ByteSlice, offset: i64) -> Result<Opti
     if lead != b'-' && !(b'0' <= lead <= b'9') {
         return Result::Ok(null);
     }
-    // A quoted number reaches here from the scalar reader, so this call closes
-    // a cycle, and the inliner never splices a function on one. Reading through
-    // `&mut JsonDeserializer` puts the cycle on an instantiation no other reader
-    // uses: on `JsonDeserializer`'s, every scalar an element or a field reads
-    // would stay a call.
-    let mut reader = &mut de;
-    return match T::deserialize(&mut reader) {
+    return match T::deserialize(&mut de) {
         Ok(v) => Result::Ok(if de.pos == de.input.len() { Option::Some(v) } else { null }),
         Err(e) => match e.kind {
             MalformedInput | Eof => Result::Ok(null),

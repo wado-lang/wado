@@ -1598,6 +1598,25 @@ pub(super) fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -
     recursive_functions(&call_graph)
 }
 
+/// The functions on a call cycle that splicing must leave alone: every member
+/// but a bridge, whose one call site enters a member that makes more than one
+/// call. Splicing a bridge exposes that member, which stays barred, so the
+/// expansion stops there. A bridge is how a cold re-entry closes a cycle
+/// through a hot forwarder: `T::deserialize` reaching a scalar reader whose
+/// quoted form re-reads through `T::deserialize`.
+fn splice_barred_cycle_members(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
+    let recursive = recursive_functions(call_graph);
+    let is_bridge = |f: usize| match call_graph[f].as_slice() {
+        &[callee] => {
+            callee != f
+                && recursive.contains(&FuncId::new(callee))
+                && call_graph[callee].len() != 1
+        }
+        _ => false,
+    };
+    recursive.iter().copied().filter(|f| !is_bridge(f.index())).collect()
+}
+
 /// The functions on a call cycle of `call_graph`, which holds each function's
 /// callees by store position.
 fn recursive_functions(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
@@ -1959,7 +1978,7 @@ pub fn inline_functions(
         .iter()
         .map(|s| s.calls.iter().map(|(c, _)| c.index()).collect())
         .collect();
-    let recursive_functions = recursive_functions(&call_graph);
+    let recursive_functions = splice_barred_cycle_members(&call_graph);
 
     // Collect inline candidates from all modules, keyed by `FuncId` (the
     // function's store position). A call site resolves its candidate by its
