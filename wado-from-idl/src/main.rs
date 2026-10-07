@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use lexopt::Arg::Long;
 use wit_parser::{PackageId, PackageSourceMap, Resolve};
 
@@ -323,9 +323,28 @@ fn run_directory_mode(
                 .with_context(|| format!("Failed to write {}", output_path.display()))?;
 
             eprintln!("Generated: {}", output_path.display());
+
+            let world_names: Vec<String> = worlds_module
+                .worlds
+                .iter()
+                .map(|w| w.name.clone())
+                .collect();
+            if let Some(clash) = world_names.iter().find(|world| {
+                flat_reexports
+                    .iter()
+                    .any(|(_, names)| names.contains(*world))
+            }) {
+                bail!(
+                    "world `{clash}` in package {pkg_name} shares its name with an interface item"
+                );
+            }
+            flat_reexports.push(("worlds".to_string(), world_names));
         }
 
-        if !flat_reexports.is_empty() && !skip_flat_reexport {
+        // A facade is the module `ns:pkg`, which exists only for a registered
+        // stdlib package: a wrapper such as `wasmtime:wasi-http` gets none.
+        let registered = stdlib_identity_for(&pkg.name.namespace, pkg_name, None).is_some();
+        if !flat_reexports.is_empty() && !skip_flat_reexport && registered {
             write_flat_reexport_file(output_dir, &pkg.name.namespace, pkg_name, &flat_reexports)?;
         }
     }

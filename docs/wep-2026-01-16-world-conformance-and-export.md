@@ -176,9 +176,6 @@ export(Command::run, Daemon::run) fn run() {
 - `export(World::name)` mapping and type export do not parse.
 - What `export(World::name)` means when `World` is not the selected world is
   undecided.
-- `wasi:cli` and `wasi:http` do not re-export their worlds, so
-  `use { Command } from "wasi:cli"` fails. The world is reached through
-  `wasi:cli/worlds.wado`.
 
 ## References
 
