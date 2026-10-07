@@ -95,7 +95,8 @@ pub struct Semantics {
     /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
     /// path derive them identically. `None` until set.
     pub(crate) wit_contract: Option<WitContract>,
-    /// What each `export(World::name)` in the entry module names.
+    /// What each `export(World::name)` in the entry module names. Empty unless
+    /// lowering succeeded.
     pub(crate) export_mappings: ExportMappings,
     /// The coverage plan reify instrumented this compile with, under
     /// `wado test --coverage`.
@@ -209,12 +210,6 @@ impl Semantics {
     #[must_use]
     pub(crate) fn resolutions(&self) -> Option<&Resolutions> {
         self.state.as_ref().map(|s| &*s.tysys.resolutions)
-    }
-
-    /// What each `export(World::name)` in the entry module names. Empty unless
-    /// the analysis completed.
-    pub(crate) fn export_mappings(&self) -> &ExportMappings {
-        &self.export_mappings
     }
 
     /// The resolved `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface
@@ -1241,8 +1236,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         .iter()
         .map(|(ms, m)| (m.ast_id_space(), ms.clone()))
         .collect();
-    // Lowering fails on an export target naming no world, so past it each one
-    // resolves to a world declaration.
     let export_mappings = if lower_ok {
         export_mappings_of(
             &load_result.modules,

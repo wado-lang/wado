@@ -1312,7 +1312,7 @@ fn compile_after_load<H: CompilerHost>(
             sem.world_registry_arc()
                 .expect("world_registry present when is_complete"),
             contract.clone(),
-            sem.export_mappings().clone(),
+            sem.export_mappings.clone(),
         )
     });
 
@@ -2192,7 +2192,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         sem.is_complete().then(|| sem.tir_modules.clone());
     let assert_plan_text = sem.assert_plan_text();
-    let export_mappings = sem.export_mappings().clone();
+    let export_mappings = sem.export_mappings.clone();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
     // Create Package early so CM binding synthesis runs before monomorphize,

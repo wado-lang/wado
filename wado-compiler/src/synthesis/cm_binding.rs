@@ -898,10 +898,9 @@ fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) 
 /// fn` for an `export use` re-export, otherwise the one entry-module function
 /// providing it ([`ExportMappings::provided_export`]).
 ///
-/// A world export with no function at all is a missing entry point. The test
-/// world handles `test` blocks separately and never reaches this lookup, so
-/// in CLI / HTTP / other worlds the entry must be defined — never silently
-/// stubbed.
+/// A world export with no function at all is a missing entry point, never
+/// silently stubbed. The test world exports `test` blocks instead, and reaches
+/// this lookup only for an export some `export(…)` names.
 fn find_export_user_func(
     project: &Package,
     entry_module: &TirModule,
