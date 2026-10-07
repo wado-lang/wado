@@ -1,0 +1,24 @@
+// A copy of an `AsyncCall` names the same call, so it ends with the original:
+// cancelling the copy after the original's `wait` traps.
+
+#[expect_trap]
+test {
+    with Fetch => &Canned {} do {
+        let call = Fetch::get("/abc");
+        let copy = call;
+        assert call.wait() == 4;
+        copy.cancel();             // traps: the call ended at `wait`
+    }
+}
+
+#[cm("example:demo/fetch")]
+interface Fetch {
+    #[cm("example:demo/fetch#get")]
+    async fn get(url: String) -> AsyncCall<i32>;
+}
+
+struct Canned {}
+
+impl Fetch for Canned {
+    fn get(&self, url: String) -> i32 { resume url.len(); }
+}

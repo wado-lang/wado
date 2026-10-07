@@ -486,6 +486,9 @@ pub struct AsyncCall<T> {
     /// Per-import lift function — reads CM-ABI bytes at `__cm_outptr`
     /// and materialises them as `T`.
     __cm_lift: fn(i32) -> T,
+    /// Set by the first `wait` or `cancel`. A reference, so every copy of the
+    /// value sees the call end: the handle and the buffer are shared too.
+    __cm_ended: &mut bool,
 }
 
 impl<T> AsyncCall<T> {
@@ -494,12 +497,21 @@ impl<T> AsyncCall<T> {
         return cm_packed_upper(self.__cm_packed);
     }
 
+    /// Traps where an earlier `wait` or `cancel` ended this call, since its
+    /// handle is dropped and its result buffer freed.
+    fn ensure_live(&self) {
+        if *self.__cm_ended {
+            panic("AsyncCall used after wait or cancel");
+        }
+    }
+
     /// Wait for the subtask to complete and return the lifted result.
     /// Drops the CM subtask handle and frees the result buffer before
-    /// returning. After `wait` returns, the `AsyncCall<T>` value must not be
-    /// used again — doing so is a use-after-free (the backing buffer has
-    /// been released).
+    /// returning, which ends the call: any later `wait`, `cancel` or `join`
+    /// on it, or on a copy of it, traps.
     pub fn wait(&self) -> T with (Subtask, WaitableSet) {
+        self.ensure_live();
+        *self.__cm_ended = true;
         let handle = self.subtask_handle();
         if handle != 0 {
             let raw = handle as Subtask;
@@ -520,9 +532,10 @@ impl<T> AsyncCall<T> {
     }
 
     /// Cancel the in-flight subtask and free the result buffer. Any
-    /// partially-written result is discarded. Same single-use contract as
-    /// `wait` — the `AsyncCall<T>` must not be used again after `cancel`.
+    /// partially-written result is discarded. It ends the call as `wait` does.
     pub fn cancel(&self) with Subtask {
+        self.ensure_live();
+        *self.__cm_ended = true;
         let handle = self.subtask_handle();
         if handle != 0 {
             // `subtask.cancel` traps on a waitable still in a set. Joining set 0
@@ -541,6 +554,7 @@ impl<T> AsyncCall<T> {
     /// subtask in wait events. The caller remains responsible for eventual
     /// `wait`/`cancel` on this `AsyncCall<T>`.
     pub fn join(&self, set: &WaitableSet) -> Waitable with Subtask {
+        self.ensure_live();
         let raw = self.subtask_handle() as Subtask;
         return raw.join(set);
     }

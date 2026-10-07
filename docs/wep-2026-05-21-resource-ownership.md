@@ -124,8 +124,7 @@ receiver (`&self` plus a `*self` deref-copy covers it), and a single borrow
 spelling removes a needless choice. Bare `self` is legal on a resource or an
 aggregate that carries one (its consuming method hands that resource off); on a
 value type that owns no resource it is a diagnostic (`value types are not move-only; use &self`) — this is how the value-semantics friction is mitigated,
-not with a keyword. The rule licenses `fn drop(self)` and the consuming
-`AsyncCall<T>` methods.
+not with a keyword. The rule licenses `fn drop(self)`.
 
 Because the annotated forms are gone, the receiver kind is carried entirely by
 `SelfKind` (`Value` / `Ref` / `MutRef`); `SelfKind::None` means a genuine

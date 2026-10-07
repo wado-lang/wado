@@ -135,9 +135,24 @@ test {
 }
 ```
 
-An `AsyncCall<T>` is used once: after `wait` or `cancel` it must not be touched
-again. `join` only registers the call with the set, so the caller still owes the
-`wait` or `cancel` that ends it.
+An `AsyncCall<T>` is used once: `wait` or `cancel` ends the call, and a later
+`wait`, `cancel` or `join` on it traps. A copy names the same call, so it ends
+with the original. `join` only registers the call with the set, so the caller
+still owes the `wait` or `cancel` that ends it.
+
+<!-- {"fixture":"async_call_copy_shares_end.wado"} -->
+
+```wado
+#[expect_trap]
+test {
+    with Fetch => &Canned {} do {
+        let call = Fetch::get("/abc");
+        let copy = call;
+        assert call.wait() == 4;
+        copy.cancel();             // traps: the call ended at `wait`
+    }
+}
+```
 
 #### Handling an Async Operation
 
@@ -176,7 +191,9 @@ keep running afterwards, for example to write a response's trailers.
 
 `Stream<T>` and `Future<T>` are unbuffered channels. A `write` blocks until the
 other end reads, and a `read` blocks until the other end writes, so the two ends
-must be driven by different tasks.
+must be driven by different tasks. A component cannot start a task of its own,
+so one end goes to another task: an async import's subtask, or the caller of an
+`export async fn`. A task that drives both ends blocks forever.
 
 ## Linking and Resources
 
