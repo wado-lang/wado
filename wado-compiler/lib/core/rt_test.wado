@@ -1,6 +1,44 @@
 //! Tests for `core:rt`.
 
-use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft } from "core:rt";
+use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
+
+#[expect_trap]
+test "unreachable traps" {
+    unreachable();
+}
+
+#[expect_trap]
+test "a read with negative room is a defect" {
+    let [rx, tx] = Stream::<u8>::new();
+    rx.read(builtin::black_box(-1));
+}
+
+test "a write to a stream whose reader is gone reports the drop" {
+    let [rx, tx] = Stream::<u8>::new();
+    rx.drop();
+    let written = tx.write([1, 2]);
+    assert written.count == 0;
+    assert written.result == CopyResult::Dropped;
+    assert tx.write_raw_all(([] as List<u8>).as_slice()) == CopyResult::Completed;
+    tx.drop();
+}
+
+test "a future whose reader is gone takes its value and drops" {
+    let [rx, tx] = Future::<i32>::new();
+    rx.drop();
+    tx.write(1);
+    tx.drop();
+}
+
+test "an empty waitable set has nothing to poll" {
+    let ws = WaitableSet::new();
+    assert ws.poll() matches { None };
+    ws.drop();
+}
+
+test "log_stdout writes without an effect" {
+    log_stdout("");
+}
 
 /// Operands at every carry, borrow and sign edge of a 32-bit limb.
 global EDGES: List<i64> = [

@@ -1159,6 +1159,14 @@ impl Serialize for TwoPayloads {
 }
 
 test "a case with more than one payload holds them as a list" {
-    let both = obj([["Both", Value::List([Value::Int(1), Value::Int(2)])]]);
+    let both = obj([
+        [
+            "Both",
+            Value::List([
+                Value::Int(1),
+                Value::Int(2),
+            ]),
+        ],
+    ]);
     assert to_value(&TwoPayloads {}) == Result::Ok(Value::Object(both));
 }

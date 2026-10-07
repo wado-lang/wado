@@ -594,11 +594,17 @@ fn exercise_sink() -> bool with Log {
 
 test "the writing sinks and NopSink answer every operation" {
     let mut text = TextSink {};
-    assert with Log => &mut text do { exercise_sink() };
+    assert with Log => &mut text do {
+        exercise_sink();
+    };
     let mut json = JsonSink {};
-    assert with Log => &mut json do { exercise_sink() };
+    assert with Log => &mut json do {
+        exercise_sink();
+    };
     let mut nop = NopSink {};
-    assert !with Log => &mut nop do { exercise_sink() };
+    assert !with Log => &mut nop do {
+        exercise_sink();
+    };
 }
 
 test "the default subscriber answers every operation" {

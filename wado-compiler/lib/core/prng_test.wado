@@ -420,7 +420,9 @@ impl Rng for Scripted {
 // Over three values the threshold is 2^64 mod 3 = 1, so only a draw whose
 // product lands on 0 mod 2^64, the word 0, is rejected.
 test "random_range redraws the biased low end of the multiply" {
-    let mut rng = Scripted { words: [0, 0, 1] };
+    let mut rng = Scripted {
+        words: [0, 0, 1],
+    };
     assert rng.random_range(0_u64..<3_u64) == 0;
     assert rng.at == 3;
 }

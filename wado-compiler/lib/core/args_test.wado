@@ -427,7 +427,13 @@ test "every scalar option type converts leniently" {
     let r = parse::<Numbers>([
         "--a", "-1", "--b", "2", "--c", "3", "--d", "-4", "--e", "5", "--f", "1.5", "--g", "2.5", "--h", "x",
     ]);
-    assert r matches { Ok(n) && n.a == -1 && n.b == 2 && n.c == 3 && n.d == -4 && n.e == 5 && n.f == 1.5 && n.g == 2.5
+    assert r matches { Ok(n) && n.a == -1
+        && n.b == 2
+        && n.c == 3
+        && n.d == -4
+        && n.e == 5
+        && n.f == 1.5
+        && n.g == 2.5
         && n.h == 'x' };
 }
 
@@ -462,7 +468,8 @@ impl Deserialize for EvenOpt;
 
 test "a field type's own failure reports InvalidValue" {
     assert parse::<EvenOpt>(["--even", "4"]) matches { Ok(o) && o.even.n == 4 };
-    assert parse::<EvenOpt>(["--even", "3"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue && e.message == "odd" };
+    assert parse::<EvenOpt>(["--even", "3"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue
+        && e.message == "odd" };
     assert parse::<EvenOpt>(["--even", "x"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
 }
 
@@ -478,8 +485,7 @@ test "a map option is unsupported" {
 
 test "a repeatable option missing its value reports MissingValue" {
     assert parse::<Repeatable>(["in", "--include"]) matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
-    assert parse::<Repeatable>(["in", "--include", "a", "--include"]) matches { Err(e)
-        && e.kind == ArgsErrorKind::MissingValue };
+    assert parse::<Repeatable>(["in", "--include", "a", "--include"]) matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
 }
 
 test "a repeatable option takes an inline first value and stops at `--`" {

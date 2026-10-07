@@ -30,7 +30,13 @@ impl Stream<u8> for ScriptedInput {
 }
 
 test "read_all drains every chunk and drops the stream" {
-    let mut input = ScriptedInput { chunks: [[1, 2], [], [3]] };
+    let mut input = ScriptedInput {
+        chunks: [
+            [1, 2],
+            [],
+            [3],
+        ],
+    };
     with &mut input do {
         assert read_all(0 as Stream<u8>) == [1, 2, 3] as ByteList;
     };
@@ -39,7 +45,12 @@ test "read_all drains every chunk and drops the stream" {
 
 test "read_text decodes a character split across chunks" {
     // U+00E9 is 0xC3 0xA9.
-    let mut input = ScriptedInput { chunks: [[0x61, 0xc3], [0xa9, 0x62]] };
+    let mut input = ScriptedInput {
+        chunks: [
+            [0x61, 0xc3],
+            [0xa9, 0x62],
+        ],
+    };
     with &mut input do {
         assert read_text(0 as Stream<u8>) == Result::Ok("a\u{e9}b");
     };
@@ -47,11 +58,20 @@ test "read_text decodes a character split across chunks" {
 }
 
 test "read_text reports where the text stops being UTF-8" {
-    let mut input = ScriptedInput { chunks: [[0x61, 0x62], [0x63, 0xff]] };
+    let mut input = ScriptedInput {
+        chunks: [
+            [0x61, 0x62],
+            [0x63, 0xff],
+        ],
+    };
     with &mut input do {
         assert read_text(0 as Stream<u8>) == Result::Err(Utf8Error::invalid(3, 1));
     };
-    input = ScriptedInput { chunks: [[0x61, 0xc3]] };
+    input = ScriptedInput {
+        chunks: [
+            [0x61, 0xc3],
+        ],
+    };
     with &mut input do {
         assert read_text(0 as Stream<u8>) == Result::Err(Utf8Error::incomplete(1));
     };

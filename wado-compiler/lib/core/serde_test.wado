@@ -953,7 +953,11 @@ impl<D: Deserializer> Deserializer for FlakyDe<D> {
         return Result::Ok(FlakyMap { inner: self.inner.begin_map()? });
     }
 
-    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<FlakyStruct<D::StructAccess>, DeserializeError> {
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        num_fields: i32,
+    ) -> Result<FlakyStruct<D::StructAccess>, DeserializeError> {
         gate()?;
         return Result::Ok(FlakyStruct { inner: self.inner.begin_struct(name, num_fields)? });
     }
@@ -1137,7 +1141,11 @@ impl<S: Serializer> Serializer for FlakySer<S> {
         return Result::Ok(FlakySerMap { inner: self.inner.begin_map(len)? });
     }
 
-    fn begin_struct<T: AsStrSlice>(&mut self, name: T, fields: i32) -> Result<FlakySerStruct<S::StructSerializer>, SerializeError> {
+    fn begin_struct<T: AsStrSlice>(
+        &mut self,
+        name: T,
+        fields: i32,
+    ) -> Result<FlakySerStruct<S::StructSerializer>, SerializeError> {
         sgate()?;
         return Result::Ok(FlakySerStruct { inner: self.inner.begin_struct(name, fields)? });
     }
