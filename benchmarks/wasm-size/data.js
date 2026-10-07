@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791369157779,
+  "lastUpdate": 1791370625241,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -64869,6 +64869,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a6e8866fb72b63d29c537623ae8ce904fb9f8e3a"
         },
         "date": 1791369156911,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20667,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1488ba812f6a752105d7efcd963dac1e6d52efa",
+          "message": "Merge pull request #2299 from wado-lang/ccr-719d495a-j9pkzu\n\nfeat(cm)!: a library imports by the same names from a component as from source",
+          "timestamp": "2026-10-07T19:27:18+09:00",
+          "tree_id": "87cebe6b8936def493bda95e7a8f1a393c52432d",
+          "url": "https://github.com/wado-lang/wado/commit/c1488ba812f6a752105d7efcd963dac1e6d52efa"
+        },
+        "date": 1791370624076,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
