@@ -73,7 +73,7 @@ use std::sync::Arc;
 use crate::codegen::EmitFailure;
 use crate::component_model::{
     CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
-    try_for_each_signed_type, wado_primitive_name_to_cm,
+    try_for_each_signed_type,
 };
 use crate::coverage::CoverageRequest;
 use crate::defs::DefId;
@@ -394,18 +394,17 @@ pub struct CompilerOptions {
     pub unused_diagnostics: bool,
     /// Library world FQ (`namespace:name/name@version`) for `wado compile
     /// --lib`. When `Some`, the compiler synthesizes a library world from the
-    /// entry module's `export fn`s — one Component Model export per function —
+    /// entry module's `export fn`s, exported in the interface this FQ names,
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
     /// The caller discards the component it asks for (`wado check`), so a rule
     /// that only protects an emitted artifact does not apply.
     pub analysis_only: bool,
-    /// Force the library's exports into the default interface (the A-grouping)
-    /// even when no signature references a named type. Set when the library
-    /// implements a foreign interface (a provider component), whose consumers
-    /// connect by interface FQ.
-    pub lib_interface_export: bool,
+    /// The library implements a foreign interface, `lib_world` (a provider
+    /// component), whose consumers connect by interface FQ. A provider is a
+    /// leaf: it resolves no providers of its own.
+    pub is_provider: bool,
     /// Provider components that satisfy a dependency's guest-effect imports.
     /// Each is composed as a sibling and wired `provider.export[fq] ->
     /// dependency.import[fq]` (research-cm-boundary-callbacks.md).
@@ -438,7 +437,7 @@ impl Default for CompilerOptions {
             unused_diagnostics: true,
             lib_world: None,
             analysis_only: false,
-            lib_interface_export: false,
+            is_provider: false,
             providers: Vec::new(),
             params: param_resolution::ParamInputs::default(),
             embed_wit_contract: None,
@@ -813,13 +812,12 @@ fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
 }
 
 /// Synthesize a `--lib` [`WorldInfo`] from the entry module's `export fn`
-/// signatures, one direct world export per exported function with parameter and
-/// return types taken straight from the AST.
+/// signatures, every one in the interface `fq` names, with parameter and return
+/// types taken straight from the AST.
 fn synthesize_lib_world_info(
     fq: &str,
     entry_module: &ast::Module,
     reexports: &[world_registry::WorldExportInfo],
-    force_interface_export: bool,
 ) -> world_registry::WorldInfo {
     use crate::ast::Item;
     use crate::world_registry::{WorldExportInfo, WorldInfo};
@@ -845,20 +843,11 @@ fn synthesize_lib_world_info(
         .collect();
     exports.extend(reexports.iter().cloned());
 
-    // A/B grouping (mirrors the WIT producer, `wit_emit`): if any exported
-    // signature references a user-defined named type, the exports cannot be
-    // bare world functions — a named type reaches consumers only through an
-    // exported interface — so they are grouped into the default interface
-    // (named after the package, i.e. the library world's own FQ). Otherwise
-    // they stay direct world exports.
-    let references_named_type = exports.iter().any(|e| {
-        e.params.iter().any(|(_, ty)| lib_sig_uses_named_type(ty))
-            || e.return_type.as_ref().is_some_and(lib_sig_uses_named_type)
-    });
-    if references_named_type || force_interface_export {
-        for export in &mut exports {
-            export.from_interface_fq = Some(fq.to_string());
-        }
+    // Always the interface, never bare world functions: a consumer imports a
+    // package's default interface by bare name, so the exports keep one shape
+    // whether or not a signature names a type.
+    for export in &mut exports {
+        export.from_interface_fq = Some(fq.to_string());
     }
 
     WorldInfo {
@@ -924,18 +913,6 @@ impl<'a> LibTypeBinder<'a> {
     fn bind_interface(&self, decl: &mut ast::InterfaceDecl) {
         let Ok(()) = try_for_each_operation_type(decl, &mut |_, ty| self.bind_type(ty));
     }
-}
-
-/// Whether a `--lib` export signature type references a user-defined named type
-/// (`struct` / `variant` / `enum` / `flags` / type alias), recursing through
-/// containers. CM primitives (`bool`, integers, `f32`/`f64`, `char`, `String`)
-/// and the unit type are not user types.
-fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
-    use crate::ast::Type;
-    ty.any(&mut |ty| {
-        matches!(ty, Type::Named(named)
-            if !ty.is_unit() && wado_primitive_name_to_cm(&named.name).is_none())
-    })
 }
 
 /// The types a library declaration carries: a struct's fields, a variant's
@@ -1086,10 +1063,10 @@ pub async fn compile_with_options<H: CompilerHost>(
     // Provider pre-pass: an `import with { provider: "./p.wado" }` compiles `p`
     // on-demand into a component satisfying the dependency's guest-effect
     // imports, before effect-check (which discharges the requirement) and
-    // codegen (which composes it). A provider build (`lib_interface_export`) is
+    // codegen (which composes it). A provider build (`is_provider`) is
     // a leaf: skipping it there bounds the reentrant compile so a
     // provider-references-provider chain cannot recurse without limit.
-    if !options.lib_interface_export {
+    if !options.is_provider {
         match resolve_inline_providers(&mut load_result, host, &options, &logger).await {
             Ok(mut extra) => options.providers.append(&mut extra),
             Err(Bail) => return Err(CompileFailure { is_todo_module }),
@@ -1115,8 +1092,7 @@ pub async fn compile_with_options<H: CompilerHost>(
 
 /// Compile each `with { provider: "./p.wado" }` directive into a provider
 /// component satisfying its dependency's guest-effect imports. The provider's
-/// `export fn`s are lowered into the imported interface (`lib_interface_export`
-/// forces the interface grouping), and the result is wired
+/// `export fn`s are lowered into the imported interface, and the result is wired
 /// `provider.export -> dependency.import` at codegen; a supplied provider also
 /// discharges the reconstructed effect at effect-check.
 async fn resolve_inline_providers<H: CompilerHost>(
@@ -1194,11 +1170,11 @@ async fn resolve_inline_providers<H: CompilerHost>(
         let provider_src = String::from_utf8_lossy(&bytes).into_owned();
         // Inherit the parent's compilation options so the provider is built the
         // same way (optimization, `-D` params, codegen flags, log level); only
-        // the world/grouping is overridden, and `providers` stays empty (the
-        // provider is a leaf — see the `lib_interface_export` guard above).
+        // the world is overridden, and `providers` stays empty (the
+        // provider is a leaf — see the `is_provider` guard above).
         let opts = CompilerOptions {
             lib_world: Some(fq.clone()),
-            lib_interface_export: true,
+            is_provider: true,
             opt_level: parent.opt_level,
             opt: parent.opt,
             log_level: parent.log_level,
@@ -1503,18 +1479,10 @@ fn compile_after_load<H: CompilerHost>(
         entry
     });
 
-    let mut lib_world_info =
-        synth_world_fq
-            .as_ref()
-            .zip(lib_entry_module.as_ref())
-            .map(|(fq, entry)| {
-                synthesize_lib_world_info(
-                    fq,
-                    entry,
-                    &lib_surface.submodule_exports,
-                    options.lib_interface_export,
-                )
-            });
+    let mut lib_world_info = synth_world_fq
+        .as_ref()
+        .zip(lib_entry_module.as_ref())
+        .map(|(fq, entry)| synthesize_lib_world_info(fq, entry, &lib_surface.submodule_exports));
 
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
@@ -2703,7 +2671,7 @@ fn helper(x: u32) -> u32 { return x; }
 export fn id_bool(v: bool) -> bool { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", &module, &[], false);
+        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", &module, &[]);
 
         assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
         assert!(world.imports.is_empty());
@@ -2713,46 +2681,29 @@ export fn id_bool(v: bool) -> bool { return v; }
 
         let id_u32 = &world.exports[0];
         assert!(!id_u32.is_async);
-        assert!(id_u32.from_interface_fq.is_none());
         assert_eq!(id_u32.params.len(), 1);
         assert_eq!(id_u32.params[0].0, "v");
         assert!(id_u32.return_type.is_some());
     }
 
     #[test]
-    fn groups_into_default_interface_when_named_type_referenced() {
-        // A signature referencing a user named type (here `Point`, even nested
-        // in `List`) forces all exports into the default interface (the B path).
-        let src = r#"
-pub struct Point { x: f64, y: f64 }
-export fn id_point(v: Point) -> Point { return v; }
-export fn id_u32(v: u32) -> u32 { return v; }
-export fn id_points(v: List<Point>) -> List<Point> { return v; }
-"#;
-        let module = parse(src).ast;
-        let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", &module, &[], false);
-        assert!(
-            world
-                .exports
-                .iter()
-                .all(|e| e.from_interface_fq.as_deref() == Some("wado:geo/geo@0.1.0")),
-            "all exports group into the default interface when any references a named type",
-        );
-    }
-
-    #[test]
-    fn stays_direct_world_exports_for_containers_of_primitives() {
-        // Containers of primitives reference no user type, so exports stay bare
-        // (the A path) — no default interface.
-        let src = r#"
-export fn id_list(v: List<u8>) -> List<u8> { return v; }
-export fn id_opt(v: Option<String>) -> Option<String> { return v; }
-"#;
-        let module = parse(src).ast;
-        let world = synthesize_lib_world_info("wado:c/c@0.1.0", &module, &[], false);
-        assert!(
-            world.exports.iter().all(|e| e.from_interface_fq.is_none()),
-            "primitive containers do not force an interface",
-        );
+    fn groups_into_default_interface_whatever_the_signatures() {
+        // Primitives alone or a named type: the exports land in the default
+        // interface either way, so adding a type never moves them.
+        for src in [
+            "export fn id_string(v: String) -> String { return v; }",
+            "pub struct Point { x: f64, y: f64 }\n\
+             export fn id_point(v: Point) -> Point { return v; }",
+        ] {
+            let module = parse(src).ast;
+            let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", &module, &[]);
+            assert!(
+                world
+                    .exports
+                    .iter()
+                    .all(|e| e.from_interface_fq.as_deref() == Some("wado:geo/geo@0.1.0")),
+                "every export groups into the default interface:\n{src}",
+            );
+        }
     }
 }

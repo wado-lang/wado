@@ -38,6 +38,9 @@ the type it embedded about itself.
   variant, an enum an enum, flags a flags, and a type alias a newtype.
 - A function the world exports directly, outside any interface, becomes a free
   function imported by bare name.
+- The default interface, named after its own package, also offers each of its
+  functions by bare name
+  ([WEP: A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)).
 
 The correspondence is the
 [WIT↔Wado mapping](./wep-2026-01-29-wit-wado-mapping.md) read in the consuming

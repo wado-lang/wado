@@ -355,10 +355,10 @@ attributes decide how the file is read:
 
 A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file | Exposes as                                     | Call style                            |
-| ------------- | ---------------------------------------------- | ------------------------------------- |
-| Core module   | One free `pub fn` per function export          | `helper(x)` — plain function          |
-| CM component  | One Wado `interface` per exported CM interface | `Iface::method(x)` — called like WASI |
+| Imported file | Exposes as                                                                            | Call style                                    |
+| ------------- | ------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Core module   | One free `pub fn` per function export                                                 | `helper(x)` — plain function                  |
+| CM component  | One Wado `interface` per exported CM interface; the default one's functions also free | `Iface::method(x)`, or `method(x)` if default |
 
 <!-- {"fixture":"spec_modules_wasm_imports.wado"} -->
 
@@ -367,13 +367,13 @@ A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether 
 use { add_one } from "./sub/wasm_import_user.wat" with { type: "wat" };
 use { twice }   from "./sub/wasm_import_user.wasm" with { type: "wasm" };
 
-// CM component — each exported interface becomes a Wado `interface`,
-// and its functions are called like WASI methods.
-use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+// CM component — each exported interface becomes a Wado `interface`. The
+// default one, named after the package, also offers its functions by bare name.
+use { CmCatalog, id_string } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test {
     assert add_one(41) == 42 && twice(1.5) == 3.0;
-    assert CmCatalog::id_string("round trip") == "round trip";
+    assert CmCatalog::id_string("round trip") == id_string("round trip");
 }
 ```
 
@@ -411,6 +411,15 @@ or side-car `.wit` is involved.
 - An exported interface becomes a Wado `interface`. Its named types become Wado
   items of the corresponding kind: a record a `struct`, a variant a `variant`,
   an enum an `enum`, flags a `flags`, and a type alias a newtype.
+- The default interface is the one named after its own package
+  (`acme:geo/geo`), which is the interface a Wado library exports
+  ([The Library World as a Component](./spec-packages.md#the-library-world-as-a-component)).
+  Each of its functions is also a free function of the module, imported by bare
+  name. So a `use` of a library reads the same whether its source is Wado code
+  or a component. A name two exported default interfaces share is left out,
+  and a world-level function keeps its name over an interface function of the
+  same name. Any other interface, an imported one included, is reached only
+  through its name.
 - A function the component's world exports directly becomes a free function,
   imported by bare name.
 - An `async func` becomes an `async fn` returning `AsyncCall<T>`

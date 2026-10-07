@@ -2177,11 +2177,9 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if let Expr::Ident(ident) = &call.callee
-                    && let Some(op) = ident.segments.last()
-                {
+                if let Expr::Ident(ident) = &call.callee {
                     let owner = self.index.resolutions.operation_owner(ident);
-                    self.flag_if_operation(owner, &op.name, call.span);
+                    self.flag_if_operation(owner, ident.case_name(), call.span);
                 }
                 self.flag_call(&call.callee, call.id, &call.args, call.span);
             }

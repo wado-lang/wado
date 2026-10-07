@@ -69,6 +69,9 @@ pub struct WitContract {
     pub world_fq: String,
     /// Name of the default interface grouping bare exports.
     pub default_interface: String,
+    /// Whether the target is a library, whose exports always sit in the default
+    /// interface: a consumer imports that interface by bare name.
+    pub library: bool,
 }
 
 /// Single source of truth for a target's emitted world name + default interface.
@@ -97,11 +100,13 @@ pub fn wit_contract(
                 parts.namespace, parts.package, LIB_WORLD_NAME, version
             ),
             default_interface: parts.interface,
+            library: true,
         };
     }
     WitContract {
         world_fq: target_world.unwrap_or("wasi:cli/command").to_string(),
         default_interface: default_interface.unwrap_or("root").to_string(),
+        library: false,
     }
 }
 
@@ -402,8 +407,8 @@ impl<'a> Emitter<'a> {
 
         if user_funcs.is_empty() {
             // No ordinary user exports beyond world conformance.
-        } else if type_defs.is_empty() {
-            // Only functions, no referenced user types: direct world exports.
+        } else if type_defs.is_empty() && !contract.library {
+            // A program's functions naming no user type: direct world exports.
             for func in user_funcs {
                 world.item(WorldItem::function_export(func));
             }

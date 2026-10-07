@@ -1,0 +1,10 @@
+// `pick` is in both `wado:left/left` and `wado:right/right`, so neither claims
+// the bare name, and the report names both.
+use { pick } from "./sub/wasm_import_cm_two_defaults.wat" with { type: "wat" };
+
+test {
+    assert pick() == 1;
+}
+
+__DATA__
+{"compile_error": ":3:7: analysis error: symbol 'pick' is in more than one default interface of module './sub/wasm_import_cm_two_defaults.wat' (Left, Right); name it through one, as `Left::pick`", "compile_error_codes": ["IMPORT_NOT_FOUND"]}

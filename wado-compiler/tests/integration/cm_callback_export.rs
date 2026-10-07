@@ -11,7 +11,8 @@ use wasmtime::component::{
 use wasmtime_wasi::p3::bindings::Command;
 
 use crate::common::{
-    DEFAULT_TIMEOUT_MS, WasiState, compile_source, engine, limit_store, linker, runtime,
+    DEFAULT_TIMEOUT_MS, WasiState, compile_source, engine, interface_export, limit_store, linker,
+    runtime,
 };
 
 const DECLARATIONS: &str = r#"
@@ -84,12 +85,7 @@ where
     Params: ComponentNamedList + Lower,
     Return: ComponentNamedList + Lift,
 {
-    let interface = instance
-        .get_export_index(&mut *store, None, "wado:callback/callback")
-        .expect("the component exports the callback interface");
-    let call = instance
-        .get_export_index(&mut *store, Some(&interface), name)
-        .unwrap_or_else(|| panic!("the callback interface exports `{name}`"));
+    let call = interface_export(&mut *store, instance, "wado:callback/callback", name);
     Ok(instance.get_typed_func(store, call)?)
 }
 

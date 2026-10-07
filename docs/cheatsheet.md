@@ -75,7 +75,11 @@ use { helper }   from "./mod.wasm" with { type: "wasm" };
 // called like a WASI method.
 use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
 
-let out = Compress::compress(bytes);  // requires `with Compress`
+let out = Compress::compress(bytes);
+
+// The default interface, named after its package (`acme:geo/geo`, what a Wado
+// library exports), also offers its functions by bare name, as source does.
+use { area } from "./geo.wasm" with { type: "wasm" };
 ```
 
 Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).

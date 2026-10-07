@@ -670,14 +670,14 @@ impl TypeSystem {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declared operation a callee names: `[ns::]E::op` through `E`'s site,
-    /// or an imported bare `op` through its own.
+    /// or an imported `[ns::]op` through its own.
     pub(super) fn effect_operation_of(&self, ident: &ast::IdentExpr) -> Option<EffectOperation> {
         let resolutions = &self.tysys.resolutions;
         let signatures = &self.tysys.signatures;
         let decl = resolutions
             .operation_owner(ident)
             .filter(|d| resolutions.defs().kind(*d).is_effect())?;
-        let sig = if ident.owner_segment().is_some() {
+        let sig = if resolutions.owner_decl(ident).is_some() {
             signatures.resource_method_sig(decl, &ident.segments.last()?.name)?
         } else {
             signatures.method_sig(resolutions.declared_if_walked(ident.id)?)?
