@@ -1608,13 +1608,15 @@ fn splice_barred_cycle_members(call_graph: &[Vec<usize>]) -> IndexSet<FuncId> {
     let recursive = recursive_functions(call_graph);
     let is_bridge = |f: usize| match call_graph[f].as_slice() {
         &[callee] => {
-            callee != f
-                && recursive.contains(&FuncId::new(callee))
-                && call_graph[callee].len() != 1
+            callee != f && recursive.contains(&FuncId::new(callee)) && call_graph[callee].len() != 1
         }
         _ => false,
     };
-    recursive.iter().copied().filter(|f| !is_bridge(f.index())).collect()
+    recursive
+        .iter()
+        .copied()
+        .filter(|f| !is_bridge(f.index()))
+        .collect()
 }
 
 /// The functions on a call cycle of `call_graph`, which holds each function's

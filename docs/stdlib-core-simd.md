@@ -111,20 +111,880 @@ assert mins.extract_lane(3) == 4;
 
 ### `pub type i8x16 = v128`
 
+#### `pub fn splat(a: i32) -> i8x16`
+
+#### `pub fn extract_lane_s(&self, lane: i32) -> i32`
+
+#### `pub fn extract_lane_u(&self, lane: i32) -> i32`
+
+#### `pub fn eq(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn ne(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn lt(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn gt(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn le(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn ge(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn swizzle(&self, indices: &i8x16) -> i8x16`
+
+#### `pub fn abs(&self) -> i8x16`
+
+#### `pub fn add_sat_s(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn add_sat_u(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn sub_sat_s(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn sub_sat_u(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn min_s(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn min_u(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn max_s(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn max_u(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn avgr_u(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn narrow_i16x8_s(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn narrow_i16x8_u(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn popcnt(&self) -> i8x16`
+
+#### `pub fn any_true(&self) -> bool`
+
+#### `pub fn andnot(&self, other: &i8x16) -> i8x16`
+
+#### `pub fn bitselect(&self, mask: &i8x16, other: &i8x16) -> i8x16`
+
+#### `pub fn relaxed_swizzle(&self, indices: &i8x16) -> i8x16`
+
+#### `pub fn relaxed_laneselect(&self, other: &i8x16, mask: &i8x16) -> i8x16`
+
+#### `impl Add for i8x16`
+
+##### `fn add(&self, rhs: &i8x16) -> i8x16`
+
+#### `impl Sub for i8x16`
+
+##### `fn sub(&self, rhs: &i8x16) -> i8x16`
+
+#### `impl Neg for i8x16`
+
+##### `fn neg(&self) -> i8x16`
+
+#### `impl BitAnd for i8x16`
+
+##### `fn bitand(&self, rhs: &i8x16) -> i8x16`
+
+#### `impl BitOr for i8x16`
+
+##### `fn bitor(&self, rhs: &i8x16) -> i8x16`
+
+#### `impl BitXor for i8x16`
+
+##### `fn bitxor(&self, rhs: &i8x16) -> i8x16`
+
+#### `impl BitNot for i8x16`
+
+##### `fn bitnot(&self) -> i8x16`
+
+#### `impl Shl for i8x16`
+
+##### `fn shl(&self, rhs: u32) -> i8x16`
+
+#### `impl Shr for i8x16`
+
+##### `fn shr(&self, rhs: u32) -> i8x16`
+
+#### `impl From<Array<i32>> for i8x16`
+
+##### `fn from(lanes: Array<i32>) -> i8x16`
+
 ### `pub type i16x8 = v128`
+
+#### `pub fn splat(a: i32) -> i16x8`
+
+#### `pub fn extract_lane_s(&self, lane: i32) -> i32`
+
+#### `pub fn extract_lane_u(&self, lane: i32) -> i32`
+
+#### `pub fn eq(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn ne(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn lt(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn gt(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn le(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn ge(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn abs(&self) -> i16x8`
+
+#### `pub fn add_sat_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn add_sat_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn sub_sat_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn sub_sat_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn min_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn min_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn max_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn max_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn avgr_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn narrow_i32x4_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn narrow_i32x4_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn extend_low_i8x16_s(a: i8x16) -> i16x8`
+
+#### `pub fn extend_high_i8x16_s(a: i8x16) -> i16x8`
+
+#### `pub fn extend_low_i8x16_u(a: i8x16) -> i16x8`
+
+#### `pub fn extend_high_i8x16_u(a: i8x16) -> i16x8`
+
+#### `pub fn extmul_low_i8x16_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn extmul_high_i8x16_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn extmul_low_i8x16_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn extmul_high_i8x16_u(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn extadd_pairwise_i8x16_s(a: i8x16) -> i16x8`
+
+#### `pub fn extadd_pairwise_i8x16_u(a: i8x16) -> i16x8`
+
+#### `pub fn q15mulr_sat_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn bitselect(&self, mask: &i16x8, other: &i16x8) -> i16x8`
+
+#### `pub fn relaxed_laneselect(&self, other: &i16x8, mask: &i16x8) -> i16x8`
+
+#### `pub fn relaxed_q15mulr_s(&self, other: &i16x8) -> i16x8`
+
+#### `pub fn relaxed_dot_i8x16_i7x16_s(&self, other: &i16x8) -> i16x8`
+
+#### `impl Add for i16x8`
+
+##### `fn add(&self, rhs: &i16x8) -> i16x8`
+
+#### `impl Sub for i16x8`
+
+##### `fn sub(&self, rhs: &i16x8) -> i16x8`
+
+#### `impl Mul for i16x8`
+
+##### `fn mul(&self, rhs: &i16x8) -> i16x8`
+
+#### `impl Neg for i16x8`
+
+##### `fn neg(&self) -> i16x8`
+
+#### `impl BitAnd for i16x8`
+
+##### `fn bitand(&self, rhs: &i16x8) -> i16x8`
+
+#### `impl BitOr for i16x8`
+
+##### `fn bitor(&self, rhs: &i16x8) -> i16x8`
+
+#### `impl BitXor for i16x8`
+
+##### `fn bitxor(&self, rhs: &i16x8) -> i16x8`
+
+#### `impl BitNot for i16x8`
+
+##### `fn bitnot(&self) -> i16x8`
+
+#### `impl Shl for i16x8`
+
+##### `fn shl(&self, rhs: u32) -> i16x8`
+
+#### `impl Shr for i16x8`
+
+##### `fn shr(&self, rhs: u32) -> i16x8`
+
+#### `impl From<Array<i32>> for i16x8`
+
+##### `fn from(lanes: Array<i32>) -> i16x8`
 
 ### `pub type i32x4 = v128`
 
+#### `pub fn splat(a: i32) -> i32x4`
+
+#### `pub fn extract_lane(&self, lane: i32) -> i32`
+
+#### `pub fn eq(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn ne(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn lt(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn gt(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn le(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn ge(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn abs(&self) -> i32x4`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn min_s(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn min_u(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn max_s(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn max_u(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn dot_i16x8_s(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn extend_low_i16x8_s(a: i16x8) -> i32x4`
+
+#### `pub fn extend_high_i16x8_s(a: i16x8) -> i32x4`
+
+#### `pub fn extend_low_i16x8_u(a: i16x8) -> i32x4`
+
+#### `pub fn extend_high_i16x8_u(a: i16x8) -> i32x4`
+
+#### `pub fn extmul_low_i16x8_s(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn extmul_high_i16x8_s(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn extmul_low_i16x8_u(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn extmul_high_i16x8_u(&self, other: &i32x4) -> i32x4`
+
+#### `pub fn extadd_pairwise_i16x8_s(a: i16x8) -> i32x4`
+
+#### `pub fn extadd_pairwise_i16x8_u(a: i16x8) -> i32x4`
+
+#### `pub fn trunc_sat_f32x4_s(a: f32x4) -> i32x4`
+
+#### `pub fn trunc_sat_f32x4_u(a: f32x4) -> i32x4`
+
+#### `pub fn trunc_sat_f64x2_s_zero(a: f64x2) -> i32x4`
+
+#### `pub fn trunc_sat_f64x2_u_zero(a: f64x2) -> i32x4`
+
+#### `pub fn bitselect(&self, mask: &i32x4, other: &i32x4) -> i32x4`
+
+#### `pub fn relaxed_laneselect(&self, other: &i32x4, mask: &i32x4) -> i32x4`
+
+#### `pub fn relaxed_trunc_f32x4_s(a: f32x4) -> i32x4`
+
+#### `pub fn relaxed_trunc_f32x4_u(a: f32x4) -> i32x4`
+
+#### `pub fn relaxed_trunc_f64x2_s_zero(a: f64x2) -> i32x4`
+
+#### `pub fn relaxed_trunc_f64x2_u_zero(a: f64x2) -> i32x4`
+
+#### `pub fn relaxed_dot_i8x16_i7x16_add_s(a: i8x16, b: i8x16, c: &i32x4) -> i32x4`
+
+#### `impl Add for i32x4`
+
+##### `fn add(&self, rhs: &i32x4) -> i32x4`
+
+#### `impl Sub for i32x4`
+
+##### `fn sub(&self, rhs: &i32x4) -> i32x4`
+
+#### `impl Mul for i32x4`
+
+##### `fn mul(&self, rhs: &i32x4) -> i32x4`
+
+#### `impl Neg for i32x4`
+
+##### `fn neg(&self) -> i32x4`
+
+#### `impl BitAnd for i32x4`
+
+##### `fn bitand(&self, rhs: &i32x4) -> i32x4`
+
+#### `impl BitOr for i32x4`
+
+##### `fn bitor(&self, rhs: &i32x4) -> i32x4`
+
+#### `impl BitXor for i32x4`
+
+##### `fn bitxor(&self, rhs: &i32x4) -> i32x4`
+
+#### `impl BitNot for i32x4`
+
+##### `fn bitnot(&self) -> i32x4`
+
+#### `impl Shl for i32x4`
+
+##### `fn shl(&self, rhs: u32) -> i32x4`
+
+#### `impl Shr for i32x4`
+
+##### `fn shr(&self, rhs: u32) -> i32x4`
+
+#### `impl From<Array<i32>> for i32x4`
+
+##### `fn from(lanes: Array<i32>) -> i32x4`
+
 ### `pub type i64x2 = v128`
+
+#### `pub fn splat(a: i64) -> i64x2`
+
+#### `pub fn extract_lane(&self, lane: i32) -> i64`
+
+#### `pub fn eq(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn ne(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn lt(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn gt(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn le(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn ge(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn abs(&self) -> i64x2`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn extend_low_i32x4_s(a: i32x4) -> i64x2`
+
+#### `pub fn extend_high_i32x4_s(a: i32x4) -> i64x2`
+
+#### `pub fn extend_low_i32x4_u(a: i32x4) -> i64x2`
+
+#### `pub fn extend_high_i32x4_u(a: i32x4) -> i64x2`
+
+#### `pub fn extmul_low_i32x4_s(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn extmul_high_i32x4_s(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn extmul_low_i32x4_u(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn extmul_high_i32x4_u(&self, other: &i64x2) -> i64x2`
+
+#### `pub fn bitselect(&self, mask: &i64x2, other: &i64x2) -> i64x2`
+
+#### `pub fn relaxed_laneselect(&self, other: &i64x2, mask: &i64x2) -> i64x2`
+
+#### `impl Add for i64x2`
+
+##### `fn add(&self, rhs: &i64x2) -> i64x2`
+
+#### `impl Sub for i64x2`
+
+##### `fn sub(&self, rhs: &i64x2) -> i64x2`
+
+#### `impl Mul for i64x2`
+
+##### `fn mul(&self, rhs: &i64x2) -> i64x2`
+
+#### `impl Neg for i64x2`
+
+##### `fn neg(&self) -> i64x2`
+
+#### `impl BitAnd for i64x2`
+
+##### `fn bitand(&self, rhs: &i64x2) -> i64x2`
+
+#### `impl BitOr for i64x2`
+
+##### `fn bitor(&self, rhs: &i64x2) -> i64x2`
+
+#### `impl BitXor for i64x2`
+
+##### `fn bitxor(&self, rhs: &i64x2) -> i64x2`
+
+#### `impl BitNot for i64x2`
+
+##### `fn bitnot(&self) -> i64x2`
+
+#### `impl Shl for i64x2`
+
+##### `fn shl(&self, rhs: u32) -> i64x2`
+
+#### `impl Shr for i64x2`
+
+##### `fn shr(&self, rhs: u32) -> i64x2`
+
+#### `impl From<Array<i64>> for i64x2`
+
+##### `fn from(lanes: Array<i64>) -> i64x2`
 
 ### `pub type u8x16 = v128`
 
+#### `pub fn splat(a: i32) -> u8x16`
+
+#### `pub fn swizzle(&self, indices: &u8x16) -> u8x16`
+
+Select each byte by a runtime index; an index of 16 or more yields 0.
+
+#### `pub fn relaxed_swizzle(&self, indices: &u8x16) -> u8x16`
+
+Select each byte by a runtime index, leaving an out-of-range one to the
+engine. Faster where the hardware swizzle differs from Wasm's.
+
+#### `pub fn from_string<S: AsStrSlice>(s: S, offset: i32) -> u8x16`
+
+Load 16 bytes from a String at the given byte offset into a u8x16.
+The caller must ensure `offset + 16 <= s.len()`.
+
+#### `pub fn store_to_string(&self, s: &mut String)`
+
+Append 16 bytes from this u8x16 to a String.
+
+#### `pub fn extract_lane(&self, lane: i32) -> i32`
+
+#### `pub fn eq(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn ne(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn lt(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn gt(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn le(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn ge(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn abs(&self) -> u8x16`
+
+#### `pub fn add_sat(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn sub_sat(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn min(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn max(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn avgr(&self, other: &u8x16) -> u8x16`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn popcnt(&self) -> u8x16`
+
+#### `pub fn bitselect(&self, mask: &u8x16, other: &u8x16) -> u8x16`
+
+#### `impl Add for u8x16`
+
+##### `fn add(&self, rhs: &u8x16) -> u8x16`
+
+#### `impl Sub for u8x16`
+
+##### `fn sub(&self, rhs: &u8x16) -> u8x16`
+
+#### `impl BitAnd for u8x16`
+
+##### `fn bitand(&self, rhs: &u8x16) -> u8x16`
+
+#### `impl BitOr for u8x16`
+
+##### `fn bitor(&self, rhs: &u8x16) -> u8x16`
+
+#### `impl BitXor for u8x16`
+
+##### `fn bitxor(&self, rhs: &u8x16) -> u8x16`
+
+#### `impl BitNot for u8x16`
+
+##### `fn bitnot(&self) -> u8x16`
+
+#### `impl Shl for u8x16`
+
+##### `fn shl(&self, rhs: u32) -> u8x16`
+
+#### `impl Shr for u8x16`
+
+##### `fn shr(&self, rhs: u32) -> u8x16`
+
+#### `impl From<Array<i32>> for u8x16`
+
+##### `fn from(lanes: Array<i32>) -> u8x16`
+
 ### `pub type u16x8 = v128`
+
+#### `pub fn splat(a: i32) -> u16x8`
+
+#### `pub fn extract_lane(&self, lane: i32) -> i32`
+
+#### `pub fn eq(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn ne(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn lt(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn gt(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn le(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn ge(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn abs(&self) -> u16x8`
+
+#### `pub fn add_sat(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn sub_sat(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn min(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn max(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn avgr(&self, other: &u16x8) -> u16x8`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn bitselect(&self, mask: &u16x8, other: &u16x8) -> u16x8`
+
+#### `impl Add for u16x8`
+
+##### `fn add(&self, rhs: &u16x8) -> u16x8`
+
+#### `impl Sub for u16x8`
+
+##### `fn sub(&self, rhs: &u16x8) -> u16x8`
+
+#### `impl Mul for u16x8`
+
+##### `fn mul(&self, rhs: &u16x8) -> u16x8`
+
+#### `impl BitAnd for u16x8`
+
+##### `fn bitand(&self, rhs: &u16x8) -> u16x8`
+
+#### `impl BitOr for u16x8`
+
+##### `fn bitor(&self, rhs: &u16x8) -> u16x8`
+
+#### `impl BitXor for u16x8`
+
+##### `fn bitxor(&self, rhs: &u16x8) -> u16x8`
+
+#### `impl BitNot for u16x8`
+
+##### `fn bitnot(&self) -> u16x8`
+
+#### `impl Shl for u16x8`
+
+##### `fn shl(&self, rhs: u32) -> u16x8`
+
+#### `impl Shr for u16x8`
+
+##### `fn shr(&self, rhs: u32) -> u16x8`
+
+#### `impl From<Array<i32>> for u16x8`
+
+##### `fn from(lanes: Array<i32>) -> u16x8`
 
 ### `pub type u32x4 = v128`
 
+#### `pub fn splat(a: i32) -> u32x4`
+
+#### `pub fn extract_lane(&self, lane: i32) -> i32`
+
+#### `pub fn eq(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn ne(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn lt(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn gt(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn le(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn ge(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn min(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn max(&self, other: &u32x4) -> u32x4`
+
+#### `pub fn bitselect(&self, mask: &u32x4, other: &u32x4) -> u32x4`
+
+#### `impl Add for u32x4`
+
+##### `fn add(&self, rhs: &u32x4) -> u32x4`
+
+#### `impl Sub for u32x4`
+
+##### `fn sub(&self, rhs: &u32x4) -> u32x4`
+
+#### `impl Mul for u32x4`
+
+##### `fn mul(&self, rhs: &u32x4) -> u32x4`
+
+#### `impl BitAnd for u32x4`
+
+##### `fn bitand(&self, rhs: &u32x4) -> u32x4`
+
+#### `impl BitOr for u32x4`
+
+##### `fn bitor(&self, rhs: &u32x4) -> u32x4`
+
+#### `impl BitXor for u32x4`
+
+##### `fn bitxor(&self, rhs: &u32x4) -> u32x4`
+
+#### `impl BitNot for u32x4`
+
+##### `fn bitnot(&self) -> u32x4`
+
+#### `impl Shl for u32x4`
+
+##### `fn shl(&self, rhs: u32) -> u32x4`
+
+#### `impl Shr for u32x4`
+
+##### `fn shr(&self, rhs: u32) -> u32x4`
+
+#### `impl From<Array<i32>> for u32x4`
+
+##### `fn from(lanes: Array<i32>) -> u32x4`
+
 ### `pub type u64x2 = v128`
+
+#### `pub fn splat(a: i64) -> u64x2`
+
+#### `pub fn extract_lane(&self, lane: i32) -> i64`
+
+#### `pub fn eq(&self, other: &u64x2) -> u64x2`
+
+#### `pub fn ne(&self, other: &u64x2) -> u64x2`
+
+#### `pub fn all_true(&self) -> bool`
+
+#### `pub fn bitmask(&self) -> i32`
+
+#### `pub fn bitselect(&self, mask: &u64x2, other: &u64x2) -> u64x2`
+
+#### `impl Add for u64x2`
+
+##### `fn add(&self, rhs: &u64x2) -> u64x2`
+
+#### `impl Sub for u64x2`
+
+##### `fn sub(&self, rhs: &u64x2) -> u64x2`
+
+#### `impl Mul for u64x2`
+
+##### `fn mul(&self, rhs: &u64x2) -> u64x2`
+
+#### `impl BitAnd for u64x2`
+
+##### `fn bitand(&self, rhs: &u64x2) -> u64x2`
+
+#### `impl BitOr for u64x2`
+
+##### `fn bitor(&self, rhs: &u64x2) -> u64x2`
+
+#### `impl BitXor for u64x2`
+
+##### `fn bitxor(&self, rhs: &u64x2) -> u64x2`
+
+#### `impl BitNot for u64x2`
+
+##### `fn bitnot(&self) -> u64x2`
+
+#### `impl Shl for u64x2`
+
+##### `fn shl(&self, rhs: u32) -> u64x2`
+
+#### `impl Shr for u64x2`
+
+##### `fn shr(&self, rhs: u32) -> u64x2`
+
+#### `impl From<Array<i64>> for u64x2`
+
+##### `fn from(lanes: Array<i64>) -> u64x2`
 
 ### `pub type f32x4 = v128`
 
+#### `pub fn splat(a: f32) -> f32x4`
+
+#### `pub fn extract_lane(&self, lane: i32) -> f32`
+
+#### `pub fn sqrt(&self) -> f32x4`
+
+#### `pub fn abs(&self) -> f32x4`
+
+#### `pub fn min(&self, other: &f32x4) -> f32x4`
+
+#### `pub fn max(&self, other: &f32x4) -> f32x4`
+
+#### `pub fn eq(&self, other: &f32x4) -> i32x4`
+
+#### `pub fn ne(&self, other: &f32x4) -> i32x4`
+
+#### `pub fn lt(&self, other: &f32x4) -> i32x4`
+
+#### `pub fn gt(&self, other: &f32x4) -> i32x4`
+
+#### `pub fn le(&self, other: &f32x4) -> i32x4`
+
+#### `pub fn ge(&self, other: &f32x4) -> i32x4`
+
+#### `pub fn ceil(&self) -> f32x4`
+
+#### `pub fn floor(&self) -> f32x4`
+
+#### `pub fn trunc(&self) -> f32x4`
+
+#### `pub fn nearest(&self) -> f32x4`
+
+#### `pub fn pmin(&self, other: &f32x4) -> f32x4`
+
+#### `pub fn pmax(&self, other: &f32x4) -> f32x4`
+
+#### `pub fn convert_i32x4_s(a: i32x4) -> f32x4`
+
+#### `pub fn convert_i32x4_u(a: i32x4) -> f32x4`
+
+#### `pub fn demote_f64x2_zero(a: f64x2) -> f32x4`
+
+#### `pub fn bitselect(&self, mask: &i32x4, other: &f32x4) -> f32x4`
+
+#### `pub fn relaxed_madd(&self, b: &f32x4, c: &f32x4) -> f32x4`
+
+#### `pub fn relaxed_nmadd(&self, b: &f32x4, c: &f32x4) -> f32x4`
+
+#### `pub fn relaxed_min(&self, other: &f32x4) -> f32x4`
+
+#### `pub fn relaxed_max(&self, other: &f32x4) -> f32x4`
+
+#### `impl Add for f32x4`
+
+##### `fn add(&self, rhs: &f32x4) -> f32x4`
+
+#### `impl Sub for f32x4`
+
+##### `fn sub(&self, rhs: &f32x4) -> f32x4`
+
+#### `impl Mul for f32x4`
+
+##### `fn mul(&self, rhs: &f32x4) -> f32x4`
+
+#### `impl Div for f32x4`
+
+##### `fn div(&self, rhs: &f32x4) -> f32x4`
+
+#### `impl Neg for f32x4`
+
+##### `fn neg(&self) -> f32x4`
+
+#### `impl From<Array<f32>> for f32x4`
+
+##### `fn from(lanes: Array<f32>) -> f32x4`
+
 ### `pub type f64x2 = v128`
+
+#### `pub fn splat(a: f64) -> f64x2`
+
+#### `pub fn extract_lane(&self, lane: i32) -> f64`
+
+#### `pub fn sqrt(&self) -> f64x2`
+
+#### `pub fn abs(&self) -> f64x2`
+
+#### `pub fn min(&self, other: &f64x2) -> f64x2`
+
+#### `pub fn max(&self, other: &f64x2) -> f64x2`
+
+#### `pub fn eq(&self, other: &f64x2) -> i64x2`
+
+#### `pub fn ne(&self, other: &f64x2) -> i64x2`
+
+#### `pub fn lt(&self, other: &f64x2) -> i64x2`
+
+#### `pub fn gt(&self, other: &f64x2) -> i64x2`
+
+#### `pub fn le(&self, other: &f64x2) -> i64x2`
+
+#### `pub fn ge(&self, other: &f64x2) -> i64x2`
+
+#### `pub fn ceil(&self) -> f64x2`
+
+#### `pub fn floor(&self) -> f64x2`
+
+#### `pub fn trunc(&self) -> f64x2`
+
+#### `pub fn nearest(&self) -> f64x2`
+
+#### `pub fn pmin(&self, other: &f64x2) -> f64x2`
+
+#### `pub fn pmax(&self, other: &f64x2) -> f64x2`
+
+#### `pub fn convert_low_i32x4_s(a: i32x4) -> f64x2`
+
+#### `pub fn convert_low_i32x4_u(a: i32x4) -> f64x2`
+
+#### `pub fn promote_low_f32x4(a: f32x4) -> f64x2`
+
+#### `pub fn bitselect(&self, mask: &i64x2, other: &f64x2) -> f64x2`
+
+#### `pub fn relaxed_madd(&self, b: &f64x2, c: &f64x2) -> f64x2`
+
+#### `pub fn relaxed_nmadd(&self, b: &f64x2, c: &f64x2) -> f64x2`
+
+#### `pub fn relaxed_min(&self, other: &f64x2) -> f64x2`
+
+#### `pub fn relaxed_max(&self, other: &f64x2) -> f64x2`
+
+#### `impl Add for f64x2`
+
+##### `fn add(&self, rhs: &f64x2) -> f64x2`
+
+#### `impl Sub for f64x2`
+
+##### `fn sub(&self, rhs: &f64x2) -> f64x2`
+
+#### `impl Mul for f64x2`
+
+##### `fn mul(&self, rhs: &f64x2) -> f64x2`
+
+#### `impl Div for f64x2`
+
+##### `fn div(&self, rhs: &f64x2) -> f64x2`
+
+#### `impl Neg for f64x2`
+
+##### `fn neg(&self) -> f64x2`
+
+#### `impl From<Array<f64>> for f64x2`
+
+##### `fn from(lanes: Array<f64>) -> f64x2`
