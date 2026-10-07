@@ -26,7 +26,7 @@ type "functype//result_if_let_mismatch.wado/$cm_export__run" = fn();  // TypeId(
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(11)
 
-type "functype//core:rt/write_string_to_stream$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(12)
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(12)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
@@ -62,7 +62,7 @@ fn "result_if_let_mismatch.wado/$cm_export__run"() {
     rx_13 = "result_if_let_mismatch.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("not ok");
-    "core:rt/write_string_to_stream$spec0"(tx_14, $mv_field_2, 6);
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx_14, $mv_field_2, 6);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     "wasi/task-return"(0);
 }
@@ -122,7 +122,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

@@ -56,6 +56,8 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-read:transmission-wasi/cli/types.wado#error-code from "wasi/future-read:transmission-wasi/cli/types.wado#error-code";
 
+global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
+
 fn "stream_cm_stdin_pipe.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
@@ -98,7 +100,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
     result = ref.null none;
     if (status_2 & 15) == 0 {
         result = (if local.tee status_2(builtin::load_u8(ptr)) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
-            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
+            global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0;
         } else {
             status_2 = (if local.tee status_2(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
                 0;

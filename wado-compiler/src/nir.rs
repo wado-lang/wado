@@ -895,6 +895,9 @@ pub struct ClosureFunctor {
     /// The `$call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
     pub call_method: Rc<RefCell<NirFunction>>,
+    /// The per-functor `$Closure_N^Inspect::inspect` impl. Found through here
+    /// and not by name: `dae` renames what it reshapes.
+    pub inspect_method: Rc<RefCell<NirFunction>>,
     /// Canonical user-declared (name, type) pairs of the closure literal,
     /// captured at functor creation and never mutated.
     /// `register_closure_wrappers` reads it for the wrapper's external signature

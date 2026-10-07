@@ -46,7 +46,7 @@ type "functype//hfs_aliased_local_whole_read.wado/$cm_export__run" = fn();  // T
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream$spec0" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
@@ -139,9 +139,9 @@ fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
             } else {
                 struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
             });
-            $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
-                $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                    break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_149(v_35.used) == 0;
+            $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
+                $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                    break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_149(v_35.used) == 0;
                     if @unlikely(local.tee new_used_153($tmpl_buf_112.used + n_149) > builtin::array_len($tmpl_buf_112.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_112, new_used_153);
@@ -150,7 +150,7 @@ fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
                     $tmpl_buf_112.used = new_used_153;
                     builtin::array_copy<u8>($tmpl_buf_112.repr, start_154, v_35.repr, 0, n_149);
                 };
-                break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
+                break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
             };
             if @unlikely(local.tee $sroa_item_0_125($tmpl_buf_112.used + 1) > builtin::array_len($tmpl_buf_112.repr)) {
                 cold_path;
@@ -275,7 +275,7 @@ fn "hfs_aliased_local_whole_read.wado/run"() with Stdout {
             $load_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             $sroa_item_1_126 = builtin::i32_wrap_i64(packed >> 32_i64);
             $load_8 = "hfs_aliased_local_whole_read.wado/$cm_binding__Stdout_write_via_stream"($load_8);
-            "core:rt/write_string_to_stream$spec0"($sroa_item_1_126, $tmpl_buf_112.repr, $tmpl_buf_112.used);
+            "core:rt/write_string_to_stream$spec0$dae[add_newline]"($sroa_item_1_126, $tmpl_buf_112.repr, $tmpl_buf_112.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($load_8);
             continue l4;
         };
@@ -346,7 +346,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

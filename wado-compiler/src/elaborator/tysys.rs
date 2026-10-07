@@ -289,6 +289,24 @@ impl TypeSystem {
     }
 }
 
+/// The links an impl search walks from `start`, nearest first, as the solver's
+/// `chain` walks them: each newtype's base, and past a reference a newtype
+/// wraps, its pointee. Any other reference ends the walk, `start` included: a
+/// reference receiver is its caller's to deref.
+fn links(tt: &TypeTable, start: TypeId) -> impl Iterator<Item = TypeId> + '_ {
+    // Each link carries whether it is a newtype's base.
+    std::iter::successors(Some((start, false)), |&(tid, wrapped)| {
+        match (tt.get_newtype_base(tid), tt.get(tid)) {
+            (Some(base), _) => Some((base, true)),
+            (None, ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)) if wrapped => {
+                Some((*inner, false))
+            }
+            (None, _) => None,
+        }
+    })
+    .map(|(tid, _)| tid)
+}
+
 /// The trait `op` dispatches through and the method it calls, or `None` for
 /// the short-circuit operators, which dispatch through no trait. `And` / `Or`
 /// are explicit arms, so a new [`BinaryOp`] variant fails the build here.
@@ -380,15 +398,20 @@ impl TypeSystem {
     pub(crate) fn impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let tt = self.type_table.borrow();
         let solver = self.solver();
-        let mut tid = type_id;
-        loop {
-            if written_impl_reaches(&self.trait_env, trait_, tid, &tt)
+        links(&tt, type_id).find(|&tid| {
+            written_impl_reaches(&self.trait_env, trait_, tid, &tt)
                 || eq_from_written_cmp(&self.trait_env, &solver, trait_, tid, &tt).is_some()
-            {
-                return Some(tid);
-            }
-            tid = tt.get_newtype_base(tid)?;
-        }
+        })
+    }
+
+    /// Whether [`Self::impl_link`]'s walk from `type_id` crosses a reference
+    /// before `link`: the method found there is the reference's own call, which
+    /// re-types nothing to the receiver.
+    pub(crate) fn link_behind_reference(&self, type_id: TypeId, link: TypeId) -> bool {
+        let tt = self.type_table.borrow();
+        links(&tt, type_id)
+            .take_while(|&tid| tid != link)
+            .any(|tid| matches!(tt.get(tid), ResolvedType::Ref(_) | ResolvedType::MutRef(_)))
     }
 
     /// [`Self::impl_link`], stopping above a scalar base: a primitive's

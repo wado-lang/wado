@@ -9,6 +9,7 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::lexer::is_ident_continue;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
@@ -127,7 +128,7 @@ pub fn display_function_name(name: &str) -> String {
 }
 
 /// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$scalar`. A clone's suffix names no
+/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`. A clone's suffix names no
 /// function an author wrote, and the span already carries the module path.
 ///
 /// An effect default spells its interface with the same separator and is left
@@ -159,12 +160,95 @@ pub fn param_spec_name(original: &str, ordinal: usize) -> String {
     format!("{original}$spec{ordinal}")
 }
 
-/// The name of `sroa_param`'s scalarized clone of `original`. The clone takes a
-/// field where the original took the struct around it; the original is left
-/// standing for whatever still needs that shape.
+/// `{base}{marker}[a,b]`: a transformation's suffix, its arguments grouped so
+/// that no identifier inside can be read as the next suffix.
+fn grouped_suffix(base: &str, marker: &str, items: &[String]) -> String {
+    assert!(!items.is_empty(), "a suffix groups one item at least");
+    format!("{base}{INTERNAL_PREFIX}{marker}[{}]", items.join(","))
+}
+
+const DAE_MARKER: &str = "dae";
+
+/// The name of the function derived from `root` that takes each `narrowed`
+/// parameter's field where `root` took the struct around it, none of the
+/// `dropped` ones, both in `root`'s declaration order, and returns as `ret`
+/// says: `f$sroa[self.used]`, `g$sroa[&mut(o.inner.x),&p.y]$dae[q,return]`.
+/// The name spells everything that makes the function one, so two routes to
+/// one shape arrive at one name. `return` is a keyword, so no parameter is
+/// named that, and `&mut` groups its path so that a parameter whose name
+/// starts with `mut` reads as one.
 #[must_use]
-pub fn sroa_param_name(original: &str) -> String {
-    format!("{original}$scalar")
+pub fn reshaped_name(
+    root: &str,
+    narrowed: &[NarrowedParam<'_>],
+    dropped: &[&str],
+    ret: ReturnShape,
+) -> String {
+    const RETURN: &str = "return";
+    let mut sroa: Vec<String> = narrowed
+        .iter()
+        .map(|n| {
+            let mut path = vec![n.param];
+            path.extend(&n.fields);
+            let path = path.join(".");
+            match n.form {
+                FieldForm::Value => path,
+                FieldForm::Shared => format!("&{path}"),
+                FieldForm::Mutable => format!("&mut({path})"),
+            }
+        })
+        .collect();
+    let mut dae: Vec<String> = dropped.iter().map(ToString::to_string).collect();
+    match ret {
+        ReturnShape::Kept => {}
+        ReturnShape::Scalarized => sroa.push(RETURN.to_string()),
+        ReturnShape::Dropped => dae.push(RETURN.to_string()),
+    }
+    let mut name = root.to_string();
+    if !sroa.is_empty() {
+        name = grouped_suffix(&name, "sroa", &sroa);
+    }
+    if !dae.is_empty() {
+        name = grouped_suffix(&name, DAE_MARKER, &dae);
+    }
+    name
+}
+
+/// `name` without the parameters [`reshaped_name`] lists dropped, or `name` itself:
+/// only a `$dae[…]` group ending the name is peeled.
+#[must_use]
+pub fn before_dae(name: &str) -> &str {
+    let opener = format!("{INTERNAL_PREFIX}{DAE_MARKER}[");
+    match name.rfind(&opener) {
+        Some(at) if name.ends_with(']') && !name[at + opener.len()..].contains('[') => &name[..at],
+        _ => name,
+    }
+}
+
+/// The name a function gives up its own for once it is dead and another
+/// stands in for it: `f$retired[17]`, unique by the serial it carries, the
+/// function's store position.
+#[must_use]
+pub fn retired_name(name: &str, serial: usize) -> String {
+    grouped_suffix(name, "retired", &[serial.to_string()])
+}
+
+/// A parameter as [`reshaped_name`] lists it: its name, and where another
+/// parameter shares that name (`_`), its position as well: `_#1`.
+#[must_use]
+pub fn param_label(name: &str, shared_at: Option<usize>) -> String {
+    match shared_at {
+        Some(position) => format!("{name}#{position}"),
+        None => name.to_string(),
+    }
+}
+
+/// One parameter `sroa_param` narrowed to a field: the parameter, the fields
+/// it was projected through, outermost first, and how it holds the last one.
+pub struct NarrowedParam<'a> {
+    pub param: &'a str,
+    pub fields: Vec<&'a str>,
+    pub form: FieldForm,
 }
 
 /// The WIR local holding one field of an aggregate the multi-value ABI took
@@ -401,6 +485,20 @@ pub fn closure_call_method_info(module: &ModuleSource, functor_id: u32) -> Local
     )
 }
 
+/// The name of the `global_id`-th closure's function-table wrapper forwarding to
+/// its `$call`.
+#[must_use]
+pub fn closure_call_wrapper_name(module: &ModuleSource, global_id: usize) -> String {
+    format!("closure/{module}/{INTERNAL_PREFIX}closure_wrapper_{global_id}")
+}
+
+/// The name of the `global_id`-th closure's function-table wrapper forwarding to
+/// its `^Inspect` impl.
+#[must_use]
+pub fn closure_inspect_wrapper_name(module: &ModuleSource, global_id: usize) -> String {
+    format!("closure/{module}/{INTERNAL_PREFIX}closure_inspect_wrapper_{global_id}")
+}
+
 /// The mangled name of closure functor `functor_id`'s `$call`.
 #[must_use]
 pub fn closure_call_name(module: &ModuleSource, functor_id: u32) -> String {
@@ -420,15 +518,6 @@ pub fn closure_call_method_name(module: &ModuleSource, functor_id: u32) -> Metho
         None,
         CLOSURE_CALL_METHOD.to_string(),
     )
-}
-
-/// Whether `name` is one [`closure_call_name`] builds, for any functor.
-#[must_use]
-pub fn is_closure_call_name(name: &str) -> bool {
-    name.strip_suffix(CLOSURE_CALL_METHOD)
-        .and_then(|head| head.strip_suffix("::"))
-        .and_then(|head| head.rsplit_once(CLOSURE_STRUCT_PREFIX))
-        .is_some_and(|(_, id)| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Field name of the `index`-th environment slot on a closure functor
@@ -1391,7 +1480,7 @@ impl LocalMethodName {
     /// that reshapes ABIs must filter them out or the signature will no longer
     /// match the vtable slot they are installed into.
     pub fn is_closure_call(&self) -> bool {
-        self.method_name == CLOSURE_CALL_METHOD
+        before_dae(&self.method_name) == CLOSURE_CALL_METHOD
             && self
                 .fq_struct_name()
                 .decl_name()
@@ -1653,6 +1742,16 @@ pub fn module_parent_dir(path: &str) -> &str {
 #[must_use]
 pub fn global_name(module_source: &ModuleSource, name: impl fmt::Display) -> String {
     format!("global:{module_source}::{name}")
+}
+
+/// The global holding the one shared object of a payload-less variant case:
+/// `variant` is the variant's WIR type name, `case` the case's discriminant.
+#[must_use]
+pub fn unit_case_global_name(variant: &str, case: i32) -> String {
+    global_name(
+        &ModuleSource::builtin(),
+        format!("{INTERNAL_PREFIX}unit_case{INTERNAL_PREFIX}{variant}{INTERNAL_PREFIX}{case}"),
+    )
 }
 
 /// The loader identity of `import_source` imported from the local module
@@ -2351,17 +2450,32 @@ mod tests {
     }
 
     #[test]
-    fn closure_call_name_is_recognised_under_its_module_qualifier() {
-        assert!(is_closure_call_name("main.wado//$Closure_0::$call"));
-        assert!(is_closure_call_name("$Closure_12::$call"));
-        assert!(!is_closure_call_name("main.wado//Point::$call"));
-        assert!(!is_closure_call_name("main.wado//$Closure_0::apply"));
+    fn before_dae_peels_only_the_dropped_parameters() {
+        let x = NarrowedParam {
+            param: "self",
+            fields: vec!["x"],
+            form: FieldForm::Value,
+        };
+        assert_eq!(
+            before_dae(&reshaped_name(
+                "$call",
+                &[],
+                &["self", "x"],
+                ReturnShape::Kept
+            )),
+            "$call"
+        );
+        assert_eq!(before_dae("$call"), "$call");
+        assert_eq!(
+            before_dae(&reshaped_name("$call", &[x], &["y"], ReturnShape::Kept)),
+            "$call$sroa[self.x]"
+        );
     }
 
     #[test]
     fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
         assert_eq!(
-            diagnostic_function_name("core:prelude/string.wado/String::grow$scalar"),
+            diagnostic_function_name("core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]"),
             "String::grow"
         );
         assert_eq!(diagnostic_function_name("main.wado/run"), "run");

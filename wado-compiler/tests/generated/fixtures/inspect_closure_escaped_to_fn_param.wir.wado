@@ -70,7 +70,7 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(22)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
 
@@ -82,9 +82,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//inspect_closure_escaped_to_fn_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(28)
 
-type "functype//inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0::$call" = fn(i32) -> i32;  // TypeId(29)
+type "functype//inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(29)
 
-type "functype//inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(30)
+type "functype//inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect$dae[self]" = fn(ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
@@ -148,7 +148,7 @@ fn "inspect_closure_escaped_to_fn_param.wado/run"() with Stdout {
     is_negative = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     self_10 = builtin::i32_wrap_i64(x >> 32_i64);
     is_negative = "inspect_closure_escaped_to_fn_param.wado/$cm_binding__Stdout_write_via_stream"(is_negative);
-    "core:rt/write_string_to_stream"(self_10, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_10, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative);
 }
 
@@ -244,7 +244,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -642,11 +642,11 @@ fn "inspect_closure_escaped_to_fn_param.wado/fn(i32)->i32^core:prelude/traits.wa
     call_ref "functype/$canonical_callback_fn"($typed_self.inspect, local.tee $typed_self(ref.cast "canonical//CanonicalInspectableBase"(self.value)).env, f);
 }
 
-fn "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0::$call"(x) {
+fn "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0::$call$dae[self]"(x) {
     return x + 1;
 }
 
-fn "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect"(f) {
+fn "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect$dae[self]"(f) {
     let self_1: ref "core:prelude/string.wado//String";
     let new_used_13: i32;
     let start_14: i32;
@@ -670,11 +670,11 @@ fn "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param
 }
 
 fn "closure/inspect_closure_escaped_to_fn_param.wado/$closure_wrapper_0"($env, $p0) {
-    return "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0::$call"($p0);
+    return "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 fn "closure/inspect_closure_escaped_to_fn_param.wado/$closure_inspect_wrapper_0"($env, $formatter) {
-    "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
+    "inspect_closure_escaped_to_fn_param.wado/inspect_closure_escaped_to_fn_param.wado/$Closure_0^core:prelude/traits.wado/Inspect::inspect$dae[self]"(ref.cast "core:prelude/format.wado//Formatter"($formatter));
 }
 
 export fn "inspect_closure_escaped_to_fn_param.wado/$cm_export__run" as "run"

@@ -228,7 +228,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             })
         }),
         sroa_param_clones: IndexSet::default(),
-        sroa_param_clone_fields: IndexMap::default(),
+        reshapes: IndexMap::default(),
+        renamed: Vec::new(),
     };
     // Finalize the born-resolved callee ids: append the interned extern stubs,
     // set every function's `id` to its store position (`FuncId == position`), and
@@ -713,26 +714,23 @@ impl Translator<'_> {
         cf: &ClosureFunctor,
         func_map: &IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>>,
     ) -> nir::ClosureFunctor {
-        // The functor's `call_method` is normally shared with a
-        // top-level function (`Rc::ptr_eq` keyed); reuse the already-
-        // converted `Rc` so the optimizer's closure-type DCE still
-        // matches. The fallback covers methods that never made the
-        // top-level list (e.g. inline-only).
-        let call_method = func_map
-            .get(&Rc::as_ptr(&cf.call_method))
-            .cloned()
-            .unwrap_or_else(|| {
-                Rc::new(RefCell::new(
-                    self.convert_function(&cf.call_method.borrow()),
-                ))
-            });
+        // A functor's methods are the package's own functions (`Rc::ptr_eq`
+        // keyed), so the optimizer reaches them by the id they carry there.
+        let shared = |method: &Rc<RefCell<TirFunction>>| {
+            Rc::clone(
+                func_map
+                    .get(&Rc::as_ptr(method))
+                    .expect("the closure plan generates a functor's methods with the functor"),
+            )
+        };
         nir::ClosureFunctor {
             module_source: cf.module_source.clone(),
             id: cf.id,
             struct_name: cf.struct_name.clone(),
             struct_type_id: cf.struct_type_id,
             ref_type_id: cf.ref_type_id,
-            call_method,
+            call_method: shared(&cf.call_method),
+            inspect_method: shared(&cf.inspect_method),
             canonical_user_params: cf.canonical_user_params.clone(),
             canonical_return: cf.canonical_return,
         }

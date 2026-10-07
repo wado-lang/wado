@@ -153,6 +153,10 @@ fn collect(
 /// newtype before it reaches the base at all: under a reference, `&W` and `W`
 /// both come before `&Inner`. Within one level a reference precedes its
 /// pointee, which is what ranks a `&T` impl ahead of the pointee's.
+///
+/// A newtype over a reference (`type W = &mut T`) is called as that reference
+/// is, so the walk goes on from `&mut T` to `T`. Any other reference ends it:
+/// the receiver's own is the caller's to peel, in a pass of its own.
 fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
     let (through_ref, mut level) = match receiver {
         SolverType::Ref { is_mut, inner } => (Some(*is_mut), Some((**inner).clone())),
@@ -163,13 +167,20 @@ fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
         | SolverType::Projection { .. } => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<SolverType> = Vec::new();
+    let mut wrapped = false;
     while let Some(ty) = level {
         // A newtype cycle is rejected where it is declared; refusing to walk one
         // twice keeps a malformed program from hanging the query.
         if chain.contains(&ty) {
             break;
         }
-        level = newtype_base(program, &ty);
+        let base = newtype_base(program, &ty);
+        level = match (&base, &ty) {
+            (Some(base), _) => Some(base.clone()),
+            (None, SolverType::Ref { inner, .. }) if wrapped => Some((**inner).clone()),
+            (None, _) => None,
+        };
+        wrapped = base.is_some();
         if let Some(is_mut) = through_ref {
             chain.push(SolverType::Ref {
                 is_mut,
@@ -418,6 +429,53 @@ mod tests {
         assert_eq!(selected(&found), Some(ImplId(1)));
         assert_eq!(found.in_scope[0].depth, 0);
         assert_eq!(found.in_scope[1].depth, 1);
+    }
+
+    /// `type Wrapper = &Point`: a call through the newtype is the reference's,
+    /// so `Point`'s impl answers it, as it answers a call on `&Point`.
+    #[test]
+    fn a_newtype_over_a_reference_reaches_the_pointee_s_impl() {
+        let mut p = program(Builder::default().concrete(TR, decl(POINT)));
+        p.types.insert(
+            WRAPPER,
+            TypeDef {
+                newtype_base: Some(ref_to(decl(POINT))),
+            },
+        );
+        let found = ask(&p, &decl(WRAPPER));
+        assert_eq!(selected(&found), Some(ImplId(0)));
+        assert_eq!(found.in_scope[0].depth, 2);
+    }
+
+    /// The order down a newtype over a reference: the newtype's own impl, then
+    /// the reference's, then the pointee's.
+    #[test]
+    fn a_newtype_over_a_reference_ranks_its_own_then_the_reference_s_impl() {
+        let build = |impls: &[SolverType]| {
+            let mut p = program(impls.iter().fold(Builder::default(), |b, target| {
+                b.concrete(TR, target.clone())
+            }));
+            p.types.insert(
+                WRAPPER,
+                TypeDef {
+                    newtype_base: Some(ref_to(decl(POINT))),
+                },
+            );
+            p
+        };
+        let all = build(&[decl(POINT), ref_to(decl(POINT)), decl(WRAPPER)]);
+        assert_eq!(selected(&ask(&all, &decl(WRAPPER))), Some(ImplId(2)));
+        let below = build(&[decl(POINT), ref_to(decl(POINT))]);
+        assert_eq!(selected(&ask(&below, &decl(WRAPPER))), Some(ImplId(1)));
+    }
+
+    /// Only a reference a newtype wraps leads on to its pointee: in `&&Point`
+    /// the inner `&` is a plain one, so `Point`'s impl stays out of reach.
+    #[test]
+    fn a_plain_reference_is_not_walked_to_its_pointee() {
+        let p = program(Builder::default().concrete(TR, decl(POINT)));
+        let found = ask(&p, &ref_to(ref_to(decl(POINT))));
+        assert_eq!(found, Candidates::default());
     }
 
     /// A trait the newtype withholds, by writing the other comparison trait

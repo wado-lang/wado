@@ -910,7 +910,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only set if not already set (for chained newtypes like C -> B -> A -> Point,
                 // we want to keep the innermost base type where the method is defined)
                 if method_info.owner == MethodOwner::Receiver {
-                    method_info.owner = MethodOwner::InheritedFrom(base_type_id);
+                    let referent = self.tysys.get_base_type(base_type_id);
+                    method_info.owner = if referent == base_type_id {
+                        MethodOwner::InheritedFrom(base_type_id)
+                    } else {
+                        MethodOwner::Referent(referent)
+                    };
                 }
                 return Some(method_info);
             }
@@ -1518,10 +1523,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(place) = receiver_ast {
             self.record_mut_borrow(place, ctx);
         }
-        let immutable = match self.tysys.type_table.borrow().get(receiver) {
-            ResolvedType::Ref(_) => true,
-            ResolvedType::MutRef(_) => false,
-            _ => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
+        let immutable = match self.reference_mutability(receiver) {
+            Some(mutable) => !mutable,
+            None => receiver_ast.is_some_and(|e| self.place_roots_at_immutable_ref(e)),
         };
         if immutable {
             let _ = self.emit(TypeError::CannotMutate {
@@ -1559,14 +1563,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether the pointee of `ty` can be written through it: every reference
+    /// layer `&mut`, read through newtypes at each. One `&` anywhere, as in
+    /// `&mut &T` or `&&mut T`, makes it immutable. `None` for a type that is no
+    /// reference at all.
+    fn reference_mutability(&self, ty: TypeId) -> Option<bool> {
+        let table = self.tysys.type_table.borrow();
+        let mut mutable = None;
+        let mut layer = table.representation_head(ty);
+        loop {
+            let (inner, layer_mutable) = match table.get(layer) {
+                ResolvedType::Ref(inner) => (*inner, false),
+                ResolvedType::MutRef(inner) => (*inner, true),
+                _ => return mutable,
+            };
+            mutable = Some(mutable.unwrap_or(true) && layer_mutable);
+            layer = table.representation_head(inner);
+        }
+    }
+
     /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
     /// `*x`, and any nesting of those. `None` past a reference step.
     fn place_root<'e>(&self, expr: &'e ast::Expr) -> Option<&'e str> {
         if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
-            && matches!(
-                self.tysys.type_table.borrow().get(ty),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
+            && self.reference_mutability(ty).is_some()
         {
             return None;
         }
@@ -1621,10 +1641,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(inner_type) = self.sem.types.expression_types.get(&inner.id()).copied() else {
             return false;
         };
-        match self.tysys.type_table.borrow().get(inner_type) {
-            ResolvedType::Ref(_) => true,
-            ResolvedType::MutRef(_) => false,
-            _ => self.place_roots_at_immutable_ref(inner),
+        match self.reference_mutability(inner_type) {
+            Some(mutable) => !mutable,
+            None => self.place_roots_at_immutable_ref(inner),
         }
     }
 

@@ -66,7 +66,7 @@ type "functype//iter_map_collect_variant.wado/$cm_binding__Stdout_write_via_stre
 
 type "functype//iter_map_collect_variant.wado/$cm_export__run" = fn();  // TypeId(21)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
 
@@ -78,7 +78,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>") -> ref null "core:prelude/string.wado//String";  // TypeId(27)
 
-type "functype//iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call" = fn(ref "iter_map_collect_variant.wado//Color") -> ref "core:prelude/string.wado//String";  // TypeId(28)
+type "functype//iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call$dae[self]" = fn(ref "iter_map_collect_variant.wado//Color") -> ref "core:prelude/string.wado//String";  // TypeId(28)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
@@ -102,6 +102,8 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:iter_map_collect_variant.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
+global global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$0: ref "iter_map_collect_variant.wado//Color" = struct.new "iter_map_collect_variant.wado//Color" { 0 };
+global global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$1: ref "iter_map_collect_variant.wado//Color" = struct.new "iter_map_collect_variant.wado//Color" { 1 };
 
 fn "iter_map_collect_variant.wado/run"() with Stdout {
     let self_3: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>";
@@ -113,7 +115,7 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
     let tx_18: i32;
     let used: i32;
     let $sroa_colors_repr_42: ref "Array<iter_map_collect_variant.wado/Color>";
-    $sroa_colors_repr_42 = array.new_fixed<ref "iter_map_collect_variant.wado//Color">(struct.new "iter_map_collect_variant.wado//Color" { 0 }, struct.new "iter_map_collect_variant.wado//Color" { 1 });
+    $sroa_colors_repr_42 = array.new_fixed<ref "iter_map_collect_variant.wado//Color">(global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$0, global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$1);
     f = struct.new "iter_map_collect_variant.wado//$Closure_0" {  };
     self_3 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<iter_map_collect_variant.wado/Color>,core:prelude/string.wado/String>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<iter_map_collect_variant.wado/Color>" { repr: $sroa_colors_repr_42, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/iter_map_collect_variant.wado/$closure_wrapper_0" } };
     result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
@@ -140,7 +142,7 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
     used = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed >> 32_i64);
     used = "iter_map_collect_variant.wado/$cm_binding__Stdout_write_via_stream"(used);
-    "core:rt/write_string_to_stream"(tx_18, item.repr, item.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_18, item.repr, item.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(used);
 }
 
@@ -153,7 +155,7 @@ fn "iter_map_collect_variant.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -264,9 +266,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
             }
             item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_68, i_4);
             $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__11: block {
-                $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0: block {
-                    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                        break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_97(item.used) == 0;
+                $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
+                    $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
+                        break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_97(item.used) == 0;
                         if @unlikely(local.tee new_used_101(buf_2.used + n_97) > builtin::array_len(buf_2.repr)) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used_101);
@@ -275,7 +277,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
                         buf_2.used = new_used_101;
                         builtin::array_copy<u8>(buf_2.repr, start_102, item.repr, 0, n_97);
                     };
-                    break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_scalar_0;
+                    break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
                 };
                 $licm_repr_81 = $mv$separator$repr;
                 break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__11;
@@ -311,7 +313,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice
     return ref.null none;
 }
 
-fn "iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call"(c) {
+fn "iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call$dae[self]"(c) {
     let $load_0: i32;
     return (if local.tee $load_0(c.discriminant) == 0 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
@@ -323,7 +325,7 @@ fn "iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$cal
 }
 
 fn "closure/iter_map_collect_variant.wado/$closure_wrapper_0"($env, $p0) {
-    return "iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call"($p0);
+    return "iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 export fn "iter_map_collect_variant.wado/$cm_export__run" as "run"

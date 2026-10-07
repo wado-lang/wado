@@ -1205,9 +1205,36 @@ A newtype over the raw `i32` handle: copyable, with `Eq` inherited from
 
 An owned, fixed-length byte buffer.
 
+#### `impl AsByteSlice for ByteArray`
+
+##### `fn as_byte_slice(&self) -> ByteSlice`
+
 ### `pub type ByteList = List<u8>`
 
+#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
+
+Byte at `index` without bounds checking — the `ByteList` parallel to
+`String::get_byte_unchecked`.
+
+The caller must guarantee `0 <= index < len()`. Any other `index` is a
+contract violation, and the result is unspecified: a byte of the
+backing array past the buffer, or a trap. Intended for hot byte-scanning loops
+that have already range-checked `index`.
+
+#### `pub fn to_hex(&self) -> String`
+
+Renders the bytes as a lowercase hexadecimal string, two digits per
+byte (e.g. `[0x0f, 0xa0]` -> `"0fa0"`).
+
+#### `impl AsByteSlice for ByteList`
+
+##### `fn as_byte_slice(&self) -> ByteSlice`
+
 ### `pub type ByteSlice = Slice<u8>`
+
+#### `impl AsByteSlice for ByteSlice`
+
+##### `fn as_byte_slice(&self) -> ByteSlice`
 
 ## Primitive Types
 

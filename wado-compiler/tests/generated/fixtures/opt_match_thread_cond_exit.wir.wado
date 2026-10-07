@@ -35,7 +35,7 @@ type "functype//opt_match_thread_cond_exit.wado/$cm_export__run" = fn();  // Typ
 
 type "functype//opt_match_thread_cond_exit.wado/run$cold2" = fn();  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(16)
 
@@ -73,33 +73,33 @@ fn "opt_match_thread_cond_exit.wado/run"() with Stdout {
     let $sroa_slot_51: i32;
     $sroa_slot_50 = 0;
     $sroa_slot_51 = 0;
-    $inline_opt_match_thread_cond_exit_wado_S__run_1: block {
+    $inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1: block {
         $sroa_slot_48 = 0;
         $sroa_slot_49 = 0;
-        $inline_opt_match_thread_cond_exit_wado_S__pick_2: block {
+        $inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block {
             $sroa_slot_48 = 1;
             $sroa_slot_49 = -1;
             if break _i0 {
                 $sroa_slot_48 = 0;
                 $sroa_slot_49 = 1;
-                break $inline_opt_match_thread_cond_exit_wado_S__pick_2;
+                break $inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2;
             }
             $sroa_slot_48 = 0;
             $sroa_slot_49 = 2;
-            break $inline_opt_match_thread_cond_exit_wado_S__pick_2;
+            break $inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2;
         };
         $sroa_slot_49 = (if $sroa_slot_48 == 0 -> i32 {
             $sroa_slot_49;
         } else if @unlikely($sroa_slot_48 == 1) -> i32 {
             cold_path;
             $sroa_slot_50 = 1;
-            break $inline_opt_match_thread_cond_exit_wado_S__run_1: $sroa_slot_51 = $sroa_slot_49;
+            break $inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1: $sroa_slot_51 = $sroa_slot_49;
         } else {
             unreachable;
         });
         $sroa_slot_50 = 0;
         $sroa_slot_51 = $sroa_slot_49 + 100;
-        break $inline_opt_match_thread_cond_exit_wado_S__run_1;
+        break $inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1;
     };
     if @unlikely(local.tee $sroa_slot_51((if ($sroa_slot_50 == 1) & ($sroa_slot_51 == -1) -> bool {
         1;
@@ -115,7 +115,7 @@ fn "opt_match_thread_cond_exit.wado/run"() with Stdout {
     $sroa_slot_51 = "opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream"($sroa_slot_51);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:opt_match_thread_cond_exit.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"($sroa_slot_50, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_50, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_slot_51);
 }
 
@@ -135,7 +135,7 @@ condition: a.run() matches { Err(-1) }
     unreachable;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -153,7 +153,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;

@@ -1,0 +1,30 @@
+// Test: reading the payload of a variant built in place yields the payload,
+// when that payload is a constant as well as when it is an expression.
+//
+// A derived deserializer fills an absent `Option<String>` field from its
+// default by opening `Option<Option<String>>::Some(null)` again. Left unfolded,
+// every decode of a record lacking the field allocates the outer `Some` only to
+// read the `null` back out of it.
+
+use { println, Stdout } from "core:cli";
+use { from_string } from "core:json";
+use { Deserialize } from "core:serde";
+
+struct Record {
+    id: i32,
+    note: Option<String> = null,
+}
+impl Deserialize for Record;
+
+export fn run() with Stdout {
+    let r = from_string::<Record, _>("{\"id\":7}").unwrap();
+    println(`${r.id} ${r.note:?}`);
+}
+
+__DATA__
+{
+    "stdout": "7 Option::None\n",
+    "wir_not_expect:O2": [
+        "Option<core:prelude/types.wado/Option<core:prelude/string.wado/String>>::Some\" { discriminant: 1, payload_0: ref.null none }"
+    ]
+}

@@ -90,13 +90,13 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(30)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(32)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(33)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32);  // TypeId(34)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]" = fn(i32);  // TypeId(34)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
 
@@ -104,19 +104,19 @@ type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wad
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(37)
 
-type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0::$call" = fn(i32) -> bool;  // TypeId(38)
+type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0::$call$dae[self]" = fn(i32) -> bool;  // TypeId(38)
 
 type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_1::$call" = fn(ref "effect_handler_forward_rest.wado//$Closure_1", ref "core:prelude/string.wado//String");  // TypeId(39)
 
-type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2::$call" = fn(i32) -> bool;  // TypeId(40)
+type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2::$call$dae[self]" = fn(i32) -> bool;  // TypeId(40)
 
-type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3::$call" = fn(ref "core:prelude/string.wado//String");  // TypeId(41)
+type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(41)
 
-type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4::$call" = fn(i32) -> bool;  // TypeId(42)
+type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4::$call$dae[self]" = fn(i32) -> bool;  // TypeId(42)
 
 type "functype//effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5::$call" = fn(ref "effect_handler_forward_rest.wado//$Closure_5", ref "core:prelude/string.wado//String");  // TypeId(43)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(44)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
@@ -232,24 +232,24 @@ fn "effect_handler_forward_rest.wado/run"() with Stdout {
     message_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative = local.tee $local_3_18(base.lines.used) < 0;
     $local_3_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($local_3_18); select i64(x < 0_i64, 0_i64 - x, x)));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(message_19, is_negative, $local_3_18);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(message_19, is_negative, $local_3_18);
     "core:prelude/primitive.wado/write_decimal_digits"(message_19.repr, is_negative, x, $local_3_18);
     $local_3_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative = builtin::i32_wrap_i64(x >> 32_i64);
     $local_3_18 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"($local_3_18);
-    "core:rt/write_string_to_stream"(is_negative, message_19.repr, message_19.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative, message_19.repr, message_19.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_3_18);
     $local_3_18 = local.tee self_61(base.lines).used;
     if @unlikely(0 >= $local_3_18) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($local_3_18);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"($local_3_18);
         unreachable;
     }
     message_19 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_61.repr, 0);
     $local_3_18 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative = builtin::i32_wrap_i64(x >> 32_i64);
     $local_3_18 = "effect_handler_forward_rest.wado/$cm_binding__Stdout_write_via_stream"($local_3_18);
-    "core:rt/write_string_to_stream"(is_negative, message_19.repr, message_19.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative, message_19.repr, message_19.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($local_3_18);
 }
 
@@ -345,7 +345,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -363,7 +363,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -424,7 +424,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,index]"($v1) {
     let $load_2: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let new_used_11: i32;
@@ -434,13 +434,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     "core:rt/panic"($local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 }; if @unlikely(local.tee new_used_11(0 + 64) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_11);
-    }; start_12 = $local_4.used; $local_4.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_12, global:core:prelude/list.wado::$const_obj_17, 0, 20); new_used_11 = start_12 + 20; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_16, 0, 17); new_used_11 = start_12 + 37; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_15, 0, 4); new_used_11 = start_12 + 41; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_14, 0, 22); start_12 = start_12 + 63; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_13, 0, 1); start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_152($local_4), 0, 3); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_152.repr, start_12, 359_i64, 3); if @unlikely(local.tee start_12($local_4.used + 58) > builtin::array_len($local_4.repr)) {
+    }; start_12 = $local_4.used; $local_4.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_12, global:core:prelude/list.wado::$const_obj_17, 0, 20); new_used_11 = start_12 + 20; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_16, 0, 17); new_used_11 = start_12 + 37; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_15, 0, 4); new_used_11 = start_12 + 41; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_14, 0, 22); start_12 = start_12 + 63; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_13, 0, 1); start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_152($local_4), 0, 3); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_152.repr, start_12, 359_i64, 3); if @unlikely(local.tee start_12($local_4.used + 58) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_12);
-    }; new_used_11 = $local_4.used; $local_4.used = start_12; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), new_used_11, global:effect_handler_forward_rest.wado::$const_obj_4, 0, 2); start_12 = new_used_11 + 2; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_11, 0, 19); start_12 = new_used_11 + 21; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_10, 0, 30); new_used_11 = new_used_11 + 51; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_9, 0, 7); new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(local.tee $sroa_$f_buf_152($local_4), 0, 1); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_152.repr, new_used_11, 0_i64, 1); if @unlikely(local.tee new_used_11($local_4.used + 12) > builtin::array_len($local_4.repr)) {
+    }; new_used_11 = $local_4.used; $local_4.used = start_12; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), new_used_11, global:effect_handler_forward_rest.wado::$const_obj_4, 0, 2); start_12 = new_used_11 + 2; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_11, 0, 19); start_12 = new_used_11 + 21; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_10, 0, 30); new_used_11 = new_used_11 + 51; builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/list.wado::$const_obj_9, 0, 7); new_used_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_152($local_4), 0, 1); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_152.repr, new_used_11, 0_i64, 1); if @unlikely(local.tee new_used_11($local_4.used + 12) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_11);
-    }; start_12 = $local_4.used; $local_4.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_12, global:core:prelude/list.wado::$const_obj_6, 0, 1); start_12 = start_12 + 1; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_7, 0, 11); $sroa_$f_buf_152 = $local_4; start_12 = $v1 < 0; $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_105(x_105 = builtin::i64_extend_i32_s($v1); select i64(x_105 < 0_i64, 0_i64 - x_105, x_105))); start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($sroa_$f_buf_152, start_12, $v1); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_152.repr, start_12, x_105, $v1); if @unlikely(local.tee $v1($local_4.used + 1) > builtin::array_len($local_4.repr)) {
+    }; start_12 = $local_4.used; $local_4.used = new_used_11; builtin::array_copy<u8>(local.tee $load_2($local_4.repr), start_12, global:core:prelude/list.wado::$const_obj_6, 0, 1); start_12 = start_12 + 1; builtin::array_copy<u8>($load_2, start_12, global:core:prelude/list.wado::$const_obj_7, 0, 11); $sroa_$f_buf_152 = $local_4; start_12 = $v1 < 0; $v1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_105(x_105 = builtin::i64_extend_i32_s($v1); select i64(x_105 < 0_i64, 0_i64 - x_105, x_105))); start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_152, start_12, $v1); "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_152.repr, start_12, x_105, $v1); if @unlikely(local.tee $v1($local_4.used + 1) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, $v1);
     }; start_12 = $local_4.used; $local_4.used = $v1; builtin::array_copy<u8>($local_4.repr, start_12, global:core:prelude/list.wado::$const_obj_6, 0, 1); $local_4);
@@ -512,7 +512,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     self.repr = new_repr;
 }
 
-fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0::$call"(level) {
+fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0::$call$dae[self]"(level) {
     return level >= 1;
 }
 
@@ -527,7 +527,7 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_1
     self_4.used = used + 1;
 }
 
-fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2::$call"(level) {
+fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2::$call$dae[self]"(level) {
     let $local_1: ref null "effect_handler_forward_rest.wado//$Dispatch_Log";
     let $local_2: ref "effect_handler_forward_rest.wado//$Dispatch_Log";
     return $inline__effect_dispatch__Log__enabled_0: block -> bool {
@@ -547,7 +547,7 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2
     };
 }
 
-fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3::$call"(message) {
+fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3::$call$dae[self]"(message) {
     let $local_1: ref null "effect_handler_forward_rest.wado//$Dispatch_Log";
     let $local_2: ref "effect_handler_forward_rest.wado//$Dispatch_Log";
     $inline__effect_dispatch__Log__emit_0: block {
@@ -563,7 +563,7 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3
     };
 }
 
-fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4::$call"(level) {
+fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4::$call$dae[self]"(level) {
     let $local_1: ref null "effect_handler_forward_rest.wado//$Dispatch_Log";
     let $local_2: ref "effect_handler_forward_rest.wado//$Dispatch_Log";
     return $inline__effect_dispatch__Log__enabled_0: block -> bool {
@@ -587,7 +587,7 @@ fn "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_5
     "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/Prefix^effect_handler_forward_rest.wado/Log::emit"(self.$capture_0, message.repr, message.used);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
@@ -609,7 +609,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_0"($env, $p0) {
-    return "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0::$call"($p0);
+    return "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_1"($env, $p0) {
@@ -617,15 +617,15 @@ fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_1"($env, $p0) {
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_2"($env, $p0) {
-    return "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2::$call"($p0);
+    return "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_2::$call$dae[self]"($p0);
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_3"($env, $p0) {
-    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3::$call"($p0);
+    "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_3::$call$dae[self]"($p0);
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_4"($env, $p0) {
-    return "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4::$call"($p0);
+    return "effect_handler_forward_rest.wado/effect_handler_forward_rest.wado/$Closure_4::$call$dae[self]"($p0);
 }
 
 fn "closure/effect_handler_forward_rest.wado/$closure_wrapper_5"($env, $p0) {

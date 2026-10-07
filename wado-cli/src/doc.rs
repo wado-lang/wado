@@ -4,8 +4,9 @@ use std::path::Path;
 
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
-    DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
-    DocVariant, extract_doc_with, extract_stdlib_doc_with, read_stdlib_import,
+    DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocPrimitiveType, DocResource, DocStruct,
+    DocTrait, DocTraitImpl, DocVariant, extract_doc_with, extract_stdlib_doc_with,
+    read_stdlib_import,
 };
 use wado_compiler::path::is_cwd_relative;
 
@@ -478,6 +479,24 @@ mod format_contract_tests {
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
+    /// A newtype lists the impls written for it, as a struct does.
+    #[test]
+    fn a_newtype_lists_its_impls() {
+        let source = "//! Demo.\n\n/// Bytes.\npub type Bytes = List<u8>;\n\n\
+                      impl Bytes {\n    /// The first byte.\n    pub fn head(&self) -> u8 { return self[0]; }\n}\n\n\
+                      pub trait Sized2 with () {\n    fn size(&self) -> i32;\n}\n\n\
+                      impl Sized2 for Bytes {\n    fn size(&self) -> i32 { return self.len(); }\n}\n";
+        let md = markdown_of(source);
+        assert!(md.contains("#### `pub fn head(&self) -> u8`"), "got:\n{md}");
+        assert!(md.contains("#### `impl Sized2 for Bytes`"), "got:\n{md}");
+        let simple = simple_all_of(source);
+        assert!(
+            simple.contains("impl Bytes {\n    pub fn head(&self) -> u8;"),
+            "got:\n{simple}"
+        );
+        assert!(simple.contains("impl Sized2 for Bytes {"), "got:\n{simple}");
+    }
+
     /// An associated type is listed as declared: its own parameters and its
     /// bounds are part of what an impl owes.
     #[test]
@@ -735,11 +754,33 @@ fn render_md_types_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str
         return;
     }
     writeln!(out, "\n{h2} Types").unwrap();
+    let h4 = h(heading_level(h3) + 1);
     for t in &doc.types {
         writeln!(out, "\n{h3} `{}`", t.signature).unwrap();
         if let Some(ref d) = t.doc {
             out.push('\n');
             render_md_doc(out, d);
+        }
+        render_md_impl_members(out, &t.constants, &t.methods, &t.trait_impls, h4);
+    }
+}
+
+/// The constants, methods and trait impls a type's `impl` blocks declare.
+fn render_md_impl_members(
+    out: &mut String,
+    constants: &[DocFunction],
+    methods: &[DocFunction],
+    trait_impls: &[DocTraitImpl],
+    h4: &str,
+) {
+    for m in constants.iter().chain(methods) {
+        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
+    }
+    for ti in trait_impls {
+        writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
+        let h5 = h(heading_level(h4) + 1);
+        for m in &ti.methods {
+            render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h5);
         }
     }
 }
@@ -840,19 +881,7 @@ fn render_md_primitive_impl(out: &mut String, p: &DocPrimitiveType, h3: &str, h4
         out.push('\n');
         render_md_doc(out, d);
     }
-    for c in &p.constants {
-        render_md_member(out, &c.signature, &c.attrs, c.doc.as_deref(), h4);
-    }
-    for m in &p.methods {
-        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
-    }
-    for ti in &p.trait_impls {
-        writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
-        let h5 = h(heading_level(h4) + 1);
-        for m in &ti.methods {
-            render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h5);
-        }
-    }
+    render_md_impl_members(out, &p.constants, &p.methods, &p.trait_impls, h4);
 }
 
 fn render_md_variants_section(out: &mut String, doc: &DocModule, h2: &str, h3: &str, h4: &str) {
@@ -899,19 +928,7 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     for f in &s.fields {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
     }
-    for c in &s.constants {
-        render_md_member(out, &c.signature, &c.attrs, c.doc.as_deref(), h4);
-    }
-    for m in &s.methods {
-        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
-    }
-    for ti in &s.trait_impls {
-        writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
-        let h5 = h(heading_level(h4) + 1);
-        for m in &ti.methods {
-            render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h5);
-        }
-    }
+    render_md_impl_members(out, &s.constants, &s.methods, &s.trait_impls, h4);
 }
 
 fn render_md_enum(out: &mut String, e: &DocEnum, h3: &str, h4: &str) {
@@ -1251,8 +1268,34 @@ fn render_simple_types_section(out: &mut String, doc: &DocModule, h2: &str) {
     writeln!(out, "\n{h2} Types\n\n```wado").unwrap();
     for t in &doc.types {
         writeln!(out, "{};", t.signature).unwrap();
+        render_simple_impls(out, &t.name, &t.constants, &t.methods, &t.trait_impls);
     }
     out.push_str("```\n");
+}
+
+/// A type's `impl` blocks: the inherent one, where it declares anything, then
+/// each trait impl.
+fn render_simple_impls(
+    out: &mut String,
+    name: &str,
+    constants: &[DocFunction],
+    methods: &[DocFunction],
+    trait_impls: &[DocTraitImpl],
+) {
+    if !constants.is_empty() || !methods.is_empty() {
+        writeln!(out, "\nimpl {name} {{").unwrap();
+        for m in constants.iter().chain(methods) {
+            writeln!(out, "    {};", m.signature).unwrap();
+        }
+        out.push_str("}\n");
+    }
+    for ti in trait_impls {
+        writeln!(out, "\n{} {{", ti.signature).unwrap();
+        for m in &ti.methods {
+            writeln!(out, "    {};", m.signature).unwrap();
+        }
+        out.push_str("}\n");
+    }
 }
 
 fn render_simple_globals_section(out: &mut String, doc: &DocModule, h2: &str) {
@@ -1356,23 +1399,7 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
     for s in &doc.structs {
         out.push_str("\n```wado\n");
         render_simple_struct(out, s);
-        if !s.constants.is_empty() || !s.methods.is_empty() {
-            writeln!(out, "\nimpl {} {{", s.name).unwrap();
-            for c in &s.constants {
-                writeln!(out, "    {};", c.signature).unwrap();
-            }
-            for m in &s.methods {
-                writeln!(out, "    {};", m.signature).unwrap();
-            }
-            out.push_str("}\n");
-        }
-        for ti in &s.trait_impls {
-            writeln!(out, "\n{} {{", ti.signature).unwrap();
-            for m in &ti.methods {
-                writeln!(out, "    {};", m.signature).unwrap();
-            }
-            out.push_str("}\n");
-        }
+        render_simple_impls(out, &s.name, &s.constants, &s.methods, &s.trait_impls);
         out.push_str("```\n");
     }
 }

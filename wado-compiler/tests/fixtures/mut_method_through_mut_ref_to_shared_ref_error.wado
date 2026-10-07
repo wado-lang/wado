@@ -1,0 +1,33 @@
+// Test: a `&mut self` method cannot be called through `&mut &T`: the write
+// lands behind the inner `&T`, whatever the outer reference allows.
+//
+// The check read only the outermost reference, so `poke` mutated the
+// immutable `c`.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn poke(v: &mut &Counter) -> i32 {
+    return v.bump();
+}
+
+export fn run() with Stdout {
+    let c = Counter { n: 0 };
+    let mut r = &c;
+    println(`${poke(&mut r)} ${c.n}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `bump` through immutable reference"
+}

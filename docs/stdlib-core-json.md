@@ -149,6 +149,44 @@ Serializes a value to pretty-printed UTF-8 JSON bytes.
 Returns a read-only `ByteSlice` over the serializer's UTF-8 buffer.
 `trailing_char`, when `Some`, is appended after the value.
 
+## Types
+
+### `pub type JsonSeqAccess = &mut JsonDeserializer`
+
+Reads the elements of a JSON array.
+
+#### `impl DeserializeSeq for JsonSeqAccess`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub type JsonMapAccess = &mut JsonDeserializer`
+
+Reads the members of a JSON object as a map.
+
+#### `impl DeserializeMap for JsonMapAccess`
+
+##### `fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub type JsonStructAccess = &mut JsonDeserializer`
+
+Reads the members of a JSON object as a struct's fields.
+
+#### `impl DeserializeStruct for JsonStructAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
 ## Structs
 
 ### `pub struct JsonSeqSerializer`
@@ -331,8 +369,8 @@ _Fields are private._
 
 #### `depth: i32`
 
-Nesting level of the value being read. Each access re-asserts its own
-level before descending, so it never needs unwinding.
+Nesting level of the value being read. A container's `begin_*` raises
+it and its `end` lowers it again.
 
 #### `max_depth: i32`
 
@@ -430,42 +468,6 @@ Skips the next JSON value without allocating.
 ##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
-
-### `pub struct JsonSeqAccess`
-
-_Fields are private._
-
-#### `impl DeserializeSeq for JsonSeqAccess`
-
-##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
-
-##### `fn end(&mut self) -> Result<(), DeserializeError>`
-
-### `pub struct JsonMapAccess`
-
-_Fields are private._
-
-#### `impl DeserializeMap for JsonMapAccess`
-
-##### `fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError>`
-
-##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
-
-##### `fn end(&mut self) -> Result<(), DeserializeError>`
-
-### `pub struct JsonStructAccess`
-
-_Fields are private._
-
-#### `impl DeserializeStruct for JsonStructAccess`
-
-##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
-
-##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
-
-##### `fn skip(&mut self) -> Result<(), DeserializeError>`
-
-##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
 ### `pub struct JsonVariantAccess`
 

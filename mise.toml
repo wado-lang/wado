@@ -245,11 +245,11 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # package-gale and the stdlib are excluded in CI only, where test-gale-o2 and
-# `test-stdlib` (once per optimization level) cover them; locally one run walks
-# every nested package. benchmark/* test blocks need no `--dir`: their file
-# reads sit in `export fn run()`, which the test world never calls. Same
-# batch-compilation shape as `test-gale-o2`, whose comment explains the purge
-# and what holding the pages costs in RSS.
+# `test-stdlib` or `test-stdlib-coverage` (once per optimization level) cover
+# them; locally one run walks every nested package. benchmark/* test blocks need
+# no `--dir`: their file reads sit in `export fn run()`, which the test world
+# never calls. Same batch-compilation shape as `test-gale-o2`, whose comment
+# explains the purge and what holding the pages costs in RSS.
 export MIMALLOC_PURGE_DELAY=-1
 extra_args=()
 if [ -n "${CI:-}" ]; then
@@ -259,7 +259,7 @@ fi
 """
 
 [tasks.test-stdlib]
-description = "Run the stdlib (wado-compiler/lib) tests at one optimization level: O0, O1, O2, O3 or Os (default O2)"
+description = "Run the stdlib (wado-compiler/lib) tests at one optimization level: O0, O1, O2, O3 or Os (default O2); later arguments go to `wado test`"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -268,6 +268,7 @@ set -xe -o pipefail
 # `lib/` modules and the `*_test.wado` siblings holding the prelude's. Same
 # batch-compilation shape as `test-gale-o2`, whose comment explains the purge.
 level="${1:-O2}"
+shift || true
 case "${level}" in
     O0 | O1 | O2 | O3 | Os) ;;
     *)
@@ -280,36 +281,24 @@ extra_args=()
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test "-${level}" wado-compiler "${extra_args[@]}"
+./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test "-${level}" wado-compiler "$@" "${extra_args[@]}"
 """
 
 [tasks.test-stdlib-coverage]
-description = "Run the stdlib tests under coverage and fail on any difference from scripts/stdlib-coverage.json"
+description = "Run the stdlib tests under coverage at one optimization level (default O2) and fail on any difference from scripts/stdlib-coverage.json"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-export MIMALLOC_PURGE_DELAY=-1
-extra_args=()
-if [ -n "${CI:-}" ]; then
-    extra_args+=(--format tap)
-fi
-./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test -O2 wado-compiler \
-    --coverage --coverage-include=stdlib --coverage-baseline scripts/stdlib-coverage.json \
-    "${extra_args[@]}"
+mise run test-stdlib "${1:-O2}" \
+    --coverage --coverage-include=stdlib --coverage-baseline scripts/stdlib-coverage.json
 """
-
-[tasks.check-coverage-levels]
-description = "Fail unless the stdlib tests report identical coverage at -O0 and -O3"
-run = "./scripts/exclusive.sh test-stdlib scripts/check-coverage-levels.sh"
 
 [tasks.update-stdlib-coverage-baseline]
 description = "Rewrite scripts/stdlib-coverage.json from what the stdlib tests leave unrun"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-export MIMALLOC_PURGE_DELAY=-1
-./scripts/exclusive.sh test-stdlib scripts/dev-bin.sh wado test -O2 wado-compiler \
-    --coverage=lcov,baseline --coverage-include=stdlib
+mise run test-stdlib O2 --coverage=lcov,baseline --coverage-include=stdlib
 cp build/coverage/baseline.json scripts/stdlib-coverage.json
 """
 

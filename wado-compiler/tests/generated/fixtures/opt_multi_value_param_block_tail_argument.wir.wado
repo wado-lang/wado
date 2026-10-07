@@ -37,9 +37,9 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(14)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
 
-type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$scalar" = fn(i32, ref "core:prelude/string.wado//String") -> [i32, i32];  // TypeId(16)
+type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]" = fn(i32, ref "core:prelude/string.wado//String") -> [i32, i32];  // TypeId(16)
 
-type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$scalar" = fn(i32, ref Array<u8>, i32, i32) -> i32;  // TypeId(17)
+type "functype//opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]" = fn(i32, ref Array<u8>, i32, i32) -> i32;  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -72,7 +72,7 @@ fn "opt_multi_value_param_block_tail_argument.wado/run"() {
     probe = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 98), used: 2 });
     let $mv$$vr_9$0: i32;
     let $mv$$vr_9$1: i32;
-    multivalue_bind [$mv$$vr_9$0, $mv$$vr_9$1] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$scalar"($sroa_t_width_11, probe);
+    multivalue_bind [$mv$$vr_9$0, $mv$$vr_9$1] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]"($sroa_t_width_11, probe);
     if @unlikely(local.tee $mv$$vr_9$1((if ($mv$$vr_9$0 == 1) & ($mv$$vr_9$1 == 1) -> bool {
         1;
     } else {
@@ -82,7 +82,7 @@ fn "opt_multi_value_param_block_tail_argument.wado/run"() {
         "opt_multi_value_param_block_tail_argument.wado/run$cold1"();
         unreachable;
     }
-    multivalue_bind [$sroa_t_width_11, $mv$$vr_9$1] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$scalar"($sroa_t_width_11, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 122, 122), used: 3 });
+    multivalue_bind [$sroa_t_width_11, $mv$$vr_9$1] = "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]"($sroa_t_width_11, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122, 122, 122), used: 3 });
     if @unlikely(local.tee $sroa_t_width_11($sroa_t_width_11 == 0) == 0) {
         cold_path;
         "opt_multi_value_param_block_tail_argument.wado/run$cold0"();
@@ -192,20 +192,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$scalar"(self, key) {
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::lookup<&core:prelude/string.wado/String>$sroa[self.width,return]"(self, key) {
     let repr: ref Array<u8>;
     if local.tee $mv_field_4(block -> i32 {
         repr = key.repr;
         let $mv_field_4: i32;
         $mv_field_4 = key.used;
-        "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$scalar"(self, repr, 0, $mv_field_4);
+        "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, repr, 0, $mv_field_4);
     }) < 0 {
         return 0, 0;
     }
     return 1, $mv_field_4;
 }
 
-fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$scalar"(self, $mv$key$repr, $mv$key$start, $mv$key$end) {
+fn "opt_multi_value_param_block_tail_argument.wado/opt_multi_value_param_block_tail_argument.wado/Table::find$sroa[self.width]"(self, $mv$key$repr, $mv$key$start, $mv$key$end) {
     return select i32(($mv$key$end - $mv$key$start) == self, 1, -1);
 }
 

@@ -101,13 +101,13 @@ type "functype//cross_module_treemap_variant.wado/$value_copy$core:collections/t
 
 type "functype//cross_module_treemap_variant.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(30)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(32)
 
-type "functype//./sub/cross_module_treemap_variant_helper.wado/stringify$scalar" = fn(ref "./sub/cross_module_treemap_variant_helper.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(33)
+type "functype//./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]" = fn(ref "./sub/cross_module_treemap_variant_helper.wado//Value") -> ref "core:prelude/string.wado//String";  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/i32::max" = fn(i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/primitive.wado/i32::max$dae[a]" = fn(i32) -> i32;  // TypeId(34)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
 
@@ -174,11 +174,11 @@ fn "cross_module_treemap_variant.wado/run"() with Stdout {
         }
         "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::push"(map.log, key_10, value_8);
     };
-    key_10 = "./sub/cross_module_treemap_variant_helper.wado/stringify$scalar"(local.tee value_8(struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map }));
+    key_10 = "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(local.tee value_8(struct.new "./sub/cross_module_treemap_variant_helper.wado//Value::Obj" { discriminant: 1, payload_0: map }));
     existing = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
     existing = "cross_module_treemap_variant.wado/$cm_binding__Stdout_write_via_stream"(existing);
-    "core:rt/write_string_to_stream"(tx_23, key_10.repr, key_10.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, key_10.repr, key_10.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(existing);
 }
 
@@ -254,7 +254,7 @@ fn "cross_module_treemap_variant.wado/$value_copy$core:prelude/string.wado/Strin
     return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -320,7 +320,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "./sub/cross_module_treemap_variant_helper.wado/stringify$scalar"(v) {
+fn "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v) {
     let $load_3: ref Array<u8>;
     let $load_17: i32;
     let $load_20: i32;
@@ -436,7 +436,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify$scalar"(v) {
                 builtin::array_copy<u8>(local.tee $array_clone_src_1(v_82.repr), start_91, $array_clone_dst_2, 0, $load_17);
                 $load_17 = start_91 + $load_17;
                 builtin::array_copy<u8>($array_clone_src_1, $load_17, global:./sub/cross_module_treemap_variant_helper.wado::$const_obj_23, 0, 2);
-                other_116 = "./sub/cross_module_treemap_variant_helper.wado/stringify$scalar"(v);
+                other_116 = "./sub/cross_module_treemap_variant_helper.wado/stringify$sroa[v.value]"(v);
                 $inline_core_prelude_string_wado_String__internal_push_string_39: block {
                     break_if $inline_core_prelude_string_wado_String__internal_push_string_39 local.tee n_121(other_116.used) == 0;
                     if @unlikely(local.tee new_used_125(v_82.used + n_121) > builtin::array_len(v_82.repr)) {
@@ -467,7 +467,7 @@ fn "./sub/cross_module_treemap_variant_helper.wado/stringify$scalar"(v) {
     });
 }
 
-fn "core:prelude/primitive.wado/i32::max"(b) {
+fn "core:prelude/primitive.wado/i32::max$dae[a]"(b) {
     return select i32(4 > b, 4, b);
 }
 
@@ -487,7 +487,7 @@ fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:pr
     let e: i32;
     if @unlikely(local.tee e(self.count) == builtin::array_len(self.keys)) {
         cold_path;
-        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::grow"(self, "core:prelude/primitive.wado/i32::max"(e * 2));
+        "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,./sub/cross_module_treemap_variant_helper.wado/Value>::grow"(self, "core:prelude/primitive.wado/i32::max$dae[a]"(e * 2));
     }
     builtin::array_set<ref "core:prelude/string.wado//String">(self.keys, e, key);
     builtin::array_set<ref "./sub/cross_module_treemap_variant_helper.wado//Value">(self.values, e, value);
@@ -558,25 +558,25 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                             y = builtin::array_get_value<u8>(b_45, i);
                             $cse_18 = x <u y;
                             $cse_19 = x >u y;
-                            if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: block -> "core:prelude/traits.wado//enum:Ordering" {
+                            if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                                 if $cse_18 {
-                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: 0;
+                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 0;
                                 }
                                 if $cse_19 {
-                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: 2;
+                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 2;
                                 }
-                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: 1;
+                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 1;
                             } == 0 {
                                 break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                             }
-                            if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: block -> "core:prelude/traits.wado//enum:Ordering" {
+                            if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
                                 if $cse_18 {
-                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: 0;
+                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
                                 }
                                 if $cse_19 {
-                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: 2;
+                                    break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
                                 }
-                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: 1;
+                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
                             } == 2 {
                                 break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                             }
@@ -758,25 +758,25 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
                         y = builtin::array_get_value<u8>(b_20, i);
                         $cse_18 = x <u y;
                         $cse_19 = x >u y;
-                        if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: block -> "core:prelude/traits.wado//enum:Ordering" {
+                        if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                             if $cse_18 {
-                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: 0;
+                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 0;
                             }
                             if $cse_19 {
-                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: 2;
+                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 2;
                             }
-                            break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_1: 1;
+                            break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: 1;
                         } == 0 {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                         }
-                        if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: block -> "core:prelude/traits.wado//enum:Ordering" {
+                        if $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
                             if $cse_18 {
-                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: 0;
+                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
                             }
                             if $cse_19 {
-                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: 2;
+                                break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
                             }
-                            break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_scalar_2: 1;
+                            break $inline_core_prelude_array_wado_seq_cmp_u8__0__$inline_u8_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
                         } == 2 {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                         }

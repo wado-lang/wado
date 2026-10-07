@@ -745,6 +745,49 @@ test {
 A trait impl written for the newtype wins over the one it inherits from the
 base. See [The Order](./spec-traits.md#the-order).
 
+### A Newtype over a Reference
+
+A newtype whose base is a reference (`type H = &mut T`) is called as that
+reference is. A trait method is looked up on `H`, then on `&mut T`, then on `T`,
+and the first that answers is called. An impl written for `&mut T` is the
+newtype's base's, inherited as any newtype inherits from its base. The inherent
+methods are `T`'s.
+
+A method of `T` is the reference's own call, so nothing in its signature is
+substituted with the newtype. A method of `T` returning `T` returns a `T`, a
+copy, not an `H` onto the same place. A method taking `&mut self` needs every
+reference on the way to `T` to be `&mut`: through `type V = &T`, or through
+`&H`, it is an error, however the binding is declared.
+
+<!-- {"fixture":"newtype_over_mut_ref_inherits_trait_methods.wado"} -->
+
+```wado
+type Handle = &mut Counter;
+
+impl Name for Handle {
+    fn name(&self) -> String {
+        return "handle";
+    }
+}
+
+type Plain = &mut Counter;
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 1 };
+    let d = Counter { n: 2 };
+    let h = &mut c as Handle;
+    assert h.bump(&d) == 3 && c.n == 3;   // writes through to `c`
+    let mut copy = h.snap();              // a `Counter`, not a `Handle`
+    copy.n = 100;
+    assert c.n == 3;
+
+    let mut e = Counter { n: 0 };
+    assert (&mut c as Handle).name() == "handle";   // its own impl first
+    assert (&mut e as Plain).name() == "counter";   // else `Counter`'s
+    println("ok");
+}
+```
+
 ### Casts
 
 `as` converts between a newtype and its base in both directions, between two

@@ -35,13 +35,13 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(15)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(18)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -213,12 +213,12 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
     builtin::array_copy<u8>($tmpl_buf_244.repr, pair_53, global:tmpl_hoist_loop.wado::$const_obj_7, 0, 6);
     pair_53 = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee q_52(q_52 = builtin::i64_extend_i32_s(total); select i64(q_52 < 0_i64, 0_i64 - q_52, q_52)));
-    pair_53 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_244, pair_53, total);
+    pair_53 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_244, pair_53, total);
     "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_244.repr, pair_53, q_52, total);
     total = builtin::i32_wrap_i64(local.tee q_52("wasi/stream-new"()));
     pair_53 = builtin::i32_wrap_i64(q_52 >> 32_i64);
     total = "tmpl_hoist_loop.wado/$cm_binding__Stdout_write_via_stream"(total);
-    "core:rt/write_string_to_stream"(pair_53, $tmpl_buf_244.repr, $tmpl_buf_244.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(pair_53, $tmpl_buf_244.repr, $tmpl_buf_244.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total);
     total = 0;
     pair_53 = 0;
@@ -237,7 +237,7 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
             builtin::array_copy<u8>($tmpl_buf_244.repr, new_used_346, global:tmpl_hoist_loop.wado::$const_obj_6, 0, 2);
             new_used_346 = pair_53 < 0;
             start_347 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_44(q_52 = builtin::i64_extend_i32_s(pair_53); select i64(q_52 < 0_i64, 0_i64 - q_52, q_52)));
-            new_used_346 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_244, new_used_346, start_347);
+            new_used_346 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_244, new_used_346, start_347);
             "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_244.repr, new_used_346, x_44, start_347);
             if @unlikely(local.tee start_347($tmpl_buf_244.used + 4) > builtin::array_len($tmpl_buf_244.repr)) {
                 cold_path;
@@ -248,7 +248,7 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
             builtin::array_copy<u8>($tmpl_buf_244.repr, new_used_346, global:tmpl_hoist_loop.wado::$const_obj_5, 0, 4);
             new_used_346 = tens_54 < 0;
             tens_54 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_144(x_147 = builtin::i64_extend_i32_s(tens_54); select i64(x_147 < 0_i64, 0_i64 - x_147, x_147)));
-            new_used_346 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_244, new_used_346, tens_54);
+            new_used_346 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_244, new_used_346, tens_54);
             "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_244.repr, new_used_346, abs_val_144, tens_54);
             total = total + $tmpl_buf_244.used;
             pair_53 = pair_53 + 1;
@@ -265,12 +265,12 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
     builtin::array_copy<u8>($tmpl_buf_244.repr, tens_54, global:tmpl_hoist_loop.wado::$const_obj_4, 0, 7);
     tens_54 = total < 0;
     total = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val_144(abs_val_144 = builtin::i64_extend_i32_s(total); select i64(abs_val_144 < 0_i64, 0_i64 - abs_val_144, abs_val_144)));
-    tens_54 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_244, tens_54, total);
+    tens_54 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_244, tens_54, total);
     "core:prelude/primitive.wado/write_decimal_digits"($tmpl_buf_244.repr, tens_54, abs_val_144, total);
     total = builtin::i32_wrap_i64(local.tee abs_val_144("wasi/stream-new"()));
     tens_54 = builtin::i32_wrap_i64(abs_val_144 >> 32_i64);
     total = "tmpl_hoist_loop.wado/$cm_binding__Stdout_write_via_stream"(total);
-    "core:rt/write_string_to_stream"(tens_54, $tmpl_buf_244.repr, $tmpl_buf_244.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tens_54, $tmpl_buf_244.repr, $tmpl_buf_244.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total);
     total = 0;
     $tmpl_buf_244 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
@@ -384,7 +384,7 @@ fn "tmpl_hoist_loop.wado/run"() with Stdout {
             new_used_30 = builtin::i32_wrap_i64(local.tee x_147("wasi/stream-new"()));
             i_1 = builtin::i32_wrap_i64(x_147 >> 32_i64);
             new_used_30 = "tmpl_hoist_loop.wado/$cm_binding__Stdout_write_via_stream"(new_used_30);
-            "core:rt/write_string_to_stream"(i_1, $tmpl_buf_244.repr, $tmpl_buf_244.used);
+            "core:rt/write_string_to_stream$dae[add_newline]"(i_1, $tmpl_buf_244.repr, $tmpl_buf_244.used);
             "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_30);
             total = total + 1;
             continue l35;
@@ -484,7 +484,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -562,7 +562,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

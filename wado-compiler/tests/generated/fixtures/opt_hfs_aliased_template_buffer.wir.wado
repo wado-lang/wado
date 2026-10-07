@@ -45,11 +45,11 @@ type "functype//opt_hfs_aliased_template_buffer.wado/$cm_binding__Stdout_write_v
 
 type "functype//opt_hfs_aliased_template_buffer.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//opt_hfs_aliased_template_buffer.wado/write_literal_char$scalar" = fn(ref "core:prelude/string.wado//String", char, char);  // TypeId(17)
+type "functype//opt_hfs_aliased_template_buffer.wado/write_literal_char$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", char, char);  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(18)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
@@ -57,9 +57,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(22)
 
-type "functype//opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/StrLit^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(23)
+type "functype//opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/StrLit^core:prelude/traits.wado/Display::fmt$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(23)
 
-type "functype//opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/LitName^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(24)
+type "functype//opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/LitName^core:prelude/traits.wado/Display::fmt$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(24)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
@@ -128,8 +128,8 @@ fn "opt_hfs_aliased_template_buffer.wado/gen"(lits) {
             self_21 = start_25 + self_21;
             builtin::array_copy<u8>($load_6, self_21, global:opt_hfs_aliased_template_buffer.wado::$const_obj_4, 0, 4);
             $tmpl_buf_93.used = 0;
-            "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/LitName^core:prelude/traits.wado/Display::fmt$scalar"(local.tee s_29(ref_val.text), $tmpl_buf_93);
-            "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/StrLit^core:prelude/traits.wado/Display::fmt$scalar"($tmpl_buf_93, $local_6);
+            "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/LitName^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"(local.tee s_29(ref_val.text), $tmpl_buf_93);
+            "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/StrLit^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"($tmpl_buf_93, $local_6);
             if @unlikely(local.tee self_21($local_6.used + 1) > builtin::array_len($local_6.repr)) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, self_21);
@@ -172,7 +172,7 @@ fn "opt_hfs_aliased_template_buffer.wado/run"() with Stdout {
     rx_8 = "opt_hfs_aliased_template_buffer.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:opt_hfs_aliased_template_buffer.wado::$const_obj_5;
-    "core:rt/write_string_to_stream"(tx_9, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_9, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_8);
 }
 
@@ -185,7 +185,7 @@ fn "opt_hfs_aliased_template_buffer.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_hfs_aliased_template_buffer.wado/write_literal_char$scalar"(f, c, quote) {
+fn "opt_hfs_aliased_template_buffer.wado/write_literal_char$sroa[f.buf]"(f, c, quote) {
     let $local_4_4: ref "core:prelude/string.wado//String";
     let val_i64_55: i64;
     let start_92: i32;
@@ -279,7 +279,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     }
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -402,7 +402,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/StrLit^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/StrLit^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"(self, f) {
     let new_used_45: i32;
     let start_46: i32;
     let b0: u32;
@@ -457,7 +457,7 @@ fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/St
                 break $inline_decode_char_at_1;
             };
             new_used_45 = new_used_45 + $sroa_slot_107;
-            "opt_hfs_aliased_template_buffer.wado/write_literal_char$scalar"(f, $sroa_slot_106, 34);
+            "opt_hfs_aliased_template_buffer.wado/write_literal_char$sroa[f.buf]"(f, $sroa_slot_106, 34);
             continue l40;
         };
     };
@@ -470,7 +470,7 @@ fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/St
     builtin::array_set_u8(f.repr, b2_67, 34);
 }
 
-fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/LitName^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/LitName^core:prelude/traits.wado/Display::fmt$sroa[f.buf]"(self, f) {
     let new_used_45: i32;
     let start_46: i32;
     let b0: u32;
@@ -525,7 +525,7 @@ fn "opt_hfs_aliased_template_buffer.wado/opt_hfs_aliased_template_buffer.wado/Li
                 break $inline_decode_char_at_1;
             };
             new_used_45 = new_used_45 + $sroa_slot_107;
-            "opt_hfs_aliased_template_buffer.wado/write_literal_char$scalar"(f, $sroa_slot_106, 39);
+            "opt_hfs_aliased_template_buffer.wado/write_literal_char$sroa[f.buf]"(f, $sroa_slot_106, 39);
             continue l47;
         };
     };

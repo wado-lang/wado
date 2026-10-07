@@ -1,0 +1,36 @@
+// Test: a `&mut self` method cannot be called through `&H`, where
+// `type H = &mut T`: the outer `&` is shared, whatever the reference it holds
+// allows.
+//
+// The check read only the innermost reference, so the `&mut` inside answered
+// for the `&` around it.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+type H = &mut Counter;
+
+fn poke(v: &H) -> i32 {
+    return v.bump();
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 0 };
+    let h = &mut c as H;
+    println(`${poke(&h)}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot call `&mut self` method `bump` through immutable reference"
+}

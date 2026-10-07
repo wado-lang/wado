@@ -289,7 +289,7 @@ type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(64)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(65)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:clocks/types.wado/Duration>$scalar" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:clocks/types.wado/Duration>$sroa[payload.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(67)
 
@@ -305,11 +305,11 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(73)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Option<u64>", ref "core:prelude/format.wado//Formatter");  // TypeId(74)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Option<u64>", ref "core:prelude/format.wado//Formatter");  // TypeId(74)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(75)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(76)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(76)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(77)
 
@@ -363,6 +363,8 @@ global global:core:prelude/traits.wado::$const_obj_57: ref "core:prelude/string.
 global global:core:prelude/traits.wado::$const_obj_58: ref Array<u8> = array.new_fixed<u8>(40);
 global global:core:prelude/traits.wado::$const_obj_60: ref Array<u8> = array.new_fixed<u8>(32, 32);
 global global:core:prelude/traits.wado::$const_obj_61: ref Array<u8> = array.new_fixed<u8>(44);
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0: ref "core:prelude/types.wado//Option<u64>" = struct.new "core:prelude/types.wado//Option<u64>" { 0 };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 
 fn "http_request_options.wado/$cm_binding__RequestOptions_new"() with RequestOptions {
     return "wasi/wasi:http/RequestOptions::new"();
@@ -374,7 +376,7 @@ fn "http_request_options.wado/$cm_binding__RequestOptions_get_connect_timeout"(s
     $outptr = "mem/realloc"(0, 0, 8, 16);
     "wasi/wasi:http/RequestOptions::get_connect_timeout"(self, $outptr);
     self = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<u64>" { 0 };
+    $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0;
     if self != 0 {
         $option_result = struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 1, payload_0: builtin::load_i64($outptr + 8) };
     }
@@ -388,7 +390,7 @@ fn "http_request_options.wado/$cm_binding__RequestOptions_get_first_byte_timeout
     $outptr = "mem/realloc"(0, 0, 8, 16);
     "wasi/wasi:http/RequestOptions::get_first_byte_timeout"(self, $outptr);
     self = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<u64>" { 0 };
+    $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0;
     if self != 0 {
         $option_result = struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 1, payload_0: builtin::load_i64($outptr + 8) };
     }
@@ -402,7 +404,7 @@ fn "http_request_options.wado/$cm_binding__RequestOptions_get_between_bytes_time
     $outptr = "mem/realloc"(0, 0, 8, 16);
     "wasi/wasi:http/RequestOptions::get_between_bytes_timeout"(self, $outptr);
     self = builtin::load_u8($outptr);
-    $option_result = struct.new "core:prelude/types.wado//Option<u64>" { 0 };
+    $option_result = global:core:builtin::$unit_case$core:prelude/types.wado//Option<u64>$0;
     if self != 0 {
         $option_result = struct.new "core:prelude/types.wado//Option<u64>::Some" { discriminant: 1, payload_0: builtin::load_i64($outptr + 8) };
     }
@@ -448,20 +450,20 @@ fn "http_request_options.wado/$cm_task_entry__handle"(request) {
     if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__RequestOptions_get_connect_timeout"(local.tee opts("http_request_options.wado/$cm_binding__RequestOptions_new"()))).discriminant == 0) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_13("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(136)), 56);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handle"), used: 6 }, 6);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_request_options.wado"), used: 25 }, 25);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handle"), used: 6 }, 6);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_request_options.wado"), used: 25 }, 25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(12, $local_14);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(12, $local_14);
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_13, 46);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: connect matches { None }
 "), used: 37 }, 37);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("connect: "), used: 9 }, 9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("connect: "), used: 9 }, 9);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$scalar"(connect, $local_14);
+        "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(connect, $local_14);
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:http_request_options.wado::$const_obj_10;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_13, $mv_arg_2.repr, $mv_arg_2.used);
@@ -471,20 +473,20 @@ condition: connect matches { None }
     if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__RequestOptions_get_first_byte_timeout"(opts)).discriminant == 0) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_13("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(142)), 56);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handle"), used: 6 }, 6);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_request_options.wado"), used: 25 }, 25);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handle"), used: 6 }, 6);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_request_options.wado"), used: 25 }, 25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(15, $local_14);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(15, $local_14);
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_13, 52);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: first_byte matches { None }
 "), used: 40 }, 40);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 40, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("first_byte: "), used: 12 }, 12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 40, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("first_byte: "), used: 12 }, 12);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$scalar"(connect, $local_14);
+        "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(connect, $local_14);
         $mv_arg_2 = global:http_request_options.wado::$const_obj_10;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_13, $mv_arg_2.repr, $mv_arg_2.used);
         "core:rt/panic"($local_13.repr, $local_13.used);
@@ -493,20 +495,20 @@ condition: first_byte matches { None }
     if @unlikely(local.tee $cond_3(local.tee connect("http_request_options.wado/$cm_binding__RequestOptions_get_between_bytes_timeout"(opts)).discriminant == 0) == 0) {
         cold_path;
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_13("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(136)), 56);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handle"), used: 6 }, 6);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_request_options.wado"), used: 25 }, 25);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 20, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("handle"), used: 6 }, 6);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_request_options.wado"), used: 25 }, 25);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 55, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(18, $local_14);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(18, $local_14);
         $cond_3 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_13, 46);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: between matches { None }
 "), used: 37 }, 37);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $cond_3 + 37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("between: "), used: 9 }, 9);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_13.repr, $cond_3 + 37, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("between: "), used: 9 }, 9);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$scalar"(connect, $local_14);
+        "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(connect, $local_14);
         $mv_arg_2 = global:http_request_options.wado::$const_obj_10;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_13, $mv_arg_2.repr, $mv_arg_2.used);
         "core:rt/panic"($local_13.repr, $local_13.used);
@@ -514,7 +516,7 @@ condition: between matches { None }
     }
     $cond_3 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    $cond_3 = "http_request_options.wado/$cm_binding__Response_new"("http_request_options.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, $cond_3).0;
+    $cond_3 = "http_request_options.wado/$cm_binding__Response_new"("http_request_options.wado/$cm_binding__Fields_new"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, $cond_3).0;
     $tv_1 = 0;
     $tv_1 = $cond_3;
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
@@ -1037,7 +1039,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:clocks/types.wado/Duration>$scalar"(payload, f) {
+fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:clocks/types.wado/Duration>$sroa[payload.value]"(payload, f) {
     let self_4: ref "core:prelude/string.wado//String";
     let new_used_16: i32;
     let start_17: i32;
@@ -1534,7 +1536,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$scalar"(self, f) {
+fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wado/Duration>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
@@ -1586,11 +1588,11 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<wasi:clocks/types.wa
         if @unlikely(self.discriminant != 1) {
             unreachable;
         }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:clocks/types.wado/Duration>$scalar"(ref.cast "core:prelude/types.wado//Option<u64>::Some"(self).payload_0, f);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wasi:clocks/types.wado/Duration>$sroa[payload.value]"(ref.cast "core:prelude/types.wado//Option<u64>::Some"(self).payload_0, f);
     }
 }
 
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let x: i64;
     is_negative = self < 0;
@@ -1603,7 +1605,7 @@ fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$scalar
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 

@@ -55,7 +55,7 @@ type "functype//effect_handler_install_held.wado/$cm_binding__Stdout_write_via_s
 
 type "functype//effect_handler_install_held.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
 
@@ -63,9 +63,9 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(23)
 
-type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
+type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(24)
 
-type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
+type "functype//effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call$dae[self]" = fn(ref "core:prelude/string.wado//String");  // TypeId(25)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
@@ -138,7 +138,7 @@ fn "effect_handler_install_held.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -156,7 +156,7 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-    "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_7);
     cold_path;
     unreachable;
@@ -229,7 +229,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call"(message) {
+fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call$dae[self]"(message) {
     let $local_2: ref "core:prelude/string.wado//String";
     let n_29: i32;
     let new_used_33: i32;
@@ -250,11 +250,11 @@ fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0
     n_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     start_34 = builtin::i32_wrap_i64(packed >> 32_i64);
     n_29 = "effect_handler_install_held.wado/$cm_binding__Stdout_write_via_stream"(n_29);
-    "core:rt/write_string_to_stream"(start_34, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_34, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_29);
 }
 
-fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call"(message) {
+fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call$dae[self]"(message) {
     let $local_2: ref "core:prelude/string.wado//String";
     let n_29: i32;
     let new_used_33: i32;
@@ -275,16 +275,16 @@ fn "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1
     n_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     start_34 = builtin::i32_wrap_i64(packed >> 32_i64);
     n_29 = "effect_handler_install_held.wado/$cm_binding__Stdout_write_via_stream"(n_29);
-    "core:rt/write_string_to_stream"(start_34, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_34, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n_29);
 }
 
 fn "closure/effect_handler_install_held.wado/$closure_wrapper_0"($env, $p0) {
-    "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call"($p0);
+    "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_0::$call$dae[self]"($p0);
 }
 
 fn "closure/effect_handler_install_held.wado/$closure_wrapper_1"($env, $p0) {
-    "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call"($p0);
+    "effect_handler_install_held.wado/effect_handler_install_held.wado/$Closure_1::$call$dae[self]"($p0);
 }
 
 export fn "effect_handler_install_held.wado/$cm_export__run" as "run"

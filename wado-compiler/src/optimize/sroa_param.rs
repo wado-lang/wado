@@ -25,7 +25,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
-use crate::nir_package::NirPackage;
+use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -34,7 +34,6 @@ use cranelift_entity::EntityRef;
 use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
 use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
-use crate::name::sroa_param_name;
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
 use crate::optimize::dae::is_dae_sroa_eligible;
@@ -172,15 +171,10 @@ fn collect_and_validate(
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
         let func = project.functions[fid.index()].borrow();
         let Some(key) = func.id else { continue };
-        // This pass's own output. A clone is already scalarized in every
-        // position found for it, and unwrapping it again chains `$scalar$scalar`
-        // names whose depth depends on how many fixpoint iterations ran.
-        if project.sroa_param_clones.contains(&key) {
-            continue;
-        }
         if !is_eligible(&func) {
             continue;
         }
+        let reshape = project.reshapes.get(&key);
         // A receiver is fair game like any parameter, a trait method's included:
         // the original function survives this pass for the calls it cannot
         // retarget — see `mint_scalarized_clones`.
@@ -198,6 +192,14 @@ fn collect_and_validate(
             else {
                 continue;
             };
+            // A struct this position was already unwrapped from reaches itself
+            // through its one field, and unwrapping it again would never end.
+            if reshape.is_some_and(|r| {
+                matches!(r.shape(pi), ParamShape::Narrowed(path)
+                    if path.iter().any(|p| p.struct_key == info.struct_key))
+            }) {
+                continue;
+            }
             info.form = func.body.as_ref().map_or(FieldForm::Value, |body| {
                 param_field_form(body, param.local_index)
             });
@@ -666,16 +668,6 @@ fn may_write_aliasing_location(
 // Phase 2 — use checker (arena)
 // -----------------------------------------------------------------------
 
-/// How the callee holds the field, and so how the scalar parameter is typed.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum FieldForm {
-    /// Read as a value — the canonical `Box<T>` case, where a reference would
-    /// only re-box what the unwrap just removed.
-    Value,
-    Shared,
-    Mutable,
-}
-
 impl FieldForm {
     fn of(self, type_table: &mut TypeTable, inner: TypeId) -> TypeId {
         match self {
@@ -892,30 +884,59 @@ fn mint_scalarized_clones(
     }
 
     let mut clones: IndexMap<FnKey, FnKey> = IndexMap::default();
-    let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
     for (key, positions) in &by_fn {
         let mut clone = project.functions[key.index()].borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
-        let name = sroa_param_name(&clone.name);
-        clone.name.clone_from(&name);
-        if let Some(info) = &mut clone.method_info {
-            info.method_name = sroa_param_name(&info.method_name);
+        let mut reshape = project
+            .reshapes
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| Reshape::root(&clone));
+        for pi in positions {
+            let info = &candidates[&(*key, *pi)];
+            let projection = SroaParamProjection {
+                struct_key: info.struct_key.clone(),
+                field_index: info.field_index,
+                field_name: info.field_name.clone(),
+                form: info.form,
+            };
+            let shape = reshape.shape_mut(*pi);
+            match shape {
+                ParamShape::Kept => *shape = ParamShape::Narrowed(vec![projection]),
+                ParamShape::Narrowed(path) => path.push(projection),
+                ParamShape::Dropped => unreachable!("a dropped parameter is no candidate"),
+            }
         }
-        // This pass runs once per fixpoint iteration, so a clone it minted on an
-        // earlier one already stands under this name. Reuse it rather than mint
-        // a second function with the same identity — but only when this run
-        // arrives at the same signature. A body another pass has since changed
-        // can resolve a different field, or a different set of positions, and
-        // retargeting calls to a clone shaped by the earlier answer passes it
-        // arguments it does not take. Leaving them on the original is always
-        // sound: the original still has the shape they pass.
+        let (name, method_name) = reshape.names();
+        clone.name.clone_from(&name);
+        if let (Some(info), Some(method)) = (&mut clone.method_info, method_name) {
+            info.method_name = method;
+        }
+        // The name spells the clone's signature against its root, and this
+        // pass runs once per fixpoint iteration and reaches one shape by more
+        // than one route, so the clone this run wants may already stand under
+        // it. A function `dae` or `drve` reshapes since is renamed for its new
+        // shape, so whatever stands under the name takes what the name says.
         let func_key =
             FunctionRef::from_resolved(&clone, clone.module_source.clone()).function_id();
         if let Some(&existing) = project.func_index.get(&func_key) {
-            if standing_clone_matches(project, existing, &clone, *key, candidates) {
-                clones.insert(*key, existing);
-            }
+            // The scalar type where this run scalarizes, the source's elsewhere.
+            let wanted: Vec<TypeId> = clone
+                .params
+                .iter()
+                .enumerate()
+                .map(|(pi, from)| {
+                    candidates
+                        .get(&(*key, pi))
+                        .map_or(from.type_id, |info| info.scalar_type_id)
+                })
+                .collect();
+            assert!(
+                project.answers_calls(existing, &wanted, clone.return_type),
+                "[NIR] sroa_param: {name} stands with another signature"
+            );
+            clones.insert(*key, existing);
             continue;
         }
         let id = FuncId::new(next_id);
@@ -956,52 +977,21 @@ fn mint_scalarized_clones(
         }
 
         project.func_index.insert(func_key, id);
-        project.sroa_param_clone_fields.insert(
-            id,
-            positions
-                .iter()
-                .map(|pi| {
-                    (
-                        clone.params[*pi].local_index,
-                        candidates[&(*key, *pi)].struct_key.clone(),
-                    )
-                })
-                .collect(),
-        );
+        project.sroa_param_clones.insert(id);
+        project.reshapes.insert(id, reshape);
         copy_function_strings(project, &origin, (clone.module_source.clone(), name));
         clones.insert(*key, id);
-        minted.push(Rc::new(RefCell::new(clone)));
-    }
-    for f in minted {
-        let id = f.borrow().id.expect("a minted clone is stamped with an id");
-        touched.insert(project.functions.len());
-        project.sroa_param_clones.insert(id);
-        project.functions.push(f);
+        // Pushed now, so a later source in this run reaching the same clone
+        // finds it standing.
+        assert_eq!(
+            id.index(),
+            project.functions.len(),
+            "a FuncId is its position"
+        );
+        touched.insert(id.index());
+        project.functions.push(Rc::new(RefCell::new(clone)));
     }
     clones
-}
-
-/// Whether the clone already standing under this name is the one this run would
-/// mint: same return type, same arity, and the same type at every position — the
-/// scalar type where this run scalarizes, the original's elsewhere.
-fn standing_clone_matches(
-    project: &NirPackage,
-    existing: FnKey,
-    fresh: &NirFunction,
-    key: FnKey,
-    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
-    let standing = project.functions[existing.index()].borrow();
-    standing.return_type == fresh.return_type
-        && standing.params.len() == fresh.params.len()
-        && standing.params.iter().enumerate().all(|(pi, param)| {
-            // `fresh` is still the original's copy here, so its type is what a
-            // position this run does not scalarize keeps.
-            let want = candidates
-                .get(&(key, pi))
-                .map_or(fresh.params[pi].type_id, |info| info.scalar_type_id);
-            param.type_id == want
-        })
 }
 
 /// Give the clone its own entry in `function_strings`, which is name-keyed: DCE
@@ -1146,7 +1136,6 @@ fn rewrite_call_sites(
     }
 
     let type_table_rc = project.type_table.clone();
-    let clone_fields = project.sroa_param_clone_fields.clone();
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
@@ -1155,7 +1144,24 @@ fn rewrite_call_sites(
         // through. Read from the package, not from this run's `clones`: a clone
         // minted on an earlier fixpoint iteration is still a clone, and losing
         // that fact projects the wrapper's field onto it a second time.
-        let scalar_param_struct = clone_fields.get(&key).cloned().unwrap_or_default();
+        let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = project
+            .reshapes
+            .get(&key)
+            .map(|reshape| {
+                func.params
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(position, param)| match reshape.shape(position) {
+                        ParamShape::Narrowed(path) => {
+                            let held = path.last().expect("a narrowing projects a field");
+                            Some((param.local_index, held.struct_key.clone()))
+                        }
+                        ParamShape::Kept => None,
+                        ParamShape::Dropped => unreachable!("a dropped parameter is gone"),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
             let type_table = type_table_rc.borrow();
@@ -1320,7 +1326,7 @@ fn plan_call_site(
 ///
 /// A clone's own scalarized parameter is the reason to ask. Unwrapping chains:
 /// `Formatter::write(&mut self)` reading only `self.buf` becomes
-/// `write$scalar(buf: &mut String)`, and a later round scalarizes that `String`
+/// `write$sroa[self.buf](buf: &mut String)`, and a later round scalarizes that `String`
 /// in turn. A caller already holding the inner `String` must not have
 /// `Formatter`'s `buf` projected onto it a second time.
 fn classify_arg(

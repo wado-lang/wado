@@ -48,7 +48,7 @@ type "functype//wasi_random.wado/$cm_binding__InsecureSeed_get_insecure_seed" = 
 
 type "functype//wasi_random.wado/$cm_export__run" = fn();  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(21)
 
@@ -103,21 +103,21 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasi_random.wado::$const_obj_11;
-    "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     if (r1 != 0_i64) | (r2 != 0_i64) {
         rx_13 = builtin::i32_wrap_i64(local.tee packed_12("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(packed_12 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_10;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     } else {
         rx_13 = builtin::i32_wrap_i64(local.tee packed_12("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(packed_12 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_9;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     }
     if r1 != r2 {
@@ -125,14 +125,14 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
         tx_14 = builtin::i32_wrap_i64(r2 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_8;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     } else {
         rx_13 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(r2 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_7;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     }
     r2 = "wasi_random.wado/$cm_binding__Insecure_get_insecure_random_u64"();
@@ -141,21 +141,21 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     tx_14 = builtin::i32_wrap_i64(packed_12 >> 32_i64);
     rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
     $mv_arg_2 = global:wasi_random.wado::$const_obj_6;
-    "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     if r2 != r1 {
         rx_13 = builtin::i32_wrap_i64(local.tee r1("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(r1 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_5;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     } else {
         rx_13 = builtin::i32_wrap_i64(local.tee r1("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(r1 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_4;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     }
     r1 = local.tee seed("wasi_random.wado/$cm_binding__InsecureSeed_get_insecure_seed"()).0;
@@ -164,28 +164,28 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     tx_14 = builtin::i32_wrap_i64(packed_12 >> 32_i64);
     rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
     $mv_arg_2 = global:wasi_random.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     if (r1 != 0_i64) | (r2 != 0_i64) {
         rx_13 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(r2 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_2;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     } else {
         rx_13 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
         tx_14 = builtin::i32_wrap_i64(r2 >> 32_i64);
         rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
         $mv_arg_2 = global:wasi_random.wado::$const_obj_1;
-        "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+        "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
     }
     rx_13 = builtin::i32_wrap_i64(local.tee r2("wasi/stream-new"()));
     tx_14 = builtin::i32_wrap_i64(r2 >> 32_i64);
     rx_13 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_13);
     $mv_arg_2 = global:wasi_random.wado::$const_obj_0;
-    "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_13);
 }
 
@@ -217,7 +217,7 @@ fn "wasi_random.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);

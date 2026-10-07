@@ -1,0 +1,44 @@
+// Test: a parameter `sroa_param` can scalarize only after its function was
+// already cloned for another one still gets scalarized.
+//
+// A derived `Serialize` for `Entities` serializes `Urls` twice, once through
+// `Option`. The clone that scalarized `Urls`'s receiver still took the
+// `JsonSerializer` around the output buffer, because inlining had not yet
+// reduced that parameter to its one field when the clone was minted. Every
+// call then built the wrapper only to pass it.
+//
+// The clone that narrows both parameters is named for `Urls::serialize` and
+// both narrowings, however many rounds it took to reach: the name spells what
+// makes the clone one.
+
+use { println, Stdout } from "core:cli";
+use { to_string } from "core:json";
+use { Serialize } from "core:serde";
+
+struct Urls {
+    urls: List<i32>,
+}
+impl Serialize for Urls;
+
+struct Entities {
+    description: Urls,
+    url: Option<Urls> = null,
+}
+impl Serialize for Entities;
+
+export fn run() with Stdout {
+    let e = Entities { description: Urls { urls: [1, 2] }, url: Option::Some(Urls { urls: [3] }) };
+    println(to_string(&e).unwrap());
+}
+
+__DATA__
+{
+    "stdout": "{\"description\":{\"urls\":[1,2]},\"url\":{\"urls\":[3]}}\n",
+    "wir_expect:O2": [
+        "fn \"core:serde/opt_sroa_param_scalarizes_clone_again.wado/Urls^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.urls,s.buf]\"("
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"core:json//JsonSerializer\"",
+        "$sroa[self.urls]$sroa"
+    ]
+}

@@ -178,8 +178,17 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
+      # Coverage runs the stdlib tests as well, so a level that measures it
+      # does not run them a second time. Coverage must not depend on -O, and
+      # the two extremes holding the same baseline say so.
       matrix:
         level: [O0, O1, O2, O3, Os]
+        include:
+          - { level: O0, stdlib: test-stdlib-coverage }
+          - { level: O1, stdlib: test-stdlib }
+          - { level: O2, stdlib: test-stdlib }
+          - { level: O3, stdlib: test-stdlib-coverage }
+          - { level: Os, stdlib: test-stdlib }
     env:
       LEVEL: ${{ matrix.level }}
     steps:
@@ -197,13 +206,7 @@ jobs:
       - name: e2e "fixture_test_${LEVEL,,}"
         working-directory: wado-compiler/tests
         run: ../../target/debug/e2e "fixture_test_${LEVEL,,}"
-      - run: mise run test-stdlib "$LEVEL"
-      # Coverage does not depend on -O, so one level gates it.
-      - if: matrix.level == 'O2'
-        run: mise run test-stdlib-coverage
-      # This holds that: -O0 and -O3 must report the same coverage.
-      - if: matrix.level == 'O3'
-        run: mise run check-coverage-levels
+      - run: mise run "${{ matrix.stdlib }}" "$LEVEL"
 
       # Tier 1 is an optimizer fold, so these run at every level like the stdlib.
       - run: mise run test-log-levels "$LEVEL"

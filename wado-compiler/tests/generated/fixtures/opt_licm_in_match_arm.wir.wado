@@ -31,21 +31,21 @@ type "functype//opt_licm_in_match_arm.wado/$cm_binding__Stdout_write_via_stream"
 
 type "functype//opt_licm_in_match_arm.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//opt_licm_in_match_arm.wado/accumulate$spec0" = fn(i32, i32) -> i32;  // TypeId(13)
+type "functype//opt_licm_in_match_arm.wado/accumulate$spec0$dae[mode]" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//opt_licm_in_match_arm.wado/accumulate$spec2" = fn(i32) -> i32;  // TypeId(14)
+type "functype//opt_licm_in_match_arm.wado/accumulate$spec2$dae[mode,n]" = fn(i32) -> i32;  // TypeId(14)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
@@ -80,36 +80,36 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
     n = black_box(5);
     t = black_box(100);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_23 = local.tee n("opt_licm_in_match_arm.wado/accumulate$spec0"(n, t)) < 0;
+    is_negative_23 = local.tee n("opt_licm_in_match_arm.wado/accumulate$spec0$dae[mode]"(n, t)) < 0;
     n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_27(x_27 = builtin::i64_extend_i32_s(n); select i64(x_27 < 0_i64, 0_i64 - x_27, x_27)));
-    is_negative_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_2, is_negative_23, n);
+    is_negative_23 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, is_negative_23, n);
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, is_negative_23, x_27, n);
     n = builtin::i32_wrap_i64(local.tee x_27("wasi/stream-new"()));
     is_negative_23 = builtin::i32_wrap_i64(x_27 >> 32_i64);
     n = "opt_licm_in_match_arm.wado/$cm_binding__Stdout_write_via_stream"(n);
-    "core:rt/write_string_to_stream"(is_negative_23, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_23, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n);
     n = builtin::i32_wrap_i64(local.tee x_27("wasi/stream-new"()));
     is_negative_23 = builtin::i32_wrap_i64(x_27 >> 32_i64);
     n = "opt_licm_in_match_arm.wado/$cm_binding__Stdout_write_via_stream"(n);
     $local_2 = global:opt_licm_in_match_arm.wado::$const_obj_4;
-    "core:rt/write_string_to_stream"(is_negative_23, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_23, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(n);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    n = local.tee t("opt_licm_in_match_arm.wado/accumulate$spec2"(t)) < 0;
+    n = local.tee t("opt_licm_in_match_arm.wado/accumulate$spec2$dae[mode,n]"(t)) < 0;
     t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_27(x_27 = builtin::i64_extend_i32_s(t); select i64(x_27 < 0_i64, 0_i64 - x_27, x_27)));
-    n = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($local_2, n, t);
+    n = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_2, n, t);
     "core:prelude/primitive.wado/write_decimal_digits"($local_2.repr, n, x_27, t);
     t = builtin::i32_wrap_i64(local.tee x_27("wasi/stream-new"()));
     n = builtin::i32_wrap_i64(x_27 >> 32_i64);
     t = "opt_licm_in_match_arm.wado/$cm_binding__Stdout_write_via_stream"(t);
-    "core:rt/write_string_to_stream"(n, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(t);
     t = builtin::i32_wrap_i64(local.tee x_27("wasi/stream-new"()));
     n = builtin::i32_wrap_i64(x_27 >> 32_i64);
     t = "opt_licm_in_match_arm.wado/$cm_binding__Stdout_write_via_stream"(t);
     $local_2 = global:opt_licm_in_match_arm.wado::$const_obj_3;
-    "core:rt/write_string_to_stream"(n, $local_2.repr, $local_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(t);
 }
 
@@ -122,7 +122,7 @@ fn "opt_licm_in_match_arm.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "opt_licm_in_match_arm.wado/accumulate$spec0"(n, t) {
+fn "opt_licm_in_match_arm.wado/accumulate$spec0$dae[mode]"(n, t) {
     let sum: i32;
     let i: i32;
     sum = 0;
@@ -139,7 +139,7 @@ fn "opt_licm_in_match_arm.wado/accumulate$spec0"(n, t) {
     return sum;
 }
 
-fn "opt_licm_in_match_arm.wado/accumulate$spec2"(t) {
+fn "opt_licm_in_match_arm.wado/accumulate$spec2$dae[mode,n]"(t) {
     return t + 1;
 }
 
@@ -226,7 +226,7 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
+fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
@@ -304,7 +304,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     self.repr = new_repr;
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_29: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {

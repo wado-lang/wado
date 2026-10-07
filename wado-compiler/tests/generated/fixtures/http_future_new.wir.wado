@@ -267,6 +267,7 @@ import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-dr
 import fn wasi/future-write from "wasi/future-write";
 
 global global:http_future_new.wado::$const_obj_0: ref "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 0 } };
+global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 
 fn "http_future_new.wado/$cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
@@ -300,9 +301,19 @@ fn "http_future_new.wado/$cm_task_entry__handle"(request) {
     let rx_185: i32;
     let tx_186: i32;
     drop("wasi/future-new"());
+<<<<<<< HEAD
     rx_185 = builtin::i32_wrap_i64(local.tee packed_184("wasi/future-new"()));
     tx_186 = builtin::i32_wrap_i64(packed_184 >> 32_i64);
     rx_185 = "http_future_new.wado/$cm_binding__Response_new"("http_future_new.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, rx_185).0;
+||||||| 14012c0eb7
+    rx_184 = builtin::i32_wrap_i64(local.tee packed_183("wasi/future-new"()));
+    tx_185 = builtin::i32_wrap_i64(packed_183 >> 32_i64);
+    rx_184 = "http_future_new.wado/$cm_binding__Response_new"("http_future_new.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 }, rx_184).0;
+=======
+    rx_184 = builtin::i32_wrap_i64(local.tee packed_183("wasi/future-new"()));
+    tx_185 = builtin::i32_wrap_i64(packed_183 >> 32_i64);
+    rx_184 = "http_future_new.wado/$cm_binding__Response_new"("http_future_new.wado/$cm_binding__Fields_new"(), global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>$0, rx_184).0;
+>>>>>>> origin/main
     $tv_1 = 0;
     $tv_1 = rx_185;
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
