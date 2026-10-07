@@ -11,7 +11,9 @@ use crate::hashmap::IndexMap;
 use crate::ast::{
     Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport, cm_import_of,
 };
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
+use crate::tir::TirFunction;
 
 /// Well-known world name for the test world.
 ///
@@ -283,7 +285,47 @@ pub struct ExportMapping {
     /// The world export it provides.
     pub export_name: String,
     /// The Wado function providing it.
-    pub function: String,
+    pub function: DefId,
+    /// That function's name, for diagnostics.
+    pub function_name: String,
+}
+
+/// Every `export(World::name)` in the entry module.
+#[derive(Debug, Clone, Default)]
+pub struct ExportMappings(Vec<ExportMapping>);
+
+impl ExportMappings {
+    /// Wrap the mappings the entry module declares.
+    #[must_use]
+    pub fn new(mappings: Vec<ExportMapping>) -> Self {
+        Self(mappings)
+    }
+
+    /// Each mapping, in declaration order.
+    pub fn iter(&self) -> std::slice::Iter<'_, ExportMapping> {
+        self.0.iter()
+    }
+
+    /// The export of `world` that `func` provides: the one `export(…)` maps it
+    /// to, none when `export(…)` maps it only to other worlds, and otherwise
+    /// its own name when it is an `export fn`.
+    #[must_use]
+    pub fn provided_export<'a>(&'a self, world: &str, func: &'a TirFunction) -> Option<&'a str> {
+        if !func.is_export {
+            return None;
+        }
+        let mut mapped = self
+            .0
+            .iter()
+            .filter(|m| func.def_id == Some(m.function))
+            .peekable();
+        if mapped.peek().is_none() {
+            return Some(&func.name);
+        }
+        mapped
+            .find(|m| m.world == world)
+            .map(|m| m.export_name.as_str())
+    }
 }
 
 impl WorldRegistry {

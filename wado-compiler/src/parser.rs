@@ -1219,13 +1219,6 @@ impl Parser {
             reject_resource_linearity(&attrs)?;
         }
 
-        // Check for contextual keyword "test" (identifier followed by string or block)
-        if let TokenKind::Ident(name) = self.peek_kind()
-            && name == "test"
-        {
-            return self.parse_test_decl(attrs).map(Item::Test);
-        }
-
         if !export_targets.is_empty() && !self.check(&TokenKind::Fn) {
             return Err(ParseError {
                 message: "`export(…)` names the world export a function provides, \
@@ -1233,6 +1226,13 @@ impl Parser {
                     .to_string(),
                 span: self.peek().span,
             });
+        }
+
+        // Check for contextual keyword "test" (identifier followed by string or block)
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && name == "test"
+        {
+            return self.parse_test_decl(attrs).map(Item::Test);
         }
 
         match self.peek_kind() {
@@ -2055,18 +2055,15 @@ impl Parser {
                 segments.push(p.consume_ident()?);
             }
             let span = start.merge(&p.previous().span);
-            let (namespace, world, name) = match <[String; 2]>::try_from(segments) {
-                Ok([world, name]) => (None, world, name),
-                Err(segments) => match <[String; 3]>::try_from(segments) {
-                    Ok([namespace, world, name]) => (Some(namespace), world, name),
-                    Err(_) => {
-                        return Err(p.error_at_span(
-                            span,
-                            "an export target is `World::name` or `ns::World::name`",
-                        ));
-                    }
-                },
-            };
+            if !(2..=3).contains(&segments.len()) {
+                return Err(p.error_at_span(
+                    span,
+                    "an export target is `World::name` or `ns::World::name`",
+                ));
+            }
+            let name = segments.pop().expect("two segments at least");
+            let world = segments.pop().expect("two segments at least");
+            let namespace = segments.pop();
             Ok(ExportTarget {
                 id: p.alloc_ast_id(),
                 namespace,

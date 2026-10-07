@@ -16,7 +16,7 @@ use crate::synthesis::effect_dispatch;
 use crate::synthesis::effect_dispatch::{DispatchPlan, ResourceWrapperIndex};
 use crate::tir::TirModule;
 use crate::token::Span;
-use crate::world_registry::{self, CallbackExport, ExportMapping, WorldInfo, WorldRegistry};
+use crate::world_registry::{self, CallbackExport, ExportMappings, WorldInfo, WorldRegistry};
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
@@ -71,7 +71,7 @@ pub struct Package {
     /// `test` world is special-cased.
     pub lib_world_info: Option<WorldInfo>,
     /// What each `export(World::name)` in the entry module names.
-    pub export_mappings: Vec<ExportMapping>,
+    pub export_mappings: ExportMappings,
     /// `--test-name` substring filters (test world only). When non-empty, only
     /// `test "name"` blocks whose name contains one of these strings are kept
     /// as component exports; the rest are dropped before adapter synthesis so
@@ -180,7 +180,7 @@ impl Package {
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
             lib_world_info: None,
-            export_mappings: Vec::new(),
+            export_mappings: ExportMappings::default(),
             test_name_filters: Vec::new(),
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),

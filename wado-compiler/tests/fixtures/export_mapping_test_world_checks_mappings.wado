@@ -1,0 +1,13 @@
+// The test world exports neither world's entry points, and still checks what
+// each `export(…)` names.
+use { Command } from "wasi:cli";
+
+export(Command::start) fn main() {
+}
+
+test {
+    assert true;
+}
+
+__DATA__
+{"test": {}, "compile_error": "world `wasi:cli/command` has no export `start` for `fn main` to provide"}

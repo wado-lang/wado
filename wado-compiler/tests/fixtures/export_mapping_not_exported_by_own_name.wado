@@ -1,0 +1,9 @@
+// A mapped function is exported only under the name it maps to: `handle`
+// provides `wasi:cli/command`'s `run`, so the service has no `handle`.
+use { Command } from "wasi:cli";
+
+export(Command::run) fn handle() {
+}
+
+__DATA__
+{"wasi:http/service": {}, "compile_error": "function `handle` is required as a world entry point but is not defined. Define it with: `export fn handle(...)`"}
