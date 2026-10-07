@@ -71,6 +71,9 @@ pub struct BodyMemo<T> {
     cursor: usize,
 }
 
+/// The edit count a forgotten [`BodyMemo`] entry holds, which no gate reaches.
+const FORGOTTEN: u64 = u64::MAX;
+
 impl<T> Default for BodyMemo<T> {
     fn default() -> Self {
         Self {
@@ -84,10 +87,19 @@ impl<T> Default for BodyMemo<T> {
 }
 
 impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
-    /// Forget every entry, for a caller whose facts read something beyond the
-    /// body that has since moved.
-    pub fn clear(&mut self) {
-        *self = Self::default();
+    /// Forget the entries `stale` picks, for a caller whose facts read
+    /// something beyond the body that has since moved.
+    pub fn forget_where(&mut self, stale: impl Fn(&T) -> bool) {
+        for (edit, fact) in self.edits.iter_mut().zip(&self.facts) {
+            if stale(fact) {
+                *edit = FORGOTTEN;
+            }
+        }
+    }
+
+    /// The facts as the last refresh left them.
+    pub fn facts(&self) -> &[T] {
+        &self.facts
     }
 
     /// Every function's facts as `project` stands, indexed by store position.
@@ -96,7 +108,19 @@ impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
         &mut self,
         project: &NirPackage,
         gate: &FunctionGate,
+        of: impl FnMut(&NirFunction) -> T,
+    ) -> &[T] {
+        self.refresh_observing(project, gate, of, |_, _, _| {})
+    }
+
+    /// [`Self::refresh`], handing `rederived` each entry it re-derives with
+    /// the entry it replaces, `None` for a function seen for the first time.
+    pub fn refresh_observing(
+        &mut self,
+        project: &NirPackage,
+        gate: &FunctionGate,
         mut of: impl FnMut(&NirFunction) -> T,
+        mut rederived: impl FnMut(usize, Option<&T>, &T),
     ) -> &[T] {
         let len = project.functions.len();
         if self.gate != Some(gate.id) || self.facts.len() > len {
@@ -111,6 +135,7 @@ impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
                 continue;
             }
             let fact = of(&f.borrow());
+            rederived(i, self.facts.get(i), &fact);
             if i < self.facts.len() {
                 self.edits[i] = edit;
                 self.facts[i] = fact;
