@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791382796615,
+  "lastUpdate": 1791407678039,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65045,6 +65045,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e6bf15f9beebc8b5803cfb5e9c7a6b9c58ad1095"
         },
         "date": 1791382796196,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de37f2a5c9c32bddf07cdb55b8ff5de752d8b795",
+          "message": "Merge pull request #2304 from wado-lang/skill-ci-timing\n\nperf(ci): a stdlib coverage run doubles as the stdlib test run at O0 and O3",
+          "timestamp": "2026-10-08T05:58:07+09:00",
+          "tree_id": "7d7448ed6490436893ff6d91a0b2aa5cf0329853",
+          "url": "https://github.com/wado-lang/wado/commit/de37f2a5c9c32bddf07cdb55b8ff5de752d8b795"
+        },
+        "date": 1791407677452,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
