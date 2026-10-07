@@ -166,8 +166,6 @@ _Fields are private._
 
 ##### `fn skip(&mut self) -> Result<(), DeserializeError>`
 
-`#[coverage(off)]`
-
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
 ### `pub struct ArgvSeqAccess`
@@ -193,8 +191,6 @@ _Fields are private._
 ##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
 
 ##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
-
-`#[coverage(off)]`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 

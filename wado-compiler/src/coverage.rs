@@ -621,9 +621,14 @@ impl Planner {
         }
     }
 
-    /// Whether `stmts` are one [`is_unreachable`](Self::is_unreachable) call and nothing else.
+    /// Whether `stmts` are one [`is_unreachable`](Self::is_unreachable) call,
+    /// returned or not, and nothing else.
     fn only_unreachable(&self, stmts: &[Stmt]) -> bool {
-        matches!(stmts, [Stmt::Expr(s)] if self.is_unreachable(&s.expr))
+        match stmts {
+            [Stmt::Expr(s)] => self.is_unreachable(&s.expr),
+            [Stmt::Return(r)] => r.value.as_ref().is_some_and(|v| self.is_unreachable(v)),
+            _ => false,
+        }
     }
 
     /// The region `block` is, unless it holds
@@ -1454,6 +1459,8 @@ mod tests {
             ("", "panic(\"x\");", &planned),
             ("", "unreachable::<i32>();", &planned),
             ("", "g(); unreachable();", &planned),
+            ("", "return unreachable();", &unplanned),
+            ("", "return panic(\"x\");", &planned),
         ];
         for (prefix, then, kinds) in shapes {
             assert_eq!(&plan_trap(prefix, then), kinds, "{prefix} {then}");

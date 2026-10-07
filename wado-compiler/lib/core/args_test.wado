@@ -534,7 +534,8 @@ test "from_env parses the process arguments" {
 
 // A hand-written impl reaches the struct and variant accesses the generated
 // code never calls.
-struct Skipper {}
+struct Skipper {
+}
 impl Deserialize for Skipper {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Skipper, DeserializeError> {
         let mut s = d.begin_struct("Skipper", 0)?;
@@ -544,7 +545,8 @@ impl Deserialize for Skipper {
     }
 }
 
-struct UnitProbe {}
+struct UnitProbe {
+}
 impl Deserialize for UnitProbe {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<UnitProbe, DeserializeError> {
         let mut v = d.begin_variant("UnitProbe", 1)?;
