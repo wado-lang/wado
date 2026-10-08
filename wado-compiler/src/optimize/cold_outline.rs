@@ -14,18 +14,8 @@
 //! reads. Ending the region at the last statement that can travel would take
 //! that shape, which `core:json`'s escape tail splits by hand for want of it.
 
-<<<<<<< HEAD
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use cranelift_entity::EntityRef;
 
-||||||| 037dba480
-use std::cell::RefCell;
-use std::rc::Rc;
-
-=======
->>>>>>> origin/main
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
@@ -167,7 +157,7 @@ fn find_region(
     let descriptors = descriptor_cache.descriptors(project);
     let params = func.params.len();
     let type_table = project.type_table.borrow();
-    let root = root_copied.then_some((body.root, false));
+    let root = root_copied.then_some((body.root(), false));
     for (block, under_loop) in root.into_iter().chain(valueless_blocks(body, &type_table)) {
         let stmts = &body.blocks[block].stmts;
         let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {
