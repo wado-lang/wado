@@ -113,7 +113,7 @@ identifier
     ;
 
 // A declared or type name. The compiler lexes `resume` as a name and refuses it
-// only once bound; it is `resume value` only where an expression begins.
+// only once bound; it is `resume value;` only where a statement begins.
 name
     : IDENTIFIER
     | 'resume'
@@ -347,6 +347,7 @@ statement
     | localItem
     | letStatement ';'?
     | returnStatement ';'?
+    | resumeStatement ';'?
     | taskReturnStatement ';'?
     | breakStatement ';'?
     | continueStatement ';'?
@@ -389,7 +390,7 @@ taskReturnStatement
     : 'task' 'return' expression?
     ;
 
-resumeExpr
+resumeStatement
     : 'resume' expression
     ;
 
@@ -495,7 +496,6 @@ primary
     : literal
     | 'self'
     | compileTimeExpr
-    | resumeExpr
     | structLiteral
     | braceLiteral
     | block
@@ -589,7 +589,6 @@ primaryNoStruct
     : literal
     | 'self'
     | compileTimeExpr
-    | resumeExpr
     | taggedTemplate
     | exprPath
     | tupleOrArrayLiteral
@@ -664,7 +663,7 @@ matchExpr
     ;
 
 matchArm
-    : pattern ('&&' expression)? '=>' (block | ifStatement | 'return' expression? | expression)
+    : pattern ('&&' expression)? '=>' (block | ifStatement | 'return' expression? | resumeStatement | expression)
     ;
 
 pattern

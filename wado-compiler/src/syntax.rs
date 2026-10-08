@@ -244,20 +244,22 @@ pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("Self", KeywordCategory::StorageType),
 ];
 
-/// Contextual keywords that begin an expression, so a name spelled like one
-/// could be declared but never read. Only a member may take one.
-pub const EXPRESSION_KEYWORDS: &[&str] = &["resume"];
+/// Contextual keywords that begin a statement and are an error where an
+/// expression goes, so a name spelled like one could be declared but never
+/// read. Only a member may take one.
+pub const STATEMENT_KEYWORDS: &[&str] = &["resume"];
 
+/// Whether `name` is one of the [`STATEMENT_KEYWORDS`].
 #[must_use]
-pub fn is_expression_keyword(name: &str) -> bool {
-    EXPRESSION_KEYWORDS.contains(&name)
+pub fn is_statement_keyword(name: &str) -> bool {
+    STATEMENT_KEYWORDS.contains(&name)
 }
 
-/// What a declaration naming an [`EXPRESSION_KEYWORDS`] entry reports, in
+/// What a declaration naming a [`STATEMENT_KEYWORDS`] entry reports, in
 /// whichever phase declares it.
 #[must_use]
-pub fn expression_keyword_name_message(name: &str) -> String {
-    format!("`{name}` cannot be a name: it is the keyword that begins `{name} value`")
+pub fn statement_keyword_name_message(name: &str) -> String {
+    format!("`{name}` cannot be a name: it is the keyword that begins `{name} value;`")
 }
 
 /// Keywords the parser also accepts as a name (`let type = 1`), which

@@ -8,13 +8,15 @@ The full dispatch protocol — front-end, elaborator/effect-check, synthesis pas
 codegen — is shipping. Detailed development history is in the git log; this
 section records only the current state.
 
-- [x] Front-end: `with E => h do { ... }`, `resume value`, and an explicit
+- [x] Front-end: `with E => h do { ... }`, `resume value;`, and an explicit
   `..trap` / `..forward` rest clause in `impl Effect for Type`. Bare `..`
-  is rejected.
-- [x] Elaborator / effect-check: `TirExprKind::WithHandler` and
-  `TirExprKind::Resume` carry the structure through TIR. The elaborator
-  validates effect-decl reference, handler-impls-effect relationship,
-  and `resume`-only-in-handler-method. Effect-check skips handled
+  is rejected. `resume value;` parses to a `Stmt::Return` carrying
+  `ReturnKeyword::Resume`.
+- [x] Elaborator / effect-check: `TirExprKind::WithHandler` carries the
+  structure through TIR, and `resume` reifies to `TirStmtKind::Return`. The
+  elaborator validates effect-decl reference, handler-impls-effect
+  relationship, and which of `return` / `resume` a body may write.
+  Effect-check skips handled
   effects from caller requirements while walking the body.
 - [x] Dispatch synthesis (`synthesis/effect_dispatch.rs`) emits, per effect:
   a `$Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
@@ -297,7 +299,9 @@ impl TcpSocket for MinimalTcp {
 
 ### Resume Keyword
 
-`resume` is a control flow expression similar to `return`. It passes a value to the computation and transfers control. The expression `resume` itself evaluates to `()`.
+`resume value;` is a statement, like `return value;`: it passes a value to the computation and transfers control, and has no value of its own. Writing it where an expression goes (`let x = resume 1;`) is a parse error.
+
+A handler always resumes its caller: Wado has no abort. So every path through a handler method ends in a `resume` or diverges, and `return`, `?`, and falling off the end are compile errors, even for an operation that returns `()`: there is no implicit `resume ()`.
 
 ```wado
 impl Stdin for MockStdin {
@@ -323,14 +327,7 @@ impl FileSystem for ManagedFs {
 
 One-shot only. Each `resume` executes at most once. Multi-shot continuations are a future consideration pending Wasm Stack Switching support.
 
-Execution model depends on whether post-resume code exists:
-
-| Pattern        | Example                                | Implementation                |
-| -------------- | -------------------------------------- | ----------------------------- |
-| No post-resume | `fn op() { resume value }`             | `resume` compiles to `return` |
-| Post-resume    | `fn op() { resume value; cleanup(); }` | Wasm Stack Switching          |
-
-Most handlers (test mocks, DI) have no post-resume code and use the `return` optimization. Post-resume handlers (resource cleanup, generators) require Wasm Stack Switching, which is available on amd64 in wasmtime.
+`resume` ends the handler method as `return` does, so a statement after it never runs. A handler that runs code once its caller has finished is an open question; see [Known Gaps](#known-gaps).
 
 ### Effect Forwarding
 
@@ -579,7 +576,7 @@ impl Stdout for MockStdout {
         let [f, ftx] = Future::<Result<(), ErrorCode>>::new();
         ftx.write(Result::<(), ErrorCode>::Ok(()));
         ftx.drop();
-        resume f  // no post-resume → compiles to return
+        resume f
     }
 }
 
@@ -652,7 +649,7 @@ impl Client for MockClient {
         let [resp, _] = Response::new(headers, Option::Some(body_rx), trailers_rx);
         resp.set_status_code(self.status);
 
-        resume Result::<Response, ErrorCode>::Ok(resp)  // no post-resume
+        resume Result::<Response, ErrorCode>::Ok(resp)
     }
     ..trap
 }
@@ -676,73 +673,6 @@ test "http-get fetches and prints" {
 
 Note: `Fields::new()`, `Response::new()` etc. are HTTP resource operations that forward to the outer scope. This test requires a world that imports `wasi:http` types (e.g., `wasi:http/service`), or additional handlers for those resources.
 
-#### HTTP Server Middleware Example (Post-Resume)
-
-A timing middleware uses post-resume to measure request processing time. The handler delegates to the outer `Handler` implementation via effect forwarding, resumes the response to the caller, then records metrics:
-
-```wado
-struct TimingMiddleware {
-    mut log: List<[String, u64]>,
-}
-
-impl Handler for TimingMiddleware {
-    fn handle(&mut self, request: Request) -> Result<Response, ErrorCode> {
-        let path = request.get_path_with_query().unwrap_or("?");
-        let start = MonotonicClock::now();
-        let resp = Handler::handle(request);  // delegates to outer scope
-        resume resp;
-        // Post-resume (Stack Switching): runs after do block completes
-        let elapsed = MonotonicClock::now() - start;
-        self.log.push([path, elapsed]);
-    }
-    ..forward
-}
-```
-
-Testing with MockHandler as the downstream:
-
-```wado
-struct MockHandler {
-    status: StatusCode,
-    body: String,
-}
-
-impl Handler for MockHandler {
-    fn handle(&self, request: Request) -> Result<Response, ErrorCode> {
-        let headers = Fields::new();
-        let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
-        let [body_rx, body_tx] = Stream::<u8>::new();
-        body_tx.write(self.body.bytes().collect());
-        body_tx.drop();
-        trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
-        trailers_tx.drop();
-        let [resp, _] = Response::new(headers, Option::Some(body_rx), trailers_rx);
-        resp.set_status_code(self.status);
-        resume Result::<Response, ErrorCode>::Ok(resp)
-    }
-    ..trap
-}
-
-test "timing middleware records elapsed time" {
-    let mut cm = MockCM::new();
-    let downstream = MockHandler { status: 200, body: "ok" };
-    let mut timing = TimingMiddleware { log: [] };
-    with &mut cm do {
-        with Handler => &downstream do {
-            with Handler => &mut timing do {
-                let req = create_test_request("/api");
-                let resp = Handler::handle(req);
-                assert resp matches { Ok(_) };
-            }
-        }
-    }
-    assert timing.log.len() == 1;
-    assert timing.log[0].0 == "/api";
-}
-```
-
-Handler nesting: inner `TimingMiddleware` intercepts `Handler::handle`, delegates to the outer `MockHandler` via effect forwarding, and records timing in post-resume.
-
 ## Implementation Notes
 
 ### Front-End Grammar Notes
@@ -755,12 +685,13 @@ them as keywords in unambiguous positions:
 
 - `do` is recognised in the trailing position of a `with ... do { ... }`
   clause, immediately after the handler binding list.
-- `resume` is recognised only in expression position. In statement /
-  pattern positions (e.g. `let resume = ...;`) it remains an ordinary
-  identifier.
+- `resume` is recognised at the start of a statement or a match arm body,
+  and rejected in any other expression position. In pattern positions
+  (e.g. `let resume = ...;`) it remains an ordinary identifier, which
+  the binding rules then reject.
 
-This keeps both words available as variable names and avoids breaking
-generated Wado source (e.g. ANTLR4 driver output that uses `let do = …`
+This keeps `do` available as a variable name, and `resume` as a field or
+method name, and avoids breaking generated Wado source (e.g. ANTLR4 driver output that uses `let do = …`
 for a TypeScript token of that name).
 
 #### Handler expressions are restricted to unary expressions
@@ -843,7 +774,7 @@ Nesting composes naturally — each `with` block links to the previous dispatch 
 
 ### Compilation of `resume`
 
-`resume value` compiles to `return value`. The handler method is a normal function; the dispatch function receives and propagates the return value. Post-resume code (e.g., cleanup after the `do` block) requires Wasm Stack Switching and is deferred.
+`resume value;` is a `return value;` written in a handler method, and compiles as one. The handler method is a normal function; the dispatch function receives and propagates the return value.
 
 ### Rest clause: `..trap` / `..forward`
 
@@ -875,8 +806,13 @@ Growth is O(operations), independent of the number of call sites or handler type
 - Handler bodies execute in the outer effect scope, enabling delegation to real implementations
 - World imports are the outermost handler scope; user handlers nest inside
 - `..forward` / `..trap` rest clauses enable partial handling: forward unimplemented operations to the outer handler, or trap on them
-- `resume` without post-processing compiles to `return`; post-processing requires Stack Switching
+- `resume` compiles to `return`, so a handler costs no continuation capture
 - One-shot semantics ensure resource safety
 - CM streams and futures are unbuffered — synchronous handlers need `MockCM` (buffered CM handlers) for data transfer
 - Handler bundling (`with &mut value do`) reduces boilerplate when a type implements multiple effects
 - `core:test::MockCM` provides standard buffered Stream/Future handlers as a foundation for all test mocks
+
+## Known Gaps
+
+- A handler cannot run code after its caller finishes. `resume` ends the method, so resource cleanup, a generator, or a middleware that times the rest of the `do` body has no way to be written. Wasm Stack Switching could carry such a continuation; which syntax would ask for one, and what it would mean for `resume` ending the method, is open.
+- Code after `resume` is unreachable and draws no diagnostic, as code after `return` draws none.

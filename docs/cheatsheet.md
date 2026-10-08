@@ -1500,7 +1500,7 @@ run_both(
 
 See [the spec](./spec-effects.md#handlers).
 
-An effect handler is an `impl Effect for Type` where the methods may call `resume value` to continue the suspended computation. The `with` block installs handlers for the duration of its `do` body. The `=>` arrow reads as "calls to E dispatch to h".
+An effect handler is an `impl Effect for Type` where the methods end in `resume value;` to continue the suspended computation. The `with` block installs handlers for the duration of its `do` body. The `=>` arrow reads as "calls to E dispatch to h".
 
 ```wado
 interface Counter {
@@ -1527,7 +1527,7 @@ fn main() {
 }
 ```
 
-`resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
+`resume value;` (only valid inside a handler) hands `value` back to the caller of the operation. Like `return`, it is a statement with no value of its own. Every path through a handler method ends in one (`resume ()` included) or diverges; `return` and `?` are errors there, outside a closure.
 
 An `interface` is a trait with a different dispatch story, so its members are written as a trait's are. An operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
 

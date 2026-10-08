@@ -1222,9 +1222,6 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
                 }
             }
         }
-        TirExprKind::Resume { value } => {
-            elab_expr(value, true, owned, cx);
-        }
         TirExprKind::GlobalVarGet { .. } => {}
 
         // A closure body addresses captured values through `Capture`, not the

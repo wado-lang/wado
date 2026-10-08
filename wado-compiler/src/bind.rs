@@ -13,7 +13,7 @@ use crate::ast::{
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
 use crate::module_source::ModuleSource;
-use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
+use crate::syntax::{is_statement_keyword, statement_keyword_name_message};
 use crate::token::Span;
 
 /// Binding information for a local variable
@@ -77,7 +77,7 @@ impl From<BindError> for Diagnostic {
             ),
             BindError::KeywordName { name, span } => (
                 Code::InvalidSyntax,
-                expression_keyword_name_message(name),
+                statement_keyword_name_message(name),
                 *span,
             ),
         };
@@ -197,7 +197,6 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
                 .any(|b| expr_references_var(&b.handler, name))
                 || block_references_var(&w.body, name)
         }
-        Expr::Resume(r) => expr_references_var(&r.value, name),
 
         Expr::Literal(_) | Expr::Error(_) => false,
     }
@@ -943,10 +942,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_block(&with_handler.body)?;
             }
 
-            Expr::Resume(resume_expr) => {
-                self.bind_expr(&resume_expr.value)?;
-            }
-
             // Literals don't reference variables
             Expr::Literal(_) => {}
 
@@ -1091,7 +1086,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Define a variable in the current scope
     fn define(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
-        if is_expression_keyword(name) {
+        if is_statement_keyword(name) {
             return self.emit(BindError::KeywordName {
                 name: name.to_string(),
                 span,

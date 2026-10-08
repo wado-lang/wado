@@ -1025,7 +1025,7 @@ impl AstVisitor for Leaves {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::TryOp(_) | Expr::Resume(_) => self.0 = true,
+            Expr::TryOp(_) => self.0 = true,
             Expr::Closure(_) => {}
             _ => walk_expr(self, expr),
         }

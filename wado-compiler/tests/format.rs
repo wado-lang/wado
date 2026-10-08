@@ -215,6 +215,33 @@ fn run() {
     assert_eq!(formatted1, formatted2, "format should be idempotent");
 }
 
+/// `resume value;` prints with its own keyword, as a statement and as a match
+/// arm, and an arm is braced as a `return` arm is.
+#[test]
+fn test_format_resume_statement_roundtrips() {
+    let source = concat!(
+        "impl Ask for H {\n",
+        "    fn ask(&self, n: i32) -> i32 {\n",
+        "        match n {\n",
+        "            0 => resume 10,\n",
+        "            _ => {}\n",
+        "        }\n",
+        "        resume n\n",
+        "    }\n",
+        "}\n"
+    );
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("0 => {\n                resume 10;\n            },"),
+        "a resume arm should print braced, got:\n{formatted}"
+    );
+    assert!(
+        formatted.contains("        resume n;\n"),
+        "a tail resume should print as a statement, got:\n{formatted}"
+    );
+}
+
 /// A tuple comprehension `[for let v of t { expr }]` must round-trip: the
 /// `.enumerate()` suffix stays part of the iterable, so the formatter reprints
 /// what was written instead of reconstructing it.

@@ -816,10 +816,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Wasm module. The async one is the opposite — presence, not definite
     /// delivery — because a `task return` under a branch is legitimate, and a
     /// path that misses it is the runtime's to trap on.
-    pub(super) fn validate_missing_return_ast(&self, return_type: TypeId, func: &ast::Function) {
+    ///
+    /// A handler method owes a `resume` on every path whatever it returns:
+    /// `return` and `?` are rejected there, so a definite exit is a `resume`
+    /// or a divergence.
+    pub(super) fn validate_missing_return_ast(
+        &self,
+        return_type: TypeId,
+        func: &ast::Function,
+        in_handler_method: bool,
+    ) {
         let Some(body) = func.body.as_ref() else {
             return;
         };
+        if in_handler_method {
+            if !control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
+                let _ = self.emit(types::TypeError::MissingResume {
+                    function: func.name.clone(),
+                    span: func.span,
+                });
+            }
+            return;
+        }
         if func.is_async {
             if !control_flow::block_delivers(self.ctrl_flow_ctx(), body)
                 && !control_flow::block_always_exits(self.ctrl_flow_ctx(), body)
@@ -2004,10 +2022,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
-            let is_handler_method = trait_name
-                .as_ref()
-                .and_then(FqTraitName::canonical)
-                .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
             // what this block's methods are recorded under — owned, or the
@@ -2057,7 +2071,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 sem::types::ImplFacts {
                     trait_name: trait_name.clone(),
                     trait_type_args,
-                    is_handler_method,
                     is_ref_impl,
                     struct_name: qualified_struct_name,
                     receiver,

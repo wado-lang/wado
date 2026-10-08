@@ -498,7 +498,6 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
             }
             remap_locals_in_block(body, remap);
         }
-        TirExprKind::Resume { value } => remap_locals_in_expr(value, remap),
         // A closure body and a `Capture` read live in the closure's own
         // local-index scope, so neither is descended into. What a capture
         // *names* is a local here, which shadowing a parameter moves.

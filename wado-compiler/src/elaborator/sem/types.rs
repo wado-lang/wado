@@ -992,11 +992,6 @@ pub(crate) struct ImplFacts {
     /// trait_type_args)`, so a generic-effect handler needs the args to
     /// match the binding's instantiation.
     pub(crate) trait_type_args: Vec<tir::TypeId>,
-    /// True iff the impl's trait reference names an effect
-    /// (`interface`) declaration — i.e. this is an effect handler
-    /// impl. Reify writes onto `FunctionContext::in_handler_method`
-    /// so `resume` validation matches annotate.
-    pub(crate) is_handler_method: bool,
     /// True iff the impl target is `&T` / `&mut T` (ref-type
     /// impl). Method receivers `&self` get an extra `&` layer at
     /// receiver-adjustment time; mirrors [`MethodDispatch::is_ref_impl`]

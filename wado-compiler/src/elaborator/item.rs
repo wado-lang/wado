@@ -1270,7 +1270,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(b) = func.body.as_ref() {
             self.resolve_block(b, ctx, None);
         }
-        self.validate_missing_return_ast(return_type, func);
+        self.validate_missing_return_ast(return_type, func, ctx.in_handler_method);
         self.validate_loop_jumps_ast(func.body.as_ref());
     }
 

@@ -19,6 +19,7 @@ impl Log for Base {
 
     fn emit(&mut self, message: String) {
         self.lines.push(message);
+        resume ();
     }
 }
 
@@ -29,6 +30,7 @@ struct Prefix {
 impl Log for Prefix {
     fn emit(&self, message: String) with Log {
         Log::emit(`${self.tag}: ${message}`);
+        resume ();
     }
 
     ..forward

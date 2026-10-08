@@ -1,6 +1,6 @@
 //! Move and share eligibility for the value-copy fold (WEP 2026-05-21), from one
-//! backward liveness walk per body plus small auxiliary scans. A handler or
-//! `resume` reads twice, so skips.
+//! backward liveness walk per body plus small auxiliary scans. A handler
+//! reads twice, so skips.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
@@ -828,10 +828,7 @@ fn has_unsupported_form(body: &TirBlock) -> bool {
             self.walk_stmt(stmt);
         }
         fn visit_expr(&mut self, expr: &TirExpr) {
-            if matches!(
-                expr.kind,
-                TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. }
-            ) {
+            if matches!(expr.kind, TirExprKind::WithHandler { .. }) {
                 self.found = true;
             }
             self.walk_expr(expr);

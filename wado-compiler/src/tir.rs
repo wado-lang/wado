@@ -6502,16 +6502,6 @@ pub enum TirExprKind {
         body: TirBlock,
         result_type: TypeId,
     },
-
-    /// `resume value` — control-flow expression valid only inside an effect
-    /// handler method body.
-    ///
-    /// In the MVP (no post-resume code), `resume` lowers to `Return { value }`.
-    /// The expression itself is typed as `Unit` because it does not produce a
-    /// value to its enclosing expression — it transfers control out.
-    Resume {
-        value: Box<TirExpr>,
-    },
 }
 
 /// One `Effect => handler` binding inside a `with ... do` block.

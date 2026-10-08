@@ -1,0 +1,90 @@
+// `resume` ends a handler method from any position the missing-resume check
+// accepts: a match arm, an `if` arm in value position, a `with … do` body, and
+// a `let … else` block. A closure inside a handler method is a function of its
+// own, so `return` and `?` stay legal there.
+
+use { println, Stdout } from "core:cli";
+
+interface A {
+    fn pick(n: i32) -> i32;
+    fn note(n: i32);
+    fn nested(n: i32) -> i32;
+    fn first(xs: List<i32>) -> i32;
+    fn via_closure(n: i32) -> i32;
+}
+
+interface B {
+    fn bump() -> i32;
+}
+
+struct G {}
+
+impl B for G {
+    fn bump() -> i32 {
+        resume 100
+    }
+}
+
+struct H {
+    seen: i32,
+}
+
+impl A for H {
+    fn pick(&mut self, n: i32) -> i32 {
+        match n {
+            0 => resume 10,
+            _ => resume if n > 5 { 30 } else { 20 },
+        }
+    }
+
+    fn note(&mut self, n: i32) {
+        match n {
+            0 => resume (),
+            _ => {
+                self.seen += n;
+                resume ()
+            },
+        }
+    }
+
+    fn nested(&mut self, n: i32) -> i32 {
+        let g = G {};
+        with B => &g do {
+            resume n + B::bump()
+        }
+    }
+
+    fn first(&mut self, xs: List<i32>) -> i32 {
+        let Some(x) = xs.first() else {
+            resume -1
+        };
+        resume x
+    }
+
+    fn via_closure(&mut self, n: i32) -> i32 {
+        let half = |o: Option<i32>| -> Option<i32> {
+            let v = o?;
+            if v % 2 != 0 {
+                return null;
+            }
+            return Some(v / 2);
+        };
+        resume half(Some(n)).unwrap_or(-1)
+    }
+}
+
+export fn run() with Stdout {
+    let mut h = H { seen: 0 };
+    with A => &mut h do {
+        println(`${A::pick(0)} ${A::pick(1)} ${A::pick(9)}`);
+        A::note(0);
+        A::note(5);
+        println(`${A::nested(1)}`);
+        println(`${A::first([])} ${A::first([7, 8])}`);
+        println(`${A::via_closure(8)} ${A::via_closure(3)}`);
+    }
+    println(`${h.seen}`);
+}
+
+__DATA__
+{"stdout": "10 20 30\n101\n-1 7\n4 -1\n5\n"}

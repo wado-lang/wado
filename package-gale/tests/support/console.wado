@@ -101,6 +101,7 @@ impl Stderr for Console {
 impl Future<Result<(), ErrorCode>> for Console {
     fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
         let _ = this;
+        resume ();
     }
 
     ..trap
@@ -114,6 +115,7 @@ impl Log for Console {
 
     fn event(&mut self, event: Event) {
         self.events.push(`${event.meta.level}: ${event.message}`);
+        resume ();
     }
 
     ..forward

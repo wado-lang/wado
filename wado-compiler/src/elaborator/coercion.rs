@@ -149,7 +149,6 @@ pub(super) fn numeric_literal_shape(
         | Expr::Spread(..)
         | Expr::Range(_)
         | Expr::WithHandler(_)
-        | Expr::Resume(_)
         | Expr::Error(_) => None,
     }
 }
@@ -203,7 +202,6 @@ fn literal_operands(expr: &Expr) -> Option<Vec<&Expr>> {
         | Expr::Spread(..)
         | Expr::Range(_)
         | Expr::WithHandler(_)
-        | Expr::Resume(_)
         | Expr::Error(_) => None,
     }
 }
