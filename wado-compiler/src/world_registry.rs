@@ -332,12 +332,7 @@ impl<'a> IntoIterator for &'a ExportMappings {
     type IntoIter = std::slice::Iter<'a, ExportMapping>;
 
     fn into_iter(self) -> Self::IntoIter {
-<<<<<<< HEAD
-        self.0.iter()
-||||||| eaffe29d42
-=======
         self.iter()
->>>>>>> origin/main
     }
 }
 
