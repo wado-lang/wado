@@ -23,6 +23,10 @@ test "format preserves an angle-bracketed autolink" {
     assert format("<https://example.com>\n") == "<https://example.com>\n";
 }
 
+test "format keeps a wrapped line starting with a number and a parenthesis in its paragraph" {
+    assert format("a (SAC\n2010) b\n") == "a (SAC\n2010) b\n";
+}
+
 test "format keeps an all-same ordered list numbering" {
     assert format("1. a\n1. b\n1. c\n") == "1. a\n1. b\n1. c\n";
 }

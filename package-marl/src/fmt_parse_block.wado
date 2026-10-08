@@ -228,7 +228,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &
             i = parse_blockquote(lines, i, end, origin, refs, &mut out);
             continue;
         }
-        if is_list_marker(&chars) {
+        if is_list_marker(&chars) && (para.is_empty() || list_marker_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             i = parse_list(lines, i, end, origin, refs, &mut out);
             continue;
@@ -622,6 +622,16 @@ fn is_list_marker(chars: &List<char>) -> bool {
     return parse_list_marker(chars) matches { Some(_) };
 }
 
+/// Whether a list marker on this line may start a list inside an open
+/// paragraph. CommonMark lets it only when the item has content and, if
+/// ordered, is numbered 1, so a wrapped `2010) …` stays paragraph text.
+fn list_marker_interrupts_paragraph(chars: &List<char>) -> bool {
+    let Some(m) = parse_list_marker(chars) else {
+        return false;
+    };
+    return (!m.ordered || m.number == 1) && !is_blank(slice_chars(chars, m.content_col, chars.len()));
+}
+
 fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     let len = chars.len();
     let mut p = 0;
@@ -645,7 +655,8 @@ fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
             number = number * 10 + (chars[q] as i32 - '0' as i32);
             q += 1;
         }
-        if q < len && chars[q] matches { '.' | ')' } {
+        // CommonMark caps an ordered marker at nine digits.
+        if q - p <= 9 && q < len && chars[q] matches { '.' | ')' } {
             ordered = true;
             delim = chars[q];
             p = q + 1;
@@ -742,7 +753,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
             // continuation line" rule — the same reason a top-level
             // paragraph line needs no minimum indentation at all).
             let can_lazy = match inner.get(inner.len() - 1) {
-                Some(prev) => !is_blank(&prev) && !interrupts_paragraph(&lines[j]),
+                Some(prev) => !is_blank(&prev) && !ends_lazy_continuation(&lines[j]),
                 None => false,
             };
             if can_lazy {
@@ -794,11 +805,12 @@ fn dedent<S: AsStrSlice>(line: S, n: i32) -> String {
     return slice_chars(&chars, p, len);
 }
 
-/// Whether `line` would start a block that can interrupt an open paragraph —
-/// the same dispatch conditions `parse_blocks` checks before falling
-/// through to plain paragraph text, reused here to decide whether an
-/// under-indented list-item line is a lazy continuation or the item's end.
-fn interrupts_paragraph<S: AsStrSlice>(line: S) -> bool {
+/// Whether an under-indented line ends a list item instead of continuing its
+/// paragraph lazily. The line falls outside the item, so it starts any block
+/// it could start where no paragraph is open: the limits a paragraph puts on a
+/// type-7 HTML block and on a list marker (`list_marker_interrupts_paragraph`)
+/// do not apply, as in commonmark.js.
+fn ends_lazy_continuation<S: AsStrSlice>(line: S) -> bool {
     let chars = line.to_chars();
     if is_html_block_start(&chars) {
         return true;

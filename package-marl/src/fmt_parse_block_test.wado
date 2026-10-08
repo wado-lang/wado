@@ -319,6 +319,47 @@ test "parse_document still starts a raw HTML block at the top of a block" {
     assert children.get(0) matches { Some(Node::Html(_)) };
 }
 
+test "parse_document keeps an ordered marker not numbered 1 in the open paragraph" {
+    let children = doc_children("a (SAC\n2010) b");
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document lets an ordered marker numbered 1 interrupt an open paragraph" {
+    let children = doc_children("a\n1. b");
+    assert children.len() == 2;
+    assert children.get(1) matches { Some(Node::List(_)) };
+}
+
+test "parse_document keeps an empty list item in the open paragraph" {
+    assert doc_children("a\n1.\nb").len() == 1;
+    assert doc_children("a\n*\nb").len() == 1;
+}
+
+test "parse_document reads more than nine digits as text, not a list marker" {
+    let children = doc_children("1234567890. a");
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document keeps an ordered marker not numbered 1 in a list item's paragraph" {
+    let children = doc_children("- a\n  2. b");
+    if let Some(Node::List(list)) = children.get(0) {
+        assert list.items[0].children.len() == 1;
+        assert list.items[0].children.get(0) matches { Some(Node::Paragraph(_)) };
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document ends a lazy continuation at any list marker" {
+    // The line would only continue the paragraph lazily, so the paragraph
+    // rule does not apply and `2.` starts a list (as commonmark.js reads it).
+    let children = doc_children("> a\n2. b");
+    assert children.len() == 2;
+    assert children.get(0) matches { Some(Node::BlockQuote(_)) };
+    assert children.get(1) matches { Some(Node::List(_)) };
+}
+
 test "parse_document lets an HTML comment interrupt an open paragraph" {
     let source = "text line\n<!-- c -->";
     let children = doc_children(&source);
