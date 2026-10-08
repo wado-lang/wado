@@ -43,8 +43,8 @@ let back = Tokenizer::decode(&ids);
 ```
 
 The use site's `type` tells the generator what the file is: `"tokenizer"` here,
-`"onnx"` for a graph. A use site writing neither stops the build. The tokenizer
-is imported apart from the model, since an ONNX graph does not carry one.
+`"onnx"` or `"onnxtext"` for a graph, never the extension. The tokenizer is
+imported apart from the model, since an ONNX graph does not carry one.
 
 ### The pipeline is decided at build time
 

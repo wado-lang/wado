@@ -347,8 +347,18 @@ is read:
    type: `"wasm"` as a Wasm binary, `"wat"` as Wasm text.
 3. Otherwise it is read as Wado source.
 
-> Not yet implemented: the loader still decides by extension. See
-> [WEP: Kiln](./wep-2026-04-12-kiln.md#known-gaps).
+So a file named like a grammar is still Wado source when the `use` says
+nothing else:
+
+<!-- {"fixture": "use_reads_wado_whatever_the_extension.wado"} -->
+
+```wado
+use { greeting } from "./sub/use_reads_wado_whatever_the_extension.g4";
+
+test "a file of any extension is read as Wado source" {
+    assert greeting() == "read as Wado";
+}
+```
 
 ## Wasm Module and Component Imports
 

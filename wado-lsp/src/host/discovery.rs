@@ -341,11 +341,11 @@ pub fn cache_root() -> Option<PathBuf> {
         .filter(|v| !v.is_empty())
         .map(|home| PathBuf::from(home).join("wado"))
 }
-/// The entry module of a source dependency: the file itself for a `.wado` path,
-/// otherwise the directory's `[package].lib`. Shared by the path, git, and
-/// inline-git resolution paths so all three locate an entry the same way.
+/// The entry module of a source dependency: the file itself for a path naming
+/// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
+/// and inline-git resolution paths so all three locate an entry the same way.
 pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
-    if dep_path.extension().is_some_and(|e| e == "wado") {
+    if dep_path.is_file() {
         return Ok(dep_path.to_path_buf());
     }
     let manifest_path = dep_path.join("wado.toml");

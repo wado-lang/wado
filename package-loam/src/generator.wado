@@ -9,7 +9,6 @@ use {
     KilnHost,
     Diagnostic as KilnDiagnostic,
     DiagnosticLevel,
-    InputFile,
     package_of,
     read_all,
     read_text,
@@ -44,10 +43,24 @@ fn at<E: Error>(path: &String, e: &E) -> KilnError {
     return KilnError::InvalidSchema(`loam: '${path}': ${e}`);
 }
 
-/// The graph from either spelling: `.onnx`, which an exporter writes, or
-/// `.onnxtext`, which a fixture is written in and a diff can show.
-fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, KilnError> {
-    if path.ends_with(".onnx") {
+/// How a graph is spelled, as the use site's `type` names it: `"onnx"`, the
+/// protobuf an exporter writes, or `"onnxtext"`, the text a fixture is written
+/// in and a diff can show.
+enum Spelling {
+    Proto,
+    Text,
+}
+
+fn spelling_of(use_type: &Option<String>) -> Option<Spelling> {
+    return match *use_type {
+        Some("onnx") => Option::Some(Spelling::Proto),
+        Some("onnxtext") => Option::Some(Spelling::Text),
+        _ => null,
+    };
+}
+
+fn read_graph(path: &String, spelling: Spelling, content: Stream<u8>) -> Result<Graph, KilnError> {
+    if spelling matches { Proto } {
         return onnx_proto::read(read_all(content)).map_err(|e| at(path, &e));
     }
     let source = match read_text(content) {
@@ -85,18 +98,6 @@ fn holds_header(prefix: &ByteList) -> bool {
     };
 }
 
-/// Why the invocation's inputs are not one `.safetensors` checkpoint at most.
-fn input_refusal(inputs: &List<InputFile>) -> Option<String> {
-    if inputs.len() > 1 {
-        return Option::Some(`loam: ${inputs.len()} inputs, and a checkpoint is one file`);
-    }
-    for let input of *inputs {
-        if !input.path.ends_with(".safetensors") {
-            return Option::Some(`loam: '${input.path}': an input is a .safetensors checkpoint`);
-        }
-    }
-    return null;
-}
 
 /// `error`, once every stream the request carries is dropped.
 fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnError> {
@@ -113,27 +114,28 @@ global HEADER_CHUNK: i32 = 65536;
 export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
     // A stream is outside drop elaboration, so every one is consumed or dropped
     // before the first return that could leave it open.
-    if let Some(reason) = input_refusal(&req.inputs) {
+    if req.inputs.len() > 1 {
+        let reason = `loam: ${req.inputs.len()} inputs, and a checkpoint is one file`;
         return refused(req, KilnError::InvalidSchema(reason));
     }
     let Some(runtime) = package_of(&req.module) else {
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
         return refused(req, KilnError::Unsupported(reason));
     };
-    if !req.type matches { Some("onnx") } {
+    let Some(spelling) = spelling_of(&req.type) else {
         let given = match req.type {
             Some(t) => `\`type: "${t}"\``,
             None => "no `type`",
         };
-        let reason = `loam: '${req.primary.path}' is given ${given}; a graph is \`type: "onnx"\``;
+        let reason = `loam: '${req.primary.path}' is given ${given}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\``;
         return refused(req, KilnError::Unsupported(reason));
-    }
+    };
     let mut headers: List<[String, ByteList]> = [];
     for let input of req.inputs {
         headers.push([input.path, read_header(input.content)]);
     }
     let path = req.primary.path;
-    let mut graph = read_graph(&path, req.primary.content)?;
+    let mut graph = read_graph(&path, spelling, req.primary.content)?;
     bind_dims(&mut graph, &req.options.dims).map_err(|e| at(&path, &e))?;
     keep_outputs(&mut graph, &req.options.outputs).map_err(|e| at(&path, &e))?;
     // An extent the algebra cannot discharge stops the build here. The one

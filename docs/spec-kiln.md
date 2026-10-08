@@ -171,7 +171,7 @@ object:
 ```wado
 use { Batch, Col, Row, Weights, forward } from "./specialize.onnxtext"
     with {
-        type: "onnx",
+        type: "onnxtext",
         generator: {
             module: "lib:loam",
             options: {

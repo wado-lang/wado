@@ -510,18 +510,6 @@ fn strip_kiln_scheme(uri: &str) -> Option<String> {
     Some(parsed.path().decode().to_string_lossy().into_owned())
 }
 
-/// `true` when `path` looks like a non-`.wado` schema source (i.e. has any
-/// extension other than `.wado`). Wado modules and bare paths with no
-/// extension fall through to normal resolution.
-fn is_non_wado_schema(path: &str) -> bool {
-    match path.rsplit_once('.') {
-        Some((_, ext)) if !ext.is_empty() && !ext.contains('/') => {
-            !ext.eq_ignore_ascii_case("wado")
-        }
-        _ => false,
-    }
-}
-
 /// Extract the wasm-asset kind from a use declaration's `with { ... }`
 /// attributes. Returns `Some(kind)` for `with { type: "wat" | "wasm" }`,
 /// `None` otherwise (including for unrelated `with { ... }` attributes
@@ -1553,21 +1541,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.pending_component_imports.push((resolved, kind));
                     continue;
                 }
-                if matches!(&resolved, ModuleSource::Local { path, .. } if is_non_wado_schema(path))
-                {
-                    let declares_generator = use_decl
-                        .attributes
-                        .as_ref()
-                        .is_some_and(ImportAttributes::is_generated);
-                    if declares_generator {
-                        // The redirect above did not fire, so no invocation
-                        // produced this module. Reading the schema as Wado would
-                        // report the generator's absence as a parse error in a
-                        // file that was never Wado.
-                        self.emit_kiln_no_generated_module(from_module_source, use_decl);
-                    } else {
-                        self.emit_kiln_missing_with(from_module_source, use_decl);
-                    }
+                let declares_generator = use_decl
+                    .attributes
+                    .as_ref()
+                    .is_some_and(ImportAttributes::is_generated);
+                if declares_generator && !matches!(resolved, ModuleSource::Redirected { .. }) {
+                    // No invocation produced this module. Reading the schema as
+                    // Wado would report the generator's absence as a parse
+                    // error in a file that was never Wado.
+                    self.emit_kiln_no_generated_module(from_module_source, use_decl);
                     continue;
                 }
                 pending.push_back((from_module_source.clone(), resolved));
@@ -1841,23 +1823,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 }
             }
         }
-    }
-
-    /// Report a `use ... from "./schema.<ext>"` that names no generator. A
-    /// non-`.wado` schema is only reachable through one.
-    fn emit_kiln_missing_with(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-        let file = decl_file_of(from_module_source);
-        self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Error,
-            code: Code::KilnMissingWith,
-            message: format!(
-                "kiln: `use ... from {:?}` requires `with {{ generator: {{ module: \"...\" }} }}` \
-                 — non-`.wado` schemas can only be loaded through an inline Kiln invocation",
-                use_decl.source,
-            ),
-            span: Some(DiagnosticSpan::from_span(&use_decl.source_span, Some(file))),
-        });
     }
 
     /// Report a `use ... from "<schema>"` that names a generator no invocation

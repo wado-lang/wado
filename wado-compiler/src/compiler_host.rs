@@ -204,9 +204,6 @@ pub enum Code {
     /// A program for a world other than the test world reaches `core:eval`,
     /// which only `wado test` supplies.
     EvalOutsideTestWorld,
-    /// A `use ... from "<path>"` whose source is a non-`.wado` schema is missing
-    /// the required `with { generator: { ... } }` clause.
-    KilnMissingWith,
     /// A `use ... from "<path>"` names a generator, but no invocation produced a
     /// module for it, so there is nothing to import.
     KilnNoGeneratedModule,
@@ -325,7 +322,6 @@ impl std::fmt::Display for Code {
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
             Code::EvalOutsideTestWorld => "EVAL_OUTSIDE_TEST_WORLD",
-            Code::KilnMissingWith => "KILN_MISSING_WITH",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
