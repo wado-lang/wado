@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791460575121,
+  "lastUpdate": 1791461810639,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65353,6 +65353,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b091ba71ef5f676775c6db80b8ffca8a9d84eb3e"
         },
         "date": 1791460574095,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6cc4a80d4e2b873959b18dad6a51a6a030454a36",
+          "message": "Merge pull request #2311 from wado-lang/todo/19-resume\n\nfeat(effects)!: a handler method resumes its caller on every path",
+          "timestamp": "2026-10-08T20:42:26+09:00",
+          "tree_id": "bda940d880da057f603500146011ff2f7012168b",
+          "url": "https://github.com/wado-lang/wado/commit/6cc4a80d4e2b873959b18dad6a51a6a030454a36"
+        },
+        "date": 1791461809766,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
