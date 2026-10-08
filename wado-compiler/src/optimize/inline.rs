@@ -25,7 +25,7 @@ use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
     BlockRole, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId,
-    StmtKind, StmtNode,
+    StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -2244,9 +2244,11 @@ pub fn inline_functions(
         let mut inlined_funcs: Vec<FuncId> = Vec::new();
         // Splice-point re-valuation records (Method A): one per inlined block.
         let mut reval: Vec<InlineRevalInfo> = Vec::new();
+        let local_count = func.local_count();
+        let func = &mut *func;
         let mut frame = CallerFrame {
-            local_count: func.local_count(),
-            locals: std::mem::take(&mut func.locals),
+            local_count,
+            locals: &mut func.locals,
             address_taken: std::mem::take(&mut func.address_taken_locals),
             stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             loop_calls: Vec::new(),
@@ -2282,7 +2284,6 @@ pub fn inline_functions(
                 Site::Plain,
             );
         }
-        *func.locals = frame.locals;
         func.address_taken_locals = frame.address_taken;
         func.stores_aliased_locals = frame.stores_aliased;
         if inlined_funcs.is_empty() {
@@ -2364,9 +2365,10 @@ pub fn inline_functions(
 
 /// The caller's local frame, which every splice extends: the locals it gains
 /// and the annotations the alias analysis reads about them.
-struct CallerFrame {
+struct CallerFrame<'f> {
     local_count: u32,
-    locals: Vec<NirLocal>,
+    /// The caller's own, borrowed: a splice that mints none leaves them unwritten.
+    locals: &'f mut Tracked<Vec<NirLocal>>,
     address_taken: IndexSet<u32>,
     stores_aliased: IndexSet<u32>,
     /// Per enclosing loop, innermost last: how many sites in its body call
@@ -2378,7 +2380,7 @@ struct CallerFrame {
     original_exprs: usize,
 }
 
-impl CallerFrame {
+impl CallerFrame<'_> {
     /// Whether `call` is a site the round began with.
     fn original_site(&self, call: ExprId) -> bool {
         call.index() < self.original_exprs
@@ -2470,7 +2472,7 @@ fn inline_calls_in_block(
     block: BlockId,
     candidates: Candidates<'_>,
     descriptors: &[FunctionRef],
-    frame: &mut CallerFrame,
+    frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
@@ -2524,11 +2526,13 @@ fn inline_calls_in_block(
                     reval,
                     site,
                 );
-                match &mut body.stmts[stmt_id].kind {
-                    StmtKind::Let { value, .. } => *value = new_value.into(),
-                    StmtKind::Expr(expr) => *expr = new_value.into(),
-                    StmtKind::Return { value } => *value = Some(new_value.into()),
-                    _ => {}
+                if new_value != value {
+                    match &mut body.stmts[stmt_id].kind {
+                        StmtKind::Let { value, .. } => *value = new_value.into(),
+                        StmtKind::Expr(expr) => *expr = new_value.into(),
+                        StmtKind::Return { value } => *value = Some(new_value.into()),
+                        _ => {}
+                    }
                 }
             }
             Shape::Nested(value) => inline_calls_in_expr(
@@ -2628,7 +2632,7 @@ fn inline_top_level(
     value: ExprId,
     candidates: Candidates<'_>,
     descriptors: &[FunctionRef],
-    frame: &mut CallerFrame,
+    frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
@@ -2792,7 +2796,7 @@ fn build_inlined_labeled_block(
     bindings: Vec<InlineBinding>,
     call_span: Span,
     call_expr: ExprId,
-    frame: &mut CallerFrame,
+    frame: &mut CallerFrame<'_>,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
@@ -2893,7 +2897,7 @@ fn try_inline_call_expr(
     caller: &mut Body,
     call_id: ExprId,
     candidates: Candidates<'_>,
-    frame: &mut CallerFrame,
+    frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
@@ -3648,7 +3652,7 @@ fn inline_calls_in_expr(
     e: ExprId,
     candidates: Candidates<'_>,
     descriptors: &[FunctionRef],
-    frame: &mut CallerFrame,
+    frame: &mut CallerFrame<'_>,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
     labels: &mut InlineLabels,
