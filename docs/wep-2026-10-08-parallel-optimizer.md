@@ -78,26 +78,29 @@ reader-writer lock and a write count. `borrow` and `borrow_mut` fail at once on
 a conflicting borrow, as `RefCell`'s do, so a visit that reaches a function
 another thread is writing panics rather than races.
 
-The first mutable dereference through a `borrow_mut` guard bumps the count, so
-a borrow that only reads counts nothing. The per-body memos key on the count
-instead of on reported edits, so a pass cannot rewrite a body behind a memo's
-back. `FunctionGate::mark_changed` stays, for scheduling only: it decides which
+A `borrow_mut` guard bumps the count on drop when the function changed, so a
+borrow that changes nothing counts nothing, whatever route it took. The body's
+parts and the locals are each `Tracked`: a version that grows on every mutable
+borrow, with an epoch drawn afresh on construction and clone, so a part put in
+place of another never compares equal to it. The rest of the function is
+compared against a copy the guard takes on the first whole-function mutable
+borrow. `FuncWriteGuard::parts` hands a rewrite the body and locals without
+that copy. The per-body memos key on the count instead of on reported edits, so
+a pass cannot rewrite a body behind a memo's back.
+`FunctionGate::mark_changed` stays, for scheduling only: it decides which
 functions a pass revisits, which costs precision when wrong, never
-correctness. A pass that only looks for something to rewrite asks through a
-shared borrow first (`Body::calls_any`), so the functions it leaves alone stay
-unwritten.
+correctness.
 
-The count is conservative: a visit that dereferences a function mutably and
-changes nothing still invalidates its memo entries. Measured on
-`package-gale`, sequentially:
+A mutable borrow that writes back what was there is still an edit, so a rewrite
+writes only what it changed (`Engine::set_block_stmts` compares first), and a
+pass that only looks for something to rewrite asks through a shared borrow
+first (`NirFunction::calls_any`). Measured on `package-gale`, sequentially:
 
 | Memo key                     | Loop seconds |
 | ---------------------------- | -----------: |
 | Edits each pass reported     |         47.1 |
 | Mutable dereferences counted |         53.3 |
-
-The difference is memo entries re-derived for visited functions, read-only
-walks that [run in parallel](#what-runs-in-parallel).
+| Changes counted              |         48.6 |
 
 The type table stays behind the package's `RefCell`. A sweep borrows it once
 and hands each visit the shared reference.
@@ -113,8 +116,9 @@ read-only:
   builtins it synthesizes. The per-function passes intern nothing today.
 - Other functions, as of the sweep's start. The pending functions are taken out
   of the store for the sweep. One that another visit may read, which today
-  means a callee the interpreter can run, is copied first, and readers see the
-  copy.
+  means a callee the interpreter can run, is cloned first, and readers see the
+  clone. A `Tracked` part is shared between clones until either side writes it,
+  so a clone costs only the parts the function's own visit then rewrites.
 - Whole-program facts built before the sweep, such as the mod/ref summaries and
   the heap effects. A memo filled lazily during the sweep holds pure values and
   sits behind a thread-safe cell, so which thread fills it changes nothing.
@@ -189,13 +193,16 @@ which callees to clone or which parameters to drop, stay sequential.
 | Build                   | Seconds |
 | ----------------------- | ------: |
 | `main`                  |    75.5 |
-| This design, 1 thread   |    84.3 |
-| This design, 16 threads |    42.9 |
+| This design, 1 thread   |    78.2 |
+| This design, 16 threads |    38.3 |
 
 ## Known gaps
 
-- On one thread a compile is slower than on `main`: memos keyed on write
-  counts re-derive more, and a sweep copies the callees it may read.
+- On one thread a compile is slower than on `main`. The memos re-derive for
+  every change, where `main`'s trusted the edits each pass reported and so
+  kept facts across changes no pass reported (a value-graph build growing the
+  pool, for one). `licm` still writes some bodies it does not change, and
+  `const_object_globalization` memoizes per visit.
 - `value_copy_demote`'s analysis memo answers a recursive call provisionally,
   `container_sroa` interns types during its visits, and `dae`, `drve`,
   `sroa_param` and the DCE closure decide over the whole program. All run on
