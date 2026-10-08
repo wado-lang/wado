@@ -112,9 +112,9 @@ A visit in a parallel sweep gets its own function mutably and everything else
 read-only:
 
 - The type table, shared. A visit is handed what it reads rather than the
-  package, so it cannot intern a type. A pass interns what
-  its visits need before the sweep, as `peephole` already does for the
-  builtins it synthesizes. The per-function passes intern nothing today.
+  package, so it cannot intern a type. A pass interns what its visits need
+  before the sweep: `peephole` the builtins it synthesizes, `container_sroa`
+  the per-field list types its plans name.
 - Other functions, as of the sweep's start. The pending functions are taken out
   of the store for the sweep. One that another visit may read, which today
   means a callee the interpreter can run, is cloned first, and readers see the
@@ -126,7 +126,8 @@ read-only:
 
 A memo that answers a cycle provisionally while the real verdict is in flight
 answers by query order. Each visit keeps its own, as
-`const_object_globalization`'s callee verdicts do. One that settles an exact
+`const_object_globalization`'s callee verdicts and `value_copy_demote`'s
+element-immutability verdicts do. One that settles an exact
 fixpoint, such as `SharedEscape`'s, is shared.
 
 A visit does not add a function. A pass that mints functions plans them during
@@ -164,6 +165,9 @@ In order of what each is worth on the table above:
    copies, so a caller reads nothing another visit writes.
 5. `sroa_variant_return`'s call-site rewrites, and `dae`, `drve` and
    `sroa_param`'s candidate scans, call-site validation and caller rewrites.
+6. `container_sroa`'s plans and rewrites, and each round of its family
+   demotions' greatest fixpoints.
+7. `value_copy_demote`'s site collection.
 
 A fact a whole-program walk reads off each body every round is taken once per
 body version instead. The DCE reachability `param_spec` reads each round
@@ -205,9 +209,7 @@ which callees to clone or which parameters to drop, stay sequential.
   kept facts across changes no pass reported (a value-graph build growing the
   pool, for one). `licm` still writes some bodies it does not change, and
   `const_object_globalization` memoizes per visit.
-- `value_copy_demote`'s analysis memo answers a recursive call provisionally,
-  and `container_sroa` interns types during its visits. Both run on one
-  thread, as does the DCE closure.
+- The DCE closure runs on one thread.
 - Developer traces (`WADO_TRACE`) interleave across threads, so their order
   varies between runs.
 - The frontend and the backend stay sequential.
