@@ -246,8 +246,18 @@ impl EvalHost {
         let (compiled, inputs) = self.compile(source, deps).await;
         let wasm = match compiled {
             Compiled::Wasm(wasm) => wasm,
-            Compiled::Failed(failure) => return Entry::of(inputs, Outcome::CompileFailed(failure)),
-            Compiled::TimedOut => return Entry::of(inputs, Outcome::CompileTimedOut),
+            Compiled::Failed(failure) => {
+                return Entry {
+                    inputs,
+                    outcome: Outcome::CompileFailed(failure),
+                };
+            }
+            Compiled::TimedOut => {
+                return Entry {
+                    inputs,
+                    outcome: Outcome::CompileTimedOut,
+                };
+            }
         };
         let host = Arc::clone(self);
         let permit = self.cpu_permit().await;
@@ -260,7 +270,7 @@ impl EvalHost {
         })
         .await
         .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
-        Entry::of(inputs, outcome)
+        Entry { inputs, outcome }
     }
 
     /// The compile's future is `!Send`, so it runs on a thread of its own. Past
@@ -434,12 +444,6 @@ struct Entry {
     outcome: Outcome,
 }
 
-impl Entry {
-    fn of(inputs: Vec<Input>, outcome: Outcome) -> Self {
-        Self { inputs, outcome }
-    }
-}
-
 /// Compile `source` on a thread that holds `held` until it ends, and report
 /// the outcome and the files it read, or the panic that ended it, on the
 /// returned channel.
@@ -464,10 +468,7 @@ fn spawn_compile(
                     Ok(result) => Compiled::Wasm(result.wasm),
                     Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
                 };
-                (
-                    compiled,
-                    host.read.into_inner().unwrap_or_else(|e| e.into_inner()),
-                )
+                (compiled, std::mem::take(&mut *lock(&host.read)))
             }));
             // Past the limit nobody is listening, and the outcome is dropped.
             let _ = report.send(outcome);
