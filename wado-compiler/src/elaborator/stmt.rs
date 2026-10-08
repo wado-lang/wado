@@ -2,8 +2,8 @@
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt, TaskReturnStmt,
-    Type, WhileStmt, walk_expr, walk_stmt,
+    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
+    TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::sig::AssocConstSig;

@@ -568,10 +568,7 @@ fn body_defies_model(body: &TirBlock) -> bool {
     }
     impl TirRefVisitor for Scan {
         fn visit_expr(&mut self, expr: &TirExpr) {
-            if matches!(
-                expr.kind,
-                TirExprKind::WithHandler { .. }
-            ) {
+            if matches!(expr.kind, TirExprKind::WithHandler { .. }) {
                 self.found = true;
             }
             self.walk_expr(expr);

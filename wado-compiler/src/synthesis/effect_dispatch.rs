@@ -2931,7 +2931,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 /// and lets the wrapper fallbacks emit that same shape. `WithHandler`
 /// desugaring waits for [`synthesize_post_check`].
 pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String> {
-
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
     let mut active_effects = identify_active_effects(&impl_index);
@@ -3187,4 +3186,3 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
         _ => type_id,
     }
 }
-
