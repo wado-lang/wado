@@ -122,8 +122,8 @@ signature has to sit beside it.
 
 ## Assertions elsewhere
 
-An assertion is a statement in the body. This section covers the statement
-alone; contracts on the signature follow in the next one.
+An assertion is a statement in the body, unlike the contracts in the next
+section.
 
 | Language | Check that always runs           | Check a build removes                         | What a removed check means                          |
 | -------- | -------------------------------- | --------------------------------------------- | --------------------------------------------------- |
@@ -189,9 +189,9 @@ argues against that view.
 
 ## Contract syntax elsewhere
 
-A contract can live in one of four places: on the signature, in the body as a
-call, in a comment or a separate block, or at a module boundary. Each has a
-language that chose it on purpose.
+A contract can live in one of five places: on the signature, in an attribute,
+in the body as a call, in a comment or a separate block, or at a module
+boundary.
 
 | Language            | Where           | Precondition                          | Postcondition                  | Result and old value    | Checking                                     |
 | ------------------- | --------------- | ------------------------------------- | ------------------------------ | ----------------------- | -------------------------------------------- |
@@ -205,7 +205,7 @@ language that chose it on purpose.
 | Rust nightly        | attribute       | `#[requires(x > 0)]`                  | `#[ensures(\|r\| *r > x)]`     | a closure parameter     | only under `-Zcontract-checks`               |
 | .NET Code Contracts | body, as a call | `Contract.Requires(x > 0)`            | `Contract.Ensures(...)`        | `Contract.Result<T>()`  | a binary rewriter; discontinued              |
 | Scala               | body, as a call | `require(x > 0)`                      | `ensuring(r => r > x)`         | a lambda parameter      | always; Stainless verifies                   |
-| Clojure             | function header | `{:pre [(pos? x)]}`                   | `{:post [(pos? %)]}`           | `%`                     | the `*assert*` flag                          |
+| Clojure             | signature       | `{:pre [(pos? x)]}`                   | `{:post [(pos? %)]}`           | `%`                     | the `*assert*` flag                          |
 | JML                 | comment         | `//@ requires x > 0;`                 | `//@ ensures \result > x;`     | `\result`, `\old`       | a separate tool (OpenJML)                    |
 | ACSL (Frama-C)      | comment         | `/*@ requires x > 0; */`              | `/*@ ensures \result > x; */`  | `\result`, `\old`       | a separate tool (E-ACSL checks, WP proves)   |
 | Python PEP 316      | docstring       | `pre: x > 0`                          | `post: __return__ > x`         | `__return__`, `__old__` | deferred, never adopted                      |
@@ -254,6 +254,13 @@ which is off by default. The project goal behind it is to specify the safety
 conditions of every `unsafe` function in the standard library and verify them
 with Kani, without changing the library's behavior or speed for anyone who has
 not opted in.
+
+The tracking issue lists questions it has not settled:
+
+- Whether a contract must be pure.
+- What happens when a contract expression panics.
+- Whether safety conditions and correctness conditions are written apart.
+- What to do with a condition that only a run can check, or only a proof can.
 
 ### In the body, as calls
 
@@ -309,16 +316,15 @@ regrets.
 
 ### A contract API in the body failed
 
-Fähndrich, Barnett and Logozzo argued in "Embedded Contract Languages" (SAC
-
-2010. for writing contracts as ordinary code rather than in a new syntax. They
-      observed that the number of specification languages roughly equals the number
-      of tools that consume them. Code Contracts was that design.
+In "Embedded Contract Languages" (SAC 2010), Fähndrich, Barnett and Logozzo
+argued for writing contracts as ordinary code rather than in a new syntax. They
+observed that the number of specification languages roughly equals the number
+of tools that consume them. Code Contracts was that design.
 
 Two reasons are given for its discontinuation. Contracts took effect only after
-the separate rewriter ran, and build pipelines that skipped it silently lost
-them. And users found some constraints they wanted could not be written, while
-others they wrote turned out too strict and had to be removed.
+the separate rewriter ran, so a build pipeline that skipped it lost them
+silently. And users found some constraints they wanted could not be written,
+while others they wrote turned out too strict and had to be removed.
 
 Duffy's account of Midori, written by a team that had lived through Code
 Contracts, gives the design reasons:
@@ -343,36 +349,45 @@ Midori's assertions went the other way. They stayed library calls
 (`Debug.Assert`, `Release.Assert`), not part of any signature, and the team
 wrote more release assertions than debug ones.
 
-### Removing checks in production is the central objection
+### C++26 adopted contracts over sustained objection
 
-The C++26 debate is about removal, not placement. P2900 lets a build choose an
-ignore semantic, under which a contract is not checked at all. The objections
-come from compiler, library and language designers:
+P2900 adds `pre`, `post` and `contract_assert`. The committee added it to the
+working draft in Hagenberg in February 2025 (100 for, 14 against, 12
+abstaining), and C++26 as a whole was approved in March 2026 (114 for, 12
+against, 3 abstaining). The objections did not go away. They come from
+compiler, library and language designers: P3173 and P3506 (Gabriel Dos Reis,
+Microsoft), P3573 "Contract concerns" (nine authors), and P4334 (Stroustrup,
+Garcia, Falco, Spicer, Voutilainen; 2026-08-09).
 
-- P3173 and P3506 (Gabriel Dos Reis, Microsoft) called the design not viable,
-  because evaluating a contract predicate may itself have undefined behavior,
-  and recommended against including it in C++26.
-- P3573, "Contract concerns", has nine authors and collects the objections.
-- P4334 (Stroustrup, Garcia, Falco, Spicer, Voutilainen; 2026-08-09) calls
-  enabling contracts for testing and removing them in production "a 1980s
-  approach". It quotes Eiffel's own documentation, which says that "when
-  releasing the final version of a system, it is usually appropriate to turn
-  off assertion monitoring", and compares the ignore semantic to wearing life
-  jackets only near the coast.
+The debate is about what a build may do with a contract, not where it is
+written:
+
+- Removal. A build may choose the ignore semantic, under which a contract is
+  not checked at all. P4334 calls enabling contracts for testing and removing
+  them in production "a 1980s approach". It quotes Eiffel's own documentation,
+  "when releasing the final version of a system, it is usually appropriate to
+  turn off assertion monitoring", and compares the ignore semantic to wearing
+  life jackets only near the coast.
+- Mixed builds. Translation units can be built with different semantics, so an
+  inline function in a header that one unit compiles without checks leaves a
+  violation undetected (P3835). Stroustrup objects to "changing the meaning of
+  code depending on where it is".
+- No use in the standard library. libc++, libstdc++ and the Microsoft STL each
+  harden with their own macros, and P2900 changes none of them.
+- No experience. GCC 16.1 ships it as experimental, Clang does not implement
+  it, and P4334 knows of no production codebase that uses it.
 
 The alternative those papers name is the hardened standard library: checks that
 stay on in production, measured at about 0.3% overhead across Google's servers.
+The objections to the predicate and to inheritance follow below.
 
 ### A disabled contract drifts from the code
 
 A contract that no build reads stops being checked against the code it
-describes.
-
-- Rust's nightly contracts are not parsed or type-checked when contract checks
-  are off (rust-lang/rust#145229). A contract can name a parameter that no
-  longer exists, and nothing reports it.
-- Code Contracts lost every contract in a build that skipped the rewriter.
-- JML and ACSL are checked only when their separate tool runs.
+describes. Rust's nightly contracts are not parsed or type-checked when
+contract checks are off (rust-lang/rust#145229), so a contract can name a
+parameter that no longer exists and nothing reports it. JML, ACSL and Code
+Contracts fail the same way whenever their separate tool does not run.
 
 ### Checking in the callee loses the caller's build
 
@@ -403,11 +418,9 @@ that code misbehaves.
 - Undefined behavior inside the predicate is the reason P3173 rejects C++'s
   design.
 - An exception escaping the predicate becomes a contract violation in C++, so
-  it can no longer be caught as one from the body could (P4308).
+  it cannot be caught the way one thrown from the body can (P4308).
 - C++ treats the variables a predicate names as `const`, so a predicate calling
   a non-`const` function fails to compile (P3261).
-- Rust's tracking issue lists the same open questions: whether a contract must
-  be pure, and what happens when it panics.
 
 ### Inheritance needs a rule
 
@@ -431,6 +444,14 @@ D's forum returns to the same dilemma from the other side: keep expensive
 contracts and miss the performance requirement, or remove them and miss the
 safety requirement.
 
+Rust's RFC 560 makes integer overflow a program error that is not undefined
+behavior. A build with `debug_assertions` must detect it and panic. A release
+build may skip the check, and then the result is defined to wrap. In Wado's
+terms, that is a contract violation whose class is unspecified, with exactly
+one listed outcome. A 2021 internals thread proposed checking overflow in every
+build. It stalled on cost: one cited study measured slowdowns from 0.4% to 95%,
+with a mean of 30%. Wado took neither side: its arithmetic wraps by definition.
+
 Higher-order contracts cost more again. A contract on a function argument has
 to wrap the function and check each later call. Takikawa et al. ("Is Sound
 Gradual Typing Dead?", POPL 2016) measured slowdowns above 100x in Typed
@@ -441,12 +462,13 @@ code.
 
 Kani, Prusti and Creusot each define their own contract language for Rust. A
 2022 design meeting of Rust's language team discussed a contracts RFC draft
-whose motivation was a shared one, and agreed to start with contracts checked
-at run time before any static verification. The standard library verification
+whose motivation was a shared one. The draft proposed `contract` and
+`debug_contract`, mirroring `assert!` and `debug_assert!`, so that expensive
+checks could be turned off. The team agreed to start with contracts checked at
+run time before any static verification. The standard library verification
 effort now reports 989 contract-verified proofs.
 
-Ada shows the payoff: GNATprove reads the same `Pre` and `Post` a test run
-checks.
+Ada's `Pre` and `Post` already serve both, as described above.
 
 ### The theory: blame, and contracts as types
 
@@ -473,6 +495,10 @@ Khlebnikov and Lakos (P1743, "Contracts, Undefined Behavior, and Defensive
 Programming") distinguish a wide contract, which has no precondition, from a
 narrow one. They argue that giving every input a defined behavior, as a null
 check in `strlen` would, hurts performance and correctness alike.
+
+Andrzej Krzemieński's 2013 "Preconditions" series treats a precondition as an
+idea rather than a language feature, and concludes that assertions and comments
+were the best C++ then offered.
 
 John Regehr ("Use of Assertions") counts executable documentation of pre- and
 postconditions among the benefits of assertions, and calls them a gateway to
@@ -525,11 +551,9 @@ The survey bears on these questions. It answers none of them.
 - [SPARK user's guide: assertion pragmas](https://docs.adacore.com/spark2014-docs/html/ug/en/source/assertion_pragmas.html)
 - [D: DIP 1009 review thread](https://lists.puremagic.com/pipermail/digitalmars-d/2017-June/269108.html)
 - [D: DIP 1006 review](https://forum.dlang.org/post/p7k63r$mt2$1@digitalmars.com)
-- [D bug 3407: `-safe -release` must keep all bounds checks](https://issues.dlang.org/bugs/3407/)
 - [Vala: assertions and contract programming](https://docs.vala.dev/tutorials/main/04-00-advanced-features/04-01-assertions-and-contract-programming)
 - [PEP 316: Programming by Contract for Python](https://peps.python.org/pep-0316/)
 - [The Move Prover: a guide](https://osec.io/blog/move-prover)
-- [Zig-DbC](https://hn.svelte.dev/item/44876174)
 - [Visual Studio Magazine: reconsider using Code Contracts](https://visualstudiomagazine.com/articles/2017/04/01/reconsider-using-contracts.aspx)
 - [Bandit B101: `assert_used`](https://bandit.readthedocs.io/en/1.7.9/plugins/b101_assert_used.html)
 - [SQLite: the use of `assert()`](https://www.sqlite.org/assert.html)
@@ -550,6 +574,8 @@ The survey bears on these questions. It answers none of them.
 - [`core::hint::assert_unchecked`](https://doc.rust-lang.org/std/hint/fn.assert_unchecked.html)
 - [Rust internals: unsafe assertion invariants](https://internals.rust-lang.org/t/unsafe-assertion-invariants/23206)
 - [RUSTSEC-2025-0137](https://rustsec.org/advisories/RUSTSEC-2025-0137)
+- [RFC 560: integer overflow](https://rust-lang.github.io/rfcs/0560-integer-overflow.html)
+- [Rust internals: switch the default on overflow checking](https://internals.rust-lang.org/t/thought-switch-the-default-on-overflow-checking-and-provide-rfc-560s-scoped-attribute-for-checked-arithmetic/15118)
 
 ### C++
 
