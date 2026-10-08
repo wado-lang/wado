@@ -32,7 +32,7 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
     }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table);
+    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let type_table = &*type_table;

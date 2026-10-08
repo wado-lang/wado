@@ -768,6 +768,9 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(body) = &func.body else { continue };
+        if !body.calls_any(|id| scalarized.contains_key(id)) {
+            continue;
+        }
 
         // Nothing calls a scalarized function from a position no consumer
         // reads a tuple in. `rebox_stragglers` has run, so every such call is

@@ -95,7 +95,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
     }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table);
+    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = &*type_table;

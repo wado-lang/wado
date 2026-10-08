@@ -22,6 +22,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
+use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
@@ -389,7 +390,7 @@ pub(super) struct CallImmutability<'a> {
 }
 
 impl<'a> CallImmutability<'a> {
-    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable) -> Self {
+    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
         let struct_fields = project
             .structs
             .iter()
@@ -402,7 +403,7 @@ impl<'a> CallImmutability<'a> {
             .collect();
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
-            compute_receiver_mutating(project, type_table, &first_param_types);
+            compute_receiver_mutating(project, type_table, &first_param_types, exec);
         Self {
             type_table,
             struct_fields,
@@ -617,6 +618,7 @@ fn compute_receiver_mutating(
     project: &NirPackage,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
+    exec: &Executor,
 ) -> (SecondaryMap<FuncId, bool>, SecondaryMap<FuncId, bool>) {
     let mut has_body: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     let mut p0_of: SecondaryMap<FuncId, Option<u32>> = SecondaryMap::new();
@@ -647,21 +649,24 @@ fn compute_receiver_mutating(
         direct: bool,
         pending: Vec<FuncId>,
     }
-    let mut summaries: Vec<Summary> = Vec::new();
-    for func_rc in &project.functions {
-        let f = func_rc.borrow();
-        let Some(id) = f.id else { continue };
-        let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
-            continue;
-        };
-        let (direct, pending) =
-            summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
-        summaries.push(Summary {
-            id,
-            direct,
-            pending,
-        });
-    }
+    let summaries: Vec<Summary> = exec
+        .map(&project.functions, |func_rc| {
+            let f = func_rc.borrow();
+            let id = f.id?;
+            let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
+                return None;
+            };
+            let (direct, pending) =
+                summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
+            Some(Summary {
+                id,
+                direct,
+                pending,
+            })
+        })
+        .into_iter()
+        .flatten()
+        .collect();
     let mut mutating: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     for s in &summaries {
         if s.direct {

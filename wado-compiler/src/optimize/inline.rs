@@ -45,6 +45,7 @@ use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::DescriptorCache;
 use crate::optimize::mod_ref::SummaryCache;
+use crate::parallel::Executor;
 use crate::token::Span;
 use crate::trace::filter;
 
@@ -1188,25 +1189,34 @@ fn constant_params(
     project: &NirPackage,
     scans: &[BodyScan],
     sites: &[Vec<ArgSite>],
+    exec: &Executor,
 ) -> IndexMap<FuncId, IndexSet<u32>> {
-    let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
+    let functions = &project.functions;
+    let positions: Vec<usize> = (0..functions.len()).collect();
+    let per_caller = exec.map(&positions, |&i| {
+        let func = functions[i].borrow();
         let Some(body) = &func.body else {
-            continue;
+            return Vec::new();
         };
         let const_locals = constant_locals(body, &scans[i]);
-        for (callee, args) in &sites[i] {
-            let here: IndexSet<u32> = args
-                .iter()
-                .filter(|&&(_, op)| is_constant_arg(body, op, &const_locals))
-                .map(|&(pos, _)| pos)
-                .collect();
-            match out.get_mut(callee) {
-                Some(prev) => prev.retain(|q| here.contains(q)),
-                None => {
-                    out.insert(*callee, here);
-                }
+        sites[i]
+            .iter()
+            .map(|(callee, args)| {
+                let here: IndexSet<u32> = args
+                    .iter()
+                    .filter(|&&(_, op)| is_constant_arg(body, op, &const_locals))
+                    .map(|&(pos, _)| pos)
+                    .collect();
+                (*callee, here)
+            })
+            .collect()
+    });
+    let mut out: IndexMap<FuncId, IndexSet<u32>> = IndexMap::default();
+    for (callee, here) in per_caller.into_iter().flatten() {
+        match out.get_mut(&callee) {
+            Some(prev) => prev.retain(|q| here.contains(q)),
+            None => {
+                out.insert(callee, here);
             }
         }
     }
@@ -1225,18 +1235,21 @@ fn hopeful_params(
     project: &NirPackage,
     scans: &[BodyScan],
     sites: &[Vec<ArgSite>],
+    exec: &Executor,
 ) -> Vec<IndexSet<u32>> {
     let n = project.functions.len();
     let funcs: Vec<_> = project.functions.iter().map(|f| f.borrow()).collect();
+    let bindings = exec.map(scans, single_bindings);
     let callers: Vec<Option<Caller<'_>>> = funcs
         .iter()
         .zip(scans)
         .zip(sites)
-        .map(|((func, scan), sites)| {
+        .zip(bindings)
+        .map(|(((func, scan), sites), bindings)| {
             func.body.as_ref().map(|body| Caller {
                 body,
                 written: &scan.written,
-                bindings: single_bindings(scan),
+                bindings,
                 sites,
             })
         })
@@ -2000,7 +2013,7 @@ pub fn inline_functions(
     // constant everywhere, which callees the compile-time engine runs on
     // constant arguments, and which of those spin a loop while doing it.
     let sites = argument_sites(scans);
-    let const_params = constant_params(project, scans, &sites);
+    let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
     let foldable: Vec<bool> = project
@@ -2019,7 +2032,7 @@ pub fn inline_functions(
     // splice pays back.
     let pricing = budget.prices_read();
     let call_sites = call_site_counts(scans);
-    let hopeful_params = hopeful_params(project, scans, &sites);
+    let hopeful_params = hopeful_params(project, scans, &sites, gate.exec());
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
@@ -2202,7 +2215,7 @@ pub fn inline_functions(
     let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
     let type_table: &TypeTable = &inline_type_table;
-    let inline_call_immutability = CallImmutability::new(project, type_table);
+    let inline_call_immutability = CallImmutability::new(project, type_table, &exec);
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;

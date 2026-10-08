@@ -31,6 +31,7 @@ use crate::optimize::alias::{
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::gate::FunctionGate;
 use crate::optimize::heap_effect::HeapEffectsCache;
+use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir;
 use crate::tir::{ResolvedType, TypeTable};
@@ -295,6 +296,7 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: tir::TypeId) -> 
 /// emitted.
 pub(super) fn freeze_pure_arith(
     project: &mut NirPackage,
+    exec: &Executor,
     include_fields: bool,
     // `Early` runs before the optimize loop, on each function's freshly-built
     // (clean, un-restructured) graph. Only then is it sound to freeze a
@@ -309,7 +311,7 @@ pub(super) fn freeze_pure_arith(
     use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table);
+    let call_immutability = CallImmutability::new(project, &type_table, exec);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a field read is versioned by what a call writes.
     let gate = include_fields.then(|| FunctionGate::new(project, &Arc::default()));
