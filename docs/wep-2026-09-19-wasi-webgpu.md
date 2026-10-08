@@ -145,14 +145,13 @@ binding is covered end to end and not only to the point of compiling.
   package closure instead of the whole table.
 - `wado run` has no host for it, and does not gain one. wasmtime ships none;
   `wasi-gfx/wasi-gfx-runtime` does, as the `wasi-webgpu-wasmtime` crate, against
-  the same `wasi:webgpu@0.3.0-rc.2` the module is generated from. It requires
-  wasmtime 48 where the workspace pins 49.0.0, and the GPU stack behind it is 31
-  crates — naga, wgpu-core, wgpu-hal and ash among them — about 38 s of a clean
-  release build and 3.1 MB of the binary. So the host is `wado-run-webgpu`, its
-  own crate and its own workspace, reached through
-  [External Subcommands](./wep-2026-09-19-external-subcommands.md). What is open
-  is when the two wasmtimes meet again: on that day the separate workspace, its
-  own lockfile and the `test-webgpu` CI job all collapse into the main ones.
+  the same `wasi:webgpu@0.3.0-rc.2` the module is generated from. The GPU stack
+  behind it is 31 crates — naga, wgpu-core, wgpu-hal and ash among them — about
+  38 s of a clean release build and 3.1 MB of the binary, and it follows
+  wasmtime on its own schedule. So the host is `wado-run-webgpu`, its own crate
+  and its own workspace, kept out of the main one so the workspace does not carry
+  that weight, reached through
+  [External Subcommands](./wep-2026-09-19-external-subcommands.md).
 - A machine with no GPU has no adapter, and wgpu's `noop` backend is opt-in and
   computes nothing. `mesa-vulkan-drivers` supplies a software adapter
   (lavapipe), a 98.5 MB install, and that is what `test-webgpu` runs on. A
@@ -163,9 +162,9 @@ binding is covered end to end and not only to the point of compiling.
   adapter it names, and `--log-level info` names the adapter each request
   returned. So a change to the host crate's `request-adapter` does not reach the
   runner until the runner's copy is changed to match.
-- The runner defines `on-submitted-work-done` too. The host crate's 0.3.1 awaits
-  a wgpu callback but polls no device, so the callback never fires and the guest
-  hangs; 0.3.0 returned without waiting. The runner's copy polls every device
+- The runner defines `on-submitted-work-done` too. The host crate's copy awaits a
+  wgpu callback but polls no device, so the callback never fires and the guest
+  hangs. The runner's copy polls every device
   until it is idle. Once the host crate polls, the copy is redundant.
 - The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2588 lines.
   Regenerating handles that. What nothing records is which version the bundled
