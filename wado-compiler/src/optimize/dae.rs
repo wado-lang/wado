@@ -273,11 +273,7 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     // Phase 3b: rewrite every call site.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        if !func
-            .body
-            .as_ref()
-            .is_some_and(|b| b.calls_any(|id| confirmed.contains_key(id)))
-        {
+        if !func.calls_any(|id| confirmed.contains_key(id)) {
             continue;
         }
         if let Some(body) = func.body.as_mut()

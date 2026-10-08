@@ -1209,11 +1209,7 @@ fn rewrite_call_sites(
         let Some(key) = func.id else { continue };
         // Only a call to a candidate is rewritten. Asked before the body is
         // borrowed mutably, so a function holding none is not written.
-        if !func
-            .body
-            .as_ref()
-            .is_some_and(|b| b.calls_any(|id| sroa_positions.contains_key(id)))
-        {
+        if !func.calls_any(|id| sroa_positions.contains_key(id)) {
             continue;
         }
         // Inside a clone the scalarized params already hold the field, so an

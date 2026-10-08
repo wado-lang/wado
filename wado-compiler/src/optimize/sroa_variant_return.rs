@@ -252,11 +252,7 @@ fn rebox_stragglers(
             let mut func = functions[i].borrow_mut();
             // Every step below keys on a call to a scalarized callee. Asked before
             // the body is taken, so a function it leaves alone is not written.
-            if !func
-                .body
-                .as_ref()
-                .is_some_and(|b| b.calls_any(|id| scalarized.contains_key(id)))
-            {
+            if !func.calls_any(|id| scalarized.contains_key(id)) {
                 return false;
             }
             let own_return = func.return_type;
@@ -2094,11 +2090,7 @@ fn rewrite_call_sites(
         let mut func = functions[i].borrow_mut();
         // Every step below keys on a call to a candidate. Asked before the body
         // is taken, so a function it leaves alone is not written.
-        if !func
-            .body
-            .as_ref()
-            .is_some_and(|b| b.calls_any(|id| candidates.contains_key(id)))
-        {
+        if !func.calls_any(|id| candidates.contains_key(id)) {
             return false;
         }
         let mut body = func.body.take().expect("checked above");

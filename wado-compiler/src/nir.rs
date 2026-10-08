@@ -585,6 +585,11 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// [`Body::calls_any`] of the body, `false` for a bodyless function.
+    pub fn calls_any(&self, callee: impl Fn(&FuncId) -> bool) -> bool {
+        self.body.as_ref().is_some_and(|b| b.calls_any(callee))
+    }
+
     /// Bodyless stub for an extern / builtin callee (Phase 5 interning).
     pub fn extern_stub(func_ref: &FunctionRef) -> Self {
         Self {
