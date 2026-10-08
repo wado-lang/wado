@@ -2,10 +2,9 @@
 //! `inline`'s cold discount describes the callee instead of promising a split.
 //!
 //! A function's root block is a region only when more than one site calls the
-//! function, since that is when the inliner copies its cold tail into each one,
-//! as it does the coverage probe's into every region. The program's init guard
-//! is not one either: run once, outlining it leaves the hot loops identical and
-//! costs a function (`dead-ends.md`).
+//! function, since that is when the inliner copies its cold tail into each one.
+//! The program's init guard is not one either: run once, outlining it leaves
+//! the hot loops identical and costs a function (`dead-ends.md`).
 //!
 //! Two things are open. The pass costs `sieve` 4.5% for no reason the IR shows
 //! — the hot loops are identical in WIR and in the emitted Wasm, and perturbing

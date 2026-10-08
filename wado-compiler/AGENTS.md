@@ -57,6 +57,8 @@ first.
 
 The stdlib carries no inline hints (`#[inline(...)]`). A hint that makes code
 faster marks a case the optimizer misses, so the fix belongs in the optimizer.
+A hint that trades run time for compile time hides no such case, and may stay:
+`core:rt`'s coverage probe is the one.
 
 A module re-exports an effect only where it owns it: `core:cli` hands out
 `Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an

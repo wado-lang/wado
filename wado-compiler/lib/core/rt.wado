@@ -185,9 +185,13 @@ global mut COVERAGE_SEEN: Array<u8> = builtin::array_new::<u8>(0);
 /// The probe `wado test --coverage` puts at the start of every region: tells
 /// the host the first time region `id` runs in this instance. The host hears a
 /// hit as it happens, since a test that traps cannot be entered again.
+// Kept a call: inlined into every region, its fast path doubles what the
+// optimizer walks under `--coverage-include=stdlib`, to speed a test run that
+// spends a fraction of the compile.
 #[compiler_item("coverage_probe")]
 #[coverage(off)]
 #[benign(CoverageHost)]
+#[inline(never)]
 internal fn coverage_probe(id: i32) {
     let len = builtin::array_len(&COVERAGE_SEEN);
     if id < len && builtin::array_get_value_u8(&COVERAGE_SEEN, id) != 0 {
