@@ -4,6 +4,8 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
+use std::rc::Rc;
+
 use crate::builtin_facts::{SideEffect, Trap};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -16,6 +18,7 @@ use crate::optimize::arena_query::{
     expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
 use crate::optimize::bounds::{self, Proofs};
+use crate::optimize::gate::{BodyMemo, FunctionGate};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeTable};
 
@@ -794,7 +797,7 @@ fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<&BuiltinDecl
 /// its body, both indexed by `func_id.index()`.
 pub(super) struct FnSummaries {
     pub effects: Vec<FnEffect>,
-    proofs: Vec<Proofs>,
+    proofs: Vec<Rc<Proofs>>,
 }
 
 impl FnSummaries {
@@ -847,32 +850,45 @@ pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
 /// declared (indexed by `func_id.index()`), for a caller that proves a body
 /// again after changing it.
 pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&BuiltinDeclaration>>) {
-    use cranelift_entity::EntityRef;
-
-    let funcs = &project.functions;
     let types = project.type_table.borrow();
-    let (mut effects, builtins) = leaf_effects(project);
-    let mut proofs: Vec<Proofs> = funcs.iter().map(|_| Proofs::default()).collect();
-    // Callee edges as one flat run per function rather than an `IndexSet` each:
-    // this walks every function in the package three times per fixed-point round.
-    let mut callee_edges: Vec<usize> = Vec::new();
-    let mut edge_ranges: Vec<(usize, usize)> = vec![(0, 0); funcs.len()];
-    let mut last_seen: Vec<usize> = vec![usize::MAX; funcs.len()];
-    let mut stack: Vec<NodeRef> = Vec::new();
+    let (leaves, builtins) = leaf_effects(project);
+    let bodies: Vec<Option<BodySummary>> = project
+        .functions
+        .iter()
+        .map(|f| BodySummary::of(&f.borrow(), &types, &leaves, &builtins))
+        .collect();
+    let summaries = join_over_calls(leaves, bodies.iter().map(Option::as_ref));
+    (summaries, builtins)
+}
 
-    for (i, f) in funcs.iter().enumerate() {
-        let f = f.borrow();
-        let Some(body) = &f.body else {
-            continue;
-        };
-        let bounds = bounds::analyze(body, &types, |fid| builtins[fid.index()]);
+/// One body's own part of [`summarize`], which nothing outside the body moves:
+/// its effect before any callee's joins in, the functions it calls, and the
+/// proofs for its builtin calls.
+#[derive(Debug, PartialEq)]
+struct BodySummary {
+    own: FnEffect,
+    callees: Vec<usize>,
+    proofs: Rc<Proofs>,
+}
+
+impl BodySummary {
+    /// `None` for a function without a body, which `leaves` answers for.
+    fn of(
+        f: &NirFunction,
+        types: &TypeTable,
+        leaves: &[FnEffect],
+        builtins: &[Option<&BuiltinDeclaration>],
+    ) -> Option<Self> {
+        use cranelift_entity::EntityRef;
+
+        let body = f.body.as_ref()?;
+        let bounds = bounds::analyze(body, types, |fid| builtins[fid.index()]);
         let mut own = FnEffect {
             writes_shared_heap: bounds.writes_shared_heap,
             ..FnEffect::default()
         };
-        let edge_start = callee_edges.len();
-        stack.clear();
-        stack.push(NodeRef::Block(body.root));
+        let mut callees = Vec::new();
+        let mut stack = vec![NodeRef::Block(body.root)];
         while let Some(node) = stack.pop() {
             own.may_trap |= operand_values_may_trap(body, node);
             match node {
@@ -895,7 +911,7 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
                     ExprKind::Call { func_id, .. }
                         if let Some(declaration) = builtins[func_id.index()] =>
                     {
-                        let callee = effects[func_id.index()];
+                        let callee = leaves[func_id.index()];
                         own.merge(FnEffect {
                             may_trap: callee.may_trap && !bounds.proofs.holds(id, *func_id),
                             // No body scan narrows a store it cannot see.
@@ -904,43 +920,55 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
                         });
                     }
                     // A direct call's trap arrives with its callee's summary.
-                    ExprKind::Call { func_id, .. } => {
-                        let callee = func_id.index();
-                        if last_seen.get(callee).is_some_and(|&run| run != i) {
-                            last_seen[callee] = i;
-                            callee_edges.push(callee);
-                        }
-                    }
-                    _ => own.may_trap |= expr_node_may_trap_typed(body, id, Some(&types)),
+                    ExprKind::Call { func_id, .. } => callees.push(func_id.index()),
+                    _ => own.may_trap |= expr_node_may_trap_typed(body, id, Some(types)),
                 },
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
             body.for_each_child(node, |c| stack.push(c));
         }
+        callees.sort_unstable();
+        callees.dedup();
         // A declared effect is a caller-visible promise in its own right; treat
         // it as opaque rather than re-deriving it. A retention is not: keeping a
         // reference is a store the body scan sees, or a result the caller holds.
         if !f.effects.is_empty() || f.is_async {
             own.opaque = true;
         }
-        effects[i] = own;
-        edge_ranges[i] = (edge_start, callee_edges.len());
-        proofs[i] = bounds.proofs;
+        Some(Self {
+            own,
+            callees,
+            proofs: Rc::new(bounds.proofs),
+        })
     }
+}
 
-    let call_graph: Vec<Vec<usize>> = edge_ranges
-        .iter()
-        .map(|&(lo, hi)| callee_edges[lo..hi].to_vec())
-        .collect();
+/// Every function's [`FnEffect`]: each body's own, joined with its callees'
+/// to the least fixpoint. `leaves` answers for the functions without a body.
+fn join_over_calls<'b>(
+    mut effects: Vec<FnEffect>,
+    bodies: impl ExactSizeIterator<Item = Option<&'b BodySummary>>,
+) -> FnSummaries {
+    let no_proofs = Rc::new(Proofs::default());
+    let mut call_graph: Vec<&[usize]> = Vec::with_capacity(bodies.len());
+    let mut proofs = Vec::with_capacity(bodies.len());
+    for (effect, body) in effects.iter_mut().zip(bodies) {
+        let Some(body) = body else {
+            call_graph.push(&[]);
+            proofs.push(no_proofs.clone());
+            continue;
+        };
+        *effect = body.own;
+        call_graph.push(&body.callees);
+        proofs.push(body.proofs.clone());
+    }
     for (effect, recursive) in effects.iter_mut().zip(recursive_scc_members(&call_graph)) {
         effect.may_diverge |= recursive;
     }
-
     loop {
         let mut changed = false;
-        for i in 0..effects.len() {
-            let (lo, hi) = edge_ranges[i];
-            let merged = callee_edges[lo..hi]
+        for (i, callees) in call_graph.iter().enumerate() {
+            let merged = callees
                 .iter()
                 .filter_map(|&c| effects.get(c).copied())
                 .fold(effects[i], |mut acc, e| {
@@ -956,7 +984,26 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
             break;
         }
     }
-    (FnSummaries { effects, proofs }, builtins)
+    FnSummaries { effects, proofs }
+}
+
+/// [`summarize`] kept across the fixed-point loop: a body's own part is
+/// re-derived only where its edit count moved, and the join over the call graph,
+/// which a rewrite anywhere can move, every time.
+#[derive(Default)]
+pub(super) struct SummaryCache(BodyMemo<Option<BodySummary>>);
+
+impl SummaryCache {
+    /// What [`summarize`] answers for `project` as it stands. Every rewrite
+    /// since the last call must have been reported to `gate`.
+    pub(super) fn summaries(&mut self, project: &NirPackage, gate: &FunctionGate) -> FnSummaries {
+        let types = project.type_table.borrow();
+        let (leaves, builtins) = leaf_effects(project);
+        let bodies = self.0.refresh(project, gate, |f| {
+            BodySummary::of(f, &types, &leaves, &builtins)
+        });
+        join_over_calls(leaves, bodies.iter().map(Option::as_ref))
+    }
 }
 
 #[cfg(test)]

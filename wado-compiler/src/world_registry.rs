@@ -327,6 +327,15 @@ impl ExportMappings {
     }
 }
 
+impl<'a> IntoIterator for &'a ExportMappings {
+    type Item = &'a ExportMapping;
+    type IntoIter = std::slice::Iter<'a, ExportMapping>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl WorldRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {

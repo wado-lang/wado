@@ -8268,7 +8268,7 @@ impl DeclarationShape {
 /// What a bodyless declaration stated, by parameter position, and what that
 /// implies for the questions its readers ask. Link snapshots it because
 /// monomorphization drops the generic declarations.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BuiltinDeclaration {
     /// How many parameters the declaration takes.
     pub arity: usize,

@@ -222,7 +222,7 @@ enum CandidateInit {
 pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     // Build the method catalog + signature-kind index once, using an immutable
     // borrow on functions. Both indexes are derived from the same scan.
-    let (catalog, method_sig) = {
+    let (catalog, mut method_sig) = {
         let type_table = project.type_table.borrow();
         build_method_catalog(project, &type_table)
     };
@@ -233,6 +233,29 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // Build a struct lookup: (name, module_source) → &NirStruct. Used by
     // `collect_candidates` to expand `List<UserStruct>` element types.
     let struct_index = build_struct_index(&project.structs);
+    let value_copy_ids = project.value_copy_func_ids();
+    let len = project.functions.len();
+    {
+        // The demotions only unclassify, so a body holding no candidate before
+        // them holds none after, and a round whose pending bodies hold none
+        // rewrites nothing. They walk the whole program, so only a round that
+        // can use them pays for them.
+        let type_table = project.type_table.borrow();
+        if !(0..len).map(FuncId::new).any(|fid| {
+            gate.needs(GatedPass::ContainerSroa, fid)
+                && holds_candidate(
+                    &project.functions[fid.index()].borrow(),
+                    &type_table,
+                    &struct_index,
+                    &method_sig,
+                    &value_copy_ids,
+                )
+        }) {
+            gate.catch_up(GatedPass::ContainerSroa, len);
+            return false;
+        }
+        demote_unsplittable_families(project, &type_table, &mut method_sig);
+    }
 
     // Per-function engine session, gate-skipped. Mutations route through the
     // engine API; the rule fires once at the body root (whole-function shape).
@@ -240,31 +263,19 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // shifts the function's call edges, which only costs propagation precision,
     // not correctness.
     let type_table_rc = project.type_table.clone();
-    let value_copy_ids = project.value_copy_func_ids();
-    let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
         let func_rc = &project.functions[fid.index()];
-        // Skip CM bindings (ABI bridges) and body-less declarations, and a body
-        // holding no candidate, which the rewrite would find before anything
-        // else: the session's indices cost a walk of the whole body.
-        {
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref().filter(|_| !func.is_cm_binding) else {
-                return false;
-            };
-            let type_table = type_table_rc.borrow();
-            if collect_candidates(
-                body,
-                &type_table,
-                &struct_index,
-                &method_sig,
-                &value_copy_ids,
-            )
-            .is_empty()
-            {
-                return false;
-            }
+        // A body holding no candidate is one the rewrite would find nothing in,
+        // and the session's indices cost a walk of the whole body.
+        if !holds_candidate(
+            &func_rc.borrow(),
+            &type_table_rc.borrow(),
+            &struct_index,
+            &method_sig,
+            &value_copy_ids,
+        ) {
+            return false;
         }
         let mut func = func_rc.borrow_mut();
         let rule = ContainerSroaRule {
@@ -285,6 +296,23 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
         // `borrow_mut`.)
         engine.run(&[&rule])
     })
+}
+
+/// Whether `func` has a body holding a candidate. A CM binding (an ABI bridge)
+/// never does.
+fn holds_candidate(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+    sig: &MethodSig,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> bool {
+    func.body
+        .as_ref()
+        .filter(|_| !func.is_cm_binding)
+        .is_some_and(|body| {
+            !collect_candidates(body, type_table, struct_index, sig, value_copy_ids).is_empty()
+        })
 }
 
 /// Standalone-session rule whose single `apply_block` performs the whole-
@@ -392,11 +420,17 @@ fn build_method_catalog(
             id_kinds.insert(func_id, kind);
         }
     }
-    let mut sig = MethodSig {
+    let sig = MethodSig {
         id_kinds,
         id_sigkeys,
         kind_index,
     };
+    (catalog, sig)
+}
+
+/// Unclassify the method families whose members do more than the per-field
+/// rewrite reproduces.
+fn demote_unsplittable_families(project: &NirPackage, type_table: &TypeTable, sig: &mut MethodSig) {
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let builtin_ids = |wanted: CtfeBuiltin| -> IndexSet<FuncId> {
         ctfe_builtins
@@ -406,14 +440,13 @@ fn build_method_catalog(
     };
     let array_len = builtin_ids(CtfeBuiltin::ArrayLen);
     let array_new = builtin_ids(CtfeBuiltin::ArrayNew);
-    demote_element_reading_queries(project, type_table, &array_len, &mut sig);
-    demote_filling_constructors(project, &array_new, &mut sig);
+    demote_element_reading_queries(project, type_table, &array_len, sig);
+    demote_filling_constructors(project, &array_new, sig);
     let storage_builtins: IndexSet<FuncId> = ctfe_builtins
         .iter()
         .filter_map(|(&id, &b)| is_storage_builtin(b).then_some(id))
         .collect();
-    demote_element_inspecting_handlers(project, type_table, &storage_builtins, &mut sig);
-    (catalog, sig)
+    demote_element_inspecting_handlers(project, type_table, &storage_builtins, sig);
 }
 
 /// The members of `kind` in `sig`, by id.

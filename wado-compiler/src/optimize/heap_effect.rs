@@ -11,7 +11,7 @@ use crate::builtin_facts::{SideEffect, Storage};
 use crate::graph::strongly_connected_components;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, NirFunction, NirUnaryOp};
+use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
@@ -21,7 +21,7 @@ use crate::tir::{
 };
 
 use super::arena_query::holds_reference;
-use super::gate::FunctionGate;
+use super::gate::{BodyMemo, FunctionGate};
 
 /// Where a class's objects may come from: a bit per parameter (the last one
 /// standing for every later one) or a global. None means allocated here.
@@ -128,6 +128,7 @@ impl Summary {
 }
 
 /// How a callee is summarised.
+#[derive(Debug, PartialEq)]
 enum Callee {
     Body,
     /// A `core:builtin` declaration.
@@ -140,10 +141,9 @@ enum Callee {
     },
 }
 
-/// One function as the solver sees it, taken when its gate edit count was
-/// `edit`.
+/// One function as the solver sees it.
+#[derive(Debug, PartialEq)]
 struct FunctionEntry {
-    edit: u64,
     callee: Callee,
     closure: bool,
     /// The functions its reachable calls name.
@@ -152,7 +152,7 @@ struct FunctionEntry {
 }
 
 impl FunctionEntry {
-    fn of(f: &NirFunction, project: &NirPackage, edit: u64) -> Self {
+    fn of(f: &NirFunction, project: &NirPackage) -> Self {
         let mut calls = IndexSet::default();
         let mut calls_indirect = false;
         if let Some(body) = &f.body {
@@ -165,7 +165,6 @@ impl FunctionEntry {
             });
         }
         Self {
-            edit,
             callee: classify_callee(f, project),
             closure: f.body.is_some() && f.is_closure_call(),
             calls,
@@ -222,7 +221,7 @@ impl Layouts {
 pub(super) struct HeapEffectsCache {
     gate: Option<u64>,
     layouts: Layouts,
-    functions: Vec<FunctionEntry>,
+    functions: BodyMemo<FunctionEntry>,
     summaries: Vec<Summary>,
     /// The join over every closure body, which is what an indirect call runs.
     indirect: Summary,
@@ -250,33 +249,27 @@ impl HeapEffectsCache {
 
     fn refresh(&mut self, project: &NirPackage, type_table: &TypeTable, gate: &FunctionGate) {
         let layouts = Layouts::of(project, type_table);
-        let len = project.functions.len();
-        if self.gate != Some(gate.id()) || self.layouts != layouts || self.functions.len() > len {
+        if self.gate != Some(gate.id()) || self.layouts != layouts {
             *self = Self {
                 gate: Some(gate.id()),
                 layouts,
                 ..Self::default()
             };
         }
+        let len = project.functions.len();
         let mut edited = vec![false; len];
         // Whether a node's answer to its callers moved; the last is the indirect one.
         let mut moved = vec![false; len + 1];
-        for i in 0..len {
-            let edit = gate.edits(FuncId::new(i));
-            if self.functions.get(i).is_some_and(|e| e.edit == edit) {
-                continue;
-            }
-            edited[i] = true;
-            let entry = FunctionEntry::of(&project.functions[i].borrow(), project, edit);
-            if let Some(old) = self.functions.get_mut(i) {
-                moved[i] = old.shape() != entry.shape();
-                *old = entry;
-            } else {
-                moved[i] = true;
-                self.functions.push(entry);
-                self.summaries.push(Summary::default());
-            }
-        }
+        self.functions.refresh_observing(
+            project,
+            gate,
+            |f| FunctionEntry::of(f, project),
+            |i, old, new| {
+                edited[i] = true;
+                moved[i] = old.is_none_or(|old| old.shape() != new.shape());
+            },
+        );
+        self.summaries.resize_with(len, Summary::default);
         if edited.contains(&true) {
             self.solve(project, type_table, &edited, &mut moved);
         }
@@ -293,7 +286,7 @@ impl HeapEffectsCache {
         edited: &[bool],
         moved: &mut [bool],
     ) {
-        let indirect = self.functions.len();
+        let indirect = self.functions.facts().len();
         let successors = self.successors();
         let components = strongly_connected_components(&successors);
         let mut component_of = vec![0; successors.len()];
@@ -358,16 +351,15 @@ impl HeapEffectsCache {
     /// Each node's callees, the node past the last function standing for what
     /// every indirect call runs.
     fn successors(&self) -> Vec<Vec<usize>> {
-        let indirect = self.functions.len();
-        let mut successors: Vec<Vec<usize>> = self
-            .functions
+        let entries = self.functions.facts();
+        let indirect = entries.len();
+        let mut successors: Vec<Vec<usize>> = entries
             .iter()
             .map(|f| match f.callee {
                 Callee::Body => f
                     .calls
                     .iter()
                     .copied()
-                    .filter(|&c| c < indirect)
                     .chain(f.calls_indirect.then_some(indirect))
                     .collect(),
                 Callee::Builtin(_) | Callee::Opaque { .. } => Vec::new(),
@@ -378,11 +370,12 @@ impl HeapEffectsCache {
     }
 
     fn closure_bodies(&self) -> impl Iterator<Item = usize> + '_ {
-        (0..self.functions.len()).filter(|&i| self.functions[i].closure)
+        let entries = self.functions.facts();
+        (0..entries.len()).filter(|&i| entries[i].closure)
     }
 
     fn summary_mut(&mut self, n: usize) -> &mut Summary {
-        if n == self.functions.len() {
+        if n == self.summaries.len() {
             &mut self.indirect
         } else {
             &mut self.summaries[n]
@@ -391,14 +384,15 @@ impl HeapEffectsCache {
 
     /// What node `n` gives its callers, read against the summaries as they stand.
     fn summarize(&self, project: &NirPackage, type_table: &TypeTable, n: usize) -> Summary {
-        if n == self.functions.len() {
+        let entries = self.functions.facts();
+        if n == entries.len() {
             let mut indirect = Summary::default();
             for c in self.closure_bodies() {
                 indirect.join(&self.summaries[c]);
             }
             return indirect;
         }
-        match self.functions[n].callee {
+        match entries[n].callee {
             Callee::Body => {
                 let effects = HeapEffects {
                     type_table,
@@ -417,7 +411,7 @@ impl HeapEffectsCache {
     /// longer answers for it. One node per refresh, rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
     fn assert_one_settled(&mut self, project: &NirPackage, type_table: &TypeTable) {
-        let nodes = self.functions.len() + 1;
+        let nodes = self.summaries.len() + 1;
         self.cursor %= nodes;
         let n = self.cursor;
         self.cursor += 1;
@@ -1856,7 +1850,12 @@ fn call_parts<'s>(effects: &'s HeapEffects, body: &Body, e: ExprId) -> (Target<'
     match &body.exprs[e].kind {
         ExprKind::Call { func_id, args, .. } => {
             let cache = effects.cache;
-            let target = match cache.functions.get(func_id.index()).map(|f| &f.callee) {
+            let target = match cache
+                .functions
+                .facts()
+                .get(func_id.index())
+                .map(|f| &f.callee)
+            {
                 Some(Callee::Body) => Target::Summary(&cache.summaries[func_id.index()]),
                 Some(Callee::Builtin(declaration)) => Target::Builtin(declaration),
                 Some(&Callee::Opaque { suspends }) => Target::Opaque { suspends },

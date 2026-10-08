@@ -32,7 +32,7 @@ use crate::token::Span;
 use cranelift_entity::EntityRef;
 
 use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
-use super::gate::{FunctionGate, GatedPass};
+use super::gate::{BodyMemo, FunctionGate, GatedPass};
 use crate::ast::Visibility;
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
@@ -60,8 +60,12 @@ struct SroaInfo {
     scalar_type_id: TypeId,
 }
 
-pub fn sroa_single_field_parameters(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let mut candidates = collect_and_validate(project, gate);
+pub fn sroa_single_field_parameters(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    state: &mut SroaParamState,
+) -> bool {
+    let mut candidates = collect_and_validate(project, gate, state);
     if candidates.is_empty() {
         return false;
     }
@@ -160,12 +164,15 @@ impl FieldUse {
 fn collect_and_validate(
     project: &NirPackage,
     gate: &mut FunctionGate,
+    state: &mut SroaParamState,
 ) -> IndexMap<(FnKey, usize), SroaInfo> {
     let type_table = project.type_table.borrow();
     let field_table = build_field_table_index(project);
     let struct_fields = build_struct_fields_index(project);
-    let reachable_writes = transitive_reachable_writes(project, &type_table);
-    let global_types = global_type_index(project);
+    let own = state.0.refresh(project, gate, |f| {
+        f.body.as_ref().map(|body| OwnWrites::of(body, &type_table))
+    });
+    let (reachable_writes, write_targets) = transitive_reachable_writes(project, own);
 
     let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
     for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
@@ -215,7 +222,7 @@ fn collect_and_validate(
             let aliasing_write = may_write_aliasing_location(
                 &reachable_writes[key.index()],
                 &info.struct_key,
-                &global_types,
+                &write_targets,
                 &type_table,
                 &struct_fields,
             );
@@ -518,7 +525,7 @@ enum ReachableWrites {
     /// reach them. Every query over `Opaque` MUST therefore answer
     /// conservatively; narrowing it un-guards every capture.
     Opaque,
-    Named(IndexSet<(ModuleSource, String)>),
+    Named(TargetSet),
 }
 
 impl ReachableWrites {
@@ -529,16 +536,98 @@ impl ReachableWrites {
                 *slot = ReachableWrites::Opaque;
                 true
             }
-            (ReachableWrites::Named(acc), ReachableWrites::Named(more)) => {
-                let before = acc.len();
-                for g in more {
-                    acc.insert(g.clone());
-                }
-                acc.len() != before
-            }
+            (ReachableWrites::Named(acc), ReachableWrites::Named(more)) => acc.absorb(more),
         }
     }
 }
+
+/// Every global a write can name, by position, with its declared type: `None`
+/// for a name no global declares, which is why the names a body writes join the
+/// declared ones.
+struct WriteTargets(IndexMap<(ModuleSource, String), Option<TypeId>>);
+
+/// A set of [`WriteTargets`] positions. A function's reachable writes are
+/// unioned up the call graph to a fixpoint, so a union is one OR per word.
+#[derive(Clone, Default)]
+struct TargetSet(Vec<u64>);
+
+impl TargetSet {
+    fn insert(&mut self, target: usize) {
+        let word = target / 64;
+        if self.0.len() <= word {
+            self.0.resize(word + 1, 0);
+        }
+        self.0[word] |= 1 << (target % 64);
+    }
+
+    /// Add `other`'s members, answering whether any was new.
+    fn absorb(&mut self, other: &TargetSet) -> bool {
+        if self.0.len() < other.0.len() {
+            self.0.resize(other.0.len(), 0);
+        }
+        let mut grew = false;
+        for (word, more) in self.0.iter_mut().zip(&other.0) {
+            grew |= *more & !*word != 0;
+            *word |= more;
+        }
+        grew
+    }
+
+    fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        self.0.iter().enumerate().flat_map(|(w, &word)| {
+            (0..64)
+                .filter(move |bit| word & (1 << bit) != 0)
+                .map(move |bit| w * 64 + bit)
+        })
+    }
+}
+
+/// What one body writes itself, before its callees' writes join in.
+#[derive(Debug, PartialEq)]
+struct OwnWrites {
+    globals: IndexSet<(ModuleSource, String)>,
+    indirect: bool,
+    /// The callees whose writes reach what runs after their call. A call typed
+    /// `!` never hands control back, so what it writes reaches no snapshot read.
+    callees: Vec<usize>,
+}
+
+impl OwnWrites {
+    fn of(body: &Body, type_table: &TypeTable) -> Self {
+        let mut own = Self {
+            globals: IndexSet::default(),
+            indirect: false,
+            callees: Vec::new(),
+        };
+        for e in reachable_exprs(body) {
+            let node = &body.exprs[e];
+            match &node.kind {
+                ExprKind::GlobalVarSet {
+                    module_source,
+                    name,
+                    ..
+                } => {
+                    own.globals.insert((module_source.clone(), name.clone()));
+                }
+                ExprKind::Assign { target, .. } => {
+                    if let Some(g) = global_place_root(body, *target) {
+                        own.globals.insert(g);
+                    }
+                }
+                ExprKind::Call { func_id, .. } if !type_table.is_never(node.type_id) => {
+                    own.callees.push(func_id.index());
+                }
+                ExprKind::IndirectCall { .. } => own.indirect = true,
+                _ => {}
+            }
+        }
+        own
+    }
+}
+
+/// The body scans [`transitive_reachable_writes`] reads, kept across rounds.
+#[derive(Default)]
+pub struct SroaParamState(BodyMemo<Option<OwnWrites>>);
 
 /// The global a write-target place is rooted at, seeing through projections, so
 /// an in-place `G.field = …` counts as a write to `G`, not only a `GlobalVarSet`.
@@ -566,58 +655,46 @@ fn global_place_root(body: &Body, target: ExprId) -> Option<(ModuleSource, Strin
 /// call graph.
 fn transitive_reachable_writes(
     project: &NirPackage,
-    type_table: &TypeTable,
-) -> Vec<ReachableWrites> {
-    let n = project.functions.len();
+    own: &[Option<OwnWrites>],
+) -> (Vec<ReachableWrites>, WriteTargets) {
+    let mut targets = WriteTargets(
+        project
+            .globals
+            .iter()
+            .map(|g| ((g.module_source.clone(), g.name.clone()), Some(g.ty)))
+            .collect(),
+    );
+    let declared = targets.0.len();
+    let n = own.len();
     let mut writes: Vec<ReachableWrites> = Vec::with_capacity(n);
     let mut callers: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for i in 0..n {
-        let func = project.functions[i].borrow();
-        let mut direct: IndexSet<(ModuleSource, String)> = IndexSet::default();
-        let mut indirect = false;
-        // Another task may write any global.
-        if func.body.is_none() && project.builtin_declarations.may_suspend(&*func) {
-            direct.extend(
-                project
-                    .globals
-                    .iter()
-                    .map(|g| (g.module_source.clone(), g.name.clone())),
-            );
-        }
-        if let Some(body) = func.body.as_ref() {
-            for e in reachable_exprs(body) {
-                let node = &body.exprs[e];
-                match &node.kind {
-                    ExprKind::GlobalVarSet {
-                        module_source,
-                        name,
-                        ..
-                    } => {
-                        direct.insert((module_source.clone(), name.clone()));
-                    }
-                    ExprKind::Assign { target, .. } => {
-                        if let Some(g) = global_place_root(body, *target) {
-                            direct.insert(g);
-                        }
-                    }
-                    // A call typed `!` never hands control back, so what it
-                    // writes reaches no snapshot read after it.
-                    ExprKind::Call { func_id, .. } if !type_table.is_never(node.type_id) => {
-                        let c = func_id.index();
-                        if c < n {
-                            callers[c].push(i);
-                        }
-                    }
-                    ExprKind::IndirectCall { .. } => indirect = true,
-                    _ => {}
-                }
+    for (i, own) in own.iter().enumerate() {
+        let mut direct = TargetSet::default();
+        let Some(own) = own else {
+            // Another task may write any global.
+            if project
+                .builtin_declarations
+                .may_suspend(&*project.functions[i].borrow())
+            {
+                (0..declared).for_each(|t| direct.insert(t));
             }
+            writes.push(ReachableWrites::Named(direct));
+            continue;
+        };
+        for &c in &own.callees {
+            assert!(c < n, "function {i} calls {c}, which is not in the store");
+            callers[c].push(i);
         }
-        writes.push(if indirect {
-            ReachableWrites::Opaque
-        } else {
-            ReachableWrites::Named(direct)
-        });
+        if own.indirect {
+            writes.push(ReachableWrites::Opaque);
+            continue;
+        }
+        for g in &own.globals {
+            let entry = targets.0.entry(g.clone());
+            direct.insert(entry.index());
+            entry.or_insert(None);
+        }
+        writes.push(ReachableWrites::Named(direct));
     }
     let mut queued = vec![true; n];
     let mut work: Vec<usize> = (0..n).collect();
@@ -631,15 +708,7 @@ fn transitive_reachable_writes(
             }
         }
     }
-    writes
-}
-
-fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), TypeId> {
-    let mut out: IndexMap<(ModuleSource, String), TypeId> = IndexMap::default();
-    for g in &project.globals {
-        out.insert((g.module_source.clone(), g.name.clone()), g.ty);
-    }
-    out
+    (writes, targets)
 }
 
 /// Whether `writes` can land on a location aliasing a `&target` pointee, and so
@@ -648,14 +717,14 @@ fn global_type_index(project: &NirPackage) -> IndexMap<(ModuleSource, String), T
 fn may_write_aliasing_location(
     writes: &ReachableWrites,
     target: &(String, ModuleSource),
-    global_types: &IndexMap<(ModuleSource, String), TypeId>,
+    targets: &WriteTargets,
     type_table: &TypeTable,
     struct_fields: &StructFieldsIndex,
 ) -> bool {
     match writes {
         ReachableWrites::Opaque => true,
-        ReachableWrites::Named(set) => set.iter().any(|g| match global_types.get(g) {
-            Some(&ty) => {
+        ReachableWrites::Named(set) => set.iter().any(|t| match targets.0[t] {
+            Some(ty) => {
                 let mut visited = IndexSet::default();
                 mut_reachable_contains(ty, true, target, type_table, struct_fields, &mut visited)
             }

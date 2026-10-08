@@ -966,7 +966,7 @@ fn validate_export_mappings(
     entry_type_table: &RefCell<TypeTable>,
 ) -> Result<(), String> {
     let entry_module = &project.tir_modules[&project.entry_module_source];
-    for mapping in project.export_mappings.iter() {
+    for mapping in &project.export_mappings {
         if !project.world_registry.has_world(&mapping.world) {
             return Err(format!(
                 "`export(…) fn {}` names the world `{}`, which no compilation can \
