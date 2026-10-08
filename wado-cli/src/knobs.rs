@@ -78,6 +78,7 @@ pub enum CompileKnobOpt {
     InlineThreshold,
     InlineGrowth,
     OptIterations,
+    OptThreads,
     LogLevel,
     Allocator,
     Feature,
@@ -112,6 +113,12 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<n>"),
                 desc: "Override number of fixed-point optimization iterations",
+            },
+            Self::OptThreads => OptSpec {
+                long: Some("optimize-threads"),
+                short: None,
+                value: Some("<n>"),
+                desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores; 1 under `wado test`, which\ncompiles several files at once)",
             },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
@@ -166,6 +173,8 @@ pub struct CompileKnobs {
     /// follow-up run without `--no-cache` benefits from a warm cache again.
     pub no_cache: bool,
     pub opt: wado_compiler::OptOverrides,
+    /// `--optimize-threads`, where given; see [`Self::optimize_threads`].
+    pub opt_threads: Option<usize>,
     pub allocator: Option<String>,
     /// `-f <flag>` codegen feature flags, forwarded verbatim to
     /// `CompilerOptions::codegen_flags`; the compiler validates them.
@@ -183,6 +192,7 @@ impl Default for CompileKnobs {
             skip_validation: false,
             no_cache: false,
             opt: wado_compiler::OptOverrides::default(),
+            opt_threads: None,
             allocator: None,
             codegen_flags: Vec::new(),
             params: ParamInputs::default(),
@@ -191,6 +201,16 @@ impl Default for CompileKnobs {
 }
 
 impl CompileKnobs {
+    /// The threads the optimizer runs on: `--optimize-threads`, else every
+    /// available core. A subcommand compiling several files at once sets 1
+    /// before this is read.
+    #[must_use]
+    pub fn optimize_threads(&self) -> usize {
+        self.opt_threads.unwrap_or_else(|| {
+            std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
+        })
+    }
+
     /// Apply a matched [`CompileKnobOpt`], consuming its value from the parser.
     pub fn apply(&mut self, opt: CompileKnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
         match opt {
@@ -207,6 +227,15 @@ impl CompileKnobs {
             }
             CompileKnobOpt::OptIterations => {
                 self.opt.iterations = Some(args::parse_u32_arg("--optimize-iterations", parser)?);
+            }
+            CompileKnobOpt::OptThreads => {
+                let threads = args::parse_u32_arg("--optimize-threads", parser)?;
+                if threads == 0 {
+                    return Err(CliExit::error(
+                        "--optimize-threads requires a positive integer",
+                    ));
+                }
+                self.opt_threads = Some(threads as usize);
             }
             CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
             CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),

@@ -1002,15 +1002,16 @@ pub fn propagate_copies(
     let type_table = project.type_table.borrow();
     let param_mut = build_param_mut(project);
     let effects = heap.effects(project, &type_table, gate);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::CopyProp, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    let len = functions.len();
+    gate.run_gated_par(GatedPass::CopyProp, len, |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
         let rule = CopyPropRule {
-            type_table: &type_table,
+            type_table,
             oracle: MutationOracle::new(&param_mut),
             copy_value_id,
             param_count: func.params.len(),
@@ -1021,6 +1022,7 @@ pub fn propagate_copies(
             body, locals, name, ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         let changed = engine.run(&[&rule]);
         if changed {

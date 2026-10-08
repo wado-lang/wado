@@ -5,6 +5,7 @@
 //! [`extract_const`] is the shared primitive, used by `store_load_forward`.
 
 use std::cmp::Reverse;
+use std::sync::Arc;
 
 use crate::compiler_trace;
 use crate::hashmap::IndexMap;
@@ -311,7 +312,7 @@ pub(super) fn freeze_pure_arith(
     let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a field read is versioned by what a call writes.
-    let gate = include_fields.then(|| FunctionGate::new(project));
+    let gate = include_fields.then(|| FunctionGate::new(project, &Arc::default()));
     let mut heap = HeapEffectsCache::default();
     let effects = gate
         .as_ref()

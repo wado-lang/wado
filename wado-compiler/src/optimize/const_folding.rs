@@ -44,14 +44,17 @@ struct FoldMaps {
     shapes: AggregateShapes,
 }
 
-fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
-    // The CalleeMap holds handles aliased with `project.functions`. The
-    // interpreter reads callee bodies via `try_borrow`, which bails cleanly when
-    // the visitor already holds `borrow_mut` on the same function (a self-call
-    // inside the function being walked). Because a handle reaches the live cell,
-    // a callee's body edit is visible without rebuilding the map — only its
-    // *membership* (the ctfe-eligible function set) can go stale.
-    let callees = build_callee_map(project);
+fn build_fold_maps(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    frozen: &IndexSet<FuncId>,
+) -> FoldMaps {
+    // The CalleeMap holds handles aliased with `project.functions`, except for
+    // the `frozen` functions the sweep is about to rewrite, which it reads as
+    // they stand now. The interpreter reads callee bodies via `try_borrow`,
+    // which bails cleanly when the visitor already holds `borrow_mut` on the
+    // same function (a self-call inside the function being walked).
+    let callees = build_callee_map(project, frozen);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
@@ -65,13 +68,15 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
 }
 
 /// One folding pass: build the whole-program maps, then hand `drive` a folder
-/// to run over whichever functions it selects.
+/// to run over whichever functions it selects. A callee in `frozen` is read
+/// as it stands when the pass starts.
 fn fold_pass(
     project: &NirPackage,
+    frozen: &IndexSet<FuncId>,
     drive: impl FnOnce(&mut dyn FnMut(FuncId) -> bool) -> bool,
 ) -> bool {
     let type_table = project.type_table.borrow();
-    let maps = build_fold_maps(project, &type_table);
+    let maps = build_fold_maps(project, &type_table, frozen);
     let globals = build_global_view(project, &type_table, &maps);
     let mut visitor = new_visitor(&type_table, &maps, &globals);
     let mut buffers = EngineBuffers::default();
@@ -89,7 +94,11 @@ fn fold_pass(
 /// pass last ran.
 pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let len = project.functions.len();
-    fold_pass(project, |fold| {
+    let pending = gate
+        .pending(GatedPass::ConstFold, len)
+        .into_iter()
+        .collect();
+    fold_pass(project, &pending, |fold| {
         gate.run_gated(GatedPass::ConstFold, len, fold)
     })
 }
@@ -98,7 +107,7 @@ pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool
 /// call graph never links, so the gate's dirty set would skip real work.
 pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let len = project.functions.len();
-    fold_pass(project, |fold| {
+    fold_pass(project, &IndexSet::default(), |fold| {
         let mut changed = false;
         for i in 0..len {
             let fid = FuncId::new(i);

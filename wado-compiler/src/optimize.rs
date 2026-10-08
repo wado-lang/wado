@@ -58,6 +58,8 @@ mod tuple_projection;
 mod value_copy;
 mod value_copy_demote;
 
+use std::sync::Arc;
+
 // The promoted-read audit is the only reader, and it is debug-only.
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
@@ -97,6 +99,7 @@ use heap_effect::HeapEffectsCache;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::{OptOverrides, compiler_trace};
 
 /// Configuration for optimization passes
@@ -149,11 +152,13 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
 /// sharply; `O1` and above run it twice, before the fixed-point loop to shrink
 /// the working set and after it to sweep what the loop made dead. What runs in
 /// between is the pass sequence below, scaled by [`OptLevel`] and by whatever
-/// `opt` overrides of that level's defaults.
+/// `opt` overrides of that level's defaults. Functions are visited on
+/// `parallelism` threads, which changes nothing in the result.
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
     opt: OptOverrides,
+    parallelism: usize,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
     let OptOverrides {
@@ -161,6 +166,7 @@ pub fn optimize(
         inline_growth,
         iterations: opt_iterations,
     } = opt;
+    let exec = Arc::new(Executor::new(parallelism));
     // Decide the short-string inline threshold once, from the opt level. Read
     // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
@@ -209,7 +215,7 @@ pub fn optimize(
                 &mut descriptors,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
             // Final DCE: clean up code made dead by optimizations
             run_dce(
                 &mut project,
@@ -247,7 +253,7 @@ pub fn optimize(
                 &mut descriptors,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
             run_dce(
                 &mut project,
                 profiler,
@@ -279,7 +285,7 @@ pub fn optimize(
                 &mut descriptors,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
             run_dce(
                 &mut project,
                 profiler,
@@ -309,6 +315,7 @@ pub fn optimize(
             "nir/cond_impl_post_promote",
             &mut project,
             profiler,
+            &exec,
             |p, g| {
                 condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
             },
@@ -428,9 +435,10 @@ fn run_bounded_fixpoint(
     name: &'static str,
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
+    exec: &Arc<Executor>,
     mut step: impl FnMut(&mut NirPackage, &mut FunctionGate) -> bool,
 ) -> bool {
-    let mut gate = FunctionGate::new(project);
+    let mut gate = FunctionGate::new(project, exec);
     run_pass(name, project, profiler, |p| {
         let mut changed = false;
         for i in 0..POST_LOOP_FIXPOINT_CAP {
@@ -645,6 +653,7 @@ fn run_optimization_passes(
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
     descriptor_cache: &mut dce::DescriptorCache,
+    exec: &Arc<Executor>,
 ) {
     // Before anything prices a body, so `nir/inline`'s cold discount describes
     // the function it copies. Ahead of the gate too, so the call graph is built
@@ -656,9 +665,9 @@ fn run_optimization_passes(
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
-    let mut gate = gate::FunctionGate::new(project);
-    // Keyed by `gate`'s edit counts, so each pass that reads heap effects
-    // re-solves only what the passes before it rewrote.
+    let mut gate = gate::FunctionGate::new(project, exec);
+    // Keyed by each function's write count, so each pass that reads heap
+    // effects re-solves only what the passes before it rewrote.
     let mut heap_effects = HeapEffectsCache::default();
     let mut mod_ref_summaries = SummaryCache::default();
     let mut sroa_param_state = SroaParamState::default();
@@ -900,6 +909,7 @@ fn run_optimization_passes(
         "nir/store_load_forward_post_scalarize",
         project,
         profiler,
+        exec,
         |p, g| {
             forward_stores_to_loads(p, g) | fold_constants_all(p, g) | prune_constant_branches(p, g)
         },
@@ -911,7 +921,7 @@ fn run_optimization_passes(
     // body directly. Iterate until convergence because one flatten can
     // expose another (e.g. single-stmt Block collapse on a freshly
     // produced `Block { Expr(tail) }`).
-    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p, g| {
+    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, exec, |p, g| {
         prune_template_block_wrappers(p, g)
     });
     // Body globalization: hoist constant, read-only aggregate `let` bindings
@@ -932,9 +942,13 @@ fn run_optimization_passes(
     // `branch_prune` run here — re-entering the full loop is unsafe, since the
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
-    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
-        fold_constants_all(p, g) | prune_constant_branches(p, g)
-    });
+    run_bounded_fixpoint(
+        "nir/const_fold_post_global",
+        project,
+        profiler,
+        exec,
+        |p, g| fold_constants_all(p, g) | prune_constant_branches(p, g),
+    );
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
     // recognizer has matched its shape, so it only strips dead-weight locals.

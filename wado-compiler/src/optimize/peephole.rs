@@ -6,7 +6,8 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir::NirFunction;
+use crate::hashmap::IndexSet;
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{build_callee_map, build_ctfe_builtin_map};
@@ -61,8 +62,18 @@ pub(super) fn run_peephole(
     // program-wide CTFE callee map and the type table; the per-function `env`
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
     // the flow-sensitive folds to the standalone `const_folding` walker.
+    let len = project.functions.len();
+    // The pre- and post-inline runs apply different rule sets, so they keep
+    // separate watermark columns: a function quiescent for one must still be
+    // revisited by the other.
+    let gated_pass = if pre_inline {
+        GatedPass::PeepholePre
+    } else {
+        GatedPass::PeepholePost
+    };
     let type_table = project.type_table.borrow();
-    let callees = build_callee_map(project);
+    let pending: IndexSet<FuncId> = gate.pending(gated_pass, len).into_iter().collect();
+    let callees = build_callee_map(project, &pending);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
@@ -77,16 +88,7 @@ pub(super) fn run_peephole(
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
     let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate));
 
-    let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
-    // The pre- and post-inline runs apply different rule sets, so they keep
-    // separate watermark columns: a function quiescent for one must still be
-    // revisited by the other.
-    let gated_pass = if pre_inline {
-        GatedPass::PeepholePre
-    } else {
-        GatedPass::PeepholePost
-    };
     debug_assert!(
         gate.any_pending(gated_pass, len),
         "[NIR] run_peephole entered on a drained gate: the setup above would be \

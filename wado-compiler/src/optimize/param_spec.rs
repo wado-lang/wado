@@ -1271,7 +1271,7 @@ struct BranchSettler {
 impl BranchSettler {
     fn new(project: &NirPackage) -> Self {
         BranchSettler {
-            callees: build_callee_map(project),
+            callees: build_callee_map(project, &IndexSet::default()),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
         }

@@ -7,7 +7,7 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
@@ -251,8 +251,10 @@ impl EditSink for BodySink<'_> {
 
 /// The [`CalleeMap`] over every function in `project` a compile-time frame can
 /// run. Its handles alias `project.functions`, so rebuilding it every optimizer
-/// iteration costs only refcount bumps.
-pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
+/// iteration costs only refcount bumps, except for the functions in `frozen`:
+/// a sweep about to rewrite those reads them as they stand now, from a copy
+/// (WEP: Parallel Optimizer).
+pub(crate) fn build_callee_map(project: &NirPackage, frozen: &IndexSet<FuncId>) -> CalleeMap {
     let mut map = CalleeMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -262,8 +264,13 @@ pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
         let Some(id) = func.id else {
             continue;
         };
+        let handle = if frozen.contains(&id) {
+            FuncCell::new(func.clone())
+        } else {
+            func_rc.clone()
+        };
         drop(func);
-        map.insert(id, Callee::new(func_rc.clone()));
+        map.insert(id, Callee::new(handle));
     }
     map
 }

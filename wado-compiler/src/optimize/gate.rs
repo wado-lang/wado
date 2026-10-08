@@ -9,6 +9,7 @@
 //! propagation marks dirty. What a rewrite stales is the memos' to notice, by
 //! each function's write count (`super::body_memo`), not the gate's.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use cranelift_entity::EntityRef;
@@ -17,6 +18,7 @@ use crate::hashmap::IndexSet;
 use crate::nir::FuncId;
 use crate::nir_arena::ExprKind;
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 
 /// The gated passes. Each owns a column of per-function watermarks. Add a
 /// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
@@ -106,26 +108,29 @@ pub struct FunctionGate {
     revision: Vec<u64>,
     watermarks: [Vec<u64>; GatedPass::COUNT],
     graph: CallGraph,
+    /// The threads a sweep's visits run on.
+    exec: Arc<Executor>,
 }
 
-/// Tells one gate's edit counts from another's.
+/// Tells one gate's state from another's.
 static NEXT_GATE_ID: AtomicU64 = AtomicU64::new(0);
 
 impl FunctionGate {
-    /// Build the gate for one optimizer run. Every function starts dirty
-    /// (`revision = 1`, watermarks `0`), so the first iteration processes
-    /// everything.
-    pub fn new(project: &NirPackage) -> Self {
+    /// Build the gate for one optimizer run, its sweeps running on `exec`.
+    /// Every function starts dirty (`revision = 1`, watermarks `0`), so the
+    /// first iteration processes everything.
+    pub fn new(project: &NirPackage, exec: &Arc<Executor>) -> Self {
         let n = project.functions.len();
-        Self::with_graph(n, CallGraph::build(project))
+        Self::with_graph(n, CallGraph::build(project), Arc::clone(exec))
     }
 
-    fn with_graph(n: usize, graph: CallGraph) -> Self {
+    fn with_graph(n: usize, graph: CallGraph, exec: Arc<Executor>) -> Self {
         Self {
             id: NEXT_GATE_ID.fetch_add(1, Ordering::Relaxed),
             revision: vec![1; n],
             watermarks: std::array::from_fn(|_| vec![0; n]),
             graph,
+            exec,
         }
     }
 
@@ -208,25 +213,55 @@ impl FunctionGate {
         (0..len).any(|i| self.needs(pass, FuncId::new(i)))
     }
 
-    /// Drive a gate-aware per-function pass: call `f` only for the functions
-    /// `pass` needs to (re)process, marking each seen afterwards and bumping the
-    /// gate when `f` reports a change. Returns whether any function changed.
-    /// `len` is the current function count (read once; these passes do not add
-    /// functions mid-pass).
+    /// The functions `pass` must (re)process, in store order. Unlike
+    /// [`Self::dirty_funcs`], marks none of them seen.
+    pub fn pending(&mut self, pass: GatedPass, len: usize) -> Vec<FuncId> {
+        (0..len)
+            .map(FuncId::new)
+            .filter(|&fid| self.needs(pass, fid))
+            .collect()
+    }
+
+    /// Drive a gate-aware per-function pass over one sweep: call `f` on each
+    /// function pending for `pass` when the sweep starts, mark each seen, and
+    /// mark the changed ones and their neighbours dirty once the sweep ends.
+    /// What one visit rewrites then decides neither which functions the sweep
+    /// visits nor what another visit sees (WEP: Parallel Optimizer). Returns
+    /// whether any function changed. `len` is the current function count
+    /// (read once; these passes do not add functions mid-pass).
     pub fn run_gated(
         &mut self,
         pass: GatedPass,
         len: usize,
         mut f: impl FnMut(FuncId) -> bool,
     ) -> bool {
-        let mut any = false;
-        for i in 0..len {
-            let fid = FuncId::new(i);
-            if !self.needs(pass, fid) {
-                continue;
-            }
-            let changed = f(fid);
+        let pending = self.pending(pass, len);
+        let changed: Vec<bool> = pending.iter().map(|&fid| f(fid)).collect();
+        self.close_sweep(pass, &pending, &changed)
+    }
+
+    /// [`Self::run_gated`] with the visits on the gate's threads. A visit holds
+    /// its own function mutably and reads everything else as the sweep found
+    /// it, so the order the visits run in changes nothing.
+    pub fn run_gated_par(
+        &mut self,
+        pass: GatedPass,
+        len: usize,
+        visit: impl Fn(FuncId) -> bool + Sync,
+    ) -> bool {
+        let pending = self.pending(pass, len);
+        let changed = self.exec.map(&pending, |&fid| visit(fid));
+        self.close_sweep(pass, &pending, &changed)
+    }
+
+    /// Mark the sweep's functions seen, then the changed ones and their
+    /// neighbours dirty. Returns whether any changed.
+    fn close_sweep(&mut self, pass: GatedPass, pending: &[FuncId], changed: &[bool]) -> bool {
+        for &fid in pending {
             self.seen(pass, fid);
+        }
+        let mut any = false;
+        for (&fid, &changed) in pending.iter().zip(changed) {
             if changed {
                 self.mark_changed(fid);
                 any = true;
@@ -305,7 +340,7 @@ mod tests {
             callees[caller].push(FuncId::new(callee));
             callers[callee].push(FuncId::new(caller));
         }
-        FunctionGate::with_graph(n, CallGraph { callees, callers })
+        FunctionGate::with_graph(n, CallGraph { callees, callers }, Arc::default())
     }
 
     #[test]

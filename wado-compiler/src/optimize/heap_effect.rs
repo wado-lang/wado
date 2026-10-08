@@ -2,8 +2,8 @@
 //! summarises each function over the call graph, [`HeapFrame`] one body's objects.
 
 use std::borrow::Cow;
-use std::cell::{OnceCell, RefCell};
-use std::rc::Rc;
+use std::cell::OnceCell;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use cranelift_entity::EntityRef;
 
@@ -226,7 +226,9 @@ pub(super) struct HeapEffectsCache {
     summaries: Vec<Summary>,
     /// The join over every closure body, which is what an indirect call runs.
     indirect: Summary,
-    reach_memo: RefCell<IndexMap<TypeKey, Rc<ObjectTypes>>>,
+    /// Filled during a sweep by whichever visit asks first; its values depend
+    /// only on the type, so the order changes nothing.
+    reach_memo: Mutex<IndexMap<TypeKey, Arc<ObjectTypes>>>,
     /// Where `assert_one_settled` resumes its rotation.
     #[cfg(debug_assertions)]
     cursor: usize,
@@ -543,7 +545,7 @@ impl HeapEffects<'_> {
 
     /// Every object type an element of the list `ty` may reach, or `None` where
     /// `ty` is no list.
-    pub(super) fn element_reach(&self, ty: TypeId) -> Option<Rc<ObjectTypes>> {
+    pub(super) fn element_reach(&self, ty: TypeId) -> Option<Arc<ObjectTypes>> {
         let tt = self.type_table;
         let ty = tt.strip_handles(ty);
         let ResolvedType::GenericInstance { type_args, .. } = tt.get(ty) else {
@@ -556,19 +558,22 @@ impl HeapEffects<'_> {
     }
 
     /// Every object type a value of `ty` may reach, itself included.
-    pub(super) fn reach(&self, ty: TypeId) -> Rc<ObjectTypes> {
+    pub(super) fn reach(&self, ty: TypeId) -> Arc<ObjectTypes> {
         let key = self.type_table.type_key(ty);
-        if let Some(hit) = self.cache.reach_memo.borrow().get(&key) {
-            return Rc::clone(hit);
+        let memo = || {
+            self.cache
+                .reach_memo
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+        };
+        if let Some(hit) = memo().get(&key) {
+            return Arc::clone(hit);
         }
         let mut out = ObjectTypes::default();
         let mut seen = IndexSet::default();
         self.reach_into(ty, &mut seen, &mut out);
-        let out = Rc::new(out);
-        self.cache
-            .reach_memo
-            .borrow_mut()
-            .insert(key, Rc::clone(&out));
+        let out = Arc::new(out);
+        memo().insert(key, Arc::clone(&out));
         out
     }
 
@@ -769,13 +774,13 @@ enum OperandNode {
 
 enum Keys {
     One(TypeKey),
-    Set(Rc<ObjectTypes>),
+    Set(Arc<ObjectTypes>),
 }
 
 impl Keys {
     fn of(effects: &HeapEffects, ty: Option<TypeId>) -> Self {
         ty.and_then(|t| effects.type_table.heap_object_key(t))
-            .map_or_else(|| Keys::Set(Rc::new(ObjectTypes::everything())), Keys::One)
+            .map_or_else(|| Keys::Set(Arc::new(ObjectTypes::everything())), Keys::One)
     }
 
     fn contains(&self, key: TypeKey) -> bool {
@@ -1659,12 +1664,12 @@ impl HeapFrame {
         &self,
         effects: &HeapEffects,
         body: &Body,
-        keys: &Rc<ObjectTypes>,
+        keys: &Arc<ObjectTypes>,
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
         let h = self.local_root(local);
-        let wanted = Keys::Set(Rc::clone(keys));
+        let wanted = Keys::Set(Arc::clone(keys));
         self.accesses.iter().any(|a| {
             a.effect == Effect::Write
                 && a.keys.meets(keys)
@@ -1764,7 +1769,7 @@ fn builtin_touches(
     effects: &HeapEffects,
     declaration: &BuiltinDeclaration,
     ty: TypeId,
-) -> Rc<ObjectTypes> {
+) -> Arc<ObjectTypes> {
     let reaches_elements = matches!(
         declaration.facts.storage,
         Storage::CopiesArgs | Storage::Opaque
@@ -1774,7 +1779,7 @@ fn builtin_touches(
     if reaches_elements || !is_array {
         return effects.reach(ty);
     }
-    Rc::new(
+    Arc::new(
         tt.heap_object_key(ty)
             .map_or_else(ObjectTypes::everything, ObjectTypes::one),
     )
