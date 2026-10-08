@@ -4,8 +4,9 @@
 //! synthesized `FieldSchema::lookup` (for `--options`) and `positional_at` (for
 //! bare tokens), through the `ArgvDeserializer`.
 
-use { Deserialize } from "core:serde";
-use { parse, ArgsError, ArgsErrorKind } from "core:args";
+use { Deserialize, Deserializer, DeserializeError } from "core:serde";
+use { parse, from_env, ArgsError, ArgsErrorKind } from "core:args";
+use { TreeMap } from "core:collections";
 use { Uuid } from "core:uuid";
 use { Instant } from "core:temporal";
 
@@ -23,13 +24,7 @@ struct Cli {
 impl Deserialize for Cli;
 
 fn cli(r: Result<Cli, ArgsError>) -> Cli {
-    if let Ok(c) = r {
-        return c;
-    }
-    if let Err(e) = r {
-        panic(`parse failed: ${e.message}`);
-    }
-    unreachable();
+    return r.unwrap();
 }
 
 struct RunCli {
@@ -164,13 +159,7 @@ struct Mixed {
 impl Deserialize for Mixed;
 
 fn mixed(r: Result<Mixed, ArgsError>) -> Mixed {
-    if let Ok(c) = r {
-        return c;
-    }
-    if let Err(e) = r {
-        panic(`parse failed: ${e.message}`);
-    }
-    unreachable();
+    return r.unwrap();
 }
 
 test "non-contiguous positionals map by rank" {
@@ -200,13 +189,7 @@ struct Variadic {
 impl Deserialize for Variadic;
 
 fn variadic(r: Result<Variadic, ArgsError>) -> Variadic {
-    if let Ok(c) = r {
-        return c;
-    }
-    if let Err(e) = r {
-        panic(`parse failed: ${e.message}`);
-    }
-    unreachable();
+    return r.unwrap();
 }
 
 test "variadic positional with no extra tokens is empty" {
@@ -242,13 +225,7 @@ struct Repeatable {
 impl Deserialize for Repeatable;
 
 fn repeatable(r: Result<Repeatable, ArgsError>) -> Repeatable {
-    if let Ok(c) = r {
-        return c;
-    }
-    if let Err(e) = r {
-        panic(`parse failed: ${e.message}`);
-    }
-    unreachable();
+    return r.unwrap();
 }
 
 test "repeatable option appends across occurrences" {
@@ -332,13 +309,7 @@ struct App {
 impl Deserialize for App;
 
 fn app(r: Result<App, ArgsError>) -> App {
-    if let Ok(c) = r {
-        return c;
-    }
-    if let Err(e) = r {
-        panic(`parse failed: ${e.message}`);
-    }
-    unreachable();
+    return r.unwrap();
 }
 
 test "global options precede subcommand, then sub-options" {
@@ -437,4 +408,153 @@ test "an enum option naming no case reports InvalidValue" {
 test "an enum option without a value reports MissingValue" {
     let r = parse::<EnumOpts>(["--shade", "--tint", "light"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+}
+
+struct Numbers {
+    a: i64 = 0,
+    b: u32 = 0,
+    c: u64 = 0,
+    d: i128 = 0,
+    e: u128 = 0,
+    f: f32 = 0.0,
+    g: f64 = 0.0,
+    h: char = ' ',
+    small: i8 = 0,
+}
+impl Deserialize for Numbers;
+
+test "every scalar option type converts leniently" {
+    let r = parse::<Numbers>([
+        "--a", "-1", "--b", "2", "--c", "3", "--d", "-4", "--e", "5", "--f", "1.5", "--g", "2.5", "--h", "x",
+    ]);
+    assert r matches { Ok(n) && n.a == -1
+        && n.b == 2
+        && n.c == 3
+        && n.d == -4
+        && n.e == 5
+        && n.f == 1.5
+        && n.g == 2.5
+        && n.h == 'x' };
+}
+
+test "an error displays its message" {
+    let r = parse::<Numbers>(["--a", "x"]);
+    assert r matches { Err(e) && `${e}` == "invalid value: 'x'" };
+}
+
+test "a value out of the field's range reports InvalidValue" {
+    let r = parse::<Numbers>(["--small", "300"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
+struct Even {
+    n: i32,
+}
+
+impl Deserialize for Even {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Even, DeserializeError> {
+        let n = d.deserialize_i32()?;
+        if n % 2 != 0 {
+            return Result::Err(DeserializeError::malformed("odd"));
+        }
+        return Result::Ok(Even { n });
+    }
+}
+
+struct EvenOpt {
+    even: Even = Even { n: 0 },
+}
+impl Deserialize for EvenOpt;
+
+test "a field type's own failure reports InvalidValue" {
+    assert parse::<EvenOpt>(["--even", "4"]) matches { Ok(o) && o.even.n == 4 };
+    assert parse::<EvenOpt>(["--even", "3"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue
+        && e.message == "odd" };
+    assert parse::<EvenOpt>(["--even", "x"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
+struct MapOpt {
+    pairs: TreeMap<String, String> = TreeMap::new(),
+}
+impl Deserialize for MapOpt;
+
+test "a map option is unsupported" {
+    let r = parse::<MapOpt>(["--pairs", "a"]);
+    assert r matches { Err(e) && e.message == "core:args does not support map yet" };
+}
+
+test "a repeatable option missing its value reports MissingValue" {
+    assert parse::<Repeatable>(["in", "--include"]) matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+    assert parse::<Repeatable>(["in", "--include", "a", "--include"]) matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+}
+
+test "a repeatable option takes an inline first value and stops at `--`" {
+    let c = repeatable(parse::<Repeatable>(["--include=a", "--n", "1", "--include", "b", "--n", "2", "--", "in"]));
+    assert c.include == ["a", "b"];
+    assert c.n == [1, 2];
+}
+
+test "an option of a type that asks for any reports a missing value" {
+    let r = parse::<RunCli>(["00010203-0405-4607-8809-0a0b0c0d0e0f", "--trace"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+}
+
+variant Pick {
+    One(RemoteCmd),
+    Two(String),
+}
+impl Deserialize for Pick;
+
+struct PickApp {
+    #[wire(positional)]
+    pick: Pick,
+}
+impl Deserialize for PickApp;
+
+test "a subcommand missing its payload reports MissingArgument" {
+    assert parse::<PickApp>(["Two", "x"]) matches { Ok(p) && p.pick matches { Two(s) && s == "x" } };
+    assert parse::<PickApp>(["One"]) matches { Err(e) && e.kind == ArgsErrorKind::MissingArgument };
+    assert parse::<PickApp>(["Two"]) matches { Err(_) };
+}
+
+struct Counts {
+    #[wire(positional)]
+    counts: List<i32> = [],
+}
+impl Deserialize for Counts;
+
+test "a variadic element that does not convert reports InvalidValue" {
+    assert parse::<Counts>(["1", "2"]) matches { Ok(c) && c.counts == [1, 2] };
+    assert parse::<Counts>(["1", "x"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
+test "from_env parses the process arguments" {
+    assert from_env::<Counts>() matches { Ok(c) && c.counts.is_empty() };
+}
+
+// A hand-written impl reaches the struct and variant accesses the generated
+// code never calls.
+struct Skipper {
+}
+impl Deserialize for Skipper {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Skipper, DeserializeError> {
+        let mut s = d.begin_struct("Skipper", 0).unwrap();
+        s.skip().unwrap();
+        s.end().unwrap();
+        return Result::Ok(Skipper {});
+    }
+}
+
+struct UnitProbe {
+}
+impl Deserialize for UnitProbe {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<UnitProbe, DeserializeError> {
+        let mut v = d.begin_variant("UnitProbe", 1).unwrap();
+        return Result::Err(v.is_unit().unwrap_err());
+    }
+}
+
+test "a hand-written impl may skip a field, but not probe a case for a payload" {
+    assert parse::<Skipper>([]) matches { Ok(_) };
+    assert parse::<UnitProbe>(["Tag"]) matches { Err(_) };
 }

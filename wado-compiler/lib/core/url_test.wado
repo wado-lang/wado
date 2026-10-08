@@ -997,3 +997,99 @@ test "percent_decode reports the UTF-8 failure it found" {
     assert e == ParseError::InvalidUtf8(Utf8Error::invalid(0, 1));
     assert `${e}` == "invalid UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
 }
+
+test "ParseError compares by kind and renders every reason" {
+    let kinds: List<ParseError> = [
+        ParseError::EmptyInput, ParseError::InvalidScheme, ParseError::MissingHost, ParseError::InvalidHost,
+        ParseError::InvalidPort, ParseError::InvalidPath, ParseError::InvalidPercentEncoding,
+    ];
+    for let i of 0..<kinds.len() {
+        for let j of 0..<kinds.len() {
+            assert (kinds[i] == kinds[j]) == (i == j);
+        }
+    }
+    assert `${ParseError::InvalidHost}` == "invalid host";
+    assert `${ParseError::InvalidPort}` == "invalid port";
+    assert `${ParseError::InvalidPath}` == "invalid path";
+    assert `${ParseError::InvalidPercentEncoding}` == "invalid percent-encoding";
+}
+
+test "a URL that is not a JSON string does not deserialize" {
+    assert from_string::<Url>("1") matches { Err(_) };
+}
+
+test "a malformed authority is refused" {
+    assert Url::from_str("http:example.com").unwrap_err() == ParseError::MissingHost;
+    assert Url::from_str("http://[]/").unwrap_err() == ParseError::MissingHost;
+    assert Url::from_str("http://:80/").unwrap_err() == ParseError::MissingHost;
+    assert Url::from_str("http://[::1]:abc/").unwrap_err() == ParseError::InvalidPort;
+    assert Url::from_str("http://[::1]x/").unwrap_err() == ParseError::InvalidHost;
+    assert Url::from_str("http://[::1/").unwrap_err() == ParseError::InvalidHost;
+    assert Url::from_str("http://[::1]/").unwrap().host == "::1";
+}
+
+test "a path keeps encoded reserved bytes and stray percent signs" {
+    assert Url::from_str("http://h/a%2Fb%zz").unwrap().path == "/a%2Fb%zz";
+    assert Url::from_str("http://h/../a").unwrap().path == "/a";
+    assert Url::from_str("http://h/..").unwrap().path == "/";
+}
+
+test "from_parts keeps a malformed authority as the host" {
+    let url = Url::from_parts("http", "[::1", Option::Some("?a=1"), null);
+    assert url.host == "[::1";
+    assert url.path == "/";
+    assert url.query == Option::Some("a=1");
+    assert Url::from_parts("http", "", null, null).host == "";
+}
+
+test "query parts that are empty are skipped" {
+    let url = Url::from_str("http://h/?a=1&&a=2").unwrap();
+    assert url.query_get_all("a") == ["1", "2"];
+    assert parse_query("a=1&&b=2").len() == 2;
+    assert Url::from_str("http://h/").unwrap().query_get_all("a").is_empty();
+    assert url.with_query_pairs(TreeMap::new()).query matches { None };
+}
+
+test "a query component keeps a stray percent and an undecodable escape" {
+    assert parse_query("a=%zz")["a"] == "%zz";
+    assert parse_query("a=%ff")["a"] == "%ff";
+}
+
+test "resolve reads a reference with a scheme as absolute" {
+    let base = Url::from_str("http://h/dir/page").unwrap();
+    assert base.resolve("HTTPS://other/x").unwrap().host == "other";
+    assert base.resolve("mailto:a@b").unwrap_err() == ParseError::InvalidScheme;
+    assert base.resolve("a1+b-c.d:x").unwrap_err() == ParseError::InvalidScheme;
+}
+
+test "resolve reads a colon a scheme cannot spell as part of a path" {
+    let base = Url::from_str("http://h/dir/page").unwrap();
+    assert base.resolve(":x").unwrap().path == "/dir/:x";
+    assert base.resolve("1a:x").unwrap().path == "/dir/1a:x";
+    assert base.resolve("a_b:x").unwrap().path == "/dir/a_b:x";
+}
+
+test "resolve takes a network-path reference with no path" {
+    let base = Url::from_str("http://h/dir/page").unwrap();
+    let url = base.resolve("//other").unwrap();
+    assert url.host == "other";
+    assert url.path == "/";
+    assert base.resolve("//").unwrap_err() == ParseError::MissingHost;
+}
+
+// Every parsed path starts with `/`, but the fields are public, so a base
+// built by hand may not.
+test "resolve against a base path with no slash merges onto the reference alone" {
+    let base = Url {
+        scheme: "http",
+        username: "",
+        password: "",
+        host: "h",
+        port: null,
+        path: "page",
+        query: null,
+        fragment: null,
+    };
+    assert base.resolve("next").unwrap().path == "next";
+    assert base.resolve(".").unwrap().path == "";
+}

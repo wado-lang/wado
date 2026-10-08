@@ -264,6 +264,13 @@ operand of `&&` and `||`, the early return of `?`, and the statements after one
 that can leave its block with `return`, `break`, `continue` or `?`. A region
 counts as run once any test runs its start.
 
+A region that leads to nothing but a call to `unreachable()` is not one: the
+call, returned or not, is all it holds, or it holds nothing and only the call
+follows it, as an omitted `else` or an empty arm may. The call is its author's
+claim that no run reaches it, so there is no path to test. A
+region holding `panic` or `assert` is one, since a caller that breaks a contract
+reaches it. See [Unrecoverable Errors](./spec-control-flow.md#unrecoverable-errors-traps).
+
 Three measures derive from regions:
 
 - A function ran when its body region did.

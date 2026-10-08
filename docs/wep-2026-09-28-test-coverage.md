@@ -115,6 +115,16 @@ anything with a `FRESH` span), nor a global's initializer. An `assert`'s
 condition is not split into regions: power-assert rewrites it, so its operands
 are not the source's.
 
+A region that leads to nothing but `unreachable()` or `builtin::unreachable()`
+is not planned either: the call, returned or not, is its only statement, or
+the region is empty and control leaving it reaches only the call, as from an
+omitted `else` or an empty arm. Its author claims no run enters it, and a test
+that did would show a bug rather than cover a path. `panic` and `assert` check
+a contract a caller can break, so their regions stay planned and are tested with
+`#[expect_trap]`. The planner runs after the body walk and knows `core:rt`'s
+`unreachable` by the declaration the walk bound the callee to, so a parameter
+or `let` that takes the name is a path like any other.
+
 ### Reify inserts one probe per region
 
 When coverage is on, reify consults the plan and puts a probe at the start of
@@ -282,8 +292,8 @@ visible where the code is.
 
 `--coverage-baseline <file>` fails the run on a difference between the regions
 left uncovered and the ones the file lists. A new uncovered region fails, and
-so does a listed region that is now covered, so the file only shrinks. It is the
-pattern `scripts/rust-inline-paths.json` already follows.
+so does a listed region that is now covered, so every change to the file is
+made on purpose and shows in review.
 
 An entry names its region by path, function and position within the function,
 not by line, so an edit elsewhere in the file leaves it valid:
@@ -303,8 +313,10 @@ place of their plain stdlib run, since a coverage run is a stdlib run too.
 `mise run update-stdlib-coverage-baseline` rewrites the file.
 The baseline starts as whatever the first run leaves uncovered, and the work
 toward 100% is emptying it: a test for each region that can run, and
-`#[coverage(off)]` for each that cannot. Once it is empty, 100% is what the gate
-holds.
+`unreachable()` or `#[coverage(off)]` for each that cannot. Code is never bent to
+fit the file. A region whose only test needs a host or a build the stdlib tests
+do not have, such as a filesystem error or a `-D log.level` threshold, is listed
+in it instead.
 
 ### Testing
 
@@ -358,7 +370,8 @@ host call on every run is too slow for loops.
    `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests.
 6. [x] The standard library: its snapshot skipped when measured,
    `--coverage-baseline`, and the CI job with its first baseline.
-7. [ ] 100% for the standard library: the baseline emptied.
+7. [ ] 100% for the standard library: the baseline holds only regions no
+   stdlib test can reach.
 8. [x] Derived regions: the plan marks them, reify leaves them without a probe,
    and the runner derives them. The `-O0`/`-O3` check and the fixtures pass
    unchanged, and the probes saved on the standard library are measured.

@@ -57,7 +57,10 @@ Logs a message to stderr and traps.
 
 ### `pub fn unreachable() -> !`
 
-Traps unconditionally, marking unreachable code.
+Traps unconditionally, marking code no run reaches: no input, not even one
+that breaks a contract, leads here, so reaching it is a bug in the code
+around it. Test coverage plans no region that leads only here. Where a
+caller can lead the run here, check the contract with `panic` or `assert`.
 
 ## Traits
 

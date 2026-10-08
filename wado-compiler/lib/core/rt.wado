@@ -24,12 +24,9 @@ use {
     StreamChunk,
     StreamWrite,
     StreamWritable,
-    Subtask,
     WaitEvent,
     Waitable,
-    WaitableSet,
     cm_packed_upper,
-    cm_subtask_settled,
     write_copy_is_final,
 } from "core:prelude/types.wado";
 
@@ -93,31 +90,6 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
     tx.drop();
 }
 
-/// Waits for a pending async subtask to settle.
-/// In WASI P3 async calling convention, canon lower async returns (handle << 4) | status:
-///   status = 0 (Starting): async guest task in flight, handle is nonzero
-///   status = 1 (Started):  async host task in flight, handle is nonzero
-///   status = 2 (Returned): sync completion, packed value = 2, handle = 0
-/// If the upper 28 bits (handle) are nonzero, an async task is in flight.
-/// Each call to waitable-set.wait delivers one transition, so we loop until
-/// the subtask leaves the in-flight states.
-internal fn wait_for_subtask(packed: i32) with (WaitableSet, Subtask) {
-    let handle = cm_packed_upper(packed);
-    if handle != 0 {
-        let subtask = handle as Subtask;
-        let ws = WaitableSet::new();
-        subtask.join(&ws);
-        loop {
-            let event = ws.wait();
-            if cm_subtask_settled(event) {
-                break;
-            }
-        }
-        subtask.drop();
-        ws.drop();
-    }
-}
-
 /// Drop a write_via_stream Future handle to signal completion.
 /// Uses CLI ErrorCode type for the Future parameterization.
 use { ErrorCode as CliErrorCode } from "wasi:cli/types.wado";
@@ -159,7 +131,9 @@ pub fn panic(message: String) -> ! {
 /// so the `-f bare-asserts` lowering can replace assertion failures with a bare
 /// `unreachable` trap (dropping the diagnostic) while leaving explicit
 /// `panic(...)` calls untouched. The `assert` desugar emits this, never `panic`.
+/// `lower::bare_asserts` rewrites every call, so this body never runs.
 #[compiler_item("assert_failed")]
+#[coverage(off)]
 internal fn assert_failed(message: String) -> ! {
     panic(message);
 }
@@ -229,7 +203,10 @@ internal fn coverage_probe(id: i32) {
     CoverageHost::hit(id as u32);
 }
 
-/// Traps unconditionally, marking unreachable code.
+/// Traps unconditionally, marking code no run reaches: no input, not even one
+/// that breaks a contract, leads here, so reaching it is a bug in the code
+/// around it. Test coverage plans no region that leads only here. Where a
+/// caller can lead the run here, check the contract with `panic` or `assert`.
 pub fn unreachable() -> ! {
     builtin::unreachable();
 }
@@ -288,22 +265,6 @@ internal fn cm_callback_key(callback: fn()) -> u32 {
 #[compiler_item("cm_callback")]
 internal fn cm_callback(key: u32) -> fn() {
     return CM_CALLBACKS[key as i32];
-}
-
-/// Writes escaped string content to a Formatter (for inspect/debug output).
-/// Escapes: " → \", \ → \\, \n → \n, \t → \t, \r → \r.
-/// Does NOT write the surrounding quotes — caller is responsible for those.
-internal fn write_escaped_string(s: String, f: &mut Formatter) {
-    for let c of s.chars() {
-        match c {
-            '"' => f.write_str("\\\""),
-            '\\' => f.write_str("\\\\"),
-            '\n' => f.write_str("\\n"),
-            '\t' => f.write_str("\\t"),
-            '\r' => f.write_str("\\r"),
-            _ => f.write_char(c),
-        }
-    }
 }
 
 global HANDLE_LIMIT: f64 = 9007199254740992.0;

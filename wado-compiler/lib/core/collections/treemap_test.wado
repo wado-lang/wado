@@ -723,7 +723,6 @@ impl DeserializeMap for FailingClose {
         return Result::Ok(null);
     }
 
-    #[coverage(off)]
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
         return unreachable();
     }
@@ -745,7 +744,6 @@ impl DeserializeSeq for FailingClose {
 
 // The trait asks for every method, but a collection reaches only `begin_map`
 // or `begin_seq`.
-#[coverage(off)]
 impl Deserializer for FailingClose {
     type SeqAccess = FailingClose;
     type MapAccess = FailingClose;

@@ -11,11 +11,11 @@ use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibilit
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
-use crate::coverage::{CoverageMap, CoverageRequest};
+use crate::coverage::{CoverageMap, CoverageRequest, plan_module, render_plan};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
-use crate::elaborator::orchestration::AnnotateState;
+use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::MethodDispatch;
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -140,6 +140,20 @@ impl Semantics {
             out.push_str(&plans);
         }
         Some(out)
+    }
+
+    /// The entry module's coverage plan, for `wado dump --coverage-plan`.
+    /// `None` before annotate has run.
+    pub fn coverage_plan_text(&self, contract_checks: bool) -> Option<String> {
+        let state = self.state.as_ref()?;
+        let module = self.modules.get(&self.entry_module_source)?;
+        let (plan, ..) = plan_module(
+            &self.entry_module_source,
+            module,
+            contract_checks,
+            &rt_unreachable_calls(state, &self.symbols),
+        );
+        Some(render_plan(&plan))
     }
 
     /// True when every analysis phase ran to completion without bailing.
@@ -1177,15 +1191,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // recorded, with no second lexical scan to drift out of sync. On Bail the
     // partial facts are still routed so cursor queries work against whatever
     // bodies were reached. `build_tir == false` stops after `annotate_bodies`.
-    let coverage = coverage.map(|request| {
-        CoverageMap::build(
-            load_result
-                .modules
-                .iter()
-                .filter(|(source, _)| request.scope.measures(source)),
-            request.contract_checks,
-        )
-    });
     let (tir_modules, lower_ok) = {
         let _span = logger.span("elaborate/build_tir");
         match Elaborator::build_tir_from_state(
@@ -1196,7 +1201,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             logger,
             snapshot.as_deref(),
             build_tir,
-            coverage.as_ref(),
+            coverage,
         ) {
             Ok(m) => (m, true),
             Err(_) => (IndexMap::default(), false),
@@ -1228,6 +1233,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // (between `annotate_bodies` and `reify`, so reify can gate on it). Move
     // it onto `Semantics` for the diagnostic emitter and LSP.
     let liveness = std::mem::take(&mut state.liveness);
+    let coverage = state.coverage.take();
 
     let cm_bound = lower_ok && register_user_cm_bindings(&mut state, &load_result.modules, logger);
 

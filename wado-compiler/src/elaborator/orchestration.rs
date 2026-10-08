@@ -21,7 +21,7 @@ use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::{Code, CompilerHost};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
-use crate::coverage::CoverageMap;
+use crate::coverage::{CoverageMap, CoverageRequest};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
@@ -451,6 +451,9 @@ pub(crate) struct AnnotateState {
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
     pub(crate) liveness: Liveness,
+    /// The coverage plan reify instruments with, planned in
+    /// [`Self::build_tir_from_state`] once the bodies' callees resolve.
+    pub(crate) coverage: Option<CoverageMap>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -1194,6 +1197,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             interner,
             abstract_selections: Rc::default(),
             liveness: Liveness::default(),
+            coverage: None,
         })
     }
 
@@ -1281,7 +1285,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         logger: &'a Logger<'a, H>,
         snapshot: Option<&Semantics>,
         build_tir: bool,
-        coverage: Option<&CoverageMap>,
+        coverage: Option<CoverageRequest>,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
         // Per-rehydration memo: maps each cached function `Rc`'s pointer
@@ -1568,6 +1572,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         }
 
+        // The plan reads which callee names `core:rt`'s `unreachable`, so it
+        // waits for the bodies to resolve.
+        state.coverage = coverage.map(|request| {
+            CoverageMap::build(
+                modules
+                    .iter()
+                    .filter(|(source, _)| request.scope.measures(source)),
+                request.contract_checks,
+                &rt_unreachable_calls(state, symbols),
+            )
+        });
+
         // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify
         // the eligible user modules, gating item emission on `emit_live`.
         // Iterating `sorted_sources` keeps `result`'s insertion order identical
@@ -1623,7 +1639,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // reify-emitted call site keeps its callee live.
                         gate,
                     );
-                    reify.coverage = coverage;
+                    reify.coverage = state.coverage.as_ref();
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                         result.insert(module_source.clone(), reified);
                     }
@@ -2395,6 +2411,28 @@ fn spelled_references(
         }
     }
     (direct, inherited)
+}
+
+/// The sites whose name the body walk bound to `core:rt`'s `unreachable`. A
+/// local binder taking the name binds its own uses, which the resolver's
+/// declaration-only answer cannot tell.
+pub(crate) fn rt_unreachable_calls(
+    state: &AnnotateState,
+    symbols: &SymbolTable,
+) -> IndexSet<ast::AstId> {
+    let Some(rt_unreachable) = symbols.lookup_in_module(&ModuleSource::rt(), "unreachable") else {
+        return IndexSet::default();
+    };
+    let (direct, inherited) = spelled_references(state);
+    let inherited = inherited
+        .into_iter()
+        .flat_map(|(site, defs)| defs.into_iter().map(move |def| (site, def)));
+    direct
+        .into_iter()
+        .chain(inherited)
+        .filter(|&(_, def)| def == rt_unreachable.defined_at)
+        .map(|(site, _)| site)
+        .collect()
 }
 
 /// The callees a dispatch fact names, in a module's own walk or in one of its

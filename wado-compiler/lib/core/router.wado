@@ -425,24 +425,10 @@ impl<H> Router<H> {
                 let rm = RouteMatch { handler: self.handlers[h], params: pp };
                 return Option::Some(&rm);
             }
-        } else if pos == plen {
+        } else {
             // Either path was "/" (root) or a trailing slash after a segment.
-            if state == 0 {
-                let h = pick_handler(
-                    &self.states[0].terminal_methods,
-                    self.states[0].terminal_any_idx,
-                    method,
-                );
-                if h >= 0 {
-                    let pp = PathParams {
-                        path,
-                        names: &self.states[0].terminal_names,
-                        ranges: &ranges,
-                    };
-                    let rm = RouteMatch { handler: self.handlers[h], params: pp };
-                    return Option::Some(&rm);
-                }
-            }
+            // The root's own routes are static, so only a wildcard is left.
+            assert pos == plen;
             if has_wildcard(&self.states[state]) {
                 let h = pick_handler(
                     &self.states[state].wildcard_methods,
@@ -509,13 +495,8 @@ impl<H> Router<H> {
         }
         if pos == plen + 1 {
             return collect_methods(&self.states[state].terminal_methods);
-        } else if pos == plen {
-            if state == 0 {
-                let m = collect_methods(&self.states[0].terminal_methods);
-                if !m.is_empty() {
-                    return m;
-                }
-            }
+        } else {
+            assert pos == plen;
             if has_wildcard(&self.states[state]) {
                 return collect_methods(&self.states[state].wildcard_methods);
             }

@@ -22,6 +22,7 @@ use {
     TextSink,
     WallClock,
     current,
+    debug,
     enabled,
     error,
     event,
@@ -32,6 +33,8 @@ use {
     parse_directives,
     set_log_level,
     span,
+    trace,
+    warn,
 } from "core:log";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
@@ -461,4 +464,182 @@ test "an explicit target replaces the caller's #function" {
     };
     assert sink.events[0].meta.target.contains("explicit_target");
     assert sink.events[1].meta.target == "db";
+}
+
+test "every level has a name and a label" {
+    let levels: List<Level> = [Level::Trace, Level::Debug, Level::Info, Level::Warn, Level::Error];
+    let names = levels.into_iter().map(|l| `${l.name()}/${l.label()}`).collect();
+    assert names == ["trace/TRACE", "debug/DEBUG", "info/INFO", "warn/WARN", "error/ERROR"];
+}
+
+test "every level wrapper stops at the subscriber's gate" {
+    let mut sink = CaptureSink { min: Level::Error };
+    with Log => &mut sink do {
+        trace(`t`);
+        debug(`d`);
+        info(`i`);
+        warn(`w`);
+        error(`e`);
+        // An event handed over directly still meets the sink's own threshold.
+        Log::event(text_event(Level::Info, "direct", Value::Null));
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "e";
+}
+
+test "an admitted warn event reaches the subscriber" {
+    let mut sink = CaptureSink {};
+    let mut admitted = false;
+    with Log => &mut sink do {
+        admitted = enabled(Level::Warn);
+        warn(`admitted`);
+    };
+    assert sink.events.len() == if admitted { 1 } else { 0 };
+}
+
+test "tier 2 rejects a level below it" {
+    set_log_level(Level::Error);
+    assert !enabled(Level::Warn);
+    assert enabled(Level::Error);
+}
+
+test "the raw event emitter honours the gates" {
+    let mut sink = CaptureSink { min: Level::Error };
+    with Log => &mut sink do {
+        event(Level::Warn, `dropped`);
+        event(Level::Error, `kept`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+}
+
+test "recording fields that are not an object records no key" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        span(Level::Info, `s`).record(5);
+    };
+    let ops: List<String> = ["new:s#1"];
+    assert sink.ops == ops;
+}
+
+test "the context layer keeps only object fields" {
+    let mut sink = CaptureSink {};
+    let ctx = Context { fields: 5 };
+    with Log => &mut sink do {
+        with Log => &ctx do {
+            error(`x`, 7);
+        };
+    };
+    assert sink.events[0].fields matches { Object(map) && map.is_empty() };
+}
+
+test "a filter installed as a layer gates by level and by target" {
+    let mut sink = CaptureSink {};
+    let filt = Filter { directives: parse_directives("error,app=warn") };
+    with Log => &mut sink do {
+        with Log => &filt do {
+            assert !enabled(Level::Info);
+            error(`kept`, {}, "core");
+            Log::event(text_event(Level::Warn, "kept too", Value::Null));
+            Log::event(Event {
+                meta: Metadata { level: Level::Warn, target: "core", file: "", line: 0 },
+                message: "dropped",
+            });
+        };
+    };
+    assert sink.events.len() == 2;
+    assert sink.events[0].message == "kept";
+    assert sink.events[1].message == "kept too";
+}
+
+test "a bare directive that names no level is skipped" {
+    assert parse_directives("loud").is_empty();
+}
+
+struct Echo {
+    count: i32 = 0,
+}
+
+impl Log for Echo {
+    fn event(&mut self, ignored: Event) with Log {
+        self.count += 1;
+        with Log => self do {
+            error(`again`);
+        };
+    }
+
+    ..forward
+}
+
+test "a handler that logs into itself stops at the depth limit" {
+    let mut sink = CaptureSink {};
+    let mut echo = Echo {};
+    with Log => &mut sink do {
+        with Log => &mut echo do {
+            error(`first`);
+        };
+    };
+    assert echo.count == 8;
+    assert sink.events.is_empty();
+}
+
+// Every operation a sink answers, each once.
+fn exercise_sink() -> bool with Log {
+    assert current() matches { None };
+    let s = span(Level::Info, `s`);
+    s.record({ k: 1 });
+    s.follows_from(&s);
+    in_span(&s, || {
+        error(`inside`);
+    });
+    Log::event(text_event(Level::Error, "direct", Value::Null));
+    return enabled(Level::Error);
+}
+
+test "the writing sinks and NopSink answer every operation" {
+    let mut text = TextSink {};
+    assert with Log => &mut text do {
+        exercise_sink();
+    };
+    let mut json = JsonSink {};
+    assert with Log => &mut json do {
+        exercise_sink();
+    };
+    let mut nop = NopSink {};
+    assert !with Log => &mut nop do {
+        exercise_sink();
+    };
+}
+
+test "the default subscriber answers every operation" {
+    assert exercise_sink();
+    // Below the default level, a direct event writes nothing.
+    Log::event(text_event(Level::Debug, "quiet", Value::Null));
+}
+
+test "json sink over WallClock leads with a stamp" {
+    let mut sink: JsonSink<WallClock> = JsonSink { seq: false };
+    assert sink.render(&text_event(Level::Info, "hi", Value::Null)).starts_with("{\"ts\":\"20");
+}
+
+test "json sink renders an event it cannot encode as the reason" {
+    let mut sink = JsonSink { seq: false };
+    let line = sink.render(&text_event(Level::Info, "nan", Value::Float(f64::NAN)));
+    assert line == "{\"error\":\"NaN is not allowed in JSON\"}";
+}
+
+test "text sink renders every kind of field value" {
+    let mut sink = TextSink { seq: false };
+    let mut fields: TreeMap<String, Value> = TreeMap::new();
+    fields["n"] = Value::Null;
+    fields["b"] = Value::Bool(true);
+    fields["u"] = Value::UInt(1);
+    fields["i128"] = Value::Int128(-2);
+    fields["u128"] = Value::UInt128(3);
+    fields["f"] = Value::Float(1.5);
+    fields["x"] = Value::Undefined;
+    fields["l"] = Value::List([Value::Int(1)]);
+    fields["bad"] = Value::List([Value::Float(f64::NAN)]);
+    let line = sink.render(&text_event(Level::Info, "kinds", Value::Object(fields)));
+    assert line == "INFO app: kinds n=null b=true u=1 i128=-2 u128=3 f=1.5 x=undefined l=[1] bad=<NaN is not allowed in JSON>";
 }

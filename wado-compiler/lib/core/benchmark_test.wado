@@ -1,4 +1,5 @@
 use { Benchmark, format_rate } from "core:benchmark";
+use { MonotonicClock } from "wasi:clocks";
 
 test "Benchmark literal defaults" {
     let b = Benchmark { name: "smoke" };
@@ -106,8 +107,42 @@ test "println does not affect benchmark state" {
 test "warmup auto-derives to 0 for fixed single iteration" {
     let mut b = Benchmark { name: "auto-warmup-single" };
     b.iterations = 1;  // fixed mode, single iteration
-    // warmup=-1 (auto) → effective warmup is 0 because iterations < 2;
-    // surface this through the field invariants the API guarantees.
-    assert b.iterations == 1;
-    assert b.warmup == -1;
+    // warmup=-1 (auto) → effective warmup is 0 because iterations < 2.
+    let mut calls = 0;
+    b.run("", || {
+        calls += 1;
+        return calls;
+    });
+    assert calls == 1;
+}
+
+/// How many times the benchmarked closure has run; the clock below reads it.
+global mut CALLS: u64 = 0;
+
+/// A clock on which each call of the closure takes 0.3 ms.
+struct CallClock {
+}
+
+impl MonotonicClock for CallClock {
+    fn now(&self) -> u64 {
+        resume CALLS * 300_000;
+    }
+
+    ..trap
+}
+
+// One call takes 0.3 ms of a 1 ms budget, so calibration asks for 3. Three take
+// 0.9 ms, and 3 * 1 / 0.9 rounds down to the 3 already run, so it stops there.
+test "auto mode calibrates toward the budget and stops where it converges" {
+    let clock = CallClock {};
+    let mut b = Benchmark { name: "calibrated", target_ms: 1 };
+    CALLS = 0;
+    with MonotonicClock => &clock do {
+        b.run("", || {
+            CALLS += 1;
+            return CALLS;
+        });
+    };
+    // One warmup, one measured call, then three.
+    assert CALLS == 5;
 }
