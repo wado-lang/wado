@@ -1,0 +1,15 @@
+// Error: a `let ... else` block diverges, so what it assigns never reaches the
+// statements after it.
+
+export fn run() {
+    let mut x: i32;
+    let opt: Option<i32> = builtin::black_box(Option::Some(1));
+    let Some(v) = opt else {
+        x = 0;
+        return;
+    };
+    assert x + v == 1;
+}
+
+__DATA__
+{"compile_error": ":11:12: analysis error: 'x' is used before initialization"}

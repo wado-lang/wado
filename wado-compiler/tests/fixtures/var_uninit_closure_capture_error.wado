@@ -1,0 +1,14 @@
+// Error: a closure may not capture a variable that is not yet initialized,
+// even one it would only assign.
+
+export fn run() {
+    let mut x: i32;
+    let mut set = || {
+        x = 3;
+    };
+    set();
+    assert x == 3;
+}
+
+__DATA__
+{"compile_error": ":7:9: analysis error: 'x' is captured by a closure before initialization"}

@@ -85,6 +85,56 @@ xs[0] = 9;       // Error: the store roots at an immutable binding
 A write through a `&mut T` is what that reference grants, so the binding
 holding one needs no `mut` of its own.
 
+## Deferred Initialization
+
+`let x: T;` declares one name without an initializer, and the type is required.
+Reading the name is a compile error unless every path reaching the read has
+assigned it. The compiler follows paths through `if`, `match`, labeled blocks and
+loops:
+
+- A `return`, `break` or `continue` takes its path to where it lands: out of
+  the function, past the loop or labeled block, or to the loop's next
+  iteration. The statements it skips are not on that path. A call does not end a
+  path, even one that never returns, such as `panic`.
+- A `loop` ends only through a `break`, so after it the name is assigned when
+  every `break` leaving the loop follows an assignment.
+- A `while`, a `for` and a `for-of` may run their body zero times, whatever the
+  condition says, so an assignment in the body never counts after the loop.
+- A `let ... else` block diverges, so what it assigns never counts.
+
+<!-- {"fixture":"var_uninit_valid.wado"} -->
+
+```wado
+let x: i32;
+let mut i = 0;
+loop {
+    i += 1;
+    if i == 3 {
+        x = i;
+        break;
+    }
+}
+assert x == 3;
+```
+
+Without `mut`, the name is assigned at most once: an assignment that a path can
+reach after another assignment is an error. A loop body that assigns runs again
+on the next iteration, so it counts as such a path.
+
+<!-- {"fixture":"var_uninit_assign_twice_error.wado"} -->
+
+```wado
+let x: i32;
+if builtin::black_box(true) {
+    x = 1;
+}
+x = 2;
+```
+
+A closure may name the variable only where it is already assigned, even if the
+closure only assigns it. Its body runs when it is called, if ever, so nothing it
+assigns counts after it.
+
 ## Variable Scoping
 
 Variables are scoped to their enclosing block. Variables declared inside control flow bodies (`if`, `while`, `for`, `loop`) are not accessible outside.

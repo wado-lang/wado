@@ -109,7 +109,8 @@ in scope, and [`shadowed_name`](./spec-expressions.md#the-shadowed_name-lint)
 warns. A refutable pattern reads such a name differently
 ([Constant Patterns](#constant-patterns)).
 
-An uninitialized `let x: T;` declares a single name, or `_`.
+An uninitialized `let x: T;` declares a single name, or `_`
+([Deferred Initialization](./spec-expressions.md#deferred-initialization)).
 
 ## Exhaustiveness
 

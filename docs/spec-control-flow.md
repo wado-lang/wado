@@ -238,7 +238,8 @@ keeps that iteration's element.
 
 Iterating a `List` reads the list's own storage, so a body that shrinks the
 list it walks breaks the contract a shrinking list puts on its
-[views](./spec-types.md#slice-semantics).
+[views](./spec-types.md#slice-semantics). The walk covers the elements the list
+held when it began: an element the body appends is not visited.
 
 The binding must match every element, as a `let` pattern must (see
 [Patterns That Cannot Fail](./spec-patterns.md#patterns-that-cannot-fail)). A
