@@ -27,6 +27,7 @@ use {
     COMMENT_CLOSE,
 } from "./fmt_ast.wado";
 use { display_width } from "./unicode_width.wado";
+use { interrupts_paragraph } from "./fmt_parse_block.wado";
 
 internal fn print_document(doc: &Node) -> String {
     let children = match doc {
@@ -100,7 +101,7 @@ fn print_block(node: &Node, out: &mut String) {
             out.push_str(&delim);
         },
         Node::Heading(h) => print_heading(h, out),
-        Node::Paragraph(p) => print_inline_seq(&p.children, out),
+        Node::Paragraph(p) => print_paragraph(&p.children, out),
         Node::BlockQuote(children) => print_blockquote(children, out),
         Node::CodeBlock(cb) => print_code_block(cb, out),
         Node::List(list) => print_list(list, out),
@@ -117,6 +118,25 @@ fn print_heading(h: &Heading, out: &mut String) {
     out.push_str("#".repeat(h.level));
     out.push(' ');
     print_inline_seq(&h.children, out);
+}
+
+/// The parser keeps a continuation line in its paragraph when it starts no
+/// block there: indented four columns, say, or lazy. Printed flush, such a
+/// line could start one, so it is indented four columns, where none starts.
+fn print_paragraph(children: &List<Node>, out: &mut String) {
+    let mut text = String::new();
+    print_inline_seq(children, &mut text);
+    let mut first = true;
+    for let line of text.split("\n") {
+        if !first {
+            out.push('\n');
+            if interrupts_paragraph(&line.to_chars(), false) {
+                out.push_str("    ");
+            }
+        }
+        first = false;
+        out.push_str(&line);
+    }
 }
 
 fn print_blockquote(children: &List<Node>, out: &mut String) {
