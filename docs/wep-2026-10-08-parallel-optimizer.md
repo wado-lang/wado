@@ -184,14 +184,13 @@ which callees to clone or which parameters to drop, stay sequential.
 - [x] Run the post-loop per-function passes and `inline`'s splicing in
   parallel.
 
-`package-gale` compiled with a dev build, `wado compile --optimize-threads <n>
-src/main.wado`, emits the same bytes on every row:
+`package-gale` compiled with a dev build, `wado compile --optimize-threads <n> src/main.wado`, emits the same bytes on every row:
 
-| Build                  | Seconds |
-| ---------------------- | ------: |
-| `main`                 |    75.5 |
-| This design, 1 thread  |    84.7 |
-| This design, 16 threads |   46.1 |
+| Build                   | Seconds |
+| ----------------------- | ------: |
+| `main`                  |    75.5 |
+| This design, 1 thread   |    84.7 |
+| This design, 16 threads |    46.1 |
 
 ## Known gaps
 
