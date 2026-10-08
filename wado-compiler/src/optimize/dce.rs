@@ -35,7 +35,7 @@ use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
-use crate::{hashmap, nir, tir};
+use crate::{hashmap, nir};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
@@ -400,35 +400,6 @@ fn extend_reachable_for_optimizer_passes(
     }
 }
 
-/// Walk `block`'s expression tree and collect every `T` such that
-/// `builtin::array_clone::<T>(...)` appears as a NIR call. The
-/// corresponding `$value_copy$` helper has to survive DCE because
-/// codegen will reach it by *name* at WIR time.
-fn collect_array_clone_element_types(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    out: &mut IndexSet<tir::TypeId>,
-) {
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::Call {
-                func_id, type_args, ..
-            } = &body.exprs[e].kind
-        {
-            // Identity is the callee (by `func_id`); the element type `T` is
-            // call-site data carried on the node's `type_args` (a generic
-            // builtin like `array_clone` has no per-`T` record, so the
-            // descriptor's `monomorph_info` is generic — only the node knows `T`).
-            let func = callee_descriptor(descriptors, *func_id);
-            if matches!(func.intrinsic(), Some("array_clone" | "array_clone_prefix"))
-                && let Some(elem) = type_args.first().copied()
-            {
-                out.insert(elem);
-            }
-        }
-    });
-}
-
 /// Compute reachable functions from all entry points via call graph traversal.
 ///
 /// Entry points are:
@@ -675,16 +646,6 @@ fn function_analysis(
         for ty in body.values.recorded_types() {
             analysis.used_types.insert(ty);
         }
-        if let Some(inspect) = type_table.compiler_items().trait_def(CompilerItem::Inspect) {
-            scan_inspect_signatures_block(
-                body,
-                type_table,
-                descriptors,
-                inspect,
-                &mut analysis.inspect_signatures,
-            );
-        }
-        collect_array_clone_element_types(body, descriptors, &mut analysis.array_clone_elems);
     }
     analysis
 }
@@ -841,35 +802,6 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
     }
 }
 
-fn scan_inspect_signatures_block(
-    body: &Body,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-    inspect: DefId,
-    sigs: &mut InspectableSignatures,
-) {
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(e) = node
-            && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
-            && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
-            && is_fn_type_name(&info.base_struct_name())
-            && info.trait_decl() == Some(inspect)
-        {
-            // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
-            // boxing pass); peel both to read the function's arity + return type.
-            let recv_type = type_table.peel_refs_and_box(body.operand_type(receiver));
-            if let ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } = type_table.get(recv_type)
-            {
-                sigs.insert((params.len(), *return_type));
-            }
-        }
-    });
-}
-
 /// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
 /// **all** per-function facts the DCE driver needs (callees, effect calls,
 /// pending inspect edges, used globals, used types) in one traversal of a
@@ -883,6 +815,8 @@ struct DceWalker<'a> {
     current_module: &'a ModuleSource,
     descriptors: &'a [FunctionRef],
     functors: &'a FunctorMethods,
+    /// The `Inspect` trait, whose calls on a function value record a signature.
+    inspect: Option<DefId>,
     analysis: FunctionAnalysis,
 }
 
@@ -932,6 +866,7 @@ impl<'a> DceWalker<'a> {
             current_module,
             descriptors,
             functors,
+            inspect: type_table.compiler_items().trait_def(CompilerItem::Inspect),
             analysis: FunctionAnalysis::default(),
         }
     }
@@ -1334,6 +1269,32 @@ impl<'a> DceWalker<'a> {
 }
 
 impl DceWalker<'_> {
+    /// An `Inspect` call on a function value: record its `(arity, return
+    /// type)`. The receiver is `&Fn(...)`, possibly boxed by the boxing pass.
+    fn record_inspect_signature(&mut self, recv_ty: TypeId, callee: &FunctionRef) {
+        let Some(info) = &callee.method_info else {
+            return;
+        };
+        if self.inspect.is_none()
+            || info.trait_decl() != self.inspect
+            || !is_fn_type_name(&info.base_struct_name())
+        {
+            return;
+        }
+        if let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = self
+            .type_table
+            .get(self.type_table.peel_refs_and_box(recv_ty))
+        {
+            self.analysis
+                .inspect_signatures
+                .insert((params.len(), *return_type));
+        }
+    }
+
     /// Record the per-node facts, then recurse into every id-bearing child
     /// (including patterns, matching the former `NirRefVisitor` full walk).
     fn walk_node(&mut self, body: &Body, node: NodeRef) {
@@ -1349,15 +1310,27 @@ impl DceWalker<'_> {
                 // Every expression has a result type that needs to stay alive.
                 self.add_type(body.exprs[e].type_id);
                 match &body.exprs[e].kind {
-                    ExprKind::Call { func_id, .. } => {
+                    ExprKind::Call {
+                        func_id, type_args, ..
+                    } => {
                         self.analysis.named.insert(*func_id);
-                        let d = self.descriptors;
+                        let callee = callee_descriptor(self.descriptors, *func_id);
+                        // `array_clone` reaches its helper by the element type
+                        // the call node carries, not by a call edge.
+                        if matches!(
+                            callee.intrinsic(),
+                            Some("array_clone" | "array_clone_prefix")
+                        ) && let Some(&elem) = type_args.first()
+                        {
+                            self.analysis.array_clone_elems.insert(elem);
+                        }
                         match body.exprs[e].kind.as_method_call() {
                             Some((receiver, _, _)) => {
                                 let recv_ty = body.operand_type(receiver);
-                                self.record_method_call(recv_ty, callee_descriptor(d, *func_id));
+                                self.record_inspect_signature(recv_ty, callee);
+                                self.record_method_call(recv_ty, callee);
                             }
-                            None => self.record_call(callee_descriptor(d, *func_id)),
+                            None => self.record_call(callee),
                         }
                     }
                     ExprKind::CmRawCall { target, .. } => self.record_cm_raw_call(target),

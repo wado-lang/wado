@@ -3,7 +3,7 @@
 
 use std::hash::Hash;
 use std::ops::ControlFlow;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::Mutex;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -12,6 +12,7 @@ use crate::nir_arena::{
     ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_package::NirPackage;
+use crate::parallel::lock;
 use crate::tir::{BuiltinDeclarations, DeclarationLookup, TypeTable};
 
 use super::arena_query::{bare_promoted_local, collect_pattern_bindings, holds_reference};
@@ -49,10 +50,6 @@ pub(super) struct SharedEscape<'a> {
     /// Per-body seed census, built on first ask. Every slot is asked of every
     /// body, so rediscovering one body's reads per slot is quadratic.
     census: Mutex<IndexMap<usize, BodyCensus>>,
-}
-
-fn lock<T>(cell: &Mutex<T>) -> MutexGuard<'_, T> {
-    cell.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl<'a> SharedEscape<'a> {

@@ -8,7 +8,7 @@
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::Mutex;
 
 use cranelift_entity::SecondaryMap;
 
@@ -22,7 +22,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
-use crate::parallel::Executor;
+use crate::parallel::{Executor, lock};
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
@@ -425,12 +425,8 @@ impl<'a> CallImmutability<'a> {
         self.walk(type_id, &mut Vec::new())
     }
 
-    fn memo(&self) -> MutexGuard<'_, IndexMap<TypeId, bool>> {
-        self.memo.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
     fn walk(&self, type_id: TypeId, stack: &mut Vec<TypeId>) -> bool {
-        if let Some(&cached) = self.memo().get(&type_id) {
+        if let Some(&cached) = lock(&self.memo).get(&type_id) {
             return cached;
         }
         // A struct can only reach itself through a `Box`/`List`/reference
@@ -478,7 +474,7 @@ impl<'a> CallImmutability<'a> {
             _ => false,
         };
         stack.pop();
-        self.memo().insert(type_id, result);
+        lock(&self.memo).insert(type_id, result);
         result
     }
 }

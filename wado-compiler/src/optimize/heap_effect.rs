@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 use std::cell::OnceCell;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use cranelift_entity::EntityRef;
 
@@ -23,6 +23,7 @@ use crate::tir::{
 use super::arena_query::holds_reference;
 use super::body_memo::BodyMemo;
 use super::gate::FunctionGate;
+use crate::parallel::lock;
 
 /// Where a class's objects may come from: a bit per parameter (the last one
 /// standing for every later one) or a global. None means allocated here.
@@ -562,20 +563,14 @@ impl HeapEffects<'_> {
     /// Every object type a value of `ty` may reach, itself included.
     pub(super) fn reach(&self, ty: TypeId) -> Arc<ObjectTypes> {
         let key = self.type_table.type_key(ty);
-        let memo = || {
-            self.cache
-                .reach_memo
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-        };
-        if let Some(hit) = memo().get(&key) {
+        if let Some(hit) = lock(&self.cache.reach_memo).get(&key) {
             return Arc::clone(hit);
         }
         let mut out = ObjectTypes::default();
         let mut seen = IndexSet::default();
         self.reach_into(ty, &mut seen, &mut out);
         let out = Arc::new(out);
-        memo().insert(key, Arc::clone(&out));
+        lock(&self.cache.reach_memo).insert(key, Arc::clone(&out));
         out
     }
 

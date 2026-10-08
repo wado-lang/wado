@@ -4,8 +4,16 @@
 //! comes back in item order, so the output never depends on the thread count
 //! (WEP: Parallel Optimizer).
 
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
+/// Lock a memo the visits share. A visit that panics fails the whole compile,
+/// so nothing reads what a poisoned lock holds.
+pub fn lock<T>(cell: &Mutex<T>) -> MutexGuard<'_, T> {
+    cell.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// Runs a visit per item on a pool of `threads`, or in order without one.
 pub struct Executor {
