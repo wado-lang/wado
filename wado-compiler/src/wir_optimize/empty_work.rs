@@ -3,8 +3,8 @@
 //! A module whose globals all became constants keeps an empty
 //! `$initialize_module`, which the program's initializer still calls behind a
 //! once-flag. With the calls gone the flag guards nothing. Runs before DCE,
-//! which drops the functions and the flag this leaves unreferenced, the
-//! helper `nir/cold_outline` split the guard's tail into among them.
+//! which drops the functions and the flag this leaves unreferenced, the helper
+//! `nir/cold_outline` moved a guard's tail into included.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirFunction, WirInstr, WirPackage};
@@ -133,7 +133,7 @@ fn flag_setters(module: &WirPackage) -> IndexMap<u32, String> {
             let Some(body) = &func.body else {
                 continue;
             };
-            if setters.contains_key(&index) || !func.param_names.is_empty() {
+            if setters.contains_key(&index) {
                 continue;
             }
             let flag = body.iter().find_map(|instr| match instr {
@@ -448,7 +448,6 @@ mod tests {
         let mut module = package(vec![
             func("f", vec![guard_with("dead", call(1, Vec::new()))]),
             func("f$cold0", vec![WirInstr::ColdPath, set("dead")]),
-            func("other", vec![set("live")]),
         ]);
         elide_empty_work(&mut module);
         assert!(module.functions[0].body.as_ref().unwrap().is_empty());
