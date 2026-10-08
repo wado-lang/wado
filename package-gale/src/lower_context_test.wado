@@ -1,5 +1,5 @@
 use { ParserRule } from "./ir.wado";
-use { LowerContext } from "./lower_context.wado";
+use { LowerContext, LowerMarks } from "./lower_context.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 
@@ -25,4 +25,12 @@ test "intern_follow_mask: same mask returns same id, empty returns null" {
     let id_empty = ctx.intern_follow_mask(&empty_depths);
     assert id_empty matches { None }, "all-empty mask interns to null";
     assert ctx.tables.follow_masks().len() == 2, "only the two real masks are registered";
+}
+
+// A shared edge list handed every rule the first rule's forwards, and the FOLLOW
+// slots with them.
+test "each rule records its own FOLLOW forwards" {
+    let mut marks = LowerMarks::new(2);
+    marks.follow_forward_edges[0].push("b");
+    assert marks.follow_forward_edges[1].is_empty();
 }
