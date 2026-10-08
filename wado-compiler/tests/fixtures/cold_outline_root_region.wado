@@ -1,0 +1,43 @@
+// A `cold_path()` in a function's root block opens a region too, once the
+// function is called from more than one site: the inliner prices the hot path
+// alone, so leaving the region in place copies it at every site. A function
+// called once keeps it, as each module's init guard does.
+
+global mut SEEN: List<i32> = [];
+
+fn note(id: i32) {
+    if id < SEEN.len() && SEEN[id] != 0 {
+        return;
+    }
+    builtin::cold_path();
+    while SEEN.len() <= id {
+        SEEN.push(0);
+    }
+    SEEN[id] = 1;
+}
+
+fn note_once(id: i32) {
+    if id < SEEN.len() && SEEN[id] != 0 {
+        return;
+    }
+    builtin::cold_path();
+    while SEEN.len() <= id {
+        SEEN.push(0);
+    }
+    SEEN[id] = 2;
+}
+
+export fn run() {
+    note(builtin::black_box(3));
+    note(builtin::black_box(1));
+    note(builtin::black_box(3));
+    note_once(builtin::black_box(5));
+    assert SEEN == [0, 1, 0, 1, 0, 2];
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["note$cold0"],
+    "wir_not_expect:O2": ["note_once$cold0"]
+}
