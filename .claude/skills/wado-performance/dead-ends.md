@@ -729,11 +729,11 @@ closing it is worth — and bytes alone would have retired this for the wrong
 reason, since they do not track speed.
 
 Since 2026-10-08 the root is a region in a function called from more than one
-site, `$initialize_modules` excepted. That is the hot leaf above: the coverage
-probe, inlined whole into every region, compiled stdlib coverage 3.4× slower.
-The init guard is excepted by name, not by its sites: it has two (`run` and
-`$cm_export__run`), and split, it keeps the `$modules_initialized` flag that WIR
-otherwise deletes along with an emptied init.
+site. That is the hot leaf above: the coverage probe, inlined whole into every
+region, compiled stdlib coverage 3.4× slower. The init guard has two sites
+(`run` and `$cm_export__run`), not one, so it splits too. WIR's once-guard
+removal now sees through the helper, or the `$modules_initialized` flag outlived
+an emptied init.
 
 ## Hoisting `HighlightVisitor::classify`'s common path to get it inlined (2026-09-02)
 

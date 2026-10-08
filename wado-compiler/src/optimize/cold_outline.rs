@@ -3,8 +3,8 @@
 //!
 //! A function's root block is a region only when more than one site calls the
 //! function, since that is when the inliner copies its cold tail into each one.
-//! The program's init guard is not one either: run once, outlining it leaves
-//! the hot loops identical and costs a function (`dead-ends.md`).
+//! Called once, a split leaves the hot loops identical and costs a function
+//! (`dead-ends.md`).
 //!
 //! Two things are open. The pass costs `sieve` 4.5% for no reason the IR shows
 //! — the hot loops are identical in WIR and in the emitted Wasm, and perturbing
@@ -39,7 +39,7 @@ use super::dce::DescriptorCache;
 use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
-use crate::name::{MODULES_INIT_FUNCTION, cold_region_helper_name};
+use crate::name::cold_region_helper_name;
 use crate::optimize::inline::{call_site_size, region_size};
 
 /// Split every cold region the preconditions admit, in every function —
@@ -161,9 +161,7 @@ fn find_region(
     let descriptors = descriptor_cache.descriptors(project);
     let params = func.params.len();
     let type_table = project.type_table.borrow();
-    // Inlined whole, the program's init guard collapses with its flag once WIR
-    // empties the module inits it calls; a split guard keeps both.
-    let root = (root_copied && func.name != MODULES_INIT_FUNCTION).then_some((body.root, false));
+    let root = root_copied.then_some((body.root, false));
     for (block, under_loop) in root.into_iter().chain(valueless_blocks(body, &type_table)) {
         let stmts = &body.blocks[block].stmts;
         let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {

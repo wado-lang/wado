@@ -3,7 +3,8 @@
 //! A module whose globals all became constants keeps an empty
 //! `$initialize_module`, which the program's initializer still calls behind a
 //! once-flag. With the calls gone the flag guards nothing. Runs before DCE,
-//! which drops the functions and the flag this leaves unreferenced.
+//! which drops the functions and the flag this leaves unreferenced, the
+//! helper `nir/cold_outline` split the guard's tail into among them.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirFunction, WirInstr, WirPackage};
@@ -104,10 +105,59 @@ impl WirMutVisitor for EmptyCallElider<'_> {
     }
 }
 
-/// The flag of `block { br_if 0 (global.get F); global.set F (i32.const _) }`,
-/// with `cold_path` markers allowed: a guard whose block, once the flag is
-/// clear, does nothing but set it.
-fn once_guard_flag(instr: &WirInstr) -> Option<&str> {
+/// Whether `instrs` does nothing but set `flag` to a constant: `cold_path`
+/// markers, `global.set flag (i32.const _)`, and calls into `setters` of the
+/// same flag, which is how a guard reads once `nir/cold_outline` has moved its
+/// tail into a function of its own.
+fn sets_only(instrs: &[WirInstr], flag: &str, setters: &IndexMap<u32, String>) -> bool {
+    instrs.iter().all(|instr| match instr {
+        WirInstr::ColdPath => true,
+        WirInstr::GlobalSet { name, value } => {
+            name.fq == flag && matches!(**value, WirInstr::I32Const(_))
+        }
+        WirInstr::Call { func_id, args } => {
+            args.is_empty() && setters.get(&func_id.index()).is_some_and(|f| f == flag)
+        }
+        _ => false,
+    })
+}
+
+/// The defined functions that do nothing but set one flag, by `WirFuncId`
+/// index, with the flag each sets.
+fn flag_setters(module: &WirPackage) -> IndexMap<u32, String> {
+    let mut setters: IndexMap<u32, String> = IndexMap::default();
+    loop {
+        let mut changed = false;
+        for (position, func) in module.functions.iter().enumerate() {
+            let index = module.defined_func_index(position);
+            let Some(body) = &func.body else {
+                continue;
+            };
+            if setters.contains_key(&index) || !func.param_names.is_empty() {
+                continue;
+            }
+            let flag = body.iter().find_map(|instr| match instr {
+                WirInstr::GlobalSet { name, .. } => Some(name.fq.clone()),
+                WirInstr::Call { func_id, .. } => setters.get(&func_id.index()).cloned(),
+                _ => None,
+            });
+            if let Some(flag) = flag
+                && sets_only(body, &flag, &setters)
+            {
+                setters.insert(index, flag);
+                changed = true;
+            }
+        }
+        if !changed {
+            return setters;
+        }
+    }
+}
+
+/// The flag of `block { br_if 0 (global.get F); global.set F (i32.const _) }`:
+/// a guard whose block, once the flag is clear, does nothing but set it, as
+/// [`sets_only`] reads that.
+fn once_guard_flag<'i>(instr: &'i WirInstr, setters: &IndexMap<u32, String>) -> Option<&'i str> {
     let WirInstr::Block {
         result: None, body, ..
     } = instr
@@ -127,23 +177,16 @@ fn once_guard_flag(instr: &WirInstr) -> Option<&str> {
     let WirInstr::GlobalGet { name: flag, .. } = condition.peel_hint() else {
         return None;
     };
-    rest.iter()
-        .all(|instr| match instr {
-            WirInstr::ColdPath => true,
-            WirInstr::GlobalSet { name, value } => {
-                name.fq == flag.fq && matches!(**value, WirInstr::I32Const(_))
-            }
-            _ => false,
-        })
-        .then_some(flag.fq.as_str())
+    sets_only(rest, &flag.fq, setters).then_some(flag.fq.as_str())
 }
 
 /// Remove the once-guards whose flag no other instruction reads and no export
 /// names: setting such a flag changes nothing anyone can observe.
 fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
+    let setters = flag_setters(module);
     let mut guards: IndexMap<String, usize> = IndexMap::default();
     for_each_instr_in(module, &mut |instr| {
-        if let Some(flag) = once_guard_flag(instr) {
+        if let Some(flag) = once_guard_flag(instr, &setters) {
             *guards.entry(flag.to_string()).or_default() += 1;
         }
     });
@@ -173,7 +216,11 @@ fn remove_dead_once_guards(module: &mut WirPackage) -> bool {
     }
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            DeadGuardRemover { dead: &dead }.visit_body(body);
+            DeadGuardRemover {
+                dead: &dead,
+                setters: &setters,
+            }
+            .visit_body(body);
         }
     }
     true
@@ -199,11 +246,14 @@ fn for_each_instr_in(module: &WirPackage, f: &mut impl FnMut(&WirInstr)) {
 
 struct DeadGuardRemover<'a> {
     dead: &'a IndexSet<String>,
+    setters: &'a IndexMap<u32, String>,
 }
 
 impl WirMutVisitor for DeadGuardRemover<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
-        body.retain(|instr| !once_guard_flag(instr).is_some_and(|flag| self.dead.contains(flag)));
+        body.retain(|instr| {
+            !once_guard_flag(instr, self.setters).is_some_and(|flag| self.dead.contains(flag))
+        });
         self.walk_body(body);
     }
 }
@@ -338,10 +388,17 @@ mod tests {
         ));
     }
 
-    fn guard(flag: &str) -> WirInstr {
-        let name = WirName {
-            fq: flag.to_string(),
-        };
+    fn set(flag: &str) -> WirInstr {
+        WirInstr::GlobalSet {
+            name: WirName {
+                fq: flag.to_string(),
+            },
+            value: Box::new(WirInstr::I32Const(1)),
+        }
+    }
+
+    /// `block { br_if 0 (global.get flag); cold_path; tail }`.
+    fn guard_with(flag: &str, tail: WirInstr) -> WirInstr {
         WirInstr::Block {
             label: None,
             result: None,
@@ -349,17 +406,20 @@ mod tests {
                 WirInstr::BrIf {
                     depth: 0,
                     condition: Box::new(WirInstr::GlobalGet {
-                        name: name.clone(),
+                        name: WirName {
+                            fq: flag.to_string(),
+                        },
                         result_ty: WirType::I32,
                     }),
                 },
                 WirInstr::ColdPath,
-                WirInstr::GlobalSet {
-                    name,
-                    value: Box::new(WirInstr::I32Const(1)),
-                },
+                tail,
             ],
         }
+    }
+
+    fn guard(flag: &str) -> WirInstr {
+        guard_with(flag, set(flag))
     }
 
     #[test]
@@ -377,6 +437,27 @@ mod tests {
         elide_empty_work(&mut module);
         let body = module.functions[0].body.as_ref().unwrap();
         assert_eq!(body.len(), 2);
-        assert_eq!(once_guard_flag(&body[0]), Some("read"));
+        assert_eq!(
+            once_guard_flag(&body[0], &IndexMap::default()),
+            Some("read")
+        );
+    }
+
+    #[test]
+    fn a_guard_whose_set_was_outlined_is_still_one() {
+        let mut module = package(vec![
+            func("f", vec![guard_with("dead", call(1, Vec::new()))]),
+            func("f$cold0", vec![WirInstr::ColdPath, set("dead")]),
+            func("other", vec![set("live")]),
+        ]);
+        elide_empty_work(&mut module);
+        assert!(module.functions[0].body.as_ref().unwrap().is_empty());
+
+        let mut module = package(vec![
+            func("f", vec![guard_with("dead", call(1, Vec::new()))]),
+            func("sets_another", vec![set("other")]),
+        ]);
+        elide_empty_work(&mut module);
+        assert_eq!(module.functions[0].body.as_ref().unwrap().len(), 1);
     }
 }
