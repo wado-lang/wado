@@ -727,6 +727,7 @@ impl<T> Tracked<T>
 where
     for<'a> &'a T: IntoIterator,
 {
+    /// Iterate the value, as `&value` does.
     pub fn iter(&self) -> <&T as IntoIterator>::IntoIter {
         self.value.into_iter()
     }
@@ -771,6 +772,7 @@ impl Body {
         *self.root
     }
 
+    /// Make `root` the root block.
     pub fn set_root(&mut self, root: BlockId) {
         *self.root = root;
     }

@@ -249,8 +249,8 @@ impl FunctionGate {
 
     /// [`Self::run_gated`] with the visits on the gate's threads. A visit holds
     /// its own function mutably and reads everything else as the sweep found
-    /// it, so the order the visits run in changes nothing.
-    /// Each visit gets its thread's engine scratch buffers.
+    /// it, so the order the visits run in changes nothing. Each visit gets its
+    /// thread's engine scratch buffers.
     pub fn run_gated_par(
         &mut self,
         pass: GatedPass,

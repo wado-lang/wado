@@ -1312,8 +1312,8 @@ impl<'a> Engine<'a> {
         } else {
             Vec::new()
         };
-        // A write is an edit to the function's memos, so an unchanged list is
-        // not written back.
+        // A write marks the function changed for its memos, so an unchanged
+        // list is not written back.
         if self.body.blocks[block].stmts != stmts {
             self.body.blocks[block].stmts = stmts;
         }
