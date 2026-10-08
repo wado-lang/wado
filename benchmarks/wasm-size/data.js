@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791461810639,
+  "lastUpdate": 1791463986074,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65417,6 +65417,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8adb9b23b863a5d53baa34a70dab2ff96fa3549b",
+          "message": "Merge pull request #2312 from wado-lang/ccr-185ac9b2-abnokd\n\nperf(coverage): compile stdlib coverage at 1.4× a plain run, not 3.7×",
+          "timestamp": "2026-10-08T21:37:01+09:00",
+          "tree_id": "b3464831af7e8c085ca1abd3ce75e63ec2198e6b",
+          "url": "https://github.com/wado-lang/wado/commit/8adb9b23b863a5d53baa34a70dab2ff96fa3549b"
+        },
+        "date": 1791463985065,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338626,
             "unit": "bytes"
           }
         ]
