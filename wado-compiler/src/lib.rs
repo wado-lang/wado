@@ -2062,6 +2062,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         &[],
         &param_resolution::ParamInputs::default(),
         kiln::InvocationIndex::default(),
+        1,
     )
     .await
 }
@@ -2085,6 +2086,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     codegen_flags: &[String],
     params: &param_resolution::ParamInputs,
     invocations: kiln::InvocationIndex,
+    parallelism: usize,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -2307,7 +2309,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Optimize
             let nir = {
                 let _span = logger.span("optimize");
-                optimize(nir, opt_level, opt, 1, &logger)
+                optimize(nir, opt_level, opt, parallelism, &logger)
             };
 
             prelower_reach::audit(prelower_reached.as_ref(), &nir);

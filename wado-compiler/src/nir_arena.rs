@@ -4,6 +4,7 @@
 //! representation, traversal, and cloning; the parent map, use index and edit
 //! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
+use std::cell::Cell;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
@@ -664,16 +665,39 @@ impl LocalSet {
 #[derive(Debug)]
 pub struct Tracked<T> {
     value: Arc<T>,
-    /// An epoch in the high half, drawn afresh by every construction and
-    /// clone, and the mutable borrows taken since in the low half. A value put
-    /// in place of another therefore always carries a higher version.
-    version: u64,
+    /// Drawn afresh by every construction and clone, so a value put in place
+    /// of another never carries its epoch.
+    epoch: u64,
+    /// The mutable borrows taken since.
+    edits: u64,
 }
 
-/// The next [`Tracked`] epoch.
-static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
+/// The first epoch no thread has reserved.
+static NEXT_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// How many epochs a thread reserves at once, so drawing one rarely touches
+/// the shared counter.
+const EPOCH_BLOCK: u64 = 1024;
+
+thread_local! {
+    /// This thread's reserved epochs, as the next one and the end of the block.
+    static EPOCHS: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
+}
+
+fn next_epoch() -> u64 {
+    EPOCHS.with(|epochs| {
+        let (mut next, mut end) = epochs.get();
+        if next == end {
+            next = NEXT_EPOCH.fetch_add(EPOCH_BLOCK, AtomicOrdering::Relaxed);
+            end = next + EPOCH_BLOCK;
+        }
+        epochs.set((next + 1, end));
+        next
+    })
+}
 
 impl<T> Tracked<T> {
+    /// `value`, under an epoch of its own.
     #[must_use]
     pub fn new(value: T) -> Self {
         Self::sharing(Arc::new(value))
@@ -682,13 +706,14 @@ impl<T> Tracked<T> {
     fn sharing(value: Arc<T>) -> Self {
         Self {
             value,
-            version: NEXT_EPOCH.fetch_add(1, AtomicOrdering::Relaxed) << 32,
+            epoch: next_epoch(),
+            edits: 0,
         }
     }
 
-    /// Higher after any mutable borrow, and on any value put in its place.
-    pub fn version(&self) -> u64 {
-        self.version
+    /// Different after any mutable borrow, and on any value put in its place.
+    pub fn version(&self) -> (u64, u64) {
+        (self.epoch, self.edits)
     }
 }
 
@@ -708,11 +733,7 @@ impl<T> std::ops::Deref for Tracked<T> {
 
 impl<T: Clone> std::ops::DerefMut for Tracked<T> {
     fn deref_mut(&mut self) -> &mut T {
-        assert!(
-            self.version & u64::from(u32::MAX) != u64::from(u32::MAX),
-            "a tracked value took 2^32 mutable borrows within one epoch"
-        );
-        self.version += 1;
+        self.edits += 1;
         Arc::make_mut(&mut self.value)
     }
 }
@@ -786,7 +807,7 @@ impl Body {
     /// Its parts' versions: different after any edit, by any route, since
     /// each part's only grows and a part put in place of another carries a
     /// newer epoch.
-    pub fn version(&self) -> [u64; 10] {
+    pub fn version(&self) -> [(u64, u64); 10] {
         [
             self.exprs.version(),
             self.stmts.version(),

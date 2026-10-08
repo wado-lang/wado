@@ -6,15 +6,14 @@ The NIR optimizer takes most of a compile, and it runs on one core. Compiling
 `package-gale/src/main.wado` with a dev build spends its time as follows,
 measured with `wado compile --log-level debug` and its span trace:
 
-| Where                                                                                                                                 | Seconds |
-| ------------------------------------------------------------------------------------------------------------------------------------- | ------: |
-| Whole compile                                                                                                                         |    75.5 |
-| Frontend (load through lower)                                                                                                         |     7.0 |
-| NIR fixed-point loop                                                                                                                  |    47.1 |
-| ↳ per-function passes (`peephole`, `copy_prop`, `licm`, `const_fold`, `sroa`, `tmpl_hoist`, `let_block_flatten`, `value_copy_demote`) |    26.3 |
-| ↳ interprocedural passes (`param_spec`, `inline`, `svr`, `sroa_param`, `dae`, `drve`, `container_sroa`)                               |    21.2 |
-| NIR after the loop (`store_load_forward`, `const_object_globalization`, DCE, …)                                                       |    17.0 |
-| WIR build, WIR optimize, codegen                                                                                                      |     3.6 |
+| Where                                                                                                                                 | Share of the compile |
+| ------------------------------------------------------------------------------------------------------------------------------------- | -------------------: |
+| Frontend (load through lower)                                                                                                         |                   9% |
+| NIR fixed-point loop                                                                                                                  |                  62% |
+| ↳ per-function passes (`peephole`, `copy_prop`, `licm`, `const_fold`, `sroa`, `tmpl_hoist`, `let_block_flatten`, `value_copy_demote`) |                  35% |
+| ↳ interprocedural passes (`param_spec`, `inline`, `svr`, `sroa_param`, `dae`, `drve`, `container_sroa`)                               |                  28% |
+| NIR after the loop (`store_load_forward`, `const_object_globalization`, DCE, …)                                                       |                  23% |
+| WIR build, WIR optimize, codegen                                                                                                      |                   5% |
 
 The package has about 16,000 function bodies, so the work divides finely. A
 per-function pass already visits functions independently through the gate
@@ -47,7 +46,9 @@ the machine.
 A compile emits the same bytes on one thread, on many, and on `wasm32`. Every
 decision below serves this. No dedicated check holds it: the compiler is
 deterministic as a rule (`wado-compiler/AGENTS.md`), and a lapse shows as drift
-in the WIR golden fixtures.
+in the WIR golden fixtures. The e2e fixtures and the golden fixtures compile on
+two threads, so every fixture runs the parallel path against expectations
+written without it.
 
 ### What a change may cost
 
@@ -96,11 +97,11 @@ writes only what it changed (`Engine::set_block_stmts` compares first), and a
 pass that only looks for something to rewrite asks through a shared borrow
 first (`NirFunction::calls_any`). Measured on `package-gale`, sequentially:
 
-| Memo key                     | Loop seconds |
-| ---------------------------- | -----------: |
-| Edits each pass reported     |         47.1 |
-| Mutable dereferences counted |         53.3 |
-| Changes counted              |         48.6 |
+| Memo key                     | Loop time |
+| ---------------------------- | --------: |
+| Edits each pass reported     |      1.00 |
+| Mutable dereferences counted |      1.13 |
+| Changes counted              |      1.03 |
 
 The type table stays behind the package's `RefCell`. A sweep borrows it once
 and hands each visit the shared reference.
@@ -190,11 +191,11 @@ which callees to clone or which parameters to drop, stay sequential.
 
 `package-gale` compiled with a dev build, `wado compile --optimize-threads <n> src/main.wado`, emits the same bytes on every row:
 
-| Build                   | Seconds |
-| ----------------------- | ------: |
-| `main`                  |    75.5 |
-| This design, 1 thread   |    78.2 |
-| This design, 16 threads |    38.3 |
+| Build                   | Time against `main` |
+| ----------------------- | ------------------: |
+| `main`                  |                1.00 |
+| This design, 1 thread   |                1.04 |
+| This design, 16 threads |                0.51 |
 
 ## Known gaps
 

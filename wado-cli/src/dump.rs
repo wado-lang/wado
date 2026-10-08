@@ -378,6 +378,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         &knobs.codegen_flags,
         &knobs.params,
         invocations,
+        knobs.optimize_threads(),
     )
     .await
     .map_err(|_bail| CliExit::silent_failure(1))?;

@@ -54,9 +54,8 @@ fn build_fold_maps(
 ) -> FoldMaps {
     // The CalleeMap holds handles aliased with `project.functions`, except for
     // the `frozen` functions the sweep is about to rewrite, which it reads as
-    // they stand now. The interpreter reads callee bodies via `try_borrow`,
-    // which bails cleanly when the visitor already holds `borrow_mut` on the
-    // same function (a self-call inside the function being walked).
+    // they stand now: the function being walked is among them, so a self-call
+    // reads the copy rather than the body held for writing.
     let callees = build_callee_map(project, exec, frozen);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a

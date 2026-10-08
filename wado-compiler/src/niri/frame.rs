@@ -718,7 +718,7 @@ impl Interpreter<'_> {
             self.facts
                 .callees
                 .and_then(|m| m.get(key))
-                .and_then(|c| c.func.try_borrow())
+                .map(|c| c.func.borrow())
                 .map_or_else(
                     || format!("{key:?}"),
                     |f| diagnostic_function_name(&f.name).to_string(),
@@ -746,7 +746,7 @@ impl Interpreter<'_> {
         if self.call_stack.iter().any(|k| k == &key) {
             return None;
         }
-        let callee = callee_rc.func.try_borrow()?;
+        let callee = callee_rc.func.borrow();
         if args.len() != callee.params.len() {
             return None;
         }

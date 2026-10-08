@@ -88,8 +88,23 @@ impl<'a> SharedEscape<'a> {
         self.slot_ok(&Slot::Param(func_id, pos))
     }
 
+    /// Settled without holding the lock: a verdict another thread publishes
+    /// meanwhile is the same exact answer this one would reach.
     fn slot_ok(&self, slot: &Slot) -> bool {
-        settle(slot, &mut lock(&self.verdicts), |s| self.own_check(s))
+        if let Some(&known) = lock(&self.verdicts).get(slot) {
+            return known;
+        }
+        let settled = settle(
+            slot,
+            |s| lock(&self.verdicts).get(s).copied(),
+            |s| self.own_check(s),
+        );
+        let holds = settled[slot];
+        let mut verdicts = lock(&self.verdicts);
+        for (s, verdict) in settled {
+            verdicts.entry(s).or_insert(verdict);
+        }
+        holds
     }
 
     /// The slots `slot` holds only if they hold too, or `None` where a use of
@@ -357,26 +372,24 @@ impl<'a> SharedEscape<'a> {
     }
 }
 
-/// Whether `root` holds: no node reachable from it through `own_check`'s
-/// obligations is refused. Settles, and caches, every node it reaches.
+/// The verdict of `root` and of every node it reaches, checking only the ones
+/// `known` does not answer: a node holds when nothing reachable from it
+/// through `own_check`'s obligations is refused.
 //
 // The greatest fixpoint: a cycle carrying no refusal holds, the sound answer
-// for a safety property. Each node is checked once over the life of `verdicts`.
+// for a safety property. Each node is checked once per call.
 fn settle<S: Clone + Eq + Hash>(
     root: &S,
-    verdicts: &mut IndexMap<S, bool>,
+    known: impl Fn(&S) -> Option<bool>,
     mut own_check: impl FnMut(&S) -> Option<IndexSet<S>>,
-) -> bool {
-    if let Some(&cached) = verdicts.get(root) {
-        return cached;
-    }
+) -> IndexMap<S, bool> {
     let mut owed_by: IndexMap<S, Vec<S>> = IndexMap::default();
     let mut failing: Vec<S> = Vec::new();
     let mut reached: IndexSet<S> = IndexSet::default();
     reached.insert(root.clone());
     let mut pending = vec![root.clone()];
     while let Some(node) = pending.pop() {
-        match verdicts.get(&node) {
+        match known(&node) {
             Some(true) => {}
             Some(false) => failing.push(node),
             None => match own_check(&node) {
@@ -400,11 +413,13 @@ fn settle<S: Clone + Eq + Hash>(
             }
         }
     }
-    for node in reached {
-        let holds = !refused.contains(&node);
-        verdicts.insert(node, holds);
-    }
-    verdicts[root]
+    reached
+        .into_iter()
+        .map(|node| {
+            let holds = !refused.contains(&node);
+            (node, holds)
+        })
+        .collect()
 }
 
 /// Whether a callee leaves an argument and everything it holds alone, and
@@ -703,12 +718,21 @@ mod tests {
         verdicts: &mut IndexMap<u32, bool>,
         checks: &mut u32,
     ) -> bool {
-        settle(&root, verdicts, |node| {
-            *checks += 1;
-            graph[node]
-                .as_ref()
-                .map(|next| next.iter().copied().collect())
-        })
+        if let Some(&cached) = verdicts.get(&root) {
+            return cached;
+        }
+        let settled = settle(
+            &root,
+            |node| verdicts.get(node).copied(),
+            |node| {
+                *checks += 1;
+                graph[node]
+                    .as_ref()
+                    .map(|next| next.iter().copied().collect())
+            },
+        );
+        verdicts.extend(settled);
+        verdicts[&root]
     }
 
     /// Mutually recursive functions passing one parameter around: every slot

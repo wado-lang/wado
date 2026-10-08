@@ -28,6 +28,7 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
         &[],
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
+        1,
     ))
     .expect("dump succeeds");
     let pkg = dump.wir_package.expect("wir package present after dump");
@@ -145,6 +146,7 @@ fn plan_matches_component_for_http_service_with_resources() {
             &[],
             &wado_compiler::param_resolution::ParamInputs::default(),
             wado_compiler::kiln::InvocationIndex::default(),
+            1,
         ))
         .expect("dump succeeds");
         dump.wir_package
@@ -226,6 +228,7 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
             &[],
             &wado_compiler::param_resolution::ParamInputs::default(),
             wado_compiler::kiln::InvocationIndex::default(),
+            1,
         ))
         .expect("dump succeeds");
         dump.wir_package

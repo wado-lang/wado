@@ -4,10 +4,23 @@
 //! comes back in item order, so the output never depends on the thread count
 //! (WEP: Parallel Optimizer).
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::BTreeMap;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
+
+/// The stack of every thread that compiles, the optimizer's included: the
+/// compiler recurses as deep as the source nests.
+pub const STACK_SIZE: usize = 64 * 1024 * 1024;
+
+/// One pool per thread count, built on first use and kept for the process, so
+/// a compile does not pay for starting its threads.
+#[cfg(not(target_arch = "wasm32"))]
+static POOLS: Mutex<BTreeMap<usize, Arc<rayon::ThreadPool>>> = Mutex::new(BTreeMap::new());
 
 /// Lock a memo the visits share. A visit that panics fails the whole compile,
 /// so nothing reads what a poisoned lock holds.
@@ -18,7 +31,7 @@ pub fn lock<T>(cell: &Mutex<T>) -> MutexGuard<'_, T> {
 /// Runs a visit per item on a pool of `threads`, or in order without one.
 pub struct Executor {
     #[cfg(not(target_arch = "wasm32"))]
-    pool: Option<rayon::ThreadPool>,
+    pool: Option<Arc<rayon::ThreadPool>>,
 }
 
 impl Executor {
@@ -28,11 +41,18 @@ impl Executor {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let pool = (threads > 1).then(|| {
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(threads)
-                    .thread_name(|i| format!("wado-opt-{i}"))
-                    .build()
-                    .expect("the optimizer's thread pool starts")
+                let mut pools = lock(&POOLS);
+                let pool = pools.entry(threads).or_insert_with(|| {
+                    Arc::new(
+                        rayon::ThreadPoolBuilder::new()
+                            .num_threads(threads)
+                            .stack_size(STACK_SIZE)
+                            .thread_name(|i| format!("wado-opt-{i}"))
+                            .build()
+                            .expect("the optimizer's thread pool starts"),
+                    )
+                });
+                Arc::clone(pool)
             });
             Self { pool }
         }

@@ -22,9 +22,7 @@ pub type CalleeKey = FuncId;
 pub type CalleeMap = IndexMap<CalleeKey, Callee>;
 
 /// A callee the engine may run, with the parameter facts the trackability
-/// analysis needs answered without a borrow. Asking the function later answers
-/// only when nobody holds `borrow_mut` on it, and a fold must not turn on
-/// which function the visitor happens to be walking.
+/// analysis needs answered without a borrow.
 pub struct Callee {
     pub func: FuncRef,
     arity: usize,

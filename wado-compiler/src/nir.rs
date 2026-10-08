@@ -314,6 +314,7 @@ pub struct FuncCell {
 pub type FuncRef = Arc<FuncCell>;
 
 impl FuncCell {
+    /// A cell holding `func`, with no writes counted yet.
     #[must_use]
     pub fn new(func: NirFunction) -> FuncRef {
         Arc::new(Self {
@@ -323,16 +324,12 @@ impl FuncCell {
     }
 
     /// Read the function. Panics while another borrow writes it, as
-    /// `RefCell::borrow` does: no caller waits for a writer.
+    /// `RefCell::borrow` does: no caller waits for a writer, and a read that
+    /// raced one would answer by thread timing.
     pub fn borrow(&self) -> RwLockReadGuard<'_, NirFunction> {
         self.func
             .try_read()
             .expect("a NIR function read while it is written")
-    }
-
-    /// Read the function, or `None` while a borrow writes it.
-    pub fn try_borrow(&self) -> Option<RwLockReadGuard<'_, NirFunction>> {
-        self.func.try_read().ok()
     }
 
     /// Borrow the function for writing. Panics while another borrow holds it,
@@ -365,14 +362,13 @@ pub struct FuncWriteGuard<'a> {
     guard: RwLockWriteGuard<'a, NirFunction>,
     writes: &'a AtomicU64,
     /// [`NirFunction::version`] when the guard was taken.
-    version: (Option<[u64; 10]>, u64),
+    version: (Option<[(u64, u64); 10]>, (u64, u64)),
     /// The function's [`Head`] before the first whole-function mutable borrow.
     head: Option<Head>,
 }
 
 /// Everything of a function but its body and locals, which count their own
 /// edits: what a whole-function mutable borrow may change unseen.
-#[derive(PartialEq)]
 struct Head {
     id: Option<FuncId>,
     is_dead: bool,
@@ -475,6 +471,73 @@ impl Head {
             return_abi: return_abi.clone(),
         }
     }
+    /// Whether `func` still has this head.
+    fn matches(&self, func: &NirFunction) -> bool {
+        let NirFunction {
+            id,
+            is_dead,
+            name,
+            module_source,
+            visibility,
+            is_export,
+            is_async,
+            type_params,
+            impl_type_params,
+            monomorph_info,
+            method_info,
+            params,
+            return_type,
+            task_return_type,
+            effects,
+            retains,
+            span,
+            address_taken_locals,
+            stores_aliased_locals,
+            is_cm_binding,
+            is_dispatch_wrapper,
+            is_cm_export,
+            is_ambient,
+            inline_hint,
+            compiler_item,
+            export_name,
+            allocator_tag,
+            kind,
+            scalarized_from,
+            return_abi,
+            body: _,
+            locals: _,
+        } = func;
+        self.id == *id
+            && self.is_dead == *is_dead
+            && self.name == *name
+            && self.module_source == *module_source
+            && self.visibility == *visibility
+            && self.is_export == *is_export
+            && self.is_async == *is_async
+            && self.type_params == *type_params
+            && self.impl_type_params == *impl_type_params
+            && self.monomorph_info == *monomorph_info
+            && self.method_info == *method_info
+            && self.params == *params
+            && self.return_type == *return_type
+            && self.task_return_type == *task_return_type
+            && self.effects == *effects
+            && self.retains == *retains
+            && self.span == *span
+            && self.address_taken_locals == *address_taken_locals
+            && self.stores_aliased_locals == *stores_aliased_locals
+            && self.is_cm_binding == *is_cm_binding
+            && self.is_dispatch_wrapper == *is_dispatch_wrapper
+            && self.is_cm_export == *is_cm_export
+            && self.is_ambient == *is_ambient
+            && self.inline_hint == *inline_hint
+            && self.compiler_item == *compiler_item
+            && self.export_name == *export_name
+            && self.allocator_tag == *allocator_tag
+            && self.kind == *kind
+            && self.scalarized_from == *scalarized_from
+            && self.return_abi == *return_abi
+    }
 }
 
 /// The parts of a function a rewrite of its body touches: the body and the
@@ -517,7 +580,7 @@ impl Drop for FuncWriteGuard<'_> {
         let head_moved = self
             .head
             .as_ref()
-            .is_some_and(|head| *head != Head::of(&self.guard));
+            .is_some_and(|head| !head.matches(&self.guard));
         if head_moved || self.guard.version() != self.version {
             self.writes.fetch_add(1, MemoryOrdering::Relaxed);
         }
@@ -746,7 +809,7 @@ pub enum InlineHint {
 
 impl NirFunction {
     /// Different after any edit to the body or the locals.
-    pub fn version(&self) -> (Option<[u64; 10]>, u64) {
+    pub fn version(&self) -> (Option<[(u64, u64); 10]>, (u64, u64)) {
         (self.body.as_ref().map(Body::version), self.locals.version())
     }
 
