@@ -189,8 +189,8 @@ which callees to clone or which parameters to drop, stay sequential.
 | Build                   | Seconds |
 | ----------------------- | ------: |
 | `main`                  |    75.5 |
-| This design, 1 thread   |    84.7 |
-| This design, 16 threads |    46.1 |
+| This design, 1 thread   |    84.3 |
+| This design, 16 threads |    42.9 |
 
 ## Known gaps
 
