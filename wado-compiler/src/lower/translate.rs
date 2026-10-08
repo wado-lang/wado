@@ -715,8 +715,8 @@ impl Translator<'_> {
         cf: &ClosureFunctor,
         func_map: &IndexMap<*const RefCell<TirFunction>, FuncRef>,
     ) -> nir::ClosureFunctor {
-        // A functor's methods are the package's own functions (`Rc::ptr_eq`
-        // keyed), so the optimizer reaches them by the id they carry there.
+        // A functor's methods are the package's own functions (keyed by
+        // pointer), so the optimizer reaches them by the id they carry there.
         let shared = |method: &Rc<RefCell<TirFunction>>| {
             Arc::clone(
                 func_map
