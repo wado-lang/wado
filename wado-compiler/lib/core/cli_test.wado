@@ -1,6 +1,7 @@
 use { println, eprintln, print, eprint, print_bytes, args, program_name, cwd, env } from "core:cli";
-use { Stdout, Stderr, exit, exit_error, exit_success, Exit } from "core:cli";
+use { Stdout, Stderr } from "core:cli";
 use { ErrorCode } from "wasi:cli";
+use { eval, Status } from "core:eval";
 
 // Captures what the helpers write. `write_via_stream` records which of the two
 // streams the next write belongs to, since one handler answers for both.
@@ -128,41 +129,14 @@ test "cwd answers without trapping" {
     let _ = cwd();
 }
 
-/// Stops the test where the host would stop the program. An exit does not
-/// return, so the handler traps rather than resume.
-struct ExitProbe {
+// An exit never returns, so only a host that runs the program sees its status.
+fn exit_status(call: String) -> Status {
+    return eval(`use { exit, exit_error, exit_success, Exit } from "core:cli";
+export fn run() with Exit { ${call}; }`).unwrap().status;
 }
 
-impl Exit for ExitProbe {
-    fn exit(&self, status: Result<(), ()>) {
-        panic(`exit ${status:?}`);
-    }
-
-    fn exit_with_code(&self, code: u8) {
-        panic(`exit ${code}`);
-    }
-}
-
-#[expect_trap]
-test "exit_success asks the host to exit" {
-    let probe = ExitProbe {};
-    with Exit => &probe do {
-        exit_success();
-    };
-}
-
-#[expect_trap]
-test "exit_error asks the host to exit" {
-    let probe = ExitProbe {};
-    with Exit => &probe do {
-        exit_error();
-    };
-}
-
-#[expect_trap]
-test "exit asks the host to exit with the code" {
-    let probe = ExitProbe {};
-    with Exit => &probe do {
-        exit(3);
-    };
+test "each exit helper hands the host its status" {
+    assert exit_status("exit_success()") matches { Exited(0) };
+    assert exit_status("exit_error()") matches { Exited(1) };
+    assert exit_status("exit(3)") matches { Exited(3) };
 }

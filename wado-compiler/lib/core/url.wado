@@ -125,6 +125,22 @@ fn is_special_scheme<S: AsStrSlice>(s: S) -> bool {
     return s matches { "http" | "https" | "ws" | "wss" };
 }
 
+/// Whether `s` opens with `scheme ":"`, RFC 3986 §3.1's
+/// `ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`: an absolute reference, never
+/// a relative one.
+fn starts_with_scheme<S: AsStrSlice>(s: S) -> bool {
+    for let [i, c] of s.chars().enumerate() {
+        if c == ':' {
+            return i > 0;
+        }
+        let allowed = c.is_ascii_alphabetic() || i > 0 && (c.is_ascii_digit() || c == '+' || c == '-' || c == '.');
+        if !allowed {
+            return false;
+        }
+    }
+    return false;
+}
+
 fn is_unreserved_char(c: char) -> bool {
     if 'A' <= c <= 'Z' {
         return true;
@@ -625,13 +641,8 @@ impl Url {
     /// Resolves a relative URL reference against this URL as the base.
     /// Follows RFC 3986 §5.
     pub fn resolve<S: AsStrSlice>(&self, reference: S) -> Result<Url, ParseError> {
-        if let Some(colon) = reference.find(":") {
-            if colon > 0 {
-                let ref_scheme = reference.substr_bytes(0, colon).to_ascii_lowercase();
-                if is_special_scheme(&ref_scheme) {
-                    return Url::from_str(reference);
-                }
-            }
+        if starts_with_scheme(&reference) {
+            return Url::from_str(reference);
         }
 
         let mut r_authority = "";
