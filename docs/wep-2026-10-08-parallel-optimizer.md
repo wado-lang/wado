@@ -162,7 +162,8 @@ In order of what each is worth on the table above:
    and `const_object_globalization`'s candidate collection and hoists.
 4. `inline`'s splicing, one caller per visit. The candidates are already
    copies, so a caller reads nothing another visit writes.
-5. `sroa_variant_return`'s call-site rewrites.
+5. `sroa_variant_return`'s call-site rewrites, and `dae`, `drve` and
+   `sroa_param`'s candidate scans, call-site validation and caller rewrites.
 
 A fact a whole-program walk reads off each body every round is taken once per
 body version instead. The DCE reachability `param_spec` reads each round
@@ -205,9 +206,8 @@ which callees to clone or which parameters to drop, stay sequential.
   pool, for one). `licm` still writes some bodies it does not change, and
   `const_object_globalization` memoizes per visit.
 - `value_copy_demote`'s analysis memo answers a recursive call provisionally,
-  `container_sroa` interns types during its visits, and `dae`, `drve`,
-  `sroa_param` and the DCE closure decide over the whole program. All run on
-  one thread.
+  and `container_sroa` interns types during its visits. Both run on one
+  thread, as does the DCE closure.
 - Developer traces (`WADO_TRACE`) interleave across threads, so their order
   varies between runs.
 - The frontend and the backend stay sequential.
