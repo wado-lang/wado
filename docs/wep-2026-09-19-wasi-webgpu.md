@@ -150,9 +150,7 @@ binding is covered end to end and not only to the point of compiling.
   crates — naga, wgpu-core, wgpu-hal and ash among them — about 38 s of a clean
   release build and 3.1 MB of the binary. So the host is `wado-run-webgpu`, its
   own crate and its own workspace, reached through
-  [External Subcommands](./wep-2026-09-19-external-subcommands.md). What is open
-  is when the two wasmtimes meet again: on that day the separate workspace, its
-  own lockfile and the `test-webgpu` CI job all collapse into the main ones.
+  [External Subcommands](./wep-2026-09-19-external-subcommands.md).
 - A machine with no GPU has no adapter, and wgpu's `noop` backend is opt-in and
   computes nothing. `mesa-vulkan-drivers` supplies a software adapter
   (lavapipe), a 98.5 MB install, and that is what `test-webgpu` runs on. A
