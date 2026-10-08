@@ -734,11 +734,10 @@ fn movers_of(
         memo: RefCell::default(),
     };
     let mut movers: IndexSet<FuncId> = exec
-        .filter_map(&project.functions, |f| {
+        .map_init(&project.functions, roles, |roles, f| {
             let f = f.borrow();
             // A bodyless function's signature types may already be gone.
             f.body.as_ref()?;
-            let roles = roles();
             f.id.filter(|id| {
                 !value_copy_ids.contains(id)
                     && f.params
@@ -749,6 +748,7 @@ fn movers_of(
             })
         })
         .into_iter()
+        .flatten()
         .collect();
     greatest_fixpoint(
         project,
