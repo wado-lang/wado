@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791415441053,
+  "lastUpdate": 1791421740131,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65133,6 +65133,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eaffe29d42a5b653e5224f1cb94cc3cf6c2c3f48"
         },
         "date": 1791415439996,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4f0f83831e3a6f6e51edd496bfbede197fc80a03",
+          "message": "Merge pull request #2306 from wado-lang/optimize-fixed-cost\n\nperf(optimize): stop re-deriving every body's facts on every round",
+          "timestamp": "2026-10-08T09:48:28+09:00",
+          "tree_id": "7e2ad5dde4111dbf4af7c30815f2f186140d4ef8",
+          "url": "https://github.com/wado-lang/wado/commit/4f0f83831e3a6f6e51edd496bfbede197fc80a03"
+        },
+        "date": 1791421739023,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
