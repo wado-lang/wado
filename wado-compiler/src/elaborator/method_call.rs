@@ -2235,7 +2235,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &args,
             &param_types,
             &static_method_defaults,
-            Some(defaults_module.clone()),
+            defaults_module.clone(),
             &static_type_bindings,
             ctx,
         );
@@ -2373,7 +2373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args,
             &param_types,
             &static_method_defaults,
-            Some(defaults_module.clone()),
+            defaults_module.clone(),
             &[],
             ctx,
         );
@@ -3333,6 +3333,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // bare name asks the *caller's* frame, which an alias leaves without
         // that name at all.
         let callee_params = resolution.params;
+        // A default the declaration wrote resolves in the module that declares
+        // the method; the signature names another only for one it inherited.
+        let defaults_module = callee_params
+            .defaults_module
+            .clone()
+            .unwrap_or_else(|| method_ref.module.clone());
 
         // Walk the defaults this spelling left out, so a default naming the
         // method's own type parameter (`u: U = U::default()`) resolves against
@@ -3355,7 +3361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver,
                     declaring_trait,
                     method_type_args.to_vec(),
-                    callee_params.defaults_module.clone(),
+                    Some(defaults_module.clone()),
                 )
             }
             None => Vec::new(),
@@ -3365,7 +3371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args,
             &callee_params.param_types,
             &callee_params.param_defaults,
-            callee_params.defaults_module.clone(),
+            defaults_module,
             &type_bindings,
             ctx,
         );

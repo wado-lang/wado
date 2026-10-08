@@ -1975,7 +1975,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &args,
                         &checked,
                         &param_defaults,
-                        Some(defaults_module.clone()),
+                        defaults_module.clone(),
                         &type_bindings,
                         ctx,
                     );
@@ -2525,7 +2525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
-        defaults_module: Option<ModuleSource>,
+        defaults_module: ModuleSource,
         type_bindings: &[DefaultTypeBinding],
         ctx: &mut FunctionContext,
     ) {
@@ -2540,7 +2540,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut padded,
             param_types,
             defaults,
-            defaults_module,
+            Some(defaults_module),
             type_bindings,
             Some(site),
             ctx,
@@ -4805,7 +4805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args,
                 &method_info_result.param_types,
                 &param_defaults,
-                Some(defaults_module.clone()),
+                defaults_module.clone(),
                 &type_bindings,
                 ctx,
             );

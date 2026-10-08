@@ -6780,12 +6780,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
 
-            let callee_module = dispatch.function_ref.module_source.clone();
             let prelude = self.reify_apply_param_defaults(
                 &mut args,
                 &dispatch.param_defaults,
                 &dispatch.param_types,
-                &callee_module,
+                &dispatch.defaults_module,
                 static_call.id,
                 static_call.span,
                 ctx,

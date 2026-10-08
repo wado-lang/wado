@@ -7,7 +7,7 @@
 use g from "./sub/default_arg_ns_lib.wado";
 use { paint } from "./sub/default_arg_private_item_lib.wado";
 use { make } from "./sub/default_arg_private_fn_call_lib.wado";
-use { process as process_ctx } from "./sub/default_arg_unimported_type_lib.wado";
+use { process as process_ctx, Runner } from "./sub/default_arg_unimported_type_lib.wado";
 use { Conf, Box, called, take } from "./sub/default_arg_caller_local_not_in_scope_lib.wado";
 use { Holder, picked, with_default } from "./sub/default_arg_namespaced_callee_a.wado";
 use {
@@ -62,6 +62,13 @@ impl Ctx {
 test "a default names a type this module never imported" {
     assert process_ctx() == 7;
     assert Ctx::new().count == 1;
+}
+
+// The `Type::method()` spelling walked a static method's defaults with no
+// declaring module, so `Ctx::new` resolved here and WIR build panicked on an
+// unresolved call.
+test "a static method's default names a type this module never imported" {
+    assert Runner::count() == 7;
 }
 
 // Issue #1486. Annotate resolved a bare identifier in the declaring module but

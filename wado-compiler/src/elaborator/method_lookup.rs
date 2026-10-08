@@ -3361,7 +3361,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &args,
                 &param_types,
                 &defaults,
-                Some(defaults_module.clone()),
+                defaults_module.clone(),
                 &type_bindings,
                 ctx,
             );
