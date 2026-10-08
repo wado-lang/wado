@@ -1700,7 +1700,7 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     return -1;
 }
 
-fn scan_alias(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_alias(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1710,7 +1710,7 @@ fn scan_alias(tokens: &Array<i32>, pos: i32) -> i32 {
     } else if kind == TK_LIT_LPAREN {
         pos = start + 1;
         try_1: {
-            pos = scan_alias(tokens, pos);
+            pos = scan_alias(tokens, pos, follow_then(FOLLOW_MASK_5, 8, follow));
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
             pos += 1;
@@ -1721,7 +1721,7 @@ fn scan_alias(tokens: &Array<i32>, pos: i32) -> i32 {
     return -1;
 }
 
-fn scan_inner(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_inner(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1731,7 +1731,7 @@ fn scan_inner(tokens: &Array<i32>, pos: i32) -> i32 {
     } else if kind == TK_LIT_LPAREN {
         pos = start + 1;
         try_1: {
-            pos = scan_inner(tokens, pos);
+            pos = scan_inner(tokens, pos, follow_then(FOLLOW_MASK_5, 8, follow));
             if pos < 0 { break try_1; }
             if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { break try_1; }
             pos += 1;
@@ -1821,17 +1821,17 @@ fn _parse_stmt(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
-    _parse_name(p);
+    _parse_name(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
     if p.peek_kind() == TK_LIT_as && _kind_set_0(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
         if p.peek_kind() == TK_LIT_as {
             p.take();
         }
         p.site = 4;
-        _parse_alias(p);
+        _parse_alias(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_3)));
     } else if _kind_set_0(p.peek_kind()) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.site = 4;
-        _parse_alias(p);
+        _parse_alias(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_3)));
     }
     let mut gd_winner: i32 = -1;
     let mut gd_best: i32 = -1;
@@ -1865,7 +1865,7 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         if gd_winner == 0 {
             p.expect(TK_LIT_idx, &SYNC_0, false);
             p.site = 5;
-            _parse_name(p);
+            _parse_name(p, follow);
         } else {
             p.expect(TK_LIT_no, &SYNC_3, false);
             p.expect(TK_LIT_idx, &EMPTY_SYNC, true);
@@ -1883,7 +1883,7 @@ fn scan_item__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let sol_1_save = pos;
             sol_1: {
                 pos += 1;
-                pos = scan_alias(tokens, pos);
+                pos = scan_alias(tokens, pos, 0);
                 if pos < 0 { break sol_1; }
                 break osl_0_done;
             }
@@ -1893,7 +1893,7 @@ fn scan_item__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < tokens.len() && _kind_set_0(tokens[pos]) {
             let sol_2_save = pos;
             sol_2: {
-                pos = scan_alias(tokens, pos);
+                pos = scan_alias(tokens, pos, 0);
                 if pos < 0 { break sol_2; }
                 break osl_0_done;
             }
@@ -1929,10 +1929,10 @@ fn scan_item__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn _parse_item__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 6;
-    _parse_name(p);
+    _parse_name(p, FOLLOW_MASK_4);
     p.expect(TK_LIT_LPAREN, &SYNC_0, false);
     p.site = 7;
-    _parse_inner(p);
+    _parse_inner(p, follow_then(FOLLOW_MASK_5, 8, follow));
     p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
     return;
 }
@@ -1943,7 +1943,7 @@ fn scan_item__alt_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
-    pos = scan_inner(tokens, pos);
+    pos = scan_inner(tokens, pos, follow_then(FOLLOW_MASK_5, 8, follow));
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RPAREN { return -1; }
     pos += 1;
@@ -2017,7 +2017,7 @@ fn _parse_item(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_alias__inner(p: &mut Parser) -> () {
+fn _parse_alias__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if kind == TK_ID {
@@ -2026,7 +2026,7 @@ fn _parse_alias__inner(p: &mut Parser) -> () {
     } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 8;
-        _parse_alias(p);
+        _parse_alias(p, follow_then(FOLLOW_MASK_5, 8, follow));
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
         return;
     }
@@ -2038,18 +2038,18 @@ fn _parse_alias__inner(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_alias(p: &mut Parser) -> () {
+fn _parse_alias(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ALIAS, _start);
-    _parse_alias__inner(p);
+    _parse_alias__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_ALIAS, "alias", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_inner__inner(p: &mut Parser) -> () {
+fn _parse_inner__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
     let kind = p.peek_kind();
     if kind == TK_NUMBER {
@@ -2058,7 +2058,7 @@ fn _parse_inner__inner(p: &mut Parser) -> () {
     } else if kind == TK_LIT_LPAREN {
         p.take();
         p.site = 9;
-        _parse_inner(p);
+        _parse_inner(p, follow_then(FOLLOW_MASK_5, 8, follow));
         p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
         return;
     }
@@ -2070,18 +2070,18 @@ fn _parse_inner__inner(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_inner(p: &mut Parser) -> () {
+fn _parse_inner(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_INNER, _start);
-    _parse_inner__inner(p);
+    _parse_inner__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_INNER, "inner", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_name(p: &mut Parser) -> () {
+fn _parse_name(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -2184,7 +2184,11 @@ global EXPECTED_4: List<i32> = [TK_ID, TK_LIT_LPAREN];
 global SYNC_5: List<i32> = [514];
 global EXPECTED_5: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
 
-global FOLLOW_SETS: List<List<i32>> = [[8], [32]];
+global FOLLOW_SETS: List<List<i32>> = [[8], [32], [961], [384], [512], [514], [1024]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;
+global FOLLOW_MASK_2: i64 = 3;
+global FOLLOW_MASK_3: i64 = 4;
+global FOLLOW_MASK_4: i64 = 1541;
+global FOLLOW_MASK_5: i64 = 7;
 

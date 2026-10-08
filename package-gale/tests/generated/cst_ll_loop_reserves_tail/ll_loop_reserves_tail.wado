@@ -1620,12 +1620,12 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if rep_scan_pos < 0 { break; }
         p.site = 1;
-        _parse_arm(p);
+        _parse_arm(p, follow_then(FOLLOW_MASK_1, 8, follow));
         p.expect(TK_SEMI, &SYNC_0, false);
         if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
     p.site = 2;
-    _parse_arm(p);
+    _parse_arm(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_1)));
     if p.peek_kind() == TK_SEMI && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
         p.take();
     }
@@ -1643,7 +1643,7 @@ fn _parse_arms(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_arm(p: &mut Parser) -> () {
+fn _parse_arm(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -1714,6 +1714,7 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [1];
 global EXPECTED_0: List<i32> = [TK_ID];
 
-global FOLLOW_SETS: List<List<i32>> = [[8]];
+global FOLLOW_SETS: List<List<i32>> = [[8], [2]];
 global FOLLOW_MASK_0: i64 = 1;
+global FOLLOW_MASK_1: i64 = 2;
 

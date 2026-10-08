@@ -1771,16 +1771,16 @@ impl Parser {
     }
 }
 
-fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+fn scan_stmt(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos, gate, memo, 0);
+    pos = scan_expr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_3, 8, follow), 0);
     if pos < 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_SEMI { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LB { return -1; }
     pos += 1;
@@ -1791,7 +1791,7 @@ fn scan_blk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanM
     return pos;
 }
 
-fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let start = pos;
     let start_gate = *gate;
     let mut pos = pos;
@@ -1800,10 +1800,10 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut
         pos = start + 1;
         try_1: {
             gate.noBrace = 1;
-            pos = scan_expr(tokens, pos, gate, memo, 0);
+            pos = scan_expr(tokens, pos, gate, memo, follow_then(FOLLOW_MASK_4, 24, follow), 0);
             if pos < 0 { break try_1; }
             gate.noBrace = 0;
-            pos = scan_blk(tokens, pos, gate, memo);
+            pos = scan_blk(tokens, pos, gate, memo, follow);
             if pos < 0 { break try_1; }
             return pos;
         }
@@ -1812,10 +1812,10 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut
     if kind == TK_ID {
         let mut best: i32 = -1;
         let mut best_gate = *gate;
-        let try_2_end = scan_expr__alt_2(tokens, start, gate, memo);
+        let try_2_end = scan_expr__alt_2(tokens, start, gate, memo, follow);
         if try_2_end > best { best = try_2_end; best_gate = *gate; }
         *gate = start_gate;
-        let try_3_end = scan_expr__alt_3(tokens, start, gate, memo);
+        let try_3_end = scan_expr__alt_3(tokens, start, gate, memo, follow);
         if try_3_end > best { best = try_3_end; best_gate = *gate; }
         if best >= 0 {
             pos = best;
@@ -1827,29 +1827,29 @@ fn scan_expr_atom(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut
     return -1;
 }
 
-fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+fn scan_expr_lr_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_EQ { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos, gate, memo, 2);
+    pos = scan_expr(tokens, pos, gate, memo, follow, 2);
     if pos < 0 { return -1; }
     return pos;
 }
 
-fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
-    let memo_at = memo.find(5, pos, min_prec, 0, 0, &*gate);
+fn scan_expr(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+    let memo_at = memo.find(5, pos, min_prec, follow, 0, &*gate);
     if memo_at >= 0 {
         *gate = memo.gate_of(memo_at);
         return memo.end_of(memo_at);
     }
     let memo_gate = *gate;
-    let memo_end = scan_expr__walk(tokens, pos, gate, memo, min_prec);
-    memo.put(5, pos, min_prec, 0, 0, memo_gate, memo_end, *gate);
+    let memo_end = scan_expr__walk(tokens, pos, gate, memo, follow, min_prec);
+    memo.put(5, pos, min_prec, follow, 0, memo_gate, memo_end, *gate);
     return memo_end;
 }
 
-fn scan_expr__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, min_prec: i32 = 0) -> i32 {
-    let mut pos = scan_expr_atom(tokens, pos, gate, memo);
+fn scan_expr__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+    let mut pos = scan_expr_atom(tokens, pos, gate, memo, follow);
     if pos < 0 { return -1; }
     loop {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1857,7 +1857,7 @@ fn scan_expr__walk(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mu
             if 1 >= min_prec {
                 let lr_saved_pos = pos;
                 let lr_saved_pos_gate = *gate;
-                pos = scan_expr_lr_0(tokens, pos, gate, memo);
+                pos = scan_expr_lr_0(tokens, pos, gate, memo, follow);
                 if pos < 0 {
                     pos = lr_saved_pos;
                     *gate = lr_saved_pos_gate;
@@ -1922,7 +1922,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                 p.scan_gate.noBrace = p.noBrace;
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_stmt(tokens, pos, &mut p.scan_gate, &mut p.memo);
+                pos = scan_stmt(tokens, pos, &mut p.scan_gate, &mut p.memo, 0);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
@@ -1938,7 +1938,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                         if pos < tokens.len() && _kind_set_1(tokens[pos]) {
                             let sp = pos;
                             let sp_gate = p.scan_gate;
-                            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.memo, 0);
+                            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.memo, follow, 0);
                             if pos < 0 {
                                 pos = sp;
                                 p.scan_gate = sp_gate;
@@ -1958,7 +1958,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                     let _rec_spec = p.speculating;
                     p.speculating = true;
                     p.site = 2;
-                    _parse_stmt(p);
+                    _parse_stmt(p, 0);
                     p.speculating = _rec_spec;
                     p.recovering = _rec_sav;
                     p.pos = _rec_pos;
@@ -1969,7 +1969,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
         }
         _plus_first = false;
         p.site = 2;
-        _parse_stmt(p);
+        _parse_stmt(p, 0);
     }
     let mut opt_enter: bool = _kind_set_1(p.peek_kind());
     if opt_enter && follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -1978,7 +1978,7 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             p.scan_gate.noBrace = p.noBrace;
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.memo, 0);
+            pos = scan_expr(tokens, pos, &mut p.scan_gate, &mut p.memo, follow, 0);
             if pos < 0 { break opt_scan; }
             opt_scan_pos = pos;
         }
@@ -1986,19 +1986,19 @@ fn _parse_stmts__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if opt_enter {
         p.site = 3;
-        _parse_expr(p);
+        _parse_expr(p, follow);
     }
     return;
 }
 
 fn scan_stmts__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_stmt(tokens, pos, gate, memo);
+    pos = scan_stmt(tokens, pos, gate, memo, 0);
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_1(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_stmt(tokens, pos, gate, memo);
+        pos = scan_stmt(tokens, pos, gate, memo, 0);
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -2016,7 +2016,7 @@ fn scan_stmts__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
                 if pos < tokens.len() && _kind_set_1(tokens[pos]) {
                     let sp = pos;
                     let sp_gate = *gate;
-                    pos = scan_expr(tokens, pos, gate, memo, 0);
+                    pos = scan_expr(tokens, pos, gate, memo, follow, 0);
                     if pos < 0 {
                         pos = sp;
                         *gate = sp_gate;
@@ -2037,7 +2037,7 @@ fn scan_stmts__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
     if pos < tokens.len() && _kind_set_1(tokens[pos]) {
         let sp = pos;
         let sp_gate = *gate;
-        pos = scan_expr(tokens, pos, gate, memo, 0);
+        pos = scan_expr(tokens, pos, gate, memo, follow, 0);
         if pos < 0 {
             pos = sp;
             *gate = sp_gate;
@@ -2051,7 +2051,7 @@ fn scan_stmts__alt_0(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &
 }
 
 fn scan_stmts__alt_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
-    return scan_expr(tokens, pos, gate, memo, 0);
+    return scan_expr(tokens, pos, gate, memo, follow, 0);
 }
 
 fn _parse_stmts__inner(p: &mut Parser, follow: i64 = 0) -> () {
@@ -2076,7 +2076,7 @@ fn _parse_stmts__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if _sd_best_i == 1 {
             p.site = 4;
-            return _parse_expr(p);
+            return _parse_expr(p, follow);
         }
         return _parse_stmts__inner_alt_0(p, follow);
     }
@@ -2099,43 +2099,43 @@ fn _parse_stmts(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_stmt__inner(p: &mut Parser) -> () {
+fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 5;
-    _parse_expr(p);
+    _parse_expr(p, follow_then(FOLLOW_MASK_3, 8, follow));
     p.expect(TK_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_stmt(p: &mut Parser) -> () {
+fn _parse_stmt(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_STMT, _start);
-    _parse_stmt__inner(p);
+    _parse_stmt__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_STMT, "stmt", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_blk__inner(p: &mut Parser) -> () {
+fn _parse_blk__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LB, &SYNC_2, false);
     p.expect(TK_ID, &SYNC_3, false);
     p.expect(TK_RB, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_blk(p: &mut Parser) -> () {
+fn _parse_blk(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_BLK, _start);
-    _parse_blk__inner(p);
+    _parse_blk__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_BLK, "blk", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
+fn _parse_expr__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_4, false);
     p.expect(TK_LB, &SYNC_2, false);
     p.expect(TK_ID, &SYNC_3, false);
@@ -2143,7 +2143,7 @@ fn _parse_expr__inner_alt_2(p: &mut Parser) -> () {
     return;
 }
 
-fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if gate.noBrace != 0 { return -1; }
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
@@ -2157,19 +2157,19 @@ fn scan_expr__alt_2(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &m
     return pos;
 }
 
-fn _parse_expr__inner_alt_3(p: &mut Parser) -> () {
+fn _parse_expr__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_ID, &SYNC_5, true);
     return;
 }
 
-fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>) -> i32 {
+fn scan_expr__alt_3(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate, memo: &mut ScanMemo<ScanGate>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
     return pos;
 }
 
-fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_IF {
@@ -2178,21 +2178,21 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
             p.noBrace = 1
         }
         p.site = 8;
-        _parse_expr(p);
+        _parse_expr(p, follow_then(FOLLOW_MASK_4, 24, follow));
         if !p.speculating {
             p.noBrace = 0
         }
         p.site = 9;
-        _parse_blk(p);
+        _parse_blk(p, follow);
         return;
     }
     if kind == TK_ID {
         let _sd_tokens = &p.kinds;
         let _sd_pos = p.pos;
         p.scan_gate.noBrace = p.noBrace;
-        let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_2 = scan_expr__alt_2(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo, follow);
         p.scan_gate.noBrace = p.noBrace;
-        let _sd_p_3 = scan_expr__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo);
+        let _sd_p_3 = scan_expr__alt_3(_sd_tokens, _sd_pos, &mut p.scan_gate, &mut p.memo, follow);
         let mut _sd_best_i: i32 = -1;
         let mut _sd_best_p: i32 = -1;
         if _sd_p_2 > _sd_best_p {
@@ -2205,9 +2205,9 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
         }
         if _sd_best_i >= 0 {
             if _sd_best_i == 2 {
-                return _parse_expr__inner_alt_2(p);
+                return _parse_expr__inner_alt_2(p, follow);
             }
-            return _parse_expr__inner_alt_3(p);
+            return _parse_expr__inner_alt_3(p, follow);
         }
     }
     p.no_viable(
@@ -2218,11 +2218,11 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     return;
 }
 
-fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     let _cp = p.b.checkpoint();
     let _start = p.peek_start();
     p.b.start_node(RK_EXPR, _start);
-    _parse_expr__inner_atom(p, min_prec);
+    _parse_expr__inner_atom(p, follow, min_prec);
     p.b.finish_node(p.last_end());
     loop {
         if p.recovering { break; }
@@ -2230,13 +2230,13 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if _sk == TK_EQ {
             if 1 >= min_prec {
                 p.scan_gate.noBrace = p.noBrace;
-                if scan_expr_lr_0(&p.kinds, p.pos, &mut p.scan_gate, &mut p.memo) < 0 {
+                if scan_expr_lr_0(&p.kinds, p.pos, &mut p.scan_gate, &mut p.memo, follow) < 0 {
                     break;
                 }
                 p.b.start_node_at(_cp, RK_EXPR, _start);
                 p.take();
                 p.site = 7;
-                _parse_expr(p, 2);
+                _parse_expr(p, follow, 2);
                 p.b.finish_node(p.last_end());
             } else {
                 break;
@@ -2248,11 +2248,11 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
     return;
 }
 
-fn _parse_expr(p: &mut Parser, min_prec: i32 = 0) -> () {
+fn _parse_expr(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _row = p.b.checkpoint();
-    _parse_expr__inner(p, min_prec);
+    _parse_expr__inner(p, follow, min_prec);
     if p.recovering && p.recover_rule(RK_EXPR, "expr", _row) { p.b.finish_node(p.last_end()); }
     p.sites.pop();
 }
@@ -2347,9 +2347,11 @@ global SYNC_3: List<i32> = [16];
 global SYNC_4: List<i32> = [8];
 global SYNC_5: List<i32> = [2];
 
-global FOLLOW_SETS: List<List<i32>> = [[128], [16]];
+global FOLLOW_SETS: List<List<i32>> = [[128], [16], [32], [8], [4]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 2;
+global FOLLOW_MASK_3: i64 = 3;
+global FOLLOW_MASK_4: i64 = 132356;
 
 struct ScanGate {
     noBrace: i32 = 0,

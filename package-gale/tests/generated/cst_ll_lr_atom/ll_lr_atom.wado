@@ -1708,7 +1708,7 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 0;
             _parse_a(p, follow_then(FOLLOW_MASK_0, 16, follow));
             p.site = 1;
-            _parse_b(p);
+            _parse_b(p, follow_then(FOLLOW_MASK_1, 8, follow));
         } else {
             p.site = 2;
             _parse_a(p, follow_then(FOLLOW_MASK_1, 8, follow));
@@ -1786,7 +1786,7 @@ fn _parse_a(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_b(p: &mut Parser) -> () {
+fn _parse_b(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();

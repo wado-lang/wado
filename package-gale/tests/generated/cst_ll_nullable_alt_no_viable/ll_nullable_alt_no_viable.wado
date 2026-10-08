@@ -1628,7 +1628,7 @@ impl Parser {
     }
 }
 
-fn scan_base(tokens: &Array<i32>, pos: i32) -> i32 {
+fn scan_base(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_DOTDOT { return -1; }
     pos += 1;
@@ -1637,7 +1637,7 @@ fn scan_base(tokens: &Array<i32>, pos: i32) -> i32 {
     return pos;
 }
 
-fn _parse_start__inner(p: &mut Parser) -> () {
+fn _parse_start__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_ID {
@@ -1645,7 +1645,7 @@ fn _parse_start__inner(p: &mut Parser) -> () {
         _parse_expr(p, 0);
     } else if grp_kind == TK_AT {
         p.site = 1;
-        _parse_any(p);
+        _parse_any(p, 0);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
     }
@@ -1653,12 +1653,12 @@ fn _parse_start__inner(p: &mut Parser) -> () {
     return;
 }
 
-fn _parse_start(p: &mut Parser) -> () {
+fn _parse_start(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_START, _start);
-    _parse_start__inner(p);
+    _parse_start__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_START, "start", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -1689,7 +1689,7 @@ fn _parse_expr(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
-    _parse_field(p);
+    _parse_field(p, follow_open_with(follow_then_opening(FOLLOW_MASK_1, 16, follow), follow_open_set(FOLLOW_MASK_2)));
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -1724,7 +1724,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
                         pos = gp_1;
                         sg_1_0: {
                             pos += 1;
-                            pos = scan_base(tokens, pos);
+                            pos = scan_base(tokens, pos, follow);
                             if pos < 0 { break sg_1_0; }
                             if pos > sg_1_best { sg_1_best = pos; }
                         }
@@ -1747,7 +1747,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if rep_scan_pos < 0 { break; }
         p.expect(TK_COMMA, &SYNC_0, false);
         p.site = 4;
-        _parse_field(p);
+        _parse_field(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_COMMA {
@@ -1759,7 +1759,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
             let mut pos: i32 = p.pos;
             if pos >= tokens.len() || tokens[pos] != TK_COMMA { break gd_scan; }
             pos += 1;
-            pos = scan_base(tokens, pos);
+            pos = scan_base(tokens, pos, follow);
             if pos < 0 { break gd_scan; }
             gd_end = pos;
         }
@@ -1783,7 +1783,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if gd_winner == 0 {
             p.expect(TK_COMMA, &SYNC_0, false);
             p.site = 5;
-            _parse_base(p);
+            _parse_base(p, follow);
         } else {
             if p.peek_kind() == TK_COMMA && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF)) {
                 p.take();
@@ -1808,24 +1808,24 @@ fn _parse_fields(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_base__inner(p: &mut Parser) -> () {
+fn _parse_base__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_DOTDOT, &SYNC_4, false);
     p.expect(TK_ID, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_base(p: &mut Parser) -> () {
+fn _parse_base(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_BASE, _start);
-    _parse_base__inner(p);
+    _parse_base__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_BASE, "base", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_field(p: &mut Parser) -> () {
+fn _parse_field(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -1836,18 +1836,18 @@ fn _parse_field(p: &mut Parser) -> () {
     p.sites.pop();
 }
 
-fn _parse_any__inner(p: &mut Parser) -> () {
+fn _parse_any__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_AT, &SYNC_5, false);
     p.any();
     return;
 }
 
-fn _parse_any(p: &mut Parser) -> () {
+fn _parse_any(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ANY, _start);
-    _parse_any__inner(p);
+    _parse_any__inner(p, follow);
     if p.recovering { let _ = p.recover_rule(RK_ANY, "any", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -1931,6 +1931,8 @@ global EXPECTED_3: List<i32> = [TK_AT, TK_DOTDOT, TK_ID, TK_RBRACE];
 global SYNC_4: List<i32> = [1];
 global SYNC_5: List<i32> = [383];
 
-global FOLLOW_SETS: List<List<i32>> = [[16]];
+global FOLLOW_SETS: List<List<i32>> = [[16], [2], [1]];
 global FOLLOW_MASK_0: i64 = 1;
+global FOLLOW_MASK_1: i64 = 770;
+global FOLLOW_MASK_2: i64 = 2;
 

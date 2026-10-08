@@ -1628,7 +1628,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
         p.site = 1;
         _parse_a(p, follow_then(FOLLOW_MASK_1, 16, follow));
         p.site = 2;
-        _parse_t(p);
+        _parse_t(p, follow_then(FOLLOW_MASK_2, 8, follow));
         p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LIT_free {
@@ -1681,7 +1681,7 @@ fn _parse_a(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_t(p: &mut Parser) -> () {
+fn _parse_t(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -1763,4 +1763,5 @@ global SYNC_3: List<i32> = [2];
 global FOLLOW_SETS: List<List<i32>> = [[8], [2], [64]];
 global FOLLOW_MASK_0: i64 = 1;
 global FOLLOW_MASK_1: i64 = 770;
+global FOLLOW_MASK_2: i64 = 3;
 
