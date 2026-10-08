@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791437181827,
+  "lastUpdate": 1791455348207,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65265,6 +65265,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/037dba4806418b7813154f366d7e832916a6d16e"
         },
         "date": 1791437180873,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7802be568dd5cbe8cedb6d816ab8ee795b5f2fa8",
+          "message": "Merge pull request #2309 from wado-lang/optimize-fixed-cost\n\nperf(optimize): visit functions on several threads, with the same output on any count",
+          "timestamp": "2026-10-08T19:09:55+09:00",
+          "tree_id": "76334c97e7e8e1380834c25947984c4270b029eb",
+          "url": "https://github.com/wado-lang/wado/commit/7802be568dd5cbe8cedb6d816ab8ee795b5f2fa8"
+        },
+        "date": 1791455347596,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
