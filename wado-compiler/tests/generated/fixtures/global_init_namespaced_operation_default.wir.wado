@@ -59,7 +59,7 @@ type "functype//global_init_namespaced_operation_default.wado/$cm_binding__Stdou
 
 type "functype//global_init_namespaced_operation_default.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//global_init_namespaced_operation_default.wado/$initialize_module" = fn();  // TypeId(21)
+type "functype//global_init_namespaced_operation_default.wado/$initialize_modules$cold0" = fn();  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(22)
 
@@ -119,8 +119,7 @@ fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_namespaced_operation_default.wado::$modules_initialized);
         cold_path;
-        "global_init_namespaced_operation_default.wado/$initialize_module"();
-        global:global_init_namespaced_operation_default.wado::$modules_initialized = 1;
+        "global_init_namespaced_operation_default.wado/$initialize_modules$cold0"();
     };
     acc = struct.new "global_init_namespaced_operation_default.wado//Acc" { value: 100 };
     global:global_init_namespaced_operation_default.wado::$effect_Stepper = local.tee $d_Stepper(struct.new "global_init_namespaced_operation_default.wado//$Dispatch_Stepper" { outer: local.tee $save_Stepper(global:global_init_namespaced_operation_default.wado::$effect_Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_0" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_0" } });
@@ -188,14 +187,13 @@ fn "global_init_namespaced_operation_default.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_namespaced_operation_default.wado::$modules_initialized);
         cold_path;
-        "global_init_namespaced_operation_default.wado/$initialize_module"();
-        global:global_init_namespaced_operation_default.wado::$modules_initialized = 1;
+        "global_init_namespaced_operation_default.wado/$initialize_modules$cold0"();
     };
     "global_init_namespaced_operation_default.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "global_init_namespaced_operation_default.wado/$initialize_module"() {
+fn "global_init_namespaced_operation_default.wado/$initialize_modules$cold0"() {
     let acc: ref "global_init_namespaced_operation_default.wado//Acc";
     let $local_2: ref null "global_init_namespaced_operation_default.wado//$Dispatch_Stepper";
     let $local_4: i32;
@@ -205,6 +203,7 @@ fn "global_init_namespaced_operation_default.wado/$initialize_module"() {
     $local_4 = "global_init_namespaced_operation_default.wado/$effect_dispatch__Stepper__step"(1) + "global_init_namespaced_operation_default.wado/$effect_dispatch__Stepper__step"(10);
     global:global_init_namespaced_operation_default.wado::$effect_Stepper = $local_2;
     global:global_init_namespaced_operation_default.wado::STEPPED = $local_4;
+    global:global_init_namespaced_operation_default.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

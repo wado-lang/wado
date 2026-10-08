@@ -45,13 +45,13 @@ type "functype//opt_sroa_param_global_alias.wado/$cm_binding__Stdout_write_via_s
 
 type "functype//opt_sroa_param_global_alias.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//opt_sroa_param_global_alias.wado/$initialize_module" = fn();  // TypeId(19)
+type "functype//opt_sroa_param_global_alias.wado/run$cold0" = fn(i32);  // TypeId(19)
 
-type "functype//opt_sroa_param_global_alias.wado/run$cold0" = fn(i32);  // TypeId(20)
+type "functype//opt_sroa_param_global_alias.wado/run$cold1" = fn(i32);  // TypeId(20)
 
-type "functype//opt_sroa_param_global_alias.wado/run$cold1" = fn(i32);  // TypeId(21)
+type "functype//opt_sroa_param_global_alias.wado/run$cold2" = fn(i32);  // TypeId(21)
 
-type "functype//opt_sroa_param_global_alias.wado/run$cold2" = fn(i32);  // TypeId(22)
+type "functype//opt_sroa_param_global_alias.wado/$initialize_modules$cold0" = fn();  // TypeId(22)
 
 type "functype//opt_sroa_param_global_alias.wado/k$sroa[p.value]" = fn(i32) -> i32;  // TypeId(23)
 
@@ -125,8 +125,7 @@ fn "opt_sroa_param_global_alias.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_sroa_param_global_alias.wado::$modules_initialized);
         cold_path;
-        "opt_sroa_param_global_alias.wado/$initialize_module"();
-        global:opt_sroa_param_global_alias.wado::$modules_initialized = 1;
+        "opt_sroa_param_global_alias.wado/$initialize_modules$cold0"();
     };
     global:opt_sroa_param_global_alias.wado::G.value = 1;
     if @unlikely(local.tee a("opt_sroa_param_global_alias.wado/f"(global:opt_sroa_param_global_alias.wado::G)) != 101) {
@@ -172,15 +171,10 @@ fn "opt_sroa_param_global_alias.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_sroa_param_global_alias.wado::$modules_initialized);
         cold_path;
-        "opt_sroa_param_global_alias.wado/$initialize_module"();
-        global:opt_sroa_param_global_alias.wado::$modules_initialized = 1;
+        "opt_sroa_param_global_alias.wado/$initialize_modules$cold0"();
     };
     "opt_sroa_param_global_alias.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "opt_sroa_param_global_alias.wado/$initialize_module"() {
-    global:opt_sroa_param_global_alias.wado::G = struct.new "opt_sroa_param_global_alias.wado//M" { value: 1 };
 }
 
 fn "opt_sroa_param_global_alias.wado/run$cold0"(c) with Stdout {
@@ -217,6 +211,11 @@ fn "opt_sroa_param_global_alias.wado/run$cold2"(a) with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used);
     }; start_25 = $local_4.used; $local_4.used = new_used; builtin::array_copy<u8>($local_4.repr, start_25, global:opt_sroa_param_global_alias.wado::$const_obj_6, 0, 36); start_25 = a < 0; a = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(a); select i64(x < 0_i64, 0_i64 - x, x))); start_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_4, start_25, a); "core:prelude/primitive.wado/write_decimal_digits"($local_4.repr, start_25, x, a); $local_4);
     unreachable;
+}
+
+fn "opt_sroa_param_global_alias.wado/$initialize_modules$cold0"() {
+    global:opt_sroa_param_global_alias.wado::G = struct.new "opt_sroa_param_global_alias.wado//M" { value: 1 };
+    global:opt_sroa_param_global_alias.wado::$modules_initialized = 1;
 }
 
 fn "opt_sroa_param_global_alias.wado/k$sroa[p.value]"(p) {

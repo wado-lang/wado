@@ -33,11 +33,11 @@ type "functype//global_init_order.wado/$cm_export__$test_1_a_dependency_reached_
 
 type "functype//global_init_order.wado/$cm_export__$test_2_a_shared_helper_naming_both_globals_is_not_a_cycle" = fn();  // TypeId(13)
 
-type "functype//global_init_order.wado/$initialize_module" = fn();  // TypeId(14)
+type "functype//global_init_order.wado/apply$$Closure_0$dae[f]" = fn() -> i32;  // TypeId(14)
 
-type "functype//global_init_order.wado/apply$$Closure_0$dae[f]" = fn() -> i32;  // TypeId(15)
+type "functype//global_init_order.wado/$test_1_a_dependency_reached_through_a_function_value_is_ordered_first$cold0" = fn();  // TypeId(15)
 
-type "functype//global_init_order.wado/$test_1_a_dependency_reached_through_a_function_value_is_ordered_first$cold0" = fn();  // TypeId(16)
+type "functype//global_init_order.wado/$initialize_modules$cold0" = fn();  // TypeId(16)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(17)
 
@@ -112,8 +112,7 @@ fn "global_init_order.wado/$cm_export__$test_0_a_dependency_reached_through_a_ca
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_order.wado::$modules_initialized);
         cold_path;
-        "global_init_order.wado/$initialize_module"();
-        global:global_init_order.wado::$modules_initialized = 1;
+        "global_init_order.wado/$initialize_modules$cold0"();
     };
     "wasi/task-return"(0);
 }
@@ -122,8 +121,7 @@ fn "global_init_order.wado/$cm_export__$test_1_a_dependency_reached_through_a_fu
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_order.wado::$modules_initialized);
         cold_path;
-        "global_init_order.wado/$initialize_module"();
-        global:global_init_order.wado::$modules_initialized = 1;
+        "global_init_order.wado/$initialize_modules$cold0"();
     };
     if @unlikely((global:global_init_order.wado::THROUGH_FN_VALUE == 4) == 0) {
         cold_path;
@@ -137,14 +135,9 @@ fn "global_init_order.wado/$cm_export__$test_2_a_shared_helper_naming_both_globa
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_order.wado::$modules_initialized);
         cold_path;
-        "global_init_order.wado/$initialize_module"();
-        global:global_init_order.wado::$modules_initialized = 1;
+        "global_init_order.wado/$initialize_modules$cold0"();
     };
     "wasi/task-return"(0);
-}
-
-fn "global_init_order.wado/$initialize_module"() {
-    global:global_init_order.wado::THROUGH_FN_VALUE = "global_init_order.wado/apply$$Closure_0$dae[f]"() + 1;
 }
 
 fn "global_init_order.wado/apply$$Closure_0$dae[f]"() {
@@ -198,6 +191,11 @@ fn "global_init_order.wado/$test_1_a_dependency_reached_through_a_function_value
     builtin::array_copy<u8>($local_1.repr, start_9, global:core:prelude/string.wado::$const_obj_6, 0, 1);
     "core:rt/panic"($local_1.repr, $local_1.used);
     unreachable;
+}
+
+fn "global_init_order.wado/$initialize_modules$cold0"() {
+    global:global_init_order.wado::THROUGH_FN_VALUE = "global_init_order.wado/apply$$Closure_0$dae[f]"() + 1;
+    global:global_init_order.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

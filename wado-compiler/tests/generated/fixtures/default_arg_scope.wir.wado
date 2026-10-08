@@ -4,99 +4,111 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+variant ./sub/default_arg_namespaced_callee_b.wado//Pick {  // TypeId(1)
+    Case(i32),
+    Other,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+struct ./sub/default_arg_namespaced_callee_b.wado//Pick::Case {  // TypeId(2)
+    discriminant: i32,
+    payload_0: i32,
+}
+
+array Array<u8> (mut u8);  // TypeId(3)
+
+struct core:prelude/string.wado//String {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct default_arg_scope.wado//$Closure_2 {  // TypeId(3)}
+struct default_arg_scope.wado//$Closure_2 {  // TypeId(5)}
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(4)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(6)
 
-struct canonical//CanonicalClosure_0 {  // TypeId(5)
+struct canonical//CanonicalClosure_0 {  // TypeId(7)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(8)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(10)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(9)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(11)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(12)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_0_a_default_names_a_module_private_item_of_its_own_module" = fn();  // TypeId(13)
+type "functype//default_arg_scope.wado/$cm_export__$test_0_a_default_names_a_module_private_item_of_its_own_module" = fn();  // TypeId(15)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_1_a_default_calls_a_module_private_function_of_its_own_module" = fn();  // TypeId(14)
+type "functype//default_arg_scope.wado/$cm_export__$test_1_a_default_calls_a_module_private_function_of_its_own_module" = fn();  // TypeId(16)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_2_a_default_names_a_type_this_module_never_imported" = fn();  // TypeId(15)
+type "functype//default_arg_scope.wado/$cm_export__$test_2_a_default_names_a_type_this_module_never_imported" = fn();  // TypeId(17)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_3_a_default_names_a_variant_case_through_a_qualified_path" = fn();  // TypeId(16)
+type "functype//default_arg_scope.wado/$cm_export__$test_3_a_default_names_a_variant_case_through_a_qualified_path" = fn();  // TypeId(18)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_4_a_file_reading_literal_in_a_default_reads_the_file_that_wrote_it" = fn();  // TypeId(17)
+type "functype//default_arg_scope.wado/$cm_export__$test_4_a_file_reading_literal_in_a_default_reads_the_file_that_wrote_it" = fn();  // TypeId(19)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_5_a_default_names_an_item_its_own_module_imported" = fn();  // TypeId(18)
+type "functype//default_arg_scope.wado/$cm_export__$test_5_a_default_names_an_item_its_own_module_imported" = fn();  // TypeId(20)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_6_a_default_resolves_its_own_module_s_import_aliases" = fn();  // TypeId(19)
+type "functype//default_arg_scope.wado/$cm_export__$test_6_a_default_resolves_its_own_module_s_import_aliases" = fn();  // TypeId(21)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_7_a_default_names_a_namespaced_global_of_its_own_module" = fn();  // TypeId(20)
+type "functype//default_arg_scope.wado/$cm_export__$test_7_a_default_names_a_namespaced_global_of_its_own_module" = fn();  // TypeId(22)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_8_a_namespace_qualified_call_fills_its_callee_s_defaults" = fn();  // TypeId(21)
+type "functype//default_arg_scope.wado/$cm_export__$test_8_a_namespace_qualified_call_fills_its_callee_s_defaults" = fn();  // TypeId(23)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it" = fn();  // TypeId(22)
+type "functype//default_arg_scope.wado/$cm_export__$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it" = fn();  // TypeId(24)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_10_a_method_s_default_resolves_where_it_is_declared" = fn();  // TypeId(23)
+type "functype//default_arg_scope.wado/$cm_export__$test_10_a_method_s_default_resolves_where_it_is_declared" = fn();  // TypeId(25)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_11_a_default_constructs_a_type_private_to_its_own_module" = fn();  // TypeId(24)
+type "functype//default_arg_scope.wado/$cm_export__$test_11_a_default_constructs_a_type_private_to_its_own_module" = fn();  // TypeId(26)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_12_a_method_s_default_names_a_type_private_to_its_own_module" = fn();  // TypeId(25)
+type "functype//default_arg_scope.wado/$cm_export__$test_12_a_method_s_default_names_a_type_private_to_its_own_module" = fn();  // TypeId(27)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_13_a_cross_module_default_naming_an_earlier_parameter_reads_the_caller_s_value" = fn();  // TypeId(26)
+type "functype//default_arg_scope.wado/$cm_export__$test_13_a_cross_module_default_naming_an_earlier_parameter_reads_the_caller_s_value" = fn();  // TypeId(28)
 
-type "functype//default_arg_scope.wado/$cm_export__$test_14_a_cross_module_default_s_nodes_keep_their_own_identity" = fn();  // TypeId(27)
+type "functype//default_arg_scope.wado/$cm_export__$test_14_a_cross_module_default_s_nodes_keep_their_own_identity" = fn();  // TypeId(29)
 
-type "functype//default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it$cold2" = fn(i32);  // TypeId(28)
+type "functype//default_arg_scope.wado/$test_6_a_default_resolves_its_own_module_s_import_aliases$cold0" = fn(i32);  // TypeId(30)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(29)
+type "functype//default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it$cold2" = fn(i32);  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(30)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(32)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(31)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(33)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(32)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(34)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]" = fn(i32, i32);  // TypeId(33)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(35)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked$cold0$dae[self]" = fn(u8);  // TypeId(34)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$cold0$dae[self,value]" = fn(i32, i32);  // TypeId(36)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked" = fn(ref "core:prelude/string.wado//String", i32, u8);  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked$cold0$dae[self]" = fn(u8);  // TypeId(37)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(36)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked" = fn(ref "core:prelude/string.wado//String", i32, u8);  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(37)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
 
-type "functype//default_arg_scope.wado/default_arg_scope.wado/$Closure_2::$call$dae[self]" = fn() -> i32;  // TypeId(38)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_unchecked" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(40)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(39)
+type "functype//default_arg_scope.wado/default_arg_scope.wado/$Closure_2::$call$dae[self]" = fn() -> i32;  // TypeId(41)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(40)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(41)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(44)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -112,6 +124,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:./sub/default_arg_caller_local_not_in_scope_lib.wado::MAKE: ref struct = struct.new "canonical//CanonicalClosure_0" { env: struct.new "default_arg_scope.wado//$Closure_2" {  }, func: ref.func "closure/default_arg_scope.wado/$closure_wrapper_0" };
+global global:./sub/default_arg_namespaced_callee_a.wado::CHOSEN: ref "./sub/default_arg_namespaced_callee_b.wado//Pick" = struct.new "./sub/default_arg_namespaced_callee_b.wado//Pick::Case" { discriminant: 0, payload_0: 41 };
 global global:core:prelude/string.wado::$const_obj_100: ref Array<u8> = array.new_fixed<u8>(10);
 global global:core:prelude/string.wado::$const_obj_101: ref Array<u8> = array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32);
 global global:core:prelude/string.wado::$const_obj_103: ref Array<u8> = array.new_fixed<u8>(105, 110, 100, 101, 120, 58, 32);
@@ -127,9 +140,12 @@ global global:core:prelude/string.wado::$const_obj_113: ref Array<u8> = array.ne
 global global:core:prelude/string.wado::$const_obj_114: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 98, 121, 116, 101, 32, 60, 32, 48, 120, 56, 48, 10);
 global global:core:prelude/string.wado::$const_obj_115: ref Array<u8> = array.new_fixed<u8>(110, 111, 116, 32, 97, 110, 32, 65, 83, 67, 73, 73, 32, 98, 121, 116, 101);
 global global:core:prelude/string.wado::$const_obj_120: ref Array<u8> = array.new_fixed<u8>(83, 116, 114, 105, 110, 103, 58, 58, 112, 117, 115, 104, 95, 97, 115, 99, 105, 105, 95, 117, 110, 99, 104, 101, 99, 107, 101, 100);
+global global:default_arg_scope.wado::$const_obj_265: ref Array<u8> = array.new_fixed<u8>(112, 105, 99, 107, 101, 100, 40, 41, 58, 32);
+global global:default_arg_scope.wado::$const_obj_266: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 112, 105, 99, 107, 101, 100, 40, 41, 32, 61, 61, 32, 52, 49, 10);
+global global:default_arg_scope.wado::$const_obj_268: ref Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 95, 97, 114, 103, 95, 115, 99, 111, 112, 101, 46, 119, 97, 100, 111);
+global global:default_arg_scope.wado::$const_obj_270: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 54, 95, 97, 95, 100, 101, 102, 97, 117, 108, 116, 95, 114, 101, 115, 111, 108, 118, 101, 115, 95, 105, 116, 115, 95, 111, 119, 110, 95, 109, 111, 100, 117, 108, 101, 95, 115, 95, 105, 109, 112, 111, 114, 116, 95, 97, 108, 105, 97, 115, 101, 115);
 global global:default_arg_scope.wado::$const_obj_357: ref Array<u8> = array.new_fixed<u8>(99, 97, 108, 108, 101, 100, 40, 41, 58, 32);
 global global:default_arg_scope.wado::$const_obj_358: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 99, 97, 108, 108, 101, 100, 40, 41, 32, 61, 61, 32, 55, 10);
-global global:default_arg_scope.wado::$const_obj_360: ref Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 95, 97, 114, 103, 95, 115, 99, 111, 112, 101, 46, 119, 97, 100, 111);
 global mut global:default_arg_scope.wado::$const_obj_362: ref null Array<u8> = ref.null none;
 
 fn "default_arg_scope.wado/$cm_export__$test_0_a_default_names_a_module_private_item_of_its_own_module"() {
@@ -157,6 +173,17 @@ fn "default_arg_scope.wado/$cm_export__$test_5_a_default_names_an_item_its_own_m
 }
 
 fn "default_arg_scope.wado/$cm_export__$test_6_a_default_resolves_its_own_module_s_import_aliases"() {
+    let v: i32;
+    let $match_scrut_0: ref "./sub/default_arg_namespaced_callee_b.wado//Pick";
+    if @unlikely(local.tee v((if ref.test "./sub/default_arg_namespaced_callee_b.wado//Pick::Case"(local.tee $match_scrut_0(global:./sub/default_arg_namespaced_callee_a.wado::CHOSEN)) -> i32 {
+        ref.cast "./sub/default_arg_namespaced_callee_b.wado//Pick::Case"($match_scrut_0).payload_0;
+    } else {
+        0;
+    })) != 41) {
+        cold_path;
+        "default_arg_scope.wado/$test_6_a_default_resolves_its_own_module_s_import_aliases$cold0"(v);
+        unreachable;
+    }
     "wasi/task-return"(0);
 }
 
@@ -201,6 +228,52 @@ fn "default_arg_scope.wado/$cm_export__$test_14_a_cross_module_default_s_nodes_k
     "wasi/task-return"(0);
 }
 
+fn "default_arg_scope.wado/$test_6_a_default_resolves_its_own_module_s_import_aliases$cold0"($v0) {
+    let $load_2: ref Array<u8>;
+    let $local_16: ref "core:prelude/string.wado//String";
+    let new_used_24: i32;
+    let start_25: i32;
+    let $sroa_$f_buf_107: ref "core:prelude/string.wado//String";
+    $local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(127), used: 0 };
+    if @unlikely(local.tee new_used_24(0 + 105) > builtin::array_len($local_16.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, new_used_24);
+    }
+    start_25 = $local_16.used;
+    $local_16.used = new_used_24;
+    builtin::array_copy<u8>(local.tee $load_2($local_16.repr), start_25, global:core:prelude/string.wado::$const_obj_111, 0, 20);
+    new_used_24 = start_25 + 20;
+    builtin::array_copy<u8>($load_2, new_used_24, global:default_arg_scope.wado::$const_obj_270, 0, 58);
+    new_used_24 = start_25 + 78;
+    builtin::array_copy<u8>($load_2, new_used_24, global:core:prelude/string.wado::$const_obj_109, 0, 4);
+    new_used_24 = start_25 + 82;
+    builtin::array_copy<u8>($load_2, new_used_24, global:default_arg_scope.wado::$const_obj_268, 0, 22);
+    start_25 = start_25 + 104;
+    builtin::array_copy<u8>($load_2, start_25, global:core:prelude/string.wado::$const_obj_107, 0, 1);
+    $sroa_$f_buf_107 = $local_16;
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(100, $sroa_$f_buf_107);
+    if @unlikely(local.tee start_25($local_16.used + 37) > builtin::array_len($local_16.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, start_25);
+    }
+    new_used_24 = $local_16.used;
+    $local_16.used = start_25;
+    builtin::array_copy<u8>(local.tee $load_2($local_16.repr), new_used_24, global:default_arg_scope.wado::$const_obj_266, 0, 27);
+    new_used_24 = new_used_24 + 27;
+    builtin::array_copy<u8>($load_2, new_used_24, global:default_arg_scope.wado::$const_obj_265, 0, 10);
+    $sroa_$f_buf_107 = $local_16;
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"($v0, $sroa_$f_buf_107);
+    if @unlikely(local.tee $v0($local_16.used + 1) > builtin::array_len($local_16.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, $v0);
+    }
+    new_used_24 = $local_16.used;
+    $local_16.used = $v0;
+    builtin::array_copy<u8>($local_16.repr, new_used_24, global:core:prelude/string.wado::$const_obj_100, 0, 1);
+    "core:rt/panic"($local_16.repr, $local_16.used);
+    unreachable;
+}
+
 fn "default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_not_in_scope_for_it$cold2"($v0) {
     let $load_2: ref Array<u8>;
     let $local_41: ref "core:prelude/string.wado//String";
@@ -223,7 +296,7 @@ fn "default_arg_scope.wado/$test_9_a_local_of_the_function_taking_a_default_is_n
     new_used_53 = start_54 + 91;
     builtin::array_copy<u8>($load_2, new_used_53, global:core:prelude/string.wado::$const_obj_109, 0, 4);
     new_used_53 = start_54 + 95;
-    builtin::array_copy<u8>($load_2, new_used_53, global:default_arg_scope.wado::$const_obj_360, 0, 22);
+    builtin::array_copy<u8>($load_2, new_used_53, global:default_arg_scope.wado::$const_obj_268, 0, 22);
     start_54 = start_54 + 117;
     builtin::array_copy<u8>($load_2, start_54, global:core:prelude/string.wado::$const_obj_107, 0, 1);
     $sroa_$f_buf_136 = $local_41;
@@ -255,16 +328,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b6: block {
-        l7: loop {
-            break_if b6 (digit_count - offset) < 2;
+    b11: block {
+        l12: loop {
+            break_if b11 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l7;
+            continue l12;
         };
     };
     if digit_count > offset {
@@ -363,17 +436,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b30: block {
-        l31: loop {
-            break_if b30 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b35: block {
+        l36: loop {
+            break_if b35 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l31;
+            continue l36;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l33: loop {
+        l38: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -403,7 +476,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l33;
+            continue l38;
         };
     };
 }

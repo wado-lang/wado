@@ -59,7 +59,7 @@ type "functype//global_init_namespaced_operation.wado/$cm_binding__Stdout_write_
 
 type "functype//global_init_namespaced_operation.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//global_init_namespaced_operation.wado/$initialize_module" = fn();  // TypeId(21)
+type "functype//global_init_namespaced_operation.wado/$initialize_modules$cold0" = fn();  // TypeId(21)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(22)
 
@@ -119,8 +119,7 @@ fn "global_init_namespaced_operation.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_namespaced_operation.wado::$modules_initialized);
         cold_path;
-        "global_init_namespaced_operation.wado/$initialize_module"();
-        global:global_init_namespaced_operation.wado::$modules_initialized = 1;
+        "global_init_namespaced_operation.wado/$initialize_modules$cold0"();
     };
     tally = struct.new "global_init_namespaced_operation.wado//Tally" { value: 10 };
     global:global_init_namespaced_operation.wado::$effect_Counter = local.tee $d_Counter(struct.new "global_init_namespaced_operation.wado//$Dispatch_Counter" { outer: local.tee $save_Counter(global:global_init_namespaced_operation.wado::$effect_Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation.wado//$Closure_0" { $capture_0: tally }, func: ref.func "closure/global_init_namespaced_operation.wado/$closure_wrapper_0" } });
@@ -189,14 +188,13 @@ fn "global_init_namespaced_operation.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_namespaced_operation.wado::$modules_initialized);
         cold_path;
-        "global_init_namespaced_operation.wado/$initialize_module"();
-        global:global_init_namespaced_operation.wado::$modules_initialized = 1;
+        "global_init_namespaced_operation.wado/$initialize_modules$cold0"();
     };
     "global_init_namespaced_operation.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "global_init_namespaced_operation.wado/$initialize_module"() {
+fn "global_init_namespaced_operation.wado/$initialize_modules$cold0"() {
     let tally: ref "global_init_namespaced_operation.wado//Tally";
     let $local_2: ref null "global_init_namespaced_operation.wado//$Dispatch_Counter";
     let $local_4: i32;
@@ -206,6 +204,7 @@ fn "global_init_namespaced_operation.wado/$initialize_module"() {
     $local_4 = "global_init_namespaced_operation.wado/$effect_dispatch__Counter__next"();
     global:global_init_namespaced_operation.wado::$effect_Counter = $local_2;
     global:global_init_namespaced_operation.wado::COUNTED = $local_4;
+    global:global_init_namespaced_operation.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
