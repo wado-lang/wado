@@ -18,6 +18,7 @@ use crate::nir_arena::{
     StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::tir::{ArrayElementAccess, ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
@@ -124,7 +125,7 @@ impl CandidateKind {
     }
 }
 
-pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
+pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> bool {
     let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
@@ -135,7 +136,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     });
 
     // Phase 1 — analysis (all immutable borrows).
-    let fn_effects = compute_fn_effects(project);
+    let fn_effects = compute_fn_effects(project, exec);
     let hoistable_pure: Vec<bool> = project
         .functions
         .iter()

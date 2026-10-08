@@ -18,6 +18,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, 
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::parallel::Executor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -85,7 +86,11 @@ struct FastArm {
 }
 
 /// Version eligible loops in every function. Returns whether anything changed.
-pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCache) -> bool {
+pub(super) fn version_loops(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    exec: &Executor,
+) -> bool {
     let fill_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "array_fill".to_string(),
@@ -103,7 +108,7 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
     {
         return false;
     }
-    let (summaries, builtins) = summarize(project);
+    let (summaries, builtins) = summarize(project, exec);
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);

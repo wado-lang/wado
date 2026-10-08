@@ -843,21 +843,23 @@ impl CallFacts<'_> {
 /// A cycle of mutually recursive functions that never touch a channel stays
 /// pure, which is what makes ordinary recursive helpers usable, but it may
 /// diverge.
-pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
-    summarize(project).0.effects
+pub(super) fn compute_fn_effects(project: &NirPackage, exec: &Executor) -> Vec<FnEffect> {
+    summarize(project, exec).0.effects
 }
 
 /// [`compute_fn_effects`] with each body's [`Proofs`], and what each builtin
 /// declared (indexed by `func_id.index()`), for a caller that proves a body
-/// again after changing it.
-pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&BuiltinDeclaration>>) {
+/// again after changing it. The bodies are summarized on `exec`'s threads.
+pub(super) fn summarize<'p>(
+    project: &'p NirPackage,
+    exec: &Executor,
+) -> (FnSummaries, Vec<Option<&'p BuiltinDeclaration>>) {
     let types = project.type_table.borrow();
+    let types = &*types;
     let (leaves, builtins) = leaf_effects(project);
-    let bodies: Vec<Option<BodySummary>> = project
-        .functions
-        .iter()
-        .map(|f| BodySummary::of(&f.borrow(), &types, &leaves, &builtins))
-        .collect();
+    let bodies: Vec<Option<BodySummary>> = exec.map(&project.functions, |f| {
+        BodySummary::of(&f.borrow(), types, &leaves, &builtins)
+    });
     let summaries = join_over_calls(leaves, bodies.iter().map(Option::as_ref));
     (summaries, builtins)
 }

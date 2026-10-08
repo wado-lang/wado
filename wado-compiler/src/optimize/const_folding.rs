@@ -119,7 +119,7 @@ pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool
 pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let all: Vec<FuncId> = (0..project.functions.len()).map(FuncId::new).collect();
     let exec = Arc::clone(gate.exec());
-    let changed = fold_pass(
+    fold_pass(
         project,
         &exec,
         |_| true,
@@ -132,8 +132,7 @@ pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> 
             }
             changed.contains(&true)
         },
-    );
-    changed
+    )
 }
 
 fn new_visitor<'a>(

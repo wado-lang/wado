@@ -184,6 +184,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
             // Dense-int / dense-enum `Match` → `Switch` is a codegen-
@@ -213,6 +214,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
@@ -221,6 +223,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::KeepEffects,
             );
         }
@@ -251,6 +254,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
@@ -258,6 +262,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::KeepEffects,
             );
             if opt_level == OptLevel::Os {
@@ -283,6 +288,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
             run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
@@ -290,6 +296,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::KeepEffects,
             );
         }
@@ -328,7 +335,7 @@ pub fn optimize(
         // checks are versioned, and before `select_lowering`, which
         // reshapes conditions out of matcher form.
         run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-            loop_version_bce::version_loops(p, &mut descriptors)
+            loop_version_bce::version_loops(p, &mut descriptors, &exec)
         });
     }
 
@@ -370,6 +377,7 @@ fn run_dce(
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
     descriptors: &mut dce::DescriptorCache,
+    exec: &Executor,
     initializers: Initializers,
 ) {
     profiler.span_start("nir/dce");
@@ -382,13 +390,13 @@ fn run_dce(
         profiler.span_start(&span);
         let functions_before = live_bodies(project);
         let globals_before = project.globals.len();
-        let mut summaries = summarize(project).0;
+        let mut summaries = summarize(project, exec).0;
         if unhoist_unobserved_globals(project, descriptors, &summaries) {
             // A rewritten body only lost work, so its real summary shrank, and
             // the stale table refuses deletions nothing has a reason to refuse.
-            summaries = summarize(project).0;
+            summaries = summarize(project, exec).0;
         }
-        let analysis = analyze_dce(project, descriptors);
+        let analysis = analyze_dce(project, descriptors, exec);
         // Clearing an unreachable function's body leaves its entry describing
         // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
@@ -933,7 +941,7 @@ fn run_optimization_passes(
     // `wir_optimize::const_global`; the final `run_dce` reclaims the dead
     // binding locals.
     run_pass("nir/const_object_globalization", project, profiler, |p| {
-        globalize_const_objects(p)
+        globalize_const_objects(p, exec)
     });
     // Clean up after globalization: fold the `global:X.used` length reads it
     // exposes (recovered via `const_folding`'s `GlobalFieldEnv`) and prune the

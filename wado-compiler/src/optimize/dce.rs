@@ -143,7 +143,11 @@ impl DceAnalysis {
 /// pure mutator over the matching field. The split also puts type reachability
 /// before `remove_unreachable_globals` mutates function bodies — those mutations
 /// expose no new types, but the ordering makes that invariant observable.
-pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache) -> DceAnalysis {
+pub(super) fn analyze_dce(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    exec: &Executor,
+) -> DceAnalysis {
     // The callee descriptor for every `FuncId`. A call's callee is identified by
     // its stamped `func_id` (born resolved, authoritative — `wir_build` never
     // falls back to name resolution for a NIR call), and the record at that id
@@ -155,7 +159,7 @@ pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache)
 
     // Single AST walk per function body: build the call graph and
     // collect per-function used-globals / used-types in one go.
-    let mut graph = build_analysis_graph(project, descriptors);
+    let mut graph = build_analysis_graph(project, descriptors, exec);
 
     let mut analysis = DceAnalysis::empty();
     analysis.functions = compute_function_reachability(project, descriptors, &mut graph);
@@ -649,14 +653,13 @@ struct AnalysisGraph<'a> {
 fn build_analysis_graph(
     project: &NirPackage,
     descriptors: &[FunctionRef],
+    exec: &Executor,
 ) -> AnalysisGraph<'static> {
     let type_table = &*project.type_table.borrow();
     let functors = functor_methods(project);
-    let analyses: Vec<FunctionAnalysis> = project
-        .functions
-        .iter()
-        .map(|f| function_analysis(&f.borrow(), type_table, descriptors, &functors))
-        .collect();
+    let analyses = exec.map(&project.functions, |f| {
+        function_analysis(&f.borrow(), type_table, descriptors, &functors)
+    });
     assemble_analysis_graph(project, Cow::Owned(analyses), functors)
 }
 
