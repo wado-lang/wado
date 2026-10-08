@@ -198,6 +198,7 @@
 - [Behavior Classes](./wep-2026-10-05-behavior-classes.md)
 - [Contract Checks](./wep-2026-10-06-contract-checks.md)
 - [A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)
+- [Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md)
 
 ## Standard Library
 
