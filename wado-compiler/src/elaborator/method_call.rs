@@ -163,8 +163,8 @@ pub(super) struct MethodSignatureFacts {
     /// The method's own type arguments, the inferred ones included.
     pub type_args: Vec<TypeId>,
     pub self_kind: ast::SelfKind,
-    /// The scope `param_defaults` resolve in, where the selected method is not
-    /// the declaration that wrote them.
+    /// The scope `param_defaults` resolve in. `None` only where no declaration
+    /// backs the method.
     pub defaults_module: Option<ModuleSource>,
 }
 

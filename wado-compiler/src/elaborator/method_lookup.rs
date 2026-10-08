@@ -2172,7 +2172,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // spelling in this frame would otherwise supply the default body,
             // its module, and the slots it is instantiated in.
             let declaring = scope.tysys.trait_sig_of(&trait_decl);
-            let trait_module = declaring.map(|sig| sig.module.clone());
             if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
                 .filter(|m| m.is_inherited())
@@ -2205,9 +2204,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_block: Some(impl_ref.0),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
-                        // The body and its defaults are the trait's, so both
-                        // resolve where the trait wrote them.
-                        defaults_module: trait_module,
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
