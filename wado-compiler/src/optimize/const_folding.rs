@@ -7,7 +7,6 @@
 //! [`ValueGraph`]: crate::nir_value_graph
 
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
@@ -16,7 +15,7 @@ use crate::compiler_item::SeqField;
 use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, FuncRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -46,10 +45,10 @@ struct FoldMaps {
 }
 
 fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
-    // The CalleeMap holds Rc handles aliased with `project.functions`. The
+    // The CalleeMap holds handles aliased with `project.functions`. The
     // interpreter reads callee bodies via `try_borrow`, which bails cleanly when
     // the visitor already holds `borrow_mut` on the same function (a self-call
-    // inside the function being walked). Because the Rc points at the live cell,
+    // inside the function being walked). Because a handle reaches the live cell,
     // a callee's body edit is visible without rebuilding the map — only its
     // *membership* (the ctfe-eligible function set) can go stale.
     let callees = build_callee_map(project);
@@ -132,7 +131,7 @@ fn new_visitor<'a>(
 }
 
 fn fold_function(
-    func_rc: &RefCell<NirFunction>,
+    func_rc: &FuncCell,
     visitor: &mut ConstFoldVisitor<'_>,
     buffers: &mut EngineBuffers,
     type_table: &TypeTable,
@@ -438,7 +437,7 @@ fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
 struct GlobalStoreCollector<'a> {
     immutable: &'a IndexSet<GlobalKey>,
     type_table: &'a TypeTable,
-    funcs: &'a [Rc<RefCell<NirFunction>>],
+    funcs: &'a [FuncRef],
     callees: &'a CalleeMap,
     ctfe_builtins: &'a CtfeBuiltinMap,
     declared_env: &'a GlobalEnv,

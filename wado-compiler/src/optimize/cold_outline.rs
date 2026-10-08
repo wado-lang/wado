@@ -15,14 +15,11 @@
 //! reads. Ending the region at the last statement that can travel would take
 //! that shape, which `core:json`'s escape tail splits by hand for want of it.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
-    FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam, ParamAbi,
-    ReturnAbi,
+    FuncCell, FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam,
+    ParamAbi, ReturnAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, BlockId, BlockNode, Body, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId,
@@ -441,7 +438,7 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
     };
     let key = FunctionRef::from_resolved(&helper, helper.module_source.clone()).function_id();
     project.func_index.insert(key, id);
-    project.functions.push(Rc::new(RefCell::new(helper)));
+    project.functions.push(FuncCell::new(helper));
 
     let mut parent = project.functions[fi].borrow_mut();
     let span = parent.span;

@@ -242,6 +242,13 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
     // underflowing the Wasm stack.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
+        if !func
+            .body
+            .as_ref()
+            .is_some_and(|b| b.calls_any(|id| confirmed.contains(id)))
+        {
+            continue;
+        }
         if let Some(body) = func.body.as_mut()
             && retype_calls(body, confirmed)
         {

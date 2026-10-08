@@ -2,13 +2,10 @@
 //! on a constant field of one passed by reference.
 //! Compiler items and cached clones retain their contracts for synthesized calls.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirParam, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
@@ -17,12 +14,13 @@ use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctf
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
+use super::body_memo::BodyMemo;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use super::extract::is_place_read;
-use super::gate::{BodyMemo, FunctionGate, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
 use super::inline::{body_callees, recursive_functions};
 use crate::ast::Visibility;
 use crate::compiler_trace;
@@ -978,7 +976,7 @@ pub(super) fn specialize_const_params(
         .copied()
         .collect();
     let mut reachable =
-        reachable_function_positions(project, descriptors, &mut state.reachability, gate, cached);
+        reachable_function_positions(project, descriptors, &mut state.reachability, cached);
     let mut changed = false;
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
@@ -1000,7 +998,7 @@ fn specialize_round(
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
-        let recursive = recursive_functions(state.callees.refresh(project, gate, body_callees));
+        let recursive = recursive_functions(state.callees.refresh(project, body_callees));
         Signatures::build(project, &types, &recursive)
     };
     let facts = summarize_params(project, &signatures);
@@ -1231,7 +1229,7 @@ fn build_clones(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     planned: &[Planned<'_>],
-) -> Vec<Rc<RefCell<NirFunction>>> {
+) -> Vec<FuncRef> {
     if planned.is_empty() {
         return Vec::new();
     }
@@ -1313,7 +1311,7 @@ impl BranchSettler {
 
 /// A freshly minted clone and the facts recorded for it.
 struct Clone {
-    function: Rc<RefCell<NirFunction>>,
+    function: FuncRef,
     param_consts: IndexMap<String, ParamSeed>,
 }
 
@@ -1385,7 +1383,7 @@ fn build_clone(
     copy_function_strings(project, &origin, (clone.module_source.clone(), name));
 
     Clone {
-        function: Rc::new(RefCell::new(clone)),
+        function: FuncCell::new(clone),
         param_consts,
     }
 }

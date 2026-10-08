@@ -35,8 +35,9 @@ use crate::tir::{BuiltinDeclaration, ResolvedType, TypeId, TypeTable};
 use cranelift_entity::EntityRef;
 
 use super::arena_query;
+use super::body_memo::BodyMemo;
 use super::dce::callee_descriptor;
-use super::gate::{BodyMemo, FunctionGate, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
 use crate::nir_value_graph::OpaqueSource;
@@ -1974,7 +1975,7 @@ pub fn inline_functions(
     // borrow-safe), so a call site is recognized by its stamped id rather than the
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
-    let scans = scans.0.refresh(project, gate, scan_body);
+    let scans = scans.0.refresh(project, scan_body);
     let call_graph: Vec<Vec<usize>> = scans
         .iter()
         .map(|s| s.calls.iter().map(|(c, _)| c.index()).collect())
@@ -2001,7 +2002,7 @@ pub fn inline_functions(
     let sites = argument_sites(scans);
     let const_params = constant_params(project, scans, &sites);
     let safepoint_calls = safepoint_calls(project, descriptors);
-    let fn_effects = mod_ref.summaries(project, gate).effects;
+    let fn_effects = mod_ref.summaries(project).effects;
     let foldable: Vec<bool> = project
         .functions
         .iter()

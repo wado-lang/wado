@@ -3,9 +3,6 @@
 //! This is the core of the `tir_to_wir` phase, translating each TIR function body
 //! into a sequence of WIR instructions.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -492,10 +489,7 @@ fn register_call_wrapper(
 
 /// The WIR function `method` became, or `None` where DCE removed it. Found by
 /// identity: `dae` renames what it reshapes.
-fn live_wir_func(
-    ctx: &WirContext<'_>,
-    method: &Rc<RefCell<nir::NirFunction>>,
-) -> Option<WirFuncId> {
+fn live_wir_func(ctx: &WirContext<'_>, method: &nir::FuncRef) -> Option<WirFuncId> {
     let method = method.borrow();
     if method.is_dead {
         return None;

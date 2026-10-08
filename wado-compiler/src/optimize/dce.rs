@@ -2,11 +2,12 @@
 
 use std::borrow::Cow;
 use std::ops::ControlFlow;
+use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
-use super::gate::{BodyMemo, FunctionGate};
+use super::body_memo::BodyMemo;
 use super::mod_ref::{CallFacts, FnSummaries};
 
 use crate::canonical::CmCallTarget;
@@ -167,12 +168,11 @@ pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
     walks: &mut ReachabilityCache,
-    gate: &FunctionGate,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
     let functors = functor_methods(project);
-    let analyses = walks.analyses(project, gate, descriptors, &functors);
+    let analyses = walks.analyses(project, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
     let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
     let roots = cached
@@ -689,12 +689,10 @@ pub(super) struct ReachabilityCache {
 }
 
 impl ReachabilityCache {
-    /// Every function's [`function_analysis`] as `project` stands. Every
-    /// rewrite since the last call must have been reported to `gate`.
+    /// Every function's [`function_analysis`] as `project` stands.
     fn analyses(
         &mut self,
         project: &NirPackage,
-        gate: &FunctionGate,
         descriptors: &[FunctionRef],
         functors: &FunctorMethods,
     ) -> &[FunctionAnalysis] {
@@ -708,7 +706,7 @@ impl ReachabilityCache {
                 .forget_where(|walk| !walk.named.is_disjoint(&renamed));
         }
         let type_table = &*project.type_table.borrow();
-        self.walks.refresh(project, gate, |f| {
+        self.walks.refresh(project, |f| {
             function_analysis(f, type_table, descriptors, functors)
         })
     }
@@ -1677,16 +1675,16 @@ fn populate_type_reachability(
         // `register_closure_wrappers` reads `ref_type_id` for the wrapper's
         // `ref.cast`, and DAE can drop every other NIR-side mention by removing
         // the env `self`. Compare by pointer identity — `functor.call_method`
-        // and the matching `project.functions[i]` are the same `Rc`.
+        // and the matching `project.functions[i]` are the same `Arc`.
         let surviving_ptrs: IndexSet<*const _> = project
             .functions
             .iter()
             .enumerate()
             .filter(|(pos, _)| analysis.functions.contains(pos))
-            .map(|(_, rc)| std::rc::Rc::as_ptr(rc))
+            .map(|(_, rc)| Arc::as_ptr(rc))
             .collect();
         for functor in &project.closure_functors {
-            let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
+            let cm_ptr = Arc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
                 analysis.types.insert(functor.struct_type_id);
                 analysis.types.insert(functor.ref_type_id);

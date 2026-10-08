@@ -23,8 +23,8 @@ use crate::name::{
     FunctionId, LocalMethodName, NarrowedParam, param_label, reshaped_name, retired_name,
 };
 use crate::nir::{
-    ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
-    NirStruct, NirTest, NirVariantDecl,
+    ClosureFunctor, FuncCell, FuncId, FuncRef, FunctionRef, NirEnum, NirFlags, NirFunction,
+    NirGlobal, NirImport, NirStruct, NirTest, NirVariantDecl,
 };
 use crate::nir_arena::{Body, ExprKind, NodeRef};
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId, TypeTable};
@@ -53,7 +53,7 @@ pub struct NirPackage {
     pub type_table: Rc<RefCell<TypeTable>>,
 
     /// All functions from all modules. Each `NirFunction` carries its own `module_source`.
-    pub functions: Vec<Rc<RefCell<NirFunction>>>,
+    pub functions: Vec<FuncRef>,
     /// The function arena's reverse index: canonical [`crate::name::FunctionId`]
     /// → [`FuncId`] (the store position). Built once in `lower` (`translate`)
     /// and grown append-only by [`Self::intern_extern`] as the optimizer
@@ -499,7 +499,7 @@ impl NirPackage {
         let id = FuncId::new(self.functions.len());
         let mut stub = NirFunction::extern_stub(func_ref);
         stub.id = Some(id);
-        self.functions.push(Rc::new(RefCell::new(stub)));
+        self.functions.push(FuncCell::new(stub));
         self.func_index.insert(key, id);
         id
     }

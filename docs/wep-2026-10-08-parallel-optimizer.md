@@ -78,13 +78,26 @@ reader-writer lock and a write count. `borrow` and `borrow_mut` fail at once on
 a conflicting borrow, as `RefCell`'s do, so a visit that reaches a function
 another thread is writing panics rather than races.
 
-`borrow_mut` bumps the count. The per-body memos key on it instead of on
-reported edits, so a pass cannot rewrite a body behind a memo's back.
-`FunctionGate::mark_changed` stays, for scheduling only: it decides which
+The first mutable dereference through a `borrow_mut` guard bumps the count, so
+a borrow that only reads counts nothing. The per-body memos key on the count
+instead of on reported edits, so a pass cannot rewrite a body behind a memo's
+back. `FunctionGate::mark_changed` stays, for scheduling only: it decides which
 functions a pass revisits, which costs precision when wrong, never
-correctness. The count is conservative: a visit that takes a function mutably
-and changes nothing still invalidates its memo entries. Roadmap step 2
-measures what that costs.
+correctness. A pass that only looks for something to rewrite asks through a
+shared borrow first (`Body::calls_any`), so the functions it leaves alone stay
+unwritten.
+
+The count is conservative: a visit that dereferences a function mutably and
+changes nothing still invalidates its memo entries. Measured on
+`package-gale`, sequentially:
+
+| Memo key                     | Loop seconds |
+| ---------------------------- | -----------: |
+| Edits each pass reported     |         47.1 |
+| Mutable dereferences counted |         53.3 |
+
+The difference is memo entries re-derived for visited functions, read-only
+walks that roadmap step 5 runs in parallel.
 
 The type table stays behind the package's `RefCell`. A sweep borrows it once
 and hands each visit the shared reference.

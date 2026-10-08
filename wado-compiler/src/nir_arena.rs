@@ -1460,6 +1460,15 @@ impl Body {
         }
     }
 
+    /// Whether any call in the arena, live or orphaned, names a function
+    /// `callee` picks. A superset of the live calls, so `false` lets a rewrite
+    /// of such calls skip the body without borrowing it mutably.
+    pub fn calls_any(&self, callee: impl Fn(&FuncId) -> bool) -> bool {
+        self.exprs
+            .values()
+            .any(|node| matches!(&node.kind, ExprKind::Call { func_id, .. } if callee(func_id)))
+    }
+
     /// Invoke `f` on every node reachable from [`Body::root`], parents before
     /// children. The arena never compacts, so this walk is what distinguishes
     /// live from orphaned.

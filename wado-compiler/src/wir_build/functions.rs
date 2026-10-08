@@ -5,7 +5,7 @@ use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::module_source::ModuleSource;
 use crate::name::{MangledName, global_name, multi_value_split_local};
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
@@ -389,7 +389,7 @@ fn register_single_function(
     tir_func: &NirFunction,
     type_table: &TypeTable,
     module_source: &ModuleSource,
-    tir_func_rc: std::rc::Rc<std::cell::RefCell<NirFunction>>,
+    tir_func_rc: FuncRef,
     type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) {
     let mangled_name = build_mangled_name(tir_func, module_source);

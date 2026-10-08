@@ -21,7 +21,8 @@ use crate::tir::{
 };
 
 use super::arena_query::holds_reference;
-use super::gate::{BodyMemo, FunctionGate};
+use super::body_memo::BodyMemo;
+use super::gate::FunctionGate;
 
 /// Where a class's objects may come from: a bit per parameter (the last one
 /// standing for every later one) or a global. None means allocated here.
@@ -215,8 +216,8 @@ impl Layouts {
     }
 }
 
-/// The call-graph-wide summaries, kept across passes and re-solved only where
-/// a body changed since: entries are keyed by one [`FunctionGate`]'s edit counts.
+/// The call-graph-wide summaries, kept across one [`FunctionGate`]'s passes and
+/// re-solved only where a function was written since.
 #[derive(Default)]
 pub(super) struct HeapEffectsCache {
     gate: Option<u64>,
@@ -232,8 +233,7 @@ pub(super) struct HeapEffectsCache {
 }
 
 impl HeapEffectsCache {
-    /// The summaries of `project` as it stands. Every rewrite since the last
-    /// call must have been reported to `gate`.
+    /// The summaries of `project` as it stands.
     pub(super) fn effects<'t>(
         &'t mut self,
         project: &NirPackage,
@@ -262,7 +262,6 @@ impl HeapEffectsCache {
         let mut moved = vec![false; len + 1];
         self.functions.refresh_observing(
             project,
-            gate,
             |f| FunctionEntry::of(f, project),
             |i, old, new| {
                 edited[i] = true;
@@ -407,8 +406,8 @@ impl HeapEffectsCache {
         }
     }
 
-    /// A body rewritten without a report to the gate keeps a summary that no
-    /// longer answers for it. One node per refresh, rotating, keeps the check cheap.
+    /// A summary the solver left behind a moved callee no longer answers for
+    /// its function. One node per refresh, rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
     fn assert_one_settled(&mut self, project: &NirPackage, type_table: &TypeTable) {
         let nodes = self.summaries.len() + 1;
@@ -418,8 +417,7 @@ impl HeapEffectsCache {
         let summary = self.summarize(project, type_table, n);
         assert!(
             summary == *self.summary_mut(n),
-            "a heap-effect summary went stale: function {n} was rewritten without \
-             `FunctionGate::mark_changed`"
+            "the heap-effect summary of node {n} went stale"
         );
     }
 }

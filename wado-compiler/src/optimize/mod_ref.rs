@@ -17,8 +17,8 @@ use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::{
     expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
+use crate::optimize::body_memo::BodyMemo;
 use crate::optimize::bounds::{self, Proofs};
-use crate::optimize::gate::{BodyMemo, FunctionGate};
 use crate::optimize::inline::recursive_scc_members;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeTable};
 
@@ -988,20 +988,19 @@ fn join_over_calls<'b>(
 }
 
 /// [`summarize`] kept across the fixed-point loop: a body's own part is
-/// re-derived only where its edit count moved, and the join over the call graph,
-/// which a rewrite anywhere can move, every time.
+/// re-derived only for a function written since, and the join over the call
+/// graph, which a rewrite anywhere can move, every time.
 #[derive(Default)]
 pub(super) struct SummaryCache(BodyMemo<Option<BodySummary>>);
 
 impl SummaryCache {
-    /// What [`summarize`] answers for `project` as it stands. Every rewrite
-    /// since the last call must have been reported to `gate`.
-    pub(super) fn summaries(&mut self, project: &NirPackage, gate: &FunctionGate) -> FnSummaries {
+    /// What [`summarize`] answers for `project` as it stands.
+    pub(super) fn summaries(&mut self, project: &NirPackage) -> FnSummaries {
         let types = project.type_table.borrow();
         let (leaves, builtins) = leaf_effects(project);
-        let bodies = self.0.refresh(project, gate, |f| {
-            BodySummary::of(f, &types, &leaves, &builtins)
-        });
+        let bodies = self
+            .0
+            .refresh(project, |f| BodySummary::of(f, &types, &leaves, &builtins));
         join_over_calls(leaves, bodies.iter().map(Option::as_ref))
     }
 }

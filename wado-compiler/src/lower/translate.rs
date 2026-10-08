@@ -13,6 +13,7 @@ mod wide_int;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
@@ -32,9 +33,9 @@ use crate::name::{
     field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
-    FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
-    NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam, NirVariantCase,
-    NirVariantDecl, ParamAbi,
+    FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
+    NirFunction, NirGlobal, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest,
+    NirTypeParam, NirVariantCase, NirVariantDecl, ParamAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -59,8 +60,8 @@ use crate::{nir, tir};
 ///
 /// Takes ownership of `flat` so owned containers move straight into
 /// the `NirPackage`. The closure-functor conversion looks up the
-/// fresh `NirFunction` `Rc` in `func_map` so the optimizer's
-/// `Rc::ptr_eq`-based closure-type DCE pass keeps matching.
+/// fresh [`FuncRef`] in `func_map`, so a functor shares its methods with
+/// the package rather than holding copies.
 pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let LowerPlan {
         box_plan,
@@ -159,14 +160,14 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         moved_local_spans,
     };
 
-    let mut func_map: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>> =
+    let mut func_map: IndexMap<*const RefCell<TirFunction>, FuncRef> =
         IndexMap::with_capacity_and_hasher(functions.len(), rustc_hash::FxBuildHasher);
-    let functions: Vec<Rc<RefCell<NirFunction>>> = functions
+    let functions: Vec<FuncRef> = functions
         .into_iter()
         .map(|func_rc| {
             let ptr = Rc::as_ptr(&func_rc);
-            let nir_rc = Rc::new(RefCell::new(translator.convert_function(&func_rc.borrow())));
-            func_map.insert(ptr, Rc::clone(&nir_rc));
+            let nir_rc = FuncCell::new(translator.convert_function(&func_rc.borrow()));
+            func_map.insert(ptr, Arc::clone(&nir_rc));
             nir_rc
         })
         .collect();
@@ -276,7 +277,7 @@ struct Translator<'a> {
 /// Construction-time callee-id minting (see [`Translator::interner`]).
 struct Interner {
     ids: IndexMap<FunctionId, FuncId>,
-    stubs: Vec<Rc<RefCell<NirFunction>>>,
+    stubs: Vec<FuncRef>,
     base_len: usize,
     /// Stubs minted for a name the package defines — see `resolve`.
     #[cfg(debug_assertions)]
@@ -320,7 +321,7 @@ impl Interner {
         let id = FuncId::new(self.base_len + self.stubs.len());
         let mut stub = NirFunction::extern_stub(func_ref);
         stub.id = Some(id);
-        self.stubs.push(Rc::new(RefCell::new(stub)));
+        self.stubs.push(FuncCell::new(stub));
         self.ids.insert(key, id);
         id
     }
@@ -712,12 +713,12 @@ impl Translator<'_> {
     fn convert_closure_functor(
         &self,
         cf: &ClosureFunctor,
-        func_map: &IndexMap<*const RefCell<TirFunction>, Rc<RefCell<NirFunction>>>,
+        func_map: &IndexMap<*const RefCell<TirFunction>, FuncRef>,
     ) -> nir::ClosureFunctor {
         // A functor's methods are the package's own functions (`Rc::ptr_eq`
         // keyed), so the optimizer reaches them by the id they carry there.
         let shared = |method: &Rc<RefCell<TirFunction>>| {
-            Rc::clone(
+            Arc::clone(
                 func_map
                     .get(&Rc::as_ptr(method))
                     .expect("the closure plan generates a functor's methods with the functor"),

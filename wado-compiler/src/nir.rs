@@ -7,6 +7,8 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering as MemoryOrdering};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::ast;
 use crate::compiler_item::CompilerItem;
@@ -298,6 +300,91 @@ pub struct NirGlobal {
     /// remark can say *which* compile-time parameter failed to fold — a remark
     /// that cannot name it stays silent.
     pub param_name: Option<String>,
+}
+
+/// A NIR function as the package holds it: shared by `Arc` so the optimizer's
+/// threads reach it, and counting the mutable borrows taken of it so a memo
+/// keyed on the count cannot outlive a rewrite (WEP: Parallel Optimizer).
+pub struct FuncCell {
+    func: RwLock<NirFunction>,
+    writes: AtomicU64,
+}
+
+/// How the package and its passes hold a [`FuncCell`].
+pub type FuncRef = Arc<FuncCell>;
+
+impl FuncCell {
+    #[must_use]
+    pub fn new(func: NirFunction) -> FuncRef {
+        Arc::new(Self {
+            func: RwLock::new(func),
+            writes: AtomicU64::new(0),
+        })
+    }
+
+    /// Read the function. Panics while another borrow writes it, as
+    /// `RefCell::borrow` does: no caller waits for a writer.
+    pub fn borrow(&self) -> RwLockReadGuard<'_, NirFunction> {
+        self.func
+            .try_read()
+            .expect("a NIR function read while it is written")
+    }
+
+    /// Read the function, or `None` while a borrow writes it.
+    pub fn try_borrow(&self) -> Option<RwLockReadGuard<'_, NirFunction>> {
+        self.func.try_read().ok()
+    }
+
+    /// Borrow the function for writing. Panics while another borrow holds it,
+    /// as `RefCell::borrow_mut` does. The write is counted when the guard is
+    /// first dereferenced mutably, so a borrow that only reads counts nothing.
+    pub fn borrow_mut(&self) -> FuncWriteGuard<'_> {
+        FuncWriteGuard {
+            guard: self
+                .func
+                .try_write()
+                .expect("a NIR function written while it is borrowed"),
+            writes: &self.writes,
+            counted: false,
+        }
+    }
+
+    /// How many borrows have written the function: what a memo of its facts
+    /// is keyed by.
+    pub fn writes(&self) -> u64 {
+        self.writes.load(MemoryOrdering::Relaxed)
+    }
+}
+
+/// [`FuncCell::borrow_mut`]'s guard.
+pub struct FuncWriteGuard<'a> {
+    guard: RwLockWriteGuard<'a, NirFunction>,
+    writes: &'a AtomicU64,
+    counted: bool,
+}
+
+impl std::ops::Deref for FuncWriteGuard<'_> {
+    type Target = NirFunction;
+
+    fn deref(&self) -> &NirFunction {
+        &self.guard
+    }
+}
+
+impl std::ops::DerefMut for FuncWriteGuard<'_> {
+    fn deref_mut(&mut self) -> &mut NirFunction {
+        if !self.counted {
+            self.counted = true;
+            self.writes.fetch_add(1, MemoryOrdering::Relaxed);
+        }
+        &mut self.guard
+    }
+}
+
+impl std::fmt::Debug for FuncCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.borrow().fmt(f)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -894,10 +981,10 @@ pub struct ClosureFunctor {
     pub ref_type_id: TypeId,
     /// The `$call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
-    pub call_method: Rc<RefCell<NirFunction>>,
+    pub call_method: FuncRef,
     /// The per-functor `$Closure_N^Inspect::inspect` impl. Found through here
     /// and not by name: `dae` renames what it reshapes.
-    pub inspect_method: Rc<RefCell<NirFunction>>,
+    pub inspect_method: FuncRef,
     /// Canonical user-declared (name, type) pairs of the closure literal,
     /// captured at functor creation and never mutated.
     /// `register_closure_wrappers` reads it for the wrapper's external signature
@@ -974,7 +1061,7 @@ pub struct NirModule {
     pub type_table: Rc<RefCell<TypeTable>>,
     /// External function imports (canonical builtins from wasi/env namespaces)
     pub imports: Vec<NirImport>,
-    pub functions: Vec<Rc<RefCell<NirFunction>>>,
+    pub functions: Vec<FuncRef>,
     pub structs: Vec<NirStruct>,
     pub enums: Vec<NirEnum>,
     /// Flags type declarations (bitmask types, newtypes over u32)
@@ -1073,9 +1160,9 @@ impl NirModule {
         self.data_section.as_deref()
     }
 
-    pub fn add_function(&mut self, func: NirFunction) -> Rc<RefCell<NirFunction>> {
-        let func_rc = Rc::new(RefCell::new(func));
-        self.functions.push(Rc::clone(&func_rc));
+    pub fn add_function(&mut self, func: NirFunction) -> FuncRef {
+        let func_rc = FuncCell::new(func);
+        self.functions.push(Arc::clone(&func_rc));
         func_rc
     }
 
@@ -1107,7 +1194,7 @@ impl NirModule {
         self.traits.push(trait_decl);
     }
 
-    pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<NirFunction>>> {
+    pub fn find_function(&self, name: &str) -> Option<FuncRef> {
         self.functions
             .iter()
             .find(|f| f.borrow().name == name)

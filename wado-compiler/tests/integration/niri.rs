@@ -9,7 +9,6 @@
 //! enumerate every operator.
 
 use std::assert_matches;
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -22,8 +21,8 @@ use wado_compiler::defs::DefTable;
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
-    FunctionKind, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal, NirParam,
-    NirUnaryOp, ParamAbi, ReturnAbi,
+    FuncCell, FunctionKind, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal,
+    NirParam, NirUnaryOp, ParamAbi, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
     ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, BlockRole, Body,
@@ -5395,13 +5394,13 @@ fn with_mut_ref_params(mut func: NirFunction, indices: &[usize]) -> NirFunction 
     func
 }
 
-/// Build a `CalleeMap` from the supplied functions, wrapping each in
-/// `Rc<RefCell<...>>` to match the production map shape.
+/// Build a `CalleeMap` from the supplied functions, wrapping each in a
+/// `FuncCell` to match the production map shape.
 fn build_callee_map_test(funcs: &[NirFunction]) -> CalleeMap {
     let mut map = CalleeMap::default();
     for f in funcs {
         let key = f.id.expect("test function must have an id");
-        map.insert(key, Callee::new(Rc::new(RefCell::new(f.clone()))));
+        map.insert(key, Callee::new(FuncCell::new(f.clone())));
     }
     map
 }

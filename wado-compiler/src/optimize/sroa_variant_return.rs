@@ -245,15 +245,17 @@ fn rebox_stragglers(
     let mut changed = false;
     for i in 0..project.functions.len() {
         let mut func = project.functions[i].borrow_mut();
-        let own_return = func.return_type;
-        let Some(mut body) = func.body.take() else {
-            continue;
-        };
-        // Every step below keys on a call to a scalarized callee.
-        if !calls_any(&body, scalarized) {
-            func.body = Some(body);
+        // Every step below keys on a call to a scalarized callee. Asked before
+        // the body is taken, so a function it leaves alone is not written.
+        if !func
+            .body
+            .as_ref()
+            .is_some_and(|b| b.calls_any(|id| scalarized.contains_key(id)))
+        {
             continue;
         }
+        let own_return = func.return_type;
+        let mut body = func.body.take().expect("checked above");
         let span = func.span;
         let bound = handled_call_sites(&body, scalarized, own_return, &project.type_table.borrow());
         let targets = straggler_calls(&body, scalarized, &bound);
@@ -274,12 +276,6 @@ fn rebox_stragglers(
 
 /// Whether `body` calls any function in `targets` — one arena scan, far cheaper
 /// than the tree walks it gates.
-fn calls_any<V>(body: &Body, targets: &IndexMap<FuncId, V>) -> bool {
-    body.exprs.values().any(|node| {
-        matches!(&node.kind, ExprKind::Call { func_id, .. } if targets.contains_key(func_id))
-    })
-}
-
 /// The same repair over the global initializers. They are never rewritten —
 /// `used_in_globals` keeps a candidate a global calls out of the candidate set
 /// — but that set is this round's, so a callee scalarized earlier and reached
@@ -2081,14 +2077,16 @@ fn rewrite_call_sites(
 ) {
     for i in 0..project.functions.len() {
         let mut func = project.functions[i].borrow_mut();
-        let Some(mut body) = func.body.take() else {
-            continue;
-        };
-        // Every step below keys on a call to a candidate.
-        if !calls_any(&body, candidates) {
-            func.body = Some(body);
+        // Every step below keys on a call to a candidate. Asked before the body
+        // is taken, so a function it leaves alone is not written.
+        if !func
+            .body
+            .as_ref()
+            .is_some_and(|b| b.calls_any(|id| candidates.contains_key(id)))
+        {
             continue;
         }
+        let mut body = func.body.take().expect("checked above");
         let span = func.span;
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing

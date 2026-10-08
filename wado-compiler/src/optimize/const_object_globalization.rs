@@ -5,13 +5,14 @@
 //! the callee's parameter, a by-value constant crossing uncopied.
 
 use cranelift_entity::EntityRef;
-use std::cell::{Ref, RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::RwLockReadGuard;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
+use crate::nir::{FuncRef, NirFunction, NirGlobal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprBody, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId,
     StmtKind, StmtNode,
@@ -1456,7 +1457,7 @@ struct Gate<'a> {
     /// Which positions each function lowers to a Wasm immediate, by
     /// `func_id.index()`. Declared with `#[immediate(p)]`, never inferred.
     immediate_params: &'a [IndexSet<usize>],
-    funcs: &'a [Rc<RefCell<NirFunction>>],
+    funcs: &'a [FuncRef],
     type_table: &'a Rc<RefCell<TypeTable>>,
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
@@ -1493,7 +1494,7 @@ impl Gate<'_> {
 
     /// The callee `func_id` names. Every per-function table here is collected
     /// from `project.functions`, which is the list a `FuncId` indexes.
-    fn func(&self, func_id: FuncId) -> Ref<'_, NirFunction> {
+    fn func(&self, func_id: FuncId) -> RwLockReadGuard<'_, NirFunction> {
         self.funcs[func_id.index()].borrow()
     }
 
