@@ -1217,7 +1217,7 @@ fn rewrite_call_sites(
         let type_table: &TypeTable = &type_table;
         let functions = &project.functions;
         let reshapes = &project.reshapes;
-        exec.map_indices(functions.len(), |i| {
+        exec.indices_where(functions.len(), |i| {
             let mut func = functions[i].borrow_mut();
             let Some(key) = func.id else { return false };
             // Only a call to a candidate is rewritten. Asked before the body is
@@ -1259,7 +1259,7 @@ fn rewrite_call_sites(
             })
         })
     };
-    touched.extend((0..rewritten.len()).filter(|&i| rewritten[i]));
+    touched.extend(rewritten);
     let empty = IndexMap::default();
     let mut rewrote_global = false;
     for global in &mut project.globals {

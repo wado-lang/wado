@@ -289,7 +289,7 @@ fn apply_dae(
 
     // Phase 3b: rewrite every call site.
     let functions = &project.functions;
-    let rewritten = exec.map_indices(functions.len(), |i| {
+    let rewritten = exec.indices_where(functions.len(), |i| {
         let mut func = functions[i].borrow_mut();
         func.calls_any(|id| confirmed.contains_key(id))
             && func
@@ -297,7 +297,7 @@ fn apply_dae(
                 .as_mut()
                 .is_some_and(|body| rewrite_calls_in_body(body, confirmed))
     });
-    touched.extend((0..rewritten.len()).filter(|&i| rewritten[i]));
+    touched.extend(rewritten);
     for global in &mut project.globals {
         rewrite_calls_in_body(global.init.slot_expr_mut().body_mut(), confirmed);
     }

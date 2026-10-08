@@ -265,7 +265,7 @@ fn apply_drve(
     // return type and `wir_build::translate.rs` wraps the call in `Drop`,
     // underflowing the Wasm stack.
     let functions = &project.functions;
-    let retyped = exec.map_indices(functions.len(), |i| {
+    let retyped = exec.indices_where(functions.len(), |i| {
         let mut func = functions[i].borrow_mut();
         func.calls_any(|id| confirmed.contains(id))
             && func
@@ -273,7 +273,7 @@ fn apply_drve(
                 .as_mut()
                 .is_some_and(|body| retype_calls(body, confirmed))
     });
-    touched.extend((0..retyped.len()).filter(|&i| retyped[i]));
+    touched.extend(retyped);
     for global in &mut project.globals {
         retype_calls(global.init.slot_expr_mut().body_mut(), confirmed);
     }

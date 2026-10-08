@@ -97,6 +97,12 @@ impl Executor {
         }
         (0..len).map(f).collect()
     }
+
+    /// The indices below `len` where `f` holds, in index order.
+    pub fn indices_where(&self, len: usize, f: impl Fn(usize) -> bool + Sync + Send) -> Vec<usize> {
+        let holds = self.map_indices(len, f);
+        (0..len).filter(|&i| holds[i]).collect()
+    }
 }
 
 impl Default for Executor {
