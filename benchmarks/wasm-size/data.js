@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791421740131,
+  "lastUpdate": 1791435737337,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65177,6 +65177,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4f0f83831e3a6f6e51edd496bfbede197fc80a03"
         },
         "date": 1791421739023,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "955a52b00b180b96182b4a94e93bec7d81b847ef",
+          "message": "Merge pull request #2307 from wado-lang/ccr-185ac9b2-abnokd\n\nchore(stdlib): cover every stdlib region outside the prelude that a test can reach",
+          "timestamp": "2026-10-08T13:41:34+09:00",
+          "tree_id": "18373717c978216269306fae0ea6fd40c286f4df",
+          "url": "https://github.com/wado-lang/wado/commit/955a52b00b180b96182b4a94e93bec7d81b847ef"
+        },
+        "date": 1791435736538,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
