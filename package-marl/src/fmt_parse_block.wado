@@ -126,10 +126,7 @@ fn try_ref_def_line_chars(chars: &List<char>) -> Option<LinkReferenceDef> {
     if !(q < len && chars[q] == ':') {
         return null;
     }
-    q += 1;
-    while q < len && chars[q] matches { ' ' | '\t' } {
-        q += 1;
-    }
+    q = skip_blanks(chars, q + 1);
     if q >= len {
         return null;
     }
@@ -233,7 +230,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &
             i = parse_blockquote(lines, i, end, origin, refs, &mut out);
             continue;
         }
-        if is_list_marker(&chars) {
+        if parse_list_marker(&chars) matches { Some(_) } {
             flush_paragraph(&mut out, &mut para, refs);
             i = parse_list(lines, i, end, origin, refs, &mut out);
             continue;
@@ -399,14 +396,6 @@ fn html_attribute_end(chars: &List<char>, p: i32) -> Option<i32> {
         k += 1;
     }
     return if k > v { Option::Some(k) } else { null };
-}
-
-fn skip_blanks(chars: &List<char>, p: i32) -> i32 {
-    let mut q = p;
-    while q < chars.len() && is_indent(chars[q]) {
-        q += 1;
-    }
-    return q;
 }
 
 /// Where a raw HTML block starting at `lines[start]` (whose `chars` these are)
@@ -721,18 +710,10 @@ struct ListMarker {
     number: i32,
 }
 
-fn is_list_marker(chars: &List<char>) -> bool {
-    return parse_list_marker(chars) matches { Some(_) };
-}
-
 fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     let len = chars.len();
-    let mut p = 0;
-    let mut indent = 0;
-    while p < len && is_indent(chars[p]) {
-        indent += 1;
-        p += 1;
-    }
+    let indent = skip_blanks(chars, 0);
+    let mut p = indent;
     if p >= len {
         return null;
     }
@@ -759,11 +740,11 @@ fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     } else {
         return null;
     }
-    if p < len && !chars[p] matches { ' ' | '\t' } {
+    if p < len && !is_indent(chars[p]) {
         return null;
     }
     let mut content_col = p;
-    if content_col < len && chars[content_col] matches { ' ' | '\t' } {
+    if content_col < len && is_indent(chars[content_col]) {
         content_col += 1;
     }
     return Option::Some(ListMarker { indent, content_col, ordered, delim, number });
@@ -1188,4 +1169,13 @@ fn skip_indent(chars: &List<char>, len: i32) -> i32 {
         p += 1;
     }
     return p;
+}
+
+/// The index of the first non-indent character at or after `p`.
+fn skip_blanks(chars: &List<char>, p: i32) -> i32 {
+    let mut q = p;
+    while q < chars.len() && is_indent(chars[q]) {
+        q += 1;
+    }
+    return q;
 }

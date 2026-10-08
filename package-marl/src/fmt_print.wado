@@ -126,34 +126,30 @@ fn print_heading(h: &Heading, out: &mut String) {
 fn print_paragraph(children: &List<Node>, out: &mut String) {
     let mut text = String::new();
     print_inline_seq(children, &mut text);
-    let mut first = true;
-    for let line of text.split("\n") {
-        if !first {
-            out.push('\n');
-            if interrupts_paragraph(&line.to_chars(), false) {
-                out.push_str("    ");
-            }
-        }
-        first = false;
-        out.push_str(&line);
-    }
+    push_lines(&text, out, |index, line| if index > 0 && interrupts_paragraph(&line.to_chars(), false) {
+        "    ";
+    } else {
+        "";
+    });
 }
 
 fn print_blockquote(children: &List<Node>, out: &mut String) {
     let mut inner = String::new();
     print_block_sequence(children, &mut inner, false);
-    let mut first = true;
-    for let line of inner.split("\n") {
-        if !first {
+    push_lines(&inner, out, |_, line| if line.len() == 0 { ">" } else { "> " });
+}
+
+/// Pushes `text` line by line, each line after the prefix `prefix` gives its
+/// index and content.
+fn push_lines<S: AsStrSlice>(text: S, out: &mut String, prefix: fn(i32, &String) -> String) {
+    let mut index = 0;
+    for let line of text.as_str_slice().split("\n") {
+        if index > 0 {
             out.push('\n');
         }
-        first = false;
-        if line.len() == 0 {
-            out.push('>');
-        } else {
-            out.push_str("> ");
-            out.push_str(&line);
-        }
+        out.push_str(&prefix(index, &line));
+        out.push_str(&line);
+        index += 1;
     }
 }
 
@@ -184,15 +180,7 @@ fn print_code_block(cb: &CodeBlock, out: &mut String) {
         out.push('\n');
         out.push_str(&fence);
     } else {
-        let mut first = true;
-        for let line of trimmed.split("\n") {
-            if !first {
-                out.push('\n');
-            }
-            first = false;
-            out.push_str("    ");
-            out.push_str(&line);
-        }
+        push_lines(&trimmed, out, |_, _| "    ");
     }
 }
 
@@ -264,19 +252,7 @@ fn print_item<S: AsStrSlice>(item: &MdItem, marker: S, out: &mut String) {
     let mut body = String::new();
     print_block_sequence(&item.children, &mut body, true);
     let indent = " ".repeat(indent_width);
-    let mut first_line = true;
-    for let line of body.split("\n") {
-        if first_line {
-            out.push_str(&line);
-            first_line = false;
-        } else {
-            out.push('\n');
-            if line.len() > 0 {
-                out.push_str(&indent);
-                out.push_str(&line);
-            }
-        }
-    }
+    push_lines(&body, out, |index, line| if index > 0 && line.len() > 0 { indent } else { "" });
 }
 
 // --- tables ---
