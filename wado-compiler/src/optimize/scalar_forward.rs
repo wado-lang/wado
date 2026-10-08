@@ -28,14 +28,14 @@ use crate::nir_value_graph::ValueKind;
 pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
     let rule = ScalarForwardRule::new(&type_table);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::ScalarForward, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         let Some(body) = body.as_mut() else {
             return false;
         };
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })

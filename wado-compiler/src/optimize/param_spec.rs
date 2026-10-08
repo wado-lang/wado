@@ -27,6 +27,7 @@ use crate::compiler_trace;
 use crate::module_source::ModuleSource;
 use crate::name::param_spec_name;
 use crate::nir::NirLocal;
+use crate::parallel::Executor;
 
 /// Whole-module cap on synthesized clones, so a pathological program cannot
 /// trade unbounded code size for constant propagation.
@@ -1277,7 +1278,7 @@ struct BranchSettler {
 impl BranchSettler {
     fn new(project: &NirPackage) -> Self {
         BranchSettler {
-            callees: build_callee_map(project, &IndexSet::default()),
+            callees: build_callee_map(project, &Executor::default(), |_| false),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
         }

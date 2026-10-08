@@ -7,6 +7,7 @@
 //! [`ValueGraph`]: crate::nir_value_graph
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
@@ -29,6 +30,7 @@ use crate::niri::{
 };
 use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;
+use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -47,14 +49,15 @@ struct FoldMaps {
 fn build_fold_maps(
     project: &NirPackage,
     type_table: &TypeTable,
-    frozen: &IndexSet<FuncId>,
+    exec: &Executor,
+    frozen: impl Fn(FuncId) -> bool + Sync + Send,
 ) -> FoldMaps {
     // The CalleeMap holds handles aliased with `project.functions`, except for
     // the `frozen` functions the sweep is about to rewrite, which it reads as
     // they stand now. The interpreter reads callee bodies via `try_borrow`,
     // which bails cleanly when the visitor already holds `borrow_mut` on the
     // same function (a self-call inside the function being walked).
-    let callees = build_callee_map(project, frozen);
+    let callees = build_callee_map(project, exec, frozen);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
@@ -73,12 +76,13 @@ fn build_fold_maps(
 /// what one function's fold spends or learns decides nothing for the next.
 fn fold_pass(
     project: &NirPackage,
-    frozen: &IndexSet<FuncId>,
+    exec: &Executor,
+    frozen: impl Fn(FuncId) -> bool + Sync + Send,
     drive: impl FnOnce(&(dyn Fn(FuncId) -> bool + Sync)) -> bool,
 ) -> bool {
     let type_table = project.type_table.borrow();
     let type_table = &*type_table;
-    let maps = build_fold_maps(project, type_table, frozen);
+    let maps = build_fold_maps(project, type_table, exec, frozen);
     let globals = build_global_view(project, type_table, &maps);
     let functions = &project.functions;
     drive(&|fid| {
@@ -96,30 +100,40 @@ fn fold_pass(
 /// pass last ran.
 pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let len = project.functions.len();
-    let pending = gate
+    let pending: IndexSet<FuncId> = gate
         .pending(GatedPass::ConstFold, len)
         .into_iter()
         .collect();
-    fold_pass(project, &pending, |fold| {
-        gate.run_gated_par(GatedPass::ConstFold, len, fold)
-    })
+    let exec = Arc::clone(gate.exec());
+    fold_pass(
+        project,
+        &exec,
+        |id| pending.contains(&id),
+        |fold| gate.run_gated_par(GatedPass::ConstFold, len, fold),
+    )
 }
 
-/// Ungated variant: folds every function. Its global facts reach readers the
-/// call graph never links, so the gate's dirty set would skip real work.
+/// Ungated variant: folds every function, each reading the others as the
+/// pass found them. Its global facts reach readers the call graph never
+/// links, so the gate's dirty set would skip real work.
 pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let len = project.functions.len();
-    fold_pass(project, &IndexSet::default(), |fold| {
-        let mut changed = false;
-        for i in 0..len {
-            let fid = FuncId::new(i);
-            if fold(fid) {
-                gate.mark_changed(fid);
-                changed = true;
+    let all: Vec<FuncId> = (0..project.functions.len()).map(FuncId::new).collect();
+    let exec = Arc::clone(gate.exec());
+    let changed = fold_pass(
+        project,
+        &exec,
+        |_| true,
+        |fold| {
+            let changed = exec.map(&all, |&fid| fold(fid));
+            for (&fid, &changed) in all.iter().zip(&changed) {
+                if changed {
+                    gate.mark_changed(fid);
+                }
             }
-        }
-        changed
-    })
+            changed.contains(&true)
+        },
+    );
+    changed
 }
 
 fn new_visitor<'a>(

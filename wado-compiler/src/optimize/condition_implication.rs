@@ -98,9 +98,10 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
     let call_immutability = CallImmutability::new(project, &type_table);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::CondImplPostPromote, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::CondImplPostPromote, len, |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
@@ -118,14 +119,15 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             locals,
             address_taken_locals,
             stores_aliased_locals,
-            &type_table,
+            type_table,
             &first_param_types,
             &call_immutability,
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

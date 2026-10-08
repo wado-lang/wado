@@ -35,17 +35,17 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
     let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let ctfe_builtins = build_ctfe_builtin_map(project);
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::StoreLoadForward, len, |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         forward_one(
             &mut func,
-            &type_table,
+            type_table,
             &first_param_types,
             &call_immutability,
             &pure_builtin_callees,
             &ctfe_builtins,
-            &mut buffers,
         )
     })
 }
@@ -59,7 +59,6 @@ fn forward_one(
     call_immutability: &CallImmutability,
     pure_builtin_callees: &IndexSet<FuncId>,
     ctfe_builtins: &CtfeBuiltinMap,
-    buffers: &mut EngineBuffers,
 ) -> bool {
     if func.body.is_none() {
         return false;
@@ -94,7 +93,8 @@ fn forward_one(
         first_param_types,
         call_immutability,
     );
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut buffers = EngineBuffers::default();
+    let mut engine = Engine::new(body, &mut buffers, locals);
     engine.set_alias_sets(alias);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);

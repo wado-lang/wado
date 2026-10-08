@@ -10,7 +10,7 @@
 use cranelift_entity::EntityRef;
 
 use crate::hashmap;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::diagnostic_function_name;
 use crate::nir::{FunctionRef, NirUnaryOp};
@@ -20,6 +20,7 @@ use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
     materializing_globals, region_queries,
 };
+use crate::parallel::Executor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -421,7 +422,7 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
 /// the fold did not reach. Read off the final IR, never off a refusal a pass
 /// recorded, so it retires itself as the fold reaches each shape.
 pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
-    let callees = build_callee_map(package, &IndexSet::default());
+    let callees = build_callee_map(package, &Executor::default(), |_| false);
     let ctfe_builtins = build_ctfe_builtin_map(package);
     let materializing = materializing_globals(package);
     let names = ctfe_runnable_names(package);

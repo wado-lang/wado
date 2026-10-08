@@ -73,7 +73,7 @@ pub(super) fn run_peephole(
     };
     let type_table = project.type_table.borrow();
     let pending: IndexSet<FuncId> = gate.pending(gated_pass, len).into_iter().collect();
-    let callees = build_callee_map(project, &pending);
+    let callees = build_callee_map(project, gate.exec(), |id| pending.contains(&id));
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);

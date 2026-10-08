@@ -49,18 +49,20 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode, gate: &mut FunctionGate) 
         return false;
     }
     let rule = BranchPruneRule::new(mode);
-    let mut buffers = EngineBuffers::default();
     let type_table = project.type_table.borrow();
+    let type_table = &*type_table;
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    gate.run_gated(GatedPass::BranchPrune, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::BranchPrune, len, |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         let Some(body) = body.as_mut() else {
             return false;
         };
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         // A pruned break value that is a promoted constant is re-materialized.
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         engine.run(&[&rule])
     })

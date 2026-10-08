@@ -14,6 +14,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 use crate::{compiler_trace, nir_arena};
@@ -251,28 +252,29 @@ impl EditSink for BodySink<'_> {
 
 /// The [`CalleeMap`] over every function in `project` a compile-time frame can
 /// run. Its handles alias `project.functions`, so rebuilding it every optimizer
-/// iteration costs only refcount bumps, except for the functions in `frozen`:
-/// a sweep about to rewrite those reads them as they stand now, from a copy
-/// (WEP: Parallel Optimizer).
-pub(crate) fn build_callee_map(project: &NirPackage, frozen: &IndexSet<FuncId>) -> CalleeMap {
-    let mut map = CalleeMap::default();
-    for func_rc in &project.functions {
+/// iteration costs only refcount bumps, except for the functions `frozen`
+/// picks: a sweep about to rewrite those reads them as they stand now, from a
+/// copy taken on `exec`'s threads (WEP: Parallel Optimizer).
+pub(crate) fn build_callee_map(
+    project: &NirPackage,
+    exec: &Executor,
+    frozen: impl Fn(FuncId) -> bool + Sync + Send,
+) -> CalleeMap {
+    let entries = exec.map(&project.functions, |func_rc| {
         let func = func_rc.borrow();
         if !is_ctfe_runnable(&func) {
-            continue;
+            return None;
         }
-        let Some(id) = func.id else {
-            continue;
-        };
-        let handle = if frozen.contains(&id) {
+        let id = func.id?;
+        let handle = if frozen(id) {
             FuncCell::new(func.clone())
         } else {
             func_rc.clone()
         };
         drop(func);
-        map.insert(id, Callee::new(handle));
-    }
-    map
+        Some((id, Callee::new(handle)))
+    });
+    entries.into_iter().flatten().collect()
 }
 
 /// Which callee ids are the builtins the engine evaluates.
