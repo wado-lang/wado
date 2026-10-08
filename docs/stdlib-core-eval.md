@@ -14,9 +14,10 @@ assert on its output.
 Only `wado test` supports it, and a program for any other world that
 reaches this module does not compile. The evaluated program gets nothing
 but stdout, stderr and exit: no arguments, stdin, environment, files,
-clock, randomness or network. Its `use` items may name `core:*` and nothing
-else. Every outcome but a compile timeout is cached, keyed by the compiler,
-the knobs, the budget and the source. See WEP 2026-09-26 (Eval).
+clock, randomness or network. Its `use` items may name `core:*` and the
+calling package's `[dependencies]`, and nothing else. Every outcome but a
+compile timeout is cached, keyed by the compiler, the knobs, the budget, the
+source and the dependency files it read. See WEP 2026-09-26 (Eval).
 
 ## Synopsis
 
