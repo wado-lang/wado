@@ -201,96 +201,52 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     });
     drop(shared_escape);
     drop(types);
-    let candidates: Vec<Candidate> = per_function.into_iter().flatten().collect();
-    if candidates.is_empty() {
-        return false;
-    }
-
     // Phase 2 — mutation. Number from the count of pre-existing `$const_obj_*`
     // globals so names stay unique across invocations.
-    let base = project
+    let mut next = project
         .globals
         .iter()
         .filter(|g| g.name.starts_with(CONST_OBJ_GLOBAL_PREFIX))
         .count();
-    for (n, cand) in (base..).zip(candidates) {
-        let name = format!("{CONST_OBJ_GLOBAL_PREFIX}{n}");
-        let Candidate {
-            func_idx,
-            ty,
-            module_source,
-            kind,
-            guarded,
-        } = cand;
-
-        let mut func = project.functions[func_idx].borrow_mut();
-        compiler_trace!(
-            "const_object_globalization",
-            "  {} hoists {} as {name} (guarded={guarded})",
-            func.name,
-            kind.what(),
-        );
+    let per_function: Vec<Vec<(String, Candidate)>> = per_function
+        .into_iter()
+        .map(|candidates| {
+            candidates
+                .into_iter()
+                .map(|cand| {
+                    let name = format!("{CONST_OBJ_GLOBAL_PREFIX}{next}");
+                    next += 1;
+                    (name, cand)
+                })
+                .collect()
+        })
+        .collect();
+    if per_function.iter().all(Vec::is_empty) {
+        return false;
+    }
+    let functions = &project.functions;
+    exec.map(&per_function, |hoists| {
+        let Some((_, first)) = hoists.first() else {
+            return;
+        };
+        let mut func = functions[first.func_idx].borrow_mut();
+        let func = &mut *func;
         let body = func.body.as_mut().expect("candidate function has a body");
-        match kind {
-            CandidateKind::LetBinding {
-                local_index,
-                sibling_lets,
-                ..
-            } => {
-                // Rewrite reads first (the let's own value is const and
-                // references no local index, so it is untouched), then
-                // replace the binding.
-                rewrite_reads(body, local_index, &module_source, &name, ty);
-                assert!(
-                    replace_let_with_set(
-                        body,
-                        local_index,
-                        &module_source,
-                        &name,
-                        ty,
-                        guarded.then_some(is_uninitialized)
-                    ),
-                    "[NIR] const_object_globalization: LetBinding candidate's `let` \
-                     (local {local_index}) went missing between collection and mutation"
-                );
-                inline_sibling_lets(body, &sibling_lets, &module_source, &name);
-                debug_assert!(
-                    !reads_local(body, local_index),
-                    "[NIR] const_object_globalization: local {local_index} is still read \
-                     after its `let` became a `GlobalVarSet`"
-                );
-            }
-            CandidateKind::InlineRef {
-                ref_expr,
-                sibling_lets,
-            } => {
-                hoist_inline_ref(
-                    body,
-                    ref_expr,
-                    &module_source,
-                    &name,
-                    ty,
-                    guarded.then_some(is_uninitialized),
-                );
-                substitute_sibling_lets(body, &sibling_lets, &module_source, &name);
-            }
-            CandidateKind::ValueArg {
-                arg_expr,
-                sibling_lets,
-            } => {
-                hoist_value_arg(
-                    body,
-                    arg_expr,
-                    &module_source,
-                    &name,
-                    ty,
-                    guarded.then_some(is_uninitialized),
-                );
-                substitute_sibling_lets(body, &sibling_lets, &module_source, &name);
-            }
+        for (name, cand) in hoists {
+            compiler_trace!(
+                "const_object_globalization",
+                "  {} hoists {} as {name} (guarded={})",
+                func.name,
+                cand.kind.what(),
+                cand.guarded,
+            );
+            hoist_candidate(body, name, cand, is_uninitialized);
         }
-        drop(func);
-
+    });
+    for (name, cand) in per_function.into_iter().flatten() {
+        let Candidate {
+            ty, module_source, ..
+        } = cand;
         project.globals.push(NirGlobal {
             name,
             ty,
@@ -315,6 +271,54 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
         });
     }
     true
+}
+
+/// Rewrite `body` so `cand`'s value lives in the global `name`.
+fn hoist_candidate(body: &mut Body, name: &str, cand: &Candidate, is_uninitialized: FuncId) {
+    let Candidate {
+        ty,
+        module_source,
+        kind,
+        guarded,
+        ..
+    } = cand;
+    let (ty, guard) = (*ty, guarded.then_some(is_uninitialized));
+    match kind {
+        CandidateKind::LetBinding {
+            local_index,
+            sibling_lets,
+            ..
+        } => {
+            // Rewrite reads first (the let's own value is const and references
+            // no local index, so it is untouched), then replace the binding.
+            rewrite_reads(body, *local_index, module_source, name, ty);
+            assert!(
+                replace_let_with_set(body, *local_index, module_source, name, ty, guard),
+                "[NIR] const_object_globalization: LetBinding candidate's `let` \
+                 (local {local_index}) went missing between collection and mutation"
+            );
+            inline_sibling_lets(body, sibling_lets, module_source, name);
+            debug_assert!(
+                !reads_local(body, *local_index),
+                "[NIR] const_object_globalization: local {local_index} is still read \
+                 after its `let` became a `GlobalVarSet`"
+            );
+        }
+        CandidateKind::InlineRef {
+            ref_expr,
+            sibling_lets,
+        } => {
+            hoist_inline_ref(body, *ref_expr, module_source, name, ty, guard);
+            substitute_sibling_lets(body, sibling_lets, module_source, name);
+        }
+        CandidateKind::ValueArg {
+            arg_expr,
+            sibling_lets,
+        } => {
+            hoist_value_arg(body, *arg_expr, module_source, name, ty, guard);
+            substitute_sibling_lets(body, sibling_lets, module_source, name);
+        }
+    }
 }
 
 /// Find every hoisting candidate in `body`: a qualifying `let` binding
