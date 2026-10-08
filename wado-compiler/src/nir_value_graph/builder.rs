@@ -2666,11 +2666,10 @@ mod tests {
             kind: StmtKind::Expr(Operand::Expr(add)),
             span,
         });
-        let new_root = b.blocks.push(BlockNode {
+        b.push_root(BlockNode {
             stmts: vec![s_call, s_add],
             span,
         });
-        b.set_root(new_root);
         b
     }
 

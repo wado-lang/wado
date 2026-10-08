@@ -958,11 +958,10 @@ mod tests {
             kind: StmtKind::Expr(sum.into()),
             span: Span::default(),
         });
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![s0],
             span: Span::default(),
         });
-        body.set_root(new_root);
 
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
@@ -1007,8 +1006,8 @@ mod tests {
         let (s0, u0) = read_stmt(&mut body, "a");
         let (s1, _filler) = read_stmt(&mut body, "f");
         let (s2, u2) = read_stmt(&mut body, "a");
-        let new_root = block(&mut body, vec![s0, s1, s2]);
-        body.set_root(new_root);
+        let root = block(&mut body, vec![s0, s1, s2]);
+        body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
@@ -1044,8 +1043,8 @@ mod tests {
             span: Span::default(),
         });
         let (lead_s, _lead) = read_stmt(&mut body, "lead");
-        let new_root = block(&mut body, vec![lead_s, if_s]);
-        body.set_root(new_root);
+        let root = block(&mut body, vec![lead_s, if_s]);
+        body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
@@ -1080,8 +1079,8 @@ mod tests {
             span: Span::default(),
         });
         let (outer_s, outer_u) = read_stmt(&mut body, "a");
-        let new_root = block(&mut body, vec![outer_s, if_s]);
-        body.set_root(new_root);
+        let root = block(&mut body, vec![outer_s, if_s]);
+        body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
@@ -1102,8 +1101,8 @@ mod tests {
             span: Span::default(),
         });
         let (out_s, out_u) = read_stmt(&mut body, "a");
-        let new_root = block(&mut body, vec![out_s, loop_s]);
-        body.set_root(new_root);
+        let root = block(&mut body, vec![out_s, loop_s]);
+        body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
@@ -1122,8 +1121,8 @@ mod tests {
             kind: StmtKind::Loop { body: loop_body },
             span: Span::default(),
         });
-        let new_root = block(&mut body, vec![loop_s]);
-        body.set_root(new_root);
+        let root = block(&mut body, vec![loop_s]);
+        body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
@@ -1157,8 +1156,8 @@ mod tests {
             },
             span: Span::default(),
         });
-        let new_root = block(&mut body, vec![if_s]);
-        body.set_root(new_root);
+        let root = block(&mut body, vec![if_s]);
+        body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);

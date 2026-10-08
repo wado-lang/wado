@@ -934,8 +934,7 @@ impl Interpreter<'_> {
         }
         self.charge(1)?;
         let mut scratch = body.nodes_only_clone();
-        let new_root = block;
-        scratch.set_root(new_root);
+        scratch.set_root(block);
         let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);

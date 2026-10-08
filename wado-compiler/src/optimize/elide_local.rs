@@ -219,11 +219,10 @@ mod tests {
                 span: Span::default(),
             }));
         }
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: Span::default(),
         });
-        body.set_root(new_root);
         let locals = Tracked::new(vec![NirLocal {
             name: "x".to_string(),
             type_id: TypeTable::I32,
@@ -271,11 +270,10 @@ mod tests {
             },
             span: Span::default(),
         });
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![binding],
             span: Span::default(),
         });
-        body.set_root(new_root);
         let mut locals = Tracked::new(vec![NirLocal {
             name: "x".to_string(),
             type_id: TypeTable::I32,
@@ -345,11 +343,10 @@ mod tests {
                 })
             })
             .to_vec();
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: Span::default(),
         });
-        body.set_root(new_root);
         let mut locals = Tracked::new(Vec::new());
         run_elide(&mut body, &mut locals);
         assert_eq!(

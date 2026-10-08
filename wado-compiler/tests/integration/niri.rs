@@ -5221,11 +5221,10 @@ fn mut_ref_of_local(index: u32, type_id: TypeId) -> Build {
 fn set_arena_body(f: &mut NirFunction, stmts: Vec<StmtBuild>) {
     let mut body = Body::empty();
     let ids: Vec<StmtId> = stmts.iter().map(|s| s(&mut body)).collect();
-    let new_root = body.blocks.push(BlockNode {
+    body.push_root(BlockNode {
         stmts: ids,
         span: Span::default(),
     });
-    body.set_root(new_root);
     f.body = Some(body);
 }
 
@@ -7251,11 +7250,10 @@ fn body_with_unlisted_mention(point: TypeId) -> (Body, ExprId) {
         point,
     );
     let live = ps(&mut body, StmtKind::Expr(Operand::Expr(unlisted_parent)));
-    let new_root = body.blocks.push(BlockNode {
+    body.push_root(BlockNode {
         stmts: vec![live],
         span: Span::default(),
     });
-    body.set_root(new_root);
     (body, mention)
 }
 
@@ -8000,8 +7998,8 @@ fn a_ref_global_alias_survives_the_body_growing_under_it() {
             TypeTable::I32,
         ),
     )];
-    let new_root = block_of(&mut body, &stmts);
-    body.set_root(new_root);
+    let root = block_of(&mut body, &stmts);
+    body.set_root(root);
     let read = field_access(local_expr(0, TypeTable::I32), 0, "width", TypeTable::I32)(&mut body)
         .as_expr()
         .expect("a field access is a composite expression");
@@ -8281,8 +8279,8 @@ fn a_ref_global_alias_rebound_by_a_later_let_does_not_vouch_for_it() {
             struct_lit(cfg_ty, vec![(0, "width", int_lit(1, TypeTable::I32, "1"))]),
         ),
     ];
-    let new_root = block_of(&mut body, &stmts);
-    body.set_root(new_root);
+    let root = block_of(&mut body, &stmts);
+    body.set_root(root);
     let read = field_access(local_expr(0, cfg_ty), 0, "width", TypeTable::I32)(&mut body)
         .as_expr()
         .expect("a field access is a composite expression");
@@ -8329,8 +8327,8 @@ fn an_orphaned_ref_global_binding_does_not_vouch_for_a_live_local() {
         cfg_ty,
         struct_lit(cfg_ty, vec![(0, "width", int_lit(1, TypeTable::I32, "1"))]),
     )];
-    let new_root = block_of(&mut body, &stmts);
-    body.set_root(new_root);
+    let root = block_of(&mut body, &stmts);
+    body.set_root(root);
     let read = field_access(local_expr(0, cfg_ty), 0, "width", TypeTable::I32)(&mut body)
         .as_expr()
         .expect("a field access is a composite expression");

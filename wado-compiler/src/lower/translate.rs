@@ -617,8 +617,7 @@ impl Translator<'_> {
         locals.extend(extra_locals.iter().map(convert_local));
         let body = root.map(move |r| {
             let mut arena = fctx.arena.into_inner();
-            let new_root = r;
-            arena.set_root(new_root);
+            arena.set_root(r);
             arena
         });
         NirFunction {
@@ -673,8 +672,7 @@ impl Translator<'_> {
         let init_root = fctx.alloc_block(vec![init_stmt], span);
         let body = ExprBody::from_body({
             let mut body = fctx.arena.into_inner();
-            let new_root = init_root;
-            body.set_root(new_root);
+            body.set_root(init_root);
             body
         });
         let init = match global.init {

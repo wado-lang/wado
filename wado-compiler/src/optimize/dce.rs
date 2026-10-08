@@ -2580,11 +2580,10 @@ mod tests {
             kind: StmtKind::Expr(Operand::Value(value)),
             span: Span::default(),
         });
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![stmt],
             span: Span::default(),
         });
-        body.set_root(new_root);
         (body, stmt)
     }
 

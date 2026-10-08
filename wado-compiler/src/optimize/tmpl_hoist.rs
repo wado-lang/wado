@@ -1630,11 +1630,10 @@ mod tests {
             kind: StmtKind::Expr(e.into()),
             span: Span::default(),
         });
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![s],
             span: Span::default(),
         });
-        body.set_root(new_root);
         (body, e)
     }
 

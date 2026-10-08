@@ -521,11 +521,10 @@ fn build_helper(
             .iter()
             .map(|&s| splice_stmt(&mut body, parent_body, s, &ctx))
             .collect();
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: parent_body.blocks[region.block].span,
         });
-        body.set_root(new_root);
     }
 
     // The enclosing body is lifted out over the clone: the helper carries the

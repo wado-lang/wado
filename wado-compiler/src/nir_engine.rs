@@ -1823,11 +1823,10 @@ mod tests {
     fn mk_body(build: impl FnOnce(&mut Body) -> Vec<StmtId>) -> Body {
         let mut body = Body::empty();
         let stmts = build(&mut body);
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: Span::default(),
         });
-        body.set_root(new_root);
         body
     }
 
@@ -2251,11 +2250,10 @@ mod tests {
         let add = bin(&mut big, one, NirBinaryOp::Add, two);
         let let_stmt = let_x(&mut big, add, false);
         let ret = ret_x(&mut big);
-        let new_root = big.blocks.push(BlockNode {
+        big.push_root(BlockNode {
             stmts: vec![let_stmt, ret],
             span: Span::default(),
         });
-        big.set_root(new_root);
         {
             let eng = Engine::new(&mut big, &mut buffers, &mut locals);
             assert_eq!(

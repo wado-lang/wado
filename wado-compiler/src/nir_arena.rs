@@ -775,6 +775,12 @@ impl Body {
         *self.root = root;
     }
 
+    /// Push `block` and make it the root.
+    pub fn push_root(&mut self, block: BlockNode) {
+        let root = self.blocks.push(block);
+        self.set_root(root);
+    }
+
     /// Its parts' versions: different after any edit, by any route, since
     /// each part's only grows and a part put in place of another carries a
     /// newer epoch.
@@ -950,11 +956,10 @@ impl Body {
             kind: StmtKind::Expr(Operand::Expr(e)),
             span,
         });
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![s],
             span,
         });
-        body.set_root(new_root);
         body
     }
 
@@ -969,11 +974,10 @@ impl Body {
             kind: StmtKind::Expr(Operand::Value(v)),
             span,
         });
-        let new_root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![s],
             span,
         });
-        body.set_root(new_root);
         body
     }
 
