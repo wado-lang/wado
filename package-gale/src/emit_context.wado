@@ -1,0 +1,689 @@
+//! What parser emit reads and where it stands. It reads what earlier phases
+//! settled — the analysis, the settings, the rules' FOLLOW, the parser plan —
+//! and records the tables its text names and the diagnostics it raises. Where
+//! the walk stands is the `EmitCursor`.
+
+use { AltAction, Alternative, ParserRule } from "./ir.wado";
+use { Admits, Diagnostics, Rule, admits_or_everything } from "./gir.wado";
+use { RuleOverlap, rule_alts_gated, rule_overlap_groups } from "./rule_overlap.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { RuleFollow } from "./follow_env.wado";
+use { TableRegistry, follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
+use { ParserPlan, RuleCaptures } from "./parser_plan.wado";
+use { PredicateSite, alt_has_gate, alt_scan_gate_conditions, gate_condition_for } from "./gate_conditions.wado";
+use { AmbiguousNode } from "./prediction.wado";
+use { AltBinding } from "./attr_resolve.wado";
+use { rule_returns_vals } from "./action_translate.wado";
+use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
+use { PARSER_HANDLE } from "./ident.wado";
+use { sets_overlap } from "./gen_util.wado";
+use { HashMap, HashSet } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
+
+/// The parser's ATN state (`AtnState`): its field, and the name a scan
+/// function's `&mut` parameter borrows it under.
+pub global ATN_STATE_HANDLE: String = "atn";
+pub global ATN_STATE_TYPE: String = "AtnState";
+
+/// The parser's scan memo (`ScanMemo`): its field, and the name a scan
+/// function's `&mut` parameter borrows it under.
+pub global SCAN_MEMO_HANDLE: String = "memo";
+
+/// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
+/// defined. A call takes the name from `EmitContext::scan_fn_of`.
+pub fn scan_fn_name<S: AsStrSlice>(snake: S) -> String {
+    return `scan_${snake}`;
+}
+
+/// Where the emit walk stands, and what it has emitted so far.
+pub struct EmitCursor {
+    /// Index of the parser rule being emitted, or -1 outside a rule body.
+    current_rule_index: i32 = -1,
+    /// Whether the code being emitted is a scan function's, which reaches the
+    /// gate through its parameter rather than through the parser.
+    in_scan_fn: bool = false,
+    /// While a left-recursive rule is emitted, the kinds its suffixes start
+    /// with: what continues an alternative's tail besides the rule's `follow`.
+    lr_continuation: List<String> = [],
+    /// Set while the atom of a rule whose mid operands are gated emits.
+    lr_cont_in_atom: bool = false,
+    /// Whether the group body being emitted has alternatives to choose between,
+    /// or null outside every group — an alt-initial predicate selects only there.
+    alt_choice: Option<bool> = null,
+    /// Actual post-dedup bindings for the alternative currently being emitted.
+    /// The action translator maps a `$ref` to its real local (`e_2`) instead of
+    /// re-deriving `binding_name`, which diverges when a token / rule field-name
+    /// collision deduped the reference.
+    alt_bindings: List<AltBinding> = [],
+    /// The rendered expected-token set at the action site being emitted, or
+    /// empty where codegen cannot answer — a body reading it there is reported.
+    expected_names: String = "",
+    /// The block a finished alternative leaves by, where the rule's `@after`
+    /// follows it; a finished alternative returns where this is `null`.
+    alt_exit_label: Option<String> = null,
+    /// Per function being emitted, innermost last, the top-level names its text
+    /// references, which it `note`s at its end for `CodeWriter::prune`.
+    ref_frames: List<HashSet<String>> = [],
+    /// Names referenced outside any function frame.
+    root_refs: HashSet<String> = HashSet::with_seed(GALE_SEED),
+    /// Monotonic counter for scan-group label uniqueness (`sg_<n>` etc.), fresh
+    /// per generation so labels do not depend on run order.
+    scan_group_counter: i32 = 0,
+    /// Per rule index, whether emitted code calls one of the rule's scan
+    /// functions; `scan_queue` holds the called rules not yet emitted.
+    scan_called: List<bool> = [],
+    scan_queue: List<i32> = [],
+    /// The emitted scan function covering one alternative, by
+    /// `[rule index, surface alt index]`: one function serves the scan and the parse.
+    alt_scan_fns: HashMap<[i32, i32], String> = HashMap::with_seed(GALE_SEED),
+    /// `action_id`s codegen has handled (emitted, or already raised a loud
+    /// diagnostic for). A post-emit sweep warns for any stamped parser action
+    /// left unhandled, so an action on a not-yet-supported code path (nested
+    /// group, LR suffix, single-token multi-alt, multi-alt prequel) surfaces
+    /// loudly instead of vanishing silently.
+    action_seen: List<i32> = [],
+    /// `action_id`s of alt-initial predicates resolved at the dispatch by
+    /// prediction-time gating; their in-body emit is suppressed.
+    predicate_gated: List<i32> = [],
+    /// Context-free gated predicates extracted to standalone `pred_<id>(p)`
+    /// fns: `[predicate_fn_id, body]`. The dispatch calls `pred_<id>(p)` instead of
+    /// inlining the condition, so the same fn is callable from every decision
+    /// path (token-led / interchangeable dispatch and the ATN's disabled alternatives).
+    predicate_fns: List<[i32, String]> = [],
+}
+
+impl EmitCursor {
+    pub fn new(rule_count: i32) -> EmitCursor {
+        let mut called: List<bool> = [];
+        for let mut i = 0; i < rule_count; i += 1 {
+            called.push(false);
+        }
+        return EmitCursor { scan_called: called };
+    }
+
+    /// Make rule `idx` the one being emitted. Set by `gen_parser` and the scan
+    /// emit loop before each body walk.
+    pub fn set_current_rule_index(&mut self, idx: i32) {
+        self.current_rule_index = idx;
+    }
+
+    pub fn current_rule_index(&self) -> i32 {
+        assert self.current_rule_index >= 0, "the parse and scan emit loops make each rule current before walking its body";
+        return self.current_rule_index;
+    }
+
+    pub fn in_scan_fn(&self) -> bool {
+        return self.in_scan_fn;
+    }
+
+    /// Enter or leave a scan function's body; returns the previous setting.
+    pub fn set_in_scan_fn(&mut self, on: bool) -> bool {
+        let was = self.in_scan_fn;
+        self.in_scan_fn = on;
+        return was;
+    }
+
+    /// The kinds the current left-recursive rule's suffixes start with, or `[]`.
+    pub fn lr_continuation(&self) -> &List<String> {
+        return &self.lr_continuation;
+    }
+
+    /// Enter a left-recursive rule with its suffixes' first kinds, or leave it with `[]`.
+    pub fn set_lr_continuation(&mut self, kinds: List<String>) {
+        self.lr_continuation = kinds;
+    }
+
+    /// Enter the atom of a left-recursive rule, or leave it, answering whether
+    /// the atom was already being emitted. Where the rule gates a mid operand,
+    /// the atom's trailing operand ends the invocation as a suffix's does and
+    /// owes the same continuation, so the atom and the helpers it calls take
+    /// and pass on `lr_cont`.
+    pub fn set_lr_cont_in_atom(&mut self, on: bool) -> bool {
+        let was = self.lr_cont_in_atom;
+        self.lr_cont_in_atom = on;
+        return was;
+    }
+
+    /// Whether the functions now emitting take `lr_cont` (`set_lr_cont_in_atom`).
+    pub fn lr_cont_in_atom(&self) -> bool {
+        return self.lr_cont_in_atom;
+    }
+
+    /// Enter a group's body, saying whether the group has alternatives to choose
+    /// between; returns the enclosing answer to restore on the way out.
+    pub fn enter_group_body(&mut self, multi_alt: bool) -> Option<bool> {
+        let outer = self.alt_choice;
+        self.alt_choice = Option::Some(multi_alt);
+        return outer;
+    }
+
+    pub fn leave_group_body(&mut self, outer: Option<bool>) {
+        self.alt_choice = outer;
+    }
+
+    /// Whether the body being emitted is one alternative of a choice. Unset
+    /// outside every group, where the rule's own alternative count answers.
+    pub fn in_alt_choice(&self) -> Option<bool> {
+        return self.alt_choice;
+    }
+
+    /// Set the actual bindings for the alternative whose actions are about to be
+    /// emitted, so the translator resolves `$ref` to its real (post-dedup) local.
+    pub fn set_alt_bindings(&mut self, bindings: List<AltBinding>) {
+        self.alt_bindings = bindings;
+    }
+
+    pub fn alt_bindings(&self) -> &List<AltBinding> {
+        return &self.alt_bindings;
+    }
+
+    /// The rendered expected-token set the action about to be emitted would see.
+    /// Set around a site codegen can answer for, cleared everywhere else.
+    pub fn set_expected_names<S: AsStrSlice>(&mut self, rendered: S) {
+        self.expected_names = rendered.to_string();
+    }
+
+    pub fn expected_names(&self) -> &String {
+        return &self.expected_names;
+    }
+
+    pub fn set_alt_exit_label(&mut self, label: Option<String>) {
+        self.alt_exit_label = label;
+    }
+
+    /// The block a finished alternative breaks out of, or `null` where it returns.
+    pub fn alt_exit_label(&self) -> Option<String> {
+        return self.alt_exit_label;
+    }
+
+    /// Open the reference frame of a function about to be emitted: what
+    /// `note_ref` records until `end_ref_frame` is that function's.
+    pub fn begin_ref_frame(&mut self) {
+        self.ref_frames.push(HashSet::with_seed(GALE_SEED));
+    }
+
+    /// Close the innermost reference frame, handing back what it recorded.
+    pub fn end_ref_frame(&mut self) -> HashSet<String> {
+        return self.ref_frames.pop().unwrap();
+    }
+
+    /// What was referenced outside every function frame.
+    pub fn take_root_refs(&mut self) -> HashSet<String> {
+        let refs = self.root_refs;
+        self.root_refs = HashSet::with_seed(GALE_SEED);
+        return refs;
+    }
+
+    /// Record that the text being built references the top-level `name`.
+    pub fn note_ref(&mut self, name: &String) {
+        let n = self.ref_frames.len();
+        if n == 0 {
+            self.root_refs.insert(*name);
+        } else {
+            self.ref_frames[n - 1].insert(*name);
+        }
+    }
+
+    fn noted(&mut self, name: String) -> String {
+        self.note_ref(&name);
+        return name;
+    }
+
+    /// Return the next scan-group id and advance the counter.
+    pub fn next_scan_group(&mut self) -> i32 {
+        let id = self.scan_group_counter;
+        self.scan_group_counter += 1;
+        return id;
+    }
+
+    /// Record that emitted code calls rule `rule`'s scan functions.
+    fn call_scan(&mut self, rule: i32) {
+        if !self.scan_called[rule] {
+            self.scan_called[rule] = true;
+            self.scan_queue.push(rule);
+        }
+    }
+
+    /// The next rule whose scan functions are called and not yet emitted.
+    pub fn next_called_scan(&mut self) -> Option<i32> {
+        return self.scan_queue.pop();
+    }
+
+    pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
+        let key = [self.current_rule_index(), alt];
+        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${key.0} already has a scan function`;
+        self.alt_scan_fns[key] = name.to_string();
+    }
+
+    pub fn alt_scan_fn(&self, alt: i32) -> Option<String> {
+        return self.alt_scan_fns.get([self.current_rule_index(), alt]);
+    }
+
+    /// Record that codegen handled this action id (emitted or diagnosed).
+    pub fn mark_action_seen(&mut self, id: i32) {
+        self.action_seen.push(id);
+    }
+
+    /// Whether an action id was handled by codegen.
+    pub fn action_was_seen(&self, id: i32) -> bool {
+        return self.action_seen.contains(&id);
+    }
+
+    pub fn mark_predicate_gated(&mut self, id: i32) {
+        if !self.predicate_gated.contains(&id) {
+            self.predicate_gated.push(id);
+        }
+    }
+
+    pub fn is_predicate_gated(&self, id: i32) -> bool {
+        return self.predicate_gated.contains(&id);
+    }
+
+    pub fn predicate_fns(&self) -> &List<[i32, String]> {
+        return &self.predicate_fns;
+    }
+}
+
+/// The context parser emit threads through its walk.
+pub struct EmitContext {
+    pub analysis: GrammarAnalysis,
+    pub settings: GenSettings,
+    pub follow: RuleFollow,
+    pub tables: TableRegistry,
+    pub diagnostics: Diagnostics,
+    pub plan: ParserPlan,
+    pub cursor: EmitCursor,
+}
+
+impl EmitContext {
+    pub fn new(
+        analysis: GrammarAnalysis,
+        settings: GenSettings,
+        follow: RuleFollow,
+        tables: TableRegistry,
+        diagnostics: Diagnostics,
+        plan: ParserPlan,
+    ) -> EmitContext {
+        let cursor = EmitCursor::new(analysis.parser_rules().len());
+        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, cursor };
+    }
+
+    /// The rule being emitted.
+    pub fn current_rule(&self) -> &ParserRule {
+        return &self.analysis.parser_rules()[self.cursor.current_rule_index()];
+    }
+
+    /// The name of `current_rule`, which diagnostics raised from inside a rule
+    /// use as their structured owner.
+    pub fn current_rule_name(&self) -> String {
+        return self.current_rule().name;
+    }
+
+    /// The declaration side of `ParserPlan::rule_reads_follow`, answered off the
+    /// same set so a rule cannot declare what its callers do not pass.
+    pub fn current_rule_reads_follow(&self) -> bool {
+        return self.plan.rule_reads_follow(&self.current_rule().snake_name);
+    }
+
+    /// Whether the functions the current rule's body is emitted into, beside a
+    /// left-recursive rule's walker, take the invocation's `min_prec`: a
+    /// prediction inside the body reads it, and only a rule whose loop the
+    /// simulator decides has one to read. Asked at every declaration and every
+    /// call site.
+    pub fn helpers_take_prec(&self) -> bool {
+        let idx = self.cursor.current_rule_index();
+        return self.plan.rule_body_predicts(idx) && self.plan.lr_loop_entry_decision(idx) >= 0;
+    }
+
+    /// Whether the current rule makes a decision the simulator decides.
+    pub fn current_rule_asks_simulator(&self) -> bool {
+        return self.plan.rule_asks_simulator(self.cursor.current_rule_index());
+    }
+
+    /// Whether an `EOF` the grammar writes may follow the current rule.
+    pub fn current_rule_precedes_eof_token(&self) -> bool {
+        return self.follow.precedes_eof_token(&self.current_rule().name);
+    }
+
+    /// The strings `r` for which `rule r EOF` can occur, for the current rule.
+    pub fn current_rule_input_end(&self) -> List<List<List<String>>> {
+        return self.follow.input_end(&self.current_rule().name);
+    }
+
+    /// Whether a call to the rule `snake` can reach a decision the simulator
+    /// decides, so the scan pushes the return state the prediction reads.
+    pub fn scan_reaches_simulator<S: AsStrSlice>(&self, snake: S) -> bool {
+        return self.plan.rule_reaches_simulator(self.analysis.snake_rule_index(snake));
+    }
+
+    /// Whether an `Ambiguous` node's decision is a runtime-ATN prediction. The
+    /// marking pass and `gen_prediction_code_inner` both ask here.
+    pub fn ambiguous_routes_via_atn<S: AsStrSlice>(&self, a: &AmbiguousNode, rule_name: S) -> bool {
+        let idx = self.cursor.current_rule_index();
+        return a.reason matches { AtEndConflict }
+            && self.plan.needs_atn
+            && self.plan.lr_loop_entry_decision(idx) < 0
+            && self.plan.atn_rule_body_decision(idx) >= 0
+            && self.follow.at_end_conflict_routes(rule_name, &a.branch_tokens);
+    }
+
+    /// Whether a `*` / `+` at decision `site` may exit on a token in `kinds`,
+    /// inside its rule or past its end. True where either is unknown.
+    pub fn loop_exit_admits_any(&self, site: i32, kinds: &List<String>) -> bool {
+        let exits = &self.plan.recovery_sets().decision_exit;
+        if site < 0 || site >= exits.len() {
+            return true;
+        }
+        let Some(exit) = &exits[site] else {
+            return true;
+        };
+        if sets_overlap(&self.analysis.token_names_of(&exit.kinds), kinds) {
+            return true;
+        }
+        return exit.reaches_end
+            && self.follow.at_end_conflict_routes(&self.analysis.parser_rules()[exit.rule].name, kinds);
+    }
+
+    /// Where an alternative of the rule being emitted renders its predicates.
+    pub fn predicate_site(&self) -> PredicateSite {
+        return PredicateSite {
+            rule_index: self.cursor.current_rule_index(),
+            vals_in_scope: self.rule_emits_vals(self.current_rule()),
+            bindings: self.cursor.alt_bindings,
+        };
+    }
+
+    /// `gate_conditions::gate_condition_for` at the alternative being emitted.
+    pub fn gate_condition(&self, a: &AltAction, handle: &String = &PARSER_HANDLE) -> Option<String> {
+        return gate_condition_for(a, &self.settings, &self.analysis, &self.predicate_site(), handle);
+    }
+
+    pub fn is_gateable_alt_initial_predicate(&self, a: &AltAction) -> bool {
+        return self.gate_condition(a) matches { Some(_) };
+    }
+
+    /// `gate_conditions::alt_has_gate` for an alternative of the rule being emitted.
+    pub fn alt_has_gate(&self, alt: &Alternative) -> bool {
+        return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
+    }
+
+    /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
+    /// rule being emitted.
+    pub fn alt_scan_gate_conditions(&self, alt: &Alternative) -> String {
+        return alt_scan_gate_conditions(alt, &self.settings, &self.analysis, &self.predicate_site());
+    }
+
+    /// `rule_overlap::rule_overlap_groups` for the rule being emitted.
+    pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
+        let gated = rule_alts_gated(rule, lowered_rule, |alt: &Alternative| self.alt_has_gate(alt));
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, gated);
+    }
+
+    /// Whether `rule` gets a value channel emitted: action execution is on and the
+    /// rule either declares args / `returns` / `locals` or captures a labeled call
+    /// for an action to read. The single source of truth for the `vals` struct,
+    /// local, return type, and `$v` substitution.
+    pub fn rule_emits_vals(&self, rule: &ParserRule) -> bool {
+        return self.settings.emit_actions
+            && (rule_returns_vals(rule) || !self.plan.rule_captures(&rule.name).is_empty());
+    }
+
+    pub fn current_rule_emits_vals(&self) -> bool {
+        return self.rule_emits_vals(self.current_rule());
+    }
+
+    pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures {
+        return self.plan.rule_captures(rule_name);
+    }
+
+    /// Whether the rule being emitted captures `field`'s token range / builder
+    /// row — the gate on emitting the capture and on resolving a reference.
+    pub fn captures_span<S: AsStrSlice>(&self, field: S) -> bool {
+        return self.plan.rule_captures(&self.current_rule().name).spans.contains_str(field);
+    }
+
+    pub fn captures_node<S: AsStrSlice>(&self, field: S) -> bool {
+        return self.plan.rule_captures(&self.current_rule().name).nodes.contains_str(field);
+    }
+
+    /// Whether an action of the rule being emitted reads the binding `base`.
+    pub fn reads_binding<S: AsStrSlice>(&self, base: S) -> bool {
+        return self.plan.reads_binding(self.cursor.current_rule_index(), base);
+    }
+
+    /// Register a context-free gated predicate's body for a standalone
+    /// `pred_<id>(p)` fn, one per distinct body.
+    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, action_id: i32, body: S) {
+        let id = self.analysis.predicate_fn_id(action_id);
+        for let e of &self.cursor.predicate_fns {
+            if e.0 == id {
+                return;
+            }
+        }
+        self.cursor.predicate_fns.push([id, body.to_string()]);
+    }
+
+    /// `scan_<snake>`, the name of a scan function rule `snake` defines, for
+    /// a call: the call is what has the rule's scan functions emitted.
+    pub fn scan_fn_of<S: AsStrSlice>(&mut self, snake: S) -> String {
+        self.cursor.call_scan(self.analysis.snake_rule_index(snake));
+        return self.cursor.noted(scan_fn_name(snake));
+    }
+
+    /// The rule whose scan a scan call to `snake` can call instead: past every
+    /// rule that only forwards to another, with nothing a call site passes.
+    pub fn scan_alias<S: AsStrSlice>(&self, snake: S) -> String {
+        let mut cur = snake.to_string();
+        let mut seen: List<String> = [];
+        while !seen.contains(&cur) {
+            seen.push(cur);
+            let Some(next) = self.scan_forward_target(&cur) else {
+                break;
+            };
+            cur = next;
+        }
+        return cur;
+    }
+
+    fn scan_forward_target(&self, snake: &String) -> Option<String> {
+        if self.scan_reaches_simulator(snake) || self.plan.rule_reads_follow(snake) {
+            return null;
+        }
+        let rule = &self.analysis.parser_rules()[self.analysis.snake_rule_index(snake)];
+        if rule.alternatives.len() != 1
+            || rule.init_action matches { Some(_) }
+            || rule.after_action matches { Some(_) } {
+            return null;
+        }
+        let alt = &rule.alternatives[0];
+        if alt.elements.len() != 1 || !alt.actions.is_empty() {
+            return null;
+        }
+        let RuleRef(r) = &alt.elements[0] else {
+            return null;
+        };
+        if self.plan.rule_reads_follow(&r.snake_name) || self.plan.rule_takes_min_prec_arg(&r.snake_name) {
+            return null;
+        }
+        return Option::Some(r.snake_name);
+    }
+
+    /// The kinds a rule matches when its scan is one token test, or `null`.
+    pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
+        return self.analysis.one_token_rule(&self.scan_alias(snake));
+    }
+
+    /// The scan gate as a place: the parameter's target inside a scan
+    /// function, the parser's field anywhere else.
+    pub fn scan_gate_place(&self) -> String {
+        if self.cursor.in_scan_fn() {
+            return `*${SCAN_GATE_HANDLE}`;
+        }
+        return self.scan_gate_path();
+    }
+
+    fn scan_gate_path(&self) -> String {
+        return self.state_path(SCAN_GATE_HANDLE, SCAN_GATE_FIELD);
+    }
+
+    /// `place.field` of the scan gate.
+    pub fn scan_gate_member<S: AsStrSlice>(&self, field: S) -> String {
+        return `${self.scan_gate_path()}.${field}`;
+    }
+
+    /// A condition rendered against the parameter (`scan_gate_condition`),
+    /// pointed at the gate as this code reaches it.
+    pub fn scan_gate_cond<S: AsStrSlice>(&self, cond: S) -> String {
+        return cond.replace(`${SCAN_GATE_HANDLE}.`, `${self.scan_gate_path()}.`);
+    }
+
+    /// The caller stack pushed and predicted with, as this code reaches it. A
+    /// scan borrows the parser's, so one launched mid-parse has full context.
+    pub fn atn_stack_place(&self) -> String {
+        return `${self.atn_state_path()}.stack`;
+    }
+
+    /// The ATN state as a place.
+    pub fn atn_state_path(&self) -> String {
+        return self.state_path(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
+    }
+
+    /// The ATN state as an argument.
+    pub fn atn_state_arg(&self) -> String {
+        return self.state_arg(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
+    }
+
+    /// Parser state a scan borrows, as a place: the scan's parameter `handle`,
+    /// or the parser's `field` anywhere else.
+    fn state_path<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
+        if self.cursor.in_scan_fn() {
+            return handle.to_string();
+        }
+        return `${PARSER_HANDLE}.${field}`;
+    }
+
+    /// Parser state a scan borrows, as an argument: the scan's borrow passed
+    /// on, or a fresh borrow of the parser's field.
+    fn state_arg<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
+        let path = self.state_path(handle, field);
+        return if self.cursor.in_scan_fn() { path } else { `&mut ${path}` };
+    }
+
+    /// The trailing arguments of a scan call for the parser state it borrows:
+    /// the gate, the ATN state, then the memo. Empty where the scan borrows
+    /// none of them.
+    pub fn scan_state_args(&self) -> List<String> {
+        let mut args: List<String> = [];
+        if self.settings.emit_scan_gate() {
+            args.push(self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD));
+        }
+        if self.plan.needs_atn {
+            args.push(self.atn_state_arg());
+        }
+        if self.plan.scan_memo {
+            args.push(self.state_arg(SCAN_MEMO_HANDLE, SCAN_MEMO_HANDLE));
+        }
+        return args;
+    }
+
+    /// The memo's type: keyed on the gate where the scan simulates one.
+    pub fn scan_memo_type(&self) -> String {
+        return `ScanMemo<${if self.settings.emit_scan_gate() { SCAN_GATE_TYPE } else { "()" }}>`;
+    }
+
+    /// Intern a token-kind set given as `TK_*` names. The same set (regardless
+    /// of input order or duplicates) maps to a single `id`.
+    pub fn intern_kind_set(&mut self, tokens: &List<String>) -> i32 {
+        return self.tables.intern_kind_set(self.analysis.canonical_kind_ids(tokens));
+    }
+
+    /// Intern a recovery sync set (a leaf's FIRST-of-rest) given as kind ids.
+    /// Returns the `SYNC_<id>` global's id, or `null` for an empty set.
+    pub fn sync_set(&mut self, ids: List<i32>) -> Option<i32> {
+        return self.tables.intern_sync_set(self.analysis.canonical_ids(ids));
+    }
+
+    /// `sync_set` of a set of `TK_*` names.
+    pub fn sync_name_set(&mut self, tokens: &List<String>) -> Option<i32> {
+        return self.sync_set(self.analysis.names_to_ids(tokens));
+    }
+
+    /// `SYNC_<id>`, the set as the bits a membership test reads, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_bits_ref(&mut self, set: Option<i32>) -> String {
+        let Some(id) = set else {
+            return String::from("EMPTY_SYNC");
+        };
+        return self.cursor.noted(sync_bits_name(id));
+    }
+
+    /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
+    /// `EMPTY_SYNC`.
+    pub fn sync_list_ref(&mut self, set: Option<i32>) -> String {
+        let Some(id) = set else {
+            return String::from("EMPTY_SYNC");
+        };
+        return self.cursor.noted(sync_list_name(id));
+    }
+
+    /// The global naming FOLLOW mask `id`.
+    pub fn follow_mask_ref(&mut self, id: i32) -> String {
+        return self.cursor.noted(follow_mask_name(id));
+    }
+
+    /// Render a token-set membership check on `expr`.
+    ///
+    ///   - 1 token  → `<expr> == TK_X` (no `matches` overhead).
+    ///   - ≥2 tokens → `_kind_set_<id>(<expr>)` after interning.
+    ///
+    /// Multi-element sets always go through the helper indirection so
+    /// duplicate sets across the grammar share a single function body
+    /// in the generated wasm.
+    ///
+    /// An empty set is not a condition: which of the two it means is `Admits`'s
+    /// to say at the site that knows, so pass a real set here.
+    pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<String>, expr: S) -> String {
+        assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
+        if tokens.len() == 1 {
+            return `${expr} == ${tokens[0]}`;
+        }
+        return `${self.kind_set_fn(tokens)}(${expr})`;
+    }
+
+    /// Render the negation of a token-set membership check —
+    /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
+    /// `<expr> != TK_X`. Used by non-greedy emit sites.
+    pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<String>, expr: S) -> String {
+        assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
+        if tokens.len() == 1 {
+            return `${expr} != ${tokens[0]}`;
+        }
+        return `!${self.kind_set_fn(tokens)}(${expr})`;
+    }
+
+    fn kind_set_fn(&mut self, tokens: &List<String>) -> String {
+        let id = self.intern_kind_set(tokens);
+        return self.cursor.noted(kind_set_fn_name(id));
+    }
+
+    /// Render a guard: enter, or go round again, while the lookahead is in
+    /// `first_set`. Its own entry point because a guard has one reading of an
+    /// absent first set — nothing excludes it — where callers differ.
+    pub fn first_check_str(&mut self, first_set: &List<String>) -> String {
+        return self.admits_first_check_str(&admits_or_everything(first_set));
+    }
+
+    /// Render what an `Admits` admits, as a condition on `expr`.
+    pub fn admits_check_str<S: AsStrSlice>(&mut self, admits: &Admits, expr: S) -> String {
+        return match admits {
+            Everything(_) | Untestable => "true",
+            Kinds(kinds) => self.kind_check_str(kinds, expr),
+        };
+    }
+
+    /// Sugar for `admits_check_str` against `p.peek_kind()`.
+    pub fn admits_first_check_str(&mut self, admits: &Admits) -> String {
+        return self.admits_check_str(admits, "p.peek_kind()");
+    }
+}

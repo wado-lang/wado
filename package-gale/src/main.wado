@@ -11,12 +11,9 @@ use {
     generate,
     GenerateOptions,
     canonicalize_for_analysis,
-    analysis_context,
-    install_action_context,
     lower_for_analysis,
 } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
-use { collect_literal_tokens } from "./lexer_gen.wado";
 use { diagnostic_level } from "./gir.wado";
 use { Level, event, set_log_level } from "core:log";
 use { render_dump, render_atn_dump } from "./dump.wado";
@@ -195,14 +192,11 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) -> Result<(), String> w
     // prologue answers once.
     let token_kinds = canonicalize_for_analysis(&mut merged);
 
-    let lit_tokens = collect_literal_tokens(&merged.parser_rules);
-    // `render_dump` renders with the ctx that lowered the grammar, so the
-    // follow-mask registry it reads is populated.
-    let mut ctx = analysis_context(&merged, &lit_tokens, token_kinds);
-    // Lowering asks whether actions execute, so the report is of the grammar a
-    // parser is built from rather than of one with its predicates ignored.
-    let _ = install_action_context(&mut merged, &mut ctx);
-    let lowered = lower_for_analysis(&merged, &lit_tokens, &mut ctx);
+    // `render_dump` renders with the context that lowered the grammar, whose
+    // actions are wired: lowering asks whether actions execute, so the report
+    // is of the grammar a parser is built from rather than of one with its
+    // predicates ignored.
+    let [lowered, mut ctx] = lower_for_analysis(&mut merged, token_kinds);
 
     // `--atn` reports the ATN off that same lowering rather than the GIR.
     if atn {

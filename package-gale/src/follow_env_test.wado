@@ -9,8 +9,7 @@ use {
     GroupElement,
     Visibility,
 } from "./ir.wado";
-use { GenContext } from "./gen_context.wado";
-use { LitToken } from "./lexer_gen.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { FollowEnv, FollowSet, build } from "./follow_env.wado";
 
 fn tk<S: AsStrSlice>(name: S) -> Element {
@@ -41,9 +40,8 @@ fn mk_rule<S: AsStrSlice>(name: S, alts: List<Alternative>) -> ParserRule {
     return ParserRule::new(name, Visibility::Private, [], alts);
 }
 
-fn mk_ctx(rules: &List<ParserRule>) -> GenContext {
-    let toks: List<LitToken> = [];
-    return GenContext::new(rules, &toks);
+fn mk_ctx(rules: &List<ParserRule>) -> GrammarAnalysis {
+    return GrammarAnalysis::new(rules);
 }
 
 fn no_start() -> String {

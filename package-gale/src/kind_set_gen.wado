@@ -3,16 +3,10 @@
 //! Module-level emit: `codegen` writes the tables once, rule bodies only
 //! intern sets and build conditions.
 
-use {
-    GenContext,
-    follow_mask_name,
-    kind_set_fn_name,
-    sets_overlap,
-    sync_bits_name,
-    sync_list_name,
-} from "./gen_context.wado";
+use { EmitContext } from "./emit_context.wado";
+use { follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { HashSet } from "core:collections";
-use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
+use { join_kinds, sets_overlap, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { DISPATCH_KIND_LOCAL } from "./ident.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
@@ -20,10 +14,10 @@ use { CodeWriter, FnSpec } from "lib:wadopoet";
 /// Scan-side twin of `gen_lookahead_condition`. Uses
 /// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
 /// of `p.peek_at(d)`. Multi-token sets route through
-/// `ctx.kind_check_str` so they collapse to a `_kind_set_<id>(...)`
+/// `EmitContext::kind_check_str` so they collapse to a `_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
 /// site bloats the generated wasm by hundreds of KB.
-pub fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+pub fn gen_scan_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<String>>) -> String {
     return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Scan);
 }
 
@@ -32,17 +26,17 @@ pub fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String
 pub global NO_KINDS: List<String> = [];
 
 /// A token set as the by-reference argument a membership test reads.
-pub fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
+pub fn sync_set_ref(ctx: &mut EmitContext, sync: &List<String>) -> String {
     return `&${ctx.sync_bits_ref(ctx.sync_name_set(sync))}`;
 }
 
 /// A token set as the by-reference kind list a diagnostic names.
-pub fn expected_set_ref(ctx: &mut GenContext, expected: &List<String>) -> String {
+pub fn expected_set_ref(ctx: &mut EmitContext, expected: &List<String>) -> String {
     return `&${ctx.sync_list_ref(ctx.sync_name_set(expected))}`;
 }
 
 /// `p.expect_set(...)` consuming one token of `kinds`.
-pub fn expect_set_call(ctx: &mut GenContext, kinds: &List<String>) -> String {
+pub fn expect_set_call(ctx: &mut EmitContext, kinds: &List<String>) -> String {
     let set = ctx.sync_name_set(kinds);
     return `p.expect_set(&${ctx.sync_bits_ref(set)}, &${ctx.sync_list_ref(set)})`;
 }
@@ -55,7 +49,7 @@ enum LookaheadAccess {
 }
 
 fn join_lookahead_condition(
-    ctx: &mut GenContext,
+    ctx: &mut EmitContext,
     sig: &List<List<String>>,
     depth: i32,
     access: LookaheadAccess,
@@ -86,16 +80,16 @@ fn join_lookahead_condition(
     return result;
 }
 
-pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -> String {
+pub fn gen_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<String>>) -> String {
     return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Parse);
 }
 
 /// Emit the `_kind_set_<id>(k) -> bool` helper of each interned kind set the
 /// emitted code names in `used`.
-pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet<String>) {
-    for let entry of ctx.kind_sets() {
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
+    for let entry of ctx.tables.kind_sets() {
         if used.contains(kind_set_fn_name(entry.id)) {
-            gen_kind_set_helper_raw(w, entry.id, &ctx.token_names_of(&entry.tokens));
+            gen_kind_set_helper_raw(w, entry.id, &ctx.analysis.token_names_of(&entry.tokens));
         }
     }
 }
@@ -105,16 +99,16 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet
 /// packs its positions into one `i64`. A continuation is therefore a scalar a
 /// call site composes with a shift, and a rule takes one parameter rather than
 /// a row of slots.
-pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet<String>) {
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
     // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
     // A grammar that gates on a forwarded `follow` alone interns no mask
     // and still reads `FOLLOW_SETS`, so only the masks are conditional.
-    if !ctx.emit_follow() {
+    if !ctx.plan.emit_follow {
         return;
     }
     let mut sets: List<List<i32>> = [];
     let mut masks: List<String> = [];
-    for let entry of ctx.follow_masks() {
+    for let entry of ctx.tables.follow_masks() {
         let name = follow_mask_name(entry.id);
         if !used.contains(name) {
             continue;
@@ -175,18 +169,18 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
 /// Emit the token-set globals: `EMPTY_SYNC`, then per interned set its
 /// `SYNC_<id>` bits and its `EXPECTED_<id>` kind list, each only where `used`
 /// names it.
-pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext, used: &HashSet<String>) {
+pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSet<String>) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
     w.line("global EMPTY_SYNC: List<i32> = [];");
-    for let entry of ctx.sync_sets() {
+    for let entry of ctx.tables.sync_sets() {
         let bits = sync_bits_name(entry.id);
         if used.contains(bits) {
             w.line(`global ${bits}: List<i32> = [${join_kinds(&kind_bitset_words(&entry.tokens))}];`);
         }
         let list = sync_list_name(entry.id);
         if used.contains(list) {
-            w.line(`global ${list}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
+            w.line(`global ${list}: List<i32> = [${join_kinds(&ctx.analysis.token_names_of(&entry.tokens))}];`);
         }
     }
     w.blank();
@@ -211,12 +205,12 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
     w.blank();
 }
 
-pub fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+pub fn build_lookahead_condition(ctx: &mut EmitContext, pos_sets: &List<List<String>>, depth: i32) -> String {
     return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ParseKind);
 }
 
 /// `build_lookahead_condition` inside a scan, which reads `kind` as the parse does.
-pub fn build_scan_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+pub fn build_scan_lookahead_condition(ctx: &mut EmitContext, pos_sets: &List<List<String>>, depth: i32) -> String {
     return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ScanKind);
 }
 

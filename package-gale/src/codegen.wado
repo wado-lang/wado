@@ -2,8 +2,6 @@ use {
     Grammar,
     OptionValue,
     LexerRule,
-    ParserRule,
-    Element,
     normalize_caches,
     assert_canonical_shape,
     canonicalize_empty_alt_groups,
@@ -15,7 +13,7 @@ use {
     find_lexer_rule,
     ActionLanguage,
 } from "./ir.wado";
-use { build as build_follow_env, rule_input_end } from "./follow_env.wado";
+use { settle_rule_follow } from "./follow_env.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use {
     LitToken,
@@ -31,7 +29,7 @@ use {
     lexer_mode_attr_use,
     splice_suffixed_alternations,
 } from "./lexer_gen.wado";
-use { gen_parser, mark_at_end_conflicts_routed } from "./parser_gen.wado";
+use { gen_parser } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
 use { gen_kind_set_helpers, gen_follow_mask_globals, gen_sync_set_globals } from "./kind_set_gen.wado";
 use { gen_node_kinds, gen_alt_enums, gen_string_tree_helper } from "./cst_gen.wado";
@@ -57,25 +55,19 @@ use {
 } from "./superclass.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
-use { GenContext } from "./gen_context.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { LowerContext } from "./lower_context.wado";
+use { plan_parser } from "./parser_plan.wado";
+use { EmitContext } from "./emit_context.wado";
 use { SCAN_GATE_TYPE, scan_gate_fields } from "./scan_gate.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { lower } from "./lower.wado";
-use { build_atn_with, atn_blob_bytes, Atn, empty_atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
+use { build_atn_with, atn_blob_bytes, Atn, empty_atn } from "./atn.wado";
 use { build_latn, grammar_needs_latn, LatnResult } from "./latn.wado";
-use { recovery_sets } from "./recovery_sets.wado";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
-use {
-    LoweredGrammar,
-    Diagnostic,
-    DiagnosticKind,
-    DiagnosticOwner,
-    DiagnosticSite,
-    Rule,
-    AltBody,
-    GroupShape,
-} from "./gir.wado";
+use { Diagnostic, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Diagnostics, LoweredGrammar } from "./gir.wado";
 
 pub struct GenerateOptions {
     /// Parsed highlight query. `Some` emits the highlighter (defaults +
@@ -96,10 +88,10 @@ pub struct GenerateOptions {
 }
 
 /// Result of a codegen pass: the generated `.wado` source plus every
-/// diagnostic the pass collected in its shared `GenContext` — both the
-/// prediction-strategy warnings lowering raised and the emit-time safety-net
-/// warnings (`warn_unhandled_actions`), which run after lowering. Read from
-/// `ctx` at the end so nothing added after the `LoweredGrammar` snapshot is
+/// diagnostic the pass collected — both the prediction-strategy warnings
+/// lowering raised and the emit-time safety-net warnings
+/// (`warn_unhandled_actions`), which run after lowering. Read from the emit
+/// context at the end so nothing added after the `LoweredGrammar` snapshot is
 /// lost. Callers that want to surface warnings (`gale gen`) read
 /// `diagnostics`; callers that only need the module text (the Kiln generator
 /// entry, unit tests) read `source`.
@@ -115,7 +107,7 @@ global GEN_BASE_CAPACITY: i32 = 4096;
 global GEN_PER_RULE_CAPACITY: i32 = 4096;
 
 /// The surface normalizations and id stamping every consumer of the analysis
-/// runs before it builds a `GenContext`. `generate`, `gale dump` and the ATN
+/// runs before it builds a `GrammarAnalysis`. `generate`, `gale dump` and the ATN
 /// builder all lower the same grammar, so a pass only one of them runs makes
 /// the others describe a parser nobody emits.
 pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
@@ -154,49 +146,60 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     return token_kinds;
 }
 
-/// A `GenContext` over a `canonicalize_for_analysis`-ed grammar, carrying
-/// everything the analysis reads. Emit-only settings (trace, fragment entries,
-/// superclasses, action members) stay with `generate`.
-pub fn analysis_context(grammar: &Grammar, lit_tokens: &List<LitToken>, token_kinds: TokenKinds) -> GenContext {
-    let mut ctx = GenContext::new(&grammar.parser_rules, lit_tokens);
-    ctx.set_token_kinds(token_kinds);
-    ctx.set_vocab_names(vocab_display_names(&grammar.lexer_rules, lit_tokens, ctx.token_kind_names()));
-    ctx.set_action_language(&grammar.action_language);
-    ctx.set_grammar_name(&grammar.name);
-    return ctx;
+/// What wiring a grammar's actions settles: the settings every later phase
+/// reads, and the lexer and parser members. The members come back rather than
+/// being consumed here because staging and emit both need them, and `dump`
+/// needs neither.
+pub struct ActionContext {
+    pub settings: GenSettings,
+    pub lexer_members: MemberDecls,
+    pub parser_members: MemberDecls,
 }
 
-/// Wire the action context lowering reads, and answer the lexer and parser
-/// members as `[lexer, parser]`. They come back rather than being consumed here
-/// because staging and emit both need them, and `dump` needs neither.
+/// Wire the action context lowering reads onto `options`.
 ///
 /// `dump` runs this too, and has to. `alt_earns_group_follow` asks
-/// `emit_actions`, so a context without it lowers a different `AltClass` — and
+/// `emit_actions`, so settings without it lower a different `AltClass` — and
 /// the dump would then report a prediction shape no parser is built from, which
 /// is the drift the prologue above exists to remove.
-pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [MemberDecls, MemberDecls] {
-    wire_superclasses(grammar, ctx);
+pub fn install_action_context(grammar: &mut Grammar, options: GenSettings, diagnostics: &mut Diagnostics) -> ActionContext {
+    let mut settings = options;
+    settings.action_language = grammar.action_language;
+    settings.grammar_name = grammar.name;
+    wire_superclasses(grammar, &mut settings, diagnostics);
     // A wired parser base's bodies are Wado once the rewrite has run, so they
     // execute even under a host language java2wado carves out.
-    ctx.set_emit_actions(should_emit_actions(grammar) || ctx.has_parser_superclass());
+    settings.emit_actions = should_emit_actions(grammar) || settings.has_parser_superclass();
     // Ahead of staging: a body resolves its bare names and `this.` calls against
     // these, so what it can resolve is exactly what reaches the struct — a block
     // the translation refuses declares nothing, and the refusal is the
     // diagnostic rather than an unknown field in the output.
-    let lexer_members = collect_members(grammar, ctx, /*lexer=*/ true);
-    let parser_members = collect_members(grammar, ctx, /*lexer=*/ false);
-    ctx.set_action_members(member_names(&parser_members));
+    let lexer_members = collect_members(grammar, &settings, diagnostics, /*lexer=*/ true);
+    let parser_members = collect_members(grammar, &settings, diagnostics, /*lexer=*/ false);
+    settings.action_members = member_names(&parser_members);
     // After the members, never before: which fields a scan can simulate is the
     // action bodies' answer narrowed by what the block actually declares, and
     // only one of those is known here. The bodies are the translator's, so both
     // action languages name a member the one way the generated struct does.
-    let gate_bodies = translate_gate_bodies(grammar, ctx);
-    ctx.set_scan_gate_fields(scan_gate_fields(grammar, &gate_bodies));
-    ctx.set_gate_bodies(gate_bodies);
-    return [lexer_members, parser_members];
+    let gate_bodies = translate_gate_bodies(grammar, &settings);
+    let declared = &settings.action_members.fields;
+    settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies)
+        .iter_ref()
+        .filter(|f| declared.contains(f))
+        .map(|f| *f)
+        .collect();
+    settings.gate_bodies = gate_bodies;
+    return ActionContext { settings, lexer_members, parser_members };
 }
 
-/// Lower for analysis, priming what lowering itself asks `ctx` for.
+/// The analysis of a `canonicalize_for_analysis`-ed grammar whose actions are
+/// wired, so it reads the bodies a `superClass` rewrite left.
+pub fn analysis_of(grammar: &Grammar, lit_tokens: &List<LitToken>, token_kinds: TokenKinds) -> GrammarAnalysis {
+    let vocab = vocab_display_names(&grammar.lexer_rules, lit_tokens, &token_kinds.names);
+    return GrammarAnalysis::new(&grammar.parser_rules, token_kinds, vocab);
+}
+
+/// The context lowering runs in, primed with what lowering itself asks for.
 ///
 /// Scannability is a fixpoint over the whole rule set: answered per query it
 /// re-walks every cycle the query reaches, which on a grammar the size of
@@ -204,11 +207,38 @@ pub fn install_action_context(grammar: &mut Grammar, ctx: &mut GenContext) -> [M
 /// lowering rather than during it: a tail-position viability probe stamps the
 /// enclosing rule's FOLLOW onto its op, so the fixed point has to be complete
 /// by then. It reads only the surface rules.
-pub fn lower_for_analysis(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut GenContext) -> LoweredGrammar {
-    assert ctx.action_context_installed(), "lower_for_analysis: call install_action_context first — lowering asks emit_actions, and a context without it lowers a different AltClass";
-    ctx.precompute_scannability();
-    install_rule_follow(grammar, ctx);
-    return lower(grammar, lit_tokens, ctx);
+pub fn lower_context(
+    grammar: &Grammar,
+    lit_tokens: &List<LitToken>,
+    token_kinds: TokenKinds,
+    settings: GenSettings,
+    diagnostics: Diagnostics,
+) -> LowerContext {
+    let mut analysis = analysis_of(grammar, lit_tokens, token_kinds);
+    analysis.precompute_scannability();
+    let follow = settle_rule_follow(&grammar.parser_rules, &mut analysis);
+    return LowerContext::new(analysis, settings, follow, diagnostics);
+}
+
+/// `generate`'s prologue up to lowering, for a consumer that reports on the
+/// lowering rather than emitting from it (`gale dump`): the lowered grammar and
+/// the context it was lowered in.
+pub fn lower_for_analysis(grammar: &mut Grammar, token_kinds: TokenKinds) -> [LoweredGrammar, LowerContext] {
+    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
+    let mut diagnostics = Diagnostics {};
+    let settings = install_action_context(grammar, GenSettings {}, &mut diagnostics).settings;
+    let mut ctx = lower_context(grammar, &lit_tokens, token_kinds, settings, diagnostics);
+    let lowered = lower(grammar, &lit_tokens, &mut ctx);
+    return [lowered, ctx];
+}
+
+/// The context the parser emits in: what lowering settled, planned against the
+/// lowered grammar and its ATN.
+fn emit_context(grammar: &Grammar, lowered: &LoweredGrammar, lctx: LowerContext, atn: &Atn) -> EmitContext {
+    let LowerContext { analysis, settings, follow, tables, diagnostics, marks, .. } = lctx;
+    let mut analysis = analysis;
+    let plan = plan_parser(grammar, lowered, &mut analysis, &settings, &marks, atn);
+    return EmitContext::new(analysis, settings, follow, tables, diagnostics, plan);
 }
 
 pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOutput {
@@ -222,58 +252,36 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     ));
     let mut w = CodeWriter::with_capacity(estimated_size);
     // Lower up-front so CST emission can consume `AltBody.fields` /
-    // `GroupShape` directly. Sharing the GenContext primes the
-    // follow-mask / kind-set registries and the first / nullable
-    // / scannable caches for the subsequent parser emit.
+    // `GroupShape` directly. The analysis caches and the tables lowering
+    // interned pass on to the parser emit.
     let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    let mut ctx = analysis_context(grammar, &lit_tokens, token_kinds);
-    ctx.set_trace(options.trace);
-    ctx.set_fragment_entries(options.fragment_entries);
-    let [lexer_members, parser_members] = install_action_context(grammar, &mut ctx);
+    let mut diagnostics = Diagnostics {};
+    let ActionContext { settings, lexer_members, parser_members } = install_action_context(
+        grammar,
+        GenSettings { trace: options.trace, fragment_entries: options.fragment_entries },
+        &mut diagnostics,
+    );
     // Read off the `.g4` bodies, which staging is about to translate away.
     let mode_use = lexer_mode_attr_use(grammar);
     // Stage the lexer bodies into Wado on exactly the grammars whose lexer
     // bodies `gen_lexer` emits (its `ea`), so the emitters splice ready text:
-    // they hold no `GenContext`, so a failure reaching one could only panic.
-    if lexer_grammar_executes_actions(grammar) || ctx.has_superclass() {
+    // they hold no `Diagnostics`, so a failure reaching one could only panic.
+    if lexer_grammar_executes_actions(grammar) || settings.has_superclass() {
         // The call rewrite already turned a body under a wired base into Wado,
         // so it stages through the identity translator whatever the grammar
         // declares — the carve-out `action_language_is_emittable` names.
         let lang = if action_language_is_emittable(grammar) { grammar.action_language } else { ActionLanguage::Wado };
         let msgs = stage_lexer_bodies(grammar, &lang, &member_names(&lexer_members));
         for let msg of &msgs {
-            ctx.warn(&DiagnosticOwner::host("lexer action"), DiagnosticKind::UnsupportedAction, *msg);
+            diagnostics.warn(&DiagnosticOwner::host("lexer action"), DiagnosticKind::UnsupportedAction, *msg);
         }
     }
-    let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
-    mark_at_end_conflicts_routed(grammar, &lowered, &mut ctx);
-    ctx.close_simulator_reach();
-    ctx.close_rule_rescans();
-    ctx.set_scan_memo(
-        !ctx.needs_lr_atn()
-            && (ctx.any_rule_rescanned() || lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) })),
-    );
+    let mut lctx = lower_context(grammar, &lit_tokens, token_kinds, settings, diagnostics);
+    let lowered = lower(grammar, &lit_tokens, &mut lctx);
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
     let atn = build_atn_with(grammar, &lowered);
-    let eof = ctx.eof_kind_id();
-    ctx.set_recovery_sets(recovery_sets(&atn, eof));
-    if ctx.needs_atn() {
-        ctx.set_atn_call_site_returns(&atn.call_site_returns);
-        ctx.set_atn_decision_sites(&atn.decision_sites);
-        let mut lr_decs: List<i32> = [];
-        let mut body_decs: List<i32> = [];
-        for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
-            let lr_dec = lr_loop_entry_decision(&atn, r);
-            lr_decs.push(lr_dec);
-            // -1 for LR rules: the atom-block decision's edge indices exclude the
-            // LR alts, so they would not equal the grammar alt indices `_alt_N`
-            // uses (AtEndConflict routing is non-LR only).
-            body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(&atn, r) });
-        }
-        ctx.set_lr_loop_entry_decisions(&lr_decs);
-        ctx.set_atn_rule_body_decisions(&body_decs);
-    }
+    let mut ctx = emit_context(grammar, &lowered, lctx, &atn);
     // Lexer ATN: built when a lexer rule's non-greedy body recurses into
     // itself (the nested-comment class static lexing cannot decide). The
     // `atn_class_map` carries each such rule's `name -> latn rule index`
@@ -293,7 +301,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             }
         }
     }
-    let emit_follow = ctx.emit_follow();
+    let emit_follow = ctx.plan.emit_follow;
     let emit_highlight = options.highlight_query matches { Some(_) };
     gen_token_constants(&mut w, &grammar.lexer_rules, &lit_tokens);
     let has_members = members_present(&lexer_members);
@@ -304,20 +312,20 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         &atn_class_map,
         &lexer_members,
         has_members,
-        ctx.superclass_name(),
-        ctx.superclass_ops(),
+        &ctx.settings.superclass_name,
+        &ctx.settings.superclass_ops,
         &mode_use,
     );
     gen_node_kinds(&mut w, &lowered.parser_rules);
     gen_alt_enums(&mut w, grammar);
     gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
-    warn_unhandled_lexer_actions(grammar, &mut ctx);
-    warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx);
+    warn_unhandled_lexer_actions(grammar, &ctx.settings, &mut ctx.diagnostics);
+    warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx.diagnostics);
     gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
-        gen_highlight(&mut w, grammar, &lit_tokens, query, &mut ctx);
+        gen_highlight(&mut w, grammar, &lit_tokens, query, &ctx.settings, &mut ctx.diagnostics);
     }
-    for let name of ctx.take_root_refs().iter_value() {
+    for let name of ctx.cursor.take_root_refs().iter_value() {
         w.note(&name);
     }
     w.prune();
@@ -328,28 +336,28 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     if emit_follow {
         gen_follow_mask_globals(&mut w, &ctx, &used);
     }
-    if ctx.needs_atn() {
-        gen_atn_data_global(&mut w, &atn, ctx.needs_lr_atn());
+    if ctx.plan.needs_atn {
+        gen_atn_data_global(&mut w, &atn, ctx.plan.needs_lr_atn);
     }
     // Serialized lexer ATN blob, decoded once into `LATN_SIM`, for the
     // runtime lexer simulator (`latn_match`).
     if needs_latn {
         gen_latn_data_global(&mut w, &latn.atn);
     }
-    if ctx.emit_scan_gate() {
-        gen_scan_gate_type(&mut w, ctx.scan_gate_fields(), &parser_members);
+    if ctx.settings.emit_scan_gate() {
+        gen_scan_gate_type(&mut w, &ctx.settings.scan_gate_fields, &parser_members);
     }
     let body = w.to_string();
     let rt = gen_runtime(
         &RuntimeFeatures {
             emit_follow,
-            atn_decode: ctx.needs_atn() || needs_latn,
-            atn_predict: ctx.needs_atn(),
-            atn_lr: ctx.needs_lr_atn(),
+            atn_decode: ctx.plan.needs_atn || needs_latn,
+            atn_predict: ctx.plan.needs_atn,
+            atn_lr: ctx.plan.needs_lr_atn,
             latn: needs_latn,
             highlight: emit_highlight,
-            superclass: ctx.has_superclass(),
-            scan_memo: ctx.scan_memo(),
+            superclass: ctx.settings.has_superclass(),
+            scan_memo: ctx.plan.scan_memo,
         },
     );
     let mut head = CodeWriter::new();
@@ -374,40 +382,41 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     // Read the full diagnostic set from `ctx`, not `lowered.diagnostics`:
     // the latter is a lowering-time snapshot, and the emit walk's
     // `warn_unhandled_actions` safety net pushes to `ctx` afterwards.
-    return GeneratedOutput { source, diagnostics: ctx.copy_diagnostics() };
+    return GeneratedOutput { source, diagnostics: ctx.diagnostics.to_list() };
 }
 
 /// Wire each declared `superClass` base to its effect interface, or refuse it
 /// with a diagnostic naming what Gale cannot represent.
-fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
+fn wire_superclasses(grammar: &mut Grammar, settings: &mut GenSettings, diagnostics: &mut Diagnostics) {
     let mut lexer_refused = false;
     if let Some(sc) = lexer_superclass_name(grammar) {
         let ops = collect_lexer_super_ops(grammar);
         let refusal = lexer_super_refusal(&ops);
         if refusal.is_empty() {
             // Wired even with no ops: a base may override only a hook.
-            ctx.set_superclass(&sc, ops);
+            settings.superclass_name = sc;
+            settings.superclass_ops = ops;
             // Must follow op collection, which scans the original `this.` sites.
             rewrite_lexer_superclass_calls(grammar, &sc);
         } else {
-            warn_superclass_refused(ctx, &sc, &refusal);
+            warn_superclass_refused(diagnostics, &sc, &refusal);
             lexer_refused = true;
         }
     }
     // A refusal already reported the cause; anything `this` left over has not.
     if !lexer_refused && lexer_bodies_name_unwired_base(grammar) {
-        ctx.warn(
+        diagnostics.warn(
             &DiagnosticOwner::host("superClass"),
             DiagnosticKind::UnsupportedAction,
             "a lexer action or predicate names 'this' with nothing to receive it; only a `this.m()` call under a lexer superClass lowers to a base operation, and a combined grammar's superClass is the parser's",
         );
     }
-    wire_parser_superclass(grammar, ctx);
+    wire_parser_superclass(grammar, settings, diagnostics);
 }
 
-fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
+fn wire_parser_superclass(grammar: &mut Grammar, settings: &mut GenSettings, diagnostics: &mut Diagnostics) {
     if let Some(sc) = parser_superclass_name(grammar) {
-        ctx.set_parser_superclass_declared();
+        settings.parser_superclass_declared = true;
         let ops = collect_parser_super_ops(grammar);
         // The parser interface declares no lifecycle hook, so a base nothing
         // calls has no operation to wire.
@@ -416,19 +425,19 @@ fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
         }
         let refusal = parser_super_refusal(&ops);
         if !refusal.is_empty() {
-            warn_superclass_refused(ctx, &sc, &refusal);
+            warn_superclass_refused(diagnostics, &sc, &refusal);
         } else if !parser_bodies_execute(grammar, &sc) {
             // Wiring would demand a handler for operations no emitted body
             // calls, so refuse and say which translator is missing.
             warn_superclass_refused(
-                ctx,
+                diagnostics,
                 &sc,
                 "is called from a body carrying host code the grammar's action language has no translator for",
             );
         } else {
-            ctx.set_parser_superclass(&sc, ops);
+            settings.parser_superclass_name = sc;
+            settings.parser_superclass_ops = ops;
             rewrite_parser_superclass_calls(grammar, &sc);
-            ctx.adopt_rewritten_bodies(&grammar.parser_rules);
         }
     }
 }
@@ -445,8 +454,8 @@ fn parser_bodies_execute<S: AsStrSlice>(grammar: &Grammar, base: S) -> bool {
     return parser_action_language_is_emittable(grammar) || parser_bodies_are_base_calls(grammar, base);
 }
 
-fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut GenContext, base: S, refusal: S1) {
-    ctx.warn(
+fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(diagnostics: &mut Diagnostics, base: S, refusal: S1) {
+    diagnostics.warn(
         &DiagnosticOwner::host("superClass"),
         DiagnosticKind::UnsupportedAction,
         `superClass '${base}' ${refusal}, so the base is not wired`,
@@ -460,11 +469,9 @@ fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut GenContext, 
 /// diagnostic — silent, against the "loud, never silent" contract. Gated on
 /// `emit_actions`, so a `language = Java` grammar warns nothing — except under
 /// a `superClass`, whose base-call rewrite runs actions the host translator
-/// never sees, leaving the rest to report. Lives here
-/// rather than in `lexer_gen` to keep that module free of a `GenContext`
-/// dependency (which would cycle through `gen_context`'s `LitToken` import).
-fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
-    if !ctx.emit_actions() && !ctx.has_superclass() {
+/// never sees, leaving the rest to report.
+fn warn_unhandled_lexer_actions(grammar: &Grammar, settings: &GenSettings, diagnostics: &mut Diagnostics) {
+    if !settings.emit_actions && !settings.has_superclass() {
         return;
     }
     let run = lexer_grammar_run_action_ids(grammar);
@@ -487,7 +494,7 @@ fn warn_unhandled_lexer_actions(grammar: &Grammar, ctx: &mut GenContext) {
                 if run.contains(id) {
                     continue;
                 }
-                ctx.warn(
+                diagnostics.warn(
                     &DiagnosticOwner { site: DiagnosticSite::LexerAction(*id) },
                     DiagnosticKind::UnsupportedAction,
                     `action ${*id} in lexer rule '${rule.name}' is not yet executed (${reason})`,
@@ -512,7 +519,7 @@ fn unhandled_lexer_action_reason(grammar_executes: bool, rule: &LexerRule) -> St
 
 /// Refuse a semantic predicate in an ATN-class lexer rule: the lexer ATN carries
 /// no predicate transition, so the rule would match input its predicate rejects.
-fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<String>, ctx: &mut GenContext) {
+fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<String>, diagnostics: &mut Diagnostics) {
     // One predicate, one report: an ATN-class rule referencing another reaches
     // the same ids under a different rule name, which the diagnostic dedup misses.
     let mut reported: List<i32> = [];
@@ -525,7 +532,7 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
                     continue;
                 }
                 reported.push(*id);
-                ctx.warn(
+                diagnostics.warn(
                     &DiagnosticOwner { site: DiagnosticSite::LexerAction(*id) },
                     DiagnosticKind::UnsupportedAction,
                     `predicate ${*id} in lexer rule '${*name}' is not evaluated: the rule matches through the lexer ATN, which has no predicate transition`,
@@ -533,69 +540,6 @@ fn warn_atn_class_lexer_predicates(grammar: &Grammar, atn_class_rules: &List<Str
             }
         }
     }
-}
-
-fn install_rule_follow(grammar: &Grammar, ctx: &mut GenContext) {
-    if grammar.parser_rules.is_empty() {
-        return;
-    }
-    let fenv = build_follow_env(&grammar.parser_rules, ctx, &grammar.parser_rules[0].name);
-    let mut follow_kinds = HashMap::<String, List<String>>::with_seed(GALE_SEED);
-    for let rule of &grammar.parser_rules {
-        let fs = fenv.rule_follow(&rule.name);
-        let mut kinds: List<String> = [];
-        for let k of &fs.kinds {
-            kinds.push(k);
-        }
-        follow_kinds[rule.name] = kinds;
-    }
-    ctx.set_rule_follow(follow_kinds, !grammar_has_open_first_element(&grammar.parser_rules));
-    let input_end = rule_input_end(&grammar.parser_rules, ctx);
-    ctx.set_rule_input_end(input_end);
-    // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
-    let written = build_follow_env(&grammar.parser_rules, ctx, "");
-    let mut before_eof: List<String> = [];
-    for let rule of &grammar.parser_rules {
-        if written.rule_follow(&rule.name).kinds.contains("TK_EOF") {
-            before_eof.push(rule.name);
-        }
-    }
-    ctx.set_rules_before_eof_token(before_eof);
-}
-
-fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {
-    for let rule of parser_rules {
-        for let alt of &rule.alternatives {
-            for let e of &alt.elements {
-                if element_has_open_first(e) {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-fn element_has_open_first(e: &Element) -> bool {
-    return match *e {
-        Wildcard(_) => true,
-        Not(_) => true,
-        Label(l) => element_has_open_first(&l.element),
-        Repeat(r) => element_has_open_first(&r.element),
-        Group(g) => {
-            for let alt of &g.alternatives {
-                for let inner of &alt.elements {
-                    if element_has_open_first(inner) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        },
-        RuleRef(_) => false,
-        TokenRef(_) => false,
-        Literal(_) => false,
-    };
 }
 
 /// Emit the decoded `ATN_SIM` global: the serialized whole-grammar ATN the

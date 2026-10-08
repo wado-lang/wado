@@ -12,10 +12,10 @@
 //! `parser_gen.wado` (`gen_prediction_code_inner`).
 
 use { Element, RepeatElement, RepeatKind, Alternative } from "./ir.wado";
-use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
+use { GrammarAnalysis, is_nullable } from "./grammar_analysis.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
-use { all_alts_are_single_token, dedup_append_arr } from "./gen_util.wado";
+use { all_alts_are_single_token, dedup_append_arr, sets_overlap } from "./gen_util.wado";
 use { HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
@@ -103,13 +103,13 @@ fn find_merge_branch(branches: &List<PredictionBranch>, child: &PredictionNode) 
 /// copied back out.
 fn collect_config_first_tokens(
     configs: &List<SllConfig>,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     tokens: &mut List<i32>,
     config_firsts: &mut List<List<i32>>,
 ) {
     let mut seen: List<u64> = [];
     for let c of configs {
-        let first = sll_config_first(c, ctx);
+        let first = sll_config_first(c, analysis);
         for let tk of &first {
             if !bits_test(&seen, *tk) {
                 bits_set(&mut seen, *tk);
@@ -138,7 +138,7 @@ pub fn build_prediction(
     alt_indices: &List<i32>,
     alt_elements: &List<List<Element>>,
     max_depth: i32,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     end_follow: &List<String>,
 ) -> PredictionNode {
     let mut configs: List<SllConfig> = [];
@@ -150,7 +150,7 @@ pub fn build_prediction(
             return_stack: [],
         });
     }
-    let tree = build_sll_node(&configs, 0, max_depth, ctx, end_follow);
+    let tree = build_sll_node(&configs, 0, max_depth, analysis, end_follow);
     return strip_dead_consume(tree);
 }
 
@@ -176,11 +176,11 @@ pub fn group_prediction_order(
 pub fn build_group_prediction_tree_from_order(
     alts: &List<Alternative>,
     real_indices: &List<i32>,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     end_follow: &List<String>,
 ) -> PredictionNode {
     let pred_elements: List<List<Element>> = real_indices.iter_ref().map(|ri: &i32| alts[*ri].elements).collect();
-    return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx, end_follow);
+    return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, analysis, end_follow);
 }
 
 /// `build_group_prediction_tree_from_order` with the ordering done for
@@ -192,11 +192,11 @@ pub fn build_group_prediction_tree(
     group: &List<i32>,
     first_sets: &List<List<String>>,
     non_lr_indices: &List<i32>,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     end_follow: &List<String>,
 ) -> PredictionNode {
     let real_indices = group_prediction_order(group, first_sets, non_lr_indices);
-    return build_group_prediction_tree_from_order(alts, &real_indices, ctx, end_follow);
+    return build_group_prediction_tree_from_order(alts, &real_indices, analysis, end_follow);
 }
 
 /// Strip Consume nodes whose child contains any Ambiguous — fall back to
@@ -370,16 +370,16 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 /// True when what the config has left, through every return frame, can match
 /// nothing — the alt can finish here and a further token may belong to the
 /// calling context.
-fn config_is_at_end(c: &SllConfig, ctx: &mut GenContext) -> bool {
+fn config_is_at_end(c: &SllConfig, analysis: &mut GrammarAnalysis) -> bool {
     assert_live(c);
-    if !ctx.tail_is_nullable_deep(c.elements, c.pos) {
+    if !analysis.tail_is_nullable_deep(c.elements, c.pos) {
         return false;
     }
     let mut i = c.return_stack.len();
     while i > 0 {
         i -= 1;
         let frame = &c.return_stack[i];
-        if !ctx.tail_is_nullable_deep(frame.elements, frame.pos) {
+        if !analysis.tail_is_nullable_deep(frame.elements, frame.pos) {
             return false;
         }
     }
@@ -390,16 +390,16 @@ fn config_is_at_end(c: &SllConfig, ctx: &mut GenContext) -> bool {
 /// Compute FIRST set of the current position in a config.
 /// Includes tokens from nullable elements that were skipped by closure.
 /// When at end of elements with a return stack, pops and continues from caller.
-fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
+fn sll_config_first(c: &SllConfig, analysis: &mut GrammarAnalysis) -> List<i32> {
     assert_live(c);
     if c.pos >= c.elements.len() {
         if c.return_stack.is_empty() {
             return [];
         }
         let popped = pop_return(c);
-        return sll_config_first(&popped, ctx);
+        return sll_config_first(&popped, analysis);
     }
-    return ctx.first_ids_of_elements_from(c.elements, c.pos);
+    return analysis.first_ids_of_elements_from(c.elements, c.pos);
 }
 
 /// Alternatives to walk into for a `Repeat` whose body can consume more than
@@ -407,13 +407,13 @@ fn sll_config_first(c: &SllConfig, ctx: &mut GenContext) -> List<i32> {
 /// matched a single token, so the walk would keep separating alternatives on
 /// lookahead that actually sits inside the body. A single-token body keeps
 /// the cheap skip, which is exact for it.
-fn repeat_entry_alts(rep: &RepeatElement, ctx: &mut GenContext) -> Option<&List<Alternative>> {
+fn repeat_entry_alts(rep: &RepeatElement, analysis: &mut GrammarAnalysis) -> Option<&List<Alternative>> {
     return match &rep.element {
         RuleRef(rr) => {
             let mut stv: List<String> = [];
-            if ctx.rule_is_single_token(&rr.name, &mut stv) {
+            if analysis.rule_is_single_token(&rr.name, &mut stv) {
                 null;
-            } else if let Some(inner_rule) = ctx.find_rule(&rr.name) {
+            } else if let Some(inner_rule) = analysis.find_rule(&rr.name) {
                 Option::Some(&inner_rule.alternatives);
             } else {
                 null;
@@ -451,12 +451,12 @@ fn after_iteration(elements: &List<Element>, at: i32, rep: &RepeatElement) -> Sl
 /// body admits: a single-token body is stepped over, a multi-token one walked
 /// into (invariant 6), and one that cannot be walked turns the config opaque.
 /// Either way the walk then resumes where `after_iteration` says.
-fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_depth: i32) -> List<SllConfig> {
+fn walk_repeat(c: &SllConfig, at: i32, token: i32, analysis: &mut GrammarAnalysis, inline_depth: i32) -> List<SllConfig> {
     let Repeat(rep) = &c.elements[at] else {
         panic("walk_repeat: not a repeat");
     };
     let next = after_iteration(c.elements, at, rep);
-    let Some(inner_alts) = repeat_entry_alts(rep, ctx) else {
+    let Some(inner_alts) = repeat_entry_alts(rep, analysis) else {
         return [
             SllConfig { ..*c, elements: next.elements, pos: next.pos },
         ];
@@ -468,7 +468,7 @@ fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_
     let mut body_results: List<SllConfig> = [];
     for let alt of inner_alts {
         let mut v: List<String> = [];
-        if !ctx.first_ids_of_alt(alt, &mut v).contains(&token) {
+        if !analysis.first_ids_of_alt(alt, &mut v).contains(&token) {
             continue;
         }
         let exp = SllConfig {
@@ -477,7 +477,7 @@ fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_
             pos: 0,
             return_stack: new_stack,
         };
-        for let a of sll_advance(&exp, token, ctx, inline_depth + 1) {
+        for let a of sll_advance(&exp, token, analysis, inline_depth + 1) {
             body_results.push(a);
         }
     }
@@ -485,7 +485,7 @@ fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_
 }
 
 /// Advance a config by one token, expanding RuleRefs into the rule's alternatives.
-fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i32 = 0) -> List<SllConfig> {
+fn sll_advance(c: &SllConfig, token: i32, analysis: &mut GrammarAnalysis, inline_depth: i32 = 0) -> List<SllConfig> {
     // Bound inline expansion through recursive rules. The config stays alive
     // as opaque: dropping it would hand its token to whichever alt survives.
     if inline_depth > 2 {
@@ -498,15 +498,15 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             return [];
         }
         let popped = pop_return(c);
-        return sll_advance(&popped, token, ctx, inline_depth);
+        return sll_advance(&popped, token, analysis, inline_depth);
     }
     let elem = &c.elements[c.pos];
 
     if is_nullable(elem) {
         let mut results: List<SllConfig> = [];
         let mut visiting: List<String> = [];
-        if ctx.first_ids_of_element(elem, &mut visiting).contains(&token) {
-            for let a of walk_repeat(c, c.pos, token, ctx, inline_depth) {
+        if analysis.first_ids_of_element(elem, &mut visiting).contains(&token) {
+            for let a of walk_repeat(c, c.pos, token, analysis, inline_depth) {
                 results.push(a);
             }
         }
@@ -514,8 +514,8 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         let mut skip_pos = c.pos + 1;
         while skip_pos < c.elements.len() && is_nullable(&c.elements[skip_pos]) {
             let mut v: List<String> = [];
-            if ctx.first_ids_of_element(&c.elements[skip_pos], &mut v).contains(&token) {
-                for let a of walk_repeat(c, skip_pos, token, ctx, inline_depth) {
+            if analysis.first_ids_of_element(&c.elements[skip_pos], &mut v).contains(&token) {
+                for let a of walk_repeat(c, skip_pos, token, analysis, inline_depth) {
                     results.push(a);
                 }
             }
@@ -525,20 +525,20 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             let skipped_elem = &c.elements[skip_pos];
             match skipped_elem {
                 TokenRef(t) => {
-                    if ctx.token_ref_id(&t.name, t.kind_id) == token {
+                    if analysis.token_ref_id(&t.name, t.kind_id) == token {
                         results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                     }
                 },
                 Literal(l) => {
-                    if ctx.literal_id(l) == token {
+                    if analysis.literal_id(l) == token {
                         results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                     }
                 },
                 RuleRef(r) => {
                     let mut v: List<String> = [];
-                    if ctx.first_ids_of_rule(&r.name, &mut v).contains(&token) {
+                    if analysis.first_ids_of_rule(&r.name, &mut v).contains(&token) {
                         let mut stv: List<String> = [];
-                        if ctx.rule_is_single_token(&r.name, &mut stv) {
+                        if analysis.rule_is_single_token(&r.name, &mut stv) {
                             results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                         } else {
                             results.push(SllConfig { ..*c, pos: SLL_POS_OPAQUE });
@@ -547,8 +547,8 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                 },
                 _ => {
                     let mut v: List<String> = [];
-                    if ctx.first_ids_of_element(skipped_elem, &mut v).contains(&token)
-                        || open_terminal_admits(skipped_elem, token, ctx) {
+                    if analysis.first_ids_of_element(skipped_elem, &mut v).contains(&token)
+                        || open_terminal_admits(skipped_elem, token, analysis) {
                         results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                     }
                 },
@@ -558,18 +558,18 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
     }
 
     return match elem {
-        TokenRef(t) => if ctx.token_ref_id(&t.name, t.kind_id) == token { sll_step(c, c.pos + 1) } else { [] },
-        Literal(l) => if ctx.literal_id(l) == token { sll_step(c, c.pos + 1) } else { [] },
+        TokenRef(t) => if analysis.token_ref_id(&t.name, t.kind_id) == token { sll_step(c, c.pos + 1) } else { [] },
+        Literal(l) => if analysis.literal_id(l) == token { sll_step(c, c.pos + 1) } else { [] },
         // Advance past a RuleRef only if the rule always consumes exactly one
         // token. A multi-token rule whose FIRST holds the token is opaque —
         // `build_sll_node` expands it only when needed to resolve ambiguity.
         RuleRef(r) => {
             let mut visiting: List<String> = [];
-            if !ctx.first_ids_of_rule(&r.name, &mut visiting).contains(&token) {
+            if !analysis.first_ids_of_rule(&r.name, &mut visiting).contains(&token) {
                 [];
             } else {
                 let mut st_visiting: List<String> = [];
-                if ctx.rule_is_single_token(&r.name, &mut st_visiting) {
+                if analysis.rule_is_single_token(&r.name, &mut st_visiting) {
                     sll_step(c, c.pos + 1);
                 } else {
                     sll_step(c, SLL_POS_OPAQUE);
@@ -580,7 +580,7 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             let mut hit = false;
             for let alt of g.alternatives {
                 let mut visiting: List<String> = [];
-                if ctx.first_ids_of_alt(&alt, &mut visiting).contains(&token) {
+                if analysis.first_ids_of_alt(&alt, &mut visiting).contains(&token) {
                     hit = true;
                     break;
                 }
@@ -593,8 +593,8 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
         },
         Repeat(rep) => {
             let mut visiting: List<String> = [];
-            if ctx.first_ids_of_element(&rep.element, &mut visiting).contains(&token) {
-                walk_repeat(c, c.pos, token, ctx, inline_depth);
+            if analysis.first_ids_of_element(&rep.element, &mut visiting).contains(&token) {
+                walk_repeat(c, c.pos, token, analysis, inline_depth);
             } else {
                 [];
             }
@@ -603,23 +603,23 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             let mut unlabeled = *c.elements;
             unlabeled[c.pos] = lab.element;
             let unwrapped = SllConfig { ..*c, elements: &unlabeled };
-            sll_advance(&unwrapped, token, ctx, inline_depth);
+            sll_advance(&unwrapped, token, analysis, inline_depth);
         },
-        Wildcard(_) | Not(_) => if open_terminal_admits(elem, token, ctx) { sll_step(c, c.pos + 1) } else { [] },
+        Wildcard(_) | Not(_) => if open_terminal_admits(elem, token, analysis) { sll_step(c, c.pos + 1) } else { [] },
     };
 }
 
 /// Whether `elem` is a `.` or `~X` matching `token`. Neither matches EOF,
 /// which ends the input rather than being a token of it.
-fn open_terminal_admits(elem: &Element, token: i32, ctx: &mut GenContext) -> bool {
-    if token == ctx.eof_kind_id() {
+fn open_terminal_admits(elem: &Element, token: i32, analysis: &mut GrammarAnalysis) -> bool {
+    if token == analysis.eof_kind_id() {
         return false;
     }
     return match elem {
         Wildcard(_) => true,
         Not(ne) => {
             let mut v: List<String> = [];
-            !ctx.first_ids_of_element(&ne.element, &mut v).contains(&token);
+            !analysis.first_ids_of_element(&ne.element, &mut v).contains(&token);
         },
         TokenRef(_) | Literal(_) | RuleRef(_) | Group(_) | Repeat(_) | Label(_) => false,
     };
@@ -627,15 +627,15 @@ fn open_terminal_admits(elem: &Element, token: i32, ctx: &mut GenContext) -> boo
 
 /// Whether the config's position admits a token no first set names: a `.` or
 /// `~X` it can reach there, directly or through what it would return into.
-fn sll_config_open(c: &SllConfig, ctx: &mut GenContext) -> bool {
+fn sll_config_open(c: &SllConfig, analysis: &mut GrammarAnalysis) -> bool {
     assert_live(c);
     if c.pos >= c.elements.len() {
         if c.return_stack.is_empty() {
             return false;
         }
-        return sll_config_open(&pop_return(c), ctx);
+        return sll_config_open(&pop_return(c), analysis);
     }
-    return ctx.elements_reach_open_end(c.elements, c.pos);
+    return analysis.elements_reach_open_end(c.elements, c.pos);
 }
 
 fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
@@ -682,7 +682,7 @@ fn build_sll_node(
     configs: &List<SllConfig>,
     depth: i32,
     max_depth: i32,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     end_follow: &List<String>,
 ) -> PredictionNode {
     // No explicit closure step: nullable handling is done in
@@ -710,15 +710,15 @@ fn build_sll_node(
         // Advance all configs past this shared terminal.
         let advanced: List<SllConfig> = closed.iter_ref().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect(
         );
-        let child = build_sll_node(&advanced, depth, max_depth, ctx, end_follow);
+        let child = build_sll_node(&advanced, depth, max_depth, analysis, end_follow);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }
 
     let mut all_tokens: List<i32> = [];
     let mut config_firsts: List<List<i32>> = [];
-    collect_config_first_tokens(&closed, ctx, &mut all_tokens, &mut config_firsts);
-    let open: List<bool> = closed.iter_ref().map(|c: &SllConfig| sll_config_open(c, ctx)).collect();
-    let eof = ctx.eof_kind_id();
+    collect_config_first_tokens(&closed, analysis, &mut all_tokens, &mut config_firsts);
+    let open: List<bool> = closed.iter_ref().map(|c: &SllConfig| sll_config_open(c, analysis)).collect();
+    let eof = analysis.eof_kind_id();
 
     let mut branches: List<PredictionBranch> = [];
 
@@ -730,7 +730,7 @@ fn build_sll_node(
         for let mut i = 0; i < closed.len(); i += 1 {
             let opens_on_tk = open[i] && tk != eof;
             if config_firsts[i].contains(&tk) || opens_on_tk {
-                let advanced = sll_advance(&closed[i], tk, ctx);
+                let advanced = sll_advance(&closed[i], tk, analysis);
                 // An open position admits the token even where the walk cannot
                 // follow it there; dropping the alt would hand the token away.
                 if opens_on_tk && advanced.is_empty() && !opaque_alts.contains(&closed[i].alt_index) {
@@ -766,7 +766,7 @@ fn build_sll_node(
             PredictionNode::Leaf(next_alts[0]);
         } else if opaque_alts.len() > 0 {
             // Still ambiguous with opaque alts: try expansion before giving up.
-            let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, ctx);
+            let expanded = try_expand_opaque(&closed, tk, &next_configs, opaque_alts, depth + 1, max_depth, analysis);
             if let Some(node) = expanded {
                 node;
             } else {
@@ -774,10 +774,10 @@ fn build_sll_node(
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
-            build_sll_node(&deduped, depth + 1, max_depth, ctx, end_follow);
+            build_sll_node(&deduped, depth + 1, max_depth, analysis, end_follow);
         };
         let idx = find_merge_branch(&branches, &child);
-        let tk_name = ctx.token_name(tk);
+        let tk_name = analysis.token_name(tk);
         if idx >= 0 {
             branches[idx].tokens.push(tk_name);
         } else {
@@ -812,7 +812,7 @@ fn build_sll_node(
     //  * Multiple at-end alts → true ambiguity → Ambiguous.
     let mut at_end_alts: List<i32> = [];
     for let c of &closed {
-        if config_is_at_end(c, ctx) && !at_end_alts.contains(&c.alt_index) {
+        if config_is_at_end(c, analysis) && !at_end_alts.contains(&c.alt_index) {
             at_end_alts.push(c.alt_index);
         }
     }
@@ -878,7 +878,7 @@ fn try_expand_opaque(
     opaque_alts: List<i32>,
     depth: i32,
     max_depth: i32,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
 ) -> Option<PredictionNode> {
     if depth >= max_depth {
         return null;
@@ -912,7 +912,7 @@ fn try_expand_opaque(
             continue;
         }
         if let RuleRef(r) = &c.elements[c.pos] {
-            let found_rule = ctx.find_rule(&r.name);
+            let found_rule = analysis.find_rule(&r.name);
             if let Some(found_rule) = found_rule {
                 if found_rule.alternatives.len() > 8 {
                     continue;
@@ -920,7 +920,7 @@ fn try_expand_opaque(
                 let new_stack = push_return(&c.return_stack, c.elements, c.pos + 1);
                 for let alt of &found_rule.alternatives {
                     let mut v: List<String> = [];
-                    if !ctx.first_ids_of_alt(alt, &mut v).contains(&token) {
+                    if !analysis.first_ids_of_alt(alt, &mut v).contains(&token) {
                         continue;
                     }
                     let exp = SllConfig {
@@ -929,7 +929,7 @@ fn try_expand_opaque(
                         pos: 0,
                         return_stack: new_stack,
                     };
-                    for let a of sll_advance(&exp, token, ctx) {
+                    for let a of sll_advance(&exp, token, analysis) {
                         if a.pos == SLL_POS_OPAQUE {
                             expansion_opaque = true;
                         } else {
@@ -955,7 +955,7 @@ fn try_expand_opaque(
     }
     let mut all_tokens: List<i32> = [];
     let mut config_firsts: List<List<i32>> = [];
-    collect_config_first_tokens(&all_configs, ctx, &mut all_tokens, &mut config_firsts);
+    collect_config_first_tokens(&all_configs, analysis, &mut all_tokens, &mut config_firsts);
     // A config with an empty FIRST set claims no token here, so no branch
     // below can carry it and the coverage check — opaque alts only — does not
     // notice. At-end is the expected shape: the alt is complete and the next
@@ -964,7 +964,7 @@ fn try_expand_opaque(
     // walk models, so the expansion is abandoned to the tournament.
     // A flat token dispatch cannot hold an alternative that admits every
     // token, so an open position abandons the expansion the same way.
-    if all_configs.iter_ref().any(|c: &SllConfig| sll_config_open(c, ctx)) {
+    if all_configs.iter_ref().any(|c: &SllConfig| sll_config_open(c, analysis)) {
         return null;
     }
     let mut has_at_end = false;
@@ -972,7 +972,7 @@ fn try_expand_opaque(
         if !config_firsts[i].is_empty() {
             continue;
         }
-        if !config_is_at_end(&all_configs[i], ctx) {
+        if !config_is_at_end(&all_configs[i], analysis) {
             return null;
         }
         has_at_end = true;
@@ -985,7 +985,7 @@ fn try_expand_opaque(
             PredictionNode::Ambiguous(AmbiguousNode {
                 alts: expansion_alts(&all_configs, &opaque_alts),
                 reason: AmbiguityReason::AtEndConflict,
-                branch_tokens: ctx.token_names_of(&all_tokens),
+                branch_tokens: analysis.token_names_of(&all_tokens),
             }),
         );
     }
@@ -1011,7 +1011,7 @@ fn try_expand_opaque(
             ambiguous(token_alts.sorted(), AmbiguityReason::OpaqueRuleRef);
         };
         let idx = find_merge_branch(&branches, &child);
-        let tk_name = ctx.token_name(tk);
+        let tk_name = analysis.token_name(tk);
         if idx >= 0 {
             branches[idx].tokens.push(tk_name);
         } else {
@@ -1131,11 +1131,4 @@ fn element_eq(a: &Element, b: &Element) -> bool {
         [Literal(ta), Literal(tb)] => ta.text == tb.text,
         _ => false,
     };
-}
-
-/// Whether an `Ambiguous` node's decision is a runtime-ATN prediction. The
-/// marking pass and `gen_prediction_code_inner` both ask here.
-pub fn ambiguous_node_routes_via_atn<S: AsStrSlice>(a: &AmbiguousNode, rule_name: S, ctx: &GenContext) -> bool {
-    return a.reason matches { AtEndConflict }
-        && ctx.emits_at_end_conflict_via_atn(ctx.current_rule_index(), rule_name, &a.branch_tokens);
 }

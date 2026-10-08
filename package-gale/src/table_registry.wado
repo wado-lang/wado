@@ -1,0 +1,166 @@
+//! The token-set tables a generated parser declares once and names from its
+//! rule bodies: `_kind_set_<id>` helpers, `SYNC_<id>` / `EXPECTED_<id>`
+//! recovery sets and `FOLLOW_MASK_<id>` continuations. Lowering interns the
+//! masks, emit the rest; ids are first-seen order, so the same grammar always
+//! produces the same names.
+
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
+use { FOLLOW_MAX_DEPTH } from "./runtime/follow.wado";
+
+/// A token-kind set interned during parser codegen. Multi-element
+/// `<expr> matches { TK_X | TK_Y | ... }` checks are emitted as
+/// `_kind_set_<id>(<expr>)`; the body is shared via a single
+/// helper function emitted at the end of the parser section.
+pub struct KindSetEntry {
+    pub id: i32,
+    /// Canonical (name-sorted, unique) token list, as kind ids. Emitted as the
+    /// `TK_*` global names via `GrammarAnalysis::token_name` at codegen.
+    pub tokens: List<i32>,
+}
+
+/// A runtime FOLLOW-continuation mask interned during parser codegen.
+/// Each distinct K-prefix mask is emitted once as a
+/// `global FOLLOW_MASK_<id>: List<List<i32>> = [[TK_X], [TK_Y], …]` and
+/// passed by reference to `follow_yields` at repair call sites — the
+/// runtime-threaded replacement for the per-(rule, mask) cloned
+/// `__follow_<id>` variant bodies. Interning the MASK (not rule×mask)
+/// keeps the generated-parser growth proportional to the number of
+/// distinct continuations, not the call graph.
+pub struct FollowMaskEntry {
+    pub id: i32,
+    /// Canonical per-depth token sets, as kind ids. `mask[d]` lists the kinds
+    /// valid at depth `d` of the caller's continuation; emitted as `TK_*` names.
+    pub mask: List<List<i32>>,
+}
+
+/// Maximum K-prefix depth carried into `intern_follow_mask` for the
+/// multi-token follow-mask path. Bounds the runtime peek; deeper
+/// continuations are truncated (the deepest tokens are the cheapest to
+/// disambiguate at runtime via the existing 1-token dispatch, so
+/// truncation hurts precision rather than correctness). The runtime caps
+/// each continuation at the same depth, so a mask that already reaches it
+/// is the whole gate.
+pub global FOLLOW_MASK_MAX_K: i32 = FOLLOW_MAX_DEPTH;
+
+/// The interned tables, each keyed by its canonical (`canonical_ids`) form.
+pub struct TableRegistry {
+    kind_sets: HashMap<List<i32>, KindSetEntry>,
+    sync_sets: HashMap<List<i32>, KindSetEntry>,
+    follow_masks: HashMap<List<List<i32>>, FollowMaskEntry>,
+    /// Positions each interned mask constrains, indexed by its id.
+    follow_mask_depths: List<i32>,
+}
+
+impl TableRegistry {
+    pub fn new() -> TableRegistry {
+        return TableRegistry {
+            kind_sets: HashMap::with_seed(GALE_SEED),
+            sync_sets: HashMap::with_seed(GALE_SEED),
+            follow_masks: HashMap::with_seed(GALE_SEED),
+            follow_mask_depths: [],
+        };
+    }
+
+    /// Intern a canonical token-kind set; the same set maps to a single `id`.
+    pub fn intern_kind_set(&mut self, ids: List<i32>) -> i32 {
+        if let Some(entry) = self.kind_sets.get(ids) {
+            return entry.id;
+        }
+        let id = self.kind_sets.len();
+        self.kind_sets[ids] = KindSetEntry { id, tokens: ids };
+        return id;
+    }
+
+    /// All interned kind sets in helper-ID order (i.e. insertion order).
+    /// Consumed by `gen_kind_set_helpers` to emit the helper functions.
+    pub fn kind_sets(&self) -> List<KindSetEntry> {
+        return self.kind_sets.values().iter_value().collect();
+    }
+
+    /// Intern a canonical recovery sync set (a leaf's FIRST-of-rest). Returns
+    /// the `SYNC_<id>` global's id, or `null` for an empty set (the caller
+    /// passes `&EMPTY_SYNC`).
+    pub fn intern_sync_set(&mut self, ids: List<i32>) -> Option<i32> {
+        if ids.is_empty() {
+            return null;
+        }
+        if let Some(entry) = self.sync_sets.get(ids) {
+            return Option::<i32>::Some(entry.id);
+        }
+        let id = self.sync_sets.len();
+        self.sync_sets[ids] = KindSetEntry { id, tokens: ids };
+        return Option::<i32>::Some(id);
+    }
+
+    /// The interned sync sets, in id order.
+    pub fn sync_sets(&self) -> List<KindSetEntry> {
+        return self.sync_sets.values().iter_value().collect();
+    }
+
+    /// Intern a runtime FOLLOW-continuation mask given as canonical per-depth
+    /// sets. Returns `null` for an effectively-empty mask (no depth carries a
+    /// constraint) — such a mask never gates, so callers pass `&EMPTY_FOLLOW`
+    /// instead of interning a dead global.
+    pub fn intern_follow_mask(&mut self, depths: List<List<i32>>) -> Option<i32> {
+        // Trim trailing depth-sets that carry no constraint: `follow_yields`
+        // skips empty depths, so `[[X], []]` gates identically to `[[X]]`.
+        let mut last_constrained: i32 = -1;
+        for let mut d = 0; d < depths.len(); d += 1 {
+            if !depths[d].is_empty() {
+                last_constrained = d;
+            }
+        }
+        if last_constrained < 0 {
+            return null;
+        }
+        let mut canonical: List<List<i32>> = [];
+        for let mut d = 0; d <= last_constrained; d += 1 {
+            canonical.push(depths[d]);
+        }
+        if let Some(entry) = self.follow_masks.get(canonical) {
+            return Option::<i32>::Some(entry.id);
+        }
+        let id = self.follow_masks.len();
+        self.follow_mask_depths.push(canonical.len());
+        self.follow_masks[canonical] = FollowMaskEntry { id, mask: canonical };
+        return Option::<i32>::Some(id);
+    }
+
+    /// The positions `FOLLOW_MASK_<id>` constrains — where a continuation
+    /// composed behind it starts.
+    pub fn follow_mask_positions(&self, id: i32) -> i32 {
+        return self.follow_mask_depths[id];
+    }
+
+    /// At `FOLLOW_MAX_DEPTH` the mask is the whole gate, since `follow_yields`
+    /// reads no deeper.
+    pub fn follow_mask_is_full(&self, id: i32) -> bool {
+        return self.follow_mask_depths[id] >= FOLLOW_MAX_DEPTH;
+    }
+
+    /// The interned FOLLOW masks, in `FOLLOW_MASK_<id>` order.
+    pub fn follow_masks(&self) -> List<FollowMaskEntry> {
+        return self.follow_masks.values().iter_value().collect();
+    }
+}
+
+/// The `SYNC_<id>` global: interned sync set `id` as membership bits.
+pub fn sync_bits_name(id: i32) -> String {
+    return `SYNC_${id}`;
+}
+
+/// The `EXPECTED_<id>` global: interned sync set `id` as the kinds a diagnostic names.
+pub fn sync_list_name(id: i32) -> String {
+    return `EXPECTED_${id}`;
+}
+
+/// The `FOLLOW_MASK_<id>` global.
+pub fn follow_mask_name(id: i32) -> String {
+    return `FOLLOW_MASK_${id}`;
+}
+
+/// The `_kind_set_<id>` membership helper.
+pub fn kind_set_fn_name(id: i32) -> String {
+    return `_kind_set_${id}`;
+}

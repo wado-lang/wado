@@ -1,0 +1,138 @@
+//! How a rule's non-LR alternatives group, and whether a group ends in a
+//! conflict only the simulator decides. Read by lowering (to mark the rules
+//! that ask the simulator), by the multi-alt emit, and by the dump.
+
+use { Alternative, ParserRule } from "./ir.wado";
+use { AltClass, Rule } from "./gir.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { RuleFollow } from "./follow_env.wado";
+use { alt_classes, compute_overlap_groups_of } from "./alt_grouping.wado";
+use { build_group_prediction_tree, prediction_at_end_conflicts } from "./prediction.wado";
+use { dedup_append_arr } from "./gen_util.wado";
+
+/// How a rule's non-LR alternatives group: the one answer the at-end conflict
+/// detection, the multi-alt emit and the dump all read, so none can drift.
+pub struct RuleOverlap {
+    pub non_lr_indices: List<i32>,
+    pub first_sets: List<List<String>>,
+    pub groups: List<List<i32>>,
+    /// The rule's exact FOLLOW, or empty where it is unknown, where an ended
+    /// atom runs on into an LR suffix, or where a gate selects instead.
+    pub end_follow: List<String>,
+}
+
+/// The indices of the alternatives a rule predicts among: all of them, less an
+/// LR rule's suffixes.
+pub fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
+    let mut out: List<i32> = [];
+    match lowered_rule {
+        Simple(_) => {
+            out.push(0);
+        },
+        MultiAlt(m) => {
+            for let alt of &m.alts {
+                out.push(alt.alt_index);
+            }
+        },
+        LeftRecursive(l) => {
+            for let alt of &l.atom.alts {
+                out.push(alt.alt_index);
+            }
+        },
+    }
+    return out;
+}
+
+/// Whether `has_gate` holds for any alternative the rule predicts among.
+/// Prediction is predicate-blind, so a rule with a gate keeps deciding in the
+/// tournament that evaluates it.
+pub fn rule_alts_gated(rule: &ParserRule, lowered_rule: &Rule, has_gate: fn(&Alternative) -> bool) -> bool {
+    for let i of non_lr_alt_indices(lowered_rule) {
+        if has_gate(&rule.alternatives[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// How `rule`'s non-LR alternatives group by what they start with, a gated
+/// rule's without its FOLLOW.
+pub fn rule_overlap_groups(
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    analysis: &mut GrammarAnalysis,
+    follow: &RuleFollow,
+    gated: bool,
+) -> RuleOverlap {
+    let non_lr_indices = non_lr_alt_indices(lowered_rule);
+    let mut first_sets: List<List<String>> = [];
+    for let idx of non_lr_indices {
+        let mut visiting: List<String> = [];
+        first_sets.push(analysis.first_of_alt(&rule.alternatives[idx], &mut visiting));
+    }
+    let mut classes = alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, analysis);
+    let end_follow: List<String> = if lowered_rule matches { MultiAlt(_) } && !gated {
+        follow.for_probe(&rule.name);
+    } else {
+        [];
+    };
+    admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
+    let groups = compute_overlap_groups_of(&classes);
+    return RuleOverlap { non_lr_indices, first_sets, groups, end_follow };
+}
+
+/// What follows the rule selects its nullable alternatives too, so one whose
+/// FOLLOW meets a sibling's first set shares its group: `r : A? | B ;` on `b`.
+fn admit_rule_follow_into_nullable(
+    classes: &mut List<AltClass>,
+    first_sets: &mut List<List<String>>,
+    follow: &List<String>,
+) {
+    if follow.is_empty() {
+        return;
+    }
+    for let mut i = 0; i < classes.len(); i += 1 {
+        if let Nullable(tokens) = classes[i] {
+            let mut admitted = tokens;
+            dedup_append_arr(&mut admitted, follow);
+            first_sets[i] = admitted;
+            classes[i] = AltClass::Selects(admitted);
+        }
+    }
+}
+
+/// Whether a multi-alt rule's prediction ends in a conflict at the rule's end
+/// that the caller's FOLLOW routes to the simulator.
+pub fn rule_has_at_end_conflict(
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    analysis: &mut GrammarAnalysis,
+    follow: &RuleFollow,
+    gated: bool,
+) -> bool {
+    if let MultiAlt(_) = lowered_rule {
+    } else {
+        return false;
+    }
+    let g = rule_overlap_groups(rule, lowered_rule, analysis, follow, gated);
+    for let group of &g.groups {
+        if group.len() > 1 {
+            let tree = build_group_prediction_tree(
+                &rule.alternatives,
+                group,
+                &g.first_sets,
+                &g.non_lr_indices,
+                analysis,
+                &g.end_follow,
+            );
+            let mut conflicts: List<List<String>> = [];
+            prediction_at_end_conflicts(&tree, &mut conflicts);
+            for let tokens of &conflicts {
+                if follow.at_end_conflict_routes(&rule.name, tokens) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}

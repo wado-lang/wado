@@ -3,24 +3,37 @@
 //! hazards.
 
 use { gen_alt_scan_fn } from "./parser_gen.wado";
-use { GenContext } from "./gen_context.wado";
+use { EmitContext } from "./emit_context.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { RuleFollow } from "./follow_env.wado";
+use { TableRegistry } from "./table_registry.wado";
+use { ParserPlan } from "./parser_plan.wado";
 use { Alternative, ParserRule, Visibility } from "./ir.wado";
 use { CodeWriter } from "lib:wadopoet";
-use { ScanBody, ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
+use { Diagnostics, ScanBody, ScanElement, ScanTokenElement, ScanRuleCallElement, FollowArg } from "./gir.wado";
 
 /// `r` is registered left-recursive: only then does `scan_r` take `min_prec`.
 /// Its two alternatives keep its scan a call rather than an inlined token test.
 /// It is current, as the scan emit loop makes each rule before walking it.
-fn lr_ctx() -> GenContext {
+fn lr_ctx() -> EmitContext {
     let rules: List<ParserRule> = [
         ParserRule::new("r", Visibility::Default, [], [
             Alternative::new([]),
             Alternative::new([]),
         ]),
     ];
-    let mut ctx = GenContext::new(&rules, &[]);
-    ctx.set_lr_rule_snakes(&(["r"] as List<String>));
-    ctx.set_current_rule_index(0);
+    let mut plan = ParserPlan {};
+    plan.lr_rule_snakes.insert("r");
+    let mut ctx = EmitContext::new(
+        GrammarAnalysis::new(&rules),
+        GenSettings {},
+        RuleFollow::unknown(),
+        TableRegistry::new(),
+        Diagnostics {},
+        plan,
+    );
+    ctx.cursor.set_current_rule_index(0);
     return ctx;
 }
 

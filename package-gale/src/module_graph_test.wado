@@ -1,0 +1,98 @@
+//! The generator's modules import one another without a cycle. A cycle is how
+//! one phase comes to hold another's state: `gen_context` once reached `lower`
+//! through `recovery_sets` and `atn`, and the context it carried was filled
+//! half by lowering and half by emit.
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
+
+/// `src/` as the working directory reaches it: the repository root under
+/// `mise run test-wado`, the package under `wado test` run inside it.
+fn src_root() -> String with Preopens {
+    if fs::exists("package-gale/src/module_graph_test.wado") {
+        return "package-gale/src";
+    }
+    return "src";
+}
+
+/// The relative `.wado` paths a module's `use` items name, as written.
+fn imported_paths(source: &String) -> List<String> {
+    let mut out: List<String> = [];
+    for let line of source.lines() {
+        let Some([_, rest]) = line.split_once("from \"") else {
+            continue;
+        };
+        let Some([target, _]) = rest.split_once("\"") else {
+            continue;
+        };
+        if (target.starts_with("./") || target.starts_with("../")) && target.ends_with(".wado") {
+            out.push(target.to_string());
+        }
+    }
+    return out;
+}
+
+/// Each non-test module under `root` with the modules it imports.
+fn import_graph<S: AsStrSlice>(root: S) -> HashMap<String, List<String>> with Preopens {
+    let mut graph = HashMap::<String, List<String>>::with_seed(GALE_SEED);
+    for let entry of fs::walk_dir(root).unwrap() {
+        let path = entry.path;
+        if !path.ends_with(".wado") || path.ends_with("_test.wado") {
+            continue;
+        }
+        let dir = fs::parent(&path).unwrap();
+        let mut targets: List<String> = [];
+        for let target of imported_paths(&fs::read_to_string(&path).unwrap()) {
+            targets.push(fs::normalize(fs::join(&dir, &target)).unwrap());
+        }
+        graph[path] = targets;
+    }
+    return graph;
+}
+
+/// A cycle through `node`, as the path that closes it, or empty.
+fn find_cycle(
+    graph: &HashMap<String, List<String>>,
+    node: &String,
+    stack: &mut List<String>,
+    done: &mut List<String>,
+) -> List<String> {
+    if done.contains(node) {
+        return [];
+    }
+    for let mut i = 0; i < stack.len(); i += 1 {
+        if stack[i] == *node {
+            let mut cycle: List<String> = [];
+            for let mut j = i; j < stack.len(); j += 1 {
+                cycle.push(stack[j]);
+            }
+            cycle.push(*node);
+            return cycle;
+        }
+    }
+    stack.push(*node);
+    if let Some(targets) = graph.get(*node) {
+        for let target of targets {
+            let cycle = find_cycle(graph, &target, stack, done);
+            if !cycle.is_empty() {
+                return cycle;
+            }
+        }
+    }
+    stack.pop();
+    done.push(*node);
+    return [];
+}
+
+test "the generator's modules import one another without a cycle" {
+    let graph = import_graph(src_root());
+    assert graph.len() > 50, `the walk found only ${graph.len()} modules`;
+    let mut done: List<String> = [];
+    for let [module, _] of graph.entries() {
+        let mut stack: List<String> = [];
+        let cycle = find_cycle(&graph, module, &mut stack, &mut done);
+        assert cycle.is_empty(), `import cycle: ${cycle:?}`;
+    }
+}

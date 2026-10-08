@@ -765,3 +765,26 @@ pub fn elements_match(consumed: &Element, expected: &Element) -> bool {
         RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
     };
 }
+
+pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
+    return a.iter_ref().any(|x| b.contains(x));
+}
+
+/// Append-and-dedup union of two token-kind arrays, preserving the
+/// order of `a` then appending new entries from `b`. Canonical
+/// implementation for every union-of-FIRST/FOLLOW sets in lower and
+/// emit; the grammar sets that pass through here are bounded by the
+/// rule's first/follow size (small in practice), so the linear
+/// `List::contains` is fine.
+pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
+    let mut result: List<String> = [];
+    for let tk of a {
+        result.push(*tk);
+    }
+    for let tk of b {
+        if !result.contains(tk) {
+            result.push(*tk);
+        }
+    }
+    return result;
+}

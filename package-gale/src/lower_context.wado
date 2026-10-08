@@ -1,0 +1,204 @@
+//! What lowering reads and what it records. It reads the grammar's analysis,
+//! the generation's settings and the rules' FOLLOW; it records the FOLLOW masks
+//! its gates name, the diagnostics its decisions raise, and the marks
+//! (`LowerMarks`) the parser plan is decided from.
+
+use { Alternative, ParserRule } from "./ir.wado";
+use { Diagnostics, Rule } from "./gir.wado";
+use { RuleOverlap, rule_alts_gated, rule_overlap_groups } from "./rule_overlap.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { RuleFollow } from "./follow_env.wado";
+use { TableRegistry } from "./table_registry.wado";
+use { PredicateSite, alt_has_gate, alt_scan_gate_conditions } from "./gate_conditions.wado";
+use { rule_returns_vals } from "./action_translate.wado";
+
+/// What lowering found out about the parser it lowered, per rule index where
+/// a list. The parser plan is decided from these.
+pub struct LowerMarks {
+    /// Lowering built a tail-greedy `Repeat` that gates on the caller's FOLLOW
+    /// continuation. While it stays false the grammar has no caller-FOLLOW
+    /// repair at all, so emit skips the entire FOLLOW machinery (the `follow`
+    /// parameter, its call-site arguments, and the `FOLLOW_MASK_<id>` globals).
+    /// This keeps deep-recursion grammars — which never read `follow` — from
+    /// paying an extra stack slot per recursive frame (the
+    /// `Performance/ExpressionGrammar_2` stack-exhaustion regression).
+    pub caller_follow_gate: bool = false,
+    /// An ATN-class LR rule was lowered: `ATN_SIM` carries the LR tables.
+    pub needs_lr_atn: bool = false,
+    /// The rule runs a caller-FOLLOW gate or a probe, so it reads the slots
+    /// itself; the seeds of `follow_rule_snakes`.
+    pub rule_reads_follow: List<bool>,
+    /// The callees a call in the rule hands its own continuation to. Such a
+    /// call spells `follow0…` only where the callee declares the slots, which is
+    /// what makes `follow_rule_snakes` a fixpoint rather than a local test.
+    pub follow_forward_edges: List<List<String>>,
+    /// The rule makes a decision the simulator decides.
+    pub rule_asks_simulator: List<bool>,
+    /// The simulator decides inside the rule's body, not only at its
+    /// left-recursion loop.
+    pub rule_body_predicts: List<bool>,
+    /// The rules whose functions carry the FOLLOW slots, by snake name: the
+    /// closure of `rule_reads_follow` over `follow_forward_edges`, settled once
+    /// every rule is lowered.
+    pub follow_rule_snakes: List<String> = [],
+}
+
+impl LowerMarks {
+    pub fn new(rule_count: i32) -> LowerMarks {
+        let mut flags: List<bool> = [];
+        let mut edges: List<List<String>> = [];
+        for let mut i = 0; i < rule_count; i += 1 {
+            flags.push(false);
+            edges.push([]);
+        }
+        return LowerMarks {
+            rule_reads_follow: flags,
+            follow_forward_edges: edges,
+            rule_asks_simulator: flags,
+            rule_body_predicts: flags,
+        };
+    }
+
+    /// Record a decision the simulator makes in rule `rule`.
+    pub fn mark_asks_simulator(&mut self, rule: i32) {
+        self.rule_asks_simulator[rule] = true;
+    }
+
+    /// Whether any decision routes to the runtime ATN simulator.
+    pub fn needs_atn(&self) -> bool {
+        return self.rule_asks_simulator.contains(&true);
+    }
+}
+
+/// The context lowering threads through its walk.
+pub struct LowerContext {
+    pub analysis: GrammarAnalysis,
+    pub settings: GenSettings,
+    pub follow: RuleFollow,
+    pub tables: TableRegistry,
+    pub diagnostics: Diagnostics,
+    pub marks: LowerMarks,
+    /// Index of the rule being lowered, or -1 between rules.
+    current_rule_index: i32,
+}
+
+impl LowerContext {
+    pub fn new(
+        analysis: GrammarAnalysis,
+        settings: GenSettings,
+        follow: RuleFollow = RuleFollow::unknown(),
+        diagnostics: Diagnostics = Diagnostics {},
+    ) -> LowerContext {
+        let marks = LowerMarks::new(analysis.parser_rules().len());
+        return LowerContext {
+            analysis,
+            settings,
+            follow,
+            tables: TableRegistry::new(),
+            diagnostics,
+            marks,
+            current_rule_index: -1,
+        };
+    }
+
+    /// Make rule `idx` the one being lowered.
+    pub fn set_current_rule_index(&mut self, idx: i32) {
+        self.current_rule_index = idx;
+    }
+
+    pub fn current_rule_index(&self) -> i32 {
+        assert self.current_rule_index >= 0, "lowering makes each rule current before walking its body";
+        return self.current_rule_index;
+    }
+
+    pub fn current_rule(&self) -> &ParserRule {
+        return &self.analysis.parser_rules()[self.current_rule_index()];
+    }
+
+    /// The name of `current_rule`, which diagnostics raised from inside a rule
+    /// use as their structured owner.
+    pub fn current_rule_name(&self) -> String {
+        return self.current_rule().name;
+    }
+
+    /// Record that lowering built a tail-greedy caller-FOLLOW gate.
+    pub fn mark_caller_follow_gate(&mut self) {
+        self.marks.caller_follow_gate = true;
+    }
+
+    /// Record a decision the simulator makes inside the body of the rule being
+    /// lowered.
+    pub fn mark_body_predicts(&mut self) {
+        let idx = self.current_rule_index();
+        self.marks.mark_asks_simulator(idx);
+        self.marks.rule_body_predicts[idx] = true;
+    }
+
+    /// Record an ATN-class LR rule: its loop decision reads the LR tables.
+    pub fn mark_needs_lr_atn(&mut self) {
+        self.marks.needs_lr_atn = true;
+        let idx = self.current_rule_index();
+        self.marks.mark_asks_simulator(idx);
+    }
+
+    /// Record that the rule being lowered reads the continuation it was called
+    /// with directly — a caller-FOLLOW gate or a probe.
+    pub fn mark_rule_reads_follow(&mut self) {
+        let idx = self.current_rule_index();
+        self.marks.rule_reads_follow[idx] = true;
+    }
+
+    /// Record that the rule being lowered hands its own continuation to
+    /// `target`, so it reads the slots exactly when `target` declares them.
+    pub fn mark_rule_forwards_follow<S: AsStrSlice>(&mut self, target: S) {
+        let idx = self.current_rule_index();
+        if !self.marks.follow_forward_edges[idx].contains_str(target) {
+            self.marks.follow_forward_edges[idx].push(target.to_string());
+        }
+    }
+
+    /// Intern a runtime FOLLOW-continuation mask of `TK_*` names per depth. The
+    /// same canonical mask maps to a single `id`; `null` for one no depth
+    /// constrains, where the caller passes `&EMPTY_FOLLOW`.
+    pub fn intern_follow_mask(&mut self, mask: &List<List<String>>) -> Option<i32> {
+        let mut depths: List<List<i32>> = [];
+        for let depth of mask {
+            depths.push(self.analysis.canonical_kind_ids(depth));
+        }
+        return self.tables.intern_follow_mask(depths);
+    }
+
+    /// Where an alternative of the rule being lowered renders its predicates.
+    /// No value struct or binding exists yet, so the rule's own declarations
+    /// are all that can be in scope.
+    fn predicate_site(&self) -> PredicateSite {
+        let idx = self.current_rule_index();
+        return PredicateSite {
+            rule_index: idx,
+            vals_in_scope: self.settings.emit_actions && rule_returns_vals(&self.analysis.parser_rules()[idx]),
+        };
+    }
+
+    /// `gate_conditions::alt_has_gate` for an alternative of the rule being lowered.
+    pub fn alt_has_gate(&self, alt: &Alternative) -> bool {
+        return alt_has_gate(alt, &self.settings, &self.analysis, &self.predicate_site());
+    }
+
+    /// `gate_conditions::alt_scan_gate_conditions` for an alternative of the
+    /// rule being lowered.
+    pub fn alt_scan_gate_conditions(&self, alt: &Alternative) -> String {
+        return alt_scan_gate_conditions(alt, &self.settings, &self.analysis, &self.predicate_site());
+    }
+
+    /// Whether any alternative the rule being lowered predicts among carries a gate.
+    pub fn rule_alts_gated(&self, rule: &ParserRule, lowered_rule: &Rule) -> bool {
+        return rule_alts_gated(rule, lowered_rule, |alt: &Alternative| self.alt_has_gate(alt));
+    }
+
+    /// `rule_overlap::rule_overlap_groups` for the rule being lowered.
+    pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
+        let gated = self.rule_alts_gated(rule, lowered_rule);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, gated);
+    }
+}
