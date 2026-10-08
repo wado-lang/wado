@@ -170,3 +170,23 @@ test "capture after initialization" {
     let add = |n: i32| n + x;
     assert add(1) == 6;
 }
+
+// Pattern 15: code no path reaches reads nothing.
+fn after_return() -> i32 {
+    return 1;
+    let y: i32;
+    return y;
+}
+
+test "unreachable read" {
+    assert after_return() == 1;
+}
+
+// Pattern 16: a let chain's block runs only when every element ran.
+test "let chain assigns before its block" {
+    let x: i32;
+    let o = builtin::black_box(Option::Some(3));
+    if let Some(v) = o && match v { _ => { x = v; true } } {
+        assert x == 3;
+    }
+}

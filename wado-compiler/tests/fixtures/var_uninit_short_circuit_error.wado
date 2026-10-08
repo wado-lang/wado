@@ -1,0 +1,12 @@
+// Error: the right side of `&&` runs only when the left is true, so what it
+// assigns does not reach past the expression.
+
+export fn run() {
+    let x: String;
+    let c = builtin::black_box(false);
+    let ok = c && match builtin::black_box(1) { _ => { x = "hi"; true } };
+    assert x.len() == 2;
+}
+
+__DATA__
+{"compile_error": ":8:12: analysis error: 'x' is used before initialization"}

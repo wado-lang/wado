@@ -6,7 +6,7 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
-    AssertStmt, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
+    AssertStmt, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
     ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern, ReturnStmt,
     Stmt, WhileStmt, for_each_pattern_name,
 };
@@ -485,7 +485,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         let Some(key) = self.deferred_key(name) else {
             return Ok(());
         };
-        if !self.flow.unassigned.contains(&key) {
+        if !self.flow.reachable || !self.flow.unassigned.contains(&key) {
             return Ok(());
         }
         let name = name.to_string();
@@ -512,6 +512,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             return Ok(());
         };
+        if !self.flow.reachable {
+            return Ok(());
+        }
         if self.captured(&key) && self.flow.unassigned.contains(&key) {
             return self.emit(BindError::CaptureBeforeInit {
                 name: name.to_string(),
@@ -618,11 +621,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     fn in_body(&mut self, bind: impl FnOnce(&mut Self) -> Result<(), Bail>) -> Result<(), Bail> {
         let flow = std::mem::replace(&mut self.flow, Flow::reachable());
         let jump_targets = std::mem::take(&mut self.jump_targets);
+        let deferred = std::mem::take(&mut self.deferred);
         self.enter_scope();
         bind(self)?;
         self.exit_scope();
         self.flow = flow;
         self.jump_targets = jump_targets;
+        self.deferred = deferred;
         Ok(())
     }
 
@@ -805,8 +810,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.enter_scope();
         }
 
-        self.bind_condition(condition)?;
-        let skipped = self.flow.clone();
+        let skipped = self.bind_condition(condition)?;
         self.bind_block(then_block)?;
 
         if is_let_chain {
@@ -823,26 +827,45 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a loop. `iteration` binds one pass from the loop's head and answers
     /// the path that leaves at the head without running the body; `update`,
-    /// a C-style `for`'s, runs on every path that goes round again. A body that
-    /// assigns may run again, so when locals declared without an initializer
-    /// are in scope a quiet pass first learns what reaches the next iteration.
-    /// Assigning only removes from `unassigned` and adds to `assigned`, so the
-    /// second pass starts from the loop's fixed point.
+    /// a C-style `for`'s, runs on every path that goes round again. A loop
+    /// catching jumps is what an unlabeled `break` or `continue` leaves.
+    ///
+    /// Assigning only removes from `unassigned` and adds to `assigned`, so a
+    /// pass from the loop's fixed point differs from the first only by adding
+    /// what the paths going round again assigned. One pass learns the result;
+    /// a second, from the fixed point, is needed only to report an immutable
+    /// local the body assigns again on a later iteration.
     fn bind_loop_with(
         &mut self,
         update: Option<&Expr>,
+        catches_jumps: bool,
         mut iteration: impl FnMut(&mut Self) -> Result<Flow, Bail>,
     ) -> Result<(), Bail> {
-        if !self.deferred.is_empty() {
-            let entry = self.flow.clone();
-            self.quiet += 1;
-            let (_, repeats) = self.bind_iteration(update, &mut iteration)?;
-            self.quiet -= 1;
+        let rerun = self.quiet == 0 && self.may_assign_twice();
+        let entry = self.flow.clone();
+        self.quiet += u32::from(rerun);
+        let (exits, repeats) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
+        self.quiet -= u32::from(rerun);
+        if rerun {
             self.flow = entry.join(repeats);
+            let (exits, _) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
+            self.flow = exits;
+        } else {
+            self.flow = exits;
+            if self.flow.reachable && repeats.reachable {
+                self.flow.assigned.extend(repeats.assigned);
+            }
         }
-        let (exits, _) = self.bind_iteration(update, &mut iteration)?;
-        self.flow = exits;
         Ok(())
+    }
+
+    /// Whether some immutable local declared without an initializer may still
+    /// take its first assignment.
+    fn may_assign_twice(&self) -> bool {
+        self.deferred.iter().any(|key| {
+            !self.flow.assigned.contains(key)
+                && !self.scopes[key.0 as usize].bindings[&key.1].is_mut
+        })
     }
 
     /// One pass of a loop body: the paths that leave the loop, and those that
@@ -850,15 +873,23 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     fn bind_iteration(
         &mut self,
         update: Option<&Expr>,
+        catches_jumps: bool,
         iteration: &mut impl FnMut(&mut Self) -> Result<Flow, Bail>,
     ) -> Result<(Flow, Flow), Bail> {
-        self.jump_targets.push(JumpTarget::Loop {
-            exits: Flow::default(),
-            repeats: Flow::default(),
-        });
+        if catches_jumps {
+            self.jump_targets.push(JumpTarget::Loop {
+                exits: Flow::default(),
+                repeats: Flow::default(),
+            });
+        }
         let skipped = iteration(self)?;
-        let Some(JumpTarget::Loop { exits, repeats }) = self.jump_targets.pop() else {
-            panic!("a loop pops the jump target it pushed");
+        let (exits, repeats) = if catches_jumps {
+            let Some(JumpTarget::Loop { exits, repeats }) = self.jump_targets.pop() else {
+                panic!("a loop pops the jump target it pushed");
+            };
+            (exits, repeats)
+        } else {
+            (Flow::default(), Flow::default())
         };
         self.flow = std::mem::take(&mut self.flow).join(repeats);
         if let Some(update) = update {
@@ -885,13 +916,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Bind a while statement. It may run its body zero times, whatever its
     /// condition.
     fn bind_while(&mut self, while_stmt: &WhileStmt) -> Result<(), Bail> {
-        self.bind_loop_with(None, |s| {
+        self.bind_loop_with(None, true, |s| {
             let is_let_chain = matches!(while_stmt.condition, Condition::LetChain { .. });
             if is_let_chain {
                 s.enter_scope();
             }
-            s.bind_condition(&while_stmt.condition)?;
-            let skipped = s.flow.clone();
+            let skipped = s.bind_condition(&while_stmt.condition)?;
             s.bind_block(&while_stmt.body)?;
             if is_let_chain {
                 s.exit_scope();
@@ -908,11 +938,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.bind_stmt(init)?;
         }
 
-        self.bind_loop_with(for_stmt.update.as_ref(), |s| {
-            if let Some(ref condition) = for_stmt.condition {
-                s.bind_condition(condition)?;
-            }
-            let skipped = s.flow.clone();
+        self.bind_loop_with(for_stmt.update.as_ref(), true, |s| {
+            let skipped = match &for_stmt.condition {
+                Some(condition) => s.bind_condition(condition)?,
+                None => s.flow.clone(),
+            };
             s.bind_block(&for_stmt.body)?;
             Ok(skipped)
         })?;
@@ -925,18 +955,29 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     fn bind_for_of(&mut self, for_of_stmt: &ForOfStmt) -> Result<(), Bail> {
         // First bind the iterable expression (uses variables from outer scope)
         self.bind_expr(&for_of_stmt.iterable)?;
+        let binding = BindingKind::Initialized {
+            is_mut: for_of_stmt.is_mut,
+        };
+        self.bind_each(&for_of_stmt.binding, binding, for_of_stmt.span, true, |s| {
+            s.bind_block(&for_of_stmt.body)
+        })
+    }
 
-        self.bind_loop_with(None, |s| {
+    /// Bind a walk over the elements of something already bound, running
+    /// `body` once per element with `binding` taking each.
+    fn bind_each(
+        &mut self,
+        binding: &Pattern,
+        kind: BindingKind,
+        span: Span,
+        catches_jumps: bool,
+        body: impl Fn(&mut Self) -> Result<(), Bail>,
+    ) -> Result<(), Bail> {
+        self.bind_loop_with(None, catches_jumps, |s| {
             let skipped = s.flow.clone();
             s.enter_scope();
-            s.bind_pattern_as(
-                &for_of_stmt.binding,
-                BindingKind::Initialized {
-                    is_mut: for_of_stmt.is_mut,
-                },
-                for_of_stmt.span,
-            )?;
-            s.bind_block(&for_of_stmt.body)?;
+            s.bind_pattern_as(binding, kind, span)?;
+            body(s)?;
             s.exit_scope();
             Ok(skipped)
         })
@@ -944,7 +985,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a `loop`, which only a `break` leaves.
     fn bind_loop(&mut self, loop_stmt: &LoopStmt) -> Result<(), Bail> {
-        self.bind_loop_with(None, |s| {
+        self.bind_loop_with(None, true, |s| {
             s.bind_block(&loop_stmt.body)?;
             Ok(Flow::default())
         })
@@ -989,7 +1030,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
             Expr::Binary(binary) => {
                 self.bind_expr(&binary.left)?;
-                self.bind_expr(&binary.right)?;
+                if matches!(binary.op, BinaryOp::And | BinaryOp::Or) {
+                    self.bind_maybe(|s| s.bind_expr(&binary.right))?;
+                } else {
+                    self.bind_expr(&binary.right)?;
+                }
             }
 
             Expr::Unary(unary) => {
@@ -1084,12 +1129,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 }
             }
 
+            // A `break` or `continue` in the body leaves the enclosing loop,
+            // so the comprehension catches no jumps.
             Expr::TupleComprehension(c) => {
                 self.bind_expr(&c.iterable)?;
-                self.enter_scope();
-                self.bind_pattern(&c.binding, c.span)?;
-                self.bind_expr(&c.body)?;
-                self.exit_scope();
+                let binding = BindingKind::Initialized { is_mut: false };
+                self.bind_each(&c.binding, binding, c.span, false, |s| s.bind_expr(&c.body))?;
             }
 
             Expr::LabeledBlock(lb) => self.bind_labeled_block(&lb.label, &lb.block)?,
@@ -1099,7 +1144,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.enter_scope();
                 self.bind_pattern(&matches_expr.pattern, matches_expr.span)?;
                 if let Some(guard) = &matches_expr.guard {
-                    self.bind_expr(guard)?;
+                    self.bind_maybe(|s| s.bind_expr(guard))?;
                 }
                 self.exit_scope();
             }
@@ -1133,15 +1178,23 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind an if condition (expression or let chain)
-    fn bind_condition(&mut self, condition: &Condition) -> Result<(), Bail> {
+    /// Bind what may not run: the path that skips it meets the one through it.
+    fn bind_maybe(&mut self, bind: impl FnOnce(&mut Self) -> Result<(), Bail>) -> Result<(), Bail> {
+        let skipped = self.flow.clone();
+        bind(self)?;
+        self.flow = std::mem::take(&mut self.flow).join(skipped);
+        Ok(())
+    }
+
+    /// Bind an `if` or `while` condition, answering the path on which it
+    /// fails. A let chain fails at whichever element fails first.
+    fn bind_condition(&mut self, condition: &Condition) -> Result<Flow, Bail> {
         match condition {
-            Condition::Expr(expr) => {
-                self.bind_expr(expr)?;
-            }
+            Condition::Expr(expr) => self.bind_expr(expr)?,
             Condition::LetChain { elements, .. } => {
-                // Process each element in order. Let elements introduce bindings
-                // visible in subsequent elements (caller must have entered a scope).
+                // Let elements introduce bindings visible in subsequent
+                // elements (caller must have entered a scope).
+                let mut failed = Flow::default();
                 for elem in elements {
                     match elem {
                         ConditionElement::Let { pattern, expr, .. } => {
@@ -1152,24 +1205,28 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                             self.bind_expr(expr)?;
                         }
                     }
+                    failed = failed.join(self.flow.clone());
                 }
+                return Ok(failed);
             }
         }
-        Ok(())
+        Ok(self.flow.clone())
     }
 
-    /// Bind a match expression
+    /// Bind a match expression. A guard that fails passes the match on to
+    /// the next arm.
     fn bind_match_expr(&mut self, match_expr: &MatchExpr) -> Result<(), Bail> {
         self.bind_expr(&match_expr.expr)?;
 
         // A match with no arms is over an empty type, so nothing follows it.
-        let scrutinized = std::mem::take(&mut self.flow);
+        let mut unmatched = std::mem::take(&mut self.flow);
         for arm in &match_expr.arms {
-            let after_arms = std::mem::replace(&mut self.flow, scrutinized.clone());
+            let after_arms = std::mem::replace(&mut self.flow, unmatched.clone());
             self.enter_scope();
             self.bind_pattern(&arm.pattern, arm.span)?;
             if let Some(guard) = &arm.guard {
                 self.bind_expr(guard)?;
+                unmatched = unmatched.join(self.flow.clone());
             }
             self.bind_expr(&arm.body)?;
             self.exit_scope();

@@ -89,8 +89,8 @@ holding one needs no `mut` of its own.
 
 `let x: T;` declares one name without an initializer, and the type is required.
 Reading the name is a compile error unless every path reaching the read has
-assigned it. The compiler follows paths through `if`, `match`, labeled blocks and
-loops:
+assigned it. The compiler follows paths through every construct that branches
+or repeats:
 
 - A `return`, `break` or `continue` takes its path to where it lands: out of
   the function, past the loop or labeled block, or to the loop's next
@@ -98,9 +98,14 @@ loops:
   path, even one that never returns, such as `panic`.
 - A `loop` ends only through a `break`, so after it the name is assigned when
   every `break` leaving the loop follows an assignment.
-- A `while`, a `for` and a `for-of` may run their body zero times, whatever the
-  condition says, so an assignment in the body never counts after the loop.
-- A `let ... else` block diverges, so what it assigns never counts.
+- A `while`, a `for`, a `for-of` and a tuple comprehension may run their body
+  zero times, whatever the condition says, so an assignment in the body never
+  counts after the loop.
+- The right side of `&&` and `||`, a guard, and each element of a `let` chain
+  after the first may not run, so what they assign counts only on the paths
+  that ran them. A guard that fails passes its assignments on to the next arm.
+- A `let ... else` block diverges, so it never reaches the statement after the
+  `let`.
 
 <!-- {"fixture":"var_uninit_valid.wado"} -->
 
