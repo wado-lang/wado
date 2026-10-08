@@ -368,7 +368,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
 
 - **The dominant cost was not GC — it was an exponential analysis (2026-07,
   fixed).** `gale gen` on TypeScript (30 min+) and Rust was ~99% inside
-  `GenContext::is_rule_scannable_at`, the recursive scannability check the
+  `GrammarAnalysis::is_rule_scannable_at`, the recursive scannability check the
   optional-scan-guard lowering runs per optional/repeat element. Profiling the
   exploding run (guest profiler with a `WADO_PROFILE_MAX_SECS` bounded flush —
   the profile only writes on clean exit, so an unbounded 30-min run is unusable)
