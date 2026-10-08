@@ -1,0 +1,22 @@
+// A closure discarding more than one parameter with `_`: the function-table
+// wrapper forwards each argument to its own `$call` parameter. Matched by name,
+// every `_` took the first one's slot, producing invalid Wasm at -O0.
+use { println, Stdout } from "core:cli";
+
+fn apply(f: fn(i32, &String) -> String) -> String {
+    let s = "x";
+    return f(1, &s);
+}
+
+fn pick(f: fn(String, i32, bool) -> i32) -> i32 {
+    return f("s", 7, true);
+}
+
+export fn run() with Stdout {
+    assert apply(|_, _| "y") == "y";
+    assert pick(|_, x, _| x) == 7;
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

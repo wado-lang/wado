@@ -11,7 +11,8 @@ use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, closure_call_method_info,
-    closure_call_name, closure_capture_field, closure_functor_struct_name, is_fn_type_name,
+    closure_call_name, closure_capture_field, closure_functor_struct_name, discarded_param_name,
+    is_fn_type_name,
 };
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
@@ -623,7 +624,20 @@ impl ClosureLowerer {
             let qualified_method_name = closure_call_name(&self.module_source, collected.id);
             let self_ref_type = type_table.make_ref(struct_type_id);
 
-            let mut params = Vec::with_capacity(1 + collected.params.len());
+            let call_params: Vec<(String, TypeId)> = collected
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, (name, type_id))| {
+                    let name = if name == "_" {
+                        discarded_param_name(i)
+                    } else {
+                        name.clone()
+                    };
+                    (name, *type_id)
+                })
+                .collect();
+            let mut params = Vec::with_capacity(1 + call_params.len());
             params.push(TirParam {
                 name: "self".to_string(),
                 type_id: self_ref_type,
@@ -632,7 +646,7 @@ impl ClosureLowerer {
                 is_mut_ref: false,
                 span: collected.span,
             });
-            for (i, (name, type_id)) in collected.params.iter().enumerate() {
+            for (i, (name, type_id)) in call_params.iter().enumerate() {
                 params.push(TirParam {
                     name: name.clone(),
                     type_id: *type_id,
@@ -691,7 +705,7 @@ impl ClosureLowerer {
 
             // Locals layout: 0=self, 1..=params.len()=closure params,
             // then any further locals introduced by `Let`s in the body.
-            let param_count = 1 + collected.params.len() as u32;
+            let param_count = 1 + call_params.len() as u32;
             let mut locals: Vec<TirLocal> = Vec::with_capacity(param_count as usize);
             locals.push(TirLocal {
                 name: "self".to_string(),
@@ -699,7 +713,7 @@ impl ClosureLowerer {
                 is_mut: false,
                 span: Span::default(),
             });
-            for (name, ty) in &collected.params {
+            for (name, ty) in &call_params {
                 locals.push(TirLocal {
                     name: name.clone(),
                     type_id: *ty,
@@ -829,7 +843,7 @@ impl ClosureLowerer {
                 call_method: call_method_rc,
                 inspect_method: inspect_method_rc,
                 captures: collected.captures.clone(),
-                canonical_user_params: collected.params.clone(),
+                canonical_user_params: call_params,
                 canonical_return: return_type,
             });
         }
@@ -1292,7 +1306,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                         "function parameter name should never be empty (function: {func_name}, index: {i})",
                     );
                     let name = if orig_name == "_" {
-                        format!("$fn_{i}")
+                        discarded_param_name(i)
                     } else {
                         orig_name.clone()
                     };
