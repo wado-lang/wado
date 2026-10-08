@@ -223,8 +223,10 @@ The host must hear about a hit when it happens, not when the test ends. A
 trapping test cannot be entered again, so a dump at the end would lose every
 `#[expect_trap]` and `#[TODO]` test. The first-hit call pays one host call per
 region per test, and the hot path is an array load and a branch. The call is
-Wado rather than a WIR lowering, so the inliner decides where the check lands,
-as it does for any other small function.
+Wado rather than a WIR lowering, and `#[inline(never)]` keeps it a call. Inlined
+into every region, the check doubled what the optimizer walked: stdlib coverage
+compiled about 2× slower than a plain run, against +39% as a call, to speed a
+test run that is a fraction of the compile.
 
 The runner collects the ids in the test's store, the way `EvalSession` lives
 there. A fresh instance per test gives per-test hit sets at no extra cost.

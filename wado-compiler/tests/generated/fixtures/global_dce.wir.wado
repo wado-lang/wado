@@ -31,7 +31,7 @@ type "functype//global_dce.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) 
 
 type "functype//global_dce.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//global_dce.wado/$initialize_module" = fn();  // TypeId(13)
+type "functype//global_dce.wado/$initialize_modules$cold0" = fn();  // TypeId(13)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
 
@@ -80,8 +80,7 @@ fn "global_dce.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_dce.wado::$modules_initialized);
         cold_path;
-        "global_dce.wado/$initialize_module"();
-        global:global_dce.wado::$modules_initialized = 1;
+        "global_dce.wado/$initialize_modules$cold0"();
     };
     global:global_dce.wado::USED_MUT = global:global_dce.wado::USED_MUT + 1;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -142,15 +141,15 @@ fn "global_dce.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_dce.wado::$modules_initialized);
         cold_path;
-        "global_dce.wado/$initialize_module"();
-        global:global_dce.wado::$modules_initialized = 1;
+        "global_dce.wado/$initialize_modules$cold0"();
     };
     "global_dce.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "global_dce.wado/$initialize_module"() {
+fn "global_dce.wado/$initialize_modules$cold0"() {
     global:global_dce.wado::USED_STRING = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alive"), used: 5 };
+    global:global_dce.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

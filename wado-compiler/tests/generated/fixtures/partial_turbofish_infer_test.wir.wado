@@ -227,29 +227,29 @@ type "functype//partial_turbofish_infer_test.wado/$test_1_partial_turbofish_on_a
 
 type "functype//partial_turbofish_infer_test.wado/$test_1_partial_turbofish_on_a_cross_module_generic__cbor_from_bytes_$cold1" = fn(i32);  // TypeId(47)
 
-type "functype//core:cbor/write_head" = fn(ref "core:prelude//List<u8>", u8, u64);  // TypeId(48)
+type "functype//partial_turbofish_infer_test.wado/$initialize_modules$cold0" = fn();  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(49)
+type "functype//core:cbor/write_head" = fn(ref "core:prelude//List<u8>", u8, u64);  // TypeId(49)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(50)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(50)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(51)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(51)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(52)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(52)
 
-type "functype//core:cbor/core/cbor/from_bytes<partial_turbofish_infer_test.wado/Blob,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]" = fn(ref "core:prelude//List<u8>") -> [i32, ref null "partial_turbofish_infer_test.wado//Blob", ref null "core:serde//DeserializeError"];  // TypeId(53)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(53)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(54)
+type "functype//core:cbor/core/cbor/from_bytes<partial_turbofish_infer_test.wado/Blob,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]" = fn(ref "core:prelude//List<u8>") -> [i32, ref null "partial_turbofish_infer_test.wado//Blob", ref null "core:serde//DeserializeError"];  // TypeId(54)
 
-type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/SerializeError>" = fn(ref "core:prelude/string.wado//String", ref "core:serde//SerializeError");  // TypeId(55)
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(55)
 
-type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/DeserializeError>" = fn(ref "core:prelude/string.wado//String", ref "core:serde//DeserializeError");  // TypeId(56)
+type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/SerializeError>" = fn(ref "core:prelude/string.wado//String", ref "core:serde//SerializeError");  // TypeId(56)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:serde/SerializeError,[core:serde/SerializeErrorKind,core:prelude/string.wado/String]>" = fn(ref "core:serde//SerializeError", ref "core:prelude/format.wado//Formatter");  // TypeId(57)
+type "functype//core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:serde/DeserializeError>" = fn(ref "core:prelude/string.wado//String", ref "core:serde//DeserializeError");  // TypeId(57)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:serde/DeserializeError,[core:serde/DeserializeErrorKind,core:prelude/string.wado/String,i64]>" = fn(ref "core:serde//DeserializeError", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:serde/SerializeError,[core:serde/SerializeErrorKind,core:prelude/string.wado/String]>" = fn(ref "core:serde//SerializeError", ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
-type "functype//core:cbor/$initialize_module" = fn();  // TypeId(59)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:serde/DeserializeError,[core:serde/DeserializeErrorKind,core:prelude/string.wado/String,i64]>" = fn(ref "core:serde//DeserializeError", ref "core:prelude/format.wado//Formatter");  // TypeId(59)
 
 type "functype//core:cbor/core:cbor/CborDeserializer::read_text_key_range$cold0$dae[self]" = fn(u8, u8, bool, u8, bool, u8, bool, bool, bool);  // TypeId(60)
 
@@ -612,8 +612,7 @@ fn "partial_turbofish_infer_test.wado/$cm_export__$test_0_partial_turbofish_infe
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:partial_turbofish_infer_test.wado::$modules_initialized);
         cold_path;
-        "core:cbor/$initialize_module"();
-        global:partial_turbofish_infer_test.wado::$modules_initialized = 1;
+        "partial_turbofish_infer_test.wado/$initialize_modules$cold0"();
     };
     "wasi/task-return"(0);
 }
@@ -622,8 +621,7 @@ fn "partial_turbofish_infer_test.wado/$cm_export__$test_1_partial_turbofish_on_a
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:partial_turbofish_infer_test.wado::$modules_initialized);
         cold_path;
-        "core:cbor/$initialize_module"();
-        global:partial_turbofish_infer_test.wado::$modules_initialized = 1;
+        "partial_turbofish_infer_test.wado/$initialize_modules$cold0"();
     };
     "partial_turbofish_infer_test.wado/$test_1_partial_turbofish_on_a_cross_module_generic__cbor_from_bytes_"();
     "wasi/task-return"(0);
@@ -725,6 +723,12 @@ fn "partial_turbofish_infer_test.wado/$test_1_partial_turbofish_on_a_cross_modul
     builtin::array_copy<u8>($local_7.repr, new_used_17, global:core:cbor::$const_obj_151, 0, 1);
     "core:rt/panic"($local_7.repr, $local_7.used);
     unreachable;
+}
+
+fn "partial_turbofish_infer_test.wado/$initialize_modules$cold0"() {
+    global:core:cbor::MSG_EXPECTED_ARRAY = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected array"), used: 14 };
+    global:core:cbor::MSG_EXPECTED_MAP_FOR_STRUCT = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected map for struct"), used: 23 };
+    global:partial_turbofish_infer_test.wado::$modules_initialized = 1;
 }
 
 fn "core:cbor/write_head"(buf, major, arg) {
@@ -1552,11 +1556,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<c
     self_12.used = start_25;
     builtin::array_copy<u8>(self_12.repr, new_used_24, global:core:prelude/traits.wado::$const_obj_85, 0, 1);
     return;
-}
-
-fn "core:cbor/$initialize_module"() {
-    global:core:cbor::MSG_EXPECTED_ARRAY = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected array"), used: 14 };
-    global:core:cbor::MSG_EXPECTED_MAP_FOR_STRUCT = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected map for struct"), used: 23 };
 }
 
 fn "core:cbor/core:cbor/CborDeserializer::read_text_key_range$cold0$dae[self]"(head, $v1, $v3, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen) {

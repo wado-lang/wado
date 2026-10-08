@@ -1,10 +1,9 @@
 //! Move what a `cold_path()` marker opens into a function of its own, so that
 //! `inline`'s cold discount describes the callee instead of promising a split.
 //!
-//! A function's root block is deliberately not a region. What a top-level
-//! marker reaches is every module's init guard: one call site, behind a branch,
-//! run once — outlining it leaves the hot loops identical and costs a function
-//! (`dead-ends.md`).
+//! A function's root block is a region only when more than one site calls the
+//! function, since that is when the inliner copies its cold tail into each one.
+//! Called once, a split leaves the hot loops identical and costs a function.
 //!
 //! Two things are open. The pass costs `sieve` 4.5% for no reason the IR shows
 //! — the hot loops are identical in WIR and in the emitted Wasm, and perturbing
@@ -14,6 +13,8 @@
 //! bookkeeping falls inside the region and writes locals the next iteration
 //! reads. Ending the region at the last statement that can travel would take
 //! that shape, which `core:json`'s escape tail splits by hand for want of it.
+
+use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -59,11 +60,16 @@ pub fn outline_cold_regions(
             never: table.intern(ResolvedType::Never),
         }
     };
+    let sites = call_site_counts(project);
     let mut changed = false;
     let mut fi = 0;
     while fi < project.functions.len() {
+        // A helper this pass made has the one site that replaced its region.
+        let root_copied = sites.get(fi).is_some_and(|&n| n > 1);
         let mut ordinal = 0;
-        while let Some(region) = find_region(project, fi, cold, exits, descriptor_cache) {
+        while let Some(region) =
+            find_region(project, fi, cold, exits, root_copied, descriptor_cache)
+        {
             outline(project, fi, region, ordinal);
             ordinal += 1;
             changed = true;
@@ -104,12 +110,33 @@ fn is_splittable(func: &NirFunction) -> bool {
     !func.is_cm_binding && !func.is_dispatch_wrapper && !func.is_cm_export && !func.is_async
 }
 
-/// The first region in function `fi` that this pass may move.
+/// How many direct calls name each function, by store position: what `inline`
+/// would copy a body into.
+fn call_site_counts(project: &NirPackage) -> Vec<usize> {
+    let mut counts = vec![0usize; project.functions.len()];
+    for func in &project.functions {
+        let func = func.borrow();
+        let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
+            continue;
+        };
+        for node in body.exprs.values() {
+            if let ExprKind::Call { func_id, .. } = &node.kind {
+                counts[func_id.index()] += 1;
+            }
+        }
+    }
+    counts
+}
+
+/// The first region in function `fi` that this pass may move. The root block
+/// holds one only when `root_copied`: a function called once gives nothing back
+/// for the function a split costs.
 fn find_region(
     project: &NirPackage,
     fi: usize,
     cold: FuncId,
     exits: Exits,
+    root_copied: bool,
     descriptor_cache: &mut DescriptorCache,
 ) -> Option<Region> {
     let func = project.functions[fi].borrow();
@@ -130,7 +157,8 @@ fn find_region(
     let descriptors = descriptor_cache.descriptors(project);
     let params = func.params.len();
     let type_table = project.type_table.borrow();
-    for (block, under_loop) in valueless_blocks(body, &type_table) {
+    let root = root_copied.then_some((body.root(), false));
+    for (block, under_loop) in root.into_iter().chain(valueless_blocks(body, &type_table)) {
         let stmts = &body.blocks[block].stmts;
         let Some(marker) = stmts.iter().position(|&s| is_cold_marker(body, s, cold)) else {
             continue;

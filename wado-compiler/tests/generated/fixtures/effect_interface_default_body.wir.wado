@@ -90,7 +90,7 @@ type "functype//effect_interface_default_body.wado/$cm_binding__Stdout_write_via
 
 type "functype//effect_interface_default_body.wado/$cm_export__run" = fn();  // TypeId(29)
 
-type "functype//effect_interface_default_body.wado/$initialize_module" = fn();  // TypeId(30)
+type "functype//effect_interface_default_body.wado/$initialize_modules$cold0" = fn();  // TypeId(30)
 
 type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(31)
 
@@ -165,8 +165,7 @@ fn "effect_interface_default_body.wado/run"() with Stdout, Log {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body.wado::$modules_initialized);
         cold_path;
-        "effect_interface_default_body.wado/$initialize_module"();
-        global:effect_interface_default_body.wado::$modules_initialized = 1;
+        "effect_interface_default_body.wado/$initialize_modules$cold0"();
     };
     $inline__effect_dispatch__Log__emit_1: block {
         message_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 110, 101), used: 3 };
@@ -432,15 +431,15 @@ fn "effect_interface_default_body.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body.wado::$modules_initialized);
         cold_path;
-        "effect_interface_default_body.wado/$initialize_module"();
-        global:effect_interface_default_body.wado::$modules_initialized = 1;
+        "effect_interface_default_body.wado/$initialize_modules$cold0"();
     };
     "effect_interface_default_body.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "effect_interface_default_body.wado/$initialize_module"() {
+fn "effect_interface_default_body.wado/$initialize_modules$cold0"() {
     global:effect_interface_default_body.wado::LINES = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
+    global:effect_interface_default_body.wado::$modules_initialized = 1;
 }
 
 fn "core:rt/panic"(message) {

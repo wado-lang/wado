@@ -44,7 +44,7 @@ type "functype//ctfe_view_of_mutable_global.wado/$cm_binding__Stdout_write_via_s
 
 type "functype//ctfe_view_of_mutable_global.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//ctfe_view_of_mutable_global.wado/$initialize_module" = fn();  // TypeId(17)
+type "functype//ctfe_view_of_mutable_global.wado/$initialize_modules$cold0" = fn();  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
@@ -119,8 +119,7 @@ fn "ctfe_view_of_mutable_global.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:ctfe_view_of_mutable_global.wado::$modules_initialized);
         cold_path;
-        "ctfe_view_of_mutable_global.wado/$initialize_module"();
-        global:ctfe_view_of_mutable_global.wado::$modules_initialized = 1;
+        "ctfe_view_of_mutable_global.wado/$initialize_modules$cold0"();
     };
     $load_0 = local.tee r(global:ctfe_view_of_mutable_global.wado::G.items).used;
     if @unlikely(0 >= $load_0) {
@@ -204,15 +203,15 @@ fn "ctfe_view_of_mutable_global.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:ctfe_view_of_mutable_global.wado::$modules_initialized);
         cold_path;
-        "ctfe_view_of_mutable_global.wado/$initialize_module"();
-        global:ctfe_view_of_mutable_global.wado::$modules_initialized = 1;
+        "ctfe_view_of_mutable_global.wado/$initialize_modules$cold0"();
     };
     "ctfe_view_of_mutable_global.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "ctfe_view_of_mutable_global.wado/$initialize_module"() {
+fn "ctfe_view_of_mutable_global.wado/$initialize_modules$cold0"() {
     global:ctfe_view_of_mutable_global.wado::G = struct.new "ctfe_view_of_mutable_global.wado//Buf" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
+    global:ctfe_view_of_mutable_global.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

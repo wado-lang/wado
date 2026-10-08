@@ -64,7 +64,7 @@ type "functype//opt_hfs_aliased_field.wado/$cm_binding__Stdout_write_via_stream"
 
 type "functype//opt_hfs_aliased_field.wado/$cm_export__run" = fn();  // TypeId(23)
 
-type "functype//opt_hfs_aliased_field.wado/$initialize_module" = fn();  // TypeId(24)
+type "functype//opt_hfs_aliased_field.wado/$initialize_modules$cold0" = fn();  // TypeId(24)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(25)
 
@@ -198,8 +198,7 @@ fn "opt_hfs_aliased_field.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_hfs_aliased_field.wado::$modules_initialized);
         cold_path;
-        "opt_hfs_aliased_field.wado/$initialize_module"();
-        global:opt_hfs_aliased_field.wado::$modules_initialized = 1;
+        "opt_hfs_aliased_field.wado/$initialize_modules$cold0"();
     };
     "opt_hfs_aliased_field.wado/through_param"(local.tee a(struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }), a);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -286,15 +285,15 @@ fn "opt_hfs_aliased_field.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_hfs_aliased_field.wado::$modules_initialized);
         cold_path;
-        "opt_hfs_aliased_field.wado/$initialize_module"();
-        global:opt_hfs_aliased_field.wado::$modules_initialized = 1;
+        "opt_hfs_aliased_field.wado/$initialize_modules$cold0"();
     };
     "opt_hfs_aliased_field.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "opt_hfs_aliased_field.wado/$initialize_module"() {
+fn "opt_hfs_aliased_field.wado/$initialize_modules$cold0"() {
     global:opt_hfs_aliased_field.wado::G = struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 };
+    global:opt_hfs_aliased_field.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

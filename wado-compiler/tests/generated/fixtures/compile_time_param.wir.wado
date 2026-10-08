@@ -42,7 +42,7 @@ type "functype//compile_time_param.wado/$cm_binding__Stdout_write_via_stream" = 
 
 type "functype//compile_time_param.wado/$cm_export__run" = fn();  // TypeId(16)
 
-type "functype//compile_time_param.wado/$initialize_module" = fn();  // TypeId(17)
+type "functype//compile_time_param.wado/$initialize_modules$cold0" = fn();  // TypeId(17)
 
 type "functype//core:prelude/fpfmt.wado/unpack64" = fn(f64) -> [u64, i32];  // TypeId(18)
 
@@ -137,8 +137,7 @@ fn "compile_time_param.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:compile_time_param.wado::$modules_initialized);
         cold_path;
-        "compile_time_param.wado/$initialize_module"();
-        global:compile_time_param.wado::$modules_initialized = 1;
+        "compile_time_param.wado/$initialize_modules$cold0"();
     };
     local.tee $local_0(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
     builtin::array_copy<u8>($local_0.repr, 0, global:compile_time_param.wado::$const_obj_8, 0, 8);
@@ -255,16 +254,16 @@ fn "compile_time_param.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:compile_time_param.wado::$modules_initialized);
         cold_path;
-        "compile_time_param.wado/$initialize_module"();
-        global:compile_time_param.wado::$modules_initialized = 1;
+        "compile_time_param.wado/$initialize_modules$cold0"();
     };
     "compile_time_param.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "compile_time_param.wado/$initialize_module"() {
+fn "compile_time_param.wado/$initialize_modules$cold0"() {
     global:compile_time_param.wado::API_URL = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("https://prod.example.com"), used: 24 };
     global:compile_time_param.wado::FALLBACK = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("default-value"), used: 13 };
+    global:compile_time_param.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/fpfmt.wado/unpack64"(f) {
