@@ -2023,7 +2023,7 @@ pub fn inline_functions(
     let mut unit_size = 0usize;
     let mut priced: Vec<Candidate> = Vec::new();
 
-    let type_table = project.type_table.borrow();
+    let types = project.type_table.borrow();
     // What a call to each function costs a caller that splices it, for
     // `CostWalk::splicing`. Every price here is read as written, with calls
     // charged as ABI edges, so the table is one level of lookahead and cannot
@@ -2041,38 +2041,35 @@ pub fn inline_functions(
     // every inlinable callee by its whole body judges a driver by its
     // post-inlining size against a threshold calibrated on as-written ones, and
     // that suppresses inlining the CBOR serializers need.
-    let spliced: Vec<usize> = project
-        .functions
-        .iter()
-        .enumerate()
-        .map(|(i, f)| {
-            let func = f.borrow();
-            let Some(body) = func.body.as_ref() else {
-                return 0;
-            };
-            if !loopy.get(i).copied().unwrap_or(false)
-                || splice_barred(&func, &barred_cycle_members, &type_table)
-            {
-                return 0;
-            }
-            let gross = inline_cost(body, &type_table, descriptors, &[]);
-            if func.inline_hint == InlineHint::Always
-                || net_cost(gross, func.params.len())
-                    <= effective_threshold(&func, inline_threshold)
-            {
-                gross
-            } else {
-                0
-            }
-        })
-        .collect();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
+    let exec = gate.exec().clone();
+    let type_table: &TypeTable = &types;
+    let functions = &project.functions;
+    let positions: Vec<usize> = (0..functions.len()).collect();
+    let spliced: Vec<usize> = exec.map(&positions, |&i| {
+        let func = functions[i].borrow();
+        let Some(body) = func.body.as_ref() else {
+            return 0;
+        };
+        if !loopy.get(i).copied().unwrap_or(false)
+            || splice_barred(&func, &barred_cycle_members, type_table)
+        {
+            return 0;
+        }
+        let gross = inline_cost(body, type_table, descriptors, &[]);
+        if func.inline_hint == InlineHint::Always
+            || net_cost(gross, func.params.len()) <= effective_threshold(&func, inline_threshold)
+        {
+            gross
+        } else {
+            0
+        }
+    });
+    let classified = exec.map(&positions, |&i| {
+        let func = functions[i].borrow();
         let size = match func.body.as_ref() {
-            Some(b) if pricing => inline_size(b, &type_table, descriptors),
+            Some(b) if pricing => inline_size(b, type_table, descriptors),
             _ => 0,
         };
-        unit_size += size;
         let view = func
             .id
             .and_then(|id| const_params.get(&id))
@@ -2085,7 +2082,7 @@ pub fn inline_functions(
             &func,
             view.as_ref(),
             &barred_cycle_members,
-            &type_table,
+            type_table,
             inline_threshold,
             descriptors,
             &foldable,
@@ -2095,41 +2092,49 @@ pub fn inline_functions(
             &spliced,
             &hopeful_params[i],
         );
-        if let Some(id) = func.id {
-            holds.settle(id, verdict.hold, gate);
-        }
-        if verdict.reach != Reach::Nowhere {
-            let id = func.id.expect("func_id assigned at lower");
-            reach.insert(id, verdict.reach);
-            let string_key = (func.module_source.clone(), func.name.clone());
-            // Get the strings used by this function
-            if let Some(strings) = project.function_strings.get(&string_key) {
-                candidate_strings.insert(id, strings.clone());
-            }
-            if pricing {
-                priced.push(Candidate {
-                    id,
-                    name: func.name.clone(),
-                    hot: verdict.hot,
-                    size,
-                    sites: call_sites[id.index()],
-                    forced: func.inline_hint == InlineHint::Always,
-                });
-            }
+        let candidate = (verdict.reach != Reach::Nowhere).then(|| {
             let hot = match func.inline_hint {
                 InlineHint::Always => inline_cost(
                     func.body.as_ref().expect("a candidate has a body"),
-                    &type_table,
+                    type_table,
                     descriptors,
                     &spliced,
                 ),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
-            net_price.insert(id, net_cost(hot, func.params.len()));
-            inline_candidates.insert(id, func.clone());
+            (net_cost(hot, func.params.len()), func.clone())
+        });
+        (func.id, size, verdict, candidate)
+    });
+    for (id, size, verdict, candidate) in classified {
+        unit_size += size;
+        if let Some(id) = id {
+            holds.settle(id, verdict.hold, gate);
         }
+        let Some((net, func)) = candidate else {
+            continue;
+        };
+        let id = id.expect("func_id assigned at lower");
+        reach.insert(id, verdict.reach);
+        let string_key = (func.module_source.clone(), func.name.clone());
+        // Get the strings used by this function
+        if let Some(strings) = project.function_strings.get(&string_key) {
+            candidate_strings.insert(id, strings.clone());
+        }
+        if pricing {
+            priced.push(Candidate {
+                id,
+                name: func.name.clone(),
+                hot: verdict.hot,
+                size,
+                sites: call_sites[id.index()],
+                forced: func.inline_hint == InlineHint::Always,
+            });
+        }
+        net_price.insert(id, net);
+        inline_candidates.insert(id, func);
     }
-    drop(type_table);
+    drop(types);
 
     compiler_trace!("inline", "held: [{}]", {
         holds
@@ -2190,157 +2195,156 @@ pub fn inline_functions(
         return false;
     }
 
-    let mut changed = false;
-
     // Purity inputs for the graph-preserving inline gate (the splice site below):
     // an inlined call that mutates no caller-reachable state lets the caller's
     // `value_of` survive the splice. Computed once over the project; the
     // per-call `pure_calls` set is taken per body just before inlining it.
     let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
-    let inline_call_immutability = CallImmutability::new(project, &inline_type_table);
+    let type_table: &TypeTable = &inline_type_table;
+    let inline_call_immutability = CallImmutability::new(project, type_table);
     let carried = carried_calls(&inline_candidates);
-    let candidates = Candidates {
-        bodies: &inline_candidates,
-        reach: &reach,
-        carried: &carried,
-        net_price: &net_price,
-        // A threshold's worth of threshold-sized callees: a call tree that
-        // doubles per level exceeds it within a few levels.
-        rescan_cap: inline_threshold * inline_threshold,
-        rescan_left: None,
-    };
+    let functions = &project.functions;
+    let held = &holds.held;
 
-    // Inline at call sites.
-    for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
-        if holds.held.contains(&fid) {
+    // Inline at call sites. A caller splices copies of the candidates, so no
+    // visit reads what another writes.
+    let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
+        if held.contains(&fid) {
+            return None;
+        }
+        let candidates = Candidates {
+            bodies: &inline_candidates,
+            reach: &reach,
+            carried: &carried,
+            net_price: &net_price,
+            // A threshold's worth of threshold-sized callees: a call tree that
+            // doubles per level exceeds it within a few levels.
+            rescan_cap: inline_threshold * inline_threshold,
+            rescan_left: None,
+        };
+        let mut func = functions[fid.index()].borrow_mut();
+        func.body.as_ref()?;
+        // Track which functions (by `FuncId`) were inlined into this function
+        let mut inlined_funcs: Vec<FuncId> = Vec::new();
+        // Splice-point re-valuation records (Method A): one per inlined block.
+        let mut reval: Vec<InlineRevalInfo> = Vec::new();
+        let mut frame = CallerFrame {
+            local_count: func.local_count(),
+            locals: std::mem::take(&mut func.locals),
+            address_taken: std::mem::take(&mut func.address_taken_locals),
+            stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
+            loop_calls: Vec::new(),
+            original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
+        };
+        let mut labels = InlineLabels::default();
+        // Calls in this body that mutate no caller-reachable state, taken
+        // *before* the splice (the call exprs survive as `reval.call_expr`
+        // keys). Drives the graph-preserving gate below.
+        let pure_set = {
+            let body = func.body.as_ref().unwrap();
+            call_verdicts(
+                body,
+                type_table,
+                &inline_first_param_types,
+                &inline_call_immutability,
+            )
+            .pure
+        };
+        {
+            let body = func.body.as_mut().unwrap();
+            let root = body.root;
+            inline_calls_in_block(
+                body,
+                root,
+                candidates,
+                descriptors,
+                &mut frame,
+                type_table,
+                &mut inlined_funcs,
+                &mut labels,
+                &mut reval,
+                Site::Plain,
+            );
+        }
+        func.locals = frame.locals;
+        func.address_taken_locals = frame.address_taken;
+        func.stores_aliased_locals = frame.stores_aliased;
+        if inlined_funcs.is_empty() {
+            return None;
+        }
+        // The splice restructures the body, staling the persisted graph's
+        // `loop_entry_values` (licm's pre-header snapshots — the only
+        // value-graph state any consumer still reads, `value_of` having
+        // been retired). Keep them only for a graph-preserving splice —
+        // every inlined call **pure** (mutates no caller-reachable state)
+        // and **loop-free** (introduces no new back-edge) — otherwise clear
+        // so licm re-derives conservatively (an absent entry is sound). The
+        // value pool and promoted operands carry every value a consumer
+        // reads across the splice.
+        let preserving = func.body.as_ref().is_some_and(|b| {
+            reval.iter().all(|i| {
+                pure_set.contains(&i.call_expr) && !arena_query::block_contains_loop(b, i.block)
+            })
+        });
+        if !preserving && let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut()) {
+            vg.loop_entry_values.clear();
+        }
+        // Only this caller's body changed (callee bodies are copied, not
+        // modified), so report just the caller. The caller's call-graph edges
+        // shift, but stale edges only cost 1-hop propagation precision
+        // (quality), not correctness.
+        Some(inlined_funcs)
+    });
+    drop(inline_call_immutability);
+    drop(inline_type_table);
+
+    for (caller, inlined_funcs) in &spliced_into {
+        let (caller_module_source, func_name) = {
+            let func = project.functions[caller.index()].borrow();
+            (func.module_source.clone(), func.name.clone())
+        };
+        compiler_trace!("inline_sites", "{func_name} <- [{}]", {
+            inlined_funcs
+                .iter()
+                .map(|id| inline_candidates[id].name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        });
+        // Update function_strings: add strings from inlined functions to the caller
+        let mut all_inlined_strings: IndexSet<String> = IndexSet::default();
+        for inlined_key in inlined_funcs {
+            if let Some(inlined_strings) = candidate_strings.get(inlined_key) {
+                all_inlined_strings.extend(inlined_strings.iter().cloned());
+            }
+        }
+        if all_inlined_strings.is_empty() {
             continue;
         }
-        let caller_idx = fid.index();
-        let func_rc = project.functions[caller_idx].clone();
-        let mut func = func_rc.borrow_mut();
-        let caller_module_source = func.module_source.clone();
-        let func_name = func.name.clone();
-        if func.body.is_some() {
-            // Track which functions (by `FuncId`) were inlined into this function
-            let mut inlined_funcs: Vec<FuncId> = Vec::new();
-            // Splice-point re-valuation records (Method A): one per inlined block.
-            let mut reval: Vec<InlineRevalInfo> = Vec::new();
-            let mut frame = CallerFrame {
-                local_count: func.local_count(),
-                locals: std::mem::take(&mut func.locals),
-                address_taken: std::mem::take(&mut func.address_taken_locals),
-                stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
-                loop_calls: Vec::new(),
-                original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
-            };
-            let mut labels = InlineLabels::default();
-            // Calls in this body that mutate no caller-reachable state, taken
-            // *before* the splice (the call exprs survive as `reval.call_expr`
-            // keys). Drives the graph-preserving gate below.
-            let pure_set = {
-                let body = func.body.as_ref().unwrap();
-                call_verdicts(
-                    body,
-                    &inline_type_table,
-                    &inline_first_param_types,
-                    &inline_call_immutability,
-                )
-                .pure
-            };
-            {
-                let body = func.body.as_mut().unwrap();
-                let root = body.root;
-                inline_calls_in_block(
-                    body,
-                    root,
-                    candidates,
-                    descriptors,
-                    &mut frame,
-                    &project.type_table.borrow(),
-                    &mut inlined_funcs,
-                    &mut labels,
-                    &mut reval,
-                    Site::Plain,
-                );
-            }
-            func.locals = frame.locals;
-            func.address_taken_locals = frame.address_taken;
-            func.stores_aliased_locals = frame.stores_aliased;
-
-            if !inlined_funcs.is_empty() {
-                changed = true;
-                compiler_trace!("inline_sites", "{func_name} <- [{}]", {
-                    inlined_funcs
-                        .iter()
-                        .map(|id| inline_candidates[id].name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                });
-                // The splice restructures the body, staling the persisted graph's
-                // `loop_entry_values` (licm's pre-header snapshots — the only
-                // value-graph state any consumer still reads, `value_of` having
-                // been retired). Keep them only for a graph-preserving splice —
-                // every inlined call **pure** (mutates no caller-reachable state)
-                // and **loop-free** (introduces no new back-edge) — otherwise clear
-                // so licm re-derives conservatively (an absent entry is sound). The
-                // value pool and promoted operands carry every value a consumer
-                // reads across the splice.
-                let preserving = func.body.as_ref().is_some_and(|b| {
-                    reval.iter().all(|i| {
-                        pure_set.contains(&i.call_expr)
-                            && !arena_query::block_contains_loop(b, i.block)
-                    })
-                });
-                if !preserving
-                    && let Some(vg) = func.body.as_mut().and_then(|b| b.value_graph.as_mut())
-                {
-                    vg.loop_entry_values.clear();
-                }
-                // Only this caller's body changed (callee bodies are copied,
-                // not modified), so report just the caller. The caller's
-                // call-graph edges shift, but stale edges only cost 1-hop
-                // propagation precision (quality), not correctness.
-                gate.mark_changed(FuncId::new(caller_idx));
-            }
-
-            // Update function_strings: add strings from inlined functions to the caller
-            let mut all_inlined_strings: IndexSet<String> = IndexSet::default();
-            for inlined_key in inlined_funcs {
-                if let Some(inlined_strings) = candidate_strings.get(&inlined_key) {
-                    all_inlined_strings.extend(inlined_strings.iter().cloned());
-                }
-            }
-            if !all_inlined_strings.is_empty() {
-                // Need to drop func borrow before borrowing project.function_strings mutably
-                drop(func);
-                {
-                    let caller_strings = project
-                        .function_strings
-                        .entry((caller_module_source.clone(), func_name.clone()))
-                        .or_default();
-                    let existing: IndexSet<&str> =
-                        caller_strings.iter().map(String::as_str).collect();
-                    let to_add: Vec<String> = all_inlined_strings
-                        .iter()
-                        .filter(|s| !existing.contains(s.as_str()))
-                        .cloned()
-                        .collect();
-                    caller_strings.extend(to_add);
-                }
-                let to_add: Vec<String> = {
-                    let existing_literals: IndexSet<&str> =
-                        project.string_literals.iter().map(String::as_str).collect();
-                    all_inlined_strings
-                        .into_iter()
-                        .filter(|s| !existing_literals.contains(s.as_str()))
-                        .collect()
-                };
-                project.string_literals.extend(to_add);
-            }
+        {
+            let caller_strings = project
+                .function_strings
+                .entry((caller_module_source, func_name))
+                .or_default();
+            let existing: IndexSet<&str> = caller_strings.iter().map(String::as_str).collect();
+            let to_add: Vec<String> = all_inlined_strings
+                .iter()
+                .filter(|s| !existing.contains(s.as_str()))
+                .cloned()
+                .collect();
+            caller_strings.extend(to_add);
         }
+        let to_add: Vec<String> = {
+            let existing_literals: IndexSet<&str> =
+                project.string_literals.iter().map(String::as_str).collect();
+            all_inlined_strings
+                .into_iter()
+                .filter(|s| !existing_literals.contains(s.as_str()))
+                .collect()
+        };
+        project.string_literals.extend(to_add);
     }
-    changed
+    !spliced_into.is_empty()
 }
 
 /// The caller's local frame, which every splice extends: the locals it gains

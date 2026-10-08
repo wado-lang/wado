@@ -255,9 +255,28 @@ impl FunctionGate {
         len: usize,
         visit: impl Fn(FuncId) -> bool + Sync,
     ) -> bool {
+        !self
+            .sweep_par(pass, len, |fid| visit(fid).then_some(()))
+            .is_empty()
+    }
+
+    /// [`Self::run_gated_par`] for a visit that hands back what it changed: a
+    /// `Some` marks the function changed. Returns the `Some`s in store order.
+    pub fn sweep_par<R: Send>(
+        &mut self,
+        pass: GatedPass,
+        len: usize,
+        visit: impl Fn(FuncId) -> Option<R> + Sync,
+    ) -> Vec<(FuncId, R)> {
         let pending = self.pending(pass, len);
-        let changed = self.exec.map(&pending, |&fid| visit(fid));
-        self.close_sweep(pass, &pending, &changed)
+        let outcomes = self.exec.map(&pending, |&fid| visit(fid));
+        let changed: Vec<bool> = outcomes.iter().map(Option::is_some).collect();
+        self.close_sweep(pass, &pending, &changed);
+        pending
+            .into_iter()
+            .zip(outcomes)
+            .filter_map(|(fid, outcome)| Some((fid, outcome?)))
+            .collect()
     }
 
     /// Mark the sweep's functions seen, then the changed ones and their
