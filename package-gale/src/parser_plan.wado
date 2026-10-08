@@ -154,6 +154,18 @@ pub fn plan_parser(
 }
 
 impl ParserPlan {
+    /// The plan of `rule_count` rules lowering marked nothing in: no FOLLOW
+    /// gate, simulator decision or rescanned rule.
+    pub fn unmarked(rule_count: i32) -> ParserPlan {
+        let none = List::<bool>::filled(rule_count, false);
+        return ParserPlan {
+            rule_asks_simulator: none,
+            rule_body_predicts: none,
+            rule_reaches_simulator: none,
+            rescanned: none,
+        };
+    }
+
     /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
     /// declaration and at every call site, so the two cannot disagree.
     pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
