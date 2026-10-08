@@ -3236,4 +3236,3 @@ impl TirMutVisitor for ResumeToReturn {
         expr.type_id = TypeTable::NEVER;
     }
 }
-
