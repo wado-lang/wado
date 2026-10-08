@@ -6,7 +6,6 @@
 
 use cranelift_entity::EntityRef;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::RwLockReadGuard;
 
 use crate::call_args::CallArgs;
@@ -126,7 +125,6 @@ impl CandidateKind {
 }
 
 pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> bool {
-    let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -167,33 +165,43 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
         .iter()
         .map(|f| project.builtin_declarations.immediate_params(&*f.borrow()))
         .collect();
-    let shared_escape = SharedEscape::new(project);
-    let gate = Gate {
-        shared_escape: &shared_escape,
-        immediate_params: &immediate_params,
-        funcs: &project.functions,
-        type_table: &type_table,
-        hoistable_pure: &hoistable_pure,
-        instruction_leaf: &instruction_leaf,
-        element_access: &element_access,
-        structs: &project.structs,
-        param_readonly: RefCell::new(IndexMap::default()),
-        param_writes_through: RefCell::new(IndexMap::default()),
-        ref_param_leaks: RefCell::new(IndexMap::default()),
-        string_inline_max_bytes: project.string_inline_max_bytes,
-    };
-    let mut candidates: Vec<Candidate> = Vec::new();
-    for (fi, f) in project.functions.iter().enumerate() {
-        let f = f.borrow();
-        if skip_function(&f) {
-            continue;
-        }
-        let Some(body) = &f.body else {
-            continue;
+    let types = project.type_table.borrow();
+    let type_table: &TypeTable = &types;
+    let shared_escape = SharedEscape::new(project, type_table);
+    let funcs = &project.functions;
+    let structs = &project.structs;
+    let string_inline_max_bytes = project.string_inline_max_bytes;
+    let positions: Vec<usize> = (0..funcs.len()).collect();
+    // Each visit memoizes its callee verdicts afresh: a memo seeds a cycle with
+    // a provisional answer, so one shared across visits would answer by which
+    // visit asked first.
+    let per_function = exec.map(&positions, |&fi| {
+        let f = funcs[fi].borrow();
+        let mut found = Vec::new();
+        let Some(body) = f.body.as_ref().filter(|_| !skip_function(&f)) else {
+            return found;
+        };
+        let gate = Gate {
+            shared_escape: &shared_escape,
+            immediate_params: &immediate_params,
+            funcs,
+            type_table,
+            hoistable_pure: &hoistable_pure,
+            instruction_leaf: &instruction_leaf,
+            element_access: &element_access,
+            structs,
+            param_readonly: RefCell::new(IndexMap::default()),
+            param_writes_through: RefCell::new(IndexMap::default()),
+            ref_param_leaks: RefCell::new(IndexMap::default()),
+            string_inline_max_bytes,
         };
         compiler_trace!("const_object_globalization", "fn {}", f.name);
-        collect_candidates(body, &gate, fi, &f.module_source, &mut candidates);
-    }
+        collect_candidates(body, &gate, fi, &f.module_source, &mut found);
+        found
+    });
+    drop(shared_escape);
+    drop(types);
+    let candidates: Vec<Candidate> = per_function.into_iter().flatten().collect();
     if candidates.is_empty() {
         return false;
     }
@@ -1459,7 +1467,7 @@ struct Gate<'a> {
     /// `func_id.index()`. Declared with `#[immediate(p)]`, never inferred.
     immediate_params: &'a [IndexSet<usize>],
     funcs: &'a [FuncRef],
-    type_table: &'a Rc<RefCell<TypeTable>>,
+    type_table: &'a TypeTable,
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
     /// Indexed by `func_id.index()`: a builtin whose declaration says where it
@@ -1490,7 +1498,7 @@ struct Gate<'a> {
 
 impl Gate<'_> {
     fn is_reference_type(&self, ty: TypeId) -> bool {
-        holds_reference(&self.type_table.borrow(), ty)
+        holds_reference(self.type_table, ty)
     }
 
     /// The callee `func_id` names. Every per-function table here is collected
@@ -1519,7 +1527,7 @@ impl Gate<'_> {
         if !seen.insert(ty) {
             return false;
         }
-        let tt = self.type_table.borrow();
+        let tt = self.type_table;
         let inner = match tt.get(ty) {
             ResolvedType::BuiltinArray(_) => return true,
             // Nothing to own.
@@ -1548,11 +1556,9 @@ impl Gate<'_> {
             _ => None,
         };
         if let Some(inner) = inner {
-            drop(tt);
             return self.owns_heap_storage_inner(inner, seen);
         }
-        let fields = aggregate_field_info(ty, &tt, self.structs);
-        drop(tt);
+        let fields = aggregate_field_info(ty, tt, self.structs);
         match fields {
             Some((field_types, _, _)) => field_types
                 .into_iter()
@@ -1582,23 +1588,17 @@ impl Gate<'_> {
     /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
     /// before boxing) and outlives it, so it is the reliable half of the test.
     fn param_borrows_mutably(&self, param: &NirParam) -> bool {
-        param.is_mut_ref
-            || matches!(
-                self.type_table.borrow().get(param.type_id),
-                ResolvedType::MutRef(_)
-            )
+        param.is_mut_ref || matches!(self.type_table.get(param.type_id), ResolvedType::MutRef(_))
     }
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
     /// convention that neither writes the caller's storage (`&mut self`) nor
     /// takes it over (a by-value `self`).
     fn callee_borrows_self(&self, func_id: FuncId) -> bool {
-        self.func(func_id).params.first().is_some_and(|p0| {
-            matches!(
-                self.type_table.borrow().get(p0.type_id),
-                ResolvedType::Ref(_)
-            )
-        })
+        self.func(func_id)
+            .params
+            .first()
+            .is_some_and(|p0| matches!(self.type_table.get(p0.type_id), ResolvedType::Ref(_)))
     }
 
     /// The position of the array `func_id` reaches an element of, when it is
@@ -1720,10 +1720,7 @@ impl Gate<'_> {
             };
             f.body.is_some()
                 && !self.param_borrows_mutably(param)
-                && matches!(
-                    self.type_table.borrow().get(param.type_id),
-                    ResolvedType::Ref(_)
-                )
+                && matches!(self.type_table.get(param.type_id), ResolvedType::Ref(_))
         };
         borrows && !self.callee_ref_param_leaks(func_id, pos)
     }
@@ -1745,7 +1742,7 @@ impl Gate<'_> {
         if self.is_reference_type(return_type) {
             return true;
         }
-        let tt = self.type_table.borrow();
+        let tt = self.type_table;
         let mut ty = arg_ty;
         loop {
             let resolved = tt.get(ty);
@@ -1784,7 +1781,7 @@ impl Gate<'_> {
             return false;
         };
         if matches!(
-            self.type_table.borrow().get(param.type_id),
+            self.type_table.get(param.type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         ) {
             return false;
@@ -2629,7 +2626,7 @@ fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate
     use crate::nir_value_graph::ValueKind;
     use crate::wir_optimize::array::{ConstOperand, data_promotion_pays};
 
-    let type_table = gate.type_table.borrow();
+    let type_table = gate.type_table;
     let mut width = None;
     let mut operand_bytes = 0;
     for element in elements {
