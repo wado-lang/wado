@@ -252,22 +252,12 @@ impl GrammarAnalysis {
     /// HTML element scans its siblings as its content, and each of them does
     /// the same, which doubles per element.
     pub fn rule_rescans(&self) -> List<bool> {
-        let mut callees: List<List<i32>> = [];
+        let callees = self.scannable_callees();
         let mut late_failing: List<String> = [];
         for let rule of &self.parser_rules {
-            let mut names: List<String> = [];
             for let alt of &rule.alternatives {
-                collect_scannable_refs(&alt.elements, &mut names);
                 collect_late_failing_calls(&alt.elements, false, &mut late_failing);
             }
-            let mut ids: List<i32> = [];
-            for let name of &names {
-                let id = self.rule_index_of(name);
-                if id >= 0 {
-                    ids.push(id);
-                }
-            }
-            callees.push(ids);
         }
         let mut rescanned: List<bool> = [];
         for let i of 0..<callees.len() {
@@ -1713,11 +1703,7 @@ pub fn is_nullable(elem: &Element) -> bool {
 
 /// Dense `null`-initialised memo cache of length `n`, indexed by rule id.
 fn none_cache<T>(n: i32) -> List<Option<T>> {
-    let mut v: List<Option<T>> = [];
-    for let mut i = 0; i < n; i += 1 {
-        v.push(null);
-    }
-    return v;
+    return List::<Option<T>>::filled(n, null);
 }
 
 /// Index of `name` in the visiting stack, or -1. Used by the scannability

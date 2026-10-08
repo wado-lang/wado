@@ -14,6 +14,7 @@ fn src_root() -> String with Preopens {
     if fs::exists("package-gale/src/module_graph_test.wado") {
         return "package-gale/src";
     }
+    assert fs::exists("src/module_graph_test.wado"), "run from the repository root or `package-gale`";
     return "src";
 }
 
@@ -21,6 +22,9 @@ fn src_root() -> String with Preopens {
 fn imported_paths(source: &String) -> List<String> {
     let mut out: List<String> = [];
     for let line of source.lines() {
+        if line.trim_start().starts_with("//") {
+            continue;
+        }
         let Some([_, rest]) = line.split_once("from \"") else {
             continue;
         };

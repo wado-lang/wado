@@ -2295,7 +2295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|sig| {
                 (
                     Param::named_defaults(&sig.params),
-                    sig.defaults_module.clone(),
+                    Some(sig.defaults_module.clone()),
                 )
             })
             .unwrap_or_default();
@@ -3333,8 +3333,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // bare name asks the *caller's* frame, which an alias leaves without
         // that name at all.
         let callee_params = resolution.params;
-        // A default the declaration wrote resolves in the module that declares
-        // the method; the signature names another only for one it inherited.
+        // No signature answered: there is no default to resolve, and the
+        // declaring module stands in.
         let defaults_module = callee_params
             .defaults_module
             .clone()

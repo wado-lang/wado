@@ -94,12 +94,9 @@ pub struct EmitCursor {
 }
 
 impl EmitCursor {
+    /// Outside every rule, nothing emitted yet, for `rule_count` rules.
     pub fn new(rule_count: i32) -> EmitCursor {
-        let mut called: List<bool> = [];
-        for let mut i = 0; i < rule_count; i += 1 {
-            called.push(false);
-        }
-        return EmitCursor { scan_called: called };
+        return EmitCursor { scan_called: List::<bool>::filled(rule_count, false) };
     }
 
     /// Make rule `idx` the one being emitted. Set by `gen_parser` and the scan
@@ -108,11 +105,13 @@ impl EmitCursor {
         self.current_rule_index = idx;
     }
 
+    /// The index of the rule being emitted.
     pub fn current_rule_index(&self) -> i32 {
         assert self.current_rule_index >= 0, "the parse and scan emit loops make each rule current before walking its body";
         return self.current_rule_index;
     }
 
+    /// Whether the code being emitted is a scan function's.
     pub fn in_scan_fn(&self) -> bool {
         return self.in_scan_fn;
     }
@@ -158,6 +157,7 @@ impl EmitCursor {
         return outer;
     }
 
+    /// Leave a group's body, restoring what `enter_group_body` returned.
     pub fn leave_group_body(&mut self, outer: Option<bool>) {
         self.alt_choice = outer;
     }
@@ -174,6 +174,7 @@ impl EmitCursor {
         self.alt_bindings = bindings;
     }
 
+    /// The bindings of the alternative whose actions are being emitted.
     pub fn alt_bindings(&self) -> &List<AltBinding> {
         return &self.alt_bindings;
     }
@@ -184,10 +185,12 @@ impl EmitCursor {
         self.expected_names = rendered.to_string();
     }
 
+    /// The rendered expected-token set at the action site, or empty.
     pub fn expected_names(&self) -> &String {
         return &self.expected_names;
     }
 
+    /// Set the block a finished alternative breaks out of, or `null` to return.
     pub fn set_alt_exit_label(&mut self, label: Option<String>) {
         self.alt_exit_label = label;
     }
@@ -250,12 +253,15 @@ impl EmitCursor {
         return self.scan_queue.pop();
     }
 
+    /// Record `name` as the scan function covering alternative `alt` of the
+    /// rule being emitted.
     pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
         let key = [self.current_rule_index(), alt];
         assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${key.0} already has a scan function`;
         self.alt_scan_fns[key] = name.to_string();
     }
 
+    /// The scan function covering alternative `alt` of the rule being emitted.
     pub fn alt_scan_fn(&self, alt: i32) -> Option<String> {
         return self.alt_scan_fns.get([self.current_rule_index(), alt]);
     }
@@ -270,16 +276,19 @@ impl EmitCursor {
         return self.action_seen.contains(&id);
     }
 
+    /// Record that the dispatch resolves predicate `id`, so its body skips it.
     pub fn mark_predicate_gated(&mut self, id: i32) {
         if !self.predicate_gated.contains(&id) {
             self.predicate_gated.push(id);
         }
     }
 
+    /// Whether the dispatch resolves predicate `id`.
     pub fn is_predicate_gated(&self, id: i32) -> bool {
         return self.predicate_gated.contains(&id);
     }
 
+    /// The standalone predicate fns registered so far, as `[id, body]`.
     pub fn predicate_fns(&self) -> &List<[i32, String]> {
         return &self.predicate_fns;
     }
@@ -297,6 +306,7 @@ pub struct EmitContext {
 }
 
 impl EmitContext {
+    /// Emit over what the earlier phases settled, with the cursor outside every rule.
     pub fn new(
         analysis: GrammarAnalysis,
         settings: GenSettings,
@@ -424,6 +434,7 @@ impl EmitContext {
             && (rule_returns_vals(rule) || !self.plan.rule_captures(&rule.name).is_empty());
     }
 
+    /// `rule_emits_vals` for the rule being emitted.
     pub fn current_rule_emits_vals(&self) -> bool {
         return self.rule_emits_vals(self.current_rule());
     }
@@ -434,6 +445,7 @@ impl EmitContext {
         return self.plan.rule_captures(&self.current_rule().name).spans.contains_str(field);
     }
 
+    /// Whether the rule being emitted captures `field`'s node.
     pub fn captures_node<S: AsStrSlice>(&self, field: S) -> bool {
         return self.plan.rule_captures(&self.current_rule().name).nodes.contains_str(field);
     }

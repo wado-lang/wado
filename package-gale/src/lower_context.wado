@@ -45,16 +45,12 @@ pub struct LowerMarks {
 }
 
 impl LowerMarks {
+    /// Nothing marked yet, for `rule_count` rules.
     pub fn new(rule_count: i32) -> LowerMarks {
-        let mut flags: List<bool> = [];
-        let mut edges: List<List<String>> = [];
-        for let mut i = 0; i < rule_count; i += 1 {
-            flags.push(false);
-            edges.push([]);
-        }
+        let flags = List::<bool>::filled(rule_count, false);
         return LowerMarks {
             rule_reads_follow: flags,
-            follow_forward_edges: edges,
+            follow_forward_edges: List::<List<String>>::filled(rule_count, []),
             rule_asks_simulator: flags,
             rule_body_predicts: flags,
         };
@@ -84,6 +80,7 @@ pub struct LowerContext {
 }
 
 impl LowerContext {
+    /// Lowering over `analysis`, between rules and with nothing marked.
     pub fn new(
         analysis: GrammarAnalysis,
         settings: GenSettings,
@@ -107,11 +104,13 @@ impl LowerContext {
         self.current_rule_index = idx;
     }
 
+    /// The index of the rule being lowered.
     pub fn current_rule_index(&self) -> i32 {
         assert self.current_rule_index >= 0, "lowering makes each rule current before walking its body";
         return self.current_rule_index;
     }
 
+    /// The rule being lowered.
     pub fn current_rule(&self) -> &ParserRule {
         return &self.analysis.parser_rules()[self.current_rule_index()];
     }

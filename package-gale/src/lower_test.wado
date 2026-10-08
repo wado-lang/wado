@@ -146,6 +146,7 @@ test "lower simple rule with RuleRef" {
             [],
             [alt_of([Element::RuleRef(RuleRefElement::new("expr"))])],
         ),
+        ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
     let lowered = lower(&g, &no_lit_tokens());
@@ -1279,6 +1280,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
                 ]),
             ],
         ),
+        ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
     let lowered = lower(&g, &no_lit_tokens());

@@ -173,7 +173,7 @@ impl Signatures {
                 .method_sigs
                 .get_mut(&def)
                 .expect("every key was just read from this map");
-            sig.defaults_module = Some(module);
+            sig.defaults_module = module;
             for (param, from_trait) in sig.params.iter_mut().zip(params) {
                 param.name = from_trait.name;
                 param.default = from_trait.default;
@@ -250,10 +250,10 @@ pub(crate) struct MethodSig {
     pub(crate) cm_name: Option<String>,
     pub(crate) is_async: bool,
     /// Where this method's defaults were written, value and type parameters
-    /// alike, when another declaration wrote them: the trait's module, for a
-    /// method implementing one. A default resolves in the scope that wrote it,
-    /// so a call site pads from here, not from the module it reached it through.
-    pub(crate) defaults_module: Option<ModuleSource>,
+    /// alike: the declaring module, or the trait's, for a method implementing
+    /// one. A default resolves in the scope that wrote it, so a call site pads
+    /// from here, not from the module it reached it through.
+    pub(crate) defaults_module: ModuleSource,
 }
 
 /// What a declaration says about one parameter beyond its type. One record

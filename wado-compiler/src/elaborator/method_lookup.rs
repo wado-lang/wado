@@ -137,7 +137,7 @@ impl MethodInfo {
             from_concrete_impl: false,
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: None,
-            defaults_module: sig.defaults_module.clone(),
+            defaults_module: Some(sig.defaults_module.clone()),
             impl_type_bindings: Vec::new(),
         }
     }
@@ -1099,10 +1099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !sig.own_params.iter().any(|p| p.default.is_some()) {
             return false;
         }
-        let declaring_module = sig.defaults_module.clone().or_else(|| {
-            sig.declaring_impl
-                .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
-        });
+        let declaring_module = Some(sig.defaults_module.clone());
         let trait_decl = self.tysys.signatures.declaring_trait(sig);
         self.fill_defaulted_method_type_args(
             &sig.own_params,

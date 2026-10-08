@@ -508,7 +508,7 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
     for let rule of &grammar.parser_rules {
         parser_rules.push(lower_rule(rule, ctx));
     }
-    ctx.marks.follow_rule_snakes = follow_rule_snakes(grammar, &ctx.marks);
+    ctx.marks.follow_rule_snakes = follow_rule_snakes(grammar, &ctx.analysis, &ctx.marks);
     mark_at_end_conflicts_routed(grammar, &parser_rules, ctx);
     return LoweredGrammar {
         name: grammar.name,
@@ -547,23 +547,13 @@ fn mark_at_end_conflicts_routed(grammar: &Grammar, lowered: &List<Rule>, ctx: &m
 /// of them joins, and that is what its own callers then see. Settled only once
 /// every rule is lowered, and emit asks it at both ends of a call so the
 /// declaration and the arguments cannot disagree.
-fn follow_rule_snakes(grammar: &Grammar, marks: &LowerMarks) -> List<String> {
-    let count = grammar.parser_rules.len();
-    let mut forwards: List<List<i32>> = [];
-    for let mut i = 0; i < count; i += 1 {
-        let mut targets: List<i32> = [];
-        for let target of &marks.follow_forward_edges[i] {
-            for let mut j = 0; j < count; j += 1 {
-                if grammar.parser_rules[j].snake_name == *target {
-                    targets.push(j);
-                }
-            }
-        }
-        forwards.push(targets);
-    }
+fn follow_rule_snakes(grammar: &Grammar, analysis: &GrammarAnalysis, marks: &LowerMarks) -> List<String> {
+    let forwards: List<List<i32>> = marks.follow_forward_edges.iter_ref().map(|targets| targets.iter_ref().map(
+        |t| analysis.snake_rule_index(t),
+    ).collect()).collect();
     let reads = close_over_callers(&forwards, marks.rule_reads_follow);
     let mut snakes: List<String> = [];
-    for let mut i = 0; i < count; i += 1 {
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
         if reads[i] {
             snakes.push(grammar.parser_rules[i].snake_name);
         }
