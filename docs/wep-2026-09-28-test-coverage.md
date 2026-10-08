@@ -291,8 +291,8 @@ visible where the code is.
 
 `--coverage-baseline <file>` fails the run on a difference between the regions
 left uncovered and the ones the file lists. A new uncovered region fails, and
-so does a listed region that is now covered, so the file only shrinks. It is the
-pattern `scripts/rust-inline-paths.json` already follows.
+so does a listed region that is now covered, so every change to the file is
+made on purpose and shows in review.
 
 An entry names its region by path, function and position within the function,
 not by line, so an edit elsewhere in the file leaves it valid:
@@ -312,8 +312,10 @@ not depend on `-O`, so one optimization level answers for all.
 `mise run update-stdlib-coverage-baseline` rewrites the file.
 The baseline starts as whatever the first run leaves uncovered, and the work
 toward 100% is emptying it: a test for each region that can run, and
-`#[coverage(off)]` for each that cannot. Once it is empty, 100% is what the gate
-holds.
+`unreachable()` or `#[coverage(off)]` for each that cannot. Code is never bent to
+fit the file. A region whose only test needs a host or a build the stdlib tests
+do not have, such as a filesystem error or a `-D log.level` threshold, is listed
+in it instead.
 
 ### Testing
 
@@ -369,7 +371,8 @@ host call on every run is too slow for loops.
    (`mise run check-coverage-levels`).
 6. [x] The standard library: its snapshot skipped when measured,
    `--coverage-baseline`, and the CI job with its first baseline.
-7. [ ] 100% for the standard library: the baseline emptied.
+7. [ ] 100% for the standard library: the baseline holds only regions no
+   stdlib test can reach.
 8. [x] Derived regions: the plan marks them, reify leaves them without a probe,
    and the runner derives them. The `-O0`/`-O3` check and the fixtures pass
    unchanged, and the probes saved on the standard library are measured.
