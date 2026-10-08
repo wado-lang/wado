@@ -81,9 +81,9 @@ another thread is writing panics rather than races.
 
 A `borrow_mut` guard bumps the count on drop when the function changed, so a
 borrow that changes nothing counts nothing, whatever route it took. The body's
-parts and the locals are each `Tracked`: a version that grows on every mutable
-borrow, with an epoch drawn afresh on construction and clone, so a part put in
-place of another never compares equal to it. The rest of the function is
+parts and the locals are each `Tracked`: an edit count that grows on every
+mutable borrow, beside an epoch drawn afresh on construction and clone, so a
+part put in place of another never compares equal to it. The rest of the function is
 compared against a copy the guard takes on the first whole-function mutable
 borrow. `FuncWriteGuard::parts` hands a rewrite the body and locals without
 that copy. The per-body memos key on the count instead of on reported edits, so

@@ -658,7 +658,7 @@ impl LocalSet {
     }
 }
 
-/// A value whose [`Self::version`] grows on every mutable borrow, so a memo
+/// A value whose [`Self::version`] changes on every mutable borrow, so a memo
 /// keyed on it notices every edit without anyone reporting one (WEP: Parallel
 /// Optimizer). A clone shares the value until either side writes it, so a
 /// sweep's copy of a function costs only the parts a visit then rewrites.
@@ -768,7 +768,7 @@ where
 
 /// A NIR body in arena form: one `PrimaryMap` per node category, a `root`
 /// block, and the function-level facts later passes read beside the arena.
-/// Every part is [`Tracked`], so [`Self::version`] grows on any edit.
+/// Every part is [`Tracked`], so [`Self::version`] changes on any edit.
 #[derive(Debug, Clone)]
 pub struct Body {
     pub exprs: Tracked<PrimaryMap<ExprId, ExprNode>>,
@@ -804,9 +804,9 @@ impl Body {
         self.set_root(root);
     }
 
-    /// Its parts' versions: different after any edit, by any route, since
-    /// each part's only grows and a part put in place of another carries a
-    /// newer epoch.
+    /// Its parts' versions: different after any edit, by any route, since a
+    /// part's edit count only grows and a part put in place of another carries
+    /// an epoch of its own.
     pub fn version(&self) -> [(u64, u64); 10] {
         [
             self.exprs.version(),
