@@ -975,8 +975,13 @@ pub(super) fn specialize_const_params(
         .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
-    let mut reachable =
-        reachable_function_positions(project, descriptors, &mut state.reachability, cached);
+    let mut reachable = reachable_function_positions(
+        project,
+        descriptors,
+        &mut state.reachability,
+        gate.exec(),
+        cached,
+    );
     let mut changed = false;
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
@@ -998,7 +1003,8 @@ fn specialize_round(
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
-        let recursive = recursive_functions(state.callees.refresh(project, body_callees));
+        let recursive =
+            recursive_functions(state.callees.refresh(project, gate.exec(), body_callees));
         Signatures::build(project, &types, &recursive)
     };
     let facts = summarize_params(project, &signatures);

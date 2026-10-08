@@ -140,6 +140,12 @@ impl FunctionGate {
         self.id
     }
 
+    /// The threads this gate's sweeps run on, for the whole-program walks a
+    /// pass takes before its sweep.
+    pub fn exec(&self) -> &Executor {
+        &self.exec
+    }
+
     /// Grow the side-tables to cover `len` functions. A pass may add functions
     /// mid-loop (`value_copy_demote` appends shallow-copy specializations), so
     /// the gate cannot assume a fixed count. New functions start dirty

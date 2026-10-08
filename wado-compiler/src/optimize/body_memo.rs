@@ -5,6 +5,7 @@
 
 use crate::nir::NirFunction;
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 
 /// Facts each function's body answers alone, re-derived only for the functions
 /// written since the last refresh. What `of` reads beyond the function must
@@ -33,7 +34,7 @@ impl<T> Default for BodyMemo<T> {
     }
 }
 
-impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
+impl<T: PartialEq + std::fmt::Debug + Send> BodyMemo<T> {
     /// Forget the entries `stale` picks, for a caller whose facts read
     /// something beyond the body that has since moved.
     pub fn forget_where(&mut self, stale: impl Fn(&T) -> bool) {
@@ -49,9 +50,15 @@ impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
         &self.facts
     }
 
-    /// Every function's facts as `project` stands, indexed by store position.
-    pub fn refresh(&mut self, project: &NirPackage, of: impl FnMut(&NirFunction) -> T) -> &[T] {
-        self.refresh_observing(project, of, |_, _, _| {})
+    /// Every function's facts as `project` stands, indexed by store position,
+    /// the stale ones re-derived on `exec`'s threads.
+    pub fn refresh(
+        &mut self,
+        project: &NirPackage,
+        exec: &Executor,
+        of: impl Fn(&NirFunction) -> T + Sync + Send,
+    ) -> &[T] {
+        self.refresh_observing(project, exec, of, |_, _, _| {})
     }
 
     /// [`Self::refresh`], handing `rederived` each entry it re-derives with
@@ -59,18 +66,22 @@ impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
     pub fn refresh_observing(
         &mut self,
         project: &NirPackage,
-        mut of: impl FnMut(&NirFunction) -> T,
+        exec: &Executor,
+        of: impl Fn(&NirFunction) -> T + Sync + Send,
         mut rederived: impl FnMut(usize, Option<&T>, &T),
     ) -> &[T] {
-        if self.facts.len() > project.functions.len() {
+        let functions = &project.functions;
+        if self.facts.len() > functions.len() {
             *self = Self::default();
         }
-        for (i, f) in project.functions.iter().enumerate() {
-            let writes = f.writes();
-            if self.writes.get(i) == Some(&writes) {
-                continue;
-            }
-            let fact = of(&f.borrow());
+        let stale: Vec<usize> = (0..functions.len())
+            .filter(|&i| self.writes.get(i) != Some(&functions[i].writes()))
+            .collect();
+        let fresh = exec.map(&stale, |&i| {
+            let f = &functions[i];
+            (f.writes(), of(&f.borrow()))
+        });
+        for (i, (writes, fact)) in stale.into_iter().zip(fresh) {
             rederived(i, self.facts.get(i), &fact);
             if i < self.facts.len() {
                 self.writes[i] = writes;
@@ -89,7 +100,7 @@ impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
     /// that nobody forgot, no longer answers for its function. One function per
     /// refresh, rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
-    fn assert_one_settled(&mut self, project: &NirPackage, mut of: impl FnMut(&NirFunction) -> T) {
+    fn assert_one_settled(&mut self, project: &NirPackage, of: impl Fn(&NirFunction) -> T) {
         let Some(n) = self.cursor.checked_rem(self.facts.len()) else {
             return;
         };

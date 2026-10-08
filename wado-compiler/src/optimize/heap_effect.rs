@@ -16,8 +16,8 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
-    BuiltinDeclaration, ObjectTypes, ResolvedType, RetainInto, RetainSpec, ReturnConvention,
-    TypeId, TypeKey, TypeTable,
+    BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,
+    ReturnConvention, TypeId, TypeKey, TypeTable,
 };
 
 use super::arena_query::holds_reference;
@@ -153,7 +153,7 @@ struct FunctionEntry {
 }
 
 impl FunctionEntry {
-    fn of(f: &NirFunction, project: &NirPackage) -> Self {
+    fn of(f: &NirFunction, declarations: &BuiltinDeclarations) -> Self {
         let mut calls = IndexSet::default();
         let mut calls_indirect = false;
         if let Some(body) = &f.body {
@@ -166,7 +166,7 @@ impl FunctionEntry {
             });
         }
         Self {
-            callee: classify_callee(f, project),
+            callee: classify_callee(f, declarations),
             closure: f.body.is_some() && f.is_closure_call(),
             calls,
             calls_indirect,
@@ -262,9 +262,11 @@ impl HeapEffectsCache {
         let mut edited = vec![false; len];
         // Whether a node's answer to its callers moved; the last is the indirect one.
         let mut moved = vec![false; len + 1];
+        let declarations = &project.builtin_declarations;
         self.functions.refresh_observing(
             project,
-            |f| FunctionEntry::of(f, project),
+            gate.exec(),
+            |f| FunctionEntry::of(f, declarations),
             |i, old, new| {
                 edited[i] = true;
                 moved[i] = old.is_none_or(|old| old.shape() != new.shape());
@@ -740,11 +742,11 @@ impl HeapEffects<'_> {
     }
 }
 
-fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
+fn classify_callee(f: &NirFunction, declarations: &BuiltinDeclarations) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    match project.builtin_declarations.get(f) {
+    match declarations.get(f) {
         Some(declaration) => match declaration.facts.side_effect {
             SideEffect::Listed { .. } => Callee::Builtin(Box::new(declaration.clone())),
             SideEffect::Opaque | SideEffect::BlackBox => Callee::Opaque {

@@ -167,8 +167,9 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let field_table = build_field_table_index(project);
     let struct_fields = build_struct_fields_index(project);
-    let own = state.0.refresh(project, |f| {
-        f.body.as_ref().map(|body| OwnWrites::of(body, &type_table))
+    let types = &*type_table;
+    let own = state.0.refresh(project, gate.exec(), |f| {
+        f.body.as_ref().map(|body| OwnWrites::of(body, types))
     });
     let (reachable_writes, write_targets) = transitive_reachable_writes(project, own);
 

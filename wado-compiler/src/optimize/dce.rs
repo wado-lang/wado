@@ -9,6 +9,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::is_pure_nontrapping_operand_typed;
 use super::body_memo::BodyMemo;
 use super::mod_ref::{CallFacts, FnSummaries};
+use crate::parallel::Executor;
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
@@ -168,11 +169,12 @@ pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
     walks: &mut ReachabilityCache,
+    exec: &Executor,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
     let functors = functor_methods(project);
-    let analyses = walks.analyses(project, descriptors, &functors);
+    let analyses = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
     let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
     let roots = cached
@@ -693,6 +695,7 @@ impl ReachabilityCache {
     fn analyses(
         &mut self,
         project: &NirPackage,
+        exec: &Executor,
         descriptors: &[FunctionRef],
         functors: &FunctorMethods,
     ) -> &[FunctionAnalysis] {
@@ -706,7 +709,7 @@ impl ReachabilityCache {
                 .forget_where(|walk| !walk.named.is_disjoint(&renamed));
         }
         let type_table = &*project.type_table.borrow();
-        self.walks.refresh(project, |f| {
+        self.walks.refresh(project, exec, |f| {
             function_analysis(f, type_table, descriptors, functors)
         })
     }

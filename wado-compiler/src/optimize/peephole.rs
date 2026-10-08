@@ -94,7 +94,7 @@ pub(super) fn run_peephole(
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let summaries = mod_ref.summaries(project);
+    let summaries = mod_ref.summaries(project, gate.exec());
     let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(gated_pass, len, |fid| {

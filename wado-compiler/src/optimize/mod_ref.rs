@@ -20,6 +20,7 @@ use crate::optimize::arena_query::{
 use crate::optimize::body_memo::BodyMemo;
 use crate::optimize::bounds::{self, Proofs};
 use crate::optimize::inline::recursive_scc_members;
+use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
@@ -994,13 +995,15 @@ fn join_over_calls<'b>(
 pub(super) struct SummaryCache(BodyMemo<Option<BodySummary>>);
 
 impl SummaryCache {
-    /// What [`summarize`] answers for `project` as it stands.
-    pub(super) fn summaries(&mut self, project: &NirPackage) -> FnSummaries {
+    /// What [`summarize`] answers for `project` as it stands, the bodies
+    /// re-derived on `exec`'s threads.
+    pub(super) fn summaries(&mut self, project: &NirPackage, exec: &Executor) -> FnSummaries {
         let types = project.type_table.borrow();
+        let types = &*types;
         let (leaves, builtins) = leaf_effects(project);
-        let bodies = self
-            .0
-            .refresh(project, |f| BodySummary::of(f, &types, &leaves, &builtins));
+        let bodies = self.0.refresh(project, exec, |f| {
+            BodySummary::of(f, types, &leaves, &builtins)
+        });
         join_over_calls(leaves, bodies.iter().map(Option::as_ref))
     }
 }
