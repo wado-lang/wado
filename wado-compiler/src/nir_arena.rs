@@ -717,6 +717,15 @@ impl<A, T: FromIterator<A>> FromIterator<A> for Tracked<T> {
     }
 }
 
+impl<T> Tracked<T>
+where
+    for<'a> &'a T: IntoIterator,
+{
+    pub fn iter(&self) -> <&T as IntoIterator>::IntoIter {
+        self.value.into_iter()
+    }
+}
+
 impl<'a, T> IntoIterator for &'a Tracked<T>
 where
     &'a T: IntoIterator,
@@ -726,18 +735,6 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         self.value.into_iter()
-    }
-}
-
-impl<'a, T> IntoIterator for &'a mut Tracked<T>
-where
-    &'a mut T: IntoIterator,
-{
-    type Item = <&'a mut T as IntoIterator>::Item;
-    type IntoIter = <&'a mut T as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        (&mut **self).into_iter()
     }
 }
 
@@ -772,9 +769,10 @@ impl Body {
         *self.root = root;
     }
 
-    /// Higher after any edit, by any route: the sum of its parts' versions,
-    /// each of which only grows.
-    pub fn version(&self) -> u128 {
+    /// Its parts' versions: different after any edit, by any route, since
+    /// each part's only grows and a part put in place of another carries a
+    /// newer epoch.
+    pub fn version(&self) -> [u64; 10] {
         [
             self.exprs.version(),
             self.stmts.version(),
@@ -787,9 +785,6 @@ impl Body {
             self.values.version(),
             self.value_graph.version(),
         ]
-        .into_iter()
-        .map(u128::from)
-        .sum()
     }
 
     /// The type of an operand: the expr's `type_id` for `Operand::Expr`, or the
@@ -902,16 +897,16 @@ impl Body {
     /// build a working body of their own.
     pub fn empty() -> Self {
         Self {
-            exprs: Tracked::new(Default::default()),
-            stmts: Tracked::new(Default::default()),
-            blocks: Tracked::new(Default::default()),
-            pats: Tracked::new(Default::default()),
+            exprs: Tracked::new(PrimaryMap::new()),
+            stmts: Tracked::new(PrimaryMap::new()),
+            blocks: Tracked::new(PrimaryMap::new()),
+            pats: Tracked::new(PrimaryMap::new()),
             root: Tracked::new(BlockId::from_u32(0)),
-            locals: Tracked::new(Default::default()),
-            address_taken_locals: Tracked::new(Default::default()),
-            stores_aliased_locals: Tracked::new(Default::default()),
+            locals: Tracked::new(Vec::new()),
+            address_taken_locals: Tracked::new(IndexSet::default()),
+            stores_aliased_locals: Tracked::new(IndexSet::default()),
             values: Tracked::new(ValuePool::new()),
-            value_graph: Tracked::new(Default::default()),
+            value_graph: Tracked::new(None),
         }
     }
 
@@ -926,13 +921,13 @@ impl Body {
             blocks: self.blocks.clone(),
             pats: self.pats.clone(),
             root: self.root.clone(),
-            locals: Tracked::new(Default::default()),
-            address_taken_locals: Tracked::new(Default::default()),
-            stores_aliased_locals: Tracked::new(Default::default()),
+            locals: Tracked::new(Vec::new()),
+            address_taken_locals: Tracked::new(IndexSet::default()),
+            stores_aliased_locals: Tracked::new(IndexSet::default()),
             values: self.values.clone(),
             // Scratch clone (niri CTFE): the value graph is a per-function
             // optimizer artifact and is not carried into a node-only working copy.
-            value_graph: Tracked::new(Default::default()),
+            value_graph: Tracked::new(None),
         }
     }
 

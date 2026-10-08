@@ -2235,7 +2235,11 @@ pub fn inline_functions(
             rescan_left: None,
         };
         let mut func = functions[fid.index()].borrow_mut();
-        func.body.as_ref()?;
+        // Asked before the frame is taken, so a caller with nothing to splice
+        // is not written.
+        if !func.calls_any(|id| inline_candidates.contains_key(id)) {
+            return None;
+        }
         // Track which functions (by `FuncId`) were inlined into this function
         let mut inlined_funcs: Vec<FuncId> = Vec::new();
         // Splice-point re-valuation records (Method A): one per inlined block.

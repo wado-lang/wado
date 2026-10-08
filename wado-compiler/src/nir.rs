@@ -239,7 +239,7 @@ pub enum NirLiteralPattern {
 }
 
 /// Generic type parameter in NIR (from AST `GenericParam`)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NirTypeParam {
     pub name: String,
     /// Whether this is an effect parameter (`effect E`)
@@ -253,7 +253,7 @@ pub struct NirTypeParam {
 }
 
 /// Information about monomorphization origin for instantiated items
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MonomorphInfo {
     /// Original generic name: `"Box"` for `"Box<i32>"`, or
     /// `"BTreeNode<K,V>::insert"` for methods.
@@ -336,10 +336,10 @@ impl FuncCell {
     }
 
     /// Borrow the function for writing. Panics while another borrow holds it,
-    /// as `RefCell::borrow_mut` does. The guard counts one write when it is
-    /// dereferenced mutably, or, reached through [`FuncWriteGuard::parts`], when
-    /// the body or the locals moved. A borrow that changes nothing counts
-    /// nothing.
+    /// as `RefCell::borrow_mut` does. The guard counts one write on drop if the
+    /// function changed: its body or locals by their [`Tracked`] versions, the
+    /// rest against a copy taken on the first whole-function mutable borrow. A
+    /// borrow that changes nothing counts nothing.
     pub fn borrow_mut(&self) -> FuncWriteGuard<'_> {
         let guard = self
             .func
@@ -349,7 +349,7 @@ impl FuncCell {
             version: guard.version(),
             guard,
             writes: &self.writes,
-            counted: false,
+            head: None,
         }
     }
 
@@ -364,9 +364,117 @@ impl FuncCell {
 pub struct FuncWriteGuard<'a> {
     guard: RwLockWriteGuard<'a, NirFunction>,
     writes: &'a AtomicU64,
-    counted: bool,
     /// [`NirFunction::version`] when the guard was taken.
-    version: u128,
+    version: (Option<[u64; 10]>, u64),
+    /// The function's [`Head`] before the first whole-function mutable borrow.
+    head: Option<Head>,
+}
+
+/// Everything of a function but its body and locals, which count their own
+/// edits: what a whole-function mutable borrow may change unseen.
+#[derive(PartialEq)]
+struct Head {
+    id: Option<FuncId>,
+    is_dead: bool,
+    name: String,
+    module_source: ModuleSource,
+    visibility: ast::Visibility,
+    is_export: bool,
+    is_async: bool,
+    type_params: Vec<NirTypeParam>,
+    impl_type_params: Vec<NirTypeParam>,
+    monomorph_info: Option<MonomorphInfo>,
+    method_info: Option<LocalMethodName>,
+    params: Vec<NirParam>,
+    return_type: TypeId,
+    task_return_type: Option<TypeId>,
+    effects: Vec<EffectRef>,
+    retains: Vec<String>,
+    span: Span,
+    address_taken_locals: IndexSet<u32>,
+    stores_aliased_locals: IndexSet<u32>,
+    is_cm_binding: bool,
+    is_dispatch_wrapper: bool,
+    is_cm_export: bool,
+    is_ambient: bool,
+    inline_hint: InlineHint,
+    compiler_item: Option<CompilerItem>,
+    export_name: Option<String>,
+    allocator_tag: Option<String>,
+    kind: FunctionKind,
+    scalarized_from: Option<TypeId>,
+    return_abi: ReturnAbi,
+}
+
+impl Head {
+    fn of(func: &NirFunction) -> Self {
+        let NirFunction {
+            id,
+            is_dead,
+            name,
+            module_source,
+            visibility,
+            is_export,
+            is_async,
+            type_params,
+            impl_type_params,
+            monomorph_info,
+            method_info,
+            params,
+            return_type,
+            task_return_type,
+            effects,
+            retains,
+            span,
+            address_taken_locals,
+            stores_aliased_locals,
+            is_cm_binding,
+            is_dispatch_wrapper,
+            is_cm_export,
+            is_ambient,
+            inline_hint,
+            compiler_item,
+            export_name,
+            allocator_tag,
+            kind,
+            scalarized_from,
+            return_abi,
+            body: _,
+            locals: _,
+        } = func;
+        Self {
+            id: *id,
+            is_dead: *is_dead,
+            name: name.clone(),
+            module_source: module_source.clone(),
+            visibility: *visibility,
+            is_export: *is_export,
+            is_async: *is_async,
+            type_params: type_params.clone(),
+            impl_type_params: impl_type_params.clone(),
+            monomorph_info: monomorph_info.clone(),
+            method_info: method_info.clone(),
+            params: params.clone(),
+            return_type: *return_type,
+            task_return_type: *task_return_type,
+            effects: effects.clone(),
+            retains: retains.clone(),
+            span: *span,
+            address_taken_locals: address_taken_locals.clone(),
+            stores_aliased_locals: stores_aliased_locals.clone(),
+            is_cm_binding: *is_cm_binding,
+            is_dispatch_wrapper: *is_dispatch_wrapper,
+            is_cm_export: *is_cm_export,
+            is_ambient: *is_ambient,
+            inline_hint: *inline_hint,
+            compiler_item: *compiler_item,
+            export_name: export_name.clone(),
+            allocator_tag: allocator_tag.clone(),
+            kind: kind.clone(),
+            scalarized_from: *scalarized_from,
+            return_abi: return_abi.clone(),
+        }
+    }
 }
 
 /// The parts of a function a rewrite of its body touches: the body and the
@@ -402,19 +510,16 @@ impl FuncWriteGuard<'_> {
             stores_aliased_locals,
         }
     }
-
-    fn count(&mut self) {
-        if !self.counted {
-            self.counted = true;
-            self.writes.fetch_add(1, MemoryOrdering::Relaxed);
-        }
-    }
 }
 
 impl Drop for FuncWriteGuard<'_> {
     fn drop(&mut self) {
-        if self.guard.version() != self.version {
-            self.count();
+        let head_moved = self
+            .head
+            .as_ref()
+            .is_some_and(|head| *head != Head::of(&self.guard));
+        if head_moved || self.guard.version() != self.version {
+            self.writes.fetch_add(1, MemoryOrdering::Relaxed);
         }
     }
 }
@@ -429,7 +534,9 @@ impl std::ops::Deref for FuncWriteGuard<'_> {
 
 impl std::ops::DerefMut for FuncWriteGuard<'_> {
     fn deref_mut(&mut self) -> &mut NirFunction {
-        self.count();
+        if self.head.is_none() {
+            self.head = Some(Head::of(&self.guard));
+        }
         &mut self.guard
     }
 }
@@ -638,9 +745,9 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
-    /// Higher after any edit to the body or the locals.
-    pub fn version(&self) -> u128 {
-        self.body.as_ref().map_or(0, Body::version) + u128::from(self.locals.version())
+    /// Different after any edit to the body or the locals.
+    pub fn version(&self) -> (Option<[u64; 10]>, u64) {
+        (self.body.as_ref().map(Body::version), self.locals.version())
     }
 
     /// [`Body::calls_any`] of the body, `false` for a bodyless function.
@@ -801,7 +908,7 @@ impl NirLocal {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NirParam {
     pub name: String,
     pub type_id: TypeId,

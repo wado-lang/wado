@@ -1312,7 +1312,11 @@ impl<'a> Engine<'a> {
         } else {
             Vec::new()
         };
-        self.body.blocks[block].stmts = stmts;
+        // A write is an edit to the function's memos, so an unchanged list is
+        // not written back.
+        if self.body.blocks[block].stmts != stmts {
+            self.body.blocks[block].stmts = stmts;
+        }
         for s in arrived {
             self.census_add_subtree(NodeRef::Stmt(s));
         }
