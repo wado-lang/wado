@@ -5,6 +5,7 @@
 //! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
 use std::ops::ControlFlow;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
@@ -658,10 +659,11 @@ impl LocalSet {
 
 /// A value whose [`Self::version`] grows on every mutable borrow, so a memo
 /// keyed on it notices every edit without anyone reporting one (WEP: Parallel
-/// Optimizer). Reading through it is free.
+/// Optimizer). A clone shares the value until either side writes it, so a
+/// sweep's copy of a function costs only the parts a visit then rewrites.
 #[derive(Debug)]
 pub struct Tracked<T> {
-    value: T,
+    value: Arc<T>,
     /// An epoch in the high half, drawn afresh by every construction and
     /// clone, and the mutable borrows taken since in the low half. A value put
     /// in place of another therefore always carries a higher version.
@@ -674,6 +676,10 @@ static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
 impl<T> Tracked<T> {
     #[must_use]
     pub fn new(value: T) -> Self {
+        Self::sharing(Arc::new(value))
+    }
+
+    fn sharing(value: Arc<T>) -> Self {
         Self {
             value,
             version: NEXT_EPOCH.fetch_add(1, AtomicOrdering::Relaxed) << 32,
@@ -686,9 +692,9 @@ impl<T> Tracked<T> {
     }
 }
 
-impl<T: Clone> Clone for Tracked<T> {
+impl<T> Clone for Tracked<T> {
     fn clone(&self) -> Self {
-        Self::new(self.value.clone())
+        Self::sharing(Arc::clone(&self.value))
     }
 }
 
@@ -700,14 +706,14 @@ impl<T> std::ops::Deref for Tracked<T> {
     }
 }
 
-impl<T> std::ops::DerefMut for Tracked<T> {
+impl<T: Clone> std::ops::DerefMut for Tracked<T> {
     fn deref_mut(&mut self) -> &mut T {
         assert!(
             self.version & u64::from(u32::MAX) != u64::from(u32::MAX),
             "a tracked value took 2^32 mutable borrows within one epoch"
         );
         self.version += 1;
-        &mut self.value
+        Arc::make_mut(&mut self.value)
     }
 }
 
