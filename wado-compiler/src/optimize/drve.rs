@@ -1,9 +1,12 @@
 //! Eliminate pure, nontrapping return values discarded by every caller.
 
+use std::sync::Arc;
+
 use crate::hashmap::IndexSet;
 use crate::nir::{FunctionKind, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::{NirPackage, Reshape, ReturnShape};
+use crate::parallel::Executor;
 use crate::tir::TypeTable;
 
 use cranelift_entity::EntityRef;
@@ -16,27 +19,31 @@ use crate::nir::FuncId;
 type FnKey = dae::FnKey;
 
 pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let type_table = project.type_table.borrow();
-
-    let mut candidates: IndexSet<FnKey> = IndexSet::default();
-    for fid in gate.dirty_funcs(GatedPass::Drve, project.functions.len()) {
-        let func = project.functions[fid.index()].borrow();
-        if !is_eligible(&func) {
-            continue;
-        }
-        if let Some(body) = &func.body
-            && has_only_pure_returns(body, &type_table)
-            && let Some(id) = func.id
-        {
-            candidates.insert(id);
-        }
-    }
-    drop(type_table);
+    let exec = Arc::clone(gate.exec());
+    let dirty = gate.dirty_funcs(GatedPass::Drve, project.functions.len());
+    let candidates: IndexSet<FnKey> = {
+        let type_table = project.type_table.borrow();
+        let type_table: &TypeTable = &type_table;
+        let functions = &project.functions;
+        exec.map(&dirty, |fid| {
+            let func = functions[fid.index()].borrow();
+            if !is_eligible(&func) {
+                return None;
+            }
+            let body = func.body.as_ref()?;
+            has_only_pure_returns(body, type_table)
+                .then_some(func.id)
+                .flatten()
+        })
+        .into_iter()
+        .flatten()
+        .collect()
+    };
     if candidates.is_empty() {
         return false;
     }
 
-    let confirmed = validate_call_sites(project, candidates);
+    let confirmed = validate_call_sites(project, candidates, &exec);
     if confirmed.is_empty() {
         return false;
     }
@@ -44,7 +51,7 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
     // drve is interprocedural and scans all functions, but reports exactly the
     // ones it touched (converted callees, retyped or retargeted callers) so the
     // gated passes re-examine only those, as dae does.
-    let touched = apply_drve(project, &confirmed);
+    let touched = apply_drve(project, &confirmed, &exec);
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
     }
@@ -117,17 +124,30 @@ fn has_only_pure_returns(body: &Body, type_table: &TypeTable) -> bool {
 // Call-site validation
 // ──────────────────────────────────────────────────────────────────────────────
 
-fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) -> IndexSet<FnKey> {
+fn validate_call_sites(
+    project: &NirPackage,
+    mut candidates: IndexSet<FnKey>,
+    exec: &Executor,
+) -> IndexSet<FnKey> {
+    let per_function = exec.map(&project.functions, |func_rc| {
+        let mut ctx = ValidateCtx {
+            candidates: &candidates,
+            rejected: IndexSet::default(),
+            observed: IndexSet::default(),
+        };
+        if let Some(body) = &func_rc.borrow().body {
+            ctx.block(body, body.root());
+        }
+        (ctx.rejected, ctx.observed)
+    });
     let mut ctx = ValidateCtx {
         candidates: &candidates,
         rejected: IndexSet::default(),
         observed: IndexSet::default(),
     };
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            ctx.block(body, body.root());
-        }
+    for (rejected, observed) in per_function {
+        ctx.rejected.extend(rejected);
+        ctx.observed.extend(observed);
     }
     // A global initializer can never be a `_ = call(...)` drop site — any
     // appearance of a candidate there consumes its result, disqualifying it.
@@ -218,7 +238,11 @@ impl ValidateCtx<'_> {
 /// signature changed (converted callees + callers whose call sites were
 /// retyped or retargeted), so the caller can mark exactly those dirty in the
 /// gate.
-fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usize> {
+fn apply_drve(
+    project: &mut NirPackage,
+    confirmed: &IndexSet<FnKey>,
+    exec: &Executor,
+) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
     // Step A: convert each confirmed candidate to void return. The candidate
     // filter guarantees every reachable `Return { value: Some(_) }` carries a
@@ -240,17 +264,16 @@ fn apply_drve(project: &mut NirPackage, confirmed: &IndexSet<FnKey>) -> Vec<usiz
     // Without this, `Expr(Call(f))` in stmt position still claims the old
     // return type and `wir_build::translate.rs` wraps the call in `Drop`,
     // underflowing the Wasm stack.
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        if !func.calls_any(|id| confirmed.contains(id)) {
-            continue;
-        }
-        if let Some(body) = func.body.as_mut()
-            && retype_calls(body, confirmed)
-        {
-            touched.insert(i);
-        }
-    }
+    let functions = &project.functions;
+    let retyped = exec.map_indices(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
+        func.calls_any(|id| confirmed.contains(id))
+            && func
+                .body
+                .as_mut()
+                .is_some_and(|body| retype_calls(body, confirmed))
+    });
+    touched.extend((0..retyped.len()).filter(|&i| retyped[i]));
     for global in &mut project.globals {
         retype_calls(global.init.slot_expr_mut().body_mut(), confirmed);
     }
