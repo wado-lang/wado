@@ -309,24 +309,25 @@ pub(super) fn freeze_pure_arith(
 ) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
-    let type_table = project.type_table.borrow();
+    let types = project.type_table.borrow();
+    let type_table: &TypeTable = &types;
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table, exec);
+    let call_immutability = CallImmutability::new(project, type_table, exec);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a field read is versioned by what a call writes.
     let gate = include_fields.then(|| FunctionGate::new(project, &Arc::default()));
     let mut heap = HeapEffectsCache::default();
     let effects = gate
         .as_ref()
-        .map(|gate| heap.effects(project, &type_table, gate));
-    let mut buffers = EngineBuffers::default();
-    let mut refusals = Refusals::new();
-    let mut changed = false;
-    for func_rc in &project.functions {
+        .map(|gate| heap.effects(project, type_table, gate));
+    let outcomes = exec.map(&project.functions, |func_rc| {
+        let mut refusals = Refusals::new();
+        let mut changed = false;
         let mut func = func_rc.borrow_mut();
         if func.body.is_none() {
-            continue;
+            return (changed, refusals);
         }
+        let mut buffers = EngineBuffers::default();
         let NirFunction {
             body,
             locals,
@@ -344,7 +345,7 @@ pub(super) fn freeze_pure_arith(
             locals,
             address_taken_locals,
             stores_aliased_locals,
-            &type_table,
+            type_table,
             &first_param_types,
             &call_immutability,
         );
@@ -357,14 +358,14 @@ pub(super) fn freeze_pure_arith(
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
         let mut_escaped_leaf = alias.mut_escaped.clone();
-        let verdicts = call_verdicts(body, &type_table, &first_param_types, &call_immutability);
+        let verdicts = call_verdicts(body, type_table, &first_param_types, &call_immutability);
         let call_writes = effects
             .as_ref()
             .map(|e| e.body_call_writes(body))
             .unwrap_or_default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(param_locals);
         engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
         engine.set_call_writes(call_writes);
@@ -393,7 +394,7 @@ pub(super) fn freeze_pure_arith(
         // spurious over-merge; deciding up front avoids that — and the
         // post-edit graph is not consumed, this being the last pass.)
         let ctx = FreezeCtx {
-            type_table: &type_table,
+            type_table,
             mut_escaped_leaf: &mut_escaped_leaf,
             multi_version_locals: &multi_version_locals,
             address_taken: &address_taken,
@@ -436,6 +437,13 @@ pub(super) fn freeze_pure_arith(
                 changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
             }
         }
+        (changed, refusals)
+    });
+    let mut refusals = Refusals::new();
+    let mut changed = false;
+    for (changed_one, refused) in outcomes {
+        changed |= changed_one;
+        refusals.absorb(refused);
     }
     refusals.report(phase, include_fields);
     changed
@@ -482,6 +490,15 @@ impl Refusals {
         match refusal {
             None => self.frozen += 1,
             Some(r) => *self.by_reason.entry((r.name(), kind_name)).or_default() += 1,
+        }
+    }
+
+    /// Add one function's tally, in function order.
+    fn absorb(&mut self, other: Self) {
+        self.pure_kinds += other.pure_kinds;
+        self.frozen += other.frozen;
+        for (key, n) in other.by_reason {
+            *self.by_reason.entry(key).or_default() += n;
         }
     }
 

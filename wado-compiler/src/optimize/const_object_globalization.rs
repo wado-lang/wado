@@ -1754,7 +1754,7 @@ impl Gate<'_> {
                 ty = *inner;
                 continue;
             }
-            if !holds_reference(&tt, ty) {
+            if !holds_reference(tt, ty) {
                 return false;
             }
             let ResolvedType::BuiltinArray(elem) = resolved else {
