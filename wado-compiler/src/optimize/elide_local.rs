@@ -180,6 +180,7 @@ fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nir_arena::Tracked;
 
     use cranelift_entity::EntityRef;
 
@@ -196,7 +197,7 @@ mod tests {
     /// the pool. `extra_read` decides whether a statement still carries that
     /// value as an operand — i.e. whether the read is reachable or stale
     /// residue of a fold.
-    fn body_with_promoted_read(extra_read: bool) -> (Body, Vec<NirLocal>) {
+    fn body_with_promoted_read(extra_read: bool) -> (Body, Tracked<Vec<NirLocal>>) {
         let mut body = Body::empty();
         let one = body.values.int_typed(1, TypeTable::I32);
         let read = body.values.canonical_local(0, TypeTable::I32);
@@ -218,19 +219,19 @@ mod tests {
                 span: Span::default(),
             }));
         }
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: Span::default(),
         });
-        let locals = vec![NirLocal {
+        let locals = Tracked::new(vec![NirLocal {
             name: "x".to_string(),
             type_id: TypeTable::I32,
             is_mut: false,
-        }];
+        }]);
         (body, locals)
     }
 
-    fn run_elide(body: &mut Body, locals: &mut Vec<NirLocal>) {
+    fn run_elide(body: &mut Body, locals: &mut Tracked<Vec<NirLocal>>) {
         let stores_aliased = IndexSet::default();
         let proofs = Proofs::default();
         // No callees in these bodies, so the summaries are unused.
@@ -269,15 +270,15 @@ mod tests {
             },
             span: Span::default(),
         });
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![binding],
             span: Span::default(),
         });
-        let mut locals = vec![NirLocal {
+        let mut locals = Tracked::new(vec![NirLocal {
             name: "x".to_string(),
             type_id: TypeTable::I32,
             is_mut: false,
-        }];
+        }]);
         let effects = [FnEffect {
             may_trap: true,
             ..FnEffect::default()
@@ -294,7 +295,7 @@ mod tests {
         let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
         engine.set_value_graph_type_table(&types);
         engine.run(&[&rule]);
-        body.blocks[body.root]
+        body.blocks[body.root()]
             .stmts
             .iter()
             .map(|s| body.stmts[*s].kind.clone())
@@ -322,7 +323,7 @@ mod tests {
         let (mut body, mut locals) = body_with_promoted_read(false);
         run_elide(&mut body, &mut locals);
         assert!(
-            body.blocks[body.root].stmts.is_empty(),
+            body.blocks[body.root()].stmts.is_empty(),
             "the pool still names local 0, but no reachable operand reads it"
         );
     }
@@ -342,14 +343,14 @@ mod tests {
                 })
             })
             .to_vec();
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: Span::default(),
         });
-        let mut locals = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
         run_elide(&mut body, &mut locals);
         assert_eq!(
-            body.blocks[body.root].stmts.len(),
+            body.blocks[body.root()].stmts.len(),
             1,
             "only the tail statement, which is the block's value, should remain"
         );
@@ -360,7 +361,7 @@ mod tests {
         let (mut body, mut locals) = body_with_promoted_read(true);
         run_elide(&mut body, &mut locals);
         assert_eq!(
-            body.blocks[body.root].stmts.len(),
+            body.blocks[body.root()].stmts.len(),
             2,
             "a read living in the value pool is still a read"
         );

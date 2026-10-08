@@ -273,6 +273,9 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     // Phase 3b: rewrite every call site.
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
+        if !func.calls_any(|id| confirmed.contains_key(id)) {
+            continue;
+        }
         if let Some(body) = func.body.as_mut()
             && rewrite_calls_in_body(body, confirmed)
         {
@@ -351,12 +354,12 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
 
     // Compact locals[] to drop the dead slots.
     let mut compact_locals = Vec::with_capacity(new_idx as usize);
-    for (old, local) in std::mem::take(&mut func.locals).into_iter().enumerate() {
+    for (old, local) in std::mem::take(&mut *func.locals).into_iter().enumerate() {
         if !dead_local_indices.contains(&u32::try_from(old).unwrap()) {
             compact_locals.push(local);
         }
     }
-    func.locals = compact_locals;
+    *func.locals = compact_locals;
 
     // Drop dead params and renumber surviving ones to point at the new
     // local positions.

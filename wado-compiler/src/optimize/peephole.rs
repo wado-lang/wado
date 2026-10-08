@@ -6,8 +6,9 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir::NirFunction;
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::hashmap::IndexSet;
+use crate::nir::{FuncId, FuncParts};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
@@ -61,8 +62,18 @@ pub(super) fn run_peephole(
     // program-wide CTFE callee map and the type table; the per-function `env`
     // stays empty so only literal arithmetic and pure CTFE fold here, leaving
     // the flow-sensitive folds to the standalone `const_folding` walker.
+    let len = project.functions.len();
+    // The pre- and post-inline runs apply different rule sets, so they keep
+    // separate watermark columns: a function quiescent for one must still be
+    // revisited by the other.
+    let gated_pass = if pre_inline {
+        GatedPass::PeepholePre
+    } else {
+        GatedPass::PeepholePost
+    };
     let type_table = project.type_table.borrow();
-    let callees = build_callee_map(project);
+    let pending: IndexSet<FuncId> = gate.pending(gated_pass, len).into_iter().collect();
+    let callees = build_callee_map(project, gate.exec(), |id| pending.contains(&id));
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
@@ -77,32 +88,24 @@ pub(super) fn run_peephole(
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
     let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate));
 
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    // The pre- and post-inline runs apply different rule sets, so they keep
-    // separate watermark columns: a function quiescent for one must still be
-    // revisited by the other.
-    let gated_pass = if pre_inline {
-        GatedPass::PeepholePre
-    } else {
-        GatedPass::PeepholePost
-    };
     debug_assert!(
         gate.any_pending(gated_pass, len),
         "[NIR] run_peephole entered on a drained gate: the setup above would be \
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let summaries = mod_ref.summaries(project, gate);
-    gate.run_gated(gated_pass, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let summaries = mod_ref.summaries(project, gate.exec());
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    gate.run_gated_par(gated_pass, len, |buffers, fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
         let elide_rule = ElideRule::new(&stores_aliased, summaries.of_body(fid.index()));
         // Per function, as its CTFE budget and remembered misses are: what one
         // body spends must not decide whether the next one folds.
-        let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
+        let const_fold_rule = ConstFoldRule::new(type_table, &callees, &ctfe_builtins);
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
@@ -140,11 +143,11 @@ pub(super) fn run_peephole(
         // value-producing `let x = f()?` consumer it cannot relocate. Ordered
         // after fusion, which produces the better code where it applies and
         // whose shape this rule would otherwise consume.
-        let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(&type_table));
+        let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(type_table));
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
-        let NirFunction { body, locals, .. } = &mut *func;
-        let Some(body) = body.as_mut() else {
+        let FuncParts { body, locals, .. } = func.parts();
+        let Some(body) = body else {
             return false;
         };
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);
@@ -198,10 +201,10 @@ pub(super) fn run_peephole(
         if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
             rules.push(append_fuse_rule);
         }
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
         engine.run(&rules)
     })

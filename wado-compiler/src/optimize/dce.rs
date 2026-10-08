@@ -2,12 +2,14 @@
 
 use std::borrow::Cow;
 use std::ops::ControlFlow;
+use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
-use super::gate::{BodyMemo, FunctionGate};
+use super::body_memo::BodyMemo;
 use super::mod_ref::{CallFacts, FnSummaries};
+use crate::parallel::Executor;
 
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
@@ -33,7 +35,7 @@ use crate::optimize::arena_query::{
     expr_node_may_trap, operand_values_may_trap, promoted_local_reads,
 };
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable, projection_arguments};
-use crate::{hashmap, nir, tir};
+use crate::{hashmap, nir};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
@@ -76,6 +78,10 @@ struct FunctionAnalysis {
     /// The functions whose names `callees` and `pending_inspects` hold, by
     /// store position: a rename of one stales them.
     named: IndexSet<FuncId>,
+    /// The signatures this function's `fn(..)^Inspect` calls receive.
+    inspect_signatures: InspectableSignatures,
+    /// Each `T` this function calls `array_clone::<T>` on.
+    array_clone_elems: IndexSet<TypeId>,
 }
 
 /// Combined DCE analysis: which functions / globals / types are
@@ -141,7 +147,11 @@ impl DceAnalysis {
 /// pure mutator over the matching field. The split also puts type reachability
 /// before `remove_unreachable_globals` mutates function bodies — those mutations
 /// expose no new types, but the ordering makes that invariant observable.
-pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache) -> DceAnalysis {
+pub(super) fn analyze_dce(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    exec: &Executor,
+) -> DceAnalysis {
     // The callee descriptor for every `FuncId`. A call's callee is identified by
     // its stamped `func_id` (born resolved, authoritative — `wir_build` never
     // falls back to name resolution for a NIR call), and the record at that id
@@ -153,10 +163,10 @@ pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache)
 
     // Single AST walk per function body: build the call graph and
     // collect per-function used-globals / used-types in one go.
-    let mut graph = build_analysis_graph(project, descriptors);
+    let mut graph = build_analysis_graph(project, descriptors, exec);
 
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = compute_function_reachability(project, descriptors, &mut graph);
+    analysis.functions = compute_function_reachability(project, &mut graph);
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
     populate_type_reachability(project, descriptors, &graph, &mut analysis);
     analysis
@@ -167,14 +177,14 @@ pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
     walks: &mut ReachabilityCache,
-    gate: &FunctionGate,
+    exec: &Executor,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
     let functors = functor_methods(project);
-    let analyses = walks.analyses(project, gate, descriptors, &functors);
+    let analyses = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
-    let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
+    let mut reachable = compute_function_reachability(project, &mut graph);
     let roots = cached
         .into_iter()
         .map(|id| function_id_for(&project.functions[id.index()].borrow()));
@@ -252,7 +262,6 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 /// is known.
 fn compute_function_reachability(
     project: &mut NirPackage,
-    descriptors: &[FunctionRef],
     graph: &mut AnalysisGraph,
 ) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
@@ -265,8 +274,7 @@ fn compute_function_reachability(
     // per-functor impls themselves don't issue any `Fn^Inspect` calls (they
     // just write per-literal strings), so the inspectable set is stable under
     // this expansion — no fixpoint iteration is needed.
-    let inspectable =
-        collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
+    let inspectable = inspectable_signatures(graph, &reachable_v1);
     apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
@@ -275,7 +283,7 @@ fn compute_function_reachability(
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // A pass may *synthesize* calls during the optimization loop. Their targets
     // must survive the DCE that runs before it, or the rewrite cannot fire.
-    extend_reachable_for_optimizer_passes(project, descriptors, &graph.call_graph, &mut reachable);
+    extend_reachable_for_optimizer_passes(project, graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
     resolve_imports(project, &reachable, &graph.effect_usage);
@@ -305,10 +313,10 @@ fn compute_reachable_positions(
 /// `nir/string_push`'s append primitives and `array_clone::<T>`'s helper.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
-    descriptors: &[FunctionRef],
-    call_graph: &CallGraph,
+    graph: &AnalysisGraph,
     reachable: &mut IndexSet<FunctionId>,
 ) {
+    let call_graph = &graph.call_graph;
     use crate::compiler_item::CompilerItem;
 
     // `push_str` is generic over `AsStrSlice`, so the item marks one id per
@@ -356,26 +364,16 @@ fn extend_reachable_for_optimizer_passes(
     // would find no function for the helper its clone loop calls. Only a
     // reachable body seeds anything, so each is scanned once, when reached.
     let type_table = project.type_table.borrow();
-    let ids: Vec<FunctionId> = project
-        .functions
-        .iter()
-        .map(|func_rc| function_id_for(&func_rc.borrow()))
-        .collect();
+    let ids = &graph.func_positions;
     let mut scanned = vec![false; ids.len()];
     loop {
         let mut fresh: Vec<FunctionId> = Vec::new();
-        for (index, func_rc) in project.functions.iter().enumerate() {
-            if scanned[index] || !reachable.contains(&ids[index]) {
+        for (index, (id, _)) in ids.iter().enumerate() {
+            if scanned[index] || !reachable.contains(id) {
                 continue;
             }
             scanned[index] = true;
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref() else {
-                continue;
-            };
-            let mut needed: IndexSet<tir::TypeId> = IndexSet::default();
-            collect_array_clone_element_types(body, descriptors, &mut needed);
-            for type_id in needed {
+            for &type_id in &graph.analyses[index].array_clone_elems {
                 // A stale `array_clone::<T>` can name a type already
                 // pruned from the table; it has no helper, so skip it
                 // rather than resolve an absent id (the structural key
@@ -386,7 +384,9 @@ fn extend_reachable_for_optimizer_passes(
                     continue;
                 }
                 if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
-                    let helper_id = &ids[helper.index()];
+                    let (helper_id, _) = ids
+                        .get_index(helper.index())
+                        .expect("a helper is in the store");
                     if !reachable.contains(helper_id) {
                         fresh.push(helper_id.clone());
                     }
@@ -398,35 +398,6 @@ fn extend_reachable_for_optimizer_passes(
         }
         reachable.extend(compute_reachable(call_graph, fresh));
     }
-}
-
-/// Walk `block`'s expression tree and collect every `T` such that
-/// `builtin::array_clone::<T>(...)` appears as a NIR call. The
-/// corresponding `$value_copy$` helper has to survive DCE because
-/// codegen will reach it by *name* at WIR time.
-fn collect_array_clone_element_types(
-    body: &Body,
-    descriptors: &[FunctionRef],
-    out: &mut IndexSet<tir::TypeId>,
-) {
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::Call {
-                func_id, type_args, ..
-            } = &body.exprs[e].kind
-        {
-            // Identity is the callee (by `func_id`); the element type `T` is
-            // call-site data carried on the node's `type_args` (a generic
-            // builtin like `array_clone` has no per-`T` record, so the
-            // descriptor's `monomorph_info` is generic — only the node knows `T`).
-            let func = callee_descriptor(descriptors, *func_id);
-            if matches!(func.intrinsic(), Some("array_clone" | "array_clone_prefix"))
-                && let Some(elem) = type_args.first().copied()
-            {
-                out.insert(elem);
-            }
-        }
-    });
 }
 
 /// Compute reachable functions from all entry points via call graph traversal.
@@ -571,7 +542,7 @@ pub fn filter_bytes_literals(project: &mut NirPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = func.body.as_ref() {
-            collect_bytes_literals_block(body, body.root, &mut used_bytes);
+            collect_bytes_literals_block(body, body.root(), &mut used_bytes);
         }
     }
 
@@ -647,14 +618,13 @@ struct AnalysisGraph<'a> {
 fn build_analysis_graph(
     project: &NirPackage,
     descriptors: &[FunctionRef],
+    exec: &Executor,
 ) -> AnalysisGraph<'static> {
     let type_table = &*project.type_table.borrow();
     let functors = functor_methods(project);
-    let analyses: Vec<FunctionAnalysis> = project
-        .functions
-        .iter()
-        .map(|f| function_analysis(&f.borrow(), type_table, descriptors, &functors))
-        .collect();
+    let analyses = exec.map(&project.functions, |f| {
+        function_analysis(&f.borrow(), type_table, descriptors, &functors)
+    });
     assemble_analysis_graph(project, Cow::Owned(analyses), functors)
 }
 
@@ -689,12 +659,11 @@ pub(super) struct ReachabilityCache {
 }
 
 impl ReachabilityCache {
-    /// Every function's [`function_analysis`] as `project` stands. Every
-    /// rewrite since the last call must have been reported to `gate`.
+    /// Every function's [`function_analysis`] as `project` stands.
     fn analyses(
         &mut self,
         project: &NirPackage,
-        gate: &FunctionGate,
+        exec: &Executor,
         descriptors: &[FunctionRef],
         functors: &FunctorMethods,
     ) -> &[FunctionAnalysis] {
@@ -708,7 +677,7 @@ impl ReachabilityCache {
                 .forget_where(|walk| !walk.named.is_disjoint(&renamed));
         }
         let type_table = &*project.type_table.borrow();
-        self.walks.refresh(project, gate, |f| {
+        self.walks.refresh(project, exec, |f| {
             function_analysis(f, type_table, descriptors, functors)
         })
     }
@@ -788,32 +757,19 @@ fn apply_inspect_edges(
 /// caller those impls cannot be invoked indirectly.
 type InspectableSignatures = IndexSet<(usize, TypeId)>;
 
-/// Compute the inspectable `(arity, return_type)` set from the bodies
-/// of *reachable* functions only. Restricting the scan to live code
-/// keeps a dead `:?`/`:#?` call from forcing per-functor inspect impls
-/// to stay alive for an unrelated reachable closure of the same
-/// signature.
-fn collect_inspectable_signatures_from_reachable(
-    project: &NirPackage,
-    descriptors: &[FunctionRef],
+/// The inspectable `(arity, return_type)` set of the *reachable* functions
+/// only. Restricting it to live code keeps a dead `:?`/`:#?` call from forcing
+/// per-functor inspect impls to stay alive for an unrelated reachable closure of
+/// the same signature.
+fn inspectable_signatures(
+    graph: &AnalysisGraph,
     reachable: &IndexSet<FunctionId>,
 ) -> InspectableSignatures {
-    let mut sigs = InspectableSignatures::default();
-    let type_table = &*project.type_table.borrow();
-    let Some(inspect) = type_table.compiler_items().trait_def(CompilerItem::Inspect) else {
-        return sigs;
-    };
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let func_id = function_id_for(&func);
-        if !reachable.contains(&func_id) {
-            continue;
-        }
-        if let Some(body) = func.body.as_ref() {
-            scan_inspect_signatures_block(body, type_table, descriptors, inspect, &mut sigs);
-        }
-    }
-    sigs
+    reachable
+        .iter()
+        .filter_map(|id| graph.func_positions.get(id))
+        .flat_map(|&pos| graph.analyses[pos].inspect_signatures.iter().copied())
+        .collect()
 }
 
 /// Compute the `FunctionId` used by the call graph for a NIR function.
@@ -846,35 +802,6 @@ fn function_id_for(func: &NirFunction) -> FunctionId {
     }
 }
 
-fn scan_inspect_signatures_block(
-    body: &Body,
-    type_table: &TypeTable,
-    descriptors: &[FunctionRef],
-    inspect: DefId,
-    sigs: &mut InspectableSignatures,
-) {
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(e) = node
-            && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
-            && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
-            && is_fn_type_name(&info.base_struct_name())
-            && info.trait_decl() == Some(inspect)
-        {
-            // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
-            // boxing pass); peel both to read the function's arity + return type.
-            let recv_type = type_table.peel_refs_and_box(body.operand_type(receiver));
-            if let ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } = type_table.get(recv_type)
-            {
-                sigs.insert((params.len(), *return_type));
-            }
-        }
-    });
-}
-
 /// Single-walk DCE fact collector: a [`NirRefVisitor`] that collects
 /// **all** per-function facts the DCE driver needs (callees, effect calls,
 /// pending inspect edges, used globals, used types) in one traversal of a
@@ -888,6 +815,8 @@ struct DceWalker<'a> {
     current_module: &'a ModuleSource,
     descriptors: &'a [FunctionRef],
     functors: &'a FunctorMethods,
+    /// The `Inspect` trait, whose calls on a function value record a signature.
+    inspect: Option<DefId>,
     analysis: FunctionAnalysis,
 }
 
@@ -937,6 +866,7 @@ impl<'a> DceWalker<'a> {
             current_module,
             descriptors,
             functors,
+            inspect: type_table.compiler_items().trait_def(CompilerItem::Inspect),
             analysis: FunctionAnalysis::default(),
         }
     }
@@ -963,7 +893,7 @@ impl<'a> DceWalker<'a> {
             }
         }
         if let Some(body) = func.body.as_ref() {
-            self.walk_node(body, NodeRef::Block(body.root));
+            self.walk_node(body, NodeRef::Block(body.root()));
         }
     }
 
@@ -1339,6 +1269,32 @@ impl<'a> DceWalker<'a> {
 }
 
 impl DceWalker<'_> {
+    /// An `Inspect` call on a function value: record its `(arity, return
+    /// type)`. The receiver is `&Fn(...)`, possibly boxed by the boxing pass.
+    fn record_inspect_signature(&mut self, recv_ty: TypeId, callee: &FunctionRef) {
+        let Some(info) = &callee.method_info else {
+            return;
+        };
+        if self.inspect.is_none()
+            || info.trait_decl() != self.inspect
+            || !is_fn_type_name(&info.base_struct_name())
+        {
+            return;
+        }
+        if let ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } = self
+            .type_table
+            .get(self.type_table.peel_refs_and_box(recv_ty))
+        {
+            self.analysis
+                .inspect_signatures
+                .insert((params.len(), *return_type));
+        }
+    }
+
     /// Record the per-node facts, then recurse into every id-bearing child
     /// (including patterns, matching the former `NirRefVisitor` full walk).
     fn walk_node(&mut self, body: &Body, node: NodeRef) {
@@ -1354,15 +1310,27 @@ impl DceWalker<'_> {
                 // Every expression has a result type that needs to stay alive.
                 self.add_type(body.exprs[e].type_id);
                 match &body.exprs[e].kind {
-                    ExprKind::Call { func_id, .. } => {
+                    ExprKind::Call {
+                        func_id, type_args, ..
+                    } => {
                         self.analysis.named.insert(*func_id);
-                        let d = self.descriptors;
+                        let callee = callee_descriptor(self.descriptors, *func_id);
+                        // `array_clone` reaches its helper by the element type
+                        // the call node carries, not by a call edge.
+                        if matches!(
+                            callee.intrinsic(),
+                            Some("array_clone" | "array_clone_prefix")
+                        ) && let Some(&elem) = type_args.first()
+                        {
+                            self.analysis.array_clone_elems.insert(elem);
+                        }
                         match body.exprs[e].kind.as_method_call() {
                             Some((receiver, _, _)) => {
                                 let recv_ty = body.operand_type(receiver);
-                                self.record_method_call(recv_ty, callee_descriptor(d, *func_id));
+                                self.record_inspect_signature(recv_ty, callee);
+                                self.record_method_call(recv_ty, callee);
                             }
-                            None => self.record_call(callee_descriptor(d, *func_id)),
+                            None => self.record_call(callee),
                         }
                     }
                     ExprKind::CmRawCall { target, .. } => self.record_cm_raw_call(target),
@@ -1667,7 +1635,7 @@ fn populate_type_reachability(
             let mut walker =
                 DceWalker::new(&type_table, &global.module_source, descriptors, functors);
             let init_body = global.init.slot_expr().body();
-            walker.walk_node(init_body, NodeRef::Block(init_body.root));
+            walker.walk_node(init_body, NodeRef::Block(init_body.root()));
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);
             }
@@ -1677,16 +1645,16 @@ fn populate_type_reachability(
         // `register_closure_wrappers` reads `ref_type_id` for the wrapper's
         // `ref.cast`, and DAE can drop every other NIR-side mention by removing
         // the env `self`. Compare by pointer identity — `functor.call_method`
-        // and the matching `project.functions[i]` are the same `Rc`.
+        // and the matching `project.functions[i]` are the same `Arc`.
         let surviving_ptrs: IndexSet<*const _> = project
             .functions
             .iter()
             .enumerate()
             .filter(|(pos, _)| analysis.functions.contains(pos))
-            .map(|(_, rc)| std::rc::Rc::as_ptr(rc))
+            .map(|(_, rc)| Arc::as_ptr(rc))
             .collect();
         for functor in &project.closure_functors {
-            let cm_ptr = std::rc::Rc::as_ptr(&functor.call_method);
+            let cm_ptr = Arc::as_ptr(&functor.call_method);
             if surviving_ptrs.contains(&cm_ptr) {
                 analysis.types.insert(functor.struct_type_id);
                 analysis.types.insert(functor.ref_type_id);
@@ -1928,7 +1896,7 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
         return Vec::new();
     }
     let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
     collect.0
 }
 
@@ -2131,7 +2099,7 @@ impl GlobalGuards<'_> {
     }
 
     fn inert_body(&self, body: &Body, calls: CallFacts) -> bool {
-        body.blocks[body.root]
+        body.blocks[body.root()]
             .stmts
             .iter()
             .all(|s| match body.stmts[*s].kind {
@@ -2351,7 +2319,7 @@ fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
         return Vec::new();
     }
     let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
     collect.0
 }
 
@@ -2435,7 +2403,7 @@ pub(super) fn remove_unreachable_globals(
             if is_module_init && initializers == Initializers::DropUnread {
                 drop_dead_initializers(body, used_globals);
             }
-            let root = body.root;
+            let root = body.root();
             remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
         }
     }
@@ -2456,7 +2424,7 @@ pub(super) enum Initializers {
 /// inlining copies it elsewhere, such a store is an initializer, and the
 /// program's assignments are elsewhere.
 fn drop_dead_initializers(body: &mut Body, used: &IndexSet<(String, String)>) {
-    let root = body.root;
+    let root = body.root();
     let stmts = std::mem::take(&mut body.blocks[root].stmts);
     body.blocks[root].stmts = stmts
         .into_iter()
@@ -2612,7 +2580,7 @@ mod tests {
             kind: StmtKind::Expr(Operand::Value(value)),
             span: Span::default(),
         });
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![stmt],
             span: Span::default(),
         });
@@ -2636,7 +2604,8 @@ mod tests {
             kind: StmtKind::Expr(Operand::Value(stale)),
             span: Span::default(),
         });
-        body.blocks[body.root].stmts = vec![live];
+        let root = body.root();
+        body.blocks[root].stmts = vec![live];
 
         let mentioned = mentioned_locals(&body);
         assert!(mentioned.contains(&3));

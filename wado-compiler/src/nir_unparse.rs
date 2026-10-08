@@ -319,7 +319,7 @@ impl<'a> NirUnparser<'a> {
         self.unparse_nir_with_clause(&f.effects);
 
         if let Some(body) = &f.body {
-            let root = body.root;
+            let root = body.root();
             self.emit_indented_block(|this| this.unparse_block(body, root));
             self.output.push('\n');
         } else {

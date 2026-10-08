@@ -4,9 +4,9 @@
 use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FuncParts, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::{block_contains_loop, strip_refs};
@@ -21,17 +21,20 @@ use super::gate::{FunctionGate, GatedPass};
 /// flattened shapes.
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::LetBlockFlatten, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        let Some(body) = body.as_mut() else {
-            return false;
-        };
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.run(&[&rule])
-    })
+    let functions = &project.functions;
+    gate.run_gated_par(
+        GatedPass::LetBlockFlatten,
+        functions.len(),
+        |buffers, fid| {
+            let mut func = functions[fid.index()].borrow_mut();
+            let FuncParts { body, locals, .. } = func.parts();
+            let Some(body) = body else {
+                return false;
+            };
+            let mut engine = Engine::new(body, buffers, locals);
+            engine.run(&[&rule])
+        },
+    )
 }
 
 pub(super) struct LetBlockFlattenRule;
@@ -187,6 +190,8 @@ fn is_place_expr(kind: &ExprKind) -> bool {
 mod tests {
     use super::*;
     use crate::call_args::CallArgs;
+    use crate::nir_arena::Tracked;
+    use crate::nir_engine::EngineBuffers;
     use std::assert_matches;
 
     use crate::hashmap::IndexSet;
@@ -258,7 +263,7 @@ mod tests {
     #[test]
     fn nested_value_blocks_flatten_coherently() {
         let mut body = Body::empty();
-        let mut locals = vec![local("p"), local("q"), local("y"), local("x")];
+        let mut locals = Tracked::new(vec![local("p"), local("q"), local("y"), local("x")]);
 
         let r = body.blocks.push(BlockNode {
             stmts: vec![],
@@ -272,7 +277,7 @@ mod tests {
             stmts: vec![],
             span: sp(),
         });
-        assert_eq!(r, body.root);
+        assert_eq!(r, body.root());
 
         let arg_q = expr(&mut body, call_expr());
         let q1 = expr(

@@ -11,11 +11,11 @@ use cranelift_entity::EntityRef;
 use super::arena_query::local_written_by;
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers};
+use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
@@ -33,7 +33,7 @@ use crate::{hashmap, nir_arena};
 /// cond-impl needs no separate build; it runs after licm in document order, so
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
-    let root = engine.body.root;
+    let root = engine.body.root();
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine);
@@ -95,37 +95,38 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
     }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table);
+    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::CondImplPostPromote, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::CondImplPostPromote, len, |buffers, fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             params,
             address_taken_locals,
             stores_aliased_locals,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
             stores_aliased_locals,
-            &type_table,
+            type_table,
             &first_param_types,
             &call_immutability,
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -172,7 +173,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
         pending: hashmap::IndexMap::default(),
         stale: hashmap::IndexSet::default(),
     };
-    walk.node(NodeRef::Block(body.root));
+    walk.node(NodeRef::Block(body.root()));
     walk.pending
         .into_iter()
         .filter(|(t, _)| !walk.stale.contains(t))

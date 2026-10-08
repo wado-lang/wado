@@ -7,6 +7,8 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering as MemoryOrdering};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::ast;
 use crate::compiler_item::CompilerItem;
@@ -16,7 +18,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FunctionId, LocalMethodName, closure_call_method_info, closure_call_name, minted_name,
 };
-use crate::nir_arena::{Body, ExprBody};
+use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -237,7 +239,7 @@ pub enum NirLiteralPattern {
 }
 
 /// Generic type parameter in NIR (from AST `GenericParam`)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NirTypeParam {
     pub name: String,
     /// Whether this is an effect parameter (`effect E`)
@@ -251,7 +253,7 @@ pub struct NirTypeParam {
 }
 
 /// Information about monomorphization origin for instantiated items
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MonomorphInfo {
     /// Original generic name: `"Box"` for `"Box<i32>"`, or
     /// `"BTreeNode<K,V>::insert"` for methods.
@@ -298,6 +300,314 @@ pub struct NirGlobal {
     /// remark can say *which* compile-time parameter failed to fold — a remark
     /// that cannot name it stays silent.
     pub param_name: Option<String>,
+}
+
+/// A NIR function as the package holds it: shared by `Arc` so the optimizer's
+/// threads reach it, and counting the mutable borrows taken of it so a memo
+/// keyed on the count cannot outlive a rewrite (WEP: Parallel Optimizer).
+pub struct FuncCell {
+    func: RwLock<NirFunction>,
+    writes: AtomicU64,
+}
+
+/// How the package and its passes hold a [`FuncCell`].
+pub type FuncRef = Arc<FuncCell>;
+
+impl FuncCell {
+    /// A cell holding `func`, with no writes counted yet.
+    #[must_use]
+    pub fn new(func: NirFunction) -> FuncRef {
+        Arc::new(Self {
+            func: RwLock::new(func),
+            writes: AtomicU64::new(0),
+        })
+    }
+
+    /// Read the function. Panics while another borrow writes it, as
+    /// `RefCell::borrow` does: no caller waits for a writer, and a read that
+    /// raced one would answer by thread timing.
+    pub fn borrow(&self) -> RwLockReadGuard<'_, NirFunction> {
+        self.func
+            .try_read()
+            .expect("a NIR function read while it is written")
+    }
+
+    /// Borrow the function for writing. Panics while another borrow holds it,
+    /// as `RefCell::borrow_mut` does. The guard counts one write on drop if the
+    /// function changed: its body or locals by their [`Tracked`] versions, the
+    /// rest against a copy taken on the first whole-function mutable borrow. A
+    /// borrow that changes nothing counts nothing.
+    pub fn borrow_mut(&self) -> FuncWriteGuard<'_> {
+        let guard = self
+            .func
+            .try_write()
+            .expect("a NIR function written while it is borrowed");
+        FuncWriteGuard {
+            version: guard.version(),
+            guard,
+            writes: &self.writes,
+            head: None,
+        }
+    }
+
+    /// How many borrows have written the function: what a memo of its facts
+    /// is keyed by.
+    pub fn writes(&self) -> u64 {
+        self.writes.load(MemoryOrdering::Relaxed)
+    }
+}
+
+/// [`FuncCell::borrow_mut`]'s guard.
+pub struct FuncWriteGuard<'a> {
+    guard: RwLockWriteGuard<'a, NirFunction>,
+    writes: &'a AtomicU64,
+    /// [`NirFunction::version`] when the guard was taken.
+    version: (Option<[(u64, u64); 10]>, (u64, u64)),
+    /// The function's [`Head`] before the first whole-function mutable borrow.
+    head: Option<Head>,
+}
+
+/// Everything of a function but its body and locals, which count their own
+/// edits: what a whole-function mutable borrow may change unseen.
+struct Head {
+    id: Option<FuncId>,
+    is_dead: bool,
+    name: String,
+    module_source: ModuleSource,
+    visibility: ast::Visibility,
+    is_export: bool,
+    is_async: bool,
+    type_params: Vec<NirTypeParam>,
+    impl_type_params: Vec<NirTypeParam>,
+    monomorph_info: Option<MonomorphInfo>,
+    method_info: Option<LocalMethodName>,
+    params: Vec<NirParam>,
+    return_type: TypeId,
+    task_return_type: Option<TypeId>,
+    effects: Vec<EffectRef>,
+    retains: Vec<String>,
+    span: Span,
+    address_taken_locals: IndexSet<u32>,
+    stores_aliased_locals: IndexSet<u32>,
+    is_cm_binding: bool,
+    is_dispatch_wrapper: bool,
+    is_cm_export: bool,
+    is_ambient: bool,
+    inline_hint: InlineHint,
+    compiler_item: Option<CompilerItem>,
+    export_name: Option<String>,
+    allocator_tag: Option<String>,
+    kind: FunctionKind,
+    scalarized_from: Option<TypeId>,
+    return_abi: ReturnAbi,
+}
+
+impl Head {
+    fn of(func: &NirFunction) -> Self {
+        let NirFunction {
+            id,
+            is_dead,
+            name,
+            module_source,
+            visibility,
+            is_export,
+            is_async,
+            type_params,
+            impl_type_params,
+            monomorph_info,
+            method_info,
+            params,
+            return_type,
+            task_return_type,
+            effects,
+            retains,
+            span,
+            address_taken_locals,
+            stores_aliased_locals,
+            is_cm_binding,
+            is_dispatch_wrapper,
+            is_cm_export,
+            is_ambient,
+            inline_hint,
+            compiler_item,
+            export_name,
+            allocator_tag,
+            kind,
+            scalarized_from,
+            return_abi,
+            body: _,
+            locals: _,
+        } = func;
+        Self {
+            id: *id,
+            is_dead: *is_dead,
+            name: name.clone(),
+            module_source: module_source.clone(),
+            visibility: *visibility,
+            is_export: *is_export,
+            is_async: *is_async,
+            type_params: type_params.clone(),
+            impl_type_params: impl_type_params.clone(),
+            monomorph_info: monomorph_info.clone(),
+            method_info: method_info.clone(),
+            params: params.clone(),
+            return_type: *return_type,
+            task_return_type: *task_return_type,
+            effects: effects.clone(),
+            retains: retains.clone(),
+            span: *span,
+            address_taken_locals: address_taken_locals.clone(),
+            stores_aliased_locals: stores_aliased_locals.clone(),
+            is_cm_binding: *is_cm_binding,
+            is_dispatch_wrapper: *is_dispatch_wrapper,
+            is_cm_export: *is_cm_export,
+            is_ambient: *is_ambient,
+            inline_hint: *inline_hint,
+            compiler_item: *compiler_item,
+            export_name: export_name.clone(),
+            allocator_tag: allocator_tag.clone(),
+            kind: kind.clone(),
+            scalarized_from: *scalarized_from,
+            return_abi: return_abi.clone(),
+        }
+    }
+    /// Whether `func` still has this head.
+    fn matches(&self, func: &NirFunction) -> bool {
+        let NirFunction {
+            id,
+            is_dead,
+            name,
+            module_source,
+            visibility,
+            is_export,
+            is_async,
+            type_params,
+            impl_type_params,
+            monomorph_info,
+            method_info,
+            params,
+            return_type,
+            task_return_type,
+            effects,
+            retains,
+            span,
+            address_taken_locals,
+            stores_aliased_locals,
+            is_cm_binding,
+            is_dispatch_wrapper,
+            is_cm_export,
+            is_ambient,
+            inline_hint,
+            compiler_item,
+            export_name,
+            allocator_tag,
+            kind,
+            scalarized_from,
+            return_abi,
+            body: _,
+            locals: _,
+        } = func;
+        self.id == *id
+            && self.is_dead == *is_dead
+            && self.name == *name
+            && self.module_source == *module_source
+            && self.visibility == *visibility
+            && self.is_export == *is_export
+            && self.is_async == *is_async
+            && self.type_params == *type_params
+            && self.impl_type_params == *impl_type_params
+            && self.monomorph_info == *monomorph_info
+            && self.method_info == *method_info
+            && self.params == *params
+            && self.return_type == *return_type
+            && self.task_return_type == *task_return_type
+            && self.effects == *effects
+            && self.retains == *retains
+            && self.span == *span
+            && self.address_taken_locals == *address_taken_locals
+            && self.stores_aliased_locals == *stores_aliased_locals
+            && self.is_cm_binding == *is_cm_binding
+            && self.is_dispatch_wrapper == *is_dispatch_wrapper
+            && self.is_cm_export == *is_cm_export
+            && self.is_ambient == *is_ambient
+            && self.inline_hint == *inline_hint
+            && self.compiler_item == *compiler_item
+            && self.export_name == *export_name
+            && self.allocator_tag == *allocator_tag
+            && self.kind == *kind
+            && self.scalarized_from == *scalarized_from
+            && self.return_abi == *return_abi
+    }
+}
+
+/// The parts of a function a rewrite of its body touches: the body and the
+/// locals mutably, which count their own edits, and the rest to read.
+pub struct FuncParts<'a> {
+    pub body: Option<&'a mut Body>,
+    pub locals: &'a mut Tracked<Vec<NirLocal>>,
+    pub name: &'a str,
+    pub params: &'a [NirParam],
+    pub address_taken_locals: &'a IndexSet<u32>,
+    pub stores_aliased_locals: &'a IndexSet<u32>,
+}
+
+impl FuncWriteGuard<'_> {
+    /// The body and locals to rewrite, without counting a write for taking
+    /// them: the write is counted on drop if either moved.
+    pub fn parts(&mut self) -> FuncParts<'_> {
+        let NirFunction {
+            body,
+            locals,
+            name,
+            params,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *self.guard;
+        FuncParts {
+            body: body.as_mut(),
+            locals,
+            name,
+            params,
+            address_taken_locals,
+            stores_aliased_locals,
+        }
+    }
+}
+
+impl Drop for FuncWriteGuard<'_> {
+    fn drop(&mut self) {
+        let head_moved = self
+            .head
+            .as_ref()
+            .is_some_and(|head| !head.matches(&self.guard));
+        if head_moved || self.guard.version() != self.version {
+            self.writes.fetch_add(1, MemoryOrdering::Relaxed);
+        }
+    }
+}
+
+impl std::ops::Deref for FuncWriteGuard<'_> {
+    type Target = NirFunction;
+
+    fn deref(&self) -> &NirFunction {
+        &self.guard
+    }
+}
+
+impl std::ops::DerefMut for FuncWriteGuard<'_> {
+    fn deref_mut(&mut self) -> &mut NirFunction {
+        if self.head.is_none() {
+            self.head = Some(Head::of(&self.guard));
+        }
+        &mut self.guard
+    }
+}
+
+impl std::fmt::Debug for FuncCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.borrow().fmt(f)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -353,7 +663,7 @@ pub struct NirFunction {
     /// `locals.len()` *is* the local count: passes that grow the local set push
     /// a `NirLocal` per new index, so the next free index is always
     /// [`NirFunction::local_count`].
-    pub locals: Vec<NirLocal>,
+    pub locals: Tracked<Vec<NirLocal>>,
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: IndexSet<u32>,
@@ -498,6 +808,16 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// Different after any edit to the body or the locals.
+    pub fn version(&self) -> (Option<[(u64, u64); 10]>, (u64, u64)) {
+        (self.body.as_ref().map(Body::version), self.locals.version())
+    }
+
+    /// [`Body::calls_any`] of the body, `false` for a bodyless function.
+    pub fn calls_any(&self, callee: impl Fn(&FuncId) -> bool) -> bool {
+        self.body.as_ref().is_some_and(|b| b.calls_any(callee))
+    }
+
     /// Bodyless stub for an extern / builtin callee (Phase 5 interning).
     pub fn extern_stub(func_ref: &FunctionRef) -> Self {
         Self {
@@ -519,7 +839,7 @@ impl NirFunction {
             retains: Vec::new(),
             body: None,
             span: Span::default(),
-            locals: Vec::new(),
+            locals: Tracked::new(Vec::new()),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
@@ -651,7 +971,7 @@ impl NirLocal {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NirParam {
     pub name: String,
     pub type_id: TypeId,
@@ -894,10 +1214,10 @@ pub struct ClosureFunctor {
     pub ref_type_id: TypeId,
     /// The `$call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
-    pub call_method: Rc<RefCell<NirFunction>>,
+    pub call_method: FuncRef,
     /// The per-functor `$Closure_N^Inspect::inspect` impl. Found through here
     /// and not by name: `dae` renames what it reshapes.
-    pub inspect_method: Rc<RefCell<NirFunction>>,
+    pub inspect_method: FuncRef,
     /// Canonical user-declared (name, type) pairs of the closure literal,
     /// captured at functor creation and never mutated.
     /// `register_closure_wrappers` reads it for the wrapper's external signature
@@ -974,7 +1294,7 @@ pub struct NirModule {
     pub type_table: Rc<RefCell<TypeTable>>,
     /// External function imports (canonical builtins from wasi/env namespaces)
     pub imports: Vec<NirImport>,
-    pub functions: Vec<Rc<RefCell<NirFunction>>>,
+    pub functions: Vec<FuncRef>,
     pub structs: Vec<NirStruct>,
     pub enums: Vec<NirEnum>,
     /// Flags type declarations (bitmask types, newtypes over u32)
@@ -1073,9 +1393,9 @@ impl NirModule {
         self.data_section.as_deref()
     }
 
-    pub fn add_function(&mut self, func: NirFunction) -> Rc<RefCell<NirFunction>> {
-        let func_rc = Rc::new(RefCell::new(func));
-        self.functions.push(Rc::clone(&func_rc));
+    pub fn add_function(&mut self, func: NirFunction) -> FuncRef {
+        let func_rc = FuncCell::new(func);
+        self.functions.push(Arc::clone(&func_rc));
         func_rc
     }
 
@@ -1107,7 +1427,7 @@ impl NirModule {
         self.traits.push(trait_decl);
     }
 
-    pub fn find_function(&self, name: &str) -> Option<Rc<RefCell<NirFunction>>> {
+    pub fn find_function(&self, name: &str) -> Option<FuncRef> {
         self.functions
             .iter()
             .find(|f| f.borrow().name == name)

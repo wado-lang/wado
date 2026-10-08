@@ -6,6 +6,7 @@
 use std::cell::RefCell;
 use std::fmt::Write;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use rustc_hash::FxBuildHasher;
 use sha2::Digest;
@@ -844,7 +845,7 @@ pub struct AssocTypeSig {
     /// The associated type's name.
     pub assoc_name: String,
     /// The declaring trait's frame, which the rest is written in.
-    pub frame: Rc<TraitFrame>,
+    pub frame: Arc<TraitFrame>,
     /// The associated type's own parameters, in declaration order.
     pub params: Vec<TypeId>,
     /// The bounds each of [`Self::params`] declares.
@@ -1046,13 +1047,13 @@ pub struct TypeTable {
     generic_assoc_type_defs: IndexMap<GenericAssocTypeKey, AssocAnswers>,
     /// What each trait declares of its associated types, by declaring trait and
     /// name. See [`AssocTypeSig`].
-    assoc_type_sigs: IndexMap<DefId, IndexMap<String, Rc<AssocTypeSig>>>,
+    assoc_type_sigs: IndexMap<DefId, IndexMap<String, Arc<AssocTypeSig>>>,
     /// Each trait's own frame, which its signatures and references read. See
     /// [`TraitFrame`].
-    trait_frames: IndexMap<DefId, Rc<TraitFrame>>,
+    trait_frames: IndexMap<DefId, Arc<TraitFrame>>,
     /// What [`Self::projection_bounds`] answered for each projection, which
     /// depends on nothing but the interned projection.
-    projection_bounds_cache: IndexMap<TypeKey, Rc<[TraitRef]>>,
+    projection_bounds_cache: IndexMap<TypeKey, Arc<[TraitRef]>>,
     /// Erasure redirects: set by `erase_newtypes_and_flags()`.
     /// After erasure, `get(id)` for any erased `TypeId` returns the base type.
     /// Newtype → ultimate base type; Flags → u32.
@@ -3536,7 +3537,7 @@ impl TypeTable {
         &mut self,
         owning_trait: DefId,
         assoc_name: String,
-        sig: Rc<AssocTypeSig>,
+        sig: Arc<AssocTypeSig>,
     ) {
         self.assoc_type_sigs
             .entry(owning_trait)
@@ -3549,7 +3550,7 @@ impl TypeTable {
         &self,
         owning_trait: DefId,
         assoc_name: &str,
-    ) -> Option<&Rc<AssocTypeSig>> {
+    ) -> Option<&Arc<AssocTypeSig>> {
         self.assoc_type_sigs.get(&owning_trait)?.get(assoc_name)
     }
 
@@ -3702,10 +3703,10 @@ impl TypeTable {
     /// read at it: `Self` its base, the trait's parameters its trait arguments,
     /// the family's its arguments. `None` while its signature is still being
     /// built, which a reader inside that build meets.
-    pub fn projection_bounds(&mut self, id: TypeId) -> Option<Rc<[TraitRef]>> {
+    pub fn projection_bounds(&mut self, id: TypeId) -> Option<Arc<[TraitRef]>> {
         let key = self.type_key(id);
         if let Some(bounds) = self.projection_bounds_cache.get(&key) {
-            return Some(Rc::clone(bounds));
+            return Some(Arc::clone(bounds));
         }
         let ResolvedType::AssocTypeProjection {
             param_id,
@@ -3721,11 +3722,12 @@ impl TypeTable {
                 self.get(id)
             );
         };
-        let sig = Rc::clone(self.assoc_type_sig(owning_trait, &assoc_name)?);
-        let bounds: Rc<[TraitRef]> = self
+        let sig = Arc::clone(self.assoc_type_sig(owning_trait, &assoc_name)?);
+        let bounds: Arc<[TraitRef]> = self
             .instantiate_trait_refs(&sig, &sig.bounds, param_id, trait_args.as_deref(), &args)
             .into();
-        self.projection_bounds_cache.insert(key, Rc::clone(&bounds));
+        self.projection_bounds_cache
+            .insert(key, Arc::clone(&bounds));
         Some(bounds)
     }
 
@@ -3816,17 +3818,17 @@ impl TypeTable {
     /// trait's frame is not built, or a parameter it leaves out has no
     /// default.
     fn filled_trait_args(&mut self, trait_ref: &TraitRef, receiver: TypeId) -> Option<Vec<TypeId>> {
-        let frame = Rc::clone(self.trait_frames.get(&trait_ref.decl)?);
+        let frame = Arc::clone(self.trait_frames.get(&trait_ref.decl)?);
         self.fill_trait_args(&frame, receiver, &trait_ref.args)
     }
 
     /// Record `trait_`'s frame.
-    pub fn register_trait_frame(&mut self, trait_: DefId, frame: Rc<TraitFrame>) {
+    pub fn register_trait_frame(&mut self, trait_: DefId, frame: Arc<TraitFrame>) {
         self.trait_frames.insert(trait_, frame);
     }
 
     /// `trait_`'s frame, where it is built.
-    pub fn trait_frame(&self, trait_: DefId) -> Option<&Rc<TraitFrame>> {
+    pub fn trait_frame(&self, trait_: DefId) -> Option<&Arc<TraitFrame>> {
         self.trait_frames.get(&trait_)
     }
 

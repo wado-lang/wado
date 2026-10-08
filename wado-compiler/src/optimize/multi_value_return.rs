@@ -187,7 +187,7 @@ fn refute_candidates(
         let is_candidate = func.id.is_some_and(|id| candidate_ids.contains_key(&id));
         validate_uses_in_block(
             body,
-            body.root,
+            body.root(),
             &candidate_ids,
             candidates,
             passes_through,
@@ -200,7 +200,7 @@ fn refute_candidates(
         let body = global.init.slot_expr().body();
         validate_uses_in_block(
             body,
-            body.root,
+            body.root(),
             &candidate_ids,
             candidates,
             None,
@@ -249,7 +249,7 @@ fn candidate_info(
         tail_call_lowerable: true,
     };
     // The lowering splits every `Return`, nested ones included.
-    if !every_return(body, NodeRef::Block(body.root), |value| {
+    if !every_return(body, NodeRef::Block(body.root()), |value| {
         value.is_some_and(|v| expr_returns_match_operand(body, v, &expected))
     }) {
         return None;

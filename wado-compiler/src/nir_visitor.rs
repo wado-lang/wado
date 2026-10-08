@@ -26,7 +26,7 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     if body.blocks.is_empty() {
         return body.exprs.iter().map(|(e, _)| e).collect();
     }
-    exprs_under(body, NodeRef::Block(body.root))
+    exprs_under(body, NodeRef::Block(body.root()))
 }
 
 /// Every expression id reachable from `node`, in walk order — the region a

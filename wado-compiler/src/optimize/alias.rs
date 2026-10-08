@@ -8,6 +8,8 @@
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
 
+use std::sync::Mutex;
+
 use cranelift_entity::SecondaryMap;
 
 use crate::compiler_item::CompilerItem;
@@ -20,6 +22,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
 use crate::niri::AliasClasses;
+use crate::parallel::{Executor, lock};
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
@@ -123,7 +126,7 @@ pub(super) fn build_alias_info(
     }
     let mut edges = same_pointee_edges;
     let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         collect_aliased_node(body, node, type_table, &mut aliased);
         if let Some(r) = extra_aliased(body, node) {
             aliased.insert(r);
@@ -161,7 +164,7 @@ pub(super) fn build_alias_info(
 /// aggregate storing it or a call taking it disqualifies the local outright.
 pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups {
     let mut edges = Vec::new();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         collect_alias_edges_node(body, node, type_table, &mut edges);
     });
     alias_groups_from_edges(edges)
@@ -368,7 +371,9 @@ fn build_mut_escaped(
 pub(super) struct CallImmutability<'a> {
     type_table: &'a TypeTable,
     struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
-    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+    /// Filled by whichever visit asks first; a verdict depends only on the
+    /// type, so the order changes nothing.
+    memo: Mutex<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
     /// (param 0). Boxing erases the `&self` / `&mut self` distinction — both
     /// become a `Box<T>` param (see `lower/plan/boxing`) — so a receiver's
@@ -385,7 +390,7 @@ pub(super) struct CallImmutability<'a> {
 }
 
 impl<'a> CallImmutability<'a> {
-    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable) -> Self {
+    pub(super) fn new(project: &NirPackage, type_table: &'a TypeTable, exec: &Executor) -> Self {
         let struct_fields = project
             .structs
             .iter()
@@ -398,11 +403,11 @@ impl<'a> CallImmutability<'a> {
             .collect();
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
-            compute_receiver_mutating(project, type_table, &first_param_types);
+            compute_receiver_mutating(project, type_table, &first_param_types, exec);
         Self {
             type_table,
             struct_fields,
-            memo: std::cell::RefCell::default(),
+            memo: Mutex::default(),
             receiver_mutating,
             has_body,
             effect_free: project.pure_builtin_callee_ids(),
@@ -421,7 +426,7 @@ impl<'a> CallImmutability<'a> {
     }
 
     fn walk(&self, type_id: TypeId, stack: &mut Vec<TypeId>) -> bool {
-        if let Some(&cached) = self.memo.borrow().get(&type_id) {
+        if let Some(&cached) = lock(&self.memo).get(&type_id) {
             return cached;
         }
         // A struct can only reach itself through a `Box`/`List`/reference
@@ -469,7 +474,7 @@ impl<'a> CallImmutability<'a> {
             _ => false,
         };
         stack.pop();
-        self.memo.borrow_mut().insert(type_id, result);
+        lock(&self.memo).insert(type_id, result);
         result
     }
 }
@@ -519,7 +524,7 @@ pub(super) fn call_verdicts(
         pure: IndexSet::default(),
         receiver_immutable: IndexSet::default(),
     };
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         let NodeRef::Expr(e) = node else {
             return;
         };
@@ -609,6 +614,7 @@ fn compute_receiver_mutating(
     project: &NirPackage,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
+    exec: &Executor,
 ) -> (SecondaryMap<FuncId, bool>, SecondaryMap<FuncId, bool>) {
     let mut has_body: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     let mut p0_of: SecondaryMap<FuncId, Option<u32>> = SecondaryMap::new();
@@ -639,21 +645,24 @@ fn compute_receiver_mutating(
         direct: bool,
         pending: Vec<FuncId>,
     }
-    let mut summaries: Vec<Summary> = Vec::new();
-    for func_rc in &project.functions {
-        let f = func_rc.borrow();
-        let Some(id) = f.id else { continue };
-        let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
-            continue;
-        };
-        let (direct, pending) =
-            summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
-        summaries.push(Summary {
-            id,
-            direct,
-            pending,
-        });
-    }
+    let summaries: Vec<Summary> = exec
+        .map(&project.functions, |func_rc| {
+            let f = func_rc.borrow();
+            let id = f.id?;
+            let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
+                return None;
+            };
+            let (direct, pending) =
+                summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
+            Some(Summary {
+                id,
+                direct,
+                pending,
+            })
+        })
+        .into_iter()
+        .flatten()
+        .collect();
     let mut mutating: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     for s in &summaries {
         if s.direct {
@@ -758,7 +767,7 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
         let mut changed = false;
         walk_all(
             body,
-            NodeRef::Block(body.root),
+            NodeRef::Block(body.root()),
             &mut |body, node| match node {
                 NodeRef::Stmt(s) => {
                     if let StmtKind::Let {
@@ -821,7 +830,7 @@ fn summarize_receiver_writes(
     let projects_p0 = |e: ExprId| -> bool { roots_self(body, &self_derived, e, p0) };
     let mut direct = false;
     let mut pending: Vec<FuncId> = Vec::new();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         if direct {
             return;
         }

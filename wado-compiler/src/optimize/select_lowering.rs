@@ -4,7 +4,7 @@
 use crate::call_args::CallArgs;
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -24,8 +24,8 @@ pub fn select_lowering(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        if let Some(body) = body.as_mut() {
+        let FuncParts { body, locals, .. } = func.parts();
+        if let Some(body) = body {
             let mut engine = Engine::new(body, &mut buffers, locals);
             changed |= engine.run(&[&rule]);
         }

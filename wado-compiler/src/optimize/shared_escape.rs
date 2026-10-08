@@ -1,18 +1,19 @@
 //! Whether a constant aggregate stays safe to share once a callee stashes it
 //! into the heap: nothing in the program writes through the object. See the WEP.
 
-use std::cell::RefCell;
 use std::hash::Hash;
 use std::ops::ControlFlow;
+use std::sync::Mutex;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction};
+use crate::nir::{FuncId, FuncRef, NirFunction};
 use crate::nir_arena::{
     ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::tir::{DeclarationLookup, TypeTable};
+use crate::parallel::lock;
+use crate::tir::{BuiltinDeclarations, DeclarationLookup, TypeTable};
 
 use super::arena_query::{bare_promoted_local, collect_pattern_bindings, holds_reference};
 
@@ -34,22 +35,31 @@ enum Slot {
 ///
 /// Every query reads bodies and writes none, so it shares its borrows with the
 /// caller's: a pass asks while walking a body of its own, and both hold a
-/// `Ref`. Asking one while a `RefMut` is out is the caller's bug — answering it
-/// with a verdict would make the analysis depend on who else held a borrow.
+/// read borrow. Asking one while a write borrow is out is the caller's bug —
+/// answering it with a verdict would make the analysis depend on who else held
+/// a borrow.
+///
+/// Queries may come from several threads. A verdict is the greatest fixpoint
+/// over what the slot reaches, so which query settles a slot first changes
+/// nothing.
 pub(super) struct SharedEscape<'a> {
-    project: &'a NirPackage,
-    verdicts: RefCell<IndexMap<Slot, bool>>,
+    functions: &'a [FuncRef],
+    type_table: &'a TypeTable,
+    declarations: &'a BuiltinDeclarations,
+    verdicts: Mutex<IndexMap<Slot, bool>>,
     /// Per-body seed census, built on first ask. Every slot is asked of every
     /// body, so rediscovering one body's reads per slot is quadratic.
-    census: RefCell<IndexMap<usize, BodyCensus>>,
+    census: Mutex<IndexMap<usize, BodyCensus>>,
 }
 
 impl<'a> SharedEscape<'a> {
-    pub(super) fn new(project: &'a NirPackage) -> Self {
+    pub(super) fn new(project: &'a NirPackage, type_table: &'a TypeTable) -> Self {
         Self {
-            project,
-            verdicts: RefCell::new(IndexMap::default()),
-            census: RefCell::new(IndexMap::default()),
+            functions: &project.functions,
+            type_table,
+            declarations: &project.builtin_declarations,
+            verdicts: Mutex::default(),
+            census: Mutex::default(),
         }
     }
 
@@ -62,11 +72,13 @@ impl<'a> SharedEscape<'a> {
         seed_field: Option<&str>,
         seed_call: Option<FuncId>,
     ) -> bool {
-        let mut census = self.census.borrow_mut();
-        census
-            .entry(func_idx)
-            .or_insert_with(|| BodyCensus::of(body, &self.project.type_table.borrow()))
-            .can_read(seed_field, seed_call)
+        if let Some(census) = lock(&self.census).get(&func_idx) {
+            return census.can_read(seed_field, seed_call);
+        }
+        let census = BodyCensus::of(body, self.type_table);
+        let can_read = census.can_read(seed_field, seed_call);
+        lock(&self.census).entry(func_idx).or_insert(census);
+        can_read
     }
 
     /// Whether a constant handed to `func_id`'s parameter at `pos` may be
@@ -76,8 +88,23 @@ impl<'a> SharedEscape<'a> {
         self.slot_ok(&Slot::Param(func_id, pos))
     }
 
+    /// Settled without holding the lock: a verdict another thread publishes
+    /// meanwhile is the same exact answer this one would reach.
     fn slot_ok(&self, slot: &Slot) -> bool {
-        settle(slot, &mut self.verdicts.borrow_mut(), |s| self.own_check(s))
+        if let Some(&known) = lock(&self.verdicts).get(slot) {
+            return known;
+        }
+        let settled = settle(
+            slot,
+            |s| lock(&self.verdicts).get(s).copied(),
+            |s| self.own_check(s),
+        );
+        let holds = settled[slot];
+        let mut verdicts = lock(&self.verdicts);
+        for (s, verdict) in settled {
+            verdicts.entry(s).or_insert(verdict);
+        }
+        holds
     }
 
     /// The slots `slot` holds only if they hold too, or `None` where a use of
@@ -86,13 +113,13 @@ impl<'a> SharedEscape<'a> {
         // A bodyless owner's `Slot::Ret` stays with the walk: a pass-through
         // hands the object to its caller, where the walk reads it.
         if let Slot::Param(id, pos) = slot {
-            let owner = self.project.functions[id.index()].borrow();
+            let owner = self.functions[id.index()].borrow();
             if owner.body.is_none() {
                 return self.declared_check(&owner, *id, *pos);
             }
         }
         let mut obligations: IndexSet<Slot> = IndexSet::default();
-        for (idx, func) in self.project.functions.iter().enumerate() {
+        for (idx, func) in self.functions.iter().enumerate() {
             let func = func.borrow();
             if !self.scan_function(slot, idx, &func, &mut obligations) {
                 compiler_trace!("shared_escape", "{slot:?} refused in {}", func.name);
@@ -169,10 +196,9 @@ impl<'a> SharedEscape<'a> {
                 return true;
             }
         }
-        let type_table = self.project.type_table.borrow();
         let mut taint = Taint {
             body,
-            type_table: &type_table,
+            type_table: self.type_table,
             seed_field,
             seed_call,
             locals,
@@ -224,7 +250,7 @@ impl<'a> SharedEscape<'a> {
         });
         // A body whose last statement is its value returns without a `Return`.
         if body
-            .block_tail(body.root)
+            .block_tail(body.root())
             .is_some_and(|op| taint.operand(op))
         {
             returns_tainted = true;
@@ -312,7 +338,7 @@ impl<'a> SharedEscape<'a> {
         // what its `#[storage]` implies. Only a callee nothing describes is
         // refused.
         let reference = DeclarationLookup::from(callee);
-        let declarations = &self.project.builtin_declarations;
+        let declarations = self.declarations;
         if declarations.get(reference).is_none() {
             return ArgClauses::REFUSED;
         }
@@ -331,7 +357,7 @@ impl<'a> SharedEscape<'a> {
         // owned result is not the object given, and `part_of_args` says it may
         // be — which makes the result the caller's to account for, under
         // `Slot::Ret`.
-        let escapes = holds_reference(&self.project.type_table.borrow(), callee.return_type);
+        let escapes = holds_reference(self.type_table, callee.return_type);
         let hands_back = escapes
             && declarations
                 .part_of_params(reference)
@@ -346,26 +372,24 @@ impl<'a> SharedEscape<'a> {
     }
 }
 
-/// Whether `root` holds: no node reachable from it through `own_check`'s
-/// obligations is refused. Settles, and caches, every node it reaches.
+/// The verdict of `root` and of every node it reaches, checking only the ones
+/// `known` does not answer: a node holds when nothing reachable from it
+/// through `own_check`'s obligations is refused.
 //
 // The greatest fixpoint: a cycle carrying no refusal holds, the sound answer
-// for a safety property. Each node is checked once over the life of `verdicts`.
+// for a safety property. Each node is checked once per call.
 fn settle<S: Clone + Eq + Hash>(
     root: &S,
-    verdicts: &mut IndexMap<S, bool>,
+    known: impl Fn(&S) -> Option<bool>,
     mut own_check: impl FnMut(&S) -> Option<IndexSet<S>>,
-) -> bool {
-    if let Some(&cached) = verdicts.get(root) {
-        return cached;
-    }
+) -> IndexMap<S, bool> {
     let mut owed_by: IndexMap<S, Vec<S>> = IndexMap::default();
     let mut failing: Vec<S> = Vec::new();
     let mut reached: IndexSet<S> = IndexSet::default();
     reached.insert(root.clone());
     let mut pending = vec![root.clone()];
     while let Some(node) = pending.pop() {
-        match verdicts.get(&node) {
+        match known(&node) {
             Some(true) => {}
             Some(false) => failing.push(node),
             None => match own_check(&node) {
@@ -389,11 +413,13 @@ fn settle<S: Clone + Eq + Hash>(
             }
         }
     }
-    for node in reached {
-        let holds = !refused.contains(&node);
-        verdicts.insert(node, holds);
-    }
-    verdicts[root]
+    reached
+        .into_iter()
+        .map(|node| {
+            let holds = !refused.contains(&node);
+            (node, holds)
+        })
+        .collect()
 }
 
 /// Whether a callee leaves an argument and everything it holds alone, and
@@ -692,12 +718,21 @@ mod tests {
         verdicts: &mut IndexMap<u32, bool>,
         checks: &mut u32,
     ) -> bool {
-        settle(&root, verdicts, |node| {
-            *checks += 1;
-            graph[node]
-                .as_ref()
-                .map(|next| next.iter().copied().collect())
-        })
+        if let Some(&cached) = verdicts.get(&root) {
+            return cached;
+        }
+        let settled = settle(
+            &root,
+            |node| verdicts.get(node).copied(),
+            |node| {
+                *checks += 1;
+                graph[node]
+                    .as_ref()
+                    .map(|next| next.iter().copied().collect())
+            },
+        );
+        verdicts.extend(settled);
+        verdicts[&root]
     }
 
     /// Mutually recursive functions passing one parameter around: every slot

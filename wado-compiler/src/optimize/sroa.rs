@@ -13,11 +13,11 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::minted_what;
-use crate::nir::{FuncId, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap, build_ctfe_builtin_map};
@@ -92,10 +92,9 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
     let stores_lookup = build_stores_lookup(project);
     let value_copy_ids = project.value_copy_func_ids();
     let builtins = build_ctfe_builtin_map(project);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::Sroa, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::Sroa, functions.len(), |buffers, fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
@@ -109,9 +108,9 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
             applied: Cell::new(false),
         };
         let changed = {
-            let NirFunction { body, locals, .. } = &mut *func;
-            let body = body.as_mut().expect("checked above");
-            let mut engine = Engine::new(body, &mut buffers, locals);
+            let FuncParts { body, locals, .. } = func.parts();
+            let body = body.expect("checked above");
+            let mut engine = Engine::new(body, buffers, locals);
             engine.run(&[&rule])
         };
         let newly = rule.newly_aliased.into_inner();
@@ -300,7 +299,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         len_map: &len_map,
         builtins: rule.builtins,
     };
-    let root = engine.body.root;
+    let root = engine.body.root();
     rewrite_block(engine, root, &ctx);
 
     true
@@ -704,7 +703,7 @@ fn scan_candidate_uses(
         lengths: &lengths,
         builtins,
     }
-    .node(body, NodeRef::Block(body.root), &mut uses);
+    .node(body, NodeRef::Block(body.root()), &mut uses);
     uses
 }
 
@@ -830,7 +829,7 @@ fn find_soft_escaped_locals(
         value_copy_ids,
     };
     let mut hard_escaped = IndexSet::default();
-    soft.walk(body, NodeRef::Block(body.root), &mut hard_escaped);
+    soft.walk(body, NodeRef::Block(body.root()), &mut hard_escaped);
 
     escaped_candidates
         .into_iter()

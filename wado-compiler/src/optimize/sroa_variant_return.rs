@@ -24,6 +24,7 @@ use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
 use crate::nir_visitor::reachable_exprs;
+use crate::parallel::Executor;
 
 /// Widest result tuple the scalarized return may use, counting the tag. Matches
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
@@ -206,7 +207,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
             variant_type: *variant_type,
         });
     }
-    rewrite_call_sites(project, &all, &mut touched);
+    rewrite_call_sites(project, &all, gate.exec(), &mut touched);
     touched.extend(project.rename_reshaped(candidates.keys().copied()));
     scalarize_variant_locals(project, &dirty, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
@@ -242,27 +243,34 @@ fn rebox_stragglers(
     if scalarized.is_empty() {
         return false;
     }
-    let mut changed = false;
-    for i in 0..project.functions.len() {
-        let mut func = project.functions[i].borrow_mut();
-        let own_return = func.return_type;
-        let Some(mut body) = func.body.take() else {
-            continue;
-        };
-        // Every step below keys on a call to a scalarized callee.
-        if !calls_any(&body, scalarized) {
+    let exec = gate.exec().clone();
+    let reboxed = {
+        let type_table = project.type_table.borrow();
+        let type_table: &TypeTable = &type_table;
+        let functions = &project.functions;
+        exec.map_indices(functions.len(), |i| {
+            let mut func = functions[i].borrow_mut();
+            // Every step below keys on a call to a scalarized callee. Asked before
+            // the body is taken, so a function it leaves alone is not written.
+            if !func.calls_any(|id| scalarized.contains_key(id)) {
+                return false;
+            }
+            let own_return = func.return_type;
+            let mut body = func.body.take().expect("checked above");
+            let span = func.span;
+            let bound = handled_call_sites(&body, scalarized, own_return, type_table);
+            let targets = straggler_calls(&body, scalarized, &bound);
+            let reboxed = !targets.is_empty();
+            for call in targets {
+                compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
+                rebox_call(&mut body, &mut func.locals, call, scalarized, span);
+            }
             func.body = Some(body);
-            continue;
-        }
-        let span = func.span;
-        let bound = handled_call_sites(&body, scalarized, own_return, &project.type_table.borrow());
-        let targets = straggler_calls(&body, scalarized, &bound);
-        let reboxed = !targets.is_empty();
-        for call in targets {
-            compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
-            rebox_call(&mut body, &mut func.locals, call, scalarized, span);
-        }
-        func.body = Some(body);
+            reboxed
+        })
+    };
+    let mut changed = false;
+    for (i, reboxed) in reboxed.into_iter().enumerate() {
         if reboxed {
             gate.mark_changed(FuncId::new(i));
             changed = true;
@@ -270,14 +278,6 @@ fn rebox_stragglers(
     }
     changed |= rebox_stragglers_in_globals(project, scalarized);
     changed
-}
-
-/// Whether `body` calls any function in `targets` — one arena scan, far cheaper
-/// than the tree walks it gates.
-fn calls_any<V>(body: &Body, targets: &IndexMap<FuncId, V>) -> bool {
-    body.exprs.values().any(|node| {
-        matches!(&node.kind, ExprKind::Call { func_id, .. } if targets.contains_key(func_id))
-    })
 }
 
 /// The same repair over the global initializers. They are never rewritten —
@@ -402,7 +402,7 @@ fn call_sites(body: &Body, own_return: TypeId) -> Vec<CallSite> {
     let mut out = Vec::new();
     collect_call_sites(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         own_return,
         &label_types,
         &mut out,
@@ -568,7 +568,7 @@ fn straggler_calls(
     let mut out = Vec::new();
     collect_straggler_calls(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         scalarized,
         handled,
         &discarded,
@@ -761,6 +761,9 @@ fn debug_assert_call_sites_rewritten(project: &NirPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let Some(body) = &func.body else { continue };
+        if !body.calls_any(|id| scalarized.contains_key(id)) {
+            continue;
+        }
 
         // Nothing calls a scalarized function from a position no consumer
         // reads a tuple in. `rebox_stragglers` has run, so every such call is
@@ -1210,7 +1213,7 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
     let mut used_in_globals: IndexSet<FuncId> = IndexSet::default();
     for global in &project.globals {
         let body = global.init.slot_expr().body();
-        collect_called(body, NodeRef::Block(body.root), &mut used_in_globals);
+        collect_called(body, NodeRef::Block(body.root()), &mut used_in_globals);
     }
     candidates.retain(|k, _| !used_in_globals.contains(k));
 
@@ -1251,7 +1254,7 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
                 type_table: &project.type_table.borrow(),
             };
             // Every `Return` `rewrite_returns` reaches must turn into the result tuple.
-            if !arena_query::every_return(body, NodeRef::Block(body.root), |value| {
+            if !arena_query::every_return(body, NodeRef::Block(body.root()), |value| {
                 value.is_some_and(|v| returns.value_scalarizable(v))
             }) {
                 invalid.insert(key);
@@ -1386,7 +1389,7 @@ fn single_def_variant_construct(
     let mut reads = 0usize;
     count_local_def_use(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         local,
         &mut defs,
         &mut reads,
@@ -1472,7 +1475,12 @@ fn bound_temps(
 pub(crate) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
     let mut reassigned: IndexSet<u32> = IndexSet::default();
-    collect_defs(body, NodeRef::Block(body.root), &mut defs, &mut reassigned);
+    collect_defs(
+        body,
+        NodeRef::Block(body.root()),
+        &mut defs,
+        &mut reassigned,
+    );
     defs.into_iter()
         .filter(|&(local, count)| count == 1 && !reassigned.contains(&local))
         .map(|(local, _)| local)
@@ -1571,7 +1579,7 @@ fn invalidate_bad_call_sites(
     }
     check_uses(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         candidates,
         &bound,
         rebind,
@@ -1829,7 +1837,7 @@ fn rewrite_callees(
             touched.insert(key.index());
             continue;
         };
-        let root = body.root;
+        let root = body.root();
         let mut rw = ReturnRewrite {
             cand,
             span,
@@ -2075,26 +2083,27 @@ fn pad_value(body: &mut Body, pad: Pad, option: &OptionCases, span: Span) -> Ope
 // -----------------------------------------------------------------------
 
 fn rewrite_call_sites(
-    project: &mut NirPackage,
+    project: &NirPackage,
     candidates: &IndexMap<FuncId, Candidate>,
+    exec: &Executor,
     touched: &mut IndexSet<usize>,
 ) {
-    for i in 0..project.functions.len() {
-        let mut func = project.functions[i].borrow_mut();
-        let Some(mut body) = func.body.take() else {
-            continue;
-        };
-        // Every step below keys on a call to a candidate.
-        if !calls_any(&body, candidates) {
-            func.body = Some(body);
-            continue;
+    let type_table = project.type_table.borrow();
+    let type_table: &TypeTable = &type_table;
+    let functions = &project.functions;
+    let rewritten = exec.map_indices(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
+        // Every step below keys on a call to a candidate. Asked before the body
+        // is taken, so a function it leaves alone is not written.
+        if !func.calls_any(|id| candidates.contains_key(id)) {
+            return false;
         }
+        let mut body = func.body.take().expect("checked above");
         let span = func.span;
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing
         // local, so a `Rebind` taken here still describes every payload binding.
-        let type_table = project.type_table.borrow();
-        let rebind = Rebind::new(&func, &type_table);
+        let rebind = Rebind::new(&func, type_table);
         changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, &rebind, span);
         let mut bound = bound_temps(&body, candidates, func.return_type);
         // Re-check every temp: a site inherited from an earlier round never
@@ -2117,7 +2126,7 @@ fn rewrite_call_sites(
                 changed |= retype_let(&mut body, local, tuple_type);
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
-            let root = body.root;
+            let root = body.root();
             let bound: IndexMap<u32, Candidate> = bound
                 .iter()
                 .map(|(&l, f)| (l, candidates[f].clone()))
@@ -2131,10 +2140,9 @@ fn rewrite_call_sites(
             changed |= rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
         }
         func.body = Some(body);
-        if changed {
-            touched.insert(i);
-        }
-    }
+        changed
+    });
+    touched.extend((0..rewritten.len()).filter(|&i| rewritten[i]));
 }
 
 // -----------------------------------------------------------------------
@@ -2222,7 +2230,7 @@ fn scalarize_locals_in(
         rebind: &rebind,
         span,
     };
-    let root = body.root;
+    let root = body.root();
     rewrite_temp_uses(body, NodeRef::Block(root), &mut cx);
     true
 }
@@ -2495,7 +2503,7 @@ fn hoist_call_scrutinees(
     let mut targets: Vec<ExprId> = Vec::new();
     collect_call_scrutinees(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         candidates,
         rebind,
         &mut targets,
@@ -2681,7 +2689,7 @@ fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind, layout: &Layou
     let mut ok = true;
     check_temp_uses(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         local,
         rebind,
         layout,
@@ -2873,9 +2881,10 @@ fn rewrite_match_on_temp(
             other => panic!("variant-return SROA: unvalidated arm pattern {other:?}"),
         };
 
+        let span = body.pats[arm.pattern].span;
         let pattern = body.pats.push(PatNode {
             kind: PatKind::Literal(NirLiteralPattern::I128(i128::from(case_index))),
-            span: body.pats[arm.pattern].span,
+            span,
         });
         let (guard, arm_body) = match binding {
             None => (arm.guard, arm.body),

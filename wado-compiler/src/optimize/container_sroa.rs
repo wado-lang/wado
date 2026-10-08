@@ -13,7 +13,7 @@ use std::cell::{Cell, RefCell};
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirStruct, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirStruct, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -286,8 +286,8 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
             value_copy_ids: &value_copy_ids,
             applied: Cell::new(false),
         };
-        let NirFunction { body, locals, .. } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        let FuncParts { body, locals, .. } = func.parts();
+        let body = body.expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
         // A promoted constant capacity is re-materialized during the rewrite;
         // `materialize_operand` falls back to a decimal repr without the type
@@ -542,7 +542,7 @@ fn builds_empty(
     let Some(body) = func.body.as_ref() else {
         return false;
     };
-    let [stmt] = body.blocks[body.root].stmts.as_slice() else {
+    let [stmt] = body.blocks[body.root()].stmts.as_slice() else {
         return false;
     };
     let value = match &body.stmts[*stmt].kind {
@@ -911,7 +911,7 @@ fn reads_length_only(
         array_len,
         is_length_only,
     }
-    .node(NodeRef::Block(body.root))
+    .node(NodeRef::Block(body.root()))
 }
 
 /// The walk behind [`reads_length_only`].
@@ -1114,7 +1114,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
         sig: rule.sig,
         value_copy_ids: rule.value_copy_ids,
     };
-    let root = engine.body.root;
+    let root = engine.body.root();
     Rewriter { ctx: &ctx }.rewrite_block(engine, root);
 
     true
@@ -1405,7 +1405,7 @@ fn compute_safe_set(
             escaped: IndexSet::default(),
             used_kinds: IndexMap::default(),
         };
-        checker.visit(body, NodeRef::Block(body.root));
+        checker.visit(body, NodeRef::Block(body.root()));
         if checker.escaped.is_empty() {
             break checker.used_kinds;
         }

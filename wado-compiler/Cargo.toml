@@ -30,6 +30,11 @@ wasm-compose = { workspace = true }
 anyhow = { workspace = true }
 semver = { workspace = true }
 
+# `wasm32-unknown-unknown` has no threads, so the optimizer runs sequentially
+# there (WEP: Parallel Optimizer).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon = { workspace = true }
+
 [dev-dependencies]
 futures = { workspace = true }
 serde_json = { workspace = true }

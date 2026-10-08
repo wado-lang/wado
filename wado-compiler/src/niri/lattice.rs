@@ -4,7 +4,7 @@
 //! belongs to the frame. A reference denotes its referent's value, the engine
 //! having no reference values of its own.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::compiler_item::SeqField;
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, eval_binary, eval_cast, eval_unary, prim_of};
@@ -228,7 +228,7 @@ impl Interpreter<'_> {
         let payload = match payload {
             None => None,
             Some(op) => match self.operand_to_lattice(body, op) {
-                Lattice::Const(v) => Some(Rc::new(v)),
+                Lattice::Const(v) => Some(Arc::new(v)),
                 Lattice::NonConst => return Lattice::NonConst,
                 Lattice::Unevaluated => return Lattice::Unevaluated,
             },

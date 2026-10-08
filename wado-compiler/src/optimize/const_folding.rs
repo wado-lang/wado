@@ -7,7 +7,7 @@
 //! [`ValueGraph`]: crate::nir_value_graph
 
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
@@ -16,7 +16,7 @@ use crate::compiler_item::SeqField;
 use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, FuncParts, FuncRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -30,6 +30,7 @@ use crate::niri::{
 };
 use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;
+use crate::parallel::Executor;
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -45,14 +46,17 @@ struct FoldMaps {
     shapes: AggregateShapes,
 }
 
-fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
-    // The CalleeMap holds Rc handles aliased with `project.functions`. The
-    // interpreter reads callee bodies via `try_borrow`, which bails cleanly when
-    // the visitor already holds `borrow_mut` on the same function (a self-call
-    // inside the function being walked). Because the Rc points at the live cell,
-    // a callee's body edit is visible without rebuilding the map — only its
-    // *membership* (the ctfe-eligible function set) can go stale.
-    let callees = build_callee_map(project);
+fn build_fold_maps(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    exec: &Executor,
+    frozen: impl Fn(FuncId) -> bool + Sync + Send,
+) -> FoldMaps {
+    // The CalleeMap holds handles aliased with `project.functions`, except for
+    // the `frozen` functions the sweep is about to rewrite, which it reads as
+    // they stand now: the function being walked is among them, so a self-call
+    // reads the copy rather than the body held for writing.
+    let callees = build_callee_map(project, exec, frozen);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     // Every immutable global whose initializer reduces to a `Const(_)` becomes a
     // `GlobalVarGet` rewrite target; mutable globals are recorded as `NonConst`.
@@ -66,19 +70,24 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
 }
 
 /// One folding pass: build the whole-program maps, then hand `drive` a folder
-/// to run over whichever functions it selects.
+/// to run over whichever functions it selects. A callee in `frozen` is read
+/// as it stands when the pass starts. Each fold starts a fresh interpreter, so
+/// what one function's fold spends or learns decides nothing for the next.
 fn fold_pass(
     project: &NirPackage,
-    drive: impl FnOnce(&mut dyn FnMut(FuncId) -> bool) -> bool,
+    exec: &Executor,
+    frozen: impl Fn(FuncId) -> bool + Sync + Send,
+    drive: impl FnOnce(&(dyn Fn(&mut EngineBuffers, FuncId) -> bool + Sync)) -> bool,
 ) -> bool {
     let type_table = project.type_table.borrow();
-    let maps = build_fold_maps(project, &type_table);
-    let globals = build_global_view(project, &type_table, &maps);
-    let mut visitor = new_visitor(&type_table, &maps, &globals);
-    let mut buffers = EngineBuffers::default();
-    drive(&mut |fid| {
-        let func = &project.functions[fid.index()];
-        let changed = fold_function(func, &mut visitor, &mut buffers, &type_table);
+    let type_table = &*type_table;
+    let maps = build_fold_maps(project, type_table, exec, frozen);
+    let globals = build_global_view(project, type_table, &maps, exec);
+    let functions = &project.functions;
+    drive(&|buffers, fid| {
+        let func = &functions[fid.index()];
+        let mut visitor = new_visitor(type_table, &maps, &globals);
+        let changed = fold_function(func, &mut visitor, buffers, type_table);
         if changed {
             compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
@@ -90,26 +99,41 @@ fn fold_pass(
 /// pass last ran.
 pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let len = project.functions.len();
-    fold_pass(project, |fold| {
-        gate.run_gated(GatedPass::ConstFold, len, fold)
-    })
+    let pending: IndexSet<FuncId> = gate
+        .pending(GatedPass::ConstFold, len)
+        .into_iter()
+        .collect();
+    let exec = Arc::clone(gate.exec());
+    fold_pass(
+        project,
+        &exec,
+        |id| pending.contains(&id),
+        |fold| gate.run_gated_par(GatedPass::ConstFold, len, fold),
+    )
 }
 
-/// Ungated variant: folds every function. Its global facts reach readers the
-/// call graph never links, so the gate's dirty set would skip real work.
+/// Ungated variant: folds every function, each reading the others as the
+/// pass found them. Its global facts reach readers the call graph never
+/// links, so the gate's dirty set would skip real work.
 pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let len = project.functions.len();
-    fold_pass(project, |fold| {
-        let mut changed = false;
-        for i in 0..len {
-            let fid = FuncId::new(i);
-            if fold(fid) {
-                gate.mark_changed(fid);
-                changed = true;
+    let all: Vec<FuncId> = (0..project.functions.len()).map(FuncId::new).collect();
+    let exec = Arc::clone(gate.exec());
+    fold_pass(
+        project,
+        &exec,
+        |_| true,
+        |fold| {
+            let changed = exec.map_init(&all, EngineBuffers::default, |buffers, &fid| {
+                fold(buffers, fid)
+            });
+            for (&fid, &changed) in all.iter().zip(&changed) {
+                if changed {
+                    gate.mark_changed(fid);
+                }
             }
-        }
-        changed
-    })
+            changed.contains(&true)
+        },
+    )
 }
 
 fn new_visitor<'a>(
@@ -132,15 +156,15 @@ fn new_visitor<'a>(
 }
 
 fn fold_function(
-    func_rc: &RefCell<NirFunction>,
+    func_rc: &FuncCell,
     visitor: &mut ConstFoldVisitor<'_>,
     buffers: &mut EngineBuffers,
     type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
     compiler_trace!("region_seed", "folding {}", func.name);
-    let NirFunction { body, locals, .. } = &mut *func;
-    let Some(body) = body.as_mut() else {
+    let FuncParts { body, locals, .. } = func.parts();
+    let Some(body) = body else {
         return false;
     };
     // Local indices are per-function; reset the interpreter env at each boundary.
@@ -151,7 +175,7 @@ fn fold_function(
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
     let mut engine = Engine::new(body, buffers, locals);
-    let root = engine.body.root;
+    let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
 }
 
@@ -363,7 +387,12 @@ struct GlobalView {
     fields: GlobalFieldEnv,
 }
 
-fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMaps) -> GlobalView {
+fn build_global_view(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    maps: &FoldMaps,
+    exec: &Executor,
+) -> GlobalView {
     let mut view = GlobalView {
         materializing: materializing_globals(project),
         values: maps.declared_globals.clone(),
@@ -393,23 +422,37 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
             );
         }
     }
+    let funcs = &project.functions;
+    let per_function = exec.map(funcs, |func_rc| {
+        let mut found = GlobalStores::default();
+        if let Some(body) = func_rc.borrow().body.as_ref() {
+            GlobalStoreCollector {
+                immutable: &immutable,
+                type_table,
+                funcs,
+                callees: &maps.callees,
+                ctfe_builtins: &maps.ctfe_builtins,
+                declared_env: &maps.declared_globals,
+                found: &mut found,
+            }
+            .visit_body(body);
+        }
+        found
+    });
+    // In store order, as one collector walking the bodies in turn would: a later
+    // sequence length overrides an earlier one, and a join keeps the first of
+    // two equal constants.
     let mut stored = GlobalEnv::default();
     let mut escaped = IndexSet::default();
-    let mut collector = GlobalStoreCollector {
-        immutable: &immutable,
-        type_table,
-        funcs: &project.functions,
-        callees: &maps.callees,
-        ctfe_builtins: &maps.ctfe_builtins,
-        declared_env: &maps.declared_globals,
-        fields: &mut view.fields,
-        stored: &mut stored,
-        escaped: &mut escaped,
-    };
-    for func_rc in &project.functions {
-        if let Some(body) = func_rc.borrow().body.as_ref() {
-            collector.visit_body(body);
+    for found in per_function {
+        for (key, fields) in found.fields {
+            view.fields.entry(key).or_default().extend(fields);
         }
+        for (key, lattice) in found.stored {
+            let slot = stored.entry(key).or_insert(Lattice::Unevaluated);
+            *slot = std::mem::replace(slot, Lattice::Unevaluated).join(lattice);
+        }
+        escaped.extend(found.escaped);
     }
     for (key, lattice) in stored {
         if matches!(lattice, Lattice::Const(_)) {
@@ -433,18 +476,24 @@ fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
     );
 }
 
-/// Reads what every body says about the immutable globals: the `GlobalVarSet`
+/// What one body says about the immutable globals.
+#[derive(Default)]
+struct GlobalStores {
+    fields: GlobalFieldEnv,
+    stored: GlobalEnv,
+    escaped: IndexSet<GlobalKey>,
+}
+
+/// Reads what a body says about the immutable globals: the `GlobalVarSet`
 /// that carries a value, and the uses that make one unknowable.
 struct GlobalStoreCollector<'a> {
     immutable: &'a IndexSet<GlobalKey>,
     type_table: &'a TypeTable,
-    funcs: &'a [Rc<RefCell<NirFunction>>],
+    funcs: &'a [FuncRef],
     callees: &'a CalleeMap,
     ctfe_builtins: &'a CtfeBuiltinMap,
     declared_env: &'a GlobalEnv,
-    fields: &'a mut GlobalFieldEnv,
-    stored: &'a mut GlobalEnv,
-    escaped: &'a mut IndexSet<GlobalKey>,
+    found: &'a mut GlobalStores,
 }
 
 impl GlobalStoreCollector<'_> {
@@ -549,7 +598,7 @@ impl GlobalStoreCollector<'_> {
             } => {
                 let key = (module_source.clone(), name.clone());
                 if self.immutable.contains(&key) {
-                    self.escaped.insert(key);
+                    self.found.escaped.insert(key);
                 }
             }
             ExprKind::FieldAccess { expr: inner, .. }
@@ -564,7 +613,7 @@ impl GlobalStoreCollector<'_> {
 
     fn record_store(&mut self, body: &Body, key: GlobalKey, value: Operand) {
         if let Some(n) = const_seq_len_operand(body, value) {
-            record_seq_len(self.fields, key.clone(), n);
+            record_seq_len(&mut self.found.fields, key.clone(), n);
         }
         let mut interpreter = Interpreter::new(self.type_table);
         interpreter.with_callees(self.callees);
@@ -586,11 +635,12 @@ impl GlobalStoreCollector<'_> {
             Lattice::NonConst | Lattice::Unevaluated => Lattice::NonConst,
         };
         let known = self
+            .found
             .stored
             .get(&key)
             .cloned()
             .unwrap_or(Lattice::Unevaluated);
-        self.stored.insert(key, known.join(stored));
+        self.found.stored.insert(key, known.join(stored));
     }
 }
 

@@ -20,6 +20,7 @@ use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
     materializing_globals, region_queries,
 };
+use crate::parallel::Executor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -59,10 +60,10 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
             type_table,
             module: func.module_source.clone(),
             remarks: &mut remarks,
-            current_span: body.blocks[body.root].span,
+            current_span: body.blocks[body.root()].span,
             in_value_block: false,
         };
-        collector.scan_node(body, NodeRef::Block(body.root));
+        collector.scan_node(body, NodeRef::Block(body.root()));
     }
     remarks
 }
@@ -349,7 +350,7 @@ impl ParamGateScan<'_> {
     /// `None` outside every scrutinee. It passes to children unchanged and is
     /// replaced, never cleared, on entering a nested scrutinee.
     fn walk(&mut self, body: &Body) {
-        let mut stack = vec![(NodeRef::Block(body.root), None)];
+        let mut stack = vec![(NodeRef::Block(body.root()), None)];
         while let Some((node, gate)) = stack.pop() {
             if let (NodeRef::Expr(e), Some(span)) = (node, gate) {
                 self.report(body, e, span);
@@ -421,7 +422,7 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
 /// the fold did not reach. Read off the final IR, never off a refusal a pass
 /// recorded, so it retires itself as the fold reaches each shape.
 pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
-    let callees = build_callee_map(package);
+    let callees = build_callee_map(package, &Executor::default(), |_| false);
     let ctfe_builtins = build_ctfe_builtin_map(package);
     let materializing = materializing_globals(package);
     let names = ctfe_runnable_names(package);

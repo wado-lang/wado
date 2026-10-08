@@ -6,7 +6,7 @@
 
 use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -387,7 +387,7 @@ impl Rule for CloneForwardRule<'_> {
         collect_address_taken(engine.body, &mut address_taken);
 
         let mut candidates = Vec::new();
-        let mut stack = vec![engine.body.root];
+        let mut stack = vec![engine.body.root()];
         while let Some(b) = stack.pop() {
             collect_in_block(
                 engine.body,
@@ -430,7 +430,7 @@ impl Rule for CloneForwardRule<'_> {
             let kind = engine.body.exprs[cloned].kind.clone();
             engine.replace_expr_kind(c.use_node, kind);
         }
-        remove_dead_bindings(engine, engine.body.root, &dead);
+        remove_dead_bindings(engine, engine.body.root(), &dead);
         true
     }
 }
@@ -489,8 +489,8 @@ pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut Descriptor
             fpt: &fpt,
             type_table: &type_table,
         };
-        let NirFunction { body, locals, .. } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        let FuncParts { body, locals, .. } = func.parts();
+        let body = body.expect("checked above");
         let mut engine = Engine::new(body, &mut buffers, locals);
         any |= engine.run(&[&rule]);
     }
