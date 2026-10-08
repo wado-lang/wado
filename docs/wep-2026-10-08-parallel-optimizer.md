@@ -210,6 +210,6 @@ which callees to clone or which parameters to drop, stay sequential.
 - Developer traces (`WADO_TRACE`) interleave across threads, so their order
   varies between runs.
 - The frontend and the backend stay sequential.
-- A sweep copies the callees the interpreter may read, so a parallel compile
-  holds more memory than a sequential one. `test-wado` already peaks near
-  14 GB.
+- A sweep clones the callees the interpreter may read, and a clone keeps every
+  part its function's visit rewrites alive twice until the sweep ends.
+  `test-wado` peaks near 16 GB.
