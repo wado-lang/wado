@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791435737337,
+  "lastUpdate": 1791437181827,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65221,6 +65221,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/955a52b00b180b96182b4a94e93bec7d81b847ef"
         },
         "date": 1791435736538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "037dba4806418b7813154f366d7e832916a6d16e",
+          "message": "Merge pull request #2308 from wado-lang/ccr-000ccf7e-dyhyoe\n\nchore(deps): wasmtime 49.0.2 for wado and wado-run-webgpu, latest Cargo dependencies",
+          "timestamp": "2026-10-08T13:41:40+09:00",
+          "tree_id": "6397296f4671657975872a0dd88b3b23cb4fda51",
+          "url": "https://github.com/wado-lang/wado/commit/037dba4806418b7813154f366d7e832916a6d16e"
+        },
+        "date": 1791437180873,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
