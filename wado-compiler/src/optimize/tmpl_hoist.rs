@@ -9,8 +9,7 @@
 //! its [`BlockRole`], the callees through their [`CompilerItem`], the fields
 //! through [`SeqField`] / [`FormatterField`].
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::cell::Cell;
 
 use crate::compiler_item::{CompilerItem, FormatterField, SeqField};
 use crate::hashmap::IndexSet;
@@ -39,7 +38,7 @@ use cranelift_entity::EntityRef;
 /// Each callee is resolved by exact identity — its compiler item, or
 /// `FunctionRef::intrinsic` — never by name, so a same-named user function is
 /// never captured. Builtins are *sets* over every monomorphized instance.
-pub(super) struct TmplIdents {
+pub(super) struct TmplIdents<'t> {
     /// The stdlib `String::with_capacity` (the pre-lowered template init).
     with_capacity: IndexSet<FuncId>,
     /// `builtin::array_new` and its monomorphizations.
@@ -48,11 +47,11 @@ pub(super) struct TmplIdents {
     ref_as_non_null: IndexSet<FuncId>,
     /// Answers which compiler struct a literal builds: the lowered template
     /// init's `String`, or each interpolation's `Formatter`.
-    type_table: Rc<RefCell<TypeTable>>,
+    type_table: &'t TypeTable,
 }
 
-impl TmplIdents {
-    fn resolve(project: &NirPackage) -> Self {
+impl<'t> TmplIdents<'t> {
+    fn resolve(project: &NirPackage, type_table: &'t TypeTable) -> Self {
         let mut with_capacity = IndexSet::default();
         let mut array_new = IndexSet::default();
         let mut ref_as_non_null = IndexSet::default();
@@ -79,7 +78,7 @@ impl TmplIdents {
             with_capacity,
             array_new,
             ref_as_non_null,
-            type_table: project.type_table.clone(),
+            type_table,
         }
     }
 
@@ -88,7 +87,7 @@ impl TmplIdents {
     }
 
     fn is_struct(&self, ty: TypeId, item: CompilerItem) -> bool {
-        self.type_table.borrow().is_compiler_item_type(ty, item)
+        self.type_table.is_compiler_item_type(ty, item)
     }
 }
 
@@ -98,20 +97,19 @@ pub fn hoist_template_buffers(
     gate: &mut FunctionGate,
     heap: &mut HeapEffectsCache,
 ) -> bool {
-    let type_table = project.type_table.clone();
-    let idents = TmplIdents::resolve(project);
-    let heap_types = type_table.borrow();
-    let effects = heap.effects(project, &heap_types, gate);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::TmplHoist, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = project.type_table.borrow();
+    let type_table = &*type_table;
+    let idents = TmplIdents::resolve(project, type_table);
+    let effects = heap.effects(project, type_table, gate);
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::TmplHoist, functions.len(), |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
         let rule = TmplHoistRule {
             cx: HoistCx {
-                type_table: &type_table,
+                type_table,
                 idents: &idents,
                 heap: &effects,
             },
@@ -119,6 +117,7 @@ pub fn hoist_template_buffers(
         };
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("checked above");
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })
@@ -153,8 +152,8 @@ type HeapView<'a> = &'a dyn Sharing;
 
 /// What the hoist walk reads besides the body.
 struct HoistCx<'a> {
-    type_table: &'a RefCell<TypeTable>,
-    idents: &'a TmplIdents,
+    type_table: &'a TypeTable,
+    idents: &'a TmplIdents<'a>,
     heap: HeapView<'a>,
 }
 
@@ -939,7 +938,7 @@ fn extract_fmt_candidates(
     engine: &mut Engine,
     block: BlockId,
     hoisted_buf_index: u32,
-    type_table: &RefCell<TypeTable>,
+    type_table: &TypeTable,
     idents: &TmplIdents,
 ) -> Vec<FmtCandidate> {
     // Phase A (read): decide candidacy without mutating the arena.
@@ -951,7 +950,6 @@ fn extract_fmt_candidates(
     }
     let mut raws: Vec<Raw> = Vec::new();
     {
-        let type_table = type_table.borrow();
         let stmts = engine.body.blocks[block].stmts.clone();
         let len = stmts.len();
         for (i, s) in stmts.iter().enumerate() {

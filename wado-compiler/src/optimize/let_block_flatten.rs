@@ -21,14 +21,14 @@ use super::gate::{FunctionGate, GatedPass};
 /// flattened shapes.
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::LetBlockFlatten, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::LetBlockFlatten, functions.len(), |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
         let Some(body) = body.as_mut() else {
             return false;
         };
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
     })

@@ -92,10 +92,9 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
     let stores_lookup = build_stores_lookup(project);
     let value_copy_ids = project.value_copy_func_ids();
     let builtins = build_ctfe_builtin_map(project);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::Sroa, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::Sroa, functions.len(), |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
@@ -111,6 +110,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         let changed = {
             let NirFunction { body, locals, .. } = &mut *func;
             let body = body.as_mut().expect("checked above");
+            let mut buffers = EngineBuffers::default();
             let mut engine = Engine::new(body, &mut buffers, locals);
             engine.run(&[&rule])
         };

@@ -8,6 +8,8 @@
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
 
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
 use cranelift_entity::SecondaryMap;
 
 use crate::compiler_item::CompilerItem;
@@ -368,7 +370,9 @@ fn build_mut_escaped(
 pub(super) struct CallImmutability<'a> {
     type_table: &'a TypeTable,
     struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
-    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+    /// Filled by whichever visit asks first; a verdict depends only on the
+    /// type, so the order changes nothing.
+    memo: Mutex<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
     /// (param 0). Boxing erases the `&self` / `&mut self` distinction — both
     /// become a `Box<T>` param (see `lower/plan/boxing`) — so a receiver's
@@ -402,7 +406,7 @@ impl<'a> CallImmutability<'a> {
         Self {
             type_table,
             struct_fields,
-            memo: std::cell::RefCell::default(),
+            memo: Mutex::default(),
             receiver_mutating,
             has_body,
             effect_free: project.pure_builtin_callee_ids(),
@@ -420,8 +424,12 @@ impl<'a> CallImmutability<'a> {
         self.walk(type_id, &mut Vec::new())
     }
 
+    fn memo(&self) -> MutexGuard<'_, IndexMap<TypeId, bool>> {
+        self.memo.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     fn walk(&self, type_id: TypeId, stack: &mut Vec<TypeId>) -> bool {
-        if let Some(&cached) = self.memo.borrow().get(&type_id) {
+        if let Some(&cached) = self.memo().get(&type_id) {
             return cached;
         }
         // A struct can only reach itself through a `Box`/`List`/reference
@@ -469,7 +477,7 @@ impl<'a> CallImmutability<'a> {
             _ => false,
         };
         stack.pop();
-        self.memo.borrow_mut().insert(type_id, result);
+        self.memo().insert(type_id, result);
         result
     }
 }

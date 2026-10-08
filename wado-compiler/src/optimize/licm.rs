@@ -201,16 +201,16 @@ pub fn apply_licm(
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let effects = heap.effects(project, &type_table, gate);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::Licm, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::Licm, functions.len(), |fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
         let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
         let rule = LicmRule {
-            type_table: &type_table,
+            type_table,
             effects: &effects,
             params: &param_locals,
             applied: Cell::new(false),
@@ -230,13 +230,14 @@ pub fn apply_licm(
             locals,
             address_taken_locals,
             stores_aliased_locals,
-            &type_table,
+            type_table,
             &first_param_types,
             &call_immutability,
         );
+        let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

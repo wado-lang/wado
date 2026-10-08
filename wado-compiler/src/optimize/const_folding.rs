@@ -69,20 +69,22 @@ fn build_fold_maps(
 
 /// One folding pass: build the whole-program maps, then hand `drive` a folder
 /// to run over whichever functions it selects. A callee in `frozen` is read
-/// as it stands when the pass starts.
+/// as it stands when the pass starts. Each fold starts a fresh interpreter, so
+/// what one function's fold spends or learns decides nothing for the next.
 fn fold_pass(
     project: &NirPackage,
     frozen: &IndexSet<FuncId>,
-    drive: impl FnOnce(&mut dyn FnMut(FuncId) -> bool) -> bool,
+    drive: impl FnOnce(&(dyn Fn(FuncId) -> bool + Sync)) -> bool,
 ) -> bool {
     let type_table = project.type_table.borrow();
-    let maps = build_fold_maps(project, &type_table, frozen);
-    let globals = build_global_view(project, &type_table, &maps);
-    let mut visitor = new_visitor(&type_table, &maps, &globals);
-    let mut buffers = EngineBuffers::default();
-    drive(&mut |fid| {
-        let func = &project.functions[fid.index()];
-        let changed = fold_function(func, &mut visitor, &mut buffers, &type_table);
+    let type_table = &*type_table;
+    let maps = build_fold_maps(project, type_table, frozen);
+    let globals = build_global_view(project, type_table, &maps);
+    let functions = &project.functions;
+    drive(&|fid| {
+        let func = &functions[fid.index()];
+        let mut visitor = new_visitor(type_table, &maps, &globals);
+        let changed = fold_function(func, &mut visitor, type_table);
         if changed {
             compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
@@ -99,7 +101,7 @@ pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool
         .into_iter()
         .collect();
     fold_pass(project, &pending, |fold| {
-        gate.run_gated(GatedPass::ConstFold, len, fold)
+        gate.run_gated_par(GatedPass::ConstFold, len, fold)
     })
 }
 
@@ -142,7 +144,6 @@ fn new_visitor<'a>(
 fn fold_function(
     func_rc: &FuncCell,
     visitor: &mut ConstFoldVisitor<'_>,
-    buffers: &mut EngineBuffers,
     type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
@@ -158,7 +159,8 @@ fn fold_function(
     visitor
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut buffers = EngineBuffers::default();
+    let mut engine = Engine::new(body, &mut buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
 }
