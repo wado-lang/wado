@@ -296,7 +296,7 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: tir::TypeId) -> 
 /// emitted.
 pub(super) fn freeze_pure_arith(
     project: &mut NirPackage,
-    exec: &Executor,
+    exec: &Arc<Executor>,
     include_fields: bool,
     // `Early` runs before the optimize loop, on each function's freshly-built
     // (clean, un-restructured) graph. Only then is it sound to freeze a
@@ -315,7 +315,7 @@ pub(super) fn freeze_pure_arith(
     let call_immutability = CallImmutability::new(project, type_table, exec);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a field read is versioned by what a call writes.
-    let gate = include_fields.then(|| FunctionGate::new(project, &Arc::default()));
+    let gate = include_fields.then(|| FunctionGate::new(project, exec));
     let mut heap = HeapEffectsCache::default();
     let effects = gate
         .as_ref()

@@ -2302,7 +2302,7 @@ pub fn inline_functions(
             vg.loop_entry_values.clear();
         }
         // Only this caller's body changed (callee bodies are copied, not
-        // modified), so report just the caller. The caller's call-graph edges
+        // modified), so the sweep marks just the caller. Its call-graph edges
         // shift, but stale edges only cost 1-hop propagation precision
         // (quality), not correctness.
         Some(inlined_funcs)
