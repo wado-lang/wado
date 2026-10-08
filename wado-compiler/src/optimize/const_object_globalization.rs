@@ -171,11 +171,10 @@ pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> boo
     let funcs = &project.functions;
     let structs = &project.structs;
     let string_inline_max_bytes = project.string_inline_max_bytes;
-    let positions: Vec<usize> = (0..funcs.len()).collect();
     // Each visit memoizes its callee verdicts afresh: a memo seeds a cycle with
     // a provisional answer, so one shared across visits would answer by which
     // visit asked first.
-    let per_function = exec.map(&positions, |&fi| {
+    let per_function = exec.map_indices(funcs.len(), |fi| {
         let f = funcs[fi].borrow();
         let mut found = Vec::new();
         let Some(body) = f.body.as_ref().filter(|_| !skip_function(&f)) else {

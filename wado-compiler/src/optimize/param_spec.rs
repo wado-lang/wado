@@ -491,8 +491,7 @@ fn summarize_params(
     exec: &Executor,
 ) -> IndexMap<(FuncId, u32), ParamFacts> {
     let functions = &project.functions;
-    let positions: Vec<usize> = (0..functions.len()).collect();
-    let per_function = exec.map(&positions, |&index| {
+    let per_function = exec.map_indices(functions.len(), |index| {
         let func = functions[index].borrow();
         let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
             return Vec::new();
@@ -1067,29 +1066,21 @@ fn collect_call_constants(
         constants
     });
     let mut constants = CallConsts::default();
-    for here in per_function {
-        join_call_constants(&mut constants, here);
+    for (callee, here) in per_function.into_iter().flatten() {
+        join_call(&mut constants, callee, here);
     }
     for global in &project.globals {
-        let mut here = CallConsts::default();
-        collect_body_call_constants(global.init.slot_expr().body(), &mut here);
-        join_call_constants(&mut constants, here);
+        collect_body_call_constants(global.init.slot_expr().body(), &mut constants);
     }
     constants
 }
 
-/// Join `from` into `into`, keeping `into`'s order and appending new callees.
-fn join_call_constants(into: &mut CallConsts, from: CallConsts) {
-    for (callee, here) in from {
-        if let Some(previous) = into.get_mut(&callee) {
-            join_args(previous, here);
-        } else {
-            into.insert(callee, here);
-        }
-    }
-}
-
-fn join_args(previous: &mut [Option<FieldConst>], here: Vec<Option<FieldConst>>) {
+/// Join one call's arguments into what the earlier calls of `callee` agree on.
+fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>>) {
+    let Some(previous) = into.get_mut(&callee) else {
+        into.insert(callee, here);
+        return;
+    };
     assert_eq!(previous.len(), here.len());
     for (old, new) in previous.iter_mut().zip(here) {
         if *old != new {
@@ -1112,11 +1103,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
                     .flatten()
             })
             .collect();
-        if let Some(previous) = constants.get_mut(func_id) {
-            join_args(previous, here);
-        } else {
-            constants.insert(*func_id, here);
-        }
+        join_call(constants, *func_id, here);
     });
 }
 
@@ -1179,8 +1166,7 @@ fn collect_sites(
     let types = project.type_table.borrow();
     let types: &TypeTable = &types;
     let functions = &project.functions;
-    let positions: Vec<usize> = (0..functions.len()).collect();
-    let per_caller = exec.map(&positions, |&index| {
+    let per_caller = exec.map_indices(functions.len(), |index| {
         let func = functions[index].borrow();
         let body = func.body.as_ref().filter(|_| !func.is_dead)?;
         let seed = state.param_consts.get(&FuncId::new(index));

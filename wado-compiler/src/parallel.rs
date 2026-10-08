@@ -51,6 +51,15 @@ impl Executor {
         }
         items.iter().map(f).collect()
     }
+
+    /// `f` of each index below `len`, in index order.
+    pub fn map_indices<R: Send>(&self, len: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = &self.pool {
+            return pool.install(|| (0..len).into_par_iter().map(f).collect());
+        }
+        (0..len).map(f).collect()
+    }
 }
 
 impl Default for Executor {

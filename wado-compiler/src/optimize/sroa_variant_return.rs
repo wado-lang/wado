@@ -248,8 +248,7 @@ fn rebox_stragglers(
         let type_table = project.type_table.borrow();
         let type_table: &TypeTable = &type_table;
         let functions = &project.functions;
-        let positions: Vec<usize> = (0..functions.len()).collect();
-        exec.map(&positions, |&i| {
+        exec.map_indices(functions.len(), |i| {
             let mut func = functions[i].borrow_mut();
             // Every step below keys on a call to a scalarized callee. Asked before
             // the body is taken, so a function it leaves alone is not written.
@@ -285,8 +284,6 @@ fn rebox_stragglers(
     changed
 }
 
-/// Whether `body` calls any function in `targets` — one arena scan, far cheaper
-/// than the tree walks it gates.
 /// The same repair over the global initializers. They are never rewritten —
 /// `used_in_globals` keeps a candidate a global calls out of the candidate set
 /// — but that set is this round's, so a callee scalarized earlier and reached
@@ -2093,8 +2090,7 @@ fn rewrite_call_sites(
     let type_table = project.type_table.borrow();
     let type_table: &TypeTable = &type_table;
     let functions = &project.functions;
-    let positions: Vec<usize> = (0..functions.len()).collect();
-    let rewritten = exec.map(&positions, |&i| {
+    let rewritten = exec.map_indices(functions.len(), |i| {
         let mut func = functions[i].borrow_mut();
         // Every step below keys on a call to a candidate. Asked before the body
         // is taken, so a function it leaves alone is not written.
@@ -2149,7 +2145,7 @@ fn rewrite_call_sites(
         func.body = Some(body);
         changed
     });
-    touched.extend(positions.into_iter().filter(|&i| rewritten[i]));
+    touched.extend((0..rewritten.len()).filter(|&i| rewritten[i]));
 }
 
 // -----------------------------------------------------------------------

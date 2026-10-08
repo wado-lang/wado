@@ -1192,8 +1192,7 @@ fn constant_params(
     exec: &Executor,
 ) -> IndexMap<FuncId, IndexSet<u32>> {
     let functions = &project.functions;
-    let positions: Vec<usize> = (0..functions.len()).collect();
-    let per_caller = exec.map(&positions, |&i| {
+    let per_caller = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let Some(body) = &func.body else {
             return Vec::new();
@@ -2057,8 +2056,7 @@ pub fn inline_functions(
     let exec = gate.exec().clone();
     let type_table: &TypeTable = &types;
     let functions = &project.functions;
-    let positions: Vec<usize> = (0..functions.len()).collect();
-    let spliced: Vec<usize> = exec.map(&positions, |&i| {
+    let spliced: Vec<usize> = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let Some(body) = func.body.as_ref() else {
             return 0;
@@ -2077,7 +2075,7 @@ pub fn inline_functions(
             0
         }
     });
-    let classified = exec.map(&positions, |&i| {
+    let classified = exec.map_indices(functions.len(), |i| {
         let func = functions[i].borrow();
         let size = match func.body.as_ref() {
             Some(b) if pricing => inline_size(b, type_table, descriptors),
