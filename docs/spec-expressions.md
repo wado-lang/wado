@@ -94,13 +94,14 @@ or repeats:
 
 - A `return`, `break` or `continue` takes its path to where it lands: out of
   the function, past the loop or labeled block, or to the loop's next
-  iteration. The statements it skips are not on that path. A call does not end a
-  path, even one that never returns, such as `panic`.
+  iteration. The statements it skips are on no path, so nothing there is
+  checked. A call does not end a path, even one that never returns, such as
+  `panic`.
 - A `loop` ends only through a `break`, so after it the name is assigned when
   every `break` leaving the loop follows an assignment.
 - A `while`, a `for`, a `for-of` and a tuple comprehension may run their body
-  zero times, whatever the condition says, so an assignment in the body never
-  counts after the loop.
+  zero times, a `while` whatever its condition says, so an assignment in the
+  body never counts after them.
 - The right side of `&&` and `||`, a guard, and each element of a `let` chain
   after the first may not run, so what they assign counts only on the paths
   that ran them. A guard that fails passes its assignments on to the next arm.

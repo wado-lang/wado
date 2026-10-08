@@ -6,9 +6,9 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 
 use crate::ast::{
-    AssertStmt, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
-    ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern, ReturnStmt,
-    Stmt, WhileStmt, for_each_pattern_name,
+    AssertStmt, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt,
+    ForOfStmt, ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern,
+    ReturnStmt, Stmt, WhileStmt, for_each_pattern_name,
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
@@ -841,21 +841,21 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         catches_jumps: bool,
         mut iteration: impl FnMut(&mut Self) -> Result<Flow, Bail>,
     ) -> Result<(), Bail> {
-        let rerun = self.quiet == 0 && self.may_assign_twice();
-        let entry = self.flow.clone();
-        self.quiet += u32::from(rerun);
-        let (exits, repeats) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
-        self.quiet -= u32::from(rerun);
-        if rerun {
-            self.flow = entry.join(repeats);
-            let (exits, _) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
-            self.flow = exits;
-        } else {
+        if self.quiet > 0 || !self.may_assign_twice() {
+            let (exits, repeats) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
             self.flow = exits;
             if self.flow.reachable && repeats.reachable {
                 self.flow.assigned.extend(repeats.assigned);
             }
+            return Ok(());
         }
+        let entry = self.flow.clone();
+        self.quiet += 1;
+        let (_, repeats) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
+        self.quiet -= 1;
+        self.flow = entry.join(repeats);
+        let (exits, _) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
+        self.flow = exits;
         Ok(())
     }
 
