@@ -57,9 +57,8 @@ from nothing else.
 - A build that does not check evaluates nothing, and the compiler does not
   assume the contract holds. The violation keeps the class the function's
   documentation gives it.
-- `builtin::contract_checks()` is the mechanism. It is `internal` to
-  `core:builtin`, so only the standard library writes a check. Open to every
-  program, it would be a removable `assert`.
+- Only the standard library writes a check. Open to every program, a check
+  would be a removable `assert`.
 
 A checked function looks like this today. The contract appears once as prose
 and once as code:
@@ -353,11 +352,12 @@ wrote more release assertions than debug ones.
 
 P2900 adds `pre`, `post` and `contract_assert`. The committee added it to the
 working draft in Hagenberg in February 2025 (100 for, 14 against, 12
-abstaining), and C++26 as a whole was approved in March 2026 (114 for, 12
-against, 3 abstaining). The objections did not go away. They come from
-compiler, library and language designers: P3173 and P3506 (Gabriel Dos Reis,
-Microsoft), P3573 "Contract concerns" (nine authors), and P4334 (Stroustrup,
-Garcia, Falco, Spicer, Voutilainen; 2026-08-09).
+abstaining). In March 2026 the committee finished C++26 and sent it to ISO's
+international approval ballot (114 for, 12 against, 3 abstaining). The
+objections did not go away. They come from compiler, library and language
+designers: P3173 and P3506 (Gabriel Dos Reis, Microsoft), P3573 "Contract
+concerns" (nine authors), and P4334 (Stroustrup, Garcia, Falco, Spicer,
+Voutilainen; 2026-08-09).
 
 The debate is about what a build may do with a contract, not where it is
 written:
@@ -384,10 +384,14 @@ The objections to the predicate and to inheritance follow below.
 ### A disabled contract drifts from the code
 
 A contract that no build reads stops being checked against the code it
-describes. Rust's nightly contracts are not parsed or type-checked when
-contract checks are off (rust-lang/rust#145229), so a contract can name a
-parameter that no longer exists and nothing reports it. JML, ACSL and Code
-Contracts fail the same way whenever their separate tool does not run.
+describes, and can name a parameter that no longer exists with nothing to
+report it. JML, ACSL and Code Contracts fail this way whenever their separate
+tool does not run. Rust's nightly contracts avoid it: a disabled contract stays
+in the function body under a condition that is false, so it is still
+type-checked (rust-lang/rust#144438). A proposal that skipped disabled
+contracts altogether was set aside, its author warning that such contracts "are
+susceptible to becoming out of sync with the rest of the codebase"
+(rust-lang/rust#145229).
 
 ### Checking in the callee loses the caller's build
 
@@ -515,8 +519,8 @@ The survey bears on these questions. It answers none of them.
 - What a contract on the signature means. Midori kept one kind, always checked.
   Wado's contract checks are the removable kind, and `assert` the kept kind.
   Every language whose removable check shares a spelling with a kept one
-  reports it misused, and the reason `builtin::contract_checks()` is
-  `internal` applies to any syntax that offers it to every program.
+  reports it misused, and the reason only the standard library writes a check
+  applies to any syntax that offers one to every program.
 - Whether a disabled contract is still compiled. A contract that is type- and
   effect-checked in every build cannot drift; one that is skipped can.
 - Where the check runs. A contract on the signature lets the compiler place the
@@ -566,7 +570,8 @@ The survey bears on these questions. It answers none of them.
 
 - [rust-lang/rust#128044: the `contracts` tracking issue](https://github.com/rust-lang/rust/issues/128044)
 - [rust-lang/rust#144444: statements in `requires`](https://github.com/rust-lang/rust/pull/144444)
-- [rust-lang/rust#145229: disabled contracts are not type-checked](https://github.com/rust-lang/rust/pull/145229)
+- [rust-lang/rust#144438: a disabled contract builds no closure but is still type-checked](https://github.com/rust-lang/rust/pull/144438)
+- [rust-lang/rust#145229: skip disabled contracts (closed)](https://github.com/rust-lang/rust/pull/145229)
 - [Rust project goal: instrument the standard library with safety contracts](https://goals.rust-lang.org/2025h1/std-contracts.html)
 - [Rust lang-team design meeting on contracts, 2022-11-25](https://github.com/rust-lang/lang-team/blob/master/design-meeting-minutes/2022-11-25-contracts.md)
 - [Verifying the Rust Standard Library](https://arxiv.org/html/2606.17374v1)
@@ -588,7 +593,7 @@ The survey bears on these questions. It answers none of them.
 - [P3471: standard library hardening](https://wg21.link/p3471r2)
 - [cppreference: contract assertions](https://en.cppreference.com/cpp/language/contracts)
 - [DevClass: contracts are in C++26 despite disquiet over their value](https://www.devclass.com/development/2026/04/01/contracts-are-in-c26-despite-disquiet-over-their-value/5213555)
-- [The Register: C++26 approved](https://www.theregister.com/2026/03/31/cplusplus26_approved)
+- [Herb Sutter: C++26 is done (March 2026 trip report)](https://herbsutter.com/2026/03/29/c26-is-done-trip-report-march-2026-iso-c-standards-meeting-london-croydon-uk/)
 - [Better Code: Contracts (slides)](https://sean-parent.stlab.cc/presentations/2023-10-06-better-code-contracts/2023-10-06-better-code-contracts.pdf)
 - [Krzemieński: Preconditions, part 1](https://isocpp.org/blog/2013/01/preconditions-part-1)
 
