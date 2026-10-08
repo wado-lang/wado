@@ -235,7 +235,7 @@ impl<'a> SharedEscape<'a> {
         });
         // A body whose last statement is its value returns without a `Return`.
         if body
-            .block_tail(body.root)
+            .block_tail(body.root())
             .is_some_and(|op| taint.operand(op))
         {
             returns_tainted = true;

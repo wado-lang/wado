@@ -175,7 +175,7 @@ fn find_region(
 fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)> {
     let unit = |id| matches!(type_table.get(id), ResolvedType::Unit);
     let mut out = Vec::new();
-    let mut stack = vec![(NodeRef::Block(body.root), false)];
+    let mut stack = vec![(NodeRef::Block(body.root()), false)];
     while let Some((node, under_loop)) = stack.pop() {
         let mut arms: Vec<BlockId> = Vec::new();
         let mut enters_loop = false;
@@ -275,7 +275,7 @@ fn free_vars(
         region.iter().map(|&s| NodeRef::Stmt(s)).collect(),
         &[],
     );
-    let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root)], region);
+    let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
         let crossing = if idx < param_count {
@@ -521,10 +521,11 @@ fn build_helper(
             .iter()
             .map(|&s| splice_stmt(&mut body, parent_body, s, &ctx))
             .collect();
-        body.root = body.blocks.push(BlockNode {
+        let new_root = body.blocks.push(BlockNode {
             stmts,
             span: parent_body.blocks[region.block].span,
         });
+        body.set_root(new_root);
     }
 
     // The enclosing body is lifted out over the clone: the helper carries the

@@ -16,7 +16,7 @@ use crate::compiler_item::SeqField;
 use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncCell, FuncId, FuncRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, FuncParts, FuncRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -161,8 +161,8 @@ fn fold_function(
 ) -> bool {
     let mut func = func_rc.borrow_mut();
     compiler_trace!("region_seed", "folding {}", func.name);
-    let NirFunction { body, locals, .. } = &mut *func;
-    let Some(body) = body.as_mut() else {
+    let FuncParts { body, locals, .. } = func.parts();
+    let Some(body) = body else {
         return false;
     };
     // Local indices are per-function; reset the interpreter env at each boundary.
@@ -174,7 +174,7 @@ fn fold_function(
         .record_alias_classes(alias_classes(body, type_table).to_classes());
     let mut buffers = EngineBuffers::default();
     let mut engine = Engine::new(body, &mut buffers, locals);
-    let root = engine.body.root;
+    let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
 }
 

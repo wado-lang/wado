@@ -11,7 +11,7 @@ use cranelift_entity::EntityRef;
 use super::arena_query::local_written_by;
 use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -33,7 +33,7 @@ use crate::{hashmap, nir_arena};
 /// cond-impl needs no separate build; it runs after licm in document order, so
 /// it still sees the hoisted body.
 pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
-    let root = engine.body.root;
+    let root = engine.body.root();
     // Built once and threaded down: sound because eliminations never add
     // reassignments, so the snapshot only omits bindings, never holds a stale one.
     let binds = build_copy_bindings(engine);
@@ -105,15 +105,15 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
         if func.body.is_none() {
             return false;
         }
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             params,
             address_taken_locals,
             stores_aliased_locals,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
             locals,
@@ -174,7 +174,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
         pending: hashmap::IndexMap::default(),
         stale: hashmap::IndexSet::default(),
     };
-    walk.node(NodeRef::Block(body.root));
+    walk.node(NodeRef::Block(body.root()));
     walk.pending
         .into_iter()
         .filter(|(t, _)| !walk.stale.contains(t))

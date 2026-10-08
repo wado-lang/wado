@@ -542,7 +542,7 @@ pub fn filter_bytes_literals(project: &mut NirPackage) {
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = func.body.as_ref() {
-            collect_bytes_literals_block(body, body.root, &mut used_bytes);
+            collect_bytes_literals_block(body, body.root(), &mut used_bytes);
         }
     }
 
@@ -893,7 +893,7 @@ impl<'a> DceWalker<'a> {
             }
         }
         if let Some(body) = func.body.as_ref() {
-            self.walk_node(body, NodeRef::Block(body.root));
+            self.walk_node(body, NodeRef::Block(body.root()));
         }
     }
 
@@ -1635,7 +1635,7 @@ fn populate_type_reachability(
             let mut walker =
                 DceWalker::new(&type_table, &global.module_source, descriptors, functors);
             let init_body = global.init.slot_expr().body();
-            walker.walk_node(init_body, NodeRef::Block(init_body.root));
+            walker.walk_node(init_body, NodeRef::Block(init_body.root()));
             for id in walker.analysis.used_types {
                 analysis.types.insert(id);
             }
@@ -1896,7 +1896,7 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
         return Vec::new();
     }
     let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
     collect.0
 }
 
@@ -2099,7 +2099,7 @@ impl GlobalGuards<'_> {
     }
 
     fn inert_body(&self, body: &Body, calls: CallFacts) -> bool {
-        body.blocks[body.root]
+        body.blocks[body.root()]
             .stmts
             .iter()
             .all(|s| match body.stmts[*s].kind {
@@ -2319,7 +2319,7 @@ fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
         return Vec::new();
     }
     let mut collect = Collect(Vec::new());
-    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root()));
     collect.0
 }
 
@@ -2403,7 +2403,7 @@ pub(super) fn remove_unreachable_globals(
             if is_module_init && initializers == Initializers::DropUnread {
                 drop_dead_initializers(body, used_globals);
             }
-            let root = body.root;
+            let root = body.root();
             remove_dead_global_sets(body, NodeRef::Block(root), used_globals, &type_table, calls);
         }
     }
@@ -2424,7 +2424,7 @@ pub(super) enum Initializers {
 /// inlining copies it elsewhere, such a store is an initializer, and the
 /// program's assignments are elsewhere.
 fn drop_dead_initializers(body: &mut Body, used: &IndexSet<(String, String)>) {
-    let root = body.root;
+    let root = body.root();
     let stmts = std::mem::take(&mut body.blocks[root].stmts);
     body.blocks[root].stmts = stmts
         .into_iter()
@@ -2580,10 +2580,11 @@ mod tests {
             kind: StmtKind::Expr(Operand::Value(value)),
             span: Span::default(),
         });
-        body.root = body.blocks.push(BlockNode {
+        let new_root = body.blocks.push(BlockNode {
             stmts: vec![stmt],
             span: Span::default(),
         });
+        body.set_root(new_root);
         (body, stmt)
     }
 
@@ -2604,7 +2605,8 @@ mod tests {
             kind: StmtKind::Expr(Operand::Value(stale)),
             span: Span::default(),
         });
-        body.blocks[body.root].stmts = vec![live];
+        let root = body.root();
+        body.blocks[root].stmts = vec![live];
 
         let mentioned = mentioned_locals(&body);
         assert!(mentioned.contains(&3));

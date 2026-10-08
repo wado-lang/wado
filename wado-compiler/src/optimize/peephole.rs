@@ -7,7 +7,7 @@
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, NirFunction};
+use crate::nir::{FuncId, FuncParts};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{build_callee_map, build_ctfe_builtin_map};
@@ -146,8 +146,8 @@ pub(super) fn run_peephole(
         let slot_temp_sroa_rule = (!pre_inline).then(|| build_slot_temp_sroa(type_table));
         // Disjoint borrow of the body arena and the local list so rules can
         // both rewrite the body and allocate fresh locals via the engine.
-        let NirFunction { body, locals, .. } = &mut *func;
-        let Some(body) = body.as_mut() else {
+        let FuncParts { body, locals, .. } = func.parts();
+        let Some(body) = body else {
             return false;
         };
         let mut rules: Vec<&dyn Rule> = Vec::with_capacity(10);

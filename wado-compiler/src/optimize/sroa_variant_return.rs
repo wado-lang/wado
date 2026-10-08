@@ -402,7 +402,7 @@ fn call_sites(body: &Body, own_return: TypeId) -> Vec<CallSite> {
     let mut out = Vec::new();
     collect_call_sites(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         own_return,
         &label_types,
         &mut out,
@@ -568,7 +568,7 @@ fn straggler_calls(
     let mut out = Vec::new();
     collect_straggler_calls(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         scalarized,
         handled,
         &discarded,
@@ -1213,7 +1213,7 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
     let mut used_in_globals: IndexSet<FuncId> = IndexSet::default();
     for global in &project.globals {
         let body = global.init.slot_expr().body();
-        collect_called(body, NodeRef::Block(body.root), &mut used_in_globals);
+        collect_called(body, NodeRef::Block(body.root()), &mut used_in_globals);
     }
     candidates.retain(|k, _| !used_in_globals.contains(k));
 
@@ -1254,7 +1254,7 @@ fn collect_and_validate(project: &NirPackage, dirty: &[FuncId]) -> IndexMap<Func
                 type_table: &project.type_table.borrow(),
             };
             // Every `Return` `rewrite_returns` reaches must turn into the result tuple.
-            if !arena_query::every_return(body, NodeRef::Block(body.root), |value| {
+            if !arena_query::every_return(body, NodeRef::Block(body.root()), |value| {
                 value.is_some_and(|v| returns.value_scalarizable(v))
             }) {
                 invalid.insert(key);
@@ -1389,7 +1389,7 @@ fn single_def_variant_construct(
     let mut reads = 0usize;
     count_local_def_use(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         local,
         &mut defs,
         &mut reads,
@@ -1475,7 +1475,12 @@ fn bound_temps(
 pub(crate) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
     let mut reassigned: IndexSet<u32> = IndexSet::default();
-    collect_defs(body, NodeRef::Block(body.root), &mut defs, &mut reassigned);
+    collect_defs(
+        body,
+        NodeRef::Block(body.root()),
+        &mut defs,
+        &mut reassigned,
+    );
     defs.into_iter()
         .filter(|&(local, count)| count == 1 && !reassigned.contains(&local))
         .map(|(local, _)| local)
@@ -1574,7 +1579,7 @@ fn invalidate_bad_call_sites(
     }
     check_uses(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         candidates,
         &bound,
         rebind,
@@ -1832,7 +1837,7 @@ fn rewrite_callees(
             touched.insert(key.index());
             continue;
         };
-        let root = body.root;
+        let root = body.root();
         let mut rw = ReturnRewrite {
             cand,
             span,
@@ -2121,7 +2126,7 @@ fn rewrite_call_sites(
                 changed |= retype_let(&mut body, local, tuple_type);
             }
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
-            let root = body.root;
+            let root = body.root();
             let bound: IndexMap<u32, Candidate> = bound
                 .iter()
                 .map(|(&l, f)| (l, candidates[f].clone()))
@@ -2225,7 +2230,7 @@ fn scalarize_locals_in(
         rebind: &rebind,
         span,
     };
-    let root = body.root;
+    let root = body.root();
     rewrite_temp_uses(body, NodeRef::Block(root), &mut cx);
     true
 }
@@ -2498,7 +2503,7 @@ fn hoist_call_scrutinees(
     let mut targets: Vec<ExprId> = Vec::new();
     collect_call_scrutinees(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         candidates,
         rebind,
         &mut targets,
@@ -2684,7 +2689,7 @@ fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind, layout: &Layou
     let mut ok = true;
     check_temp_uses(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         local,
         rebind,
         layout,
@@ -2876,9 +2881,10 @@ fn rewrite_match_on_temp(
             other => panic!("variant-return SROA: unvalidated arm pattern {other:?}"),
         };
 
+        let span = body.pats[arm.pattern].span;
         let pattern = body.pats.push(PatNode {
             kind: PatKind::Literal(NirLiteralPattern::I128(i128::from(case_index))),
-            span: body.pats[arm.pattern].span,
+            span,
         });
         let (guard, arm_body) = match binding {
             None => (arm.guard, arm.body),

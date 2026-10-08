@@ -13,7 +13,7 @@ use std::cell::Cell;
 
 use crate::compiler_item::{CompilerItem, FormatterField, SeqField};
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId,
     StmtKind,
@@ -115,8 +115,8 @@ pub fn hoist_template_buffers(
             },
             applied: Cell::new(false),
         };
-        let NirFunction { body, locals, .. } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        let FuncParts { body, locals, .. } = func.parts();
+        let body = body.expect("checked above");
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.run(&[&rule])
@@ -165,7 +165,7 @@ impl Rule for TmplHoistRule<'_> {
         if self.applied.replace(true) {
             return false;
         }
-        let root = engine.body.root;
+        let root = engine.body.root();
         hoist_in_block(engine, root, &self.cx)
     }
 }
@@ -1631,10 +1631,11 @@ mod tests {
             kind: StmtKind::Expr(e.into()),
             span: Span::default(),
         });
-        body.root = body.blocks.push(BlockNode {
+        let new_root = body.blocks.push(BlockNode {
             stmts: vec![s],
             span: Span::default(),
         });
+        body.set_root(new_root);
         (body, e)
     }
 

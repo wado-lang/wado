@@ -11,7 +11,7 @@ use crate::compiler_trace;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LICM_HOIST, is_licm_hoist, minted_what};
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
@@ -215,7 +215,7 @@ pub fn apply_licm(
             params: &param_locals,
             applied: Cell::new(false),
         };
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             params,
@@ -223,8 +223,8 @@ pub fn apply_licm(
             stores_aliased_locals,
             name,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
             locals,
@@ -275,7 +275,7 @@ impl Rule for LicmRule<'_> {
         if self.applied.replace(true) {
             return false;
         }
-        let root = engine.body.root;
+        let root = engine.body.root();
         let mut ctx = LicmCtx::new(self.type_table, self.effects, self.params, engine.locals());
         let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
         licm_block(engine, root, &mut ctx, &mut outer_aliases)

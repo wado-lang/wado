@@ -60,10 +60,10 @@ pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
             type_table,
             module: func.module_source.clone(),
             remarks: &mut remarks,
-            current_span: body.blocks[body.root].span,
+            current_span: body.blocks[body.root()].span,
             in_value_block: false,
         };
-        collector.scan_node(body, NodeRef::Block(body.root));
+        collector.scan_node(body, NodeRef::Block(body.root()));
     }
     remarks
 }
@@ -350,7 +350,7 @@ impl ParamGateScan<'_> {
     /// `None` outside every scrutinee. It passes to children unchanged and is
     /// replaced, never cleared, on entering a nested scrutinee.
     fn walk(&mut self, body: &Body) {
-        let mut stack = vec![(NodeRef::Block(body.root), None)];
+        let mut stack = vec![(NodeRef::Block(body.root()), None)];
         while let Some((node, gate)) = stack.pop() {
             if let (NodeRef::Expr(e), Some(span)) = (node, gate) {
                 self.report(body, e, span);

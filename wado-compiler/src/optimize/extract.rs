@@ -17,6 +17,7 @@ use crate::trace::filter;
 use super::census;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap;
+use crate::nir::FuncParts;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{BlockId, Operand, StmtId};
 use crate::nir_engine::FieldValues;
@@ -307,7 +308,6 @@ pub(super) fn freeze_pure_arith(
     // the loop's structural-edit staleness.
     phase: FreezePhase,
 ) -> bool {
-    use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
     let types = project.type_table.borrow();
     let type_table: &TypeTable = &types;
@@ -328,15 +328,15 @@ pub(super) fn freeze_pure_arith(
             return (changed, refusals);
         }
         let mut buffers = EngineBuffers::default();
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             params,
             address_taken_locals,
             stores_aliased_locals,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
         // receivers by the receiver-stability gate. Cloned before `Engine::new`.
         let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
@@ -903,7 +903,8 @@ pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{NirBinaryOp, NirLocal};
+    use crate::nir::NirBinaryOp;
+    use crate::nir_arena::Tracked;
     use crate::nir_arena::{BlockId, BlockNode, Body, ExprNode, StmtId, StmtKind, StmtNode};
     use crate::nir_engine::{EngineBuffers, Rule};
     use crate::tir;
@@ -953,13 +954,14 @@ mod tests {
             kind: StmtKind::Expr(sum.into()),
             span: Span::default(),
         });
-        body.root = body.blocks.push(BlockNode {
+        let new_root = body.blocks.push(BlockNode {
             stmts: vec![s0],
             span: Span::default(),
         });
+        body.set_root(new_root);
 
         let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
         let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
         let rule = ExtractLiteralRule;
         let rules: Vec<&dyn Rule> = vec![&rule];
@@ -1001,13 +1003,14 @@ mod tests {
         let (s0, u0) = read_stmt(&mut body, "a");
         let (s1, _filler) = read_stmt(&mut body, "f");
         let (s2, u2) = read_stmt(&mut body, "a");
-        body.root = block(&mut body, vec![s0, s1, s2]);
+        let new_root = block(&mut body, vec![s0, s1, s2]);
+        body.set_root(new_root);
         let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
         // Uses at positions 0 and 2 -> insert before position 0.
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
-        assert_eq!(b, eng.body.root);
+        assert_eq!(b, eng.body.root());
         assert_eq!(s, s0);
     }
 
@@ -1037,14 +1040,15 @@ mod tests {
             span: Span::default(),
         });
         let (lead_s, _lead) = read_stmt(&mut body, "lead");
-        body.root = block(&mut body, vec![lead_s, if_s]);
+        let new_root = block(&mut body, vec![lead_s, if_s]);
+        body.set_root(new_root);
         let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
         let (s, b) = materialise_point(&eng, &[tu, eu]).unwrap();
         // Common dominator is the root block, at the `if` statement (position 1),
         // not inside either branch.
-        assert_eq!(b, eng.body.root);
+        assert_eq!(b, eng.body.root());
         assert_eq!(s, if_s);
     }
 
@@ -1072,12 +1076,13 @@ mod tests {
             span: Span::default(),
         });
         let (outer_s, outer_u) = read_stmt(&mut body, "a");
-        body.root = block(&mut body, vec![outer_s, if_s]);
+        let new_root = block(&mut body, vec![outer_s, if_s]);
+        body.set_root(new_root);
         let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
         let (s, b) = materialise_point(&eng, &[tu, outer_u]).unwrap();
-        assert_eq!(b, eng.body.root);
+        assert_eq!(b, eng.body.root());
         assert_eq!(s, outer_s);
     }
 
@@ -1093,8 +1098,9 @@ mod tests {
             span: Span::default(),
         });
         let (out_s, out_u) = read_stmt(&mut body, "a");
-        body.root = block(&mut body, vec![out_s, loop_s]);
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let new_root = block(&mut body, vec![out_s, loop_s]);
+        body.set_root(new_root);
+        let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
         assert_eq!(materialise_point(&eng, &[in_u, out_u]), None);
@@ -1112,8 +1118,9 @@ mod tests {
             kind: StmtKind::Loop { body: loop_body },
             span: Span::default(),
         });
-        body.root = block(&mut body, vec![loop_s]);
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let new_root = block(&mut body, vec![loop_s]);
+        body.set_root(new_root);
+        let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
@@ -1146,9 +1153,10 @@ mod tests {
             },
             span: Span::default(),
         });
-        body.root = block(&mut body, vec![if_s]);
+        let new_root = block(&mut body, vec![if_s]);
+        body.set_root(new_root);
         let mut buf = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut buf, &mut locals);
         let (s, b) = materialise_point(&eng, &[bu2, bu0]).unwrap();
         assert_eq!(b, then_b);

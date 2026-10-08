@@ -6,7 +6,7 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir::NirFunction;
+use crate::nir::FuncParts;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -31,8 +31,8 @@ pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |fid| {
         let mut func = functions[fid.index()].borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        let Some(body) = body.as_mut() else {
+        let FuncParts { body, locals, .. } = func.parts();
+        let Some(body) = body else {
             return false;
         };
         let mut buffers = EngineBuffers::default();

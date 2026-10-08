@@ -260,7 +260,7 @@ impl<'a> CostWalk<'a> {
 
     /// What the whole body costs at this walk's price.
     fn whole_body(&self) -> usize {
-        self.block(self.body.root, &mut SeenValues::default())
+        self.block(self.body.root(), &mut SeenValues::default())
     }
 
     /// What a call to `callee` costs this body: the body it splices, when the
@@ -797,7 +797,7 @@ impl InlineLabels {
     fn fresh(&mut self, caller: &Body, callee: &str) -> String {
         let taken = self.taken.get_or_insert_with(|| {
             let mut taken = IndexSet::default();
-            collect_inner_labels(caller, NodeRef::Block(caller.root), &mut taken);
+            collect_inner_labels(caller, NodeRef::Block(caller.root()), &mut taken);
             taken
         });
         loop {
@@ -964,7 +964,7 @@ fn has_safepoint(
         descriptors,
         safepoint_calls,
     }
-    .block(body.root)
+    .block(body.root())
 }
 
 /// Whether a call to each function, by `FuncId` index, is a safepoint: any call
@@ -1726,7 +1726,7 @@ fn for_each_call_site(body: &Body, node: NodeRef, mut f: impl FnMut(FuncId)) {
 /// recursion call graph). Each stamped `func_id` is total and resolves to a
 /// position in `project.functions`, which is exactly the call-graph node index.
 fn collect_callees(body: &Body, callees: &mut IndexSet<usize>) {
-    for_each_call_site(body, NodeRef::Block(body.root), |callee| {
+    for_each_call_site(body, NodeRef::Block(body.root()), |callee| {
         callees.insert(callee.index());
     });
 }
@@ -2264,7 +2264,7 @@ pub fn inline_functions(
         };
         {
             let body = func.body.as_mut().unwrap();
-            let root = body.root;
+            let root = body.root();
             inline_calls_in_block(
                 body,
                 root,
@@ -2278,7 +2278,7 @@ pub fn inline_functions(
                 Site::Plain,
             );
         }
-        func.locals = frame.locals;
+        *func.locals = frame.locals;
         func.address_taken_locals = frame.address_taken;
         func.stores_aliased_locals = frame.stores_aliased;
         if inlined_funcs.is_empty() {
@@ -2436,7 +2436,7 @@ fn carried_calls(
             .as_ref()
             .expect("a candidate has a body");
         let mut callees = Vec::new();
-        for_each_call_site(body, NodeRef::Block(body.root), |g| callees.push(g));
+        for_each_call_site(body, NodeRef::Block(body.root()), |g| callees.push(g));
         for &g in &callees {
             assert_ne!(g, id, "a candidate is never recursive");
             if candidates.contains_key(&g) {
@@ -2845,7 +2845,7 @@ fn build_inlined_labeled_block(
         .extend(candidate.stores_aliased_locals.iter().map(carry));
 
     let mut inner_labels: IndexSet<String> = IndexSet::default();
-    collect_inner_labels(callee, NodeRef::Block(callee.root), &mut inner_labels);
+    collect_inner_labels(callee, NodeRef::Block(callee.root()), &mut inner_labels);
     let mut label_map: IndexMap<String, String> = IndexMap::default();
     for inner_label in inner_labels {
         label_map.insert(inner_label.clone(), format!("{label}__{inner_label}"));
@@ -2858,7 +2858,7 @@ fn build_inlined_labeled_block(
         label: &label,
         label_map: &label_map,
     };
-    splice_block_into(caller, callee, callee.root, &ctx, &mut block_stmts);
+    splice_block_into(caller, callee, callee.root(), &ctx, &mut block_stmts);
 
     let result_type = candidate.return_type;
     let bid = caller.blocks.push(BlockNode {

@@ -10,7 +10,7 @@ use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -297,7 +297,7 @@ fn scan_blocks(
     let mut frames: Vec<(BlockId, usize)> = Vec::new();
     scan_node(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         type_table,
         oracle,
         aliases,
@@ -389,7 +389,7 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
         usage: IndexMap::default(),
         promoted_reads: IndexSet::default(),
     };
-    analyze_block(body, body.root, &mut result, ctx);
+    analyze_block(body, body.root(), &mut result, ctx);
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
@@ -948,7 +948,7 @@ fn propagate_at_root(
         }
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
         substitute_promoted_reads(engine, &substitutions);
-        let root = engine.body.root;
+        let root = engine.body.root();
         apply_in_block(engine, root, &substitutions, &dead_locals);
         for &local in &dead_locals {
             engine.note_elided_local(local);
@@ -1018,10 +1018,10 @@ pub fn propagate_copies(
             effects: &effects,
             applied: Cell::new(false),
         };
-        let NirFunction {
+        let FuncParts {
             body, locals, name, ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals);
         let changed = engine.run(&[&rule]);

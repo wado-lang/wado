@@ -3,7 +3,7 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir::NirFunction;
+use crate::nir::FuncParts;
 use crate::nir_arena::{
     BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -55,8 +55,8 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode, gate: &mut FunctionGate) 
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::BranchPrune, len, |fid| {
         let mut func = functions[fid.index()].borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        let Some(body) = body.as_mut() else {
+        let FuncParts { body, locals, .. } = func.parts();
+        let Some(body) = body else {
             return false;
         };
         let mut buffers = EngineBuffers::default();

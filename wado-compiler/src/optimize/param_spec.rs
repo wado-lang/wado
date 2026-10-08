@@ -5,8 +5,10 @@
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncCell, FuncId, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
+use crate::nir::{
+    FuncCell, FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp,
+};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind, Tracked};
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -1142,8 +1144,8 @@ fn propagate_scalar_constants(
         if bindings.is_empty() {
             continue;
         }
-        let NirFunction { body, locals, .. } = &mut *func;
-        let body = body.as_mut().expect("eligible function has a body");
+        let FuncParts { body, locals, .. } = func.parts();
+        let body = body.expect("eligible function has a body");
         if substitute_locals(body, locals, &mut buffers, &bindings) {
             gate.mark_changed(id);
             changed = true;
@@ -1322,7 +1324,7 @@ impl BranchSettler {
     fn settle(
         &self,
         body: &mut Body,
-        locals: &mut Vec<NirLocal>,
+        locals: &mut Tracked<Vec<NirLocal>>,
         buffers: &mut EngineBuffers,
         types: &TypeTable,
     ) {
@@ -1461,7 +1463,7 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 /// itself, and its clone exists to seed the callee it forwards to.
 fn substitute_fields(
     body: &mut Body,
-    locals: &mut Vec<NirLocal>,
+    locals: &mut Tracked<Vec<NirLocal>>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConsts>,
 ) -> bool {
@@ -1493,7 +1495,7 @@ fn substitute_fields(
 /// Replace every read of a bound local with its constant.
 fn substitute_locals(
     body: &mut Body,
-    locals: &mut Vec<NirLocal>,
+    locals: &mut Tracked<Vec<NirLocal>>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConst>,
 ) -> bool {

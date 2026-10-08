@@ -850,7 +850,7 @@ impl Interpreter<'_> {
         targets: Vec<(u32, u32, Vec<u32>)>,
         returns_unit: bool,
     ) -> Option<CallRun> {
-        let root = scratch.root;
+        let root = scratch.root();
         let flow = self.exec_block(scratch, root);
         let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
         let result = match flow {
@@ -934,7 +934,8 @@ impl Interpreter<'_> {
         }
         self.charge(1)?;
         let mut scratch = body.nodes_only_clone();
-        scratch.root = block;
+        let new_root = block;
+        scratch.set_root(new_root);
         let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);

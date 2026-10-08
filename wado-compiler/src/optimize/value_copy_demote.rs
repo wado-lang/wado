@@ -219,7 +219,7 @@ pub fn demote_value_copies(
 
 fn body_is_list_wrapper_copy(body: &Body, descriptors: &[FunctionRef]) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
-    for s in &body.blocks[body.root].stmts {
+    for s in &body.blocks[body.root()].stmts {
         if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
             && let Some(ve) = v.as_expr()
             && let ExprKind::StructLiteral { fields, .. } = &body.exprs[ve].kind
@@ -629,7 +629,7 @@ impl Analyzer<'_> {
                     visiting,
                     clean: true,
                 };
-                v.visit_node(&body, NodeRef::Block(body.root));
+                v.visit_node(&body, NodeRef::Block(body.root()));
                 v.clean
             }
             None => false,
@@ -658,7 +658,7 @@ impl Analyzer<'_> {
             idx,
             clean: true,
         };
-        v.visit_node(body, NodeRef::Block(body.root));
+        v.visit_node(body, NodeRef::Block(body.root()));
         v.clean
     }
 

@@ -374,7 +374,7 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     let mut loose: IndexSet<GlobalKey> = IndexSet::default();
     let mut visit = |body: &Body| {
         let mut enclosing: Vec<GlobalKey> = Vec::new();
-        let mut stack = vec![Step::Enter(NodeRef::Block(body.root))];
+        let mut stack = vec![Step::Enter(NodeRef::Block(body.root()))];
         while let Some(step) = stack.pop() {
             let node = match step {
                 Step::Leave(depth) => {

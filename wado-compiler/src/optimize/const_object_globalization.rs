@@ -339,7 +339,7 @@ fn collect_candidates(
     let leaked_ref_args = ref_args_that_escape(body, gate);
     let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
-    let mut stack = vec![NodeRef::Block(body.root)];
+    let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {
@@ -976,7 +976,7 @@ fn confined_sibling_lets(
 ) -> Option<(IndexSet<u32>, Vec<StmtId>)> {
     let used = seeded_locals_read(body, value, siblings);
     if !used.is_empty() {
-        let body_reads = count_reads_of(body, NodeRef::Block(body.root), &used);
+        let body_reads = count_reads_of(body, NodeRef::Block(body.root()), &used);
         let value_reads = value
             .as_expr()
             .map(|e| count_reads_of(body, NodeRef::Expr(e), &used))
@@ -1081,7 +1081,7 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
 /// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
 /// its moved definitions into.
 fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
-    if let Some(e) = body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
+    if let Some(e) = body.find_in_live_node_under(NodeRef::Block(body.root()), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 name: n,
@@ -1812,7 +1812,7 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'static str> {
     if !binding_names(body, idx)
         .into_iter()
-        .all(|name| block_readonly(body, body.root, name, gate))
+        .all(|name| block_readonly(body, body.root(), name, gate))
     {
         return Some("written after the binding");
     }
@@ -1873,9 +1873,9 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// A binding hoisted into a global hands the global to whoever receives it.
 fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
     let delivers = |op: Operand| delivers_projection_operand(body, op, roots, gate);
-    body.block_tail(body.root).is_some_and(delivers)
+    body.block_tail(body.root()).is_some_and(delivers)
         || body
-            .find_in_live_node_under(NodeRef::Block(body.root), |node| {
+            .find_in_live_node_under(NodeRef::Block(body.root()), |node| {
                 let leaves = match node {
                     NodeRef::Stmt(s) => match &body.stmts[s].kind {
                         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
@@ -1915,7 +1915,7 @@ fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 /// keep the storage or hand it back.
 fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
     let escapes = |op: Operand| delivers_projection_operand(body, op, roots, gate);
-    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
+    body.find_in_live_node_under(NodeRef::Block(body.root()), |node| {
         if let NodeRef::Expr(e) = node {
             match &body.exprs[e].kind {
                 // A by-value `self` receiver hands the storage to the callee,
@@ -2744,7 +2744,7 @@ fn replace_let_with_set(
     ty: TypeId,
     guarded: Option<FuncId>,
 ) -> bool {
-    let mut stack = vec![NodeRef::Block(body.root)];
+    let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {

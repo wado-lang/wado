@@ -2113,7 +2113,7 @@ fn plan_slot_temp_sroa(
     // `clone_block` copies `local_index` verbatim, and a second copy's reads
     // would be rewritten to slot locals only the first copy's exits assign.
     let mut reads = SlotReadCollector::whole_body(temp_local);
-    reads.visit_node(body, NodeRef::Block(body.root));
+    reads.visit_node(body, NodeRef::Block(body.root()));
     assert!(
         reads.stopped || reads.slot_uses <= reads.direct_uses,
         "every slot read is also a direct read, so a completed census cannot \
@@ -2274,7 +2274,7 @@ fn perform_slot_temp_sroa(
         local_idx: plan.temp_local,
         hits: Vec::new(),
     };
-    hits.visit_node(engine.body, NodeRef::Block(engine.body.root));
+    hits.visit_node(engine.body, NodeRef::Block(engine.body.root()));
     for (e, field_index) in hits.hits {
         let Some(slot) = plan.slot_of(field_index) else {
             continue;

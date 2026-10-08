@@ -891,7 +891,7 @@ impl BodySummary {
             ..FnEffect::default()
         };
         let mut callees = Vec::new();
-        let mut stack = vec![NodeRef::Block(body.root)];
+        let mut stack = vec![NodeRef::Block(body.root())];
         while let Some(node) = stack.pop() {
             own.may_trap |= operand_values_may_trap(body, node);
             match node {

@@ -89,7 +89,7 @@ impl Census {
         self.blocks_allocated += body.blocks.len();
         self.pats_allocated += body.pats.len();
         self.pool_values += body.values.len();
-        if let Some(graph) = &body.value_graph {
+        if let Some(graph) = &*body.value_graph {
             self.with_value_graph += 1;
             self.loop_entry_snapshots += graph.loop_entry_values.len();
             self.loop_entry_locals += graph

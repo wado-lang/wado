@@ -40,7 +40,7 @@ use crate::nir::{
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
     BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode,
+    PatNode, StmtId, StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -617,7 +617,8 @@ impl Translator<'_> {
         locals.extend(extra_locals.iter().map(convert_local));
         let body = root.map(move |r| {
             let mut arena = fctx.arena.into_inner();
-            arena.root = r;
+            let new_root = r;
+            arena.set_root(new_root);
             arena
         });
         NirFunction {
@@ -643,7 +644,7 @@ impl Translator<'_> {
             retains: self.retained_param_names(func),
             body,
             span: func.span,
-            locals,
+            locals: Tracked::new(locals),
             address_taken_locals: func.address_taken_locals.clone(),
             stores_aliased_locals: func.stores_aliased_locals.clone(),
             is_cm_binding: func.is_cm_binding,
@@ -672,7 +673,8 @@ impl Translator<'_> {
         let init_root = fctx.alloc_block(vec![init_stmt], span);
         let body = ExprBody::from_body({
             let mut body = fctx.arena.into_inner();
-            body.root = init_root;
+            let new_root = init_root;
+            body.set_root(new_root);
             body
         });
         let init = match global.init {

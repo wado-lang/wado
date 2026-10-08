@@ -4,7 +4,7 @@
 use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
-use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir::{FuncParts, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -24,8 +24,8 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::LetBlockFlatten, functions.len(), |fid| {
         let mut func = functions[fid.index()].borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        let Some(body) = body.as_mut() else {
+        let FuncParts { body, locals, .. } = func.parts();
+        let Some(body) = body else {
             return false;
         };
         let mut buffers = EngineBuffers::default();
@@ -187,6 +187,7 @@ fn is_place_expr(kind: &ExprKind) -> bool {
 mod tests {
     use super::*;
     use crate::call_args::CallArgs;
+    use crate::nir_arena::Tracked;
     use std::assert_matches;
 
     use crate::hashmap::IndexSet;
@@ -258,7 +259,7 @@ mod tests {
     #[test]
     fn nested_value_blocks_flatten_coherently() {
         let mut body = Body::empty();
-        let mut locals = vec![local("p"), local("q"), local("y"), local("x")];
+        let mut locals = Tracked::new(vec![local("p"), local("q"), local("y"), local("x")]);
 
         let r = body.blocks.push(BlockNode {
             stmts: vec![],
@@ -272,7 +273,7 @@ mod tests {
             stmts: vec![],
             span: sp(),
         });
-        assert_eq!(r, body.root);
+        assert_eq!(r, body.root());
 
         let arg_q = expr(&mut body, call_expr());
         let q1 = expr(

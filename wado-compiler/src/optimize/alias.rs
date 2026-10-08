@@ -126,7 +126,7 @@ pub(super) fn build_alias_info(
     }
     let mut edges = same_pointee_edges;
     let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         collect_aliased_node(body, node, type_table, &mut aliased);
         if let Some(r) = extra_aliased(body, node) {
             aliased.insert(r);
@@ -164,7 +164,7 @@ pub(super) fn build_alias_info(
 /// aggregate storing it or a call taking it disqualifies the local outright.
 pub(super) fn alias_classes(body: &Body, type_table: &TypeTable) -> AliasGroups {
     let mut edges = Vec::new();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         collect_alias_edges_node(body, node, type_table, &mut edges);
     });
     alias_groups_from_edges(edges)
@@ -524,7 +524,7 @@ pub(super) fn call_verdicts(
         pure: IndexSet::default(),
         receiver_immutable: IndexSet::default(),
     };
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         let NodeRef::Expr(e) = node else {
             return;
         };
@@ -767,7 +767,7 @@ fn self_derived_locals(body: &Body, p0: u32, type_table: &TypeTable) -> IndexSet
         let mut changed = false;
         walk_all(
             body,
-            NodeRef::Block(body.root),
+            NodeRef::Block(body.root()),
             &mut |body, node| match node {
                 NodeRef::Stmt(s) => {
                     if let StmtKind::Let {
@@ -830,7 +830,7 @@ fn summarize_receiver_writes(
     let projects_p0 = |e: ExprId| -> bool { roots_self(body, &self_derived, e, p0) };
     let mut direct = false;
     let mut pending: Vec<FuncId> = Vec::new();
-    walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
+    walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         if direct {
             return;
         }

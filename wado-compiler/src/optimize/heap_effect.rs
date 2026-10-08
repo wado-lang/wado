@@ -929,7 +929,7 @@ impl HeapFrame {
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
         }
-        if let Some(tail) = body.block_tail(body.root) {
+        if let Some(tail) = body.block_tail(body.root()) {
             frame.unify_op(effects, body, RET, tail);
         }
         frame.finish();

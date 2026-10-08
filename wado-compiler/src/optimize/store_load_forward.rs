@@ -10,7 +10,7 @@ use std::cell::Cell;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction};
+use crate::nir::{FuncId, FuncParts, FuncWriteGuard};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -53,7 +53,7 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
 /// Run store→load forwarding over one function body. Returns whether anything
 /// changed.
 fn forward_one(
-    func: &mut NirFunction,
+    func: &mut FuncWriteGuard<'_>,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
@@ -76,14 +76,14 @@ fn forward_one(
     // `inline` / `ref_elim` copy `Ref` nodes (see `elide_local::ElideRule`).
     let mut unsafe_locals = func.address_taken_locals.clone();
     unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
-    let NirFunction {
+    let FuncParts {
         body,
         locals,
         address_taken_locals,
         stores_aliased_locals,
         ..
-    } = &mut *func;
-    let body = body.as_mut().expect("checked above");
+    } = func.parts();
+    let body = body.expect("checked above");
     let alias = builder_alias_sets(
         body,
         locals,
@@ -201,7 +201,7 @@ fn forward_at_root(
 /// Place-position filtering happens later (`extract::is_place_read`), so write
 /// / reference places are gathered here but rejected before rewriting.
 fn collect_candidate_reads(body: &Body, out: &mut Vec<(ExprId, Option<u32>)>) {
-    collect_candidate_reads_node(body, NodeRef::Block(body.root), out);
+    collect_candidate_reads_node(body, NodeRef::Block(body.root()), out);
 }
 
 fn collect_candidate_reads_node(body: &Body, node: NodeRef, out: &mut Vec<(ExprId, Option<u32>)>) {

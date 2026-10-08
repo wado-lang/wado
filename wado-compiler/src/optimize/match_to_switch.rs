@@ -7,9 +7,9 @@
 use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirGlobal, NirLiteralPattern, NirLocal};
+use crate::nir::{FuncId, FuncParts, FunctionRef, NirGlobal, NirLiteralPattern};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
+    ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind, Tracked,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -40,8 +40,8 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let NirFunction { body, locals, .. } = &mut *func;
-        if let Some(body) = body.as_mut() {
+        let FuncParts { body, locals, .. } = func.parts();
+        if let Some(body) = body {
             let mut engine = Engine::new(body, &mut buffers, locals);
             engine.set_value_graph_type_table(&type_table);
             engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -90,7 +90,7 @@ fn run_globals(
     // runtime-computed local is hoisted into `$initialize_module`). Lend an
     // empty scratch list, reused across globals; `MatchToSwitchRule` never
     // allocates, so it stays empty.
-    let mut no_locals: Vec<NirLocal> = Vec::new();
+    let mut no_locals = Tracked::new(Vec::new());
     for global in globals {
         let mut engine = Engine::new(
             global.init.slot_expr_mut().body_mut(),

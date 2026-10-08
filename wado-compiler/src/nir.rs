@@ -18,7 +18,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     FunctionId, LocalMethodName, closure_call_method_info, closure_call_name, minted_name,
 };
-use crate::nir_arena::{Body, ExprBody};
+use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -336,14 +336,18 @@ impl FuncCell {
     }
 
     /// Borrow the function for writing. Panics while another borrow holds it,
-    /// as `RefCell::borrow_mut` does. The write is counted when the guard is
-    /// first dereferenced mutably, so a borrow that only reads counts nothing.
+    /// as `RefCell::borrow_mut` does. The guard counts one write when it is
+    /// dereferenced mutably, or, reached through [`FuncWriteGuard::parts`], when
+    /// the body or the locals moved. A borrow that changes nothing counts
+    /// nothing.
     pub fn borrow_mut(&self) -> FuncWriteGuard<'_> {
+        let guard = self
+            .func
+            .try_write()
+            .expect("a NIR function written while it is borrowed");
         FuncWriteGuard {
-            guard: self
-                .func
-                .try_write()
-                .expect("a NIR function written while it is borrowed"),
+            version: guard.version(),
+            guard,
             writes: &self.writes,
             counted: false,
         }
@@ -361,6 +365,58 @@ pub struct FuncWriteGuard<'a> {
     guard: RwLockWriteGuard<'a, NirFunction>,
     writes: &'a AtomicU64,
     counted: bool,
+    /// [`NirFunction::version`] when the guard was taken.
+    version: u128,
+}
+
+/// The parts of a function a rewrite of its body touches: the body and the
+/// locals mutably, which count their own edits, and the rest to read.
+pub struct FuncParts<'a> {
+    pub body: Option<&'a mut Body>,
+    pub locals: &'a mut Tracked<Vec<NirLocal>>,
+    pub name: &'a str,
+    pub params: &'a [NirParam],
+    pub address_taken_locals: &'a IndexSet<u32>,
+    pub stores_aliased_locals: &'a IndexSet<u32>,
+}
+
+impl FuncWriteGuard<'_> {
+    /// The body and locals to rewrite, without counting a write for taking
+    /// them: the write is counted on drop if either moved.
+    pub fn parts(&mut self) -> FuncParts<'_> {
+        let NirFunction {
+            body,
+            locals,
+            name,
+            params,
+            address_taken_locals,
+            stores_aliased_locals,
+            ..
+        } = &mut *self.guard;
+        FuncParts {
+            body: body.as_mut(),
+            locals,
+            name,
+            params,
+            address_taken_locals,
+            stores_aliased_locals,
+        }
+    }
+
+    fn count(&mut self) {
+        if !self.counted {
+            self.counted = true;
+            self.writes.fetch_add(1, MemoryOrdering::Relaxed);
+        }
+    }
+}
+
+impl Drop for FuncWriteGuard<'_> {
+    fn drop(&mut self) {
+        if self.guard.version() != self.version {
+            self.count();
+        }
+    }
 }
 
 impl std::ops::Deref for FuncWriteGuard<'_> {
@@ -373,10 +429,7 @@ impl std::ops::Deref for FuncWriteGuard<'_> {
 
 impl std::ops::DerefMut for FuncWriteGuard<'_> {
     fn deref_mut(&mut self) -> &mut NirFunction {
-        if !self.counted {
-            self.counted = true;
-            self.writes.fetch_add(1, MemoryOrdering::Relaxed);
-        }
+        self.count();
         &mut self.guard
     }
 }
@@ -440,7 +493,7 @@ pub struct NirFunction {
     /// `locals.len()` *is* the local count: passes that grow the local set push
     /// a `NirLocal` per new index, so the next free index is always
     /// [`NirFunction::local_count`].
-    pub locals: Vec<NirLocal>,
+    pub locals: Tracked<Vec<NirLocal>>,
     /// Local indices that have their address taken (&x or &mut x).
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: IndexSet<u32>,
@@ -585,6 +638,11 @@ pub enum InlineHint {
 }
 
 impl NirFunction {
+    /// Higher after any edit to the body or the locals.
+    pub fn version(&self) -> u128 {
+        self.body.as_ref().map_or(0, Body::version) + u128::from(self.locals.version())
+    }
+
     /// [`Body::calls_any`] of the body, `false` for a bodyless function.
     pub fn calls_any(&self, callee: impl Fn(&FuncId) -> bool) -> bool {
         self.body.as_ref().is_some_and(|b| b.calls_any(callee))
@@ -611,7 +669,7 @@ impl NirFunction {
             retains: Vec::new(),
             body: None,
             span: Span::default(),
-            locals: Vec::new(),
+            locals: Tracked::new(Vec::new()),
             address_taken_locals: IndexSet::default(),
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,

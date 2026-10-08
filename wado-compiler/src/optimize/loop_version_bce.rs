@@ -13,7 +13,7 @@ use std::ops::ControlFlow;
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
-use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncParts, FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
@@ -123,14 +123,14 @@ pub(super) fn version_loops(
             continue;
         }
         let stores_aliased = func.stores_aliased_locals.clone();
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             address_taken_locals,
             stores_aliased_locals,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
             locals,
@@ -148,7 +148,7 @@ pub(super) fn version_loops(
 
         let binds = build_copy_bindings(&engine);
         let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
-        collect_loops(engine.body, engine.body.root, &mut loops);
+        collect_loops(engine.body, engine.body.root(), &mut loops);
         let plans: Vec<Plan> = loops
             .into_iter()
             .filter_map(|(parent, loop_stmt, loop_body)| {
@@ -1086,13 +1086,13 @@ fn collect_writes(body: &Body, node: NodeRef, out: &mut Vec<u32>) {
 /// does not run.
 fn confined_to(engine: &Engine, l: u32, version_if: StmtId) -> bool {
     let body = &engine.body;
-    let root = NodeRef::Block(body.root);
+    let root = NodeRef::Block(body.root());
     !mentions_local_except(body, root, Some(NodeRef::Stmt(version_if)), l)
 }
 
 /// Whether `block` sits inside a loop, and so may run more than once.
 fn block_repeats(body: &Body, block: BlockId) -> bool {
-    body.find_in_nodes_under(NodeRef::Block(body.root), |n| {
+    body.find_in_nodes_under(NodeRef::Block(body.root()), |n| {
         let NodeRef::Stmt(s) = n else { return None };
         let StmtKind::Loop { body: inner } = &body.stmts[s].kind else {
             return None;

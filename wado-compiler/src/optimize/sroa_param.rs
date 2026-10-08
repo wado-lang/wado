@@ -792,7 +792,7 @@ fn param_field_use(
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> FieldUse {
-    check_node(body, NodeRef::Block(body.root), idx, candidates)
+    check_node(body, NodeRef::Block(body.root()), idx, candidates)
 }
 
 fn check_node(
@@ -1040,7 +1040,7 @@ fn mint_scalarized_clones(
                 .map(|s| (s.local, s.scalar_type_id))
                 .collect();
             body.values.retype_locals(&retyped);
-            let root = body.root;
+            let root = body.root();
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }
 
@@ -1236,7 +1236,7 @@ fn rewrite_call_sites(
             })
             .unwrap_or_default();
         if let Some(body) = func.body.as_mut() {
-            let root = body.root;
+            let root = body.root();
             let type_table = type_table_rc.borrow();
             if rewrite_calls_node(
                 body,
@@ -1253,7 +1253,7 @@ fn rewrite_call_sites(
     let mut rewrote_global = false;
     for global in &mut project.globals {
         let body = global.init.slot_expr_mut().body_mut();
-        let root = body.root;
+        let root = body.root();
         let type_table = type_table_rc.borrow();
         rewrote_global |= rewrite_calls_node(
             body,

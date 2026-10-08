@@ -92,7 +92,7 @@ fn is_eligible(func: &NirFunction) -> bool {
 
 /// Every return operand can be discarded without losing an effect or trap.
 fn has_only_pure_returns(body: &Body, type_table: &TypeTable) -> bool {
-    let root = body.root;
+    let root = body.root();
     // Every return reachable in the body must carry a pure value — a
     // `Return { value: None }` would mean a void exit path, structurally
     // inconsistent for a non-void signature.
@@ -126,7 +126,7 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         if let Some(body) = &func.body {
-            ctx.block(body, body.root);
+            ctx.block(body, body.root());
         }
     }
     // A global initializer can never be a `_ = call(...)` drop site — any
@@ -135,7 +135,7 @@ fn validate_call_sites(project: &NirPackage, mut candidates: IndexSet<FnKey>) ->
     for global in &project.globals {
         ctx.scan_node(
             global.init.slot_expr().body(),
-            NodeRef::Block(global.init.slot_expr().body().root),
+            NodeRef::Block(global.init.slot_expr().body().root()),
         );
     }
     let ValidateCtx {

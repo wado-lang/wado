@@ -925,7 +925,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
             for param in &tir_func.params {
                 local_names.insert(param.local_index, param.name.clone());
             }
-            collect_let_names(body, &mut local_names, body.root);
+            collect_let_names(body, &mut local_names, body.root());
             for (idx, local) in tir_func.locals.iter().enumerate() {
                 let key = u32::try_from(idx).unwrap();
                 local_names.entry(key).or_insert_with(|| local.name.clone());
@@ -959,7 +959,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     force_fixed_string_repr: false,
                     discovered_local_types: IndexMap::default(),
                 };
-                translator.translate_block(body.root)
+                translator.translate_block(body.root())
             };
             apply_cold_path_hints(&mut wir_body);
             let _ = type_table;

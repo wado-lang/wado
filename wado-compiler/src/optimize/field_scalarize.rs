@@ -140,7 +140,7 @@ fn analyze_function_field_usage(
         conservative_params: &mut conservative_locals,
         type_table,
     };
-    scan.visit_node(arena, NodeRef::Block(arena.root));
+    scan.visit_node(arena, NodeRef::Block(arena.root()));
 
     // Convert from local_index-keyed to position-keyed
     let mut result: IndexMap<u32, ParamFieldUsage> = IndexMap::default();
@@ -299,7 +299,7 @@ fn scalarize_function(
         loop_sites,
     };
     let body = func.body.as_mut().unwrap();
-    let root = body.root;
+    let root = body.root();
     scalarize_block(body, root, &mut func.locals, type_table, cache, &analysis)
 }
 
@@ -764,7 +764,7 @@ fn collect_function_aliases(body: &Body, type_table: &TypeTable) -> FnAliases {
         in_call_arg: false,
         out: FnAliases::default(),
     };
-    scan.visit_node(body, NodeRef::Block(body.root));
+    scan.visit_node(body, NodeRef::Block(body.root()));
     scan.out
 }
 
