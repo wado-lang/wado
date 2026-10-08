@@ -41,5 +41,5 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   the indices `--gpu-adapter` takes. It replaces two of the host crate's
   functions. `request-adapter` has no hook for `--gpu-adapter` to pin an adapter
   or for `--log-level info` to name the one returned.
-  `on-submitted-work-done` (0.4.0) awaits a callback no device poll ever fires,
+  `on-submitted-work-done` awaits a callback no device poll ever fires,
   so the guest would hang.
