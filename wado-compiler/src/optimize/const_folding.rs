@@ -83,7 +83,7 @@ fn fold_pass(
     let type_table = project.type_table.borrow();
     let type_table = &*type_table;
     let maps = build_fold_maps(project, type_table, exec, frozen);
-    let globals = build_global_view(project, type_table, &maps);
+    let globals = build_global_view(project, type_table, &maps, exec);
     let functions = &project.functions;
     drive(&|fid| {
         let func = &functions[fid.index()];
@@ -386,7 +386,12 @@ struct GlobalView {
     fields: GlobalFieldEnv,
 }
 
-fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMaps) -> GlobalView {
+fn build_global_view(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    maps: &FoldMaps,
+    exec: &Executor,
+) -> GlobalView {
     let mut view = GlobalView {
         materializing: materializing_globals(project),
         values: maps.declared_globals.clone(),
@@ -416,23 +421,37 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
             );
         }
     }
+    let funcs = &project.functions;
+    let per_function = exec.map(funcs, |func_rc| {
+        let mut found = GlobalStores::default();
+        if let Some(body) = func_rc.borrow().body.as_ref() {
+            GlobalStoreCollector {
+                immutable: &immutable,
+                type_table,
+                funcs,
+                callees: &maps.callees,
+                ctfe_builtins: &maps.ctfe_builtins,
+                declared_env: &maps.declared_globals,
+                found: &mut found,
+            }
+            .visit_body(body);
+        }
+        found
+    });
+    // In store order, as one collector walking the bodies in turn would: a later
+    // sequence length overrides an earlier one, and a join keeps the first of
+    // two equal constants.
     let mut stored = GlobalEnv::default();
     let mut escaped = IndexSet::default();
-    let mut collector = GlobalStoreCollector {
-        immutable: &immutable,
-        type_table,
-        funcs: &project.functions,
-        callees: &maps.callees,
-        ctfe_builtins: &maps.ctfe_builtins,
-        declared_env: &maps.declared_globals,
-        fields: &mut view.fields,
-        stored: &mut stored,
-        escaped: &mut escaped,
-    };
-    for func_rc in &project.functions {
-        if let Some(body) = func_rc.borrow().body.as_ref() {
-            collector.visit_body(body);
+    for found in per_function {
+        for (key, fields) in found.fields {
+            view.fields.entry(key).or_default().extend(fields);
         }
+        for (key, lattice) in found.stored {
+            let slot = stored.entry(key).or_insert(Lattice::Unevaluated);
+            *slot = std::mem::replace(slot, Lattice::Unevaluated).join(lattice);
+        }
+        escaped.extend(found.escaped);
     }
     for (key, lattice) in stored {
         if matches!(lattice, Lattice::Const(_)) {
@@ -456,7 +475,15 @@ fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
     );
 }
 
-/// Reads what every body says about the immutable globals: the `GlobalVarSet`
+/// What one body says about the immutable globals.
+#[derive(Default)]
+struct GlobalStores {
+    fields: GlobalFieldEnv,
+    stored: GlobalEnv,
+    escaped: IndexSet<GlobalKey>,
+}
+
+/// Reads what a body says about the immutable globals: the `GlobalVarSet`
 /// that carries a value, and the uses that make one unknowable.
 struct GlobalStoreCollector<'a> {
     immutable: &'a IndexSet<GlobalKey>,
@@ -465,9 +492,7 @@ struct GlobalStoreCollector<'a> {
     callees: &'a CalleeMap,
     ctfe_builtins: &'a CtfeBuiltinMap,
     declared_env: &'a GlobalEnv,
-    fields: &'a mut GlobalFieldEnv,
-    stored: &'a mut GlobalEnv,
-    escaped: &'a mut IndexSet<GlobalKey>,
+    found: &'a mut GlobalStores,
 }
 
 impl GlobalStoreCollector<'_> {
@@ -572,7 +597,7 @@ impl GlobalStoreCollector<'_> {
             } => {
                 let key = (module_source.clone(), name.clone());
                 if self.immutable.contains(&key) {
-                    self.escaped.insert(key);
+                    self.found.escaped.insert(key);
                 }
             }
             ExprKind::FieldAccess { expr: inner, .. }
@@ -587,7 +612,7 @@ impl GlobalStoreCollector<'_> {
 
     fn record_store(&mut self, body: &Body, key: GlobalKey, value: Operand) {
         if let Some(n) = const_seq_len_operand(body, value) {
-            record_seq_len(self.fields, key.clone(), n);
+            record_seq_len(&mut self.found.fields, key.clone(), n);
         }
         let mut interpreter = Interpreter::new(self.type_table);
         interpreter.with_callees(self.callees);
@@ -609,11 +634,12 @@ impl GlobalStoreCollector<'_> {
             Lattice::NonConst | Lattice::Unevaluated => Lattice::NonConst,
         };
         let known = self
+            .found
             .stored
             .get(&key)
             .cloned()
             .unwrap_or(Lattice::Unevaluated);
-        self.stored.insert(key, known.join(stored));
+        self.found.stored.insert(key, known.join(stored));
     }
 }
 
