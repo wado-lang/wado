@@ -3,8 +3,7 @@
 //!
 //! A function's root block is a region only when more than one site calls the
 //! function, since that is when the inliner copies its cold tail into each one.
-//! Called once, a split leaves the hot loops identical and costs a function
-//! (`dead-ends.md`).
+//! Called once, a split leaves the hot loops identical and costs a function.
 //!
 //! Two things are open. The pass costs `sieve` 4.5% for no reason the IR shows
 //! — the hot loops are identical in WIR and in the emitted Wasm, and perturbing
