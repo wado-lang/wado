@@ -360,6 +360,29 @@ test "parse_document ends a lazy continuation at any list marker" {
     assert children.get(1) matches { Some(Node::List(_)) };
 }
 
+test "parse_document lazily continues a blockquote's paragraph" {
+    let children = doc_children("> a\nb");
+    assert children.len() == 1;
+    if let Some(Node::BlockQuote(quoted)) = children.get(0) {
+        assert quoted.len() == 1;
+        assert quoted.get(0) matches { Some(Node::Paragraph(_)) };
+    } else {
+        panic("expected a BlockQuote node");
+    }
+}
+
+test "parse_document lazily continues a paragraph nested in a container" {
+    assert doc_children("> - a\nb").len() == 1;
+    assert doc_children("- > a\nb").len() == 1;
+}
+
+test "parse_document ends a container whose last block is not a paragraph" {
+    assert doc_children("> # h\nb").len() == 2;
+    assert doc_children("> ```\nb").len() == 2;
+    assert doc_children("- # h\nb").len() == 2;
+    assert doc_children("- ```\nb").len() == 2;
+}
+
 test "parse_document lets an HTML comment interrupt an open paragraph" {
     let source = "text line\n<!-- c -->";
     let children = doc_children(&source);

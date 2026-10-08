@@ -600,8 +600,14 @@ fn parse_blockquote(
 ) -> i32 {
     let mut inner: List<String> = [];
     let mut k = start;
-    while k < end && is_blockquote(&lines[k].to_chars()) {
-        inner.push(strip_blockquote_marker(&lines[k]));
+    while k < end {
+        if is_blockquote(&lines[k].to_chars()) {
+            inner.push(strip_blockquote_marker(&lines[k]));
+        } else if continues_lazily(&lines[k], &inner, refs) {
+            inner.push(lines[k]);
+        } else {
+            break;
+        }
         k += 1;
     }
     out.push(Node::BlockQuote(parse_blocks(&inner, 0, inner.len(), origin + start, refs)));
@@ -747,16 +753,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
                 j += 1;
                 continue;
             }
-            // Lazy continuation: an under-indented line still belongs to the
-            // item's open paragraph, regardless of container indent, as long
-            // as it doesn't itself start a new block (CommonMark's "lazy
-            // continuation line" rule — the same reason a top-level
-            // paragraph line needs no minimum indentation at all).
-            let can_lazy = match inner.get(inner.len() - 1) {
-                Some(prev) => !is_blank(&prev) && !ends_lazy_continuation(&lines[j]),
-                None => false,
-            };
-            if can_lazy {
+            if continues_lazily(&lines[j], &inner, refs) {
                 inner.push(dedent(&lines[j], content_col));
                 j += 1;
                 continue;
@@ -805,11 +802,34 @@ fn dedent<S: AsStrSlice>(line: S, n: i32) -> String {
     return slice_chars(&chars, p, len);
 }
 
-/// Whether an under-indented line ends a list item instead of continuing its
-/// paragraph lazily. The line falls outside the item, so it starts any block
-/// it could start where no paragraph is open: the limits a paragraph puts on a
-/// type-7 HTML block and on a list marker (`list_marker_interrupts_paragraph`)
-/// do not apply, as in commonmark.js.
+/// Whether `line`, which a container (a blockquote or a list item) does not
+/// claim by its marker or indent, still joins the container as CommonMark's
+/// lazy continuation: it must continue a paragraph left open at the end of
+/// `inner`, the container's lines so far, and start no block of its own.
+fn continues_lazily<S: AsStrSlice>(line: S, inner: &List<String>, refs: &RefTable) -> bool {
+    if is_blank(&line) || ends_lazy_continuation(&line) {
+        return false;
+    }
+    if inner.is_empty() || is_blank(&inner[inner.len() - 1]) {
+        return false;
+    }
+    return ends_in_paragraph(&parse_blocks(inner, 0, inner.len(), 0, refs));
+}
+
+fn ends_in_paragraph(blocks: &List<Node>) -> bool {
+    return match blocks.get(blocks.len() - 1) {
+        Some(Node::Paragraph(_)) => true,
+        Some(Node::BlockQuote(quoted)) => ends_in_paragraph(&quoted),
+        Some(Node::List(list)) => ends_in_paragraph(&list.items[list.items.len() - 1].children),
+        _ => false,
+    };
+}
+
+/// Whether a line outside a container ends it instead of continuing its
+/// paragraph lazily. The line starts any block it could start where no
+/// paragraph is open: the limits a paragraph puts on a type-7 HTML block and
+/// on a list marker (`list_marker_interrupts_paragraph`) do not apply, as in
+/// commonmark.js.
 fn ends_lazy_continuation<S: AsStrSlice>(line: S) -> bool {
     let chars = line.to_chars();
     if is_html_block_start(&chars) {

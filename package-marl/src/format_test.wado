@@ -27,6 +27,10 @@ test "format keeps a wrapped line starting with a number and a parenthesis in it
     assert format("a (SAC\n2010) b\n") == "a (SAC\n2010) b\n";
 }
 
+test "format keeps a lazy continuation line in its blockquote" {
+    assert format("> a\nb\n") == format("> a\n> b\n");
+}
+
 test "format keeps an all-same ordered list numbering" {
     assert format("1. a\n1. b\n1. c\n") == "1. a\n1. b\n1. c\n";
 }
