@@ -156,33 +156,31 @@ pub fn inject_kiln_request_adapter(
         span,
     };
 
+    let string_ty = |module: &mut Module| {
+        Type::Named(NamedType::new(
+            module.alloc_ast_id(),
+            "String".to_string(),
+            span,
+        ))
+    };
+    let generic_ty = |module: &mut Module, name: &str, arg: Type| {
+        Type::Generic(GenericType {
+            id: module.alloc_ast_id(),
+            name: name.to_string(),
+            args: vec![arg],
+            span,
+        })
+    };
+
     let primary_ty = input_file_ty(module);
     let primary_param = param(module, "primary", primary_ty);
     let inputs_elem = input_file_ty(module);
-    let inputs_ty = Type::Generic(GenericType {
-        id: module.alloc_ast_id(),
-        name: "List".to_string(),
-        args: vec![inputs_elem],
-        span,
-    });
+    let inputs_ty = generic_ty(module, "List", inputs_elem);
     let inputs_param = param(module, "inputs", inputs_ty);
-    let module_ty = Type::Named(NamedType::new(
-        module.alloc_ast_id(),
-        "String".to_string(),
-        span,
-    ));
+    let module_ty = string_ty(module);
     let module_param = param(module, "module", module_ty);
-    let type_string = Type::Named(NamedType::new(
-        module.alloc_ast_id(),
-        "String".to_string(),
-        span,
-    ));
-    let use_type_ty = Type::Generic(GenericType {
-        id: module.alloc_ast_id(),
-        name: "Option".to_string(),
-        args: vec![type_string],
-        span,
-    });
+    let type_string = string_ty(module);
+    let use_type_ty = generic_ty(module, "Option", type_string);
     // `type` is a WIT keyword, so the wire parameter is named apart from the field.
     let use_type_param = param(module, USE_TYPE_PARAM, use_type_ty);
     let options_param = has_options.then(|| param(module, "options", options_type));
