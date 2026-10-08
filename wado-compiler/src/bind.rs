@@ -1250,9 +1250,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.define(name, is_mut, span)?;
         let key = (self.current_depth, name.to_string());
         self.deferred.insert(key.clone());
-        if self.flow.reachable {
-            self.flow.unassigned.insert(key);
-        }
+        self.flow.unassigned.insert(key);
         Ok(())
     }
 
