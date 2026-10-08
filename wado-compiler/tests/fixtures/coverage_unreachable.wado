@@ -60,7 +60,30 @@ fn checked(x: i32) -> i32 {
     return x;
 }
 
+// The innermost `else if` omits its `else`, whose path also reaches only the
+// trap after the chain.
+fn chain(x: i32) -> i32 {
+    if x > 0 {
+        return 1;
+    } else if x < 0 {
+        return -1;
+    } else if x == 0 {
+        return 0;
+    }
+    return unreachable();
+}
+
+// A parameter that shadows the name is a path a caller takes.
+fn call_back(#[allow(shadowed_name)] unreachable: fn() -> i32, go: bool) -> i32 {
+    if go {
+        return unreachable();
+    }
+    return 0;
+}
+
 test "the paths a run can take" {
+    assert chain(2) + chain(-2) + chain(0) == 0;
+    assert call_back(|| 1, false) == 0;
     assert sign(3) + sign(-3) + sign(0) == 0;
     assert width(Shape::Line(2)) == 2;
     assert width(Shape::Dot) == 0;
@@ -73,8 +96,8 @@ __DATA__
 {
   "test": {},
   "coverage": {
-    "uncovered_lines": [58],
-    "uncovered_branches": ["57:5 then"],
+    "uncovered_lines": [58, 79],
+    "uncovered_branches": ["57:5 then", "78:5 then"],
     "uncovered_functions": []
   }
 }

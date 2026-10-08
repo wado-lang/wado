@@ -346,10 +346,9 @@ impl Editor {
             }
             return i;
         }
-        // The source is valid, so the container closes before `len`.
         let mut depth = 0;
         let mut i = start;
-        loop {
+        while i < len {
             let b = self.byte(i);
             if b == b'"' {
                 i = string_end(&self.bytes, i + 1);
@@ -369,6 +368,7 @@ impl Editor {
             }
             i += 1;
         }
+        unreachable();
     }
 
     /// Where `token` leads from the value at `at`: its container, and the

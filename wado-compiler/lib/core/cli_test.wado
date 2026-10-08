@@ -44,10 +44,12 @@ impl Stream<u8> for MockStdio {
 
 impl StreamWritable<u8> for MockStdio {
     fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
-        // Only `print_bytes` writes a list, and it writes to stdout.
-        assert !self.to_stderr;
         let count = data.len();
-        self.out.extend(&data);
+        if self.to_stderr {
+            self.err.extend(&data);
+        } else {
+            self.out.extend(&data);
+        }
         resume StreamWrite { count, result: CopyResult::Completed };
     }
 

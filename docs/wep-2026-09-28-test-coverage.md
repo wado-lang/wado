@@ -115,14 +115,15 @@ anything with a `FRESH` span), nor a global's initializer. An `assert`'s
 condition is not split into regions: power-assert rewrites it, so its operands
 are not the source's.
 
-A region whose only statement is `unreachable()` or `builtin::unreachable()`,
-returned or not, is not planned either, nor is the omitted `else` of an `if` that only that call
-follows. Its author claims no run enters it, and a test that did
-would show a bug rather than cover a path. `panic` and `assert` check a
-contract a caller can break, so their regions stay planned and are tested with
-`#[expect_trap]`. The planner reads a bare `unreachable` as `core:rt`'s unless
-the module declares or imports that name itself. A local binding of the name
-is not seen, and `shadowed_name` warns on one.
+A region that leads to nothing but `unreachable()` or `builtin::unreachable()`
+is not planned either: the call, returned or not, is its only statement, or
+the region is empty and control leaving it reaches only the call, as from an
+omitted `else` or an empty arm. Its author claims no run enters it, and a test
+that did would show a bug rather than cover a path. `panic` and `assert` check
+a contract a caller can break, so their regions stay planned and are tested with
+`#[expect_trap]`. The planner runs after the body walk and knows `core:rt`'s
+`unreachable` by the declaration the walk bound the callee to, so a parameter
+or `let` that takes the name is a path like any other.
 
 ### Reify inserts one probe per region
 

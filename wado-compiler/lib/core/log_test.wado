@@ -488,12 +488,13 @@ test "every level wrapper stops at the subscriber's gate" {
 }
 
 test "an admitted warn event reaches the subscriber" {
-    // Asserts nothing on the count: a build threshold above `Warn` drops it.
     let mut sink = CaptureSink {};
+    let mut admitted = false;
     with Log => &mut sink do {
+        admitted = enabled(Level::Warn);
         warn(`admitted`);
     };
-    assert sink.events.len() <= 1;
+    assert sink.events.len() == if admitted { 1 } else { 0 };
 }
 
 test "tier 2 rejects a level below it" {
@@ -503,10 +504,13 @@ test "tier 2 rejects a level below it" {
 }
 
 test "the raw event emitter honours the gates" {
-    let mut sink = NopSink {};
+    let mut sink = CaptureSink { min: Level::Error };
     with Log => &mut sink do {
-        event(Level::Error, `dropped`);
+        event(Level::Warn, `dropped`);
+        event(Level::Error, `kept`);
     };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
 }
 
 test "recording fields that are not an object records no key" {

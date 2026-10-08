@@ -577,8 +577,10 @@ fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> 
                 // so the next name drops the target's and keeps its directory.
                 if e matches { NameTooLong } && named_after_target {
                     named_after_target = false;
-                    // A name long enough to overflow has a parent, if only `""`.
-                    base = join(parent(target).unwrap(), ".wado-tmp");
+                    base = match parent(target) {
+                        Some(holder) => join(holder, ".wado-tmp"),
+                        None => ".wado-tmp",
+                    };
                     taken = 0;
                 } else if !e matches { Exist } {
                     return Result::Err(failure(target, e));
