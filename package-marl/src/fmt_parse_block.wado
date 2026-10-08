@@ -807,10 +807,7 @@ fn dedent<S: AsStrSlice>(line: S, n: i32) -> String {
 /// lazy continuation: it must continue a paragraph left open at the end of
 /// `inner`, the container's lines so far, and start no block of its own.
 fn continues_lazily<S: AsStrSlice>(line: S, inner: &List<String>, refs: &RefTable) -> bool {
-    if is_blank(&line) || ends_lazy_continuation(&line) {
-        return false;
-    }
-    if inner.is_empty() || is_blank(&inner[inner.len() - 1]) {
+    if is_blank(&line) || ends_lazy_continuation(&line) || is_blank(&inner[inner.len() - 1]) {
         return false;
     }
     return ends_in_paragraph(&parse_blocks(inner, 0, inner.len(), 0, refs));
