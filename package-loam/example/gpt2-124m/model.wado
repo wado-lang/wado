@@ -1,11 +1,12 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily.
 
+use { Cpu, LoadError, Tensor } from "lib:loam";
 pub use { Tokenizer } from "../gpt2_tokenizer.wado";
 use gpt2 from "./gpt2.onnxtext"
     with {
         generator: {
-            module: "../../src/generator.wado",
+            module: "lib:loam",
             inputs: ["./gpt2-header.safetensors"],
             options: {
                 dims: { batch_size: 1 },
@@ -148,7 +149,7 @@ pub struct Model {
 impl Model {
     /// Loads the weights from a safetensors checkpoint laid out as
     /// `gpt2-header.safetensors` says.
-    pub fn load(checkpoint: &ByteList) -> Result<Model, gpt2::LoadError> {
+    pub fn load(checkpoint: &ByteList) -> Result<Model, LoadError> {
         return Ok(Model { weights: gpt2::Weights::load(checkpoint)? });
     }
 
@@ -167,9 +168,9 @@ impl Model {
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
-            &mut gpt2::Cpu {},
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
+            &mut Cpu {},
+            &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+            &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             &self.weights,
         );
         let row = (ids.len() - 1) * vocab;

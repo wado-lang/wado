@@ -1,4 +1,11 @@
-use { Error, read_all, read_text } from "core:kiln";
+use { Error, package_of, read_all, read_text } from "core:kiln";
+
+test "package_of keeps the package and drops a version or a file path" {
+    assert package_of(&"lib:grog") == Option::Some("lib:grog");
+    assert package_of(&"wado-lang:loam@0.1") == Option::Some("wado-lang:loam");
+    assert package_of(&"lib:gale/src/generator.wado") == Option::Some("lib:gale");
+    assert package_of(&"../package-grog") == null;
+}
 
 test "Error renders its reason" {
     assert `${Error::InvalidSchema("bad token")}` == "invalid schema: bad token";

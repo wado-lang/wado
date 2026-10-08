@@ -142,8 +142,7 @@ runs, so a typo or a type mismatch is reported on the offending key.
   at its use sites every field is required unless its type is an `Option`, a
   `List`, or a `TreeMap`.
 
-Loam's options hold a list of structs, a map, a list of strings, and an
-optional flag:
+Loam's options hold a list of structs, a map, and a list of strings:
 
 <!-- {"source": "package-loam/src/generator.wado"} -->
 
@@ -155,10 +154,6 @@ pub struct Options {
     pub dims: TreeMap<String, i32>,
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String>,
-    /// Whether to inline `WebGpuBackend`, the kernels over `wasi:webgpu`,
-    /// beside `Cpu`. An `Option`, so a use site of the prebuilt generator may
-    /// leave it out.
-    pub webgpu: Option<bool>,
 }
 ```
 
@@ -168,10 +163,10 @@ object:
 <!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
 
 ```wado
-use { Batch, Merged, Col, Cpu, Row, Tensor, Weights, forward } from "./specialize.onnxtext"
+use { Batch, Col, Row, Weights, forward } from "./specialize.onnxtext"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -726,22 +721,17 @@ use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from
 ```
 
 Only the use site knows what the consumer calls the package, so the generated
-code imports it through `req.module`. Grog takes the package part of that name
-and refuses a path, which names no package:
+code imports it through `req.module`. `core:kiln`'s `package_of` takes the
+package part of that name, and is `None` for a path, which names no package.
+Grog refuses a path:
 
 <!-- {"source": "package-grog/src/generator.wado"} -->
 
 ```wado
 fn runtime_of(module: &String) -> Result<String, Error> {
-    let view = module.as_str_slice();
-    let Some(colon) = view.find(":") else {
-        return Result::Err(Error::Unsupported(
-            `grog: invoked by the path ${module}; name it by the package spec its runtime is a dependency under`,
-        ));
-    };
-    let rest = view.slice(colon + 1, view.len());
-    let end = rest.find_char(|c| c == '@' || c == '/').map(|i| colon + 1 + i).unwrap_or(view.len());
-    return Result::Ok(view.slice(0, end).to_string());
+    return package_of(module).ok_or(Error::Unsupported(
+        `grog: invoked by the path ${module}; name it by the package spec its runtime is a dependency under`,
+    ));
 }
 ```
 

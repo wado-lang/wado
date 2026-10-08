@@ -1,11 +1,12 @@
 //! `pytorch-operator/test_operator_pow`: one binary operator over
 //! `float[1, 2, 3, 4]`, checked against the output ONNX ships.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { A, B, C, Cpu, D, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_pow/model.onnx"
+use { A, B, C, D, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_pow/model.onnx"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

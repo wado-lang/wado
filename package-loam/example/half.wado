@@ -7,10 +7,11 @@
 //!     wado run package-loam/example/half.wado
 
 use { println, Stdout } from "core:cli";
-use { Batch, Cpu, In, Out, Tensor, Weights, forward } from "./half.onnxtext"
+use { Cpu, Tensor } from "lib:loam";
+use { Batch, In, Out, Weights, forward } from "./half.onnxtext"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

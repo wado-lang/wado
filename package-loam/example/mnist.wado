@@ -8,10 +8,11 @@
 //!     wado run package-loam/example/mnist.wado
 
 use { println, Stdout } from "core:cli";
+use { Cpu, Tensor } from "lib:loam";
 use mnist from "../tests/models/mnist-12/model.onnx"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -103,7 +104,7 @@ global ONE: List<String> = [
 ];
 
 /// A drawn digit as the model reads one: white strokes on black, in `[0, 1]`.
-fn image_of(rows: &List<String>) -> mnist::Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]> {
+fn image_of(rows: &List<String>) -> Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]> {
     let mut data: List<f32> = [];
     for let row of *rows {
         assert row.len() == rows.len();
@@ -111,7 +112,7 @@ fn image_of(rows: &List<String>) -> mnist::Tensor<f32, [mnist::Batch, mnist::Gra
             data.push(if c == '#' { 1.0 } else { 0.0 });
         }
     }
-    return mnist::Tensor {
+    return Tensor {
         data,
         extents: [
             1,
@@ -122,8 +123,8 @@ fn image_of(rows: &List<String>) -> mnist::Tensor<f32, [mnist::Batch, mnist::Gra
     };
 }
 
-fn classify(image: &mnist::Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]>) -> i32 {
-    let logits = mnist::forward(&mut mnist::Cpu {}, image, &mnist::Weights::embedded());
+fn classify(image: &Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]>) -> i32 {
+    let logits = mnist::forward(&mut Cpu {}, image, &mnist::Weights::embedded());
     let mut best = 0;
     for let [digit, v] of logits.data.into_iter().enumerate() {
         if v > logits.data[best] {

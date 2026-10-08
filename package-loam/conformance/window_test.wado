@@ -1,11 +1,12 @@
 //! The window operators against the outputs ONNX ships: `MaxPool` over one and
 //! two spatial axes, and `Conv` with its bias.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
 use pool2d from "../tests/onnx/pytorch-converted/test_MaxPool2d/model.onnx"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -23,7 +24,7 @@ use pool2d from "../tests/onnx/pytorch-converted/test_MaxPool2d/model.onnx"
 use pool1d from "../tests/onnx/pytorch-operator/test_operator_maxpool/model.onnx"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -41,7 +42,7 @@ use pool1d from "../tests/onnx/pytorch-operator/test_operator_maxpool/model.onnx
 use conv2d from "../tests/onnx/pytorch-converted/test_Conv2d/model.onnx"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -74,8 +75,8 @@ test "MaxPool over two padded axes reproduces the output ONNX ships" {
     );
 
     let got = pool2d::forward(
-        &mut pool2d::Cpu {},
-        &pool2d::Tensor::<f32, [pool2d::Batch, pool2d::Chan, pool2d::Row, pool2d::Col]> { data: x, extents: x_extents },
+        &mut Cpu {},
+        &Tensor::<f32, [pool2d::Batch, pool2d::Chan, pool2d::Row, pool2d::Col]> { data: x, extents: x_extents },
         &pool2d::Weights {},
     );
 
@@ -92,8 +93,8 @@ test "MaxPool over one axis reproduces the output ONNX ships" {
     );
 
     let got = pool1d::forward(
-        &mut pool1d::Cpu {},
-        &pool1d::Tensor::<f32, [pool1d::Batch, pool1d::Chan, pool1d::Len]> { data: x, extents: x_extents },
+        &mut Cpu {},
+        &Tensor::<f32, [pool1d::Batch, pool1d::Chan, pool1d::Len]> { data: x, extents: x_extents },
         &pool1d::Weights {},
     );
 
@@ -110,8 +111,8 @@ test "Conv with a bias reproduces the output ONNX ships" {
     );
 
     let got = conv2d::forward(
-        &mut conv2d::Cpu {},
-        &conv2d::Tensor::<f32, [conv2d::Batch, conv2d::Chan, conv2d::Row, conv2d::Col]> { data: x, extents: x_extents },
+        &mut Cpu {},
+        &Tensor::<f32, [conv2d::Batch, conv2d::Chan, conv2d::Row, conv2d::Col]> { data: x, extents: x_extents },
         &conv2d::Weights::embedded(),
     );
 

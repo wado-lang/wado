@@ -1,0 +1,21 @@
+# Loam as a consumer uses it: the generator a build dependency, its runtime an
+# ordinary one, under the same name. The oracle also reads ONNX through Loam's
+# own sources, so their dependencies are listed too.
+[package]
+name = "loam-conformance"
+version = "0.0.0"
+
+[build-dependencies]
+"lib:loam" = { path = "..", package = "wado-lang:loam", version = "^0.0.28" }
+"lib:gale" = { path = "../../package-gale", package = "wado-lang:gale", version = "^0.0.28" }
+"lib:grog" = { path = "../../package-grog", package = "wado-lang:grog", version = "^0.0.28" }
+
+[dependencies]
+"lib:loam" = { path = "..", package = "wado-lang:loam", version = "^0.0.28" }
+"lib:grog" = { path = "../../package-grog", package = "wado-lang:grog", version = "^0.0.28" }
+"lib:wadopoet" = { path = "../../package-wadopoet", package = "wado-lang:wadopoet", version = "^0.0.28" }
+
+[test]
+# The test backend is spliced after a generated module, not a source file of
+# its own.
+exclude = ["build/**", "opaque_backend.wado"]

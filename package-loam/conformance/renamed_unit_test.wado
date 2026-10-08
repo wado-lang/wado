@@ -1,10 +1,11 @@
 //! An operand's axis of 1 that broadcasting renames after the other operand's:
 //! the kernel must produce the output under the name stage 0 gave it.
 
-use { Cpu, Tensor, Weights, forward } from "./renamed_unit.onnxtext"
+use { Cpu, Tensor } from "lib:loam";
+use { Weights, forward } from "./renamed_unit.onnxtext"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

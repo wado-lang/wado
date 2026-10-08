@@ -10,6 +10,7 @@ use {
     Diagnostic as KilnDiagnostic,
     DiagnosticLevel,
     InputFile,
+    package_of,
     read_all,
     read_text,
 } from "core:kiln";
@@ -34,10 +35,6 @@ pub struct Options {
     pub dims: TreeMap<String, i32>,
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String>,
-    /// Whether to inline `WebGpuBackend`, the kernels over `wasi:webgpu`,
-    /// beside `Cpu`. An `Option`, so a use site of the prebuilt generator may
-    /// leave it out.
-    pub webgpu: Option<bool>,
 }
 
 impl Deserialize for Options;
@@ -101,6 +98,15 @@ fn input_refusal(inputs: &List<InputFile>) -> Option<String> {
     return null;
 }
 
+/// `error`, once every stream the request carries is dropped.
+fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnError> {
+    req.primary.content.drop();
+    for let input of req.inputs {
+        input.content.drop();
+    }
+    return Result::Err(error);
+}
+
 /// Enough for GPT-2's header in one read, which is 14 KiB.
 global HEADER_CHUNK: i32 = 65536;
 
@@ -108,12 +114,12 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
     // A stream is outside drop elaboration, so every one is consumed or dropped
     // before the first return that could leave it open.
     if let Some(reason) = input_refusal(&req.inputs) {
-        req.primary.content.drop();
-        for let input of req.inputs {
-            input.content.drop();
-        }
-        return Result::Err(KilnError::InvalidSchema(reason));
+        return refused(req, KilnError::InvalidSchema(reason));
     }
+    let Some(runtime) = package_of(&req.module) else {
+        let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
+        return refused(req, KilnError::Unsupported(reason));
+    };
     let mut headers: List<[String, ByteList]> = [];
     for let input of req.inputs {
         headers.push([input.path, read_header(input.content)]);
@@ -128,7 +134,7 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
     let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
     // Emitting first refuses an element type no kernel holds, which the check
     // below takes as given.
-    let generated = emit(&graph, &checked, req.options.webgpu.unwrap_or(false)).map_err(|e| at(&path, &e))?;
+    let generated = emit(&graph, &checked, &runtime).map_err(|e| at(&path, &e))?;
     for let [input_path, header] of headers {
         let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
         check_checkpoint(&graph, &checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;

@@ -11,11 +11,12 @@
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
+use { Cpu, Tensor } from "lib:loam";
 use { tiny } from "./gpt2_tokenizer.wado";
 use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 dims: { batch_size: 1 },
                 layout: [
@@ -161,13 +162,13 @@ fn longest_prompt(steps: i32, weights: &gpt2::Weights) -> i32 {
 
 /// The keys and values so far, one per layer's key and value in the order the
 /// graph names them.
-type Cache = List<gpt2::Tensor<f32, [gpt2::Batch, gpt2::Head, gpt2::Past, gpt2::Dim]>>;
+type Cache = List<Tensor<f32, [gpt2::Batch, gpt2::Head, gpt2::Past, gpt2::Dim]>>;
 
 /// No positions yet, which takes the branch without a past.
 fn empty_cache() -> Cache {
     let mut cache: Cache = [];
     for let _ of 0..<10 {
-        cache.push(gpt2::Tensor {
+        cache.push(Tensor {
             data: [],
             extents: [gpt2::Batch::EXTENT, 4, 0, 8],
         });
@@ -176,7 +177,7 @@ fn empty_cache() -> Cache {
 }
 
 /// The token the logits rank first at the last position.
-fn best(logits: &gpt2::Tensor<f32, [gpt2::Batch, gpt2::Seq, gpt2::Vocab]>) -> i32 {
+fn best(logits: &Tensor<f32, [gpt2::Batch, gpt2::Seq, gpt2::Vocab]>) -> i32 {
     let vocab = logits.extents[2];
     let row = (logits.extents[1] - 1) * vocab;
     let mut top = 0;
@@ -195,12 +196,12 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, C
     let length = past + tokens.len();
     let ids: List<i64> = tokens.into_iter().map(|id| id as i64).collect();
     let o = gpt2::forward(
-        &mut gpt2::Cpu {},
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &mut Cpu {},
+        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
             data: ids,
             extents: [gpt2::Batch::EXTENT, tokens.len()],
         },
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
             data: List::<i64>::filled(length, 1),
             extents: [gpt2::Batch::EXTENT, length],
         },
@@ -214,7 +215,7 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, C
         &cache[7],
         &cache[8],
         &cache[9],
-        &gpt2::Tensor::<bool, [gpt2::One]> {
+        &Tensor::<bool, [gpt2::One]> {
             data: [past > 0],
             extents: [1],
         },
@@ -226,7 +227,7 @@ fn decode(tokens: &List<i32>, cache: &Cache, weights: &gpt2::Weights) -> [i32, C
     ];
     let mut grown: Cache = [];
     for let p of presents {
-        grown.push(gpt2::Tensor { data: p.data, extents: p.extents });
+        grown.push(Tensor { data: p.data, extents: p.extents });
     }
     return [best(&o.logits), grown];
 }

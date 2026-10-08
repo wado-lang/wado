@@ -57,8 +57,9 @@ interpret at run time:
 - The vocabulary and the merges are embedded as data, as `Weights::embedded()`
   embeds a graph's weights.
 
-The kernels the stages share live in a runtime module inlined into the
-generated code, as the tensor kernels are.
+The kernels the stages share live in Loam's runtime library beside the tensor
+kernels, and the generated module imports them as it imports those. So the ids
+a tokenizer gives are the type a model's `forward` takes.
 
 ### Support grows by the models that need it
 
