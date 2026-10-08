@@ -538,9 +538,9 @@ struct Skipper {
 }
 impl Deserialize for Skipper {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Skipper, DeserializeError> {
-        let mut s = d.begin_struct("Skipper", 0)?;
-        s.skip()?;
-        s.end()?;
+        let mut s = d.begin_struct("Skipper", 0).unwrap();
+        s.skip().unwrap();
+        s.end().unwrap();
         return Result::Ok(Skipper {});
     }
 }
@@ -549,9 +549,8 @@ struct UnitProbe {
 }
 impl Deserialize for UnitProbe {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<UnitProbe, DeserializeError> {
-        let mut v = d.begin_variant("UnitProbe", 1)?;
-        v.is_unit()?;
-        return Result::Ok(UnitProbe {});
+        let mut v = d.begin_variant("UnitProbe", 1).unwrap();
+        return Result::Err(v.is_unit().unwrap_err());
     }
 }
 
