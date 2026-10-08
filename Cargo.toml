@@ -12,8 +12,8 @@ members = [
     "wado-playground",
     "wado-wasm-embed",
 ]
-# `wado-run-webgpu` is a workspace of its own: it needs a wasmtime a generation
-# past the pin below, and one workspace resolves one version of a crate.
+# `wado-run-webgpu` is a workspace of its own: its host crate follows wasmtime
+# on its own schedule, and one workspace resolves one version of a crate.
 exclude = ["vendor", "wado-run-webgpu"]
 resolver = "3"
 
@@ -30,7 +30,7 @@ glob = { version = "0.3" }
 indexmap = { version = "2", features = ["serde"] }
 rustc-hash = { version = "2" }
 libm = { version = "0.2" }
-cranelift-entity = { version = "0.136.1" }
+cranelift-entity = { version = "0.136.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
@@ -55,7 +55,7 @@ oci-client = { version = "0.18", default-features = false, features = ["rustls-t
 # Default features minus `cache` (wasmtime's disk cache is unused — Kiln is
 # wado's cache — and it drags in zstd-sys), `coredump`, `debug-builtins`, and
 # `debug` (guest DWARF debugging; wado never sets `Config::debug_info`).
-wasmtime = { version = "=49.0.1", default-features = false, features = [
+wasmtime = { version = "=49.0.2", default-features = false, features = [
     "anyhow",
     "async",
     "backtrace",
@@ -79,9 +79,9 @@ wasmtime = { version = "=49.0.1", default-features = false, features = [
     "compile-time-builtins",
     "wit-parser",
 ] }
-wasmtime-wasi = { version = "=49.0.1", features = ["p3"] }
-wasmtime-wasi-http = { version = "=49.0.1" }
-wasmtime-wasi-tls = { version = "=49.0.1", default-features = false, features = ["p3", "rustls"] }
+wasmtime-wasi = { version = "=49.0.2", features = ["p3"] }
+wasmtime-wasi-http = { version = "=49.0.2" }
+wasmtime-wasi-tls = { version = "=49.0.2", default-features = false, features = ["p3", "rustls"] }
 bytes = { version = "1" }
 futures = { version = "0.3" }
 http = { version = "1" }

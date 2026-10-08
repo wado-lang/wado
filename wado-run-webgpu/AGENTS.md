@@ -6,7 +6,7 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 ## Rules
 
 - This crate is a workspace of its own and is excluded from the repository's.
-  It needs wasmtime 48 where the workspace pins 49, and one workspace
+  The host crate follows wasmtime on its own schedule, and one workspace
   resolves one version of a crate. Nothing here is built by `cargo build` at the
   repository root, `mise run test`, or the repository's clippy and fmt jobs. The
   `test-webgpu` CI job is what builds, lints and tests it, on every change that
@@ -41,5 +41,5 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   the indices `--gpu-adapter` takes. It replaces two of the host crate's
   functions. `request-adapter` has no hook for `--gpu-adapter` to pin an adapter
   or for `--log-level info` to name the one returned.
-  `on-submitted-work-done` (0.3.1) awaits a callback no device poll ever fires,
+  `on-submitted-work-done` (0.4.0) awaits a callback no device poll ever fires,
   so the guest would hang.

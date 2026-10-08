@@ -5,8 +5,8 @@ edition = "2024"
 description = "The `wado run-webgpu` subcommand: run a Wado program on a wasi:webgpu host"
 publish = false
 
-# Its own workspace, not the repository's. The host needs wasmtime 48 where the
-# workspace pins 49, and one workspace resolves one version of a crate.
+# Its own workspace, not the repository's. The host crate follows wasmtime on
+# its own schedule, and one workspace resolves one version of a crate.
 [workspace]
 
 # Its own workspace, so the repository's `[workspace.lints]` never reaches it.
@@ -23,7 +23,7 @@ anyhow = "1"
 lexopt = "0.3"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-wasi-webgpu-wasmtime = "0.3.1"
+wasi-webgpu-wasmtime = "0.4.0"
 wgpu-types = "29"
 
 [dependencies.wgpu-core]
@@ -31,7 +31,7 @@ version = "29"
 features = ["wgsl", "vulkan"]
 
 [dependencies.wasmtime]
-version = "48"
+version = "49.0.2"
 default-features = false
 features = [
     "anyhow",
@@ -49,5 +49,5 @@ features = [
 ]
 
 [dependencies.wasmtime-wasi]
-version = "48"
+version = "49.0.2"
 features = ["p3"]
