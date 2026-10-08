@@ -26,7 +26,7 @@ use crate::tir::{
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
     TypeTable, positional_substitution,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::{Span, hashmap, tir, token};
 
 /// Canonical identity of an effect or resource **declaration**:
@@ -3212,116 +3212,28 @@ fn lower_resume_in_handler_methods(project: &mut Package) {
                 continue;
             }
             if let Some(body) = &mut func.body {
-                rewrite_resume_in_block(body);
+                ResumeToReturn.visit_block(body);
             }
         }
     }
 }
 
-/// Rewrite every `Resume { value }` in the block to a `Return { value }`
-/// statement. The resume expression itself yields `Unit` at the source
-/// level — when it sits at statement position it becomes a real return;
-/// when it appears as a sub-expression we leave it as-is and rely on
-/// `Return` short-circuiting the enclosing computation. The MVP fixtures
-/// only place `resume` at statement position, so the simple statement-
-/// level rewrite is sufficient.
-fn rewrite_resume_in_block(block: &mut TirBlock) {
-    for stmt in &mut block.stmts {
-        rewrite_resume_in_stmt(stmt);
-    }
-}
+/// Rewrites every `Resume { value }`, in whatever position, to a return of
+/// `value`. The elaborator accepts `resume` wherever its definite-exit analysis
+/// sees one, so this pass may not skip a position that analysis counts.
+struct ResumeToReturn;
 
-fn rewrite_resume_in_stmt(stmt: &mut TirStmt) {
-    // Statement-position `resume value;` is parsed as
-    // `TirStmtKind::Expr(TirExpr { kind: Resume { value }, .. })`.
-    // Replace it with `TirStmtKind::Return { value }`.
-    // `resume value;` at statement position becomes `return value;`.
-    if let TirStmtKind::Expr(expr) = &mut stmt.kind
-        && let TirExprKind::Resume { value } = &mut expr.kind
-    {
+impl TirMutVisitor for ResumeToReturn {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        self.walk_expr(expr);
+        let TirExprKind::Resume { value } = &mut expr.kind else {
+            return;
+        };
         let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span);
         let value = std::mem::replace(value.as_mut(), placeholder);
-        stmt.kind = TirStmtKind::Return { value: Some(value) };
-        return;
-    }
-    // `return resume value;` (which the elaborator synthesises when a
-    // method body's tail expression is `resume`, because the
-    // missing-return rewriter sees `Resume { value }` in expression
-    // position and wraps it in `Return { value: Some(Resume { ... }) }`)
-    // collapses to `return value;`.
-    if let TirStmtKind::Return { value: Some(value) } = &mut stmt.kind
-        && let TirExprKind::Resume { value: inner } = &mut value.kind
-    {
-        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, value.span);
-        let inner = std::mem::replace(inner.as_mut(), placeholder);
-        stmt.kind = TirStmtKind::Return { value: Some(inner) };
-        return;
-    }
-    // Recurse into sub-statements; expression-position resumes inside
-    // composite expressions are still walked but currently left as-is
-    // (the e2e MVP has no such uses; if they appear, the `unreachable!`
-    // stub in the lower phase will catch them).
-    match &mut stmt.kind {
-        TirStmtKind::Let { value, .. }
-        | TirStmtKind::Expr(value)
-        | TirStmtKind::TaskReturn { value } => rewrite_resume_in_expr(value),
-        TirStmtKind::Return { value } | TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                rewrite_resume_in_expr(v);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::Loop { body } | TirStmtKind::LabeledBlock { block: body, .. } => {
-            rewrite_resume_in_block(body);
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            rewrite_resume_in_expr(condition);
-            rewrite_resume_in_block(then_block);
-            if let Some(eb) = else_block {
-                rewrite_resume_in_block(eb);
-            }
-        }
-        TirStmtKind::LetDestructure { value, .. } => rewrite_resume_in_expr(value),
-        TirStmtKind::VariadicForOf { iterable, body, .. } => {
-            rewrite_resume_in_expr(iterable);
-            rewrite_resume_in_block(body);
-        }
+        let ret = TirStmt::new(TirStmtKind::Return { value: Some(value) }, expr.span);
+        expr.kind = TirExprKind::Block(TirBlock::new(vec![ret], expr.span));
+        expr.type_id = TypeTable::NEVER;
     }
 }
 
-fn rewrite_resume_in_expr(expr: &mut TirExpr) {
-    // Walk into all sub-expressions so nested handler methods (closures,
-    // labelled blocks, etc.) get their statement-level `resume` rewritten
-    // too. Expression-level rewriting is not needed for the MVP.
-    match &mut expr.kind {
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            rewrite_resume_in_block(block);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            rewrite_resume_in_expr(condition);
-            rewrite_resume_in_block(then_branch);
-            if let Some(eb) = else_branch {
-                rewrite_resume_in_block(eb);
-            }
-        }
-        TirExprKind::Match { expr, arms } => {
-            rewrite_resume_in_expr(expr);
-            for arm in arms {
-                if let Some(g) = &mut arm.guard {
-                    rewrite_resume_in_expr(g);
-                }
-                rewrite_resume_in_expr(&mut arm.body);
-            }
-        }
-        TirExprKind::Closure { body, .. } => rewrite_resume_in_expr(body),
-        _ => {}
-    }
-}

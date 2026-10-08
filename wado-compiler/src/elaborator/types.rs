@@ -2749,25 +2749,25 @@ impl TypeError {
                 *span,
             ),
             TypeError::ResumeOutsideHandler { span } => (
-                Code::UnsupportedFeature,
+                Code::EffectHandlerInvalid,
                 "`resume` is only valid inside an effect handler method body".to_string(),
                 *span,
             ),
             TypeError::ReturnInHandler { span } => (
-                Code::InvalidSyntax,
+                Code::EffectHandlerInvalid,
                 "cannot use `return` in an effect handler method; use `resume` instead"
                     .to_string(),
                 *span,
             ),
             TypeError::TryInHandler { span } => (
-                Code::InvalidSyntax,
+                Code::EffectHandlerInvalid,
                 "cannot use `?` in an effect handler method; hand the error over with `resume` \
                  instead"
                     .to_string(),
                 *span,
             ),
             TypeError::MissingResume { function, span } => (
-                Code::MissingReturn,
+                Code::EffectHandlerInvalid,
                 format!("handler method `{function}` can reach its end without `resume`"),
                 *span,
             ),
@@ -4510,7 +4510,7 @@ mod tests {
     #[test]
     fn render_carries_diagnostic_code_and_span() {
         let (code, message, sp) = TypeError::ResumeOutsideHandler { span: span() }.render();
-        assert_matches!(code, Code::UnsupportedFeature);
+        assert_matches!(code, Code::EffectHandlerInvalid);
         assert_eq!(
             message,
             "`resume` is only valid inside an effect handler method body"

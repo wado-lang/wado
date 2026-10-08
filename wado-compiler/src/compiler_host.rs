@@ -116,7 +116,8 @@ pub enum Code {
     ClosureInvalid,
     /// A type with no representation at the Component Model boundary
     CmBoundaryType,
-    /// A `with ... do` whose handler does not implement the effect
+    /// A `with ... do` whose handler does not implement the effect, or a
+    /// handler method body that breaks a rule of `resume`
     EffectHandlerInvalid,
     /// A call or a handler install demanding an effect the position does not hold
     MissingEffect,
