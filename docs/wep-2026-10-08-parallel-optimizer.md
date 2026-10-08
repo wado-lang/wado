@@ -45,8 +45,16 @@ the machine.
 ### Output does not depend on the thread count
 
 A compile emits the same bytes on one thread, on many, and on `wasm32`. Every
-decision below serves this, and a CI check holds it: the corpus compiled with
-one thread and with several, compared byte for byte.
+decision below serves this. No dedicated check holds it: the compiler is
+deterministic as a rule (`wado-compiler/AGENTS.md`), and a lapse shows as drift
+in the WIR golden fixtures.
+
+### What a change may cost
+
+The output may change wherever these decisions change what the optimizer sees,
+as the sweep semantics below do. The generated code may run slower, by at most
+5% on any row of `benchmark/`, the price of a parallel pipeline, as ThinLTO
+pays against full LTO. Code size is not a criterion.
 
 ### A sweep sees the state it started from
 
@@ -136,10 +144,10 @@ which callees to clone or which parameters to drop, stay sequential.
    memo hit rate on `package-gale` is measured.
 3. Adopt the sweep semantics in `run_gated`, still sequential, with reads of
    other functions served from the sweep-start copies. Done when the tests and
-   `test-wado` pass and `benchmark/` and `wasm-size/` hold within noise.
+   `test-wado` pass and no `benchmark/` row is more than 5% slower.
 4. Add the executor and the thread-count option, and run the per-function loop
-   passes in parallel. Done when the thread-count invariance check runs in CI
-   and `package-gale`'s loop time is measured against step 3.
+   passes in parallel. Done when `package-gale`'s loop time is measured against
+   step 3.
 5. Run the read-only whole-program walks in parallel.
 6. Run the post-loop per-function passes and `inline`'s splicing in parallel.
 

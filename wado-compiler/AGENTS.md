@@ -4,6 +4,9 @@ The Wado compiler crate.
 
 ## Rules
 
+- The compiler is deterministic: one input emits the same bytes on every run,
+  whatever the thread count or host. A lapse shows as drift in the WIR golden
+  fixtures (`mise run update-golden-fixtures`), and nondeterminism is a P0 bug.
 - Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
   are denied at the crate root. A user-facing message goes through `Logger` and
   a developer trace through `compiler_trace!`.
