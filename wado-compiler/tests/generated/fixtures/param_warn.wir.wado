@@ -31,7 +31,7 @@ type "functype//param_warn.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) 
 
 type "functype//param_warn.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//param_warn.wado/$initialize_module" = fn();  // TypeId(13)
+type "functype//param_warn.wado/$initialize_modules$cold0" = fn();  // TypeId(13)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
@@ -74,8 +74,7 @@ fn "param_warn.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:param_warn.wado::$modules_initialized);
         cold_path;
-        "param_warn.wado/$initialize_module"();
-        global:param_warn.wado::$modules_initialized = 1;
+        "param_warn.wado/$initialize_modules$cold0"();
     };
     rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
     tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
@@ -117,15 +116,15 @@ fn "param_warn.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:param_warn.wado::$modules_initialized);
         cold_path;
-        "param_warn.wado/$initialize_module"();
-        global:param_warn.wado::$modules_initialized = 1;
+        "param_warn.wado/$initialize_modules$cold0"();
     };
     "param_warn.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "param_warn.wado/$initialize_module"() {
+fn "param_warn.wado/$initialize_modules$cold0"() {
     global:param_warn.wado::REGION = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("local"), used: 5 };
+    global:param_warn.wado::$modules_initialized = 1;
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

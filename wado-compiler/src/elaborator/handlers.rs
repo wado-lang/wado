@@ -1,12 +1,13 @@
-//! Annotation pass for effect handler installation (`with E => h do { … }`) and
-//! `resume`; see WEP 2026-04-11. It validates that each binding names a real
-//! effect declaration, that the handler's stripped type has an `impl` in scope,
-//! and that `resume` sits in a handler method, recording only
-//! `HandlerBindingFacts` for reify to rebuild the TIR nodes from.
+//! Annotation pass for effect handler installation (`with E => h do { … }`);
+//! see WEP 2026-04-11. It validates that each binding names a real effect
+//! declaration and that the handler's stripped type has an `impl` in scope,
+//! recording only `HandlerBindingFacts` for reify to rebuild the TIR nodes
+//! from. Where `resume` and `return` may stand is checked in
+//! `stmt.rs::resolve_return`.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -24,7 +25,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Reify rebuilds the `WithHandler` node — its handler bindings from
     /// `HandlerBindingFacts` and its body from the AST; the missing-return
-    /// analysis in `control_flow.rs` reads `with` / `resume` off the AST too.
+    /// analysis in `control_flow.rs` reads `with` off the AST too.
     /// Nothing needs a resolved node, so this arm records facts and projects
     /// the body's result type.
     pub(super) fn resolve_with_handler(
@@ -66,7 +67,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_handler_binding` above) and its body from the AST — so the
         // body walk only resolves the body for its fact-recording side
         // effects and projects the result type. Missing-return analysis reads
-        // `with`/`resume` off the AST via `control_flow.rs`, so nothing
+        // `with` off the AST via `control_flow.rs`, so nothing
         // consumes this node's structure.
         result_type
     }
@@ -388,37 +389,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn handler_impl_target(&self, handler_type: TypeId) -> ImplTargetKey {
         let name = self.tysys.handler_impl_target_name(handler_type);
         self.impl_target_of(handler_type, &DeclName::new(name))
-    }
-
-    /// Annotate `resume value`, which yields `()` — at source level it is
-    /// control flow, and dispatch synthesis later lowers it to `Return { value }`
-    /// for the ordinary return-type rules to check. Returns a placeholder:
-    /// missing-return analysis reads the definite exit off the AST and reify
-    /// rebuilds the node, so this walk only resolves the value for its facts.
-    pub(super) fn resolve_resume(
-        &mut self,
-        resume: &ast::ResumeExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        if !ctx.in_handler_method {
-            let _ = self.emit(TypeError::ResumeOutsideHandler { span: resume.span });
-        }
-
-        // Resolve the value with the surrounding method's return type as the
-        // expected type so literal coercion (e.g. `resume 0` → `i64`) lines
-        // up with what `return` would have produced.
-        let expected = if ctx.in_handler_method {
-            Some(ctx.return_type)
-        } else {
-            None
-        };
-        let value = self.resolve_expr(&resume.value, ctx, expected);
-
-        if ctx.in_handler_method {
-            self.typecheck(value, ctx.return_type, resume.span);
-        }
-
-        TypeTable::UNIT
     }
 }
 

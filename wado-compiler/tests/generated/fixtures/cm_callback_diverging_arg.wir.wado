@@ -91,19 +91,19 @@ type "functype//cm_callback_diverging_arg.wado/$cm_callback__call-i32" = fn(u32,
 
 type "functype//cm_callback_diverging_arg.wado/$cm_export__run" = fn();  // TypeId(31)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(32)
+type "functype//cm_callback_diverging_arg.wado/$initialize_modules$cold0" = fn();  // TypeId(32)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(33)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(33)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(34)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(35)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(35)
 
-type "functype//core:rt/cm_callback_key" = fn(ref struct) -> u32;  // TypeId(36)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(36)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(37)
+type "functype//core:rt/cm_callback_key" = fn(ref struct) -> u32;  // TypeId(37)
 
-type "functype//core:rt/$initialize_module" = fn();  // TypeId(38)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(38)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self]" = fn(i32, i32);  // TypeId(39)
 
@@ -171,8 +171,7 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cm_callback_diverging_arg.wado::$modules_initialized);
         cold_path;
-        "core:rt/$initialize_module"();
-        global:cm_callback_diverging_arg.wado::$modules_initialized = 1;
+        "cm_callback_diverging_arg.wado/$initialize_modules$cold0"();
     };
     mock = struct.new "cm_callback_diverging_arg.wado//Mock" {  };
     global:cm_callback_diverging_arg.wado::$effect_Demo = local.tee $d_Demo(struct.new "cm_callback_diverging_arg.wado//$Dispatch_Demo" { outer: local.tee $save_Demo(global:cm_callback_diverging_arg.wado::$effect_Demo), op_target: struct.new "canonical//CanonicalClosure_2" { env: struct.new "cm_callback_diverging_arg.wado//$Closure_0" { $capture_0: mock }, func: ref.func "closure/cm_callback_diverging_arg.wado/$closure_wrapper_0" } });
@@ -234,8 +233,7 @@ fn "cm_callback_diverging_arg.wado/$cm_callback__call-i32"(key, a0) {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cm_callback_diverging_arg.wado::$modules_initialized);
         cold_path;
-        "core:rt/$initialize_module"();
-        global:cm_callback_diverging_arg.wado::$modules_initialized = 1;
+        "cm_callback_diverging_arg.wado/$initialize_modules$cold0"();
     };
     let $indirect_call_1: ref "canonical//CanonicalClosure_1";
     call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($v1 = local.tee self_3(global:core:rt::CM_CALLBACKS).used; if @unlikely(key >= $v1) {
@@ -249,11 +247,15 @@ fn "cm_callback_diverging_arg.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cm_callback_diverging_arg.wado::$modules_initialized);
         cold_path;
-        "core:rt/$initialize_module"();
-        global:cm_callback_diverging_arg.wado::$modules_initialized = 1;
+        "cm_callback_diverging_arg.wado/$initialize_modules$cold0"();
     };
     "cm_callback_diverging_arg.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "cm_callback_diverging_arg.wado/$initialize_modules$cold0"() {
+    global:core:rt::CM_CALLBACKS = struct.new "core:prelude//List<fn()->()>" { repr: array.new_fixed<ref struct>(), used: 0 };
+    global:cm_callback_diverging_arg.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
@@ -447,10 +449,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l37;
         };
     };
-}
-
-fn "core:rt/$initialize_module"() {
-    global:core:rt::CM_CALLBACKS = struct.new "core:prelude//List<fn()->()>" { repr: array.new_fixed<ref struct>(), used: 0 };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self]"(index, $v1) {

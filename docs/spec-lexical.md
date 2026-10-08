@@ -173,7 +173,7 @@ position listed:
 | `task`    | `task return expr;`                                 |
 | `trap`    | `..trap` rest clause of an effect handler `impl`    |
 | `forward` | `..forward` rest clause of an effect handler `impl` |
-| `resume`  | `resume expr` in an effect handler                  |
+| `resume`  | `resume expr;` in an effect handler                 |
 | `self`    | a method's receiver: `&self`, `self.field`          |
 | `Self`    | the implementing or declared type: `Self::Item`     |
 
@@ -201,7 +201,8 @@ for let of of arr {
 assert sum == 6;
 ```
 
-`resume` is the exception. It begins an expression (`resume value`) in every
-expression position, so a name spelled `resume` could never be read. A
+`resume` is the exception. It begins a statement (`resume value;`) wherever a
+statement can start, and is an error wherever an expression can, so a name
+spelled `resume` could never be read. A
 variable, parameter, item, case or import may not take it. Only a field or a
 method, reached through `.`, may.

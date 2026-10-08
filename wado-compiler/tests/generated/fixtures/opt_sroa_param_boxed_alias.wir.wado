@@ -66,21 +66,21 @@ type "functype//opt_sroa_param_boxed_alias.wado/$cm_binding__Stdout_write_via_st
 
 type "functype//opt_sroa_param_boxed_alias.wado/$cm_export__run" = fn();  // TypeId(25)
 
-type "functype//opt_sroa_param_boxed_alias.wado/$initialize_module" = fn();  // TypeId(26)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold0" = fn(i32);  // TypeId(26)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold0" = fn(i32);  // TypeId(27)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold1" = fn(i32);  // TypeId(27)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold1" = fn(i32);  // TypeId(28)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold2" = fn(i32);  // TypeId(28)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold2" = fn(i32);  // TypeId(29)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold3" = fn(i32);  // TypeId(29)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold3" = fn(i32);  // TypeId(30)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold4" = fn(i32);  // TypeId(30)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold4" = fn(i32);  // TypeId(31)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold5" = fn(i32);  // TypeId(31)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold5" = fn(i32);  // TypeId(32)
+type "functype//opt_sroa_param_boxed_alias.wado/run$cold6" = fn(i32);  // TypeId(32)
 
-type "functype//opt_sroa_param_boxed_alias.wado/run$cold6" = fn(i32);  // TypeId(33)
+type "functype//opt_sroa_param_boxed_alias.wado/$initialize_modules$cold0" = fn();  // TypeId(33)
 
 type "functype//opt_sroa_param_boxed_alias.wado/shared_pair$sroa[a.value,b.value]" = fn(i32, i32) -> i32;  // TypeId(34)
 
@@ -183,8 +183,7 @@ fn "opt_sroa_param_boxed_alias.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_sroa_param_boxed_alias.wado::$modules_initialized);
         cold_path;
-        "opt_sroa_param_boxed_alias.wado/$initialize_module"();
-        global:opt_sroa_param_boxed_alias.wado::$modules_initialized = 1;
+        "opt_sroa_param_boxed_alias.wado/$initialize_modules$cold0"();
     };
     if @unlikely(local.tee sibling("opt_sroa_param_boxed_alias.wado/touch"(local.tee x_0(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }), x_0)) != 1) {
         cold_path;
@@ -253,15 +252,10 @@ fn "opt_sroa_param_boxed_alias.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_sroa_param_boxed_alias.wado::$modules_initialized);
         cold_path;
-        "opt_sroa_param_boxed_alias.wado/$initialize_module"();
-        global:opt_sroa_param_boxed_alias.wado::$modules_initialized = 1;
+        "opt_sroa_param_boxed_alias.wado/$initialize_modules$cold0"();
     };
     "opt_sroa_param_boxed_alias.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "opt_sroa_param_boxed_alias.wado/$initialize_module"() {
-    global:opt_sroa_param_boxed_alias.wado::G = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: struct.new "core:prelude/types.wado//Box<i32>" { value: global:opt_sroa_param_boxed_alias.wado::ZERO } };
 }
 
 fn "opt_sroa_param_boxed_alias.wado/run$cold0"(apart) with Stdout {
@@ -346,6 +340,11 @@ fn "opt_sroa_param_boxed_alias.wado/run$cold6"(sibling) with Stdout {
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_18, new_used);
     }; start_47 = $local_18.used; $local_18.used = new_used; builtin::array_copy<u8>($local_18.repr, start_47, global:opt_sroa_param_boxed_alias.wado::$const_obj_10, 0, 25); start_47 = sibling < 0; sibling = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_60(x_60 = builtin::i64_extend_i32_s(sibling); select i64(x_60 < 0_i64, 0_i64 - x_60, x_60))); start_47 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_18, start_47, sibling); "core:prelude/primitive.wado/write_decimal_digits"($local_18.repr, start_47, x_60, sibling); $local_18);
     unreachable;
+}
+
+fn "opt_sroa_param_boxed_alias.wado/$initialize_modules$cold0"() {
+    global:opt_sroa_param_boxed_alias.wado::G = struct.new "opt_sroa_param_boxed_alias.wado//Holder" { r: struct.new "core:prelude/types.wado//Box<i32>" { value: global:opt_sroa_param_boxed_alias.wado::ZERO } };
+    global:opt_sroa_param_boxed_alias.wado::$modules_initialized = 1;
 }
 
 fn "opt_sroa_param_boxed_alias.wado/shared_pair$sroa[a.value,b.value]"(a, b) {

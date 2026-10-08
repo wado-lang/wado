@@ -506,10 +506,9 @@ that never runs, and what does run is priced by what the loop executes. The thre
 quantities move independently: the append fusion grew `wado dump -O2` on
 syntax-highlight 8.3% (a fused write unparses its offset as an expression) and
 shrank the `-Os` binary 1.5%, while the thing that justified it was a +8%
-benchmark and a diff showing one less capacity check per key. Size is its own
-budget (`mise run report-wasm-size`); as evidence about speed it is only the
-tiebreaker at rank 3. Where size and speed trade, take the speed and state the
-size cost. A fold of an idiom wasmtime already matches (shift-or into `rotl`)
+benchmark and a diff showing one less capacity check per key. As evidence about
+speed, size is only the tiebreaker at rank 3. Where size and speed trade, take
+the speed and state the size cost. A fold of an idiom wasmtime already matches (shift-or into `rotl`)
 buys size only, so judge it by bytes.
 
 ## 6. Lessons

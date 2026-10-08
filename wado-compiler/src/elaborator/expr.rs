@@ -739,7 +739,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx, expected_type),
             Expr::Range(range) => self.resolve_range(range, ctx, expected_type),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
-            Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
             Expr::Error(_e) => TypeTable::ERROR,
@@ -5094,6 +5093,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if ctx.is_async {
             let _ = self.emit(TypeError::TryInAsync { span: qm.span });
+            return payload;
+        }
+        if ctx.in_handler_method {
+            let _ = self.emit(TypeError::TryInHandler { span: qm.span });
             return payload;
         }
         let mismatch = match (is_option, ret_is_option, ret_is_result) {

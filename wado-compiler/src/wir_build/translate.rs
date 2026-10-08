@@ -298,7 +298,17 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // trait-method dispatch closures synthesised by `effect_dispatch`
         // — has the user's resource ref type, not the functor's struct
         // ref). Every other surviving param matches a `canonical_user_params`
-        // entry by name.
+        // entry by name, which the closure planner keeps distinct.
+        let distinct_names: IndexSet<&String> = functor
+            .canonical_user_params
+            .iter()
+            .map(|(name, _)| name)
+            .collect();
+        assert_eq!(
+            distinct_names.len(),
+            functor.canonical_user_params.len(),
+            "closure {functor_name}::$call repeats a param name",
+        );
         let live_param_sources: Vec<CallWrapperArg> = call_func
             .params
             .iter()

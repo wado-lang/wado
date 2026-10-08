@@ -578,24 +578,30 @@ impl<C: Clock> Log for TextSink<C> {
     }
 
     fn record_fields(&mut self, span: SpanId, fields: Value) {
+        resume ();
     }
 
     fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+        resume ();
     }
 
     fn enter(&mut self, span: SpanId) {
         self.spans.enter(span);
+        resume ();
     }
 
     fn exit(&mut self, span: SpanId) {
         self.spans.exit();
+        resume ();
     }
 
     fn close(&mut self, span: SpanId) {
+        resume ();
     }
 
     fn event(&mut self, event: Event) {
         log_stderr(self.render(&event));
+        resume ();
     }
 }
 
@@ -669,24 +675,30 @@ impl<C: Clock> Log for JsonSink<C> {
     }
 
     fn record_fields(&mut self, span: SpanId, fields: Value) {
+        resume ();
     }
 
     fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+        resume ();
     }
 
     fn enter(&mut self, span: SpanId) {
         self.spans.enter(span);
+        resume ();
     }
 
     fn exit(&mut self, span: SpanId) {
         self.spans.exit();
+        resume ();
     }
 
     fn close(&mut self, span: SpanId) {
+        resume ();
     }
 
     fn event(&mut self, event: Event) {
         log_stderr(self.render(&event));
+        resume ();
     }
 }
 
@@ -710,23 +722,29 @@ impl Log for NopSink {
     }
 
     fn record_fields(&mut self, span: SpanId, fields: Value) {
+        resume ();
     }
 
     fn follows_from(&mut self, span: SpanId, cause: SpanId) {
+        resume ();
     }
 
     fn enter(&mut self, span: SpanId) {
         self.spans.enter(span);
+        resume ();
     }
 
     fn exit(&mut self, span: SpanId) {
         self.spans.exit();
+        resume ();
     }
 
     fn close(&mut self, span: SpanId) {
+        resume ();
     }
 
     fn event(&mut self, event: Event) {
+        resume ();
     }
 }
 
@@ -766,30 +784,36 @@ impl Log for CaptureSink {
                 self.ops.push(`record:${span}:${key}`);
             }
         }
+        resume ();
     }
 
     fn follows_from(&mut self, span: SpanId, cause: SpanId) {
         self.ops.push(`follows:${span}<-${cause}`);
+        resume ();
     }
 
     fn enter(&mut self, span: SpanId) {
         self.stack.enter(span);
         self.ops.push(`enter:${span}`);
+        resume ();
     }
 
     fn exit(&mut self, span: SpanId) {
         self.stack.exit();
         self.ops.push(`exit:${span}`);
+        resume ();
     }
 
     fn close(&mut self, span: SpanId) {
         self.ops.push(`close:${span}`);
+        resume ();
     }
 
     fn event(&mut self, event: Event) {
         if event.meta.level >= self.min {
             self.events.push(event);
         }
+        resume ();
     }
 }
 
@@ -824,6 +848,7 @@ impl<T: Serialize> Log for Context<T> {
             fields: Value::Object(merged),
             parent: event.parent,
         });
+        resume ();
     }
 
     ..forward
@@ -919,6 +944,7 @@ impl Log for Filter {
         if event.meta.level >= self.threshold(event.meta.target) {
             Log::event(event);
         }
+        resume ();
     }
 
     ..forward

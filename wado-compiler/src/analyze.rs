@@ -23,7 +23,7 @@ use crate::symbol::{
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
     WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
-use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
+use crate::syntax::{is_statement_keyword, statement_keyword_name_message};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::exported_interfaces;
@@ -42,7 +42,7 @@ fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
     struct Names(Vec<(String, Span)>);
     impl Names {
         fn check(&mut self, name: &str, span: Span) {
-            if is_expression_keyword(name) {
+            if is_statement_keyword(name) {
                 self.0.push((name.to_string(), span));
             }
         }
@@ -329,7 +329,7 @@ impl AnalyzeError {
             ),
             AnalyzeError::KeywordName { name, span } => (
                 Code::InvalidSyntax,
-                expression_keyword_name_message(name),
+                statement_keyword_name_message(name),
                 *span,
             ),
             AnalyzeError::MalformedUnavailable { fault, span } => (
@@ -1207,7 +1207,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        if !is_expression_keyword(name) {
+        if !is_statement_keyword(name) {
             return Ok(());
         }
         self.logger.error_in(

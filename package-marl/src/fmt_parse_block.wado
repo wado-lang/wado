@@ -126,10 +126,7 @@ fn try_ref_def_line_chars(chars: &List<char>) -> Option<LinkReferenceDef> {
     if !(q < len && chars[q] == ':') {
         return null;
     }
-    q += 1;
-    while q < len && chars[q] matches { ' ' | '\t' } {
-        q += 1;
-    }
+    q = skip_blanks(chars, q + 1);
     if q >= len {
         return null;
     }
@@ -183,6 +180,11 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &
             continue;
         }
         let chars = line.to_chars();
+        if !para.is_empty() && !interrupts_paragraph(&chars, false) && !table_starts_at(lines, i, end) {
+            para.push(*line);
+            i += 1;
+            continue;
+        }
         if let Some(def) = try_ref_def_line_chars(&chars) {
             // Emitted as a node in place (not just recorded in `refs`, which
             // only exists to resolve forward references) so the printer
@@ -193,7 +195,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &
             i += 1;
             continue;
         }
-        if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
+        if is_html_block_start(&chars) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, &chars, i, end);
             out.push(html_block_node(lines_slice(lines, i, block_end).join("\n").trim_end().to_string()));
@@ -228,12 +230,12 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &
             i = parse_blockquote(lines, i, end, origin, refs, &mut out);
             continue;
         }
-        if is_list_marker(&chars) {
+        if parse_list_marker(&chars) matches { Some(_) } {
             flush_paragraph(&mut out, &mut para, refs);
             i = parse_list(lines, i, end, origin, refs, &mut out);
             continue;
         }
-        if i + 1 < end && line_has_pipe(line) && line_has_pipe(&lines[i + 1]) && is_table_header(line, &lines[i + 1]) {
+        if table_starts_at(lines, i, end) {
             flush_paragraph(&mut out, &mut para, refs);
             i = parse_table(lines, i, end, refs, &mut out);
             continue;
@@ -275,39 +277,125 @@ fn html_block_node(block: String) -> Node {
     };
 }
 
-/// A line starting (after up to 3 spaces of indent) with a syntactically
-/// plausible HTML tag open/close, comment, or processing instruction. A
-/// "tag name" is only ever followed by whitespace, `>`, `/`, or end of line
-/// — never `:`, which distinguishes it from a scheme-prefixed autolink like
-/// `<https://example.com>`.
+/// Whether this line opens a CommonMark HTML block of any type (1–7).
 fn is_html_block_start(chars: &List<char>) -> bool {
+    return html_block_interrupts_paragraph(chars) || is_lone_complete_tag(chars);
+}
+
+/// Whether this line opens an HTML block that may interrupt an open paragraph:
+/// CommonMark's types 1–6. Type 7 cannot, so its line stays paragraph text.
+fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
+    return html_block_end_markers(chars) matches { Some(_) } || opens_block_level_tag(chars);
+}
+
+/// The block-level tag names that open a type-6 HTML block.
+global BLOCK_LEVEL_TAGS: List<String> = [
+    "address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center", "col", "colgroup",
+    "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form", "frame",
+    "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header", "hr", "html", "iframe", "legend", "li", "link",
+    "main", "menu", "menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param", "search", "section",
+    "summary", "table", "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
+];
+
+/// A type-6 start: `<` or `</`, a block-level tag name in any case, then
+/// whitespace, the end of the line, `>`, or `/>`.
+fn opens_block_level_tag(chars: &List<char>) -> bool {
     let len = chars.len();
     let mut p = skip_indent(chars, len);
     if p >= len || chars[p] != '<' {
         return false;
     }
     p += 1;
-    if p < len && chars[p] matches { '!' | '?' } {
-        return true;
-    }
     if p < len && chars[p] == '/' {
         p += 1;
     }
-    if !(p < len && chars[p].is_ascii_alphabetic()) {
+    let name_start = p;
+    while p < len && chars[p].is_ascii_alphanumeric() {
+        p += 1;
+    }
+    if !BLOCK_LEVEL_TAGS.contains_str(slice_chars(chars, name_start, p).to_ascii_lowercase()) {
         return false;
     }
-    p += 1;
+    return p >= len || chars[p] matches { ' ' | '\t' | '>' } || chars[p] == '/' && p + 1 < len && chars[p + 1] == '>';
+}
+
+/// A type-7 start: one complete open or closing tag, and nothing after it but
+/// whitespace.
+fn is_lone_complete_tag(chars: &List<char>) -> bool {
+    let len = chars.len();
+    let p = skip_indent(chars, len);
+    if p >= len || chars[p] != '<' {
+        return false;
+    }
+    let Some(end) = html_tag_end(chars, p) else {
+        return false;
+    };
+    return is_blank(slice_chars(chars, end, len));
+}
+
+/// The position past the open or closing tag that starts at `chars[lt]`, read
+/// by CommonMark's raw HTML grammar, or `null` where no tag starts there. A tag
+/// name is never followed by `:`, so `<https://example.com>` is no tag.
+fn html_tag_end(chars: &List<char>, lt: i32) -> Option<i32> {
+    let len = chars.len();
+    let mut p = lt + 1;
+    let closing = p < len && chars[p] == '/';
+    if closing {
+        p += 1;
+    }
+    if !(p < len && chars[p].is_ascii_alphabetic()) {
+        return null;
+    }
     while p < len && (chars[p].is_ascii_alphanumeric() || chars[p] == '-') {
         p += 1;
     }
-    return p >= len || chars[p] matches { ' ' | '\t' | '>' | '/' };
+    if !closing {
+        loop {
+            let Some(after) = html_attribute_end(chars, p) else {
+                break;
+            };
+            p = after;
+        }
+    }
+    p = skip_blanks(chars, p);
+    if !closing && p < len && chars[p] == '/' {
+        p += 1;
+    }
+    return if p < len && chars[p] == '>' { Option::Some(p + 1) } else { null };
 }
 
-/// Whether an HTML block starting on this line may interrupt an open
-/// paragraph. CommonMark types 1–5 do; any other tag is read as type 7, which
-/// cannot, and so continues the paragraph as inline content.
-fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
-    return html_block_end_markers(chars) matches { Some(_) };
+/// The position past one whitespace-led attribute at `chars[p]`, or `null`
+/// where none is there.
+fn html_attribute_end(chars: &List<char>, p: i32) -> Option<i32> {
+    let len = chars.len();
+    let mut q = skip_blanks(chars, p);
+    if q == p || !(q < len && (chars[q].is_ascii_alphabetic() || chars[q] matches { '_' | ':' })) {
+        return null;
+    }
+    while q < len && (chars[q].is_ascii_alphanumeric() || chars[q] matches { '_' | '.' | ':' | '-' }) {
+        q += 1;
+    }
+    let eq = skip_blanks(chars, q);
+    if !(eq < len && chars[eq] == '=') {
+        return Option::Some(q);
+    }
+    let v = skip_blanks(chars, eq + 1);
+    if v >= len {
+        return null;
+    }
+    if chars[v] matches { '"' | '\'' } {
+        for let mut k = v + 1; k < len; k += 1 {
+            if chars[k] == chars[v] {
+                return Option::Some(k + 1);
+            }
+        }
+        return null;
+    }
+    let mut k = v;
+    while k < len && !chars[k] matches { ' ' | '\t' | '"' | '\'' | '=' | '<' | '>' | '`' } {
+        k += 1;
+    }
+    return if k > v { Option::Some(k) } else { null };
 }
 
 /// Where a raw HTML block starting at `lines[start]` (whose `chars` these are)
@@ -598,13 +686,17 @@ fn parse_blockquote(
     refs: &RefTable,
     out: &mut List<Node>,
 ) -> i32 {
-    let mut inner: List<String> = [];
+    let mut inner = ContainerLines {};
     let mut k = start;
-    while k < end && is_blockquote(&lines[k].to_chars()) {
-        inner.push(strip_blockquote_marker(&lines[k]));
+    while k < end {
+        if is_blockquote(&lines[k].to_chars()) {
+            inner.claim(strip_blockquote_marker(&lines[k]));
+        } else if !inner.take_lazy(&lines[k], lines[k], refs) {
+            break;
+        }
         k += 1;
     }
-    out.push(Node::BlockQuote(parse_blocks(&inner, 0, inner.len(), origin + start, refs)));
+    out.push(Node::BlockQuote(parse_blocks(&inner.lines, 0, inner.lines.len(), origin + start, refs)));
     return k;
 }
 
@@ -618,18 +710,10 @@ struct ListMarker {
     number: i32,
 }
 
-fn is_list_marker(chars: &List<char>) -> bool {
-    return parse_list_marker(chars) matches { Some(_) };
-}
-
 fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     let len = chars.len();
-    let mut p = 0;
-    let mut indent = 0;
-    while p < len && is_indent(chars[p]) {
-        indent += 1;
-        p += 1;
-    }
+    let indent = skip_blanks(chars, 0);
+    let mut p = indent;
     if p >= len {
         return null;
     }
@@ -645,7 +729,8 @@ fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
             number = number * 10 + (chars[q] as i32 - '0' as i32);
             q += 1;
         }
-        if q < len && chars[q] matches { '.' | ')' } {
+        // CommonMark caps an ordered marker at nine digits.
+        if q - p <= 9 && q < len && chars[q] matches { '.' | ')' } {
             ordered = true;
             delim = chars[q];
             p = q + 1;
@@ -655,11 +740,11 @@ fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     } else {
         return null;
     }
-    if p < len && !chars[p] matches { ' ' | '\t' } {
+    if p < len && !is_indent(chars[p]) {
         return null;
     }
     let mut content_col = p;
-    if content_col < len && chars[content_col] matches { ' ' | '\t' } {
+    if content_col < len && is_indent(chars[content_col]) {
         content_col += 1;
     }
     return Option::Some(ListMarker { indent, content_col, ordered, delim, number });
@@ -711,9 +796,9 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
         }
         let loose = items.len() > 0 && item_start > k;
 
-        let mut inner: List<String> = [];
+        let mut inner = ContainerLines {};
         let [marker, first_rest] = strip_task_marker(&cut_prefix(&lines[item_start], content_col));
-        inner.push(first_rest);
+        inner.claim(first_rest);
         let mut j = item_start + 1;
         loop {
             if j >= end {
@@ -725,35 +810,31 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &Re
                     && line_indent(&lines[j + 1]) >= content_col
                     && parse_list_marker(&lines[j + 1].to_chars()) matches { None };
                 if continues {
-                    inner.push("");
+                    inner.claim("");
                     j += 1;
                     continue;
                 }
                 break;
             }
             if line_indent(&lines[j]) >= content_col {
-                inner.push(dedent(&lines[j], content_col));
+                inner.claim(dedent(&lines[j], content_col));
                 j += 1;
                 continue;
             }
-            // Lazy continuation: an under-indented line still belongs to the
-            // item's open paragraph, regardless of container indent, as long
-            // as it doesn't itself start a new block (CommonMark's "lazy
-            // continuation line" rule — the same reason a top-level
-            // paragraph line needs no minimum indentation at all).
-            let can_lazy = match inner.get(inner.len() - 1) {
-                Some(prev) => !is_blank(&prev) && !interrupts_paragraph(&lines[j]),
-                None => false,
-            };
-            if can_lazy {
-                inner.push(dedent(&lines[j], content_col));
+            if inner.take_lazy(&lines[j], dedent(&lines[j], content_col), refs) {
                 j += 1;
                 continue;
             }
             break;
         }
 
-        items.push(MdItem { marker, children: parse_blocks(&inner, 0, inner.len(), origin + item_start, refs), loose });
+        items.push(MdItem { marker, children: parse_blocks(
+            &inner.lines,
+            0,
+            inner.lines.len(),
+            origin + item_start,
+            refs,
+        ), loose });
         k = j;
     }
 
@@ -794,31 +875,76 @@ fn dedent<S: AsStrSlice>(line: S, n: i32) -> String {
     return slice_chars(&chars, p, len);
 }
 
-/// Whether `line` would start a block that can interrupt an open paragraph —
-/// the same dispatch conditions `parse_blocks` checks before falling
-/// through to plain paragraph text, reused here to decide whether an
-/// under-indented list-item line is a lazy continuation or the item's end.
-fn interrupts_paragraph<S: AsStrSlice>(line: S) -> bool {
-    let chars = line.to_chars();
-    if is_html_block_start(&chars) {
+/// Whether a line starts a block where it would otherwise continue an open
+/// paragraph, either inside the paragraph's own container or `lazy`ly from
+/// outside it. CommonMark starts no block four columns in, and never a type-7
+/// HTML block, a link reference definition or indented code there. A list
+/// marker inside the container needs an item with content, numbered 1 if
+/// ordered, so a wrapped `2010) …` stays text. A lazy line ends at any
+/// marker, as commonmark.js and markdown-it read it.
+internal fn interrupts_paragraph(chars: &List<char>, lazy: bool) -> bool {
+    let len = chars.len();
+    let p = skip_indent(chars, len);
+    if p < len && is_indent(chars[p]) {
+        return false;
+    }
+    if html_block_interrupts_paragraph(chars) || fence_marker(chars) matches { Some(_) } || heading_level(chars) > 0 {
         return true;
     }
-    if fence_marker(&chars) matches { Some(_) } {
+    if is_thematic_break(slice_chars(chars, p, len)) || is_blockquote(chars) {
         return true;
     }
-    if heading_level(&chars) > 0 {
+    return match parse_list_marker(chars) {
+        Some(m) => lazy || (!m.ordered || m.number == 1) && !is_blank(slice_chars(chars, m.content_col, len)),
+        None => false,
+    };
+}
+
+/// Lines a container (a blockquote or a list item) claims by its marker or
+/// indent, and whether they end in an open paragraph that a line the
+/// container does not claim may continue lazily.
+struct ContainerLines {
+    lines: List<String> = [],
+    /// Whether `lines` end in an open paragraph, or `null` until asked since
+    /// the last claimed line. A lazy line leaves the paragraph open, so only a
+    /// claimed line makes the answer stale.
+    open_paragraph: Option<bool> = null,
+}
+
+impl ContainerLines {
+    fn claim(&mut self, line: String) {
+        self.lines.push(line);
+        self.open_paragraph = null;
+    }
+
+    /// Takes `line` (as `stored`) if it continues the open paragraph lazily:
+    /// it must start no block of its own.
+    fn take_lazy<S: AsStrSlice>(&mut self, line: S, stored: String, refs: &RefTable) -> bool {
+        if is_blank(&line) || interrupts_paragraph(&line.to_chars(), true) || !self.ends_in_paragraph(refs) {
+            return false;
+        }
+        self.lines.push(stored);
         return true;
     }
-    if is_thematic_break(line) {
-        return true;
+
+    fn ends_in_paragraph(&mut self, refs: &RefTable) -> bool {
+        if let Some(open) = self.open_paragraph {
+            return open;
+        }
+        let open = !is_blank(&self.lines[self.lines.len() - 1])
+            && last_block_is_paragraph(&parse_blocks(&self.lines, 0, self.lines.len(), 0, refs));
+        self.open_paragraph = Option::Some(open);
+        return open;
     }
-    if is_blockquote(&chars) {
-        return true;
-    }
-    if is_list_marker(&chars) {
-        return true;
-    }
-    return false;
+}
+
+fn last_block_is_paragraph(blocks: &List<Node>) -> bool {
+    return match blocks.get(blocks.len() - 1) {
+        Some(Node::Paragraph(_)) => true,
+        Some(Node::BlockQuote(quoted)) => last_block_is_paragraph(&quoted),
+        Some(Node::List(list)) => last_block_is_paragraph(&list.items[list.items.len() - 1].children),
+        _ => false,
+    };
 }
 
 fn line_indent<S: AsStrSlice>(line: S) -> i32 {
@@ -834,6 +960,15 @@ fn line_indent<S: AsStrSlice>(line: S) -> i32 {
 }
 
 // --- tables (GFM) ---
+
+/// Whether `lines[i]` and the line after it are a GFM table's header and
+/// delimiter rows.
+fn table_starts_at(lines: &List<String>, i: i32, end: i32) -> bool {
+    return i + 1 < end
+        && line_has_pipe(&lines[i])
+        && line_has_pipe(&lines[i + 1])
+        && is_table_header(&lines[i], &lines[i + 1]);
+}
 
 fn line_has_pipe<S: AsStrSlice>(line: S) -> bool {
     return line.contains("|");
@@ -1034,4 +1169,13 @@ fn skip_indent(chars: &List<char>, len: i32) -> i32 {
         p += 1;
     }
     return p;
+}
+
+/// The index of the first non-indent character at or after `p`.
+fn skip_blanks(chars: &List<char>, p: i32) -> i32 {
+    let mut q = p;
+    while q < chars.len() && is_indent(chars[q]) {
+        q += 1;
+    }
+    return q;
 }

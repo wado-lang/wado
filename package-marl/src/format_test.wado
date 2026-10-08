@@ -23,6 +23,21 @@ test "format preserves an angle-bracketed autolink" {
     assert format("<https://example.com>\n") == "<https://example.com>\n";
 }
 
+test "format keeps a wrapped line starting with a number and a parenthesis in its paragraph" {
+    assert format("a (SAC\n2010) b\n") == "a (SAC\n2010) b\n";
+}
+
+test "format keeps a lazy continuation line in its blockquote" {
+    assert format("> a\nb\n") == format("> a\n> b\n");
+}
+
+test "format keeps a continuation line that would start a block in its paragraph" {
+    assert format("a\n    - b\n") == "a\n    - b\n";
+    assert format("a\n    # h\n") == "a\n    # h\n";
+    assert format("> a\n    - b\n") == "> a\n>     - b\n";
+    assert format("- [ ] outer\n      - inner\n") == "- [ ] outer\n      - inner\n";
+}
+
 test "format keeps an all-same ordered list numbering" {
     assert format("1. a\n1. b\n1. c\n") == "1. a\n1. b\n1. c\n";
 }

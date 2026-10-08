@@ -52,7 +52,7 @@ type "functype//opt_licm_reload_after_value_tail.wado/$cm_binding__Stdout_write_
 
 type "functype//opt_licm_reload_after_value_tail.wado/$cm_export__run" = fn();  // TypeId(18)
 
-type "functype//opt_licm_reload_after_value_tail.wado/$initialize_module" = fn();  // TypeId(19)
+type "functype//opt_licm_reload_after_value_tail.wado/$initialize_modules$cold0" = fn();  // TypeId(19)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(20)
 
@@ -154,8 +154,7 @@ fn "opt_licm_reload_after_value_tail.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_licm_reload_after_value_tail.wado::$modules_initialized);
         cold_path;
-        "opt_licm_reload_after_value_tail.wado/$initialize_module"();
-        global:opt_licm_reload_after_value_tail.wado::$modules_initialized = 1;
+        "opt_licm_reload_after_value_tail.wado/$initialize_modules$cold0"();
     };
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_17 = local.tee self_11("opt_licm_reload_after_value_tail.wado/arith_tail"(global:opt_licm_reload_after_value_tail.wado::G)) < 0;
@@ -188,15 +187,15 @@ fn "opt_licm_reload_after_value_tail.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_licm_reload_after_value_tail.wado::$modules_initialized);
         cold_path;
-        "opt_licm_reload_after_value_tail.wado/$initialize_module"();
-        global:opt_licm_reload_after_value_tail.wado::$modules_initialized = 1;
+        "opt_licm_reload_after_value_tail.wado/$initialize_modules$cold0"();
     };
     "opt_licm_reload_after_value_tail.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "opt_licm_reload_after_value_tail.wado/$initialize_module"() {
+fn "opt_licm_reload_after_value_tail.wado/$initialize_modules$cold0"() {
     global:opt_licm_reload_after_value_tail.wado::G = struct.new "opt_licm_reload_after_value_tail.wado//P" { x: 1, y: 0 };
+    global:opt_licm_reload_after_value_tail.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

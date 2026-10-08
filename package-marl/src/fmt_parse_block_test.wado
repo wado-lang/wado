@@ -245,29 +245,30 @@ test "parse_document lazily continues a nested list item's paragraph at less tha
     // real corpus idempotency check against wado-lsp/AGENTS.md's nested
     // `use { Eff::{f, g} }` list item, whose second line is indented only
     // to the outer task item's column.
-    let source = "- [ ] outer\n      - inner one line\n      - inner two lines\n      continued\n";
+    let source = "- [ ] outer\n  - inner one line\n  - inner two lines\n  continued\n";
     let children = doc_children(&source);
     if let Some(Node::List(outer)) = children.get(0) {
-        if let Some(outer_item) = outer.items.get(0) {
-            // children[0] is the item's own "outer" paragraph; the nested
-            // list is its second child (see "parse_document nests a
-            // sub-list inside a list item" above for the same shape).
-            if let Some(Node::List(inner)) = outer_item.children.get(1) {
-                assert inner.items.len() == 2;
-                if let Some(second) = inner.items.get(1) {
-                    // One Paragraph with a SoftBreak joining both lines, not
-                    // a Paragraph followed by a stray sibling paragraph.
-                    assert second.children.len() == 1;
-                    assert second.children.get(0) matches { Some(Node::Paragraph(_)) };
-                } else {
-                    panic("expected a second inner item");
-                }
-            } else {
-                panic("expected a nested List as the outer item's first child");
-            }
+        if let Some(Node::List(inner)) = outer.items[0].children.get(1) {
+            assert inner.items.len() == 2;
+            // One Paragraph with a SoftBreak joining both lines, not a
+            // Paragraph followed by a stray sibling paragraph.
+            assert inner.items[1].children.len() == 1;
+            assert inner.items[1].children.get(0) matches { Some(Node::Paragraph(_)) };
         } else {
-            panic("expected an outer item");
+            panic("expected a nested List as the outer item's second child");
         }
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document reads a marker four columns into an item's paragraph as text" {
+    // CommonMark measures from the item's content column, so `- inner` six
+    // columns in is paragraph text under `- [ ] outer`, not a nested list.
+    let children = doc_children("- [ ] outer\n      - inner\n");
+    if let Some(Node::List(outer)) = children.get(0) {
+        assert outer.items[0].children.len() == 1;
+        assert outer.items[0].children.get(0) matches { Some(Node::Paragraph(_)) };
     } else {
         panic("expected a List node");
     }
@@ -317,6 +318,121 @@ test "parse_document still starts a raw HTML block at the top of a block" {
     let source = "<div>\ntext\n</div>";
     let children = doc_children(&source);
     assert children.get(0) matches { Some(Node::Html(_)) };
+}
+
+test "parse_document keeps an ordered marker not numbered 1 in the open paragraph" {
+    let children = doc_children("a (SAC\n2010) b");
+    assert children.len() == 1;
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document lets an ordered marker numbered 1 interrupt an open paragraph" {
+    let children = doc_children("a\n1. b");
+    assert children.len() == 2;
+    assert children.get(1) matches { Some(Node::List(_)) };
+}
+
+test "parse_document keeps an empty list item in the open paragraph" {
+    assert doc_children("a\n1.\nb").len() == 1;
+    assert doc_children("a\n*\nb").len() == 1;
+}
+
+test "parse_document reads more than nine digits as text, not a list marker" {
+    let children = doc_children("1234567890. a");
+    assert children.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document keeps an ordered marker not numbered 1 in a list item's paragraph" {
+    let children = doc_children("- a\n  2. b");
+    if let Some(Node::List(list)) = children.get(0) {
+        assert list.items[0].children.len() == 1;
+        assert list.items[0].children.get(0) matches { Some(Node::Paragraph(_)) };
+    } else {
+        panic("expected a List node");
+    }
+}
+
+test "parse_document ends a lazy continuation at any list marker" {
+    // The line would only continue the paragraph lazily, so the paragraph
+    // rule does not apply and `2.` starts a list (as commonmark.js reads it).
+    let children = doc_children("> a\n2. b");
+    assert children.len() == 2;
+    assert children.get(0) matches { Some(Node::BlockQuote(_)) };
+    assert children.get(1) matches { Some(Node::List(_)) };
+}
+
+test "parse_document lazily continues a blockquote's paragraph" {
+    let children = doc_children("> a\nb");
+    assert children.len() == 1;
+    if let Some(Node::BlockQuote(quoted)) = children.get(0) {
+        assert quoted.len() == 1;
+        assert quoted.get(0) matches { Some(Node::Paragraph(_)) };
+    } else {
+        panic("expected a BlockQuote node");
+    }
+}
+
+test "parse_document lazily continues a paragraph nested in a container" {
+    assert doc_children("> - a\nb").len() == 1;
+    assert doc_children("- > a\nb").len() == 1;
+}
+
+test "parse_document ends a container whose last block is not a paragraph" {
+    assert doc_children("> # h\nb").len() == 2;
+    assert doc_children("> ```\nb").len() == 2;
+    assert doc_children("- # h\nb").len() == 2;
+    assert doc_children("- ```\nb").len() == 2;
+}
+
+fn quoted_children<S: AsStrSlice>(source: S) -> List<Node> {
+    let children = doc_children(source);
+    assert children.len() == 1;
+    return match children[0] {
+        Node::BlockQuote(quoted) => quoted,
+        _ => panic("expected a lone BlockQuote node"),
+    };
+}
+
+test "parse_document starts no block four columns into an open paragraph" {
+    assert doc_children("a\n    - b").len() == 1;
+    assert doc_children("a\n    # h").len() == 1;
+    assert doc_children("a\n    ```\nb").len() == 1;
+    assert quoted_children("> a\n    - b").len() == 1;
+    assert quoted_children("> a\n    ***").len() == 1;
+}
+
+test "parse_document lets no type-7 HTML line end a lazy continuation" {
+    assert quoted_children("> a\n<b>x</b> y").len() == 1;
+    assert quoted_children("> a\n<b>").len() == 1;
+}
+
+test "parse_document lets a type-6 HTML block interrupt a paragraph" {
+    let children = doc_children("a\n<div>\nb");
+    assert children.len() == 2;
+    assert children.get(1) matches { Some(Node::Html(_)) };
+    assert doc_children("> a\n<div>").len() == 2;
+}
+
+test "parse_document reads a type-7 HTML block only from a complete tag alone on its line" {
+    assert doc_children("<b>x</b> y").get(0) matches { Some(Node::Paragraph(_)) };
+    assert doc_children("<b>").get(0) matches { Some(Node::Html(_)) };
+    assert doc_children("<a href=\"x > y\" title='t' hidden>").get(0) matches { Some(Node::Html(_)) };
+    assert doc_children("<a href=\"x>").get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document lets no link reference definition interrupt a paragraph" {
+    assert doc_children("a\n[x]: /u").len() == 1;
+    let quoted = quoted_children("> a\n[x]: /u");
+    assert quoted.len() == 1;
+    assert quoted.get(0) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document reads a long lazy continuation in nested quotes in linear time" {
+    let mut source = "> > > > > > a";
+    for let _ of 0..<500 {
+        source.push_str("\nb");
+    }
+    assert quoted_children(&source).len() == 1;
 }
 
 test "parse_document lets an HTML comment interrupt an open paragraph" {

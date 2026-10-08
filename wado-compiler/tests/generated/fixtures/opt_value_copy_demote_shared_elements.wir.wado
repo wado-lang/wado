@@ -69,9 +69,9 @@ type "functype//opt_value_copy_demote_shared_elements.wado/$cm_binding__Stdout_w
 
 type "functype//opt_value_copy_demote_shared_elements.wado/$cm_export__run" = fn();  // TypeId(26)
 
-type "functype//opt_value_copy_demote_shared_elements.wado/$initialize_module" = fn();  // TypeId(27)
+type "functype//opt_value_copy_demote_shared_elements.wado/$value_copy$opt_value_copy_demote_shared_elements.wado/S" = fn(ref "opt_value_copy_demote_shared_elements.wado//S") -> ref "opt_value_copy_demote_shared_elements.wado//S";  // TypeId(27)
 
-type "functype//opt_value_copy_demote_shared_elements.wado/$value_copy$opt_value_copy_demote_shared_elements.wado/S" = fn(ref "opt_value_copy_demote_shared_elements.wado//S") -> ref "opt_value_copy_demote_shared_elements.wado//S";  // TypeId(28)
+type "functype//opt_value_copy_demote_shared_elements.wado/$initialize_modules$cold0" = fn();  // TypeId(28)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(29)
 
@@ -365,8 +365,7 @@ fn "opt_value_copy_demote_shared_elements.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_value_copy_demote_shared_elements.wado::$modules_initialized);
         cold_path;
-        "opt_value_copy_demote_shared_elements.wado/$initialize_module"();
-        global:opt_value_copy_demote_shared_elements.wado::$modules_initialized = 1;
+        "opt_value_copy_demote_shared_elements.wado/$initialize_modules$cold0"();
     };
     a = "opt_value_copy_demote_shared_elements.wado/fresh"();
     $local_7_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -444,19 +443,19 @@ fn "opt_value_copy_demote_shared_elements.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_value_copy_demote_shared_elements.wado::$modules_initialized);
         cold_path;
-        "opt_value_copy_demote_shared_elements.wado/$initialize_module"();
-        global:opt_value_copy_demote_shared_elements.wado::$modules_initialized = 1;
+        "opt_value_copy_demote_shared_elements.wado/$initialize_modules$cold0"();
     };
     "opt_value_copy_demote_shared_elements.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "opt_value_copy_demote_shared_elements.wado/$initialize_module"() {
-    global:opt_value_copy_demote_shared_elements.wado::G = struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(), used: 0 };
-}
-
 fn "opt_value_copy_demote_shared_elements.wado/$value_copy$opt_value_copy_demote_shared_elements.wado/S"(v) {
     return struct.new "opt_value_copy_demote_shared_elements.wado//S" { v: v.v };
+}
+
+fn "opt_value_copy_demote_shared_elements.wado/$initialize_modules$cold0"() {
+    global:opt_value_copy_demote_shared_elements.wado::G = struct.new "core:prelude//List<opt_value_copy_demote_shared_elements.wado/S>" { repr: array.new_fixed<ref "opt_value_copy_demote_shared_elements.wado//S">(), used: 0 };
+    global:opt_value_copy_demote_shared_elements.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

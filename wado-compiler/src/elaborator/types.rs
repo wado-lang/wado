@@ -1337,10 +1337,26 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `resume` expression appeared outside an effect handler method body.
-    /// `resume value` is only valid inside the body of a method belonging
-    /// to an `impl Effect for Type` block (see WEP 2026-04-11).
+    /// `resume` outside the body of a method of an `impl Effect for Type`
+    /// block (see WEP 2026-04-11).
     ResumeOutsideHandler {
+        span: Span,
+    },
+
+    /// `return` in a handler method, which answers the caller with `resume`.
+    ReturnInHandler {
+        span: Span,
+    },
+
+    /// `?` in a handler method: it returns its error, which only `resume` can
+    /// hand to the caller.
+    TryInHandler {
+        span: Span,
+    },
+
+    /// A handler method with a path that reaches its end without `resume`.
+    MissingResume {
+        function: String,
         span: Span,
     },
 
@@ -2732,8 +2748,26 @@ impl TypeError {
                 *span,
             ),
             TypeError::ResumeOutsideHandler { span } => (
-                Code::UnsupportedFeature,
+                Code::EffectHandlerInvalid,
                 "`resume` is only valid inside an effect handler method body".to_string(),
+                *span,
+            ),
+            TypeError::ReturnInHandler { span } => (
+                Code::EffectHandlerInvalid,
+                "cannot use `return` in an effect handler method; use `resume` instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::TryInHandler { span } => (
+                Code::EffectHandlerInvalid,
+                "cannot use `?` in an effect handler method; hand the error over with `resume` \
+                 instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::MissingResume { function, span } => (
+                Code::EffectHandlerInvalid,
+                format!("handler method `{function}` can reach its end without `resume`"),
                 *span,
             ),
             TypeError::AsyncUserEffectHandlerUnsupported {
@@ -4475,7 +4509,7 @@ mod tests {
     #[test]
     fn render_carries_diagnostic_code_and_span() {
         let (code, message, sp) = TypeError::ResumeOutsideHandler { span: span() }.render();
-        assert_matches!(code, Code::UnsupportedFeature);
+        assert_matches!(code, Code::EffectHandlerInvalid);
         assert_eq!(
             message,
             "`resume` is only valid inside an effect handler method body"

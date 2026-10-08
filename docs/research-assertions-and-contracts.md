@@ -1,15 +1,17 @@
 # Research: Assertions and Contracts in Other Languages
 
-Wado's `assert` is never removed, in any build. The question that started this
-survey is a different kind of check: one that states a function's contract,
-runs in a build meant to find bugs, and is skipped in a build meant to ship.
-The `_unchecked` functions are the first candidates. Such a check could be a
-second assertion statement, or a contract written on the function's signature.
+Wado checks the contracts of its `_unchecked` functions at run time, in a build
+meant to find bugs. Each contract is written twice: as prose in the function's
+doc comment, and as a check in its body. The open question is whether a
+contract gets syntax on the function's signature. There it would be an
+executable comment: documentation that a reader, a tool and a checking build
+all read from one place.
 
-This survey records where Wado stood on 2026-10-06 (`a03e903f9`), what other
-languages chose, and what their users say about it. It feeds no WEP yet.
+This survey records where Wado stood on 2026-10-08 (`037dba480`), how other
+languages write contracts, and what their users and researchers say about the
+choices. It feeds no WEP yet.
 
-## Wado on 2026-10-06
+## Wado on 2026-10-08
 
 ### `assert`
 
@@ -18,8 +20,7 @@ assertion: at every optimization level the condition is evaluated, and a false
 one traps. A program can therefore rely on `assert` to protect its state.
 
 The only part a build may drop is the power-assert message.
-`-f bare-asserts` (on at `-Os`) makes a failed assertion trap silently, and
-compiles in nothing that captures operands or builds the message.
+`-f bare-asserts` (on at `-Os`) makes a failed assertion trap silently.
 
 `panic(message)` and `unreachable()` trap on purpose. Nothing recovers from a
 trap.
@@ -39,30 +40,56 @@ Where the specification leaves behavior open, it names one of three classes:
   and GC references stay well-typed.
 
 A contract violation is a program reaching an operation outside the contract
-that operation states. It is a second axis, independent of the class. It is
-always a bug, and each operation says which class its violation has.
-Unconstrained behavior arises from a contract violation and from nothing else.
+that operation states. It is always a bug, and each operation says which class
+its violation has. Unconstrained behavior arises from a contract violation and
+from nothing else.
 
-Any build may detect a contract violation and trap. No build may trap on
-unspecified or host-defined behavior that is not a contract violation. The WEP
-lists the gap this question is about: no build detects a contract violation
-yet.
+### Contract checks
+
+[Contract Checks](./spec-assertions.md#contract-checks) holds the rule, and
+[WEP: Contract Checks](./wep-2026-10-06-contract-checks.md) says why.
+
+- `-f contract-checks` and `-f no-contract-checks` choose whether a build
+  checks. The test world checks by default at every optimization level, and any
+  other world checks by default at `-O0` only.
+- A checking build traps on a call outside the contract, as a failed assertion
+  does, message included.
+- A build that does not check evaluates nothing, and the compiler does not
+  assume the contract holds. The violation keeps the class the function's
+  documentation gives it.
+- Only the standard library writes a check. Open to every program, a check
+  would be a removable `assert`.
+
+A checked function looks like this today. The contract appears once as prose
+and once as code:
+
+```text
+/// # Contract
+/// - `0 <= index < self.len()`.
+///
+/// Any other `index` is a contract violation, and the result is
+/// unspecified: a byte of the backing array past `len()`, or a trap.
+pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+    if builtin::contract_checks() {
+        assert 0 <= index < self.used, "index out of bounds";
+    }
+    return self.repr[index];
+}
+```
+
+The WEP lists three known gaps that bear on syntax:
+
+- A failed check reports the position inside the `_unchecked` function, not
+  the call that broke the contract.
+- A clause that costs more than the function it guards is not checked, such as
+  "the bytes are UTF-8" in `from_utf8_unchecked`.
+- Contracts have no syntax.
 
 ### `_unchecked` functions
 
 [WEP: String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
 sets the pattern. A checked method is `assert` on its inputs followed by a call
-to its `_unchecked` twin. `String::truncate` is one:
-
-```text
-assert byte_len >= 0, "negative length";
-assert self.is_char_boundary(byte_len), "not on a UTF-8 character boundary";
-self.truncate_unchecked(byte_len);
-```
-
-Each `_unchecked` function in `core:prelude` states its contract in its doc
-comment, most under a `# Contract` heading, and names the class of a
-violation. The contract is prose, and only a person reads it.
+to its `_unchecked` twin.
 
 | Function                     | Contract                                                   | Class of a violation |
 | ---------------------------- | ---------------------------------------------------------- | -------------------- |
@@ -78,28 +105,24 @@ Wado has no `unsafe` block, and the behavior-classes WEP plans none.
 
 [Overflow and Division by Zero](./spec-expressions.md#overflow-and-division-by-zero)
 holds the rule. Integer `+`, `-` and `*` wrap in two's complement at every
-width, and their overflow never traps. Overflow is therefore not a contract
-violation in Wado. Division by zero and a signed `MIN / -1` trap, as the Wasm
-instructions do.
+width, so overflow is not a contract violation. Division by zero and a signed
+`MIN / -1` trap, as the Wasm instructions do.
 
 ### Effects
 
 [WEP: A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 makes a function without a `with` clause effect-free. The exception is an
-`#[ambient]` function such as `log_stderr`, whose body is exempt from effect
-checking. Whether an unused call to an ambient function runs is unspecified.
+`#[ambient]` function such as `log_stderr`. A predicate written in Wado can
+therefore be checked for effects, though it can still trap: an index out of
+range or a failed `assert` inside a called function does.
 
-A predicate can still trap without performing an effect: an index out of range
-or a failed `assert` inside a called function does.
-
-### The test world
-
-`wado test` compiles to the test world. It already trades speed for finding
-bugs: it uses the `debug` allocator, which never reuses freed memory and
-poisons it with `0xFF`. The behavior-classes WEP names the test
-world as a build that could keep the checks an `_unchecked` function elides.
+`with` already follows a function's return type, so any clause added to the
+signature has to sit beside it.
 
 ## Assertions elsewhere
+
+An assertion is a statement in the body, unlike the contracts in the next
+section.
 
 | Language | Check that always runs           | Check a build removes                         | What a removed check means                          |
 | -------- | -------------------------------- | --------------------------------------------- | --------------------------------------------------- |
@@ -131,18 +154,16 @@ that must hold.
 Zig implements `std.debug.assert` as `if (!ok) unreachable`. In ReleaseFast,
 reaching `unreachable` is undefined behavior, and the optimizer uses it. Zig's
 users point out that this does more harm, and is harder to debug, than
-removing the check would. They also say the documentation's "optimized away"
-reads as if the statement vanished.
+removing the check would.
 
-Swift does the same at `-Ounchecked`: `assert` and `precondition` are not
-evaluated, but the optimizer may assume they hold. On swift-evolution, Joseph
-Lord and Dave Abrahams argued that an assertion should never create undefined
-behavior. Chris Lattner answered that `-Ounchecked` deliberately removes the
-guard rails, and that nobody has to use it.
+Swift does the same at `-Ounchecked`. On swift-evolution, Joseph Lord and Dave
+Abrahams argued that an assertion should never create undefined behavior.
+Chris Lattner answered that `-Ounchecked` deliberately removes the guard
+rails, and that nobody has to use it.
 
 Rust keeps the assumption separate and explicit. `core::hint::assert_unchecked`
-(stable since 1.81) is an `unsafe fn`, and calling it with a false condition is
-immediate undefined behavior.
+is an `unsafe fn`, and calling it with a false condition is immediate undefined
+behavior.
 
 ### Keeping checks on costs little where it was measured
 
@@ -167,162 +188,391 @@ argues against that view.
 
 ## Contract syntax elsewhere
 
-| Language     | Precondition         | Postcondition              | Status                                   |
-| ------------ | -------------------- | -------------------------- | ---------------------------------------- |
-| Eiffel       | `require`            | `ensure`, with `old`       | the origin of Design by Contract         |
-| Ada 2012     | `with Pre => …`      | `Post => …`, with `'Old`   | in the language; SPARK proves them       |
-| D            | `in (x > 0)`         | `out (r; r > 0)`           | in the language; `-release` removes them |
-| C++26        | `pre (x > 0)`        | `post (r: r > 0)`          | adopted over sustained objection         |
-| Rust nightly | `#[requires(x > 0)]` | `#[ensures(\|r\| *r > 0)]` | experimental (`#![feature(contracts)]`)  |
-| .NET         | `Contract.Requires`  | `Contract.Ensures`         | discontinued                             |
+A contract can live in one of five places: on the signature, in an attribute,
+in the body as a call, in a comment or a separate block, or at a module
+boundary.
 
-Kotlin also has a feature named "contracts", but it is a different thing: a
-function tells the compiler what its result implies, for smart casts. It
-checks nothing at run time.
+| Language            | Where           | Precondition                          | Postcondition                  | Result and old value    | Checking                                     |
+| ------------------- | --------------- | ------------------------------------- | ------------------------------ | ----------------------- | -------------------------------------------- |
+| Eiffel              | signature       | `require x > 0`                       | `ensure Result > x`            | `Result`, `old`         | a monitoring level per class; off in release |
+| Ada 2012            | signature       | `with Pre => X > 0`                   | `Post => F'Result > X'Old`     | `'Result`, `'Old`       | `Assertion_Policy` per kind; SPARK proves    |
+| D                   | signature       | `in (x > 0)`                          | `out (r; r > 0)`               | named in `out`          | `-release` removes; checked in the callee    |
+| C++26               | signature       | `pre (x > 0)`                         | `post (r: r > 0)`              | named in `post`         | one of four semantics, per translation unit  |
+| Vala                | signature       | `requires (x > 0)`                    | `ensures (result > 0)`         | `result`                | at run time                                  |
+| Spec#, Midori       | signature       | `requires x > 0`                      | `ensures return > x`           | `return`, `old(..)`     | Midori: always                               |
+| Dafny, Verus        | signature       | `requires x > 0`                      | `ensures r > x`                | the result is named     | proved statically                            |
+| Rust nightly        | attribute       | `#[requires(x > 0)]`                  | `#[ensures(\|r\| *r > x)]`     | a closure parameter     | only under `-Zcontract-checks`               |
+| .NET Code Contracts | body, as a call | `Contract.Requires(x > 0)`            | `Contract.Ensures(...)`        | `Contract.Result<T>()`  | a binary rewriter; discontinued              |
+| Scala               | body, as a call | `require(x > 0)`                      | `ensuring(r => r > x)`         | a lambda parameter      | always; Stainless verifies                   |
+| Clojure             | signature       | `{:pre [(pos? x)]}`                   | `{:post [(pos? %)]}`           | `%`                     | the `*assert*` flag                          |
+| JML                 | comment         | `//@ requires x > 0;`                 | `//@ ensures \result > x;`     | `\result`, `\old`       | a separate tool (OpenJML)                    |
+| ACSL (Frama-C)      | comment         | `/*@ requires x > 0; */`              | `/*@ ensures \result > x; */`  | `\result`, `\old`       | a separate tool (E-ACSL checks, WP proves)   |
+| Python PEP 316      | docstring       | `pre: x > 0`                          | `post: __return__ > x`         | `__return__`, `__old__` | deferred, never adopted                      |
+| Move                | separate block  | `spec f { requires x > 0; }`          | `ensures result > x;`          | `result`, `old`         | the Move Prover only; never at run time      |
+| Racket              | module boundary | `(contract-out [f (-> positive? …)])` | in the same `->` or `->i` form | named in `->i`          | always, with blame                           |
 
-### Eiffel
+Swift, Go and Zig have no contract syntax. Kotlin's `contract { … }` shares the
+name only: a function tells the compiler what its result implies, for smart
+casts, and nothing is checked at run time.
+
+### On the signature
 
 Eiffel introduced Design by Contract. A failed precondition is the caller's
 fault, and a failed postcondition is the function's own. The split is why a
-precondition sits on the signature, where the caller reads it, rather than in
-the body.
+precondition sits on the signature, where the caller reads it. Eiffel's
+interface view of a class shows the signatures with their contracts and hides
+the bodies, so the contract is the documentation.
 
-### Ada and SPARK
-
-Ada 2012 added `Pre` and `Post` aspects. `pragma Assertion_Policy` decides per
-kind of assertion whether a run checks it (`Check`) or skips it (`Ignore`).
+Ada 2012 added the `Pre` and `Post` aspects. `pragma Assertion_Policy` decides
+per kind of assertion whether a run checks it (`Check`) or skips it (`Ignore`).
 GNATprove, SPARK's prover, uses every contract whatever the policy says, so one
 contract serves both testing and proof. Tucker Taft told Rust's language team
 that contracts were the one Ada 2012 feature that got people to move off older
 versions.
 
-### D
+D's `in`, `out` and `invariant` are removed by `-release`, as `assert` is.
+DIP 1009 (2018) gave them the expression form in the table.
 
-D's `in`, `out` and `invariant` are removed by `-release`, as `assert` is. Its
-forum returns to one dilemma: keep expensive contracts and miss the
-performance requirement, or remove them and miss the safety requirement.
+Vala places `requires` and `ensures` between the parameter list and the body,
+after any `throws` clause. A method may repeat either clause.
 
-### C++26
+Spec# put `requires` and `ensures` on the signature of C#. Midori, an operating
+system written in a Spec#-derived C#, kept that placement after trying the
+alternatives (see [A contract API in the body failed](#a-contract-api-in-the-body-failed)).
 
-P2900 adds `pre`, `post` and `contract_assert`, each evaluated under one of four
-semantics chosen by the build: ignore, observe, enforce and quick-enforce. The
-committee added it to the working draft in Hagenberg in February 2025 (100 for,
-14 against, 12 abstaining). C++26 as a whole was approved in March 2026 (114
-for, 12 against, 3 abstaining).
+Dafny and Verus write the same clauses, and prove them instead of running them.
+Verus names the result in the return type: `fn f(x: u32) -> (r: u32)`.
 
-The objections did not go away. Bjarne Stroustrup co-wrote P3573 "Contract
-concerns", said of the feature that "it's not minimal, it's not viable", and
-said he will recommend not using it. The recurring complaints:
+### As attributes
 
-- The ignore semantic removes the checks in production, where the code runs
-  for real.
-- Different translation units can be built with different semantics, so one
-  inline function can mean different things. Stroustrup objects to "changing
-  the meaning of code depending on where it is".
-- A predicate may have side effects, and the specification lets it be
-  evaluated more than once or not at all, so those effects are unreliable.
-- The standard library does not use it. libc++, libstdc++ and the Microsoft STL
-  each harden with their own macros.
-- Virtual functions cannot carry contracts yet.
+Rust's nightly `contracts` feature (rust-lang/rust#128044) writes
+`#[core::contracts::requires(...)]` and `#[core::contracts::ensures(...)]`. A
+`requires` may hold a sequence of statements ending in a `bool`
+(rust-lang/rust#144444). A run checks contracts only under `-Zcontract-checks`,
+which is off by default. The project goal behind it is to specify the safety
+conditions of every `unsafe` function in the standard library and verify them
+with Kani, without changing the library's behavior or speed for anyone who has
+not opted in.
 
-### .NET Code Contracts
-
-Microsoft discontinued Code Contracts and archived its repository. Two reasons
-are cited. Contracts took effect only after a separate tool rewrote the
-compiled assembly, and build pipelines that skipped that tool silently lost
-them. And users found some constraints they wanted could not be written, while
-others they wrote turned out too strict and had to be removed.
-
-## What Rust's users asked for
-
-### A shared contract language for verification tools
-
-A 2022 design meeting of the Rust language team discussed a contracts RFC
-draft. The motivation was that Kani, Prusti and Creusot each define their own
-contract language. The draft proposed `contract` and `debug_contract`, mirroring
-`assert!` and `debug_assert!`, so that expensive checks could be turned off.
-The team agreed to start small, with contracts checked at run time, before any
-static verification.
-
-### The `contracts` feature
-
-Contracts landed on nightly as an experiment (rust-lang/rust#128044, compiler
-MCP 759) with `#[requires]` and `#[ensures]`. A run checks them only under
-`-Zcontract-checks`, which is off by default. The project goal behind it is to
-specify the safety conditions of every `unsafe` function in the standard
-library and verify them with Kani. Its design rule is that the contracts change
-nothing about the standard library's behavior or speed unless a user opts in to
-checking them. The verification effort reports 989 contract-verified proofs.
-
-The tracking issue's open questions overlap with Wado's:
+The tracking issue lists questions it has not settled:
 
 - Whether a contract must be pure.
 - What happens when a contract expression panics.
 - Whether safety conditions and correctness conditions are written apart.
 - What to do with a condition that only a run can check, or only a proof can.
 
-### Checking `unsafe` preconditions in debug builds
+### In the body, as calls
 
-The standard library already checks many `unsafe` preconditions with
-`assert_unsafe_precondition!`. The check is decided by the caller's
-`debug_assertions` when the caller is monomorphized, not by how the standard
-library was built. A release-built standard library therefore still checks
-when it is called from a debug build. Each check says what it guards:
+.NET Code Contracts wrote contracts as calls to a library: `Contract.Requires`
+and `Contract.Ensures` at the top of the body. A separate tool rewrote the
+compiled assembly, moving each postcondition to every exit. Microsoft
+discontinued it and archived the repository.
 
-- `check_language_ub` guards undefined behavior of the language itself.
-- `check_library_ub` guards a documented library precondition whose violation
-  is not immediately undefined behavior.
+Scala's `require` is an ordinary function, and `ensuring` is a method on the
+result expression. Stainless reads both as a specification to verify.
 
-The two correspond roughly to Wado's unconstrained and unspecified violations.
+### In comments and separate blocks
 
-### An O(1) function with an O(n) precondition
+JML and ACSL are contracts written in comments, so the host language's compiler
+never reads them. A separate tool checks them at run time (OpenJML, E-ACSL) or
+proves them (Frama-C's WP). They are literally executable comments, and run only
+when that tool runs.
 
-In July 2025 a thread on Rust's internals forum proposed writing each `unsafe`
-precondition as a machine-readable `debug_assert`. The objection: some
-preconditions are far costlier than the function they guard. Checking that the
-bytes are UTF-8 is O(n), while `from_utf8_unchecked` is O(1), and such a check
-was called too slow even for a debug build. Others answered that a checked
-twin, here `String::from_utf8`, already exists for whoever wants the check.
+PEP 316 (2003) proposed `inv:`, `pre:` and `post:` lines in docstrings. Its
+stated reasons were better documentation and easier testing. It was deferred
+after python-dev objected that docstrings would grow even longer. Its style
+lives on in CrossHair, which reads contracts from docstrings, and in decorator
+libraries such as icontract.
 
-### Integer overflow as a program error
+Move puts a contract in a `spec` block beside the function. The Move Prover
+reads it, and no build runs it.
+
+### At module boundaries
+
+Racket attaches a contract where a module exports a function, so the check runs
+when a value crosses the boundary, not on every internal call. Every check
+records which party broke it: the caller for an argument, the module for a
+result. This is what "blame" means in the research below.
+
+## What the record shows
+
+### Most contracts are null and range checks
+
+| Study                                  | Corpus                                                | Finding                                                                                                                                            |
+| -------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chalin (2006)                          | 85 Eiffel projects                                    | the earlier study of contract use that Estler et al. extend                                                                                        |
+| Estler, Furia, Nordio, Piccioni, Meyer | 21 projects in Eiffel, C# and Java; 260 million lines | over 33% of program elements carry contracts in most projects; contracts change less often than the code; inheritance changes little               |
+| Schiller, Donohue, Coward, Ernst       | 90 C# projects using Code Contracts                   | 68% preconditions, 26% postconditions; 75% check that a value is present, mostly non-null; suggested contracts did not broaden what people wrote   |
+| Dietrich, Pearce, Jezek, Brada         | the 200 most popular Maven Central projects           | many mechanisms mixed in one program; fewer contracts than expected; projects that adopt contracts add more; some contracts break substitutability |
+
+Midori reached the same figure from the inside. Joe Duffy reports that about
+90% of its contracts were nullability and numeric ranges, and that about 90%
+of the argument-validating exceptions in typical .NET code became
+preconditions. He sums it up as "contracts begin where the type system leaves
+off". Midori explored non-null and range types to absorb those checks, and
+Duffy calls the failure to deploy non-null types system-wide one of his biggest
+regrets.
+
+### A contract API in the body failed
+
+In "Embedded Contract Languages" (SAC 2010), Fähndrich, Barnett and Logozzo
+argued for writing contracts as ordinary code rather than in a new syntax. They
+observed that the number of specification languages roughly equals the number
+of tools that consume them. Code Contracts was that design.
+
+Two reasons are given for its discontinuation. Contracts took effect only after
+the separate rewriter ran, so a build pipeline that skipped it lost them
+silently. And users found some constraints they wanted could not be written,
+while others they wrote turned out too strict and had to be removed.
+
+Duffy's account of Midori, written by a team that had lived through Code
+Contracts, gives the design reasons:
+
+- An API put the contracts in the implementation, not in the signature. On the
+  signature they appear in documentation and IDE tooltips, and tools can reason
+  about them.
+- A postcondition must hold on every exit path, which an API call at the top of
+  the body cannot express.
+- The compiler could remove a check it proved true, and report an error for one
+  it proved false.
+
+### One kind of contract, always checked
+
+Midori first offered weak and strong contracts, and contracts compiled only in
+debug builds. Developers misused the variants and could not tell when a
+contract would be checked. Midori dropped them all and kept a single kind that
+is always checked. A violation ends the process ("abandonment"). Duffy reports
+that forcing the one choice produced healthier code.
+
+Midori's assertions went the other way. They stayed library calls
+(`Debug.Assert`, `Release.Assert`), not part of any signature, and the team
+wrote more release assertions than debug ones.
+
+### C++26 adopted contracts over sustained objection
+
+P2900 adds `pre`, `post` and `contract_assert`. The committee added it to the
+working draft in Hagenberg in February 2025 (100 for, 14 against, 12
+abstaining). In March 2026 the committee finished C++26 and sent it to ISO's
+international approval ballot (114 for, 12 against, 3 abstaining). The
+objections did not go away. They come from compiler, library and language
+designers: P3173 and P3506 (Gabriel Dos Reis, Microsoft), P3573 "Contract
+concerns" (nine authors), and P4334 (Stroustrup, Garcia, Falco, Spicer,
+Voutilainen; 2026-08-09).
+
+The debate is about what a build may do with a contract, not where it is
+written:
+
+- Removal. A build may choose the ignore semantic, under which a contract is
+  not checked at all. P4334 calls enabling contracts for testing and removing
+  them in production "a 1980s approach". It quotes Eiffel's own documentation,
+  "when releasing the final version of a system, it is usually appropriate to
+  turn off assertion monitoring", and compares the ignore semantic to wearing
+  life jackets only near the coast.
+- Mixed builds. Translation units can be built with different semantics, so an
+  inline function in a header that one unit compiles without checks leaves a
+  violation undetected (P3835). Stroustrup objects to "changing the meaning of
+  code depending on where it is".
+- No use in the standard library. libc++, libstdc++ and the Microsoft STL each
+  harden with their own macros, and P2900 changes none of them.
+- No experience. GCC 16.1 ships it as experimental, Clang does not implement
+  it, and P4334 knows of no production codebase that uses it.
+
+The alternative those papers name is the hardened standard library: checks that
+stay on in production, measured at about 0.3% overhead across Google's servers.
+The objections to the predicate and to inheritance follow below.
+
+### A disabled contract drifts from the code
+
+A contract that no build reads stops being checked against the code it
+describes, and can name a parameter that no longer exists with nothing to
+report it. JML, ACSL and Code Contracts fail this way whenever their separate
+tool does not run. Rust's nightly contracts avoid it: a disabled contract stays
+in the function body under a condition that is false, so it is still
+type-checked (rust-lang/rust#144438). A proposal that skipped disabled
+contracts altogether was set aside, its author warning that such contracts "are
+susceptible to becoming out of sync with the rest of the codebase"
+(rust-lang/rust#145229).
+
+### Checking in the callee loses the caller's build
+
+D runs an `in` contract inside the called function. A library vendor who ships
+a `-release` build therefore ships it with every precondition removed, and the
+library's users cannot turn them back on. The DIP 1009 discussion asked for the
+check to move to the call site, which would make the contract part of the
+signature. No DIP followed. P3267, on C++ implementation strategies, weighs the
+same choice between checking at the call and checking in the callee.
+
+Rust's standard library takes the caller's side for its `unsafe` preconditions.
+`assert_unsafe_precondition!` is decided by the caller's `debug_assertions`
+when the caller is monomorphized, so a release-built standard library still
+checks when it is called from a debug build. Each check says what it guards:
+`check_language_ub` for undefined behavior of the language itself, and
+`check_library_ub` for a documented library precondition whose violation is not
+immediately undefined behavior. The two correspond roughly to Wado's
+unconstrained and unspecified violations.
+
+### The predicate has its own failures
+
+A contract predicate is code, and every language has to say what happens when
+that code misbehaves.
+
+- Side effects: C++ lets a predicate be evaluated more than once or not at all,
+  so its effects are unreliable. Midori proved every contract free of side
+  effects.
+- Undefined behavior inside the predicate is the reason P3173 rejects C++'s
+  design.
+- An exception escaping the predicate becomes a contract violation in C++, so
+  it cannot be caught the way one thrown from the body can (P4308).
+- C++ treats the variables a predicate names as `const`, so a predicate calling
+  a non-`const` function fails to compile (P3261).
+
+### Inheritance needs a rule
+
+A method that overrides another may only weaken its precondition and only
+strengthen its postcondition, or callers written against the parent break.
+Eiffel writes this as `require else` and `ensure then`, and Ada as `Pre'Class`
+and `Post'Class`. C++26 adopted an inheritance model into P2900R13 and removed
+it before R14 for lack of consensus, so virtual functions cannot carry
+contracts yet. Dietrich et al. found Java contracts that break the rule in
+practice.
+
+### The cost of a check can exceed the function
+
+Some preconditions cost far more than the function they guard. In a July 2025
+thread on Rust's internals forum, checking that bytes are UTF-8, an O(n) scan,
+was called too slow even for a debug build, since `from_utf8_unchecked` is
+O(1). Others answered that a checked twin, `String::from_utf8`, already exists
+for whoever wants the check.
+
+D's forum returns to the same dilemma from the other side: keep expensive
+contracts and miss the performance requirement, or remove them and miss the
+safety requirement.
 
 Rust's RFC 560 makes integer overflow a program error that is not undefined
 behavior. A build with `debug_assertions` must detect it and panic. A release
 build may skip the check, and then the result is defined to wrap. In Wado's
 terms, that is a contract violation whose class is unspecified, with exactly
-one listed outcome.
+one listed outcome. A 2021 internals thread proposed checking overflow in every
+build. It stalled on cost: one cited study measured slowdowns from 0.4% to 95%,
+with a mean of 30%. Wado took neither side: its arithmetic wraps by definition.
 
-A 2021 internals thread proposed checking overflow in every build. It stalled
-on cost: one cited study measured slowdowns from 0.4% to 95%, with a mean of
-30%. Wado took neither side: its arithmetic wraps by definition, so overflow is
-not a violation at all.
+Higher-order contracts cost more again. A contract on a function argument has
+to wrap the function and check each later call. Takikawa et al. ("Is Sound
+Gradual Typing Dead?", POPL 2016) measured slowdowns above 100x in Typed
+Racket, where such contracts guard every boundary between typed and untyped
+code.
+
+### One contract for checking and proof
+
+Kani, Prusti and Creusot each define their own contract language for Rust. A
+2022 design meeting of Rust's language team discussed a contracts RFC draft
+whose motivation was a shared one. The draft proposed `contract` and
+`debug_contract`, mirroring `assert!` and `debug_assert!`, so that expensive
+checks could be turned off. The team agreed to start with contracts checked at
+run time before any static verification. The standard library verification
+effort now reports 989 contract-verified proofs.
+
+Ada's `Pre` and `Post` already serve both, as described above.
+
+### The theory: blame, and contracts as types
+
+Findler and Felleisen ("Contracts for Higher-Order Functions", ICFP 2002)
+extended contracts to functions passed as values, and introduced blame: each
+failed check names the party that broke the agreement. Dimoulas, Findler,
+Flanagan and Felleisen ("Correct Blame for Contracts", POPL 2011) showed that
+the obvious semantics sometimes blame the wrong module, and gave one that does
+not.
+
+Greenberg, Pierce and Weirich ("Contracts Made Manifest", POPL 2010) compared
+latent contracts, which are checks the type system does not see, with manifest
+contracts, which are refinement types recording the checks a value has passed.
+The two had been assumed interchangeable. They are not quite: translating one
+into the other can make a program blame more.
+
+### Contracts as documentation and as test oracles
+
+Sean Parent and Dave Abrahams ("Better Code: Contracts", CppCon 2023) teach
+contracts as a design method, and argue between them whether the code or the
+documentation matters more.
+
+Khlebnikov and Lakos (P1743, "Contracts, Undefined Behavior, and Defensive
+Programming") distinguish a wide contract, which has no precondition, from a
+narrow one. They argue that giving every input a defined behavior, as a null
+check in `strlen` would, hurts performance and correctness alike.
+
+Andrzej Krzemieński's 2013 "Preconditions" series treats a precondition as an
+idea rather than a language feature, and concludes that assertions and comments
+were the best C++ then offered.
+
+John Regehr ("Use of Assertions") counts executable documentation of pre- and
+postconditions among the benefits of assertions, and calls them a gateway to
+formal methods.
+
+Hillel Wayne ("Property Tests + Contracts = Integration Tests") uses contracts
+as the oracle of a property test. The test asserts nothing itself, and fails
+when any contract does.
 
 ## Questions this leaves for Wado
 
 The survey bears on these questions. It answers none of them.
 
-- Name. Every language whose `assert` disappears in a release build reports it
-  being used for checks that must hold. A removable check needs a name that a
-  reader cannot mistake for `assert`.
-- What a skipped check means. Skipping can mean "not evaluated", or "assumed
-  true". The second turns a violation whose class is unspecified into an
-  unconstrained one, which is what Zig's and Swift's users complain about.
-- Whose build decides. Rust decides an `unsafe` precondition check by the
-  caller's build. C++ decides by translation unit and has to answer for mixed
-  builds. Wado compiles a whole program from source, and has the test world.
-- Purity of a predicate. Wado's effect rule answers what C++ and Rust leave
-  open, except for `#[ambient]` calls and for a predicate that traps.
-- Cost. Some preconditions cost more than the function they guard.
-- Signature or body. A contract on the signature can be read by `wado doc`, the
-  language service and a prover, and blames the caller by its position. A
-  check in the body is a statement like `assert`, and needs no new grammar.
-- Syntax. `with` already introduces a function's effects, so Ada's
-  `with Pre => …` would collide with it.
+- What a contract on the signature means. Midori kept one kind, always checked.
+  Wado's contract checks are the removable kind, and `assert` the kept kind.
+  Every language whose removable check shares a spelling with a kept one
+  reports it misused, and the reason only the standard library writes a check
+  applies to any syntax that offers one to every program.
+- Whether a disabled contract is still compiled. A contract that is type- and
+  effect-checked in every build cannot drift; one that is skipped can.
+- Where the check runs. A contract on the signature lets the compiler place the
+  check at the call, which would report the caller's position and blame the
+  caller. Wado compiles a whole program from source, so D's separate
+  compilation problem does not arise.
+- What the predicate may do. Wado's effect rule answers purity, except for
+  `#[ambient]` calls and for a predicate that traps.
+- How a trait method's contract binds an impl. A trait method's `with` clause
+  already bounds every impl of it.
+- How a postcondition names the result and an old value. Wado has no
+  `result` keyword, and an old value is a copy under value semantics.
+- What to do with a clause too costly to check. It could be written and never
+  checked, or not written at all.
+- Syntax. Ada's `with Pre => …` collides with `with` for effects. Vala, Dafny
+  and Verus place `requires` and `ensures` between the signature and the body.
+- How much the type system takes first. The studies find most contracts are
+  null and range checks, and `Option` already absorbs the null ones.
 
 ## Sources
 
-- [Rust project goal: instrument the standard library with safety contracts](https://goals.rust-lang.org/2025h1/std-contracts.html)
+### Wado
+
+- [Assertions](./spec-assertions.md)
+- [WEP: Contract Checks](./wep-2026-10-06-contract-checks.md)
+- [WEP: Behavior Classes](./wep-2026-10-05-behavior-classes.md)
+
+### Languages
+
+- [AdaCore: Design by contracts](https://learn.adacore.com/courses/intro-to-ada/chapters/contracts.html)
+- [Ada 2012 RM 11.4.2: pragmas `Assert` and `Assertion_Policy`](https://www.adaic.org/resources/add_content/standards/12rm/html/RM-11-4-2.html)
+- [SPARK user's guide: assertion pragmas](https://docs.adacore.com/spark2014-docs/html/ug/en/source/assertion_pragmas.html)
+- [D: DIP 1009 review thread](https://lists.puremagic.com/pipermail/digitalmars-d/2017-June/269108.html)
+- [D: DIP 1006 review](https://forum.dlang.org/post/p7k63r$mt2$1@digitalmars.com)
+- [Vala: assertions and contract programming](https://docs.vala.dev/tutorials/main/04-00-advanced-features/04-01-assertions-and-contract-programming)
+- [PEP 316: Programming by Contract for Python](https://peps.python.org/pep-0316/)
+- [The Move Prover: a guide](https://osec.io/blog/move-prover)
+- [Visual Studio Magazine: reconsider using Code Contracts](https://visualstudiomagazine.com/articles/2017/04/01/reconsider-using-contracts.aspx)
+- [Bandit B101: `assert_used`](https://bandit.readthedocs.io/en/1.7.9/plugins/b101_assert_used.html)
+- [SQLite: the use of `assert()`](https://www.sqlite.org/assert.html)
+- [Go FAQ: why does Go not have assertions?](https://go.dev/doc/faq#assertions)
+- [swift-evolution: asserts should not cause undefined behaviour](https://lists.swift.org/pipermail/swift-evolution/Week-of-Mon-20151228/004997.html)
+- [Swift asserts: the missing manual](https://blog.krzyzanowskim.com/2015/03/09/swift-asserts-the-missing-manual/)
+- [Ziggit: key semantics of `std.debug.assert`](https://ziggit.dev/t/key-semantics-of-std-debug-assert/11123)
+
+### Rust
+
 - [rust-lang/rust#128044: the `contracts` tracking issue](https://github.com/rust-lang/rust/issues/128044)
+- [rust-lang/rust#144444: statements in `requires`](https://github.com/rust-lang/rust/pull/144444)
+- [rust-lang/rust#144438: a disabled contract builds no closure but is still type-checked](https://github.com/rust-lang/rust/pull/144438)
+- [rust-lang/rust#145229: skip disabled contracts (closed)](https://github.com/rust-lang/rust/pull/145229)
+- [Rust project goal: instrument the standard library with safety contracts](https://goals.rust-lang.org/2025h1/std-contracts.html)
 - [Rust lang-team design meeting on contracts, 2022-11-25](https://github.com/rust-lang/lang-team/blob/master/design-meeting-minutes/2022-11-25-contracts.md)
 - [Verifying the Rust Standard Library](https://arxiv.org/html/2606.17374v1)
 - [`core::ub_checks` and `assert_unsafe_precondition!`](https://doc.rust-lang.org/src/core/ub_checks.rs.html)
@@ -331,21 +581,34 @@ The survey bears on these questions. It answers none of them.
 - [RUSTSEC-2025-0137](https://rustsec.org/advisories/RUSTSEC-2025-0137)
 - [RFC 560: integer overflow](https://rust-lang.github.io/rfcs/0560-integer-overflow.html)
 - [Rust internals: switch the default on overflow checking](https://internals.rust-lang.org/t/thought-switch-the-default-on-overflow-checking-and-provide-rfc-560s-scoped-attribute-for-checked-arithmetic/15118)
-- [The `contracts` crate](https://docs.rs/contracts/latest/contracts/)
+
+### C++
+
 - [P2900R14: Contracts for C++](https://isocpp.org/files/papers/P2900R14.pdf)
+- [P3173R0: P2900R6 may be minimal, but it is not viable](https://isocpp.org/files/papers/P3173R0.pdf)
+- [P3506R0: P2900 is still not ready for C++26](https://open-std.org/JTC1/SC22/WG21/docs/papers/2025/p3506r0.pdf)
+- [P3267R1: C++ contracts implementation strategies](https://open-std.org/jtc1/sc22/wg21/docs/papers/2024/p3267r1.html)
+- [P4334R0: P2900 contracts' fundamental flaws](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2026/p4334r0.pdf)
+- [P1743R0: Contracts, undefined behavior, and defensive programming](https://www.open-std.org/JTC1/SC22/wg21/docs/papers/2019/p1743r0.pdf)
+- [P3471: standard library hardening](https://wg21.link/p3471r2)
 - [cppreference: contract assertions](https://en.cppreference.com/cpp/language/contracts)
 - [DevClass: contracts are in C++26 despite disquiet over their value](https://www.devclass.com/development/2026/04/01/contracts-are-in-c26-despite-disquiet-over-their-value/5213555)
-- [The Register: C++26 approved](https://www.theregister.com/2026/03/31/cplusplus26_approved)
-- [P3471: standard library hardening](https://wg21.link/p3471r2)
-- [C++26: standard library hardening](https://www.sandordargo.com/blog/2026/05/13/cpp26-library-hardening)
-- [swift-evolution: asserts should not cause undefined behaviour](https://lists.swift.org/pipermail/swift-evolution/Week-of-Mon-20151228/004997.html)
-- [Swift asserts: the missing manual](https://blog.krzyzanowskim.com/2015/03/09/swift-asserts-the-missing-manual/)
-- [Ziggit: key semantics of `std.debug.assert`](https://ziggit.dev/t/key-semantics-of-std-debug-assert/11123)
-- [D: DIP 1006 review](https://forum.dlang.org/post/p7k63r$mt2$1@digitalmars.com)
-- [D bug 3407: `-safe -release` must keep all bounds checks](https://issues.dlang.org/bugs/3407/)
-- [Ada 2012 RM 11.4.2: pragmas `Assert` and `Assertion_Policy`](https://www.adaic.org/resources/add_content/standards/12rm/html/RM-11-4-2.html)
-- [SPARK user's guide: assertion pragmas](https://docs.adacore.com/spark2014-docs/html/ug/en/source/assertion_pragmas.html)
-- [Visual Studio Magazine: reconsider using Code Contracts](https://visualstudiomagazine.com/articles/2017/04/01/reconsider-using-contracts.aspx)
-- [Bandit B101: `assert_used`](https://bandit.readthedocs.io/en/1.7.9/plugins/b101_assert_used.html)
-- [SQLite: the use of `assert()`](https://www.sqlite.org/assert.html)
-- [Go FAQ: why does Go not have assertions?](https://go.dev/doc/faq#assertions)
+- [Herb Sutter: C++26 is done (March 2026 trip report)](https://herbsutter.com/2026/03/29/c26-is-done-trip-report-march-2026-iso-c-standards-meeting-london-croydon-uk/)
+- [Better Code: Contracts (slides)](https://sean-parent.stlab.cc/presentations/2023-10-06-better-code-contracts/2023-10-06-better-code-contracts.pdf)
+- [Krzemieński: Preconditions, part 1](https://isocpp.org/blog/2013/01/preconditions-part-1)
+
+### Papers and essays
+
+- [Joe Duffy: The Error Model](https://joeduffyblog.com/2016/02/07/the-error-model/)
+- [Estler et al.: Contracts in Practice](https://arxiv.org/pdf/1211.4775)
+- [AdaCore: studies of contracts in practice](https://blog.adacore.com/studies-of-contracts-in-practice)
+- [Schiller et al.: Case Studies and Tools for Contract Specifications](https://homes.cs.washington.edu/~mernst/pubs/contract-specifications-icse2014.pdf)
+- [Dietrich et al.: Contracts in the Wild](https://drops.dagstuhl.de/storage/00lipics/lipics-vol074-ecoop2017/LIPIcs.ECOOP.2017.9/LIPIcs.ECOOP.2017.9.pdf)
+- [Fähndrich, Barnett, Logozzo: Embedded Contract Languages](https://www.microsoft.com/en-us/research/publication/embedded-contract-languages/)
+- [Findler, Felleisen: Contracts for Higher-Order Functions](https://www.cs.northwestern.edu/~robby/pubs/papers/ho-contracts-techreport.pdf)
+- [Dimoulas et al.: Correct Blame for Contracts](https://www.cs.northwestern.edu/~robby/pubs/papers/popl2011-dfff.pdf)
+- [Greenberg, Pierce, Weirich: Contracts Made Manifest](https://cs.pomona.edu/~michael/papers/popl2010_contracts.pdf)
+- [Is Sound Gradual Typing Dead? (summary)](https://blog.acolyer.org/2016/02/05/is-sound-gradual-typing-dead/)
+- [Hillel Wayne: contract examples](https://hillelwayne.com/post/contract-examples/)
+- [Hillel Wayne: posts on contracts](https://www.hillelwayne.com/tags/contracts)
+- [John Regehr on assertions, discussed on the D forum](https://digitalmars.com/d/archives/digitalmars/D/John_Regehr_on_Use_of_Assertions_318515.html)

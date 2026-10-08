@@ -5452,6 +5452,7 @@ fn i64_mul_wide_s_soft(a: i64, b: i64) -> [i64, i64] {
     return [low, ((high - (b & (a >> 63))) - (a & (b >> 63)))];
 }
 
+#[inline(never)]
 fn coverage_probe(id: i32) {
     let len: i32 = "core::builtin::core/builtin/array_len<u8>"(&core::rt::COVERAGE_SEEN);
     if ((id < len) && (core::builtin::array_get_value_u8(&core::rt::COVERAGE_SEEN, id) != 0)) {

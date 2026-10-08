@@ -1838,9 +1838,6 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),
-            TirExprKind::Resume { .. } => unreachable!(
-                "TirExprKind::Resume should be desugared by synthesis::effect_dispatch before lower::translate runs"
-            ),
         }
     }
 

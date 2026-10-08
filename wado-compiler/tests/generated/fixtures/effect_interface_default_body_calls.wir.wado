@@ -77,7 +77,7 @@ type "functype//effect_interface_default_body_calls.wado/$cm_binding__Stdout_wri
 
 type "functype//effect_interface_default_body_calls.wado/$cm_export__run" = fn();  // TypeId(23)
 
-type "functype//effect_interface_default_body_calls.wado/$initialize_module" = fn();  // TypeId(24)
+type "functype//effect_interface_default_body_calls.wado/$initialize_modules$cold0" = fn();  // TypeId(24)
 
 type "functype//effect_interface_default_body_calls.wado/$effect_dispatch__Calc__value$spec0" = fn(i32) -> i32;  // TypeId(25)
 
@@ -156,8 +156,7 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body_calls.wado::$modules_initialized);
         cold_path;
-        "effect_interface_default_body_calls.wado/$initialize_module"();
-        global:effect_interface_default_body_calls.wado::$modules_initialized = 1;
+        "effect_interface_default_body_calls.wado/$initialize_modules$cold0"();
     };
     $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_35 = local.tee $local_3_27($inline__effect_dispatch__Calc__value_5: block -> i32 {
@@ -354,15 +353,15 @@ fn "effect_interface_default_body_calls.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:effect_interface_default_body_calls.wado::$modules_initialized);
         cold_path;
-        "effect_interface_default_body_calls.wado/$initialize_module"();
-        global:effect_interface_default_body_calls.wado::$modules_initialized = 1;
+        "effect_interface_default_body_calls.wado/$initialize_modules$cold0"();
     };
     "effect_interface_default_body_calls.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "effect_interface_default_body_calls.wado/$initialize_module"() {
+fn "effect_interface_default_body_calls.wado/$initialize_modules$cold0"() {
     global:effect_interface_default_body_calls.wado::TRACE = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
+    global:effect_interface_default_body_calls.wado::$modules_initialized = 1;
 }
 
 fn "effect_interface_default_body_calls.wado/$effect_dispatch__Calc__value$spec0"(n) {

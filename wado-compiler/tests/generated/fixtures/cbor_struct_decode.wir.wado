@@ -158,19 +158,19 @@ type "functype//cbor_struct_decode.wado/$test_1_round_trip_a_derived_struct_thro
 
 type "functype//cbor_struct_decode.wado/$test_1_round_trip_a_derived_struct_through_cbor$cold1" = fn(i32);  // TypeId(39)
 
-type "functype//core:cbor/write_head" = fn(ref "core:prelude//List<u8>", u8, u64);  // TypeId(40)
+type "functype//cbor_struct_decode.wado/$initialize_modules$cold0" = fn();  // TypeId(40)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(41)
+type "functype//core:cbor/write_head" = fn(ref "core:prelude//List<u8>", u8, u64);  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(42)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(42)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(43)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(43)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(44)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(44)
 
-type "functype//core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]" = fn(ref "core:prelude//List<u8>") -> [i32, ref null "cbor_struct_decode.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(45)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(45)
 
-type "functype//core:cbor/$initialize_module" = fn();  // TypeId(46)
+type "functype//core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/bytes.wado/ByteList>$sroa[return]$dae[strict,max_depth]" = fn(ref "core:prelude//List<u8>") -> [i32, ref null "cbor_struct_decode.wado//Point", ref null "core:serde//DeserializeError"];  // TypeId(46)
 
 type "functype//core:cbor/core:cbor/CborDeserializer::read_text_key_range$cold0$dae[self]" = fn(u8, u8, bool, u8, bool, u8, bool, bool, bool);  // TypeId(47)
 
@@ -521,8 +521,7 @@ fn "cbor_struct_decode.wado/$cm_export__$test_0_decode_struct_from_a_cbor_map"()
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cbor_struct_decode.wado::$modules_initialized);
         cold_path;
-        "core:cbor/$initialize_module"();
-        global:cbor_struct_decode.wado::$modules_initialized = 1;
+        "cbor_struct_decode.wado/$initialize_modules$cold0"();
     };
     "cbor_struct_decode.wado/$test_0_decode_struct_from_a_cbor_map"();
     "wasi/task-return"(0);
@@ -532,8 +531,7 @@ fn "cbor_struct_decode.wado/$cm_export__$test_1_round_trip_a_derived_struct_thro
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:cbor_struct_decode.wado::$modules_initialized);
         cold_path;
-        "core:cbor/$initialize_module"();
-        global:cbor_struct_decode.wado::$modules_initialized = 1;
+        "cbor_struct_decode.wado/$initialize_modules$cold0"();
     };
     "cbor_struct_decode.wado/$test_1_round_trip_a_derived_struct_through_cbor"();
     "wasi/task-return"(0);
@@ -721,6 +719,11 @@ fn "cbor_struct_decode.wado/$test_1_round_trip_a_derived_struct_through_cbor$col
     builtin::array_copy<u8>($local_9.repr, new_used_19, global:cbor_struct_decode.wado::$const_obj_73, 0, 1);
     "core:rt/panic"($local_9.repr, $local_9.used);
     unreachable;
+}
+
+fn "cbor_struct_decode.wado/$initialize_modules$cold0"() {
+    global:core:cbor::MSG_EXPECTED_MAP_FOR_STRUCT = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected map for struct"), used: 23 };
+    global:cbor_struct_decode.wado::$modules_initialized = 1;
 }
 
 fn "core:cbor/write_head"(buf, major, arg) {
@@ -1012,10 +1015,6 @@ fn "core:cbor/core/cbor/from_bytes<cbor_struct_decode.wado/Point,core:prelude/by
         return 1, ref.null none, "core:serde/core:serde/DeserializeError::trailing"(builtin::i64_extend_i32_s($mv$$vr_7$0));
     }
     return 0, $qm_v, ref.null none;
-}
-
-fn "core:cbor/$initialize_module"() {
-    global:core:cbor::MSG_EXPECTED_MAP_FOR_STRUCT = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected map for struct"), used: 23 };
 }
 
 fn "core:cbor/core:cbor/CborDeserializer::read_text_key_range$cold0$dae[self]"(head, $v1, $v3, $v4, $v4_seen, $v5, $v5_seen, $v6, $v6_seen) {

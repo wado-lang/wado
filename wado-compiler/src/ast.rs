@@ -1035,7 +1035,6 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             }
             v.visit_block(&w.body);
         }
-        Expr::Resume(r) => v.visit_expr(&r.value),
         Expr::Error(_) => {}
     }
 }
@@ -2605,11 +2604,33 @@ pub struct ExprStmt {
     pub span: Span,
 }
 
+/// `return value;`, or `resume value;` in an effect handler method. The two
+/// leave the function the same way; they differ in who may write them.
 #[derive(Debug, Clone)]
 pub struct ReturnStmt {
     pub id: AstId,
+    pub keyword: ReturnKeyword,
     pub value: Option<Expr>,
     pub span: Span,
+}
+
+/// Which keyword a [`ReturnStmt`] was written with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnKeyword {
+    Return,
+    /// Hands the value to the operation's caller.
+    Resume,
+}
+
+impl ReturnKeyword {
+    /// The keyword as source spells it.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Return => "return",
+            Self::Resume => "resume",
+        }
+    }
 }
 
 /// `task return expr;` — delivers the async task result without terminating the function.
@@ -2811,10 +2832,6 @@ pub enum Expr {
     /// Effect handler installation block: `with E1 => h1, E2 => h2 do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     WithHandler(Box<WithHandlerExpr>),
-    /// `resume value` — control-flow expression valid only inside an effect
-    /// handler method. Delivers `value` to the suspended computation; in the
-    /// MVP (no post-resume code) it lowers to `return value`.
-    Resume(Box<ResumeExpr>),
     /// Placeholder for an expression that failed to parse, emitted by error
     /// recovery so one malformed expression doesn't discard its enclosing
     /// statement or list (e.g. a broken argument in a call). Resolves to
@@ -2860,14 +2877,6 @@ pub struct EffectHandlerBinding {
     pub effect: Option<Type>,
     /// Handler expression, e.g., `&mut mock`.
     pub handler: Expr,
-    pub span: Span,
-}
-
-/// `resume value` — see `WithHandlerExpr` and the WEP for semantics.
-#[derive(Debug, Clone)]
-pub struct ResumeExpr {
-    pub id: AstId,
-    pub value: Expr,
     pub span: Span,
 }
 
@@ -2962,7 +2971,6 @@ impl Expr {
             Expr::Spread(inner, _) => inner.id(),
             Expr::Range(e) => e.id,
             Expr::WithHandler(e) => e.id,
-            Expr::Resume(e) => e.id,
             Expr::Error(e) => e.id,
         }
     }
@@ -2998,7 +3006,6 @@ impl Expr {
             Expr::Spread(_, span) => *span,
             Expr::Range(e) => e.span,
             Expr::WithHandler(e) => e.span,
-            Expr::Resume(e) => e.span,
             Expr::Error(e) => e.span,
         }
     }
@@ -3115,10 +3122,6 @@ impl Expr {
             Expr::WithHandler(mut e) => {
                 e.span = new_span;
                 Expr::WithHandler(e)
-            }
-            Expr::Resume(mut e) => {
-                e.span = new_span;
-                Expr::Resume(e)
             }
             Expr::Error(mut e) => {
                 e.span = new_span;

@@ -7,6 +7,8 @@
 
 global mut heap_offset: u32 = 8;
 
+global mut $modules_initialized: bool = false;
+
 fn grow_memory(end: u64) {
     let current_bytes: u64 = (core::builtin::memory_size() as u64 * 65536);
     let deficit: u64 = (end - current_bytes);
@@ -271,7 +273,25 @@ pub fn unreachable() -> !;
 pub fn cold_path();
 
 export fn "$cm_export__run"() {
+    $inline__initialize_modules_0: {
+        if ops.mess_dirty.wado::$modules_initialized {
+            break $inline__initialize_modules_0;
+        }
+        core::builtin::cold_path();
+        "ops.mess_dirty.wado::$initialize_modules$cold0"();
+    };
+    $inline__initialize_modules_2: {
+        if ops.mess_dirty.wado::$modules_initialized {
+            break $inline__initialize_modules_2;
+        }
+        core::builtin::cold_path();
+        "ops.mess_dirty.wado::$initialize_modules$cold0"();
+    };
     cm_raw_call task-return(0);
+}
+
+fn "$initialize_modules$cold0"() {
+    ops.mess_dirty.wado::$modules_initialized = true;
 }
 
 fn array_fill();

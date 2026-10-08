@@ -13,7 +13,7 @@ struct Base {
 
 impl Log for Base {
     fn enabled(&self, level: i32) -> bool { resume level >= 1 }
-    fn emit(&mut self, message: String) { self.lines.push(message); }
+    fn emit(&mut self, message: String) { self.lines.push(message); resume (); }
 }
 
 fn mock_socket() -> TcpSocket with TcpSocket {

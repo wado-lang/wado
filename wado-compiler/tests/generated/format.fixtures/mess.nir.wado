@@ -7,6 +7,8 @@
 
 global mut heap_offset: u32 = 8;
 
+global mut $modules_initialized: bool = false;
+
 flags Access {
     Read,  // 0x1
     Write,  // 0x2
@@ -277,7 +279,25 @@ pub fn unreachable() -> !;
 pub fn cold_path();
 
 export fn "$cm_export__run"() {
+    $inline__initialize_modules_0: {
+        if mess_dirty.wado::$modules_initialized {
+            break $inline__initialize_modules_0;
+        }
+        core::builtin::cold_path();
+        "mess_dirty.wado::$initialize_modules$cold0"();
+    };
+    $inline__initialize_modules_2: {
+        if mess_dirty.wado::$modules_initialized {
+            break $inline__initialize_modules_2;
+        }
+        core::builtin::cold_path();
+        "mess_dirty.wado::$initialize_modules$cold0"();
+    };
     cm_raw_call task-return(0);
+}
+
+fn "$initialize_modules$cold0"() {
+    mess_dirty.wado::$modules_initialized = true;
 }
 
 fn array_fill();

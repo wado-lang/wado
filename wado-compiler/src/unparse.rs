@@ -1468,7 +1468,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_return(&mut self, r: &ReturnStmt) {
         self.write_indent();
-        self.output.push_str("return");
+        self.output.push_str(r.keyword.as_str());
         if let Some(value) = &r.value {
             self.output.push(' ');
             self.emit_inline_comments_in(r.span.start, value.span().start);
@@ -1769,10 +1769,6 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(&range.end);
             }
             Expr::WithHandler(w) => self.unparse_with_handler(w),
-            Expr::Resume(r) => {
-                self.output.push_str("resume ");
-                self.unparse_expr(&r.value);
-            }
             // The formatter is fail-fast on syntax errors, so this placeholder
             // is never reached; emit nothing to keep the match total.
             Expr::Error(_) => {}
@@ -3246,7 +3242,6 @@ fn closure_body_needs_parens(expr: &Expr) -> bool {
         | Expr::TupleComprehension(_)
         | Expr::LabeledBlock(_)
         | Expr::Spread(..)
-        | Expr::Resume(_)
         | Expr::Error(_) => false,
     }
 }
@@ -3289,7 +3284,6 @@ fn unary_operand_needs_parens(op: UnaryOp, expr: &Expr) -> bool {
         | Expr::LabeledBlock(_)
         | Expr::WithHandler(_)
         | Expr::Spread(..)
-        | Expr::Resume(_)
         | Expr::Error(_) => false,
     }
 }
@@ -3637,10 +3631,6 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
             output.push_str(" do ");
             unparse_block_expr_into(&w.body, output);
         }
-        Expr::Resume(r) => {
-            output.push_str("resume ");
-            unparse_expr_into(&r.value, output);
-        }
         // Parser error-recovery placeholder; rendered as an empty marker for
         // the readability-first preview paths that use this helper.
         Expr::Error(_) => output.push_str("<error>"),
@@ -3738,7 +3728,7 @@ fn unparse_stmt_into(stmt: &Stmt, output: &mut String) {
             output.push(';');
         }
         Stmt::Return(r) => {
-            output.push_str("return");
+            output.push_str(r.keyword.as_str());
             if let Some(v) = &r.value {
                 output.push(' ');
                 unparse_expr_into(v, output);
@@ -5393,10 +5383,6 @@ impl<'a> TirUnparser<'a> {
                 });
                 self.output.push_str(" do ");
                 self.unparse_block(body);
-            }
-            TirExprKind::Resume { value } => {
-                self.output.push_str("resume ");
-                self.unparse_expr(value);
             }
         }
     }

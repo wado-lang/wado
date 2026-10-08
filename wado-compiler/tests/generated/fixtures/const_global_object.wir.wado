@@ -57,7 +57,7 @@ type "functype//const_global_object.wado/$cm_binding__Stdout_write_via_stream" =
 
 type "functype//const_global_object.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//const_global_object.wado/$initialize_module" = fn();  // TypeId(18)
+type "functype//const_global_object.wado/$initialize_modules$cold0" = fn();  // TypeId(18)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(19)
 
@@ -124,8 +124,7 @@ fn "const_global_object.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:const_global_object.wado::$modules_initialized);
         cold_path;
-        "const_global_object.wado/$initialize_module"();
-        global:const_global_object.wado::$modules_initialized = 1;
+        "const_global_object.wado/$initialize_modules$cold0"();
     };
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(101), used: 0 };
     offset_18 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $local_1(struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_0 }).buf, 0, 1);
@@ -214,15 +213,15 @@ fn "const_global_object.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:const_global_object.wado::$modules_initialized);
         cold_path;
-        "const_global_object.wado/$initialize_module"();
-        global:const_global_object.wado::$modules_initialized = 1;
+        "const_global_object.wado/$initialize_modules$cold0"();
     };
     "const_global_object.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "const_global_object.wado/$initialize_module"() {
+fn "const_global_object.wado/$initialize_modules$cold0"() {
     global:const_global_object.wado::BANNER = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("welcome to wado"), used: 15 };
+    global:const_global_object.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

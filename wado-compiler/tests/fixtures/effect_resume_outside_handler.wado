@@ -1,8 +1,7 @@
 // Negative test: `resume` is control flow that only makes sense inside an
 // effect handler method body (a method of an `impl Effect for Type` block).
-// Using it in a plain function has no handler frame to resume into, so the
-// elaborator rejects it with a dedicated diagnostic rather than lowering a
-// `Resume` node that codegen could never honour.
+// A plain function has no operation caller to hand the value to, so the
+// elaborator rejects it with a dedicated diagnostic.
 
 fn not_a_handler() {
     resume 0

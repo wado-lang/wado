@@ -14,7 +14,7 @@ use crate::ast::{
     InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
     LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
     NamespacedGenericType, Newtype, NumericSuffix, Param, PathSegment, Pattern, RangeExpr,
-    RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt, SelfKind,
+    RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TryOpExpr,
@@ -27,7 +27,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, lex_interpolation};
-use crate::syntax::expression_keyword_name_message;
+use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
 
@@ -842,14 +842,25 @@ impl Parser {
     /// it sets [`Parser::recovering`], which a backtracking caller must not.
     fn parse_expr_recovering(&mut self) -> Expr {
         let before = self.pos;
-        // Enable operand-position recovery inside the binary / assignment
-        // parsers for the duration of this statement-level expression. Saved /
-        // restored so nesting (a block expression statement inside this one)
-        // composes correctly.
+        let result = self.parse_expr_in_recovery();
+        self.recover_expr(before, result)
+    }
+
+    /// [`Parser::parse_expr`] with operand-position recovery enabled inside the
+    /// binary / assignment parsers for the duration of this statement-level
+    /// expression. Saved / restored so nesting (a block expression statement
+    /// inside this one) composes correctly.
+    fn parse_expr_in_recovery(&mut self) -> ParseResult<Expr> {
         let prev = self.recovering;
         self.recovering = true;
         let result = self.parse_expr();
         self.recovering = prev;
+        result
+    }
+
+    /// The expression parsed from `before`, or on failure an error placeholder
+    /// over the tokens skipped to the next expression boundary.
+    fn recover_expr(&mut self, before: usize, result: ParseResult<Expr>) -> Expr {
         match result {
             Ok(e) => e,
             Err(e) => {
@@ -2479,6 +2490,10 @@ impl Parser {
             return self.parse_let_stmt();
         }
 
+        if self.at_resume() {
+            return self.parse_resume_stmt();
+        }
+
         match self.peek_kind() {
             TokenKind::Return => self.parse_return_stmt(),
             TokenKind::If => self.parse_if_stmt(),
@@ -2701,6 +2716,7 @@ impl Parser {
 
         Ok(Stmt::Return(ReturnStmt {
             id,
+            keyword: ReturnKeyword::Return,
             value,
             span: start_span.merge(&end_span),
         }))
@@ -4433,11 +4449,11 @@ impl Parser {
 
         // Handle identifiers and contextual keywords (flags, type)
         if let Some(name) = self.peek_kind().as_ident_name() {
-            // Contextual keyword `resume` in expression position. Only matched
-            // here; outside of expressions (e.g. `let resume = ...`), `resume`
-            // remains an ordinary identifier.
             if name == "resume" {
-                return self.parse_resume_expr();
+                return Err(self.error_at_span(
+                    start_span,
+                    "`resume` is a statement and has no value; write `resume value;` on its own",
+                ));
             }
             let name = name.to_string();
             self.mark_keyword_name();
@@ -4860,30 +4876,52 @@ impl Parser {
         })
     }
 
-    /// Parse a `resume value` expression. Valid only inside an effect handler
-    /// method body; the elaborator (later phase) is responsible for that check.
-    /// `resume` is a contextual keyword: the lexer hands it to us as an Ident,
-    /// so we consume it by name rather than via a dedicated `TokenKind`.
-    fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
+    /// Whether the next token is the contextual keyword `resume`. The lexer
+    /// hands it over as an identifier, and no name can spell it.
+    fn at_resume(&self) -> bool {
+        self.peek_kind().as_ident_name() == Some("resume")
+    }
+
+    /// Parse `resume value;`. Valid only inside an effect handler method body;
+    /// the elaborator is responsible for that check.
+    fn parse_resume_stmt(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
+        let value = self.parse_resume_value(true)?;
+        let end_span = self.expect_stmt_separator(value.span())?;
+        Ok(Stmt::Return(ReturnStmt {
+            id,
+            keyword: ReturnKeyword::Resume,
+            value: Some(value),
+            span: start_span.merge(&end_span),
+        }))
+    }
+
+    /// Consume `resume` and the value it requires. `recovering` is what
+    /// `return` does in the same position: a statement recovers from a broken
+    /// value, a match arm does not.
+    fn parse_resume_value(&mut self, recovering: bool) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         self.mark_contextual_keyword(start_span);
         self.advance(); // consume `resume` ident
-        let id = self.alloc_ast_id();
+        let before = self.pos;
         let value_start = self.peek().span;
-        let value = self.parse_expr().map_err(|err| {
-            if err.span.start != value_start.start {
-                return err;
-            }
-            ParseError {
+        let result = if recovering {
+            self.parse_expr_in_recovery()
+        } else {
+            self.parse_expr()
+        };
+        match result {
+            Err(err) if err.span.start == value_start.start => Err(ParseError {
                 message: format!(
                     "`resume` takes a value; {}",
-                    expression_keyword_name_message("resume")
+                    statement_keyword_name_message("resume")
                 ),
                 span: start_span,
-            }
-        })?;
-        let span = start_span.merge(&value.span());
-        Ok(Expr::Resume(Box::new(ResumeExpr { id, value, span })))
+            }),
+            Err(err) if !recovering => Err(err),
+            result => Ok(self.recover_expr(before, result)),
+        }
     }
 
     /// Parse match expression: `match expr { pattern => body, ... }`
@@ -4947,20 +4985,27 @@ impl Parser {
             // Block body: `{ ... }`
             let block = self.parse_block()?;
             Expr::Block(Box::new(block))
-        } else if self.check(&TokenKind::Return) {
-            // Return in match arm: `return expr` — wrap in a synthetic block.
-            // The comma/closing brace terminates the arm; no semicolon needed.
+        } else if self.check(&TokenKind::Return) || self.at_resume() {
+            // `return expr` or `resume expr` as an arm, wrapped in a synthetic
+            // block. The comma/closing brace terminates the arm; no semicolon
+            // needed.
             let ret_start = self.peek().span;
-            self.advance(); // consume 'return'
-            let value = if self.check(&TokenKind::Comma) || self.check(&TokenKind::RBrace) {
-                None
+            let (keyword, value) = if self.at_resume() {
+                (ReturnKeyword::Resume, Some(self.parse_resume_value(false)?))
             } else {
-                Some(self.parse_expr()?)
+                self.advance(); // consume 'return'
+                let value = if self.check(&TokenKind::Comma) || self.check(&TokenKind::RBrace) {
+                    None
+                } else {
+                    Some(self.parse_expr()?)
+                };
+                (ReturnKeyword::Return, value)
             };
             let ret_end = value.as_ref().map_or(ret_start, Expr::span);
             let ret_span = ret_start.merge(&ret_end);
             let ret_stmt = Stmt::Return(ReturnStmt {
                 id: self.alloc_ast_id(),
+                keyword,
                 value,
                 span: ret_span,
             });
@@ -9159,12 +9204,16 @@ line 2
     }
 
     #[test]
-    fn parse_resume_expression() {
-        let expr = parse_expr_from("resume 42");
-        let Expr::Resume(r) = expr else {
-            panic!("expected Resume");
+    fn parse_resume_statement() {
+        let module = parse("fn f() -> i32 { resume 42; }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
         };
-        assert_matches!(r.value, Expr::Literal(_));
+        let Stmt::Return(r) = &f.body.as_ref().unwrap().stmts[0] else {
+            panic!("expected a return statement");
+        };
+        assert_eq!(r.keyword, ReturnKeyword::Resume);
+        assert_matches!(r.value, Some(Expr::Literal(_)));
     }
 
     #[test]
@@ -9886,20 +9935,25 @@ line 2
     #[test]
     fn recovery_return_value_keeps_statement() {
         // `return a + ;` — the return survives, keeping the partial `a + <error>`.
-        let (module, errors) = parse_recovering("fn f() -> i32 {\n    return a + ;\n}\n");
-        assert!(!errors.is_empty());
-        let stmts = fn_f_stmts(&module);
-        let ret = stmts
-            .iter()
-            .find_map(|s| match s {
-                Stmt::Return(r) => Some(r),
-                _ => None,
-            })
-            .expect("the return statement survives");
-        let Some(Expr::Binary(bin)) = &ret.value else {
-            panic!("expected a binary expression, got {:?}", ret.value);
-        };
-        assert_matches!(bin.right, Expr::Error(_));
+        // `resume` is the same statement and recovers the same way.
+        for keyword in [ReturnKeyword::Return, ReturnKeyword::Resume] {
+            let source = format!("fn f() -> i32 {{\n    {} a + ;\n}}\n", keyword.as_str());
+            let (module, errors) = parse_recovering(&source);
+            assert!(!errors.is_empty());
+            let stmts = fn_f_stmts(&module);
+            let ret = stmts
+                .iter()
+                .find_map(|s| match s {
+                    Stmt::Return(r) => Some(r),
+                    _ => None,
+                })
+                .expect("the return statement survives");
+            assert_eq!(ret.keyword, keyword);
+            let Some(Expr::Binary(bin)) = &ret.value else {
+                panic!("expected a binary expression, got {:?}", ret.value);
+            };
+            assert_matches!(bin.right, Expr::Error(_));
+        }
     }
 
     #[test]

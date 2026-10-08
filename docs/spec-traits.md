@@ -985,8 +985,8 @@ head, such as `Take<RangeExclusive<i32>>` beside `Take<RangeExclusive<i64>>`,
 stay ambiguous for such an argument.
 
 These carry nothing to select on and admit every candidate: a closure, a
-compound literal (a tuple, an anonymous struct, a list, a spread), `?`,
-`resume`, a tuple comprehension, a labeled block, a tagged template, a static
+compound literal (a tuple, an anonymous struct, a list, a spread), `?`, a
+tuple comprehension, a labeled block, a tagged template, a static
 call `Type::f(…)`, and a function named as a value. A name the argument binds
 for itself (a block's `let`, a match arm's pattern) is read the same way.
 

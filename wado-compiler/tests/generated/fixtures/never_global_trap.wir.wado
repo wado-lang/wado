@@ -31,7 +31,7 @@ type "functype//never_global_trap.wado/$cm_binding__Stdout_write_via_stream" = f
 
 type "functype//never_global_trap.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//never_global_trap.wado/$initialize_module" = fn();  // TypeId(13)
+type "functype//never_global_trap.wado/$initialize_modules$cold0" = fn();  // TypeId(13)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
 
@@ -84,14 +84,12 @@ fn "never_global_trap.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:never_global_trap.wado::$modules_initialized);
         cold_path;
-        "never_global_trap.wado/$initialize_module"();
-        global:never_global_trap.wado::$modules_initialized = 1;
+        "never_global_trap.wado/$initialize_modules$cold0"();
     };
     $inline__initialize_modules_2: block {
         break_if $inline__initialize_modules_2 @likely(global:never_global_trap.wado::$modules_initialized);
         cold_path;
-        "never_global_trap.wado/$initialize_module"();
-        global:never_global_trap.wado::$modules_initialized = 1;
+        "never_global_trap.wado/$initialize_modules$cold0"();
     };
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative = local.tee self_9(global:never_global_trap.wado::X) < 0;
@@ -106,9 +104,10 @@ fn "never_global_trap.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "never_global_trap.wado/$initialize_module"() {
+fn "never_global_trap.wado/$initialize_modules$cold0"() {
     "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("global boom"), used: 11 });
     unreachable;
+    global:never_global_trap.wado::$modules_initialized = 1;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

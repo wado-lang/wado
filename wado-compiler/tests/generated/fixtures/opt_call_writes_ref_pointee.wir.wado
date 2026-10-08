@@ -83,7 +83,7 @@ type "functype//opt_call_writes_ref_pointee.wado/$cm_binding__Stdout_write_via_s
 
 type "functype//opt_call_writes_ref_pointee.wado/$cm_export__run" = fn();  // TypeId(33)
 
-type "functype//opt_call_writes_ref_pointee.wado/$initialize_module" = fn();  // TypeId(34)
+type "functype//opt_call_writes_ref_pointee.wado/$initialize_modules$cold0" = fn();  // TypeId(34)
 
 type "functype//opt_call_writes_ref_pointee.wado/across_opaque$sroa[r.x]" = fn(i32, bool) -> i32;  // TypeId(35)
 
@@ -285,8 +285,7 @@ fn "opt_call_writes_ref_pointee.wado/run"() with Stdout {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_call_writes_ref_pointee.wado::$modules_initialized);
         cold_path;
-        "opt_call_writes_ref_pointee.wado/$initialize_module"();
-        global:opt_call_writes_ref_pointee.wado::$modules_initialized = 1;
+        "opt_call_writes_ref_pointee.wado/$initialize_modules$cold0"();
     };
     c = black_box(1);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -445,15 +444,15 @@ fn "opt_call_writes_ref_pointee.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_call_writes_ref_pointee.wado::$modules_initialized);
         cold_path;
-        "opt_call_writes_ref_pointee.wado/$initialize_module"();
-        global:opt_call_writes_ref_pointee.wado::$modules_initialized = 1;
+        "opt_call_writes_ref_pointee.wado/$initialize_modules$cold0"();
     };
     "opt_call_writes_ref_pointee.wado/run"();
     "wasi/task-return"(0);
 }
 
-fn "opt_call_writes_ref_pointee.wado/$initialize_module"() {
+fn "opt_call_writes_ref_pointee.wado/$initialize_modules$cold0"() {
     global:opt_call_writes_ref_pointee.wado::G = struct.new "opt_call_writes_ref_pointee.wado//P" { x: 1, y: 0 };
+    global:opt_call_writes_ref_pointee.wado::$modules_initialized = 1;
 }
 
 fn "opt_call_writes_ref_pointee.wado/across_opaque$sroa[r.x]"(r, c) {

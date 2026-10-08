@@ -2,8 +2,8 @@
 
 use crate::ast::{
     self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnStmt, Stmt, TaskReturnStmt,
-    Type, WhileStmt, walk_expr, walk_stmt,
+    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnKeyword, ReturnStmt, Stmt,
+    TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::sig::AssocConstSig;
@@ -1264,10 +1264,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_expr(&expr_stmt.expr, ctx, None);
     }
 
+    /// `return` and `resume` leave the function alike, so one check serves
+    /// both; they differ only in where each may be written.
     pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
+        assert!(
+            ret_stmt.keyword == ReturnKeyword::Return || ret_stmt.value.is_some(),
+            "the parser gives every `resume` a value"
+        );
+        match (ret_stmt.keyword, ctx.in_handler_method) {
+            (ReturnKeyword::Return, false) | (ReturnKeyword::Resume, true) => {}
+            (ReturnKeyword::Return, true) => {
+                let _ = self.emit(TypeError::ReturnInHandler {
+                    span: ret_stmt.span,
+                });
+            }
+            (ReturnKeyword::Resume, false) => {
+                let _ = self.emit(TypeError::ResumeOutsideHandler {
+                    span: ret_stmt.span,
+                });
+                // No operation's return type to check the value against.
+                if let Some(value) = &ret_stmt.value {
+                    self.resolve_expr(value, ctx, None);
+                }
+                return;
+            }
+        }
         // An `async fn` names its result with `task return`; a bare `return`
         // still ends the function, carrying whatever was already delivered.
-        if ctx.is_async && ret_stmt.value.is_some() {
+        if ctx.is_async && ret_stmt.keyword == ReturnKeyword::Return && ret_stmt.value.is_some() {
             let _ = self.emit(TypeError::ReturnValueInAsync {
                 span: ret_stmt.span,
             });

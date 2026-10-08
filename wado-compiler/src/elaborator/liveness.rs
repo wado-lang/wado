@@ -917,7 +917,6 @@ impl LastUseAnalyzer<'_> {
                     self.walk_expr(&handler.handler, live, record);
                 }
             }
-            Expr::Resume(e) => self.walk_expr(&e.value, live, record),
         }
     }
 
