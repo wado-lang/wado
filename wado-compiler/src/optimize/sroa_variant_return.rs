@@ -248,7 +248,7 @@ fn rebox_stragglers(
         let type_table = project.type_table.borrow();
         let type_table: &TypeTable = &type_table;
         let functions = &project.functions;
-        exec.map_indices(functions.len(), |i| {
+        exec.indices_where(functions.len(), |i| {
             let mut func = functions[i].borrow_mut();
             // Every step below keys on a call to a scalarized callee. Asked before
             // the body is taken, so a function it leaves alone is not written.
@@ -269,15 +269,10 @@ fn rebox_stragglers(
             reboxed
         })
     };
-    let mut changed = false;
-    for (i, reboxed) in reboxed.into_iter().enumerate() {
-        if reboxed {
-            gate.mark_changed(FuncId::new(i));
-            changed = true;
-        }
+    for &i in &reboxed {
+        gate.mark_changed(FuncId::new(i));
     }
-    changed |= rebox_stragglers_in_globals(project, scalarized);
-    changed
+    rebox_stragglers_in_globals(project, scalarized) | !reboxed.is_empty()
 }
 
 /// The same repair over the global initializers. They are never rewritten —
@@ -2091,7 +2086,7 @@ fn rewrite_call_sites(
     let type_table = project.type_table.borrow();
     let type_table: &TypeTable = &type_table;
     let functions = &project.functions;
-    let rewritten = exec.map_indices(functions.len(), |i| {
+    let rewritten = exec.indices_where(functions.len(), |i| {
         let mut func = functions[i].borrow_mut();
         // Every step below keys on a call to a candidate. Asked before the body
         // is taken, so a function it leaves alone is not written.
@@ -2142,7 +2137,7 @@ fn rewrite_call_sites(
         func.body = Some(body);
         changed
     });
-    touched.extend((0..rewritten.len()).filter(|&i| rewritten[i]));
+    touched.extend(rewritten);
 }
 
 // -----------------------------------------------------------------------

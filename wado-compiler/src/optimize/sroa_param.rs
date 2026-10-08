@@ -23,6 +23,7 @@ use crate::module_source::ModuleSource;
 use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
+use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -78,7 +79,8 @@ pub fn sroa_single_field_parameters(
     }
     // A clone reused rather than minted, with every call site already on it, is
     // a run that changed nothing and must not hold the fixpoint open.
-    let rewrote_global = rewrite_call_sites(project, &candidates, &clones, &mut touched);
+    let rewrote_global =
+        rewrite_call_sites(project, &candidates, &clones, gate.exec(), &mut touched);
     let changed = rewrote_global || !touched.is_empty();
     for idx in touched {
         gate.mark_changed(FuncId::new(idx));
@@ -173,14 +175,17 @@ fn collect_and_validate(
     });
     let (reachable_writes, write_targets) = transitive_reachable_writes(project, own);
 
-    let mut candidates: IndexMap<(FnKey, usize), SroaInfo> = IndexMap::default();
-    for fid in gate.dirty_funcs(GatedPass::SroaParam, project.functions.len()) {
-        let func = project.functions[fid.index()].borrow();
-        let Some(key) = func.id else { continue };
+    let dirty = gate.dirty_funcs(GatedPass::SroaParam, project.functions.len());
+    let functions = &project.functions;
+    let reshapes = &project.reshapes;
+    let per_function = gate.exec().map(&dirty, |fid| {
+        let mut found: Vec<((FnKey, usize), SroaInfo)> = Vec::new();
+        let func = functions[fid.index()].borrow();
+        let Some(key) = func.id else { return found };
         if !is_eligible(&func) {
-            continue;
+            return found;
         }
-        let reshape = project.reshapes.get(&key);
+        let reshape = reshapes.get(&key);
         // A receiver is fair game like any parameter, a trait method's included:
         // the original function survives this pass for the calls it cannot
         // retarget — see `mint_scalarized_clones`.
@@ -194,8 +199,7 @@ fn collect_and_validate(
             if func.retains.iter().any(|s| s == &param.name) {
                 continue;
             }
-            let Some(mut info) = candidate_info_for(param.type_id, &type_table, &field_table)
-            else {
+            let Some(mut info) = candidate_info_for(param.type_id, types, &field_table) else {
                 continue;
             };
             // A struct this position was already unwrapped from reaches itself
@@ -222,22 +226,25 @@ fn collect_and_validate(
                 &reachable_writes[key.index()],
                 &info.struct_key,
                 &write_targets,
-                &type_table,
+                types,
                 &struct_fields,
             );
             if param_snapshot_unsound(
                 &func,
                 pi,
                 &info.struct_key,
-                &type_table,
+                types,
                 &struct_fields,
                 aliasing_write,
             ) {
                 continue;
             }
-            candidates.insert((key, pi), info);
+            found.push(((key, pi), info));
         }
-    }
+        found
+    });
+    let mut candidates: IndexMap<(FnKey, usize), SroaInfo> =
+        per_function.into_iter().flatten().collect();
     if candidates.is_empty() {
         return candidates;
     }
@@ -1188,6 +1195,7 @@ fn rewrite_call_sites(
     project: &mut NirPackage,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
     clones: &IndexMap<FnKey, FnKey>,
+    exec: &Executor,
     touched: &mut IndexSet<usize>,
 ) -> bool {
     let mut sroa_positions: IndexMap<FnKey, (FnKey, IndexMap<usize, SroaInfo>)> =
@@ -1204,51 +1212,54 @@ fn rewrite_call_sites(
     }
 
     let type_table_rc = project.type_table.clone();
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        let Some(key) = func.id else { continue };
-        // Only a call to a candidate is rewritten. Asked before the body is
-        // borrowed mutably, so a function holding none is not written.
-        if !func.calls_any(|id| sroa_positions.contains_key(id)) {
-            continue;
-        }
-        // Inside a clone the scalarized params already hold the field, so an
-        // onward call at another candidate position passes them straight
-        // through. Read from the package, not from this run's `clones`: a clone
-        // minted on an earlier fixpoint iteration is still a clone, and losing
-        // that fact projects the wrapper's field onto it a second time.
-        let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = project
-            .reshapes
-            .get(&key)
-            .map(|reshape| {
-                func.params
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(position, param)| match reshape.shape(position) {
-                        ParamShape::Narrowed(path) => {
-                            let held = path.last().expect("a narrowing projects a field");
-                            Some((param.local_index, held.struct_key.clone()))
-                        }
-                        ParamShape::Kept => None,
-                        ParamShape::Dropped => unreachable!("a dropped parameter is gone"),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        if let Some(body) = func.body.as_mut() {
-            let root = body.root();
-            let type_table = type_table_rc.borrow();
-            if rewrite_calls_node(
-                body,
-                NodeRef::Block(root),
-                &sroa_positions,
-                &scalar_param_struct,
-                &type_table,
-            ) {
-                touched.insert(i);
+    let rewritten = {
+        let type_table = type_table_rc.borrow();
+        let type_table: &TypeTable = &type_table;
+        let functions = &project.functions;
+        let reshapes = &project.reshapes;
+        exec.indices_where(functions.len(), |i| {
+            let mut func = functions[i].borrow_mut();
+            let Some(key) = func.id else { return false };
+            // Only a call to a candidate is rewritten. Asked before the body is
+            // borrowed mutably, so a function holding none is not written.
+            if !func.calls_any(|id| sroa_positions.contains_key(id)) {
+                return false;
             }
-        }
-    }
+            // Inside a clone the scalarized params already hold the field, so an
+            // onward call at another candidate position passes them straight
+            // through. Read from the package, not from this run's `clones`: a clone
+            // minted on an earlier fixpoint iteration is still a clone, and losing
+            // that fact projects the wrapper's field onto it a second time.
+            let scalar_param_struct: IndexMap<u32, (String, ModuleSource)> = reshapes
+                .get(&key)
+                .map(|reshape| {
+                    func.params
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(position, param)| match reshape.shape(position) {
+                            ParamShape::Narrowed(path) => {
+                                let held = path.last().expect("a narrowing projects a field");
+                                Some((param.local_index, held.struct_key.clone()))
+                            }
+                            ParamShape::Kept => None,
+                            ParamShape::Dropped => unreachable!("a dropped parameter is gone"),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            func.body.as_mut().is_some_and(|body| {
+                let root = body.root();
+                rewrite_calls_node(
+                    body,
+                    NodeRef::Block(root),
+                    &sroa_positions,
+                    &scalar_param_struct,
+                    type_table,
+                )
+            })
+        })
+    };
+    touched.extend(rewritten);
     let empty = IndexMap::default();
     let mut rewrote_global = false;
     for global in &mut project.globals {

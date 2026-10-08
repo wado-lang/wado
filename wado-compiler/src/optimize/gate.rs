@@ -229,28 +229,15 @@ impl FunctionGate {
             .collect()
     }
 
-    /// Drive a gate-aware per-function pass over one sweep: call `f` on each
-    /// function pending for `pass` when the sweep starts, mark each seen, and
-    /// mark the changed ones and their neighbours dirty once the sweep ends.
-    /// What one visit rewrites then decides neither which functions the sweep
-    /// visits nor what another visit sees (WEP: Parallel Optimizer). Returns
-    /// whether any function changed. `len` is the current function count
-    /// (read once; these passes do not add functions mid-pass).
-    pub fn run_gated(
-        &mut self,
-        pass: GatedPass,
-        len: usize,
-        mut f: impl FnMut(FuncId) -> bool,
-    ) -> bool {
-        let pending = self.pending(pass, len);
-        let changed: Vec<bool> = pending.iter().map(|&fid| f(fid)).collect();
-        self.close_sweep(pass, &pending, &changed)
-    }
-
-    /// [`Self::run_gated`] with the visits on the gate's threads. A visit holds
-    /// its own function mutably and reads everything else as the sweep found
-    /// it, so the order the visits run in changes nothing. Each visit gets its
-    /// thread's engine scratch buffers.
+    /// Drive a gate-aware per-function pass over one sweep, on the gate's
+    /// threads: visit each function pending for `pass` when the sweep starts,
+    /// mark each seen, and mark the changed ones and their neighbours dirty once
+    /// the sweep ends. A visit holds its own function mutably and reads
+    /// everything else as the sweep found it, so neither the order the visits
+    /// run in nor what one rewrites changes what another sees (WEP: Parallel
+    /// Optimizer). Returns whether any function changed. `len` is the current
+    /// function count (read once; these passes do not add functions mid-pass).
+    /// Each visit gets its thread's engine scratch buffers.
     pub fn run_gated_par(
         &mut self,
         pass: GatedPass,
@@ -258,12 +245,24 @@ impl FunctionGate {
         visit: impl Fn(&mut EngineBuffers, FuncId) -> bool + Sync,
     ) -> bool {
         let pending = self.pending(pass, len);
+        self.sweep_pending_par(pass, &pending, visit)
+    }
+
+    /// [`Self::run_gated_par`] over `pending`, what [`Self::pending`] answered
+    /// with nothing marked changed since: for a pass that plans its sweep from
+    /// the functions it will visit.
+    pub fn sweep_pending_par(
+        &mut self,
+        pass: GatedPass,
+        pending: &[FuncId],
+        visit: impl Fn(&mut EngineBuffers, FuncId) -> bool + Sync,
+    ) -> bool {
         let changed = self
             .exec
-            .map_init(&pending, EngineBuffers::default, |buffers, &fid| {
+            .map_init(pending, EngineBuffers::default, |buffers, &fid| {
                 visit(buffers, fid)
             });
-        self.close_sweep(pass, &pending, &changed)
+        self.close_sweep(pass, pending, &changed)
     }
 
     /// [`Self::run_gated_par`] for a visit that hands back what it changed: a
@@ -454,21 +453,16 @@ mod tests {
         for i in 0..3 {
             gate.seen(GatedPass::CopyProp, FuncId::new(i));
         }
-        // Nothing dirty for CopyProp now: run_gated visits nothing.
-        let mut visited = Vec::new();
-        let changed = gate.run_gated(GatedPass::CopyProp, 3, |fid| {
-            visited.push(fid);
-            false
-        });
-        assert!(visited.is_empty());
-        assert!(!changed);
+        // Nothing dirty for CopyProp now: the sweep visits nothing.
+        let visited = |gate: &mut FunctionGate| -> Vec<FuncId> {
+            gate.sweep_par(GatedPass::CopyProp, 3, Some)
+                .into_iter()
+                .map(|(fid, _)| fid)
+                .collect()
+        };
+        assert!(visited(&mut gate).is_empty());
         // Dirty function 1 (and its caller 0 via propagation), then run again.
         gate.mark_changed(FuncId::new(1));
-        let mut visited = Vec::new();
-        gate.run_gated(GatedPass::CopyProp, 3, |fid| {
-            visited.push(fid);
-            false
-        });
-        assert_eq!(visited, vec![FuncId::new(0), FuncId::new(1)]);
+        assert_eq!(visited(&mut gate), vec![FuncId::new(0), FuncId::new(1)]);
     }
 }

@@ -8,9 +8,6 @@
 //! `container_sroa`'s whitelist and nested-`List<List<T>>` demotion. Its
 //! recursion guard reports `false` at any recursive call site.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -30,7 +27,9 @@ use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
 use crate::optimize::heap_effect::{HeapEffects, HeapEffectsCache, LazyHeapFrame};
+use crate::parallel::lock;
 use cranelift_entity::EntityRef;
+use std::sync::Mutex;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key
 /// on it, and a call site is matched by its stamped `func_id`.
@@ -90,16 +89,11 @@ pub fn demote_value_copies(
         return false;
     }
 
-    let type_table = project.type_table.clone();
-    let heap_types = type_table.borrow();
-    let effects = heap.effects(project, &heap_types, gate);
-    let mut analyzer = Analyzer {
-        funcs: &project.functions,
-        descriptors,
-        element_accessors: element_accessors(project),
-        type_table: &type_table,
-        eimm_memo: IndexMap::default(),
-    };
+    let type_table_rc = project.type_table.clone();
+    let type_table = type_table_rc.borrow();
+    let type_table: &TypeTable = &type_table;
+    let effects = heap.effects(project, type_table, gate);
+    let element_accessors = element_accessors(project);
 
     // Phase 1: per `(function, target-local)`, AND-combine the eligibility
     // of every value-copy-wrapper binding to that local. A local bound by
@@ -107,27 +101,42 @@ pub fn demote_value_copies(
     // eligible — so the single `(fi, local)` key precisely drives the
     // rewrite, and a binding whose sibling is unsafe stays deep rather than
     // being collaterally demoted.
+    let dirty = gate.dirty_funcs(GatedPass::ValueCopyDemote, project.functions.len());
+    let functions = &project.functions;
+    let exact = Mutex::default();
+    let per_function = gate.exec().map(&dirty, |fid| {
+        let fi = fid.index();
+        let mut site_elig: IndexMap<(usize, u32), bool> = IndexMap::default();
+        let mut site_key: IndexMap<(usize, u32), FuncKey> = IndexMap::default();
+        let f = functions[fi].borrow();
+        if let Some(body) = f.body.as_ref().filter(|_| f.value_copy_type().is_none()) {
+            let mut analyzer = Analyzer {
+                funcs: functions,
+                descriptors,
+                element_accessors: &element_accessors,
+                type_table,
+                exact: &exact,
+                provisional: IndexMap::default(),
+                guard_answers: 0,
+            };
+            collect_sites(
+                body,
+                &list_wrapper_copies,
+                &f.params,
+                fi,
+                &mut analyzer,
+                &effects,
+                &mut site_elig,
+                &mut site_key,
+            );
+        }
+        (site_elig, site_key)
+    });
     let mut site_elig: IndexMap<(usize, u32), bool> = IndexMap::default();
     let mut site_key: IndexMap<(usize, u32), FuncKey> = IndexMap::default();
-    for fid in gate.dirty_funcs(GatedPass::ValueCopyDemote, project.functions.len()) {
-        let fi = fid.index();
-        let f = project.functions[fi].borrow();
-        if f.value_copy_type().is_some() {
-            continue;
-        }
-        let Some(body) = &f.body else {
-            continue;
-        };
-        collect_sites(
-            body,
-            &list_wrapper_copies,
-            &f.params,
-            fi,
-            &mut analyzer,
-            &effects,
-            &mut site_elig,
-            &mut site_key,
-        );
+    for (elig, key) in per_function {
+        site_elig.extend(elig);
+        site_key.extend(key);
     }
 
     let mut demoted_keys: IndexSet<FuncKey> = IndexSet::default();
@@ -412,14 +421,10 @@ fn collect_sites(
 
 /// True when `idx` is a parameter declared as an immutable reference (`&T`):
 /// the body cannot mutate `*idx` at all, so its elements are element-clean.
-fn is_immutable_ref_param(
-    params: &[NirParam],
-    type_table: &Rc<RefCell<TypeTable>>,
-    idx: u32,
-) -> bool {
-    params.iter().any(|p| {
-        p.local_index == idx && matches!(type_table.borrow().get(p.type_id), ResolvedType::Ref(_))
-    })
+fn is_immutable_ref_param(params: &[NirParam], type_table: &TypeTable, idx: u32) -> bool {
+    params
+        .iter()
+        .any(|p| p.local_index == idx && matches!(type_table.get(p.type_id), ResolvedType::Ref(_)))
 }
 
 /// Whether `e` is a provably-fresh rvalue: a value materialized here that
@@ -576,9 +581,17 @@ struct Analyzer<'a> {
     funcs: &'a [FuncRef],
     descriptors: &'a [FunctionRef],
     /// The builtins that hand back a handle into an array argument.
-    element_accessors: IndexSet<FuncId>,
-    type_table: &'a Rc<RefCell<TypeTable>>,
-    eimm_memo: IndexMap<FuncKey, bool>,
+    element_accessors: &'a IndexSet<FuncId>,
+    type_table: &'a TypeTable,
+    /// Element-immutability verdicts no recursion guard decided. Such a
+    /// verdict is the same whichever visit asks first, so every visit shares
+    /// them.
+    exact: &'a Mutex<IndexMap<FuncKey, bool>>,
+    /// This visit's verdicts that rest on the recursion guard's provisional
+    /// `false`: another visit, asking in another order, may answer otherwise.
+    provisional: IndexMap<FuncKey, bool>,
+    /// How many answers so far rested on the recursion guard.
+    guard_answers: usize,
 }
 
 impl Analyzer<'_> {
@@ -588,7 +601,7 @@ impl Analyzer<'_> {
         let f = self.funcs.get(key.index())?.borrow();
         let p0 = f.params.first()?;
         Some(matches!(
-            self.type_table.borrow().get(p0.type_id),
+            self.type_table.get(p0.type_id),
             ResolvedType::MutRef(_)
         ))
     }
@@ -603,12 +616,18 @@ impl Analyzer<'_> {
     }
 
     fn verify(&mut self, key: FuncKey, visiting: &mut IndexSet<FuncKey>) -> bool {
-        if let Some(&v) = self.eimm_memo.get(&key) {
+        if let Some(&v) = lock(self.exact).get(&key) {
+            return v;
+        }
+        if let Some(&v) = self.provisional.get(&key) {
+            self.guard_answers += 1;
             return v;
         }
         if visiting.contains(&key) {
+            self.guard_answers += 1;
             return false; // recursion guard — conservative
         }
+        let guard_answers = self.guard_answers;
         let Some(func_rc) = self.funcs.get(key.index()) else {
             compiler_trace!(
                 "demote",
@@ -635,7 +654,11 @@ impl Analyzer<'_> {
             None => false,
         };
         visiting.swap_remove(&key);
-        self.eimm_memo.insert(key, result);
+        if self.guard_answers == guard_answers {
+            lock(self.exact).insert(key, result);
+        } else {
+            self.provisional.insert(key, result);
+        }
         result
     }
 
@@ -745,10 +768,7 @@ impl ElementClean<'_, '_> {
                             // writes, so what it returns decides too.
                             Some(true) => {
                                 !matches!(
-                                    self.analyzer
-                                        .type_table
-                                        .borrow()
-                                        .get(body.exprs[id].type_id),
+                                    self.analyzer.type_table.get(body.exprs[id].type_id),
                                     ResolvedType::MutRef(_)
                                 ) && self.analyzer.is_method_element_immutable(callee)
                             }
@@ -1002,7 +1022,7 @@ impl ElementImmutable<'_, '_, '_> {
                             ve,
                             &self.tainted,
                             self.analyzer.type_table,
-                            &self.analyzer.element_accessors,
+                            self.analyzer.element_accessors,
                         )
                     {
                         self.tainted.insert(local_index);
@@ -1027,7 +1047,7 @@ impl ElementImmutable<'_, '_, '_> {
                             value,
                             &self.tainted,
                             self.analyzer.type_table,
-                            &self.analyzer.element_accessors,
+                            self.analyzer.element_accessors,
                         ) {
                             self.tainted.insert(index);
                         }
@@ -1058,7 +1078,7 @@ impl ElementImmutable<'_, '_, '_> {
                     inner,
                     &self.tainted,
                     tt,
-                    &self.analyzer.element_accessors,
+                    self.analyzer.element_accessors,
                 ) {
                     compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
@@ -1082,7 +1102,7 @@ impl ElementImmutable<'_, '_, '_> {
                             base,
                             &self.tainted,
                             tt,
-                            &self.analyzer.element_accessors,
+                            self.analyzer.element_accessors,
                         ) && base.as_expr().is_some_and(|be| {
                             !matches!(&body.exprs[be].kind, ExprKind::Local { index: 0, .. })
                         })
@@ -1092,7 +1112,7 @@ impl ElementImmutable<'_, '_, '_> {
                         *base,
                         &self.tainted,
                         tt,
-                        &self.analyzer.element_accessors,
+                        self.analyzer.element_accessors,
                     ),
                     _ => false,
                 };
@@ -1123,7 +1143,7 @@ impl ElementImmutable<'_, '_, '_> {
                     receiver,
                     &self.tainted,
                     tt,
-                    &self.analyzer.element_accessors,
+                    self.analyzer.element_accessors,
                 ) {
                     let ok = match self.analyzer.callee_mutates_self(callee) {
                         Some(false) => true,
@@ -1208,7 +1228,7 @@ impl ElementImmutable<'_, '_, '_> {
                     callee,
                     &self.tainted,
                     tt,
-                    &self.analyzer.element_accessors,
+                    self.analyzer.element_accessors,
                 ) {
                     compiler_trace!(
                         "demote",
@@ -1259,7 +1279,7 @@ impl ElementImmutable<'_, '_, '_> {
             arg,
             &self.tainted,
             self.analyzer.type_table,
-            &self.analyzer.element_accessors,
+            self.analyzer.element_accessors,
         ) {
             self.clean = false;
             return;
@@ -1285,7 +1305,7 @@ fn is_self_derived_op(
     body: &Body,
     op: Operand,
     tainted: &IndexSet<u32>,
-    tt: &Rc<RefCell<TypeTable>>,
+    tt: &TypeTable,
     element_accessors: &IndexSet<FuncId>,
 ) -> bool {
     op.as_expr()
@@ -1303,13 +1323,10 @@ fn is_self_derived(
     body: &Body,
     id: ExprId,
     tainted: &IndexSet<u32>,
-    tt: &Rc<RefCell<TypeTable>>,
+    tt: &TypeTable,
     element_accessors: &IndexSet<FuncId>,
 ) -> bool {
-    if matches!(
-        tt.borrow().get(body.exprs[id].type_id),
-        ResolvedType::Primitive(_)
-    ) {
+    if matches!(tt.get(body.exprs[id].type_id), ResolvedType::Primitive(_)) {
         return false;
     }
     match &body.exprs[id].kind {
@@ -1329,7 +1346,7 @@ fn is_self_derived(
             // (`$value_copy$T`) produce fresh storage.
             let hands_back_borrow = element_accessors.contains(func_id)
                 || matches!(
-                    tt.borrow().get(body.exprs[id].type_id),
+                    tt.get(body.exprs[id].type_id),
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 );
             hands_back_borrow

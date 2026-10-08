@@ -4,6 +4,8 @@
 //! loop and shrinks signatures before `inline` sees them. [`is_dae_sroa_eligible`]
 //! holds the pinning rules; neither `is_export` nor a method receiver is pinned.
 
+use std::sync::Arc;
+
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -14,6 +16,7 @@ use crate::nir_package::{NirPackage, Reshape};
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
+use crate::parallel::Executor;
 use crate::tir::TypeTable;
 
 /// A function's canonical [`FuncId`]: the candidate/confirmed/pinned sets key on
@@ -40,27 +43,30 @@ fn eliminate_dead_arguments_round(
     gate: &mut FunctionGate,
     closure_call_keys: &IndexSet<FnKey>,
 ) -> bool {
+    let exec = Arc::clone(gate.exec());
     // Phase 1: identify candidate (function, dead positions) pairs.
-    let mut candidates: IndexMap<FnKey, Vec<bool>> = IndexMap::default();
-    for fid in gate.dirty_funcs(GatedPass::Dae, project.functions.len()) {
-        let func = project.functions[fid.index()].borrow();
-        let Some(key) = func.id else { continue };
-        let is_closure_dae_relaxed = closure_call_keys.contains(&key);
-        if !is_dae_sroa_eligible(&func, is_closure_dae_relaxed) {
-            continue;
-        }
-        let dead = find_dead_params(&func);
-        if dead.iter().any(|&d| d) {
-            candidates.insert(key, dead);
-        }
-    }
+    let dirty = gate.dirty_funcs(GatedPass::Dae, project.functions.len());
+    let functions = &project.functions;
+    let candidates: IndexMap<FnKey, Vec<bool>> = exec
+        .filter_map(&dirty, |fid| {
+            let func = functions[fid.index()].borrow();
+            let key = func.id?;
+            let is_closure_dae_relaxed = closure_call_keys.contains(&key);
+            if !is_dae_sroa_eligible(&func, is_closure_dae_relaxed) {
+                return None;
+            }
+            let dead = find_dead_params(&func);
+            dead.iter().any(|&d| d).then_some((key, dead))
+        })
+        .into_iter()
+        .collect();
     if candidates.is_empty() {
         return false;
     }
 
     // Phase 2: validate every call site passes side-effect-free args at the
     // dead positions. A single offending site rejects the candidate entirely.
-    let confirmed = validate_call_sites(project, candidates);
+    let confirmed = validate_call_sites(project, candidates, &exec);
     if confirmed.is_empty() {
         return false;
     }
@@ -68,7 +74,7 @@ fn eliminate_dead_arguments_round(
     // Phase 3: rewrite signatures and call sites. dae is interprocedural and
     // scans all functions, but reports exactly the ones it touched so the gated
     // passes re-examine only those and their call-graph neighbours.
-    let touched = apply_dae(project, &confirmed);
+    let touched = apply_dae(project, &confirmed, &exec);
     let rewrote = !touched.is_empty();
     debug_assert!(
         rewrote,
@@ -168,21 +174,30 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
 fn validate_call_sites(
     project: &NirPackage,
     mut candidates: IndexMap<FnKey, Vec<bool>>,
+    exec: &Executor,
 ) -> IndexMap<FnKey, Vec<bool>> {
     let type_table = project.type_table.borrow();
-    let mut rejected: IndexSet<FnKey> = IndexSet::default();
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        if let Some(body) = &func.body {
-            validate_in_body(body, &candidates, &mut rejected, &type_table);
-        }
-    }
+    let type_table: &TypeTable = &type_table;
+    let mut rejected: IndexSet<FnKey> = exec
+        .filter_map(&project.functions, |func_rc| {
+            let func = func_rc.borrow();
+            let body = func.body.as_ref()?;
+            if !body.calls_any(|id| candidates.contains_key(id)) {
+                return None;
+            }
+            let mut rejected = IndexSet::default();
+            validate_in_body(body, &candidates, &mut rejected, type_table);
+            Some(rejected)
+        })
+        .into_iter()
+        .flatten()
+        .collect();
     for global in &project.globals {
         validate_in_body(
             global.init.slot_expr().body(),
             &candidates,
             &mut rejected,
-            &type_table,
+            type_table,
         );
     }
     for r in rejected {
@@ -254,7 +269,11 @@ fn validate_call(
 /// rewritten), so the caller can mark exactly those dirty in the gate. The call
 /// graph is unaffected: dae drops arguments on the *same* callee — never
 /// adding or removing an edge.
-fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -> Vec<usize> {
+fn apply_dae(
+    project: &mut NirPackage,
+    confirmed: &IndexMap<FnKey, Vec<bool>>,
+    exec: &Executor,
+) -> Vec<usize> {
     let mut touched: IndexSet<usize> = IndexSet::default();
     // Phase 3a: record each confirmed callee's new shape, then shrink its
     // parameter list and renumber locals so `params[k].local_index == k`
@@ -271,17 +290,16 @@ fn apply_dae(project: &mut NirPackage, confirmed: &IndexMap<FnKey, Vec<bool>>) -
     }
 
     // Phase 3b: rewrite every call site.
-    for (i, func_rc) in project.functions.iter().enumerate() {
-        let mut func = func_rc.borrow_mut();
-        if !func.calls_any(|id| confirmed.contains_key(id)) {
-            continue;
-        }
-        if let Some(body) = func.body.as_mut()
-            && rewrite_calls_in_body(body, confirmed)
-        {
-            touched.insert(i);
-        }
-    }
+    let functions = &project.functions;
+    let rewritten = exec.indices_where(functions.len(), |i| {
+        let mut func = functions[i].borrow_mut();
+        func.calls_any(|id| confirmed.contains_key(id))
+            && func
+                .body
+                .as_mut()
+                .is_some_and(|body| rewrite_calls_in_body(body, confirmed))
+    });
+    touched.extend(rewritten);
     for global in &mut project.globals {
         rewrite_calls_in_body(global.init.slot_expr_mut().body_mut(), confirmed);
     }

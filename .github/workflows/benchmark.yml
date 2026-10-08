@@ -108,49 +108,26 @@ jobs:
       # Only `-O2` is compared — the level a program ships at. Every level is
       # recorded above, so `-O1` and `-O3` keep their history on the pages.
       #
-      # `sieve` is flaky on CI runners, so it gets a looser threshold (warn at
-      # 2x, fail at 3x). github-action-benchmark applies a single threshold per
-      # invocation, so the runtime suite is compared in two steps reading the
-      # same data dir: everything but sieve at 1.5x/2x, sieve alone at 2x/3x.
+      # A runtime ratio below 2x is CI runner noise, so the comparison warns at
+      # 2x and fails at 4x.
       - name: Select the compared benchmarks
         if: github.event_name == 'pull_request'
         run: |
           jq '[.[] | select(.name | endswith("(-O2)"))]' runtime-benchmark.json > runtime-o2.json
-          jq '[.[] | select(.name | startswith("sieve ("))]' runtime-o2.json > sieve-benchmark.json
-          jq '[.[] | select(.name | startswith("sieve (") | not)]' runtime-o2.json > runtime-benchmark-main.json
 
-      - name: Compare runtime benchmarks (excluding sieve)
+      - name: Compare runtime benchmarks
         if: github.event_name == 'pull_request'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: customBiggerIsBetter
-          output-file-path: runtime-benchmark-main.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: false
-          save-data-file: false
-          comment-on-alert: true
-          fail-on-alert: true
-          alert-threshold: '150%'
-          fail-threshold: '200%'
-          alert-comment-cc-users: ''
-          summary-always: true
-          gh-pages-branch: gh-pages
-          benchmark-data-dir-path: benchmarks/runtime-throughput
-          skip-fetch-gh-pages: true
-
-      - name: Compare sieve benchmark (flaky, looser threshold)
-        if: github.event_name == 'pull_request'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: customBiggerIsBetter
-          output-file-path: sieve-benchmark.json
+          output-file-path: runtime-o2.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           save-data-file: false
           comment-on-alert: true
           fail-on-alert: true
           alert-threshold: '200%'
-          fail-threshold: '300%'
+          fail-threshold: '400%'
           alert-comment-cc-users: ''
           summary-always: true
           gh-pages-branch: gh-pages

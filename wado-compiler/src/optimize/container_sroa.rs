@@ -9,6 +9,7 @@
 //! query so any element-immutable method counts as a SROA-safe use.
 
 use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -17,8 +18,9 @@ use crate::nir::{FuncId, FuncParts, FunctionRef, NirFunction, NirStruct, NirUnar
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
@@ -179,6 +181,9 @@ struct Candidate {
     /// Element types of the container (for tuples: the tuple element types;
     /// for structs: the struct field types in declaration order).
     element_types: Vec<TypeId>,
+    /// `List<T_k>` for each of `element_types`, interned once the plans are
+    /// made; empty before.
+    list_types: Vec<TypeId>,
     /// Whether every field is a scalar (carries no identity, needs no value
     /// copy). Only then may a slot copy `v[i] = $value_copy$T(v[j])` be seen
     /// through: the decomposition becomes per-field scalar copies. With an
@@ -235,65 +240,93 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     let struct_index = build_struct_index(&project.structs);
     let value_copy_ids = project.value_copy_func_ids();
     let len = project.functions.len();
-    {
+    let exec = Arc::clone(gate.exec());
+    let pending = gate.pending(GatedPass::ContainerSroa, len);
+    let functions = &project.functions;
+    let holding = {
         // The demotions only unclassify, so a body holding no candidate before
         // them holds none after, and a round whose pending bodies hold none
         // rewrites nothing. They walk the whole program, so only a round that
         // can use them pays for them.
         let type_table = project.type_table.borrow();
-        if !(0..len).map(FuncId::new).any(|fid| {
-            gate.needs(GatedPass::ContainerSroa, fid)
-                && holds_candidate(
-                    &project.functions[fid.index()].borrow(),
-                    &type_table,
-                    &struct_index,
-                    &method_sig,
-                    &value_copy_ids,
-                )
-        }) {
+        let type_table: &TypeTable = &type_table;
+        let holding = exec.filter_map(&pending, |&fid| {
+            holds_candidate(
+                &functions[fid.index()].borrow(),
+                type_table,
+                &struct_index,
+                &method_sig,
+                &value_copy_ids,
+            )
+            .then_some(fid)
+        });
+        if holding.is_empty() {
             gate.catch_up(GatedPass::ContainerSroa, len);
             return false;
         }
-        demote_unsplittable_families(project, &type_table, &mut method_sig);
+        demote_unsplittable_families(project, type_table, &mut method_sig, &exec);
+        holding
+    };
+
+    // What each body holding a candidate decomposes, read off the body. The
+    // rewrite mints a `List<T_k>` per field, so those are interned between the
+    // two, in store order, leaving the visits nothing to intern.
+    let mut plans: IndexMap<FuncId, Vec<Candidate>> = {
+        let type_table = project.type_table.borrow();
+        let type_table: &TypeTable = &type_table;
+        exec.filter_map(&holding, |&fid| {
+            let func = functions[fid.index()].borrow();
+            let body = func
+                .body
+                .as_ref()
+                .expect("a function holding a candidate has a body");
+            let plan = plan_body(
+                body,
+                type_table,
+                &struct_index,
+                &method_sig,
+                &catalog,
+                &value_copy_ids,
+            )?;
+            Some((fid, plan))
+        })
+        .into_iter()
+        .collect()
+    };
+    {
+        let mut type_table = project.type_table.borrow_mut();
+        for c in plans.values_mut().flatten() {
+            c.list_types = c
+                .element_types
+                .iter()
+                .map(|&elem_ty| type_table.make_list(elem_ty))
+                .collect();
+        }
     }
 
-    // Per-function engine session, gate-skipped. Mutations route through the
-    // engine API; the rule fires once at the body root (whole-function shape).
-    // Retargeting some `List<Tuple>::m` calls to per-field `List<F>::m` callees
-    // shifts the function's call edges, which only costs propagation precision,
-    // not correctness.
-    let type_table_rc = project.type_table.clone();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::ContainerSroa, len, |fid| {
-        let func_rc = &project.functions[fid.index()];
-        // A body holding no candidate is one the rewrite would find nothing in,
-        // and the session's indices cost a walk of the whole body.
-        if !holds_candidate(
-            &func_rc.borrow(),
-            &type_table_rc.borrow(),
-            &struct_index,
-            &method_sig,
-            &value_copy_ids,
-        ) {
+    // Per-function engine session. Mutations route through the engine API; the
+    // rule fires once at the body root (whole-function shape). Retargeting some
+    // `List<Tuple>::m` calls to per-field `List<F>::m` callees shifts the
+    // function's call edges, which only costs propagation precision, not
+    // correctness.
+    gate.sweep_pending_par(GatedPass::ContainerSroa, &pending, |buffers, fid| {
+        let Some(plan) = plans.get(&fid) else {
             return false;
-        }
-        let mut func = func_rc.borrow_mut();
+        };
+        let mut func = functions[fid.index()].borrow_mut();
         let rule = ContainerSroaRule {
             catalog: &catalog,
             sig: &method_sig,
-            struct_index: &struct_index,
-            type_table_rc: type_table_rc.clone(),
+            plan,
             value_copy_ids: &value_copy_ids,
             applied: Cell::new(false),
         };
         let FuncParts { body, locals, .. } = func.parts();
-        let body = body.expect("checked above");
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let body = body.expect("a planned function has a body");
+        let mut engine = Engine::new(body, buffers, locals);
         // A promoted constant capacity is re-materialized during the rewrite;
         // `materialize_operand` falls back to a decimal repr without the type
-        // table, which is exact for the non-negative capacity ints. (The session
-        // cannot hold a `type_table` borrow — the rule's `make_list` needs
-        // `borrow_mut`.)
+        // table, which is exact for the non-negative capacity ints.
         engine.run(&[&rule])
     })
 }
@@ -320,11 +353,8 @@ fn holds_candidate(
 pub(super) struct ContainerSroaRule<'a> {
     catalog: &'a MethodCatalog,
     sig: &'a MethodSig,
-    struct_index: &'a StructIndex<'a>,
-    /// Shared `TypeTable` — `make_list(elem_ty)` interns per-field array types
-    /// during the local-allocation step. Borrowed through the `Rc` to avoid
-    /// holding a long mutable borrow across the rewrite.
-    type_table_rc: std::rc::Rc<std::cell::RefCell<TypeTable>>,
+    /// What this body decomposes: [`plan_body`]'s answer.
+    plan: &'a [Candidate],
     /// The `$value_copy$T` helper ids. A slot copy `v[i] = $value_copy$T(v[j])`
     /// of an all-scalar element decomposes to per-field scalar copies, so the
     /// wrapper is seen through during decomposition.
@@ -430,7 +460,12 @@ fn build_method_catalog(
 
 /// Unclassify the method families whose members do more than the per-field
 /// rewrite reproduces.
-fn demote_unsplittable_families(project: &NirPackage, type_table: &TypeTable, sig: &mut MethodSig) {
+fn demote_unsplittable_families(
+    project: &NirPackage,
+    type_table: &TypeTable,
+    sig: &mut MethodSig,
+    exec: &Executor,
+) {
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let builtin_ids = |wanted: CtfeBuiltin| -> IndexSet<FuncId> {
         ctfe_builtins
@@ -440,13 +475,13 @@ fn demote_unsplittable_families(project: &NirPackage, type_table: &TypeTable, si
     };
     let array_len = builtin_ids(CtfeBuiltin::ArrayLen);
     let array_new = builtin_ids(CtfeBuiltin::ArrayNew);
-    demote_element_reading_queries(project, type_table, &array_len, sig);
-    demote_filling_constructors(project, &array_new, sig);
+    demote_element_reading_queries(project, type_table, &array_len, sig, exec);
+    demote_filling_constructors(project, &array_new, sig, exec);
     let storage_builtins: IndexSet<FuncId> = ctfe_builtins
         .iter()
         .filter_map(|(&id, &b)| is_storage_builtin(b).then_some(id))
         .collect();
-    demote_element_inspecting_handlers(project, type_table, &storage_builtins, sig);
+    demote_element_inspecting_handlers(project, type_table, &storage_builtins, sig, exec);
 }
 
 /// The members of `kind` in `sig`, by id.
@@ -459,29 +494,39 @@ fn members_of(sig: &MethodSig, kind: ListMethodKind) -> IndexSet<FuncId> {
 
 /// Shrink `holding` to the members whose `holds` stays true against what is
 /// left of it. `holds` sees `holding` only through the membership query it is
-/// handed.
-fn greatest_fixpoint(
+/// handed. A round's checks run on `exec`'s threads: none removes a member
+/// before all of them have answered. Each thread hands `holds` one scratch
+/// state made by `init`, as [`Executor::map_init`] does.
+fn greatest_fixpoint<S>(
     project: &NirPackage,
+    exec: &Executor,
     holding: &mut IndexSet<FuncId>,
-    holds: impl Fn(&NirFunction, &dyn Fn(&FuncId) -> bool) -> bool,
+    init: impl Fn() -> S + Sync + Send,
+    holds: impl Fn(&mut S, &NirFunction, &dyn Fn(&FuncId) -> bool) -> bool + Sync + Send,
 ) {
     // A verdict changes only once a member it was answered `true` about
     // leaves, so each round rechecks just the dependents of the last removals.
     let mut dependents: IndexMap<FuncId, Vec<FuncId>> = IndexMap::default();
-    let mut pending: IndexSet<FuncId> = holding.clone();
+    let mut pending: Vec<FuncId> = holding.iter().copied().collect();
+    let functions = &project.functions;
     while !pending.is_empty() {
-        let mut failing = Vec::new();
-        for id in pending {
+        let members: &IndexSet<FuncId> = holding;
+        let verdicts = exec.map_init(&pending, &init, |state, id| {
             let relied_on = RefCell::new(Vec::new());
             let is_member = |callee: &FuncId| {
-                let member = holding.contains(callee);
+                let member = members.contains(callee);
                 if member {
                     relied_on.borrow_mut().push(*callee);
                 }
                 member
             };
-            if holds(&project.functions[id.index()].borrow(), &is_member) {
-                for callee in relied_on.into_inner() {
+            let holds = holds(state, &functions[id.index()].borrow(), &is_member);
+            (holds, relied_on.into_inner())
+        });
+        let mut failing = Vec::new();
+        for (id, (holds, relied_on)) in pending.into_iter().zip(verdicts) {
+            if holds {
+                for callee in relied_on {
                     dependents.entry(callee).or_default().push(id);
                 }
             } else {
@@ -491,12 +536,13 @@ fn greatest_fixpoint(
         for id in &failing {
             holding.shift_remove(id);
         }
-        pending = failing
+        let next: IndexSet<FuncId> = failing
             .iter()
             .filter_map(|id| dependents.swap_remove(id))
             .flatten()
             .filter(|id| holding.contains(id))
             .collect();
+        pending = next.into_iter().collect();
     }
 }
 
@@ -523,12 +569,17 @@ fn demote_filling_constructors(
     project: &NirPackage,
     array_new: &IndexSet<FuncId>,
     sig: &mut MethodSig,
+    exec: &Executor,
 ) {
     let constructors = members_of(sig, ListMethodKind::Constructor);
     let mut empty = constructors.clone();
-    greatest_fixpoint(project, &mut empty, |func, is_empty| {
-        builds_empty(func, array_new, is_empty)
-    });
+    greatest_fixpoint(
+        project,
+        exec,
+        &mut empty,
+        || (),
+        |(), func, is_empty| builds_empty(func, array_new, is_empty),
+    );
     demote_families(sig, &constructors, &empty);
 }
 
@@ -600,6 +651,7 @@ fn demote_element_inspecting_handlers(
     type_table: &TypeTable,
     storage_builtins: &IndexSet<FuncId>,
     sig: &mut MethodSig,
+    exec: &Executor,
 ) {
     let value_copy_ids = project.value_copy_func_ids();
     let handlers: IndexSet<FuncId> = [
@@ -643,6 +695,7 @@ fn demote_element_inspecting_handlers(
                         element,
                         storage_builtins,
                         &value_copy_ids,
+                        exec,
                     )
                 })
                 .contains(&id)
@@ -672,35 +725,45 @@ fn movers_of(
     element: TypeId,
     storage_builtins: &IndexSet<FuncId>,
     value_copy_ids: &IndexSet<FuncId>,
+    exec: &Executor,
 ) -> IndexSet<FuncId> {
-    let roles = ElementRoles {
+    // A memo per thread: a role is a pure function of the type.
+    let roles = || ElementRoles {
         type_table,
         element: type_table.type_key(element),
         memo: RefCell::default(),
     };
-    let mut movers: IndexSet<FuncId> = project
-        .functions
-        .iter()
-        .filter_map(|f| {
+    let mut movers: IndexSet<FuncId> = exec
+        .map_init(&project.functions, roles, |roles, f| {
             let f = f.borrow();
             // A bodyless function's signature types may already be gone.
             f.body.as_ref()?;
-            let touches = f
-                .params
-                .iter()
-                .map(|p| p.type_id)
-                .chain(std::iter::once(f.return_type))
-                .any(|t| roles.of(t) != ElementRole::Unrelated);
-            touches.then_some(f.id).flatten()
+            f.id.filter(|id| {
+                !value_copy_ids.contains(id)
+                    && f.params
+                        .iter()
+                        .map(|p| p.type_id)
+                        .chain(std::iter::once(f.return_type))
+                        .any(|t| roles.of(t) != ElementRole::Unrelated)
+            })
         })
-        .filter(|id| !value_copy_ids.contains(id))
+        .into_iter()
+        .flatten()
         .collect();
-    greatest_fixpoint(project, &mut movers, |func, is_mover| {
-        let passes = |callee: &FuncId| {
-            is_mover(callee) || storage_builtins.contains(callee) || value_copy_ids.contains(callee)
-        };
-        moves_elements_only(func, &roles, &passes)
-    });
+    greatest_fixpoint(
+        project,
+        exec,
+        &mut movers,
+        roles,
+        |roles, func, is_mover| {
+            let passes = |callee: &FuncId| {
+                is_mover(callee)
+                    || storage_builtins.contains(callee)
+                    || value_copy_ids.contains(callee)
+            };
+            moves_elements_only(func, roles, &passes)
+        },
+    );
     movers
 }
 
@@ -876,6 +939,7 @@ fn demote_element_reading_queries(
     type_table: &TypeTable,
     array_len: &IndexSet<FuncId>,
     sig: &mut MethodSig,
+    exec: &Executor,
 ) {
     let queries = members_of(sig, ListMethodKind::Query);
     let array_subjects = project.functions.iter().filter_map(|f| {
@@ -884,14 +948,16 @@ fn demote_element_reading_queries(
         f.body.as_ref()?;
         let first = f.params.first()?;
         let ty = type_table.peel_refs(first.type_id);
-        matches!(type_table.get(ty), ResolvedType::BuiltinArray(_))
-            .then_some(f.id)
-            .flatten()
+        f.id.filter(|_| matches!(type_table.get(ty), ResolvedType::BuiltinArray(_)))
     });
     let mut length_only: IndexSet<FuncId> = queries.iter().copied().chain(array_subjects).collect();
-    greatest_fixpoint(project, &mut length_only, |func, is_length_only| {
-        reads_length_only(func, array_len, is_length_only)
-    });
+    greatest_fixpoint(
+        project,
+        exec,
+        &mut length_only,
+        || (),
+        |(), func, is_length_only| reads_length_only(func, array_len, is_length_only),
+    );
     demote_families(sig, &queries, &length_only);
 }
 
@@ -1021,57 +1087,60 @@ impl LengthOnly<'_> {
     }
 }
 
-/// Whole-function container SROA driven from the engine session root.
-fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
-    // Step 1: collect candidates. Immutable borrow of type_table.
-    let candidates = {
-        let type_table = rule.type_table_rc.borrow();
-        collect_candidates(
-            engine.body,
-            &type_table,
-            rule.struct_index,
-            rule.sig,
-            rule.value_copy_ids,
-        )
-    };
+/// The candidates container SROA decomposes in `body`, or `None` for none.
+fn plan_body(
+    body: &Body,
+    type_table: &TypeTable,
+    struct_index: &StructIndex<'_>,
+    sig: &MethodSig,
+    catalog: &MethodCatalog,
+    value_copy_ids: &IndexSet<FuncId>,
+) -> Option<Vec<Candidate>> {
+    // Step 1: collect candidates.
+    let candidates = collect_candidates(body, type_table, struct_index, sig, value_copy_ids);
     if candidates.is_empty() {
-        return false;
+        return None;
     }
 
     // Step 2: escape analysis. Build safe-set via whitelist + tuple-source fixpoint.
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) =
-        compute_safe_set(engine.body, &candidates, rule.sig, rule.value_copy_ids);
+    let (safe_indices, used_kinds_map) = compute_safe_set(body, &candidates, sig, value_copy_ids);
     if safe_indices.is_empty() {
-        return false;
+        return None;
     }
 
     // Step 3: verify that every required (element_ty, sig) is present in the catalog.
     // Required kinds = `Constructor` (always, for the initializer) ∪ observed
     // kinds. If any candidate has missing monomorphizations, drop it.
     let empty_used: IndexSet<(ListMethodKind, FuncId)> = IndexSet::default();
-    let safe_candidates: Vec<&Candidate> = candidates
-        .iter()
+    let safe_candidates: Vec<Candidate> = candidates
+        .into_iter()
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, rule.sig, rule.catalog)
+            required_methods_available(c, used, sig, catalog)
         })
         .collect();
-    if safe_candidates.is_empty() {
-        return false;
-    }
+    (!safe_candidates.is_empty()).then_some(safe_candidates)
+}
 
-    // Step 4: allocate parallel `List<T_k>` locals through the engine. The
-    // type-table borrow is scoped so it does not overlap the engine's locals
-    // mutation (`alloc_minted_local` takes `&mut self`).
+/// Whole-function container SROA driven from the engine session root, over
+/// the candidates [`plan_body`] found.
+fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
+    let safe_candidates = rule.plan;
+
+    // Step 4: allocate parallel `List<T_k>` locals through the engine.
     let mut field_map: IndexMap<(u32, u32), FieldList> = IndexMap::default();
     let mut decomposed: IndexSet<u32> = IndexSet::default();
-    for c in &safe_candidates {
-        for (k, &elem_ty) in c.element_types.iter().enumerate() {
-            let list_type = rule.type_table_rc.borrow_mut().make_list(elem_ty);
+    for c in safe_candidates {
+        assert_eq!(
+            c.list_types.len(),
+            c.element_types.len(),
+            "a planned candidate's list types are interned before the sweep"
+        );
+        for (k, (&elem_ty, &list_type)) in c.element_types.iter().zip(&c.list_types).enumerate() {
             let what = minted_what("csroa", &c.local_name);
             let local_index = engine.alloc_minted_local(&what, list_type, /* is_mut */ false);
             let name = engine.local_name(local_index);
@@ -1240,6 +1309,7 @@ fn collect_candidates(
                 local_index: *local_index,
                 local_name: name.clone(),
                 element_types,
+                list_types: Vec::new(),
                 all_scalar,
                 layout,
                 span: body.stmts[*s].span,
