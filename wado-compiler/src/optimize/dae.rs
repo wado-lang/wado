@@ -48,7 +48,7 @@ fn eliminate_dead_arguments_round(
     let dirty = gate.dirty_funcs(GatedPass::Dae, project.functions.len());
     let functions = &project.functions;
     let candidates: IndexMap<FnKey, Vec<bool>> = exec
-        .map(&dirty, |fid| {
+        .filter_map(&dirty, |fid| {
             let func = functions[fid.index()].borrow();
             let key = func.id?;
             let is_closure_dae_relaxed = closure_call_keys.contains(&key);
@@ -59,7 +59,6 @@ fn eliminate_dead_arguments_round(
             dead.iter().any(|&d| d).then_some((key, dead))
         })
         .into_iter()
-        .flatten()
         .collect();
     if candidates.is_empty() {
         return false;
@@ -180,12 +179,15 @@ fn validate_call_sites(
     let type_table = project.type_table.borrow();
     let type_table: &TypeTable = &type_table;
     let mut rejected: IndexSet<FnKey> = exec
-        .map(&project.functions, |func_rc| {
-            let mut rejected = IndexSet::default();
-            if let Some(body) = &func_rc.borrow().body {
-                validate_in_body(body, &candidates, &mut rejected, type_table);
+        .filter_map(&project.functions, |func_rc| {
+            let func = func_rc.borrow();
+            let body = func.body.as_ref()?;
+            if !body.calls_any(|id| candidates.contains_key(id)) {
+                return None;
             }
-            rejected
+            let mut rejected = IndexSet::default();
+            validate_in_body(body, &candidates, &mut rejected, type_table);
+            Some(rejected)
         })
         .into_iter()
         .flatten()

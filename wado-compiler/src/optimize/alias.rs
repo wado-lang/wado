@@ -645,24 +645,20 @@ fn compute_receiver_mutating(
         direct: bool,
         pending: Vec<FuncId>,
     }
-    let summaries: Vec<Summary> = exec
-        .map(&project.functions, |func_rc| {
-            let f = func_rc.borrow();
-            let id = f.id?;
-            let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
-                return None;
-            };
-            let (direct, pending) =
-                summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
-            Some(Summary {
-                id,
-                direct,
-                pending,
-            })
+    let summaries: Vec<Summary> = exec.filter_map(&project.functions, |func_rc| {
+        let f = func_rc.borrow();
+        let id = f.id?;
+        let (Some(body), Some(p0)) = (f.body.as_ref(), p0_of[id]) else {
+            return None;
+        };
+        let (direct, pending) =
+            summarize_receiver_writes(body, p0, &has_body, first_param_types, type_table);
+        Some(Summary {
+            id,
+            direct,
+            pending,
         })
-        .into_iter()
-        .flatten()
-        .collect();
+    });
     let mut mutating: SecondaryMap<FuncId, bool> = SecondaryMap::new();
     for s in &summaries {
         if s.direct {

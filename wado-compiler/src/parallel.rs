@@ -98,6 +98,19 @@ impl Executor {
         (0..len).map(f).collect()
     }
 
+    /// [`Self::map`] keeping the `Some`s, in item order.
+    pub fn filter_map<T: Sync, R: Send>(
+        &self,
+        items: &[T],
+        f: impl Fn(&T) -> Option<R> + Sync + Send,
+    ) -> Vec<R> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = &self.pool {
+            return pool.install(|| items.par_iter().filter_map(f).collect());
+        }
+        items.iter().filter_map(f).collect()
+    }
+
     /// The indices below `len` where `f` holds, in index order.
     pub fn indices_where(&self, len: usize, f: impl Fn(usize) -> bool + Sync + Send) -> Vec<usize> {
         let holds = self.map_indices(len, f);

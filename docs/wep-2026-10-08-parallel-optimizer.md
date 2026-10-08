@@ -126,9 +126,10 @@ read-only:
 
 A memo that answers a cycle provisionally while the real verdict is in flight
 answers by query order. Each visit keeps its own, as
-`const_object_globalization`'s callee verdicts and `value_copy_demote`'s
-element-immutability verdicts do. One that settles an exact
-fixpoint, such as `SharedEscape`'s, is shared.
+`const_object_globalization`'s callee verdicts do. One that settles an exact
+fixpoint, such as `SharedEscape`'s, is shared. `value_copy_demote` splits its
+element-immutability verdicts: the ones no recursion guard decided are shared,
+and each visit keeps the rest.
 
 A visit does not add a function. A pass that mints functions plans them during
 the sweep and appends them after it, in function order.

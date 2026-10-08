@@ -25,18 +25,15 @@ pub fn eliminate_dead_return_values(project: &mut NirPackage, gate: &mut Functio
         let type_table = project.type_table.borrow();
         let type_table: &TypeTable = &type_table;
         let functions = &project.functions;
-        exec.map(&dirty, |fid| {
+        exec.filter_map(&dirty, |fid| {
             let func = functions[fid.index()].borrow();
             if !is_eligible(&func) {
                 return None;
             }
             let body = func.body.as_ref()?;
-            has_only_pure_returns(body, type_table)
-                .then_some(func.id)
-                .flatten()
+            func.id.filter(|_| has_only_pure_returns(body, type_table))
         })
         .into_iter()
-        .flatten()
         .collect()
     };
     if candidates.is_empty() {
@@ -129,16 +126,19 @@ fn validate_call_sites(
     mut candidates: IndexSet<FnKey>,
     exec: &Executor,
 ) -> IndexSet<FnKey> {
-    let per_function = exec.map(&project.functions, |func_rc| {
+    let per_function = exec.filter_map(&project.functions, |func_rc| {
+        let func = func_rc.borrow();
+        let body = func.body.as_ref()?;
+        if !body.calls_any(|id| candidates.contains(id)) {
+            return None;
+        }
         let mut ctx = ValidateCtx {
             candidates: &candidates,
             rejected: IndexSet::default(),
             observed: IndexSet::default(),
         };
-        if let Some(body) = &func_rc.borrow().body {
-            ctx.block(body, body.root());
-        }
-        (ctx.rejected, ctx.observed)
+        ctx.block(body, body.root());
+        Some((ctx.rejected, ctx.observed))
     });
     let mut ctx = ValidateCtx {
         candidates: &candidates,

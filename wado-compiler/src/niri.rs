@@ -260,7 +260,7 @@ pub(crate) fn build_callee_map(
     exec: &Executor,
     frozen: impl Fn(FuncId) -> bool + Sync + Send,
 ) -> CalleeMap {
-    let entries = exec.map(&project.functions, |func_rc| {
+    let entries = exec.filter_map(&project.functions, |func_rc| {
         let func = func_rc.borrow();
         if !is_ctfe_runnable(&func) {
             return None;
@@ -274,7 +274,7 @@ pub(crate) fn build_callee_map(
         drop(func);
         Some((id, Callee::new(handle)))
     });
-    entries.into_iter().flatten().collect()
+    entries.into_iter().collect()
 }
 
 /// Which callee ids are the builtins the engine evaluates.

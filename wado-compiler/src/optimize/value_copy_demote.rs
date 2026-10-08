@@ -27,7 +27,9 @@ use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
 use crate::optimize::heap_effect::{HeapEffects, HeapEffectsCache, LazyHeapFrame};
+use crate::parallel::lock;
 use cranelift_entity::EntityRef;
+use std::sync::Mutex;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key
 /// on it, and a call site is matched by its stamped `func_id`.
@@ -99,12 +101,9 @@ pub fn demote_value_copies(
     // eligible — so the single `(fi, local)` key precisely drives the
     // rewrite, and a binding whose sibling is unsafe stays deep rather than
     // being collaterally demoted.
-    //
-    // Each visit memoizes its callee verdicts afresh: the memo answers a
-    // recursive call provisionally, so one shared across visits would answer
-    // by which visit asked first.
     let dirty = gate.dirty_funcs(GatedPass::ValueCopyDemote, project.functions.len());
     let functions = &project.functions;
+    let exact = Mutex::default();
     let per_function = gate.exec().map(&dirty, |fid| {
         let fi = fid.index();
         let mut site_elig: IndexMap<(usize, u32), bool> = IndexMap::default();
@@ -116,7 +115,9 @@ pub fn demote_value_copies(
                 descriptors,
                 element_accessors: &element_accessors,
                 type_table,
-                eimm_memo: IndexMap::default(),
+                exact: &exact,
+                provisional: IndexMap::default(),
+                guard_answers: 0,
             };
             collect_sites(
                 body,
@@ -582,7 +583,15 @@ struct Analyzer<'a> {
     /// The builtins that hand back a handle into an array argument.
     element_accessors: &'a IndexSet<FuncId>,
     type_table: &'a TypeTable,
-    eimm_memo: IndexMap<FuncKey, bool>,
+    /// Element-immutability verdicts no recursion guard decided. Such a
+    /// verdict is the same whichever visit asks first, so every visit shares
+    /// them.
+    exact: &'a Mutex<IndexMap<FuncKey, bool>>,
+    /// This visit's verdicts that rest on the recursion guard's provisional
+    /// `false`: another visit, asking in another order, may answer otherwise.
+    provisional: IndexMap<FuncKey, bool>,
+    /// How many answers so far rested on the recursion guard.
+    guard_answers: usize,
 }
 
 impl Analyzer<'_> {
@@ -607,12 +616,18 @@ impl Analyzer<'_> {
     }
 
     fn verify(&mut self, key: FuncKey, visiting: &mut IndexSet<FuncKey>) -> bool {
-        if let Some(&v) = self.eimm_memo.get(&key) {
+        if let Some(&v) = lock(self.exact).get(&key) {
+            return v;
+        }
+        if let Some(&v) = self.provisional.get(&key) {
+            self.guard_answers += 1;
             return v;
         }
         if visiting.contains(&key) {
+            self.guard_answers += 1;
             return false; // recursion guard — conservative
         }
+        let guard_answers = self.guard_answers;
         let Some(func_rc) = self.funcs.get(key.index()) else {
             compiler_trace!(
                 "demote",
@@ -639,7 +654,11 @@ impl Analyzer<'_> {
             None => false,
         };
         visiting.swap_remove(&key);
-        self.eimm_memo.insert(key, result);
+        if self.guard_answers == guard_answers {
+            lock(self.exact).insert(key, result);
+        } else {
+            self.provisional.insert(key, result);
+        }
         result
     }
 

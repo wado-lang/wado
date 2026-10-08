@@ -76,9 +76,7 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
             // guard into, and would claim a `panic_free_parse` that merely reads
             // like one. `dce` retires the type slots only a dead function names,
             // and a dead function is uncallable, so skipping one loses nothing.
-            (!f.is_dead && type_table.is_never(f.return_type))
-                .then_some(f.id)
-                .flatten()
+            f.id.filter(|_| !f.is_dead && type_table.is_never(f.return_type))
         })
         .collect()
 }

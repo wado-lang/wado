@@ -236,8 +236,8 @@ impl FunctionGate {
     /// everything else as the sweep found it, so neither the order the visits
     /// run in nor what one rewrites changes what another sees (WEP: Parallel
     /// Optimizer). Returns whether any function changed. `len` is the current
-    /// function count (read once; these passes do not add functions mid-pass). Each visit gets its
-    /// thread's engine scratch buffers.
+    /// function count (read once; these passes do not add functions mid-pass).
+    /// Each visit gets its thread's engine scratch buffers.
     pub fn run_gated_par(
         &mut self,
         pass: GatedPass,
@@ -245,12 +245,24 @@ impl FunctionGate {
         visit: impl Fn(&mut EngineBuffers, FuncId) -> bool + Sync,
     ) -> bool {
         let pending = self.pending(pass, len);
+        self.sweep_pending_par(pass, &pending, visit)
+    }
+
+    /// [`Self::run_gated_par`] over `pending`, what [`Self::pending`] answered
+    /// with nothing marked changed since: for a pass that plans its sweep from
+    /// the functions it will visit.
+    pub fn sweep_pending_par(
+        &mut self,
+        pass: GatedPass,
+        pending: &[FuncId],
+        visit: impl Fn(&mut EngineBuffers, FuncId) -> bool + Sync,
+    ) -> bool {
         let changed = self
             .exec
-            .map_init(&pending, EngineBuffers::default, |buffers, &fid| {
+            .map_init(pending, EngineBuffers::default, |buffers, &fid| {
                 visit(buffers, fid)
             });
-        self.close_sweep(pass, &pending, &changed)
+        self.close_sweep(pass, pending, &changed)
     }
 
     /// [`Self::run_gated_par`] for a visit that hands back what it changed: a
