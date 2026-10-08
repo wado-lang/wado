@@ -2618,7 +2618,7 @@ pub struct ReturnStmt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnKeyword {
     Return,
-    /// Hands the value to the operation's caller; always carries a value.
+    /// Hands the value to the operation's caller.
     Resume,
 }
 

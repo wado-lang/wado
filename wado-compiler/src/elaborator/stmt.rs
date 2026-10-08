@@ -1267,6 +1267,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `return` and `resume` leave the function alike, so one check serves
     /// both; they differ only in where each may be written.
     pub(super) fn resolve_return(&mut self, ret_stmt: &ReturnStmt, ctx: &mut FunctionContext) {
+        assert!(
+            ret_stmt.keyword == ReturnKeyword::Return || ret_stmt.value.is_some(),
+            "the parser gives every `resume` a value"
+        );
         match (ret_stmt.keyword, ctx.in_handler_method) {
             (ReturnKeyword::Return, false) | (ReturnKeyword::Resume, true) => {}
             (ReturnKeyword::Return, true) => {

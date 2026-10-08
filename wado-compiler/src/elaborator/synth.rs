@@ -60,7 +60,7 @@ pub(super) enum OpaqueReason {
     /// expected type's builder trait says.
     CompoundLiteral,
     /// The type exists but depends on inference: an open generic return type,
-    /// `?`, `resume`, branches that disagree.
+    /// `?`, branches that disagree.
     Inference,
     /// A name or type that did not resolve. Error recovery — the real walk
     /// reports it.

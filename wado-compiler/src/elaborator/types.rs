@@ -1337,9 +1337,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `resume` expression appeared outside an effect handler method body.
-    /// `resume value` is only valid inside the body of a method belonging
-    /// to an `impl Effect for Type` block (see WEP 2026-04-11).
+    /// `resume` outside the body of a method of an `impl Effect for Type`
+    /// block (see WEP 2026-04-11).
     ResumeOutsideHandler {
         span: Span,
     },

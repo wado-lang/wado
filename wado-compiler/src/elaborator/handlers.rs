@@ -1,8 +1,9 @@
-//! Annotation pass for effect handler installation (`with E => h do { … }`) and
-//! `resume`; see WEP 2026-04-11. It validates that each binding names a real
-//! effect declaration, that the handler's stripped type has an `impl` in scope,
-//! and that `resume` sits in a handler method, recording only
-//! `HandlerBindingFacts` for reify to rebuild the TIR nodes from.
+//! Annotation pass for effect handler installation (`with E => h do { … }`);
+//! see WEP 2026-04-11. It validates that each binding names a real effect
+//! declaration and that the handler's stripped type has an `impl` in scope,
+//! recording only `HandlerBindingFacts` for reify to rebuild the TIR nodes
+//! from. Where `resume` and `return` may stand is checked in
+//! `stmt.rs::resolve_return`.
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -24,7 +25,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// Reify rebuilds the `WithHandler` node — its handler bindings from
     /// `HandlerBindingFacts` and its body from the AST; the missing-return
-    /// analysis in `control_flow.rs` reads `with` / `resume` off the AST too.
+    /// analysis in `control_flow.rs` reads `with` off the AST too.
     /// Nothing needs a resolved node, so this arm records facts and projects
     /// the body's result type.
     pub(super) fn resolve_with_handler(
@@ -66,7 +67,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_handler_binding` above) and its body from the AST — so the
         // body walk only resolves the body for its fact-recording side
         // effects and projects the result type. Missing-return analysis reads
-        // `with`/`resume` off the AST via `control_flow.rs`, so nothing
+        // `with` off the AST via `control_flow.rs`, so nothing
         // consumes this node's structure.
         result_type
     }

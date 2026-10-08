@@ -188,7 +188,7 @@ carries a generic call's return type (`fn ids() -> List<T>` synthesizes
 | ----------------- | -------------------------------------------------------------------------- |
 | `Closure`         | a closure whose parameters or return type are unannotated                  |
 | `CompoundLiteral` | `[…]`, `{…}`, a spread — typed by the expected type through builder traits |
-| `Inference`       | `?`, `resume`, a tuple comprehension, branches that disagree               |
+| `Inference`       | `?`, a tuple comprehension, branches that disagree                         |
 | `Unresolved`      | a name or type that did not resolve — error recovery                       |
 
 There is deliberately no "unsupported" reason. The judgement matches on
@@ -260,7 +260,7 @@ yields `Head` when its head is known and `Opaque(Inference)` when it is not.
 | labeled block                                | `Opaque(Inference)` — it yields through `break label:`, not through its tail             |
 | `if`, `match`                                | the join of the branch classes                                                           |
 | closure                                      | `Opaque(Closure)`                                                                        |
-| `e?`, `resume`, tuple comprehension          | `Opaque(Inference)`                                                                      |
+| `e?`, tuple comprehension                    | `Opaque(Inference)`                                                                      |
 | parse-error placeholder                      | `Opaque(Unresolved)`                                                                     |
 
 A subscript is the one position read differently from an argument: its key is

@@ -1,6 +1,6 @@
 //! Move and share eligibility for the value-copy fold (WEP 2026-05-21), from one
-//! backward liveness walk per body plus small auxiliary scans. A handler or
-//! `resume` reads twice, so skips.
+//! backward liveness walk per body plus small auxiliary scans. A handler
+//! reads twice, so skips.
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;

@@ -13,7 +13,7 @@
 //! callee rather than save it). A parameter is confined iff it is not declared
 //! `mut`, `side` is not raised, and `ret` and `taken` are not both. The
 //! analysis over-approximates escape: unmodelled constructs, a closure's
-//! captures, and a handler / `resume` body mark the parameters they reach.
+//! captures, and a handler body mark the parameters they reach.
 
 use super::analyze::{collect_pattern_bindings, passes_through};
 use super::callgraph::CallGraph;
@@ -560,8 +560,7 @@ fn subtree_local_taint(taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
     w.acc
 }
 
-/// A handler or `resume` re-enters this frame, so nothing it holds can be
-/// tracked.
+/// A handler re-enters this frame, so nothing it holds can be tracked.
 fn body_defies_model(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,
