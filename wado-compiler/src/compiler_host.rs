@@ -591,6 +591,8 @@ pub struct GeneratorRequest {
     pub inputs: Vec<GeneratorInputFile>,
     /// How the use site named the generator: the invocation's `invoked_as`.
     pub module: String,
+    /// The use site's `type` beside `generator`: the invocation's `use_type`.
+    pub use_type: Option<String>,
     /// The validated, typed options for this invocation. The host builds a
     /// Component-Model value from it — shaped by the generator component's own
     /// introspected `generate` options parameter — and passes it as a typed
@@ -834,6 +836,7 @@ mod tests {
                     },
                     inputs: vec![],
                     module: "ns:proto@1.0.0".to_string(),
+                    use_type: None,
                     options: CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;

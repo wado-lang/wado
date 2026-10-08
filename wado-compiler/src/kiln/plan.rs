@@ -220,6 +220,7 @@ mod tests {
             }],
             module: GeneratorModule::Spec(format!("ns:{name}@1.0.0").into()),
             invoked_as: format!("ns:{name}@1.0.0"),
+            use_type: None,
             from: InvocationPath::normalize(from),
             inputs: inputs
                 .iter()

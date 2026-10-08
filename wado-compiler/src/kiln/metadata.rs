@@ -28,6 +28,9 @@ pub struct Metadata {
     /// The `invoked_as` the generator was handed, which its output may name.
     #[serde(default)]
     pub invoked_as: String,
+    /// The `use_type` the generator was handed, which decides how it read the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub use_type: Option<String>,
     /// Hex-encoded SHA-256 of the generator's source closure (entry
     /// `.wado` plus every transitively imported `.wado`). When the
     /// stored value differs from the provider's current hash the
@@ -96,6 +99,7 @@ mod tests {
             invocation: "kiln-deadbeef".to_string(),
             generator: "local:src/generator.wado".to_string(),
             invoked_as: "src/generator.wado".to_string(),
+            use_type: Some("onnx".to_string()),
             generator_source_hash: "sha256:gen".to_string(),
             primary: FileHash {
                 path: "schemas/x.proto".to_string(),

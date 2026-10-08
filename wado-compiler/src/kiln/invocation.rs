@@ -204,6 +204,8 @@ pub struct Invocation {
     /// How the use site named the generator, handed to it as `Request.module`:
     /// a specifier verbatim, or a path resolved against the project root.
     pub invoked_as: String,
+    /// The use site's `type` beside `generator`, handed to it as `Request.type`.
+    pub use_type: Option<String>,
     /// Primary schema file, resolved relative to the declaring `.wado` file
     /// (project-root-relative). Drives input loading, the cache key, and the
     /// default `output_dir`.
@@ -264,6 +266,7 @@ impl Invocation {
     ) -> (
         &GeneratorModule,
         &str,
+        Option<&str>,
         &str,
         &[InvocationPath],
         &str,
@@ -272,6 +275,7 @@ impl Invocation {
         (
             &self.module,
             &self.invoked_as,
+            self.use_type.as_deref(),
             self.from.as_str(),
             self.inputs.as_slice(),
             self.output_dir.as_str(),
@@ -352,6 +356,7 @@ mod tests {
             }],
             module: GeneratorModule::Spec("ns:x@1.0.0".into()),
             invoked_as: "ns:x@1.0.0".to_string(),
+            use_type: None,
             from: InvocationPath::normalize("s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),

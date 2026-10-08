@@ -438,6 +438,9 @@ pub async fn run_generator(
                         .collect::<Result<_, _>>()?,
                 ),
                 "module" => Val::String(request.module.clone()),
+                "use-type" => {
+                    Val::Option(request.use_type.clone().map(|t| Box::new(Val::String(t))))
+                }
                 "options" => options_to_val(&request.options, ty)
                     .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
                 other => {
@@ -709,6 +712,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             },
             inputs: vec![],
             module: "../gen".to_string(),
+            use_type: None,
             options,
         };
 
@@ -801,6 +805,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             },
             inputs: vec![],
             module: "../gen".to_string(),
+            use_type: None,
             options,
         };
 

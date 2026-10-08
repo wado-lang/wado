@@ -147,6 +147,7 @@ mod tests {
             invocation: "kiln-deadbeef".to_string(),
             generator: "local:src/generator.wado".to_string(),
             invoked_as: "src/generator.wado".to_string(),
+            use_type: None,
             generator_source_hash: "sha256:gen".to_string(),
             primary: FileHash {
                 path: "schemas/x.proto".to_string(),

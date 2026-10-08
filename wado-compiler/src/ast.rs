@@ -2200,9 +2200,13 @@ impl ImportAttributes {
     /// The key making the import a generated one.
     pub const GENERATOR: &str = "generator";
 
+    /// The key saying how the file is read: the only one a generated import may
+    /// carry beside [`Self::GENERATOR`], which receives it.
+    pub const TYPE: &str = "type";
+
     /// Every other key a clause may carry, each taking a string.
     pub const STRING_KEYS: [&str; 8] = [
-        "type",
+        Self::TYPE,
         "provider",
         "git",
         "ref",
@@ -2264,7 +2268,7 @@ impl ImportAttributes {
 
     #[must_use]
     pub fn type_hint(&self) -> Option<String> {
-        self.get_str("type")
+        self.get_str(Self::TYPE)
     }
 
     /// Whether the clause names a Kiln generator (`with { generator: … }`),

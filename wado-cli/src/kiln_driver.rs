@@ -190,6 +190,7 @@ pub async fn execute<H: CompilerHost>(
         primary,
         inputs,
         module: invocation.invoked_as.clone(),
+        use_type: invocation.use_type.clone(),
         options: invocation.options.clone(),
     };
 
@@ -326,6 +327,7 @@ pub fn build_metadata(
         invocation: invocation_name.to_string(),
         generator,
         invoked_as: invocation.invoked_as.clone(),
+        use_type: invocation.use_type.clone(),
         generator_source_hash,
         primary,
         inputs,
@@ -469,7 +471,7 @@ pub async fn cache_matches<H: CompilerHost>(
     if metadata.generator_source_hash != current_generator_source_hash {
         return CacheCheck::Miss;
     }
-    if metadata.invoked_as != invocation.invoked_as {
+    if metadata.invoked_as != invocation.invoked_as || metadata.use_type != invocation.use_type {
         return CacheCheck::Miss;
     }
 
@@ -1406,6 +1408,7 @@ mod tests {
                 }],
                 module: GeneratorModule::Spec("ns:proto@1.0.0".into()),
                 invoked_as: "ns:proto@1.0.0".to_string(),
+                use_type: None,
                 from: InvocationPath::normalize("schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
@@ -1637,6 +1640,7 @@ mod tests {
                 }],
                 module: GeneratorModule::Spec("ns:proto@1.0.0".into()),
                 invoked_as: "ns:proto@1.0.0".to_string(),
+                use_type: None,
                 from: InvocationPath::normalize("schema.proto"),
                 inputs: vec![InvocationPath::normalize("dep.proto")],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),

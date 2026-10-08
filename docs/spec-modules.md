@@ -338,17 +338,16 @@ use { println, Stdout } from "core:cli" with { tpye: "wasm", provider: 1 };
 
 ### How an Import Is Read
 
-`type` is `"wasm"` or `"wat"`. A `use` never looks at its path's extension. Its
-attributes decide how the file is read:
+A `use` never looks at its path's extension. Its attributes decide how the file
+is read:
 
 1. With `generator`, a [Kiln generator](./spec-kiln.md) reads it. A `type`
-   beside `generator` is passed to the generator.
-2. With `type` alone, the file is read as that type: `"wasm"` as a Wasm binary,
-   `"wat"` as Wasm text.
+   beside `generator` is any string, and is passed to the generator.
+2. With `type` alone, which is `"wasm"` or `"wat"`, the file is read as that
+   type: `"wasm"` as a Wasm binary, `"wat"` as Wasm text.
 3. Otherwise it is read as Wado source.
 
-> Not yet implemented: the loader still decides by extension, and a generator
-> does not receive `type`. See
+> Not yet implemented: the loader still decides by extension. See
 > [WEP: Kiln](./wep-2026-04-12-kiln.md#known-gaps).
 
 ## Wasm Module and Component Imports

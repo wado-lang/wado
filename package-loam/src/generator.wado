@@ -120,6 +120,14 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
         return refused(req, KilnError::Unsupported(reason));
     };
+    if !req.type matches { Some("onnx") } {
+        let given = match req.type {
+            Some(t) => `\`type: "${t}"\``,
+            None => "no `type`",
+        };
+        let reason = `loam: '${req.primary.path}' is given ${given}; a graph is \`type: "onnx"\``;
+        return refused(req, KilnError::Unsupported(reason));
+    }
     let mut headers: List<[String, ByteList]> = [];
     for let input of req.inputs {
         headers.push([input.path, read_header(input.content)]);

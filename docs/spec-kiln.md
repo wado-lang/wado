@@ -39,6 +39,12 @@ resolved against the declaring file, like a local module import. The
 
 Each field has one type, and any other key or type is an error at the use site.
 
+Beside `generator`, the `with` clause may hold `type`, a string. The generator
+receives it as `Request.type`, and decides what it means: it is how a generator
+that reads more than one kind of file is told which one this is. Any other key
+beside `generator` is an error at the use site. A `type` makes the invocation a
+different one, so the same file under two types is generated twice.
+
 A `[build-dependencies]` coordinate names a published generator. Here Gale, a
 generator that builds a parser from an ANTLR4 grammar
 ([WEP: Gale](./wep-2026-03-02-gale.md)), comes from a registry. The use site
@@ -165,6 +171,7 @@ object:
 ```wado
 use { Batch, Col, Row, Weights, forward } from "./specialize.onnxtext"
     with {
+        type: "onnx",
         generator: {
             module: "lib:loam",
             options: {
@@ -337,6 +344,9 @@ pub struct Request<T = NoOptions> {
     /// How the use site named this generator: its `module:` specifier as
     /// written, or for a path, that path from the project root.
     pub module: String,
+    /// The `type` the use site wrote beside `generator`, which says how the
+    /// generator reads the file. `None` where it wrote none.
+    pub type: Option<String>,
     pub options: T,
 }
 ```
@@ -345,6 +355,7 @@ pub struct Request<T = NoOptions> {
   in the order written.
 - `module` is how the use site named the generator: the `module:` specifier as
   written, or for a relative path, that path from the project root.
+- `type` is the `type` beside `generator`, or `None`.
 - `options` is the use site's options, with defaults filled in.
 
 An input file carries its path from the project root, normalized, and the

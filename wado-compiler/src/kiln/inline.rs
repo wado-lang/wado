@@ -6,7 +6,9 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::ast::{AttrObject, AttrValue, ImportAttributes, Item, Module, UseDecl, attr_value};
+use crate::ast::{
+    AttrEntry, AttrObject, AttrValue, ImportAttributes, Item, Module, UseDecl, attr_value,
+};
 use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
 use crate::name::resolve_module_path;
@@ -192,17 +194,32 @@ fn lower_inline(
     let mut errors: Vec<Diagnostic> = Vec::new();
 
     for (key, entry) in &attrs.entries {
-        if key != ImportAttributes::GENERATOR {
+        if key != ImportAttributes::GENERATOR && key != ImportAttributes::TYPE {
             errors.push(clause_error(
                 module_path,
                 &entry.key_span,
                 format!(
                     "kiln: unknown key `{key}` beside `generator`; a generated import's \
-                     `with` holds `generator` alone"
+                     `with` holds `generator`, and may hold `type`"
                 ),
             ));
         }
     }
+    let use_type = match attrs.entries.get(ImportAttributes::TYPE) {
+        None => None,
+        Some(AttrEntry {
+            value: AttrValue::String(t),
+            ..
+        }) => Some(t.clone()),
+        Some(entry) => {
+            errors.push(clause_error(
+                module_path,
+                &entry.key_span,
+                format!("kiln: `type` must be a string, got {}", entry.value.kind()),
+            ));
+            None
+        }
+    };
     let generator = &attrs.entries[ImportAttributes::GENERATOR];
     let Some(cfg) = generator.value.as_object() else {
         errors.push(clause_error(
@@ -388,7 +405,14 @@ fn lower_inline(
     let module = module.expect("module was validated above");
 
     let written_options = encode_written_options(options_entry.map(|entry| &entry.value));
-    let digest = clause_digest(&module, from.as_str(), &inputs, None, &written_options);
+    let digest = clause_digest(
+        &module,
+        use_type.as_deref(),
+        from.as_str(),
+        &inputs,
+        None,
+        &written_options,
+    );
     let synthetic_id = format!("kiln-{}", &digest[..16]);
 
     let output_dir = output_dir_override.unwrap_or_else(|| {
@@ -405,6 +429,7 @@ fn lower_inline(
         }],
         invoked_as: module.as_written(),
         module,
+        use_type,
         from,
         inputs,
         output_dir,
@@ -588,14 +613,15 @@ fn module_key(module: &GeneratorModule) -> String {
 }
 
 fn identity_key(inv: &Invocation) -> String {
-    let (module, _, from, inputs, output_dir, options) = inv.identity_tuple();
-    clause_digest(module, from, inputs, Some(output_dir), &options)
+    let (module, _, use_type, from, inputs, output_dir, options) = inv.identity_tuple();
+    clause_digest(module, use_type, from, inputs, Some(output_dir), &options)
 }
 
 /// The hex SHA-256 of what a clause names. The synthetic id leaves out the
 /// output directory, since by default the directory is named for it.
 fn clause_digest(
     module: &GeneratorModule,
+    use_type: Option<&str>,
     from: &str,
     inputs: &[InvocationPath],
     output_dir: Option<&str>,
@@ -603,6 +629,12 @@ fn clause_digest(
 ) -> String {
     let mut h = Sha256::new();
     h.update(module_key(module).as_bytes());
+    // Only a `type` adds bytes, so a clause without one keeps the id it had.
+    if let Some(t) = use_type {
+        h.update([1u8]);
+        h.update((t.len() as u64).to_le_bytes());
+        h.update(t.as_bytes());
+    }
     h.update(from.as_bytes());
     for p in inputs {
         h.update(p.as_str().as_bytes());
@@ -624,7 +656,7 @@ fn use_error(module_path: &str, use_decl: &UseDecl, message: String) -> Diagnost
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstId, AttrEntry, UseItem, Visibility};
+    use crate::ast::{AstId, UseItem, Visibility};
     use crate::compiler_host::{Code, Severity};
     use crate::token::Span;
     use std::assert_matches;
@@ -881,19 +913,73 @@ mod tests {
         let mut attrs =
             attr_with_generator(&[("module", AttrValue::String("./inner.wado".to_string()))]);
         attrs.entries.insert(
-            "type".to_string(),
-            entry_at(3, 9, AttrValue::String("wasm".to_string())),
+            "provider".to_string(),
+            entry_at(3, 9, AttrValue::String("./ext.wado".to_string())),
         );
 
         assert_eq!(
             only_error(attrs),
             (
-                "kiln: unknown key `type` beside `generator`; a generated import's `with` \
-                 holds `generator` alone"
+                "kiln: unknown key `provider` beside `generator`; a generated import's `with` \
+                 holds `generator`, and may hold `type`"
                     .to_string(),
                 3,
                 9,
             ),
+        );
+    }
+
+    /// The invocation a `use` of `./model.onnx` in `src/main.wado` lowers to,
+    /// with `type` beside its generator where one is given.
+    fn invocation_typed(use_type: Option<&str>) -> Invocation {
+        let mut attrs =
+            attr_with_generator(&[("module", AttrValue::String("lib:gen".to_string()))]);
+        if let Some(t) = use_type {
+            attrs
+                .entries
+                .insert("type".to_string(), entry(AttrValue::String(t.to_string())));
+        }
+        let module = module_with_use("./model.onnx", attrs);
+        let mut result = expect_ok(collect_inline_invocations(
+            [("src/main.wado", &module)],
+            &IndexMap::default(),
+            "",
+        ));
+        assert_eq!(result.len(), 1);
+        result.remove(0)
+    }
+
+    #[test]
+    fn a_type_beside_generator_is_handed_to_it() {
+        assert_eq!(
+            invocation_typed(Some("tokenizer")).use_type.as_deref(),
+            Some("tokenizer")
+        );
+        assert_eq!(invocation_typed(None).use_type, None);
+    }
+
+    #[test]
+    fn a_type_beside_generator_is_part_of_the_invocation() {
+        let ids: Vec<String> = [None, Some("onnx"), Some("tokenizer")]
+            .into_iter()
+            .map(|t| invocation_typed(t).decl_site().synthetic_id.clone())
+            .collect();
+        assert_ne!(ids[0], ids[1]);
+        assert_ne!(ids[1], ids[2]);
+        assert_ne!(ids[0], ids[2]);
+    }
+
+    #[test]
+    fn a_type_beside_generator_that_is_not_a_string_is_an_error_on_its_key() {
+        let mut attrs =
+            attr_with_generator(&[("module", AttrValue::String("lib:gen".to_string()))]);
+        attrs
+            .entries
+            .insert("type".to_string(), entry_at(2, 5, AttrValue::Bool(true)));
+
+        assert_eq!(
+            only_error(attrs),
+            ("kiln: `type` must be a string, got bool".to_string(), 2, 5),
         );
     }
 

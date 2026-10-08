@@ -525,9 +525,14 @@ fn is_non_wado_schema(path: &str) -> bool {
 /// Extract the wasm-asset kind from a use declaration's `with { ... }`
 /// attributes. Returns `Some(kind)` for `with { type: "wat" | "wasm" }`,
 /// `None` otherwise (including for unrelated `with { ... }` attributes
-/// such as `with { version: "1.0" }`).
+/// such as `with { version: "1.0" }`). A `type` beside `generator` is the
+/// generator's to read, so that import is no asset.
 pub fn wasm_asset_kind_from_attrs(attrs: Option<&ImportAttributes>) -> Option<WasmAssetKind> {
-    let type_hint = ImportAttributes::type_hint(attrs?)?;
+    let attrs = attrs?;
+    if attrs.is_generated() {
+        return None;
+    }
+    let type_hint = ImportAttributes::type_hint(attrs)?;
     match type_hint.as_str() {
         "wat" => Some(WasmAssetKind::Wat),
         "wasm" => Some(WasmAssetKind::Wasm),
@@ -1090,6 +1095,29 @@ mod tests {
             );
             assert_eq!(strip_kiln_scheme(&uri).as_deref(), Some(path));
         }
+    }
+
+    /// The attributes of the module's one `use`.
+    fn use_attributes(source: &str) -> ImportAttributes {
+        let module = parse_test_module(source);
+        let Some(Item::Use(use_decl)) = module.items.into_iter().next() else {
+            panic!("the source is one `use`");
+        };
+        use_decl.attributes.expect("the `use` carries a `with`")
+    }
+
+    #[test]
+    fn a_type_beside_generator_reads_no_wasm_asset() {
+        let generated = use_attributes(
+            "use { f } from \"./m.wasm\" with { type: \"wasm\", generator: { module: \"lib:gen\" } };",
+        );
+        assert_eq!(wasm_asset_kind_from_attrs(Some(&generated)), None);
+
+        let asset = use_attributes("use { f } from \"./m.wasm\" with { type: \"wasm\" };");
+        assert_eq!(
+            wasm_asset_kind_from_attrs(Some(&asset)),
+            Some(WasmAssetKind::Wasm)
+        );
     }
 
     #[test]
