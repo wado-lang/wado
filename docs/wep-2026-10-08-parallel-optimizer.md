@@ -71,26 +71,31 @@ programs of `benchmark/` and `example/` compile to identical bytes at O2, and
 The change is adopted for its own sake, sequentially, before any thread is
 added, so a regression it brings is not confused with one threads bring.
 
-### The package owns its functions
+### A function is a cell that counts its writes
 
-`NirPackage::functions` becomes a store of `NirFunction` values indexed by
-`FuncId`. Nothing holds a function by `Rc`: a closure functor names its methods
-by `FuncId`, and so do the interpreter's callees.
+`NirPackage::functions` holds each function in a `FuncCell` shared by `Arc`: a
+reader-writer lock and a write count. `borrow` and `borrow_mut` fail at once on
+a conflicting borrow, as `RefCell`'s do, so a visit that reaches a function
+another thread is writing panics rather than races.
 
-Mutable access to a function goes through the store, and the store counts it.
-The per-body memos key on that count instead of on reported edits, so a pass
-cannot rewrite a body behind a memo's back. `FunctionGate::mark_changed` stays,
-for scheduling only: it decides which functions a pass revisits, which costs
-precision when wrong, never correctness. The count is conservative: a visit
-that takes a function mutably and changes nothing still invalidates its memo
-entries. Roadmap step 2 measures what that costs.
+`borrow_mut` bumps the count. The per-body memos key on it instead of on
+reported edits, so a pass cannot rewrite a body behind a memo's back.
+`FunctionGate::mark_changed` stays, for scheduling only: it decides which
+functions a pass revisits, which costs precision when wrong, never
+correctness. The count is conservative: a visit that takes a function mutably
+and changes nothing still invalidates its memo entries. Roadmap step 2
+measures what that costs.
+
+The type table stays behind the package's `RefCell`. A sweep borrows it once
+and hands each visit the shared reference.
 
 ### What a parallel visit may touch
 
 A visit in a parallel sweep gets its own function mutably and everything else
 read-only:
 
-- The type table, shared. A visit does not intern a type. A pass interns what
+- The type table, shared. A visit is handed what it reads rather than the
+  package, so it cannot intern a type. A pass interns what
   its visits need before the sweep, as `peephole` already does for the
   builtins it synthesizes. The per-function passes intern nothing today.
 - Other functions, as of the sweep's start. The pending functions are taken out
@@ -136,10 +141,10 @@ which callees to clone or which parameters to drop, stay sequential.
 
 ## Roadmap
 
-1. Make `Body`, `NirFunction` and `TypeTable` `Send` and `Sync`, and give the
-   package its type table by value. Done when the static assertion compiles.
-2. Replace `Vec<Rc<RefCell<NirFunction>>>` with the store, counting mutable
-   access, and key every `BodyMemo` on that count. Done when no
+1. Make `Body`, `NirFunction` and `TypeTable` `Send` and `Sync`. Done when the
+   static assertion compiles.
+2. Replace `Rc<RefCell<NirFunction>>` with `Arc<FuncCell>`, and key every
+   `BodyMemo` on the cell's write count. Done when no
    `Rc<RefCell<NirFunction>>` remains, the gate no longer counts edits, and the
    memo hit rate on `package-gale` is measured.
 3. Adopt the sweep semantics in `run_gated`, still sequential, with reads of

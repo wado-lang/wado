@@ -5,7 +5,7 @@
 //! value-graph builder can fold arithmetic without depending on `niri`.
 
 use std::cmp::Ordering;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{Body, Operand};
@@ -39,7 +39,7 @@ pub enum Value {
     /// interpreter; what reaches the IR is the scalars projected out of them.
     Aggregate {
         type_id: TypeId,
-        fields: Rc<[(u32, Value)]>,
+        fields: Arc<[(u32, Value)]>,
     },
     /// A backing array of compile-time values. `String` and `List<T>` need no
     /// case of their own: each is an [`Value::Aggregate`] over one of these
@@ -47,14 +47,14 @@ pub enum Value {
     /// array's — a grown container's capacity outruns what it holds.
     Seq {
         type_id: TypeId,
-        elements: Rc<[Value]>,
+        elements: Arc<[Value]>,
     },
     /// A variant value: which case it holds, by index (WEP 2026-08-12), and that
     /// case's payload — an aggregate where the case carries several fields.
     Variant {
         type_id: TypeId,
         case_index: u32,
-        payload: Option<Rc<Value>>,
+        payload: Option<Arc<Value>>,
     },
 }
 
@@ -65,16 +65,16 @@ pub const MAX_SEQ_ELEMENTS: usize = 1024;
 
 /// A backing nobody else holds, to be written through in place.
 ///
-/// `Rc::make_mut` covers `Rc<T>` but not `Rc<[T]>`, so the copy-on-write step
+/// `Arc::make_mut` covers `Arc<T>` but not `Arc<[T]>`, so the copy-on-write step
 /// is spelled out: a shared backing is copied and the copy handed back, a
 /// unique one is handed back where it lies. That is what keeps filling a
 /// sequence element by element linear — copying it per write is what makes it
 /// quadratic — while a value two locals share still forks on the first write.
-fn unshared<T: Clone>(backing: &mut Rc<[T]>) -> &mut [T] {
-    if Rc::get_mut(backing).is_none() {
+fn unshared<T: Clone>(backing: &mut Arc<[T]>) -> &mut [T] {
+    if Arc::get_mut(backing).is_none() {
         *backing = backing.iter().cloned().collect();
     }
-    Rc::get_mut(backing).expect("the backing was just replaced with a unique one")
+    Arc::get_mut(backing).expect("the backing was just replaced with a unique one")
 }
 
 impl Value {

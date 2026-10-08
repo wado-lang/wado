@@ -31,6 +31,14 @@ use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
+// The optimizer visits functions on several threads, each holding its own
+// function mutably and reading the rest (WEP: Parallel Optimizer).
+const _: () = {
+    const fn shared_across_threads<T: Send + Sync>() {}
+    shared_across_threads::<NirFunction>();
+    shared_across_threads::<TypeTable>();
+};
+
 /// A linked Wado package ready for WIR building and code generation.
 ///
 /// Produced by [`crate::link::link`] from a [`crate::package::Package`].
