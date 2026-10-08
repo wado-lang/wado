@@ -454,7 +454,12 @@ fn greedy_loop_prefix(ctx: &mut LowerContext, rep: &RepeatElement) -> List<List<
         },
     }
     let mut visiting: List<String> = [];
-    let [prefix, _consumed] = ctx.analysis.deep_position_first_sets_from(&body_elements, 0, FOLLOW_MASK_MAX_K, &mut visiting);
+    let [prefix, _consumed] = ctx.analysis.deep_position_first_sets_from(
+        &body_elements,
+        0,
+        FOLLOW_MASK_MAX_K,
+        &mut visiting,
+    );
     // Two positions is the whole bar, not a stand-in for one. Demanding the
     // walk span the body instead rejects `(SEP seg)`, whose second element is
     // the rule the loop exists to re-enter, and takes the repair with it —
@@ -524,10 +529,13 @@ pub fn lower(grammar: &Grammar, lit_tokens: &List<LitToken>, ctx: &mut LowerCont
 /// the conflict is read off the lowered shape.
 fn mark_at_end_conflicts_routed(grammar: &Grammar, lowered: &List<Rule>, ctx: &mut LowerContext) {
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
+        if !lowered[r] matches { MultiAlt(_) } {
+            continue;
+        }
         ctx.set_current_rule_index(r);
         let rule = &grammar.parser_rules[r];
-        let gated = ctx.rule_alts_gated(rule, &lowered[r]);
-        if rule_has_at_end_conflict(rule, &lowered[r], &mut ctx.analysis, &ctx.follow, gated) {
+        let overlap = ctx.rule_overlap(rule, &lowered[r]);
+        if rule_has_at_end_conflict(rule, &overlap, &mut ctx.analysis, &ctx.follow) {
             ctx.marks.mark_asks_simulator(r);
         }
     }
@@ -4244,7 +4252,8 @@ fn atn_asked_kinds(
     index: i32,
     ctx: &mut LowerContext,
 ) -> List<String> {
-    if ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1) || ctx.analysis.elements_reach_open_end(alt_elements, index + 1) {
+    if ctx.analysis.tail_is_nullable_deep(alt_elements, index + 1)
+        || ctx.analysis.elements_reach_open_end(alt_elements, index + 1) {
         return [];
     }
     let Repeat(rep) = repeat else {

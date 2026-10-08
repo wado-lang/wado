@@ -18,12 +18,7 @@ use { Diagnostics, DiagnosticKind, DiagnosticOwner, DiagnosticSite, Op, RuleCall
 use { EmitContext } from "./emit_context.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleCaptures } from "./parser_plan.wado";
-use {
-    body_names_unwired_base,
-    body_needs_no_translator,
-    join_gate_conds,
-    pred_fn_name,
-} from "./gate_conditions.wado";
+use { body_names_unwired_base, body_needs_no_translator, join_gate_conds, pred_fn_name } from "./gate_conditions.wado";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 use { elements_match, follow_forward_args, negate_cond, to_snake_case } from "./gen_util.wado";
@@ -208,7 +203,12 @@ fn rule_gate_sources(rule: &ParserRule) -> List<ActionSource> {
     return out;
 }
 
-fn translate_gate_body<S: AsStrSlice>(text: S, rule: &ParserRule, grammar: &Grammar, settings: &GenSettings) -> Option<String> {
+fn translate_gate_body<S: AsStrSlice>(
+    text: S,
+    rule: &ParserRule,
+    grammar: &Grammar,
+    settings: &GenSettings,
+) -> Option<String> {
     return match translate_action(
         &grammar.action_language,
         rule,
@@ -361,7 +361,7 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &EmitContext
         }
         gen_vals_fields(w, &rule.returns_decls);
         gen_vals_fields(w, &rule.locals_decls);
-        gen_capture_fields(w, ctx.rule_captures(&rule.name));
+        gen_capture_fields(w, ctx.plan.rule_captures(&rule.name));
         w.end();
         w.blank();
     }
@@ -728,7 +728,7 @@ pub fn mark_gated_predicates(
 /// carries them as its condition and the body does not repeat them as a guard.
 fn mark_alt_gate_predicates(alt: &Alternative, ctx: &mut EmitContext) {
     for let a of &alt.actions {
-        if ctx.is_gateable_alt_initial_predicate(a) {
+        if ctx.gate_condition(a) matches { Some(_) } {
             mark_gate_predicate(a, ctx);
         }
     }

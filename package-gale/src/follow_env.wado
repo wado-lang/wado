@@ -1,4 +1,4 @@
-//! Static call-graph FOLLOW analysis. `rule_follow` settles it into the
+//! Static call-graph FOLLOW analysis. `settle_rule_follow` settles it into the
 //! `RuleFollow` lowering and emit read, whose `at_end_conflict_routes` decides
 //! whether an at-end multi-alt conflict must route through the ATN.
 //!
@@ -133,6 +133,7 @@ impl RuleFollow {
         };
     }
 
+    /// Whether the per-rule sets are the real FOLLOW, not an over-approximation.
     pub fn is_exact(&self) -> bool {
         return self.exact;
     }
@@ -153,6 +154,9 @@ impl RuleFollow {
         return follow;
     }
 
+    /// Whether an at-end conflict over `branch_tokens` in `rule_name` must route
+    /// to the simulator: a caller may continue on one of them, or FOLLOW is not
+    /// known exactly.
     pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<String>) -> bool {
         if !self.exact {
             return true;
@@ -368,7 +372,12 @@ struct PlanFollow {
 /// local follow at the group's position; `Repeat` recurses with
 /// `first(inner) ∪ local_follow` so that the inner's siblings (after one
 /// iteration) see the start-of-inner contributions plus the loop exit follow.
-fn plan_elements(elements: &List<Element>, analysis: &mut GrammarAnalysis, outer: &PlanFollow, plan: &mut List<Contribution>) {
+fn plan_elements(
+    elements: &List<Element>,
+    analysis: &mut GrammarAnalysis,
+    outer: &PlanFollow,
+    plan: &mut List<Contribution>,
+) {
     for let mut i = 0; i < elements.len(); i += 1 {
         let local = plan_local_follow(elements, i, analysis, outer);
         plan_element(&elements[i], analysis, &local, plan);
@@ -802,7 +811,13 @@ fn walk_end_element(
 
 /// What can come after the position before `elem`, given `after` follows it.
 /// A written `EOF` ends the input there, whatever follows it.
-fn end_after_element(elem: &Element, after: &EndAfter, analysis: &mut GrammarAnalysis, lang: &List<Strings>, eof: i32) -> EndAfter {
+fn end_after_element(
+    elem: &Element,
+    after: &EndAfter,
+    analysis: &mut GrammarAnalysis,
+    lang: &List<Strings>,
+    eof: i32,
+) -> EndAfter {
     let peeled = peel_labels(elem);
     if peeled matches { TokenRef(_) } {
         let mut fv: List<String> = [];

@@ -10,7 +10,12 @@ use { GenSettings } from "./gen_settings.wado";
 use { LowerMarks } from "./lower_context.wado";
 use { Atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { RecoverySets, empty_recovery_sets, recovery_sets } from "./recovery_sets.wado";
-use { action_reads_rule_ctx, action_reads_rule_span, rule_action_bodies, rule_binding_reads } from "./action_translate.wado";
+use {
+    action_reads_rule_ctx,
+    action_reads_rule_span,
+    rule_action_bodies,
+    rule_binding_reads,
+} from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
@@ -139,7 +144,11 @@ pub fn plan_parser(
         // Every grammar reads its recovery sets off the ATN; only the
         // simulator's grammars also embed it.
         recovery: recovery_sets(atn, analysis.eof_kind_id()),
-        rule_captures: if settings.emit_actions { rule_captures_of(grammar, lowered) } else { HashMap::with_seed(GALE_SEED) },
+        rule_captures: if settings.emit_actions {
+            rule_captures_of(grammar, lowered);
+        } else {
+            HashMap::with_seed(GALE_SEED);
+        },
         binding_reads,
     };
 }
@@ -151,6 +160,7 @@ impl ParserPlan {
         return self.emit_follow && self.follow_rule_snakes.contains_str(snake);
     }
 
+    /// Whether a call to `snake` passes `min_prec`: only a left-recursive rule takes one.
     pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
         return self.lr_rule_snakes.contains_str(snake);
     }
@@ -201,6 +211,7 @@ impl ParserPlan {
         return entry_or_none(&self.atn_decision_sites, site);
     }
 
+    /// What error recovery expects and resynchronizes on, read off the ATN.
     pub fn recovery_sets(&self) -> &RecoverySets {
         return &self.recovery;
     }
@@ -230,6 +241,7 @@ impl ParserPlan {
         return expect_ids(&self.recovery.rule_entry, rule);
     }
 
+    /// The labeled calls of `rule_name` an action reads the capture of.
     pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures {
         if let Some(captures) = self.rule_captures.get_ref_str(rule_name) {
             return captures;

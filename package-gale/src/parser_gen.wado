@@ -1706,7 +1706,12 @@ fn scan_element_can_fail(se: &ScanElement, known: &List<List<String>>, ctx: &Emi
     };
 }
 
-fn scan_elements_can_fail(elements: &List<ScanElement>, from: i32, known: &List<List<String>>, ctx: &EmitContext) -> bool {
+fn scan_elements_can_fail(
+    elements: &List<ScanElement>,
+    from: i32,
+    known: &List<List<String>>,
+    ctx: &EmitContext,
+) -> bool {
     let mut k = *known;
     for let i of from..<elements.len() {
         if scan_element_can_fail(&elements[i], &k, ctx) {
@@ -2551,7 +2556,12 @@ fn gen_scan_token_set<S: AsStrSlice>(
 }
 
 /// `gen_scan_token_set` where a miss sets `pos = -1`.
-fn gen_scan_token_set_assign(w: &mut CodeWriter, kinds: &List<String>, ctx: &mut EmitContext, known: &List<List<String>>) {
+fn gen_scan_token_set_assign(
+    w: &mut CodeWriter,
+    kinds: &List<String>,
+    ctx: &mut EmitContext,
+    known: &List<List<String>>,
+) {
     if known_within(known, kinds) {
         w.line("pos += 1;");
         return;
@@ -2677,7 +2687,13 @@ fn gen_scan_op_elements<S: AsStrSlice>(
 
 /// Whether `se` is an optional probe whose continuation is exactly
 /// `scan_elems[from..end]`, so a probe that holds leaves nothing to scan.
-fn probe_scans_rest(se: &ScanElement, scan_elems: &List<ScanElement>, from: i32, end: i32, ctx: &mut EmitContext) -> bool {
+fn probe_scans_rest(
+    se: &ScanElement,
+    scan_elems: &List<ScanElement>,
+    from: i32,
+    end: i32,
+    ctx: &mut EmitContext,
+) -> bool {
     let Repeat(re) = se else {
         return false;
     };
@@ -2713,7 +2729,12 @@ global NO_CONT_DONE: String = "";
 /// says it does not exist. The parse side's twin is the `alt_initial_gate`
 /// guard on the tournament; both have to be present or the measurement and the
 /// parse disagree about which alternatives are in the running.
-fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, ctx: &EmitContext, gate_cond: S, fail_stmt: S1) {
+fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &EmitContext,
+    gate_cond: S,
+    fail_stmt: S1,
+) {
     if gate_cond.is_empty() {
         return;
     }
@@ -3221,7 +3242,11 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         w.blank();
         ctx.cursor.set_lr_cont_in_atom(was_in_atom);
 
-        let h_loop_dec = if l.atn_class { ctx.plan.lr_loop_entry_decision(ctx.analysis.rule_index_of(&rule.name)) } else { -1 };
+        let h_loop_dec = if l.atn_class {
+            ctx.plan.lr_loop_entry_decision(ctx.analysis.rule_index_of(&rule.name));
+        } else {
+            -1;
+        };
         gen_lr_fn(
             w,
             rule,
@@ -8193,7 +8218,8 @@ fn compute_lr_second_token<S: AsStrSlice>(
 fn optional_body_is_single_token(elem: &Element, ctx: &mut EmitContext) -> bool {
     let mut visiting: List<String> = [];
     return match elem {
-        Repeat(rep) => rep.kind matches { Optional } && ctx.analysis.element_is_single_token(&rep.element, &mut visiting),
+        Repeat(rep) => rep.kind matches { Optional }
+            && ctx.analysis.element_is_single_token(&rep.element, &mut visiting),
         _ => false,
     };
 }

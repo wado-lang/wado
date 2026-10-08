@@ -370,7 +370,11 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
 /// `( a b | a )` sorts the two-element alt ahead on its mandatory `b`, and so
 /// does `( a b? | a )` where `b?` is first-exact; a nullable that is not falls
 /// to priority instead.
-pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, analysis: &mut GrammarAnalysis) {
+pub fn sort_group_by_mandatory_count_desc(
+    group: &mut List<i32>,
+    alts: &List<Alternative>,
+    analysis: &mut GrammarAnalysis,
+) {
     let mut keyed: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < group.len(); i += 1 {
         let idx = group[i];

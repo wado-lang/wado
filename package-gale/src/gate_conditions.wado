@@ -77,15 +77,6 @@ pub fn gate_condition_for(
     };
 }
 
-pub fn is_gateable_alt_initial_predicate(
-    a: &AltAction,
-    settings: &GenSettings,
-    analysis: &GrammarAnalysis,
-    site: &PredicateSite,
-) -> bool {
-    return gate_condition_for(a, settings, analysis, site) matches { Some(_) };
-}
-
 /// Whether `alt` carries an alt-initial predicate that will reach its emitted
 /// arm — for a caller deciding how to shape a dispatch, not emitting one.
 ///
@@ -96,7 +87,7 @@ pub fn is_gateable_alt_initial_predicate(
 /// written.
 pub fn alt_has_gate(alt: &Alternative, settings: &GenSettings, analysis: &GrammarAnalysis, site: &PredicateSite) -> bool {
     return settings.emit_actions
-        && alt.actions.iter_ref().any(|a| is_gateable_alt_initial_predicate(a, settings, analysis, site));
+        && alt.actions.iter_ref().any(|a| gate_condition_for(a, settings, analysis, site) matches { Some(_) });
 }
 
 /// An alt's gate conditions rendered against the scan's copy of the members,

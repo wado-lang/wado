@@ -20,11 +20,9 @@ pub struct KindSetEntry {
 }
 
 /// A runtime FOLLOW-continuation mask interned during parser codegen.
-/// Each distinct K-prefix mask is emitted once as a
-/// `global FOLLOW_MASK_<id>: List<List<i32>> = [[TK_X], [TK_Y], …]` and
-/// passed by reference to `follow_yields` at repair call sites — the
-/// runtime-threaded replacement for the per-(rule, mask) cloned
-/// `__follow_<id>` variant bodies. Interning the MASK (not rule×mask)
+/// Each distinct K-prefix mask is emitted once, as the packed `i64`
+/// `FOLLOW_MASK_<id>` (`gen_follow_mask_globals`) that repair call sites
+/// compose into their continuation. Interning the mask (not rule×mask)
 /// keeps the generated-parser growth proportional to the number of
 /// distinct continuations, not the call graph.
 pub struct FollowMaskEntry {
@@ -53,6 +51,7 @@ pub struct TableRegistry {
 }
 
 impl TableRegistry {
+    /// No table interned.
     pub fn new() -> TableRegistry {
         return TableRegistry {
             kind_sets: HashMap::with_seed(GALE_SEED),

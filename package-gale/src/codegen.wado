@@ -162,7 +162,11 @@ pub struct ActionContext {
 /// `emit_actions`, so settings without it lower a different `AltClass` — and
 /// the dump would then report a prediction shape no parser is built from, which
 /// is the drift the prologue above exists to remove.
-pub fn install_action_context(grammar: &mut Grammar, options: GenSettings, diagnostics: &mut Diagnostics) -> ActionContext {
+pub fn install_action_context(
+    grammar: &mut Grammar,
+    options: GenSettings,
+    diagnostics: &mut Diagnostics,
+) -> ActionContext {
     let mut settings = options;
     settings.action_language = grammar.action_language;
     settings.grammar_name = grammar.name;
@@ -183,23 +187,16 @@ pub fn install_action_context(grammar: &mut Grammar, options: GenSettings, diagn
     // action languages name a member the one way the generated struct does.
     let gate_bodies = translate_gate_bodies(grammar, &settings);
     let declared = &settings.action_members.fields;
-    settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies)
-        .iter_ref()
-        .filter(|f| declared.contains(f))
-        .map(|f| *f)
-        .collect();
+    settings.scan_gate_fields = scan_gate_fields(grammar, &gate_bodies).iter_ref().filter(|f| declared.contains(f)).map(
+        |f| *f,
+    ).collect();
     settings.gate_bodies = gate_bodies;
     return ActionContext { settings, lexer_members, parser_members };
 }
 
-/// The analysis of a `canonicalize_for_analysis`-ed grammar whose actions are
-/// wired, so it reads the bodies a `superClass` rewrite left.
-pub fn analysis_of(grammar: &Grammar, lit_tokens: &List<LitToken>, token_kinds: TokenKinds) -> GrammarAnalysis {
-    let vocab = vocab_display_names(&grammar.lexer_rules, lit_tokens, &token_kinds.names);
-    return GrammarAnalysis::new(&grammar.parser_rules, token_kinds, vocab);
-}
-
 /// The context lowering runs in, primed with what lowering itself asks for.
+/// The grammar's actions are wired first, so the analysis reads the bodies a
+/// `superClass` rewrite left.
 ///
 /// Scannability is a fixpoint over the whole rule set: answered per query it
 /// re-walks every cycle the query reaches, which on a grammar the size of
@@ -207,14 +204,15 @@ pub fn analysis_of(grammar: &Grammar, lit_tokens: &List<LitToken>, token_kinds: 
 /// lowering rather than during it: a tail-position viability probe stamps the
 /// enclosing rule's FOLLOW onto its op, so the fixed point has to be complete
 /// by then. It reads only the surface rules.
-pub fn lower_context(
+fn lower_context(
     grammar: &Grammar,
     lit_tokens: &List<LitToken>,
     token_kinds: TokenKinds,
     settings: GenSettings,
     diagnostics: Diagnostics,
 ) -> LowerContext {
-    let mut analysis = analysis_of(grammar, lit_tokens, token_kinds);
+    let vocab = vocab_display_names(&grammar.lexer_rules, lit_tokens, &token_kinds.names);
+    let mut analysis = GrammarAnalysis::new(&grammar.parser_rules, token_kinds, vocab);
     analysis.precompute_scannability();
     let follow = settle_rule_follow(&grammar.parser_rules, &mut analysis);
     return LowerContext::new(analysis, settings, follow, diagnostics);

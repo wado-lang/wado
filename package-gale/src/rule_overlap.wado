@@ -23,7 +23,7 @@ pub struct RuleOverlap {
 
 /// The indices of the alternatives a rule predicts among: all of them, less an
 /// LR rule's suffixes.
-pub fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
+fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
     let mut out: List<i32> = [];
     match lowered_rule {
         Simple(_) => {
@@ -43,26 +43,16 @@ pub fn non_lr_alt_indices(lowered_rule: &Rule) -> List<i32> {
     return out;
 }
 
-/// Whether `has_gate` holds for any alternative the rule predicts among.
-/// Prediction is predicate-blind, so a rule with a gate keeps deciding in the
-/// tournament that evaluates it.
-pub fn rule_alts_gated(rule: &ParserRule, lowered_rule: &Rule, has_gate: fn(&Alternative) -> bool) -> bool {
-    for let i of non_lr_alt_indices(lowered_rule) {
-        if has_gate(&rule.alternatives[i]) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/// How `rule`'s non-LR alternatives group by what they start with, a gated
-/// rule's without its FOLLOW.
+/// How `rule`'s non-LR alternatives group by what they start with. `has_gate`
+/// answers for the site asking: prediction is predicate-blind, so a rule with
+/// a gate keeps deciding in the tournament that evaluates it, without its
+/// FOLLOW.
 pub fn rule_overlap_groups(
     rule: &ParserRule,
     lowered_rule: &Rule,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    gated: bool,
+    has_gate: fn(&Alternative) -> bool,
 ) -> RuleOverlap {
     let non_lr_indices = non_lr_alt_indices(lowered_rule);
     let mut first_sets: List<List<String>> = [];
@@ -71,6 +61,7 @@ pub fn rule_overlap_groups(
         first_sets.push(analysis.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut classes = alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, analysis);
+    let gated = non_lr_indices.iter_ref().any(|i: &i32| has_gate(&rule.alternatives[*i]));
     let end_follow: List<String> = if lowered_rule matches { MultiAlt(_) } && !gated {
         follow.for_probe(&rule.name);
     } else {
@@ -101,20 +92,14 @@ fn admit_rule_follow_into_nullable(
     }
 }
 
-/// Whether a multi-alt rule's prediction ends in a conflict at the rule's end
-/// that the caller's FOLLOW routes to the simulator.
+/// Whether a rule's prediction among its overlap groups `g` ends in a conflict
+/// at the rule's end that the caller's FOLLOW routes to the simulator.
 pub fn rule_has_at_end_conflict(
     rule: &ParserRule,
-    lowered_rule: &Rule,
+    g: &RuleOverlap,
     analysis: &mut GrammarAnalysis,
     follow: &RuleFollow,
-    gated: bool,
 ) -> bool {
-    if let MultiAlt(_) = lowered_rule {
-    } else {
-        return false;
-    }
-    let g = rule_overlap_groups(rule, lowered_rule, analysis, follow, gated);
     for let group of &g.groups {
         if group.len() > 1 {
             let tree = build_group_prediction_tree(

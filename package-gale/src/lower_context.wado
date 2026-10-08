@@ -5,7 +5,7 @@
 
 use { Alternative, ParserRule } from "./ir.wado";
 use { Diagnostics, Rule } from "./gir.wado";
-use { RuleOverlap, rule_alts_gated, rule_overlap_groups } from "./rule_overlap.wado";
+use { RuleOverlap, rule_overlap_groups } from "./rule_overlap.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { RuleFollow } from "./follow_env.wado";
@@ -191,14 +191,9 @@ impl LowerContext {
         return alt_scan_gate_conditions(alt, &self.settings, &self.analysis, &self.predicate_site());
     }
 
-    /// Whether any alternative the rule being lowered predicts among carries a gate.
-    pub fn rule_alts_gated(&self, rule: &ParserRule, lowered_rule: &Rule) -> bool {
-        return rule_alts_gated(rule, lowered_rule, |alt: &Alternative| self.alt_has_gate(alt));
-    }
-
     /// `rule_overlap::rule_overlap_groups` for the rule being lowered.
     pub fn rule_overlap(&mut self, rule: &ParserRule, lowered_rule: &Rule) -> RuleOverlap {
-        let gated = self.rule_alts_gated(rule, lowered_rule);
-        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, gated);
+        let has_gate = |alt: &Alternative| self.alt_has_gate(alt);
+        return rule_overlap_groups(rule, lowered_rule, &mut self.analysis, &self.follow, has_gate);
     }
 }
