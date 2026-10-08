@@ -718,7 +718,7 @@ impl Interpreter<'_> {
             self.facts
                 .callees
                 .and_then(|m| m.get(key))
-                .and_then(|c| c.func.try_borrow().ok())
+                .map(|c| c.func.borrow())
                 .map_or_else(
                     || format!("{key:?}"),
                     |f| diagnostic_function_name(&f.name).to_string(),
@@ -746,7 +746,7 @@ impl Interpreter<'_> {
         if self.call_stack.iter().any(|k| k == &key) {
             return None;
         }
-        let callee = callee_rc.func.try_borrow().ok()?;
+        let callee = callee_rc.func.borrow();
         if args.len() != callee.params.len() {
             return None;
         }
@@ -850,7 +850,7 @@ impl Interpreter<'_> {
         targets: Vec<(u32, u32, Vec<u32>)>,
         returns_unit: bool,
     ) -> Option<CallRun> {
-        let root = scratch.root;
+        let root = scratch.root();
         let flow = self.exec_block(scratch, root);
         let completed = matches!(flow, Flow::Return(_) | Flow::Fallthrough(_));
         let result = match flow {
@@ -934,7 +934,7 @@ impl Interpreter<'_> {
         }
         self.charge(1)?;
         let mut scratch = body.nodes_only_clone();
-        scratch.root = block;
+        scratch.set_root(block);
         let track = Trackability::in_frame(&scratch, self.facts, self.type_table);
         let caller = self.swap_frame(FrameState::for_call(track, seeds));
         let flow = self.exec_block(&mut scratch, block);

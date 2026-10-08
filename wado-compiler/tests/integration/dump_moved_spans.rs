@@ -32,6 +32,7 @@ fn dump_applies_last_use_moves() {
         &[],
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
+        1,
     ))
     .expect("dump succeeds");
 

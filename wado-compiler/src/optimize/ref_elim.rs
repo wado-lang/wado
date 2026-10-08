@@ -49,7 +49,7 @@ pub(super) struct RefElimRule {
 pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
     let rebound = find_rebound_locals(body);
     let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
-    analyze_block(body, body.root, &rebound, &mut refs);
+    analyze_block(body, body.root(), &rebound, &mut refs);
 
     // Capture-at-binding: a `let r = &<place>` reference captures the object the
     // place denotes at binding time; folding `r.field` back into a re-read of
@@ -81,7 +81,7 @@ pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
     }
 
     let mut deref: IndexMap<u32, DerefOnlyRef> = IndexMap::default();
-    deref_collect_block(body, body.root, &rebound, &mut deref);
+    deref_collect_block(body, body.root(), &rebound, &mut deref);
     // Only eliminate refs still eliminable AND used exactly once via `*r`;
     // multi-use elision would duplicate the source literal at every site.
     let deref_sources = deref
@@ -306,7 +306,7 @@ fn collect_capture_facts(body: &Body, refs: &IndexMap<u32, RefInfo>) -> CaptureF
     let mut pos = 0;
     capture_walk(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         0,
         &mut pos,
         refs,

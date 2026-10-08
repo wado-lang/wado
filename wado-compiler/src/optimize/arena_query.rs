@@ -854,7 +854,7 @@ impl MutRefAliases {
             }
         }
         let mut borrowed_refs: IndexSet<u32> = IndexSet::default();
-        map.build_walk(body, NodeRef::Block(body.root), &mut borrowed_refs);
+        map.build_walk(body, NodeRef::Block(body.root()), &mut borrowed_refs);
         // A ref-typed local with no recognized definition (a pattern binding,
         // an engine-synthesized slot) has unknown provenance.
         for e in map.entries.values_mut() {

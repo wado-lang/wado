@@ -46,9 +46,12 @@ allocation, and a hash-consed graph of the pure values it reaches. Local
 rewrites are rules on one worklist engine, and a per-function dirty set lets a
 pass skip functions unchanged since it last ran. A whole-program analysis keeps
 what each body answers alone across rounds, and re-derives it only for the
-bodies a rewrite reached. CSE, GVN, and pure copy
-propagation are not passes, because the hash-consing already does them. See
+bodies a rewrite reached. CSE, GVN, and pure copy propagation are not passes,
+because the hash-consing already does them. See
 [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md).
+
+The passes run on `--optimize-threads` threads, and the output does not depend
+on how many. See [WEP: Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md).
 
 ## Pipeline
 

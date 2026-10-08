@@ -5,18 +5,19 @@
 //! the callee's parameter, a by-value constant crossing uncopied.
 
 use cranelift_entity::EntityRef;
-use std::cell::{Ref, RefCell};
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::sync::RwLockReadGuard;
 
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{NirFunction, NirGlobal, NirUnaryOp};
+use crate::nir::{FuncRef, NirFunction, NirGlobal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprBody, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId,
     StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::tir::{ArrayElementAccess, ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{
@@ -123,8 +124,7 @@ impl CandidateKind {
     }
 }
 
-pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
-    let type_table = project.type_table.clone();
+pub fn globalize_const_objects(project: &mut NirPackage, exec: &Executor) -> bool {
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -134,7 +134,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     });
 
     // Phase 1 — analysis (all immutable borrows).
-    let fn_effects = compute_fn_effects(project);
+    let fn_effects = compute_fn_effects(project, exec);
     let hoistable_pure: Vec<bool> = project
         .functions
         .iter()
@@ -165,122 +165,87 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .iter()
         .map(|f| project.builtin_declarations.immediate_params(&*f.borrow()))
         .collect();
-    let shared_escape = SharedEscape::new(project);
-    let gate = Gate {
-        shared_escape: &shared_escape,
-        immediate_params: &immediate_params,
-        funcs: &project.functions,
-        type_table: &type_table,
-        hoistable_pure: &hoistable_pure,
-        instruction_leaf: &instruction_leaf,
-        element_access: &element_access,
-        structs: &project.structs,
-        param_readonly: RefCell::new(IndexMap::default()),
-        param_writes_through: RefCell::new(IndexMap::default()),
-        ref_param_leaks: RefCell::new(IndexMap::default()),
-        string_inline_max_bytes: project.string_inline_max_bytes,
-    };
-    let mut candidates: Vec<Candidate> = Vec::new();
-    for (fi, f) in project.functions.iter().enumerate() {
-        let f = f.borrow();
-        if skip_function(&f) {
-            continue;
-        }
-        let Some(body) = &f.body else {
-            continue;
+    let types = project.type_table.borrow();
+    let type_table: &TypeTable = &types;
+    let shared_escape = SharedEscape::new(project, type_table);
+    let funcs = &project.functions;
+    let structs = &project.structs;
+    let string_inline_max_bytes = project.string_inline_max_bytes;
+    // Each visit memoizes its callee verdicts afresh: a memo seeds a cycle with
+    // a provisional answer, so one shared across visits would answer by which
+    // visit asked first.
+    let per_function = exec.map_indices(funcs.len(), |fi| {
+        let f = funcs[fi].borrow();
+        let mut found = Vec::new();
+        let Some(body) = f.body.as_ref().filter(|_| !skip_function(&f)) else {
+            return found;
+        };
+        let gate = Gate {
+            shared_escape: &shared_escape,
+            immediate_params: &immediate_params,
+            funcs,
+            type_table,
+            hoistable_pure: &hoistable_pure,
+            instruction_leaf: &instruction_leaf,
+            element_access: &element_access,
+            structs,
+            param_readonly: RefCell::new(IndexMap::default()),
+            param_writes_through: RefCell::new(IndexMap::default()),
+            ref_param_leaks: RefCell::new(IndexMap::default()),
+            string_inline_max_bytes,
         };
         compiler_trace!("const_object_globalization", "fn {}", f.name);
-        collect_candidates(body, &gate, fi, &f.module_source, &mut candidates);
-    }
-    if candidates.is_empty() {
-        return false;
-    }
-
+        collect_candidates(body, &gate, fi, &f.module_source, &mut found);
+        found
+    });
+    drop(shared_escape);
+    drop(types);
     // Phase 2 — mutation. Number from the count of pre-existing `$const_obj_*`
     // globals so names stay unique across invocations.
-    let base = project
+    let mut next = project
         .globals
         .iter()
         .filter(|g| g.name.starts_with(CONST_OBJ_GLOBAL_PREFIX))
         .count();
-    for (n, cand) in (base..).zip(candidates) {
-        let name = format!("{CONST_OBJ_GLOBAL_PREFIX}{n}");
-        let Candidate {
-            func_idx,
-            ty,
-            module_source,
-            kind,
-            guarded,
-        } = cand;
-
-        let mut func = project.functions[func_idx].borrow_mut();
-        compiler_trace!(
-            "const_object_globalization",
-            "  {} hoists {} as {name} (guarded={guarded})",
-            func.name,
-            kind.what(),
-        );
+    let per_function: Vec<Vec<(String, Candidate)>> = per_function
+        .into_iter()
+        .map(|candidates| {
+            candidates
+                .into_iter()
+                .map(|cand| {
+                    let name = format!("{CONST_OBJ_GLOBAL_PREFIX}{next}");
+                    next += 1;
+                    (name, cand)
+                })
+                .collect()
+        })
+        .collect();
+    if per_function.iter().all(Vec::is_empty) {
+        return false;
+    }
+    let functions = &project.functions;
+    exec.map(&per_function, |hoists| {
+        let Some((_, first)) = hoists.first() else {
+            return;
+        };
+        let mut func = functions[first.func_idx].borrow_mut();
+        let func = &mut *func;
         let body = func.body.as_mut().expect("candidate function has a body");
-        match kind {
-            CandidateKind::LetBinding {
-                local_index,
-                sibling_lets,
-                ..
-            } => {
-                // Rewrite reads first (the let's own value is const and
-                // references no local index, so it is untouched), then
-                // replace the binding.
-                rewrite_reads(body, local_index, &module_source, &name, ty);
-                assert!(
-                    replace_let_with_set(
-                        body,
-                        local_index,
-                        &module_source,
-                        &name,
-                        ty,
-                        guarded.then_some(is_uninitialized)
-                    ),
-                    "[NIR] const_object_globalization: LetBinding candidate's `let` \
-                     (local {local_index}) went missing between collection and mutation"
-                );
-                inline_sibling_lets(body, &sibling_lets, &module_source, &name);
-                debug_assert!(
-                    !reads_local(body, local_index),
-                    "[NIR] const_object_globalization: local {local_index} is still read \
-                     after its `let` became a `GlobalVarSet`"
-                );
-            }
-            CandidateKind::InlineRef {
-                ref_expr,
-                sibling_lets,
-            } => {
-                hoist_inline_ref(
-                    body,
-                    ref_expr,
-                    &module_source,
-                    &name,
-                    ty,
-                    guarded.then_some(is_uninitialized),
-                );
-                substitute_sibling_lets(body, &sibling_lets, &module_source, &name);
-            }
-            CandidateKind::ValueArg {
-                arg_expr,
-                sibling_lets,
-            } => {
-                hoist_value_arg(
-                    body,
-                    arg_expr,
-                    &module_source,
-                    &name,
-                    ty,
-                    guarded.then_some(is_uninitialized),
-                );
-                substitute_sibling_lets(body, &sibling_lets, &module_source, &name);
-            }
+        for (name, cand) in hoists {
+            compiler_trace!(
+                "const_object_globalization",
+                "  {} hoists {} as {name} (guarded={})",
+                func.name,
+                cand.kind.what(),
+                cand.guarded,
+            );
+            hoist_candidate(body, name, cand, is_uninitialized);
         }
-        drop(func);
-
+    });
+    for (name, cand) in per_function.into_iter().flatten() {
+        let Candidate {
+            ty, module_source, ..
+        } = cand;
         project.globals.push(NirGlobal {
             name,
             ty,
@@ -307,6 +272,54 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     true
 }
 
+/// Rewrite `body` so `cand`'s value lives in the global `name`.
+fn hoist_candidate(body: &mut Body, name: &str, cand: &Candidate, is_uninitialized: FuncId) {
+    let Candidate {
+        ty,
+        module_source,
+        kind,
+        guarded,
+        ..
+    } = cand;
+    let (ty, guard) = (*ty, guarded.then_some(is_uninitialized));
+    match kind {
+        CandidateKind::LetBinding {
+            local_index,
+            sibling_lets,
+            ..
+        } => {
+            // Rewrite reads first (the let's own value is const and references
+            // no local index, so it is untouched), then replace the binding.
+            rewrite_reads(body, *local_index, module_source, name, ty);
+            assert!(
+                replace_let_with_set(body, *local_index, module_source, name, ty, guard),
+                "[NIR] const_object_globalization: LetBinding candidate's `let` \
+                 (local {local_index}) went missing between collection and mutation"
+            );
+            inline_sibling_lets(body, sibling_lets, module_source, name);
+            debug_assert!(
+                !reads_local(body, *local_index),
+                "[NIR] const_object_globalization: local {local_index} is still read \
+                 after its `let` became a `GlobalVarSet`"
+            );
+        }
+        CandidateKind::InlineRef {
+            ref_expr,
+            sibling_lets,
+        } => {
+            hoist_inline_ref(body, *ref_expr, module_source, name, ty, guard);
+            substitute_sibling_lets(body, sibling_lets, module_source, name);
+        }
+        CandidateKind::ValueArg {
+            arg_expr,
+            sibling_lets,
+        } => {
+            hoist_value_arg(body, *arg_expr, module_source, name, ty, guard);
+            substitute_sibling_lets(body, sibling_lets, module_source, name);
+        }
+    }
+}
+
 /// Find every hoisting candidate in `body`: a qualifying `let` binding
 /// ([`let_stmt_qualifies`]) or an unnested `Unary { op: Ref, expr: <closed
 /// const aggregate> }` node. Neither is recursed into further.
@@ -326,7 +339,7 @@ fn collect_candidates(
     let leaked_ref_args = ref_args_that_escape(body, gate);
     let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
-    let mut stack = vec![NodeRef::Block(body.root)];
+    let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {
@@ -963,7 +976,7 @@ fn confined_sibling_lets(
 ) -> Option<(IndexSet<u32>, Vec<StmtId>)> {
     let used = seeded_locals_read(body, value, siblings);
     if !used.is_empty() {
-        let body_reads = count_reads_of(body, NodeRef::Block(body.root), &used);
+        let body_reads = count_reads_of(body, NodeRef::Block(body.root()), &used);
         let value_reads = value
             .as_expr()
             .map(|e| count_reads_of(body, NodeRef::Expr(e), &used))
@@ -1068,7 +1081,7 @@ fn detach_stmts(body: &mut Body, stmts: &[StmtId]) {
 /// The `GlobalVarSet` a hoist just planted, which every sibling rewrite folds
 /// its moved definitions into.
 fn find_global_var_set(body: &Body, module_source: &ModuleSource, name: &str) -> ExprId {
-    if let Some(e) = body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
+    if let Some(e) = body.find_in_live_node_under(NodeRef::Block(body.root()), |node| {
         if let NodeRef::Expr(e) = node
             && let ExprKind::GlobalVarSet {
                 name: n,
@@ -1456,8 +1469,8 @@ struct Gate<'a> {
     /// Which positions each function lowers to a Wasm immediate, by
     /// `func_id.index()`. Declared with `#[immediate(p)]`, never inferred.
     immediate_params: &'a [IndexSet<usize>],
-    funcs: &'a [Rc<RefCell<NirFunction>>],
-    type_table: &'a Rc<RefCell<TypeTable>>,
+    funcs: &'a [FuncRef],
+    type_table: &'a TypeTable,
     /// Indexed by `func_id.index()`.
     hoistable_pure: &'a [bool],
     /// Indexed by `func_id.index()`: a builtin whose declaration says where it
@@ -1488,12 +1501,12 @@ struct Gate<'a> {
 
 impl Gate<'_> {
     fn is_reference_type(&self, ty: TypeId) -> bool {
-        holds_reference(&self.type_table.borrow(), ty)
+        holds_reference(self.type_table, ty)
     }
 
     /// The callee `func_id` names. Every per-function table here is collected
     /// from `project.functions`, which is the list a `FuncId` indexes.
-    fn func(&self, func_id: FuncId) -> Ref<'_, NirFunction> {
+    fn func(&self, func_id: FuncId) -> RwLockReadGuard<'_, NirFunction> {
         self.funcs[func_id.index()].borrow()
     }
 
@@ -1517,7 +1530,7 @@ impl Gate<'_> {
         if !seen.insert(ty) {
             return false;
         }
-        let tt = self.type_table.borrow();
+        let tt = self.type_table;
         let inner = match tt.get(ty) {
             ResolvedType::BuiltinArray(_) => return true,
             // Nothing to own.
@@ -1546,11 +1559,9 @@ impl Gate<'_> {
             _ => None,
         };
         if let Some(inner) = inner {
-            drop(tt);
             return self.owns_heap_storage_inner(inner, seen);
         }
-        let fields = aggregate_field_info(ty, &tt, self.structs);
-        drop(tt);
+        let fields = aggregate_field_info(ty, tt, self.structs);
         match fields {
             Some((field_types, _, _)) => field_types
                 .into_iter()
@@ -1580,23 +1591,17 @@ impl Gate<'_> {
     /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
     /// before boxing) and outlives it, so it is the reliable half of the test.
     fn param_borrows_mutably(&self, param: &NirParam) -> bool {
-        param.is_mut_ref
-            || matches!(
-                self.type_table.borrow().get(param.type_id),
-                ResolvedType::MutRef(_)
-            )
+        param.is_mut_ref || matches!(self.type_table.get(param.type_id), ResolvedType::MutRef(_))
     }
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
     /// convention that neither writes the caller's storage (`&mut self`) nor
     /// takes it over (a by-value `self`).
     fn callee_borrows_self(&self, func_id: FuncId) -> bool {
-        self.func(func_id).params.first().is_some_and(|p0| {
-            matches!(
-                self.type_table.borrow().get(p0.type_id),
-                ResolvedType::Ref(_)
-            )
-        })
+        self.func(func_id)
+            .params
+            .first()
+            .is_some_and(|p0| matches!(self.type_table.get(p0.type_id), ResolvedType::Ref(_)))
     }
 
     /// The position of the array `func_id` reaches an element of, when it is
@@ -1718,10 +1723,7 @@ impl Gate<'_> {
             };
             f.body.is_some()
                 && !self.param_borrows_mutably(param)
-                && matches!(
-                    self.type_table.borrow().get(param.type_id),
-                    ResolvedType::Ref(_)
-                )
+                && matches!(self.type_table.get(param.type_id), ResolvedType::Ref(_))
         };
         borrows && !self.callee_ref_param_leaks(func_id, pos)
     }
@@ -1743,7 +1745,7 @@ impl Gate<'_> {
         if self.is_reference_type(return_type) {
             return true;
         }
-        let tt = self.type_table.borrow();
+        let tt = self.type_table;
         let mut ty = arg_ty;
         loop {
             let resolved = tt.get(ty);
@@ -1751,7 +1753,7 @@ impl Gate<'_> {
                 ty = *inner;
                 continue;
             }
-            if !holds_reference(&tt, ty) {
+            if !holds_reference(tt, ty) {
                 return false;
             }
             let ResolvedType::BuiltinArray(elem) = resolved else {
@@ -1782,7 +1784,7 @@ impl Gate<'_> {
             return false;
         };
         if matches!(
-            self.type_table.borrow().get(param.type_id),
+            self.type_table.get(param.type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         ) {
             return false;
@@ -1810,7 +1812,7 @@ fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'static str> {
     if !binding_names(body, idx)
         .into_iter()
-        .all(|name| block_readonly(body, body.root, name, gate))
+        .all(|name| block_readonly(body, body.root(), name, gate))
     {
         return Some("written after the binding");
     }
@@ -1871,9 +1873,9 @@ fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
 /// A binding hoisted into a global hands the global to whoever receives it.
 fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
     let delivers = |op: Operand| delivers_projection_operand(body, op, roots, gate);
-    body.block_tail(body.root).is_some_and(delivers)
+    body.block_tail(body.root()).is_some_and(delivers)
         || body
-            .find_in_live_node_under(NodeRef::Block(body.root), |node| {
+            .find_in_live_node_under(NodeRef::Block(body.root()), |node| {
                 let leaves = match node {
                     NodeRef::Stmt(s) => match &body.stmts[s].kind {
                         StmtKind::Return { value } | StmtKind::Break { value, .. } => {
@@ -1913,7 +1915,7 @@ fn storage_leaves_body(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 /// keep the storage or hand it back.
 fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
     let escapes = |op: Operand| delivers_projection_operand(body, op, roots, gate);
-    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
+    body.find_in_live_node_under(NodeRef::Block(body.root()), |node| {
         if let NodeRef::Expr(e) = node {
             match &body.exprs[e].kind {
                 // A by-value `self` receiver hands the storage to the callee,
@@ -2627,7 +2629,7 @@ fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate
     use crate::nir_value_graph::ValueKind;
     use crate::wir_optimize::array::{ConstOperand, data_promotion_pays};
 
-    let type_table = gate.type_table.borrow();
+    let type_table = gate.type_table;
     let mut width = None;
     let mut operand_bytes = 0;
     for element in elements {
@@ -2742,7 +2744,7 @@ fn replace_let_with_set(
     ty: TypeId,
     guarded: Option<FuncId>,
 ) -> bool {
-    let mut stack = vec![NodeRef::Block(body.root)];
+    let mut stack = vec![NodeRef::Block(body.root())];
     while let Some(node) = stack.pop() {
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let {

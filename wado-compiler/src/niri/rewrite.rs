@@ -1487,7 +1487,7 @@ mod tests {
             kind: StmtKind::Expr(Operand::Expr(e)),
             span: Span::default(),
         });
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![stmt],
             span: Span::default(),
         });

@@ -1002,14 +1002,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         owning_trait: DefId,
         assoc: &str,
-    ) -> Option<Rc<AssocTypeSig>> {
+    ) -> Option<Arc<AssocTypeSig>> {
         if let Some(sig) = self
             .tysys
             .type_table
             .borrow()
             .assoc_type_sig(owning_trait, assoc)
         {
-            return Some(Rc::clone(sig));
+            return Some(Arc::clone(sig));
         }
         let sig = self.unless_on_walk(
             |scope| &mut scope.assoc_sig_stack,
@@ -1020,11 +1020,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }))
             },
         )?;
-        let sig = Rc::new(sig);
+        let sig = Arc::new(sig);
         self.tysys.type_table.borrow_mut().register_assoc_type_sig(
             owning_trait,
             assoc.to_string(),
-            Rc::clone(&sig),
+            Arc::clone(&sig),
         );
         Some(sig)
     }
@@ -1034,7 +1034,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         owning_trait: DefId,
         assoc: &str,
-        frame: Rc<TraitFrame>,
+        frame: Arc<TraitFrame>,
     ) -> AssocTypeSig {
         let decl = self
             .tysys
@@ -1056,9 +1056,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// `owning_trait`'s own frame, resolved once and kept. `None` for an
     /// interface or a resource, which an impl also names and which has none.
-    pub(super) fn trait_frame(&mut self, owning_trait: DefId) -> Option<Rc<TraitFrame>> {
+    pub(super) fn trait_frame(&mut self, owning_trait: DefId) -> Option<Arc<TraitFrame>> {
         if let Some(frame) = self.tysys.type_table.borrow().trait_frame(owning_trait) {
-            return Some(Rc::clone(frame));
+            return Some(Arc::clone(frame));
         }
         self.tysys.trait_env.decl_header_of(&owning_trait)?;
         Some(self.in_trait_frame(owning_trait, |_, frame| frame))
@@ -1070,7 +1070,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn in_trait_frame<R>(
         &mut self,
         owning_trait: DefId,
-        body: impl FnOnce(&mut Self, Rc<TraitFrame>) -> R,
+        body: impl FnOnce(&mut Self, Arc<TraitFrame>) -> R,
     ) -> R {
         let header = self
             .tysys
@@ -1105,7 +1105,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .iter()
                     .map(|param| param.default.as_ref().map(|ty| scope.resolve_type(ty)))
                     .collect();
-                let frame = Rc::new(TraitFrame {
+                let frame = Arc::new(TraitFrame {
                     self_param,
                     params,
                     defaults,
@@ -1114,7 +1114,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .register_trait_frame(owning_trait, Rc::clone(&frame));
+                    .register_trait_frame(owning_trait, Arc::clone(&frame));
                 frame
             });
             body(&mut scope, frame)

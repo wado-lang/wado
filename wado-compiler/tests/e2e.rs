@@ -902,6 +902,9 @@ fn run_with_allocator(
         codegen_flags: spec.compile.codegen_flags.clone(),
         params: spec.compile.param_inputs(),
         coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
+        // More than one, so every fixture runs the optimizer's parallel path
+        // against expectations no thread count may change.
+        parallelism: 2,
         ..Default::default()
     };
 

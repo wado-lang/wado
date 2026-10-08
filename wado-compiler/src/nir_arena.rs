@@ -4,7 +4,10 @@
 //! representation, traversal, and cloning; the parent map, use index and edit
 //! API sit on [`crate::nir_engine::Engine`]. See WEP 2026-06-05.
 
+use std::cell::Cell;
 use std::ops::ControlFlow;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
@@ -655,27 +658,170 @@ impl LocalSet {
     }
 }
 
+/// A value whose [`Self::version`] changes on every mutable borrow, so a memo
+/// keyed on it notices every edit without anyone reporting one (WEP: Parallel
+/// Optimizer). A clone shares the value until either side writes it, so a
+/// sweep's copy of a function costs only the parts a visit then rewrites.
+#[derive(Debug)]
+pub struct Tracked<T> {
+    value: Arc<T>,
+    /// Drawn afresh by every construction and clone, so a value put in place
+    /// of another never carries its epoch.
+    epoch: u64,
+    /// The mutable borrows taken since.
+    edits: u64,
+}
+
+/// The first epoch no thread has reserved.
+static NEXT_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// How many epochs a thread reserves at once, so drawing one rarely touches
+/// the shared counter.
+const EPOCH_BLOCK: u64 = 1024;
+
+thread_local! {
+    /// This thread's reserved epochs, as the next one and the end of the block.
+    static EPOCHS: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
+}
+
+fn next_epoch() -> u64 {
+    EPOCHS.with(|epochs| {
+        let (mut next, mut end) = epochs.get();
+        if next == end {
+            next = NEXT_EPOCH.fetch_add(EPOCH_BLOCK, AtomicOrdering::Relaxed);
+            end = next + EPOCH_BLOCK;
+        }
+        epochs.set((next + 1, end));
+        next
+    })
+}
+
+impl<T> Tracked<T> {
+    /// `value`, under an epoch of its own.
+    #[must_use]
+    pub fn new(value: T) -> Self {
+        Self::sharing(Arc::new(value))
+    }
+
+    fn sharing(value: Arc<T>) -> Self {
+        Self {
+            value,
+            epoch: next_epoch(),
+            edits: 0,
+        }
+    }
+
+    /// Different after any mutable borrow, and on any value put in its place.
+    pub fn version(&self) -> (u64, u64) {
+        (self.epoch, self.edits)
+    }
+}
+
+impl<T> Clone for Tracked<T> {
+    fn clone(&self) -> Self {
+        Self::sharing(Arc::clone(&self.value))
+    }
+}
+
+impl<T> std::ops::Deref for Tracked<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: Clone> std::ops::DerefMut for Tracked<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.edits += 1;
+        Arc::make_mut(&mut self.value)
+    }
+}
+
+impl<A, T: FromIterator<A>> FromIterator<A> for Tracked<T> {
+    fn from_iter<I: IntoIterator<Item = A>>(iter: I) -> Self {
+        Self::new(iter.into_iter().collect())
+    }
+}
+
+impl<T> Tracked<T>
+where
+    for<'a> &'a T: IntoIterator,
+{
+    /// Iterate the value, as `&value` does.
+    pub fn iter(&self) -> <&T as IntoIterator>::IntoIter {
+        self.value.into_iter()
+    }
+}
+
+impl<'a, T> IntoIterator for &'a Tracked<T>
+where
+    &'a T: IntoIterator,
+{
+    type Item = <&'a T as IntoIterator>::Item;
+    type IntoIter = <&'a T as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.value.into_iter()
+    }
+}
+
 /// A NIR body in arena form: one `PrimaryMap` per node category, a `root`
 /// block, and the function-level facts later passes read beside the arena.
+/// Every part is [`Tracked`], so [`Self::version`] changes on any edit.
 #[derive(Debug, Clone)]
 pub struct Body {
-    pub exprs: PrimaryMap<ExprId, ExprNode>,
-    pub stmts: PrimaryMap<StmtId, StmtNode>,
-    pub blocks: PrimaryMap<BlockId, BlockNode>,
-    pub pats: PrimaryMap<PatId, PatNode>,
-    pub root: BlockId,
-    pub locals: Vec<NirLocal>,
-    pub address_taken_locals: IndexSet<u32>,
-    pub stores_aliased_locals: IndexSet<u32>,
+    pub exprs: Tracked<PrimaryMap<ExprId, ExprNode>>,
+    pub stmts: Tracked<PrimaryMap<StmtId, StmtNode>>,
+    pub blocks: Tracked<PrimaryMap<BlockId, BlockNode>>,
+    pub pats: Tracked<PrimaryMap<PatId, PatNode>>,
+    root: Tracked<BlockId>,
+    pub locals: Tracked<Vec<NirLocal>>,
+    pub address_taken_locals: Tracked<IndexSet<u32>>,
+    pub stores_aliased_locals: Tracked<IndexSet<u32>>,
     /// The pure-value pool every [`Operand::Value`] indexes. Maintained in
     /// place; never re-derived from the skeleton.
-    pub values: ValuePool,
+    pub values: Tracked<ValuePool>,
     /// The graph build's persisted product. `None` until the first value query
     /// builds it; never cleared after.
-    pub value_graph: Option<ValueGraphBuild>,
+    pub value_graph: Tracked<Option<ValueGraphBuild>>,
 }
 
 impl Body {
+    /// The root block.
+    pub fn root(&self) -> BlockId {
+        *self.root
+    }
+
+    /// Make `root` the root block.
+    pub fn set_root(&mut self, root: BlockId) {
+        *self.root = root;
+    }
+
+    /// Push `block` and make it the root.
+    pub fn push_root(&mut self, block: BlockNode) {
+        let root = self.blocks.push(block);
+        self.set_root(root);
+    }
+
+    /// Its parts' versions: different after any edit, by any route, since a
+    /// part's edit count only grows and a part put in place of another carries
+    /// an epoch of its own.
+    pub fn version(&self) -> [(u64, u64); 10] {
+        [
+            self.exprs.version(),
+            self.stmts.version(),
+            self.blocks.version(),
+            self.pats.version(),
+            self.root.version(),
+            self.locals.version(),
+            self.address_taken_locals.version(),
+            self.stores_aliased_locals.version(),
+            self.values.version(),
+            self.value_graph.version(),
+        ]
+    }
+
     /// The type of an operand: the expr's `type_id` for `Operand::Expr`, or the
     /// promoted value's recorded source type for `Operand::Value` (WEP: operand
     /// promotion). Panics if a promoted value has no recorded type (a builder
@@ -786,16 +932,16 @@ impl Body {
     /// build a working body of their own.
     pub fn empty() -> Self {
         Self {
-            exprs: PrimaryMap::new(),
-            stmts: PrimaryMap::new(),
-            blocks: PrimaryMap::new(),
-            pats: PrimaryMap::new(),
-            root: BlockId::from_u32(0),
-            locals: Vec::new(),
-            address_taken_locals: IndexSet::default(),
-            stores_aliased_locals: IndexSet::default(),
-            values: ValuePool::new(),
-            value_graph: None,
+            exprs: Tracked::new(PrimaryMap::new()),
+            stmts: Tracked::new(PrimaryMap::new()),
+            blocks: Tracked::new(PrimaryMap::new()),
+            pats: Tracked::new(PrimaryMap::new()),
+            root: Tracked::new(BlockId::from_u32(0)),
+            locals: Tracked::new(Vec::new()),
+            address_taken_locals: Tracked::new(IndexSet::default()),
+            stores_aliased_locals: Tracked::new(IndexSet::default()),
+            values: Tracked::new(ValuePool::new()),
+            value_graph: Tracked::new(None),
         }
     }
 
@@ -809,14 +955,14 @@ impl Body {
             stmts: self.stmts.clone(),
             blocks: self.blocks.clone(),
             pats: self.pats.clone(),
-            root: self.root,
-            locals: Vec::new(),
-            address_taken_locals: IndexSet::default(),
-            stores_aliased_locals: IndexSet::default(),
+            root: self.root.clone(),
+            locals: Tracked::new(Vec::new()),
+            address_taken_locals: Tracked::new(IndexSet::default()),
+            stores_aliased_locals: Tracked::new(IndexSet::default()),
             values: self.values.clone(),
             // Scratch clone (niri CTFE): the value graph is a per-function
             // optimizer artifact and is not carried into a node-only working copy.
-            value_graph: None,
+            value_graph: Tracked::new(None),
         }
     }
 
@@ -833,7 +979,7 @@ impl Body {
             kind: StmtKind::Expr(Operand::Expr(e)),
             span,
         });
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![s],
             span,
         });
@@ -851,7 +997,7 @@ impl Body {
             kind: StmtKind::Expr(Operand::Value(v)),
             span,
         });
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts: vec![s],
             span,
         });
@@ -862,7 +1008,7 @@ impl Body {
     /// global initializers take, whose root block holds exactly one `Expr`
     /// statement. Panics if the body is not in that shape.
     pub fn sole_expr(&self) -> Operand {
-        let block = &self.blocks[self.root];
+        let block = &self.blocks[*self.root];
         assert_eq!(
             block.stmts.len(),
             1,
@@ -889,7 +1035,7 @@ impl ExprBody {
     /// Wrap a `Body` that is already in single-`Expr`-statement form.
     pub fn from_body(body: Body) -> Self {
         debug_assert_eq!(
-            body.blocks[body.root].stmts.len(),
+            body.blocks[*body.root].stmts.len(),
             1,
             "ExprBody requires a single-statement root block"
         );
@@ -1301,7 +1447,7 @@ impl Body {
     /// A subtree walk: the whole body is [`Body::for_each_reachable_node`].
     pub fn for_each_node_under(&self, root: NodeRef, f: impl FnMut(NodeRef)) {
         debug_assert!(
-            self.blocks.is_empty() || root != NodeRef::Block(self.root),
+            self.blocks.is_empty() || root != NodeRef::Block(*self.root),
             "[NIR] a whole-body walk is `for_each_reachable_node`, which also covers what a \
              promoted operand names as its extraction source"
         );
@@ -1460,6 +1606,15 @@ impl Body {
         }
     }
 
+    /// Whether any call in the arena, live or orphaned, names a function
+    /// `callee` picks. A superset of the live calls, so `false` lets a rewrite
+    /// of such calls skip the body without borrowing it mutably.
+    pub fn calls_any(&self, callee: impl Fn(&FuncId) -> bool) -> bool {
+        self.exprs
+            .values()
+            .any(|node| matches!(&node.kind, ExprKind::Call { func_id, .. } if callee(func_id)))
+    }
+
     /// Invoke `f` on every node reachable from [`Body::root`], parents before
     /// children. The arena never compacts, so this walk is what distinguishes
     /// live from orphaned.
@@ -1479,7 +1634,7 @@ impl Body {
             }
             return;
         }
-        self.for_each_live_node_under(NodeRef::Block(self.root), f);
+        self.for_each_live_node_under(NodeRef::Block(*self.root), f);
     }
 
     /// The distinct promoted values the reachable skeleton carries, and how many
@@ -1517,7 +1672,7 @@ impl Body {
     /// bare-`Local` target of an `Assign` (a write). `&local` / `&mut local`,
     /// `local.field = …`, and every value-position `Local` count as reads.
     pub fn collect_local_reads(&self, out: &mut IndexSet<u32>) {
-        self.collect_local_reads_node(NodeRef::Block(self.root), out);
+        self.collect_local_reads_node(NodeRef::Block(*self.root), out);
     }
 
     fn collect_local_reads_node(&self, node: NodeRef, out: &mut IndexSet<u32>) {

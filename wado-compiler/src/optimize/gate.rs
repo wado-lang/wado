@@ -6,17 +6,20 @@
 //!
 //! Every loop pass is optional, the IR being valid without it, so an imprecise
 //! gate costs optimization quality and never correctness. When in doubt, the
-//! propagation marks dirty. The exception is [`FunctionGate::edits`]: the
-//! heap-effect summaries trust it, so a pass reports every body it rewrites.
+//! propagation marks dirty. What a rewrite stales is the memos' to notice, by
+//! each function's write count (`super::body_memo`), not the gate's.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexSet;
-use crate::nir::{FuncId, NirFunction};
+use crate::nir::FuncId;
 use crate::nir_arena::ExprKind;
+use crate::nir_engine::EngineBuffers;
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 
 /// The gated passes. Each owns a column of per-function watermarks. Add a
 /// variant when a pass becomes gate-aware; `COUNT` sizes the watermark table.
@@ -57,115 +60,6 @@ pub enum GatedPass {
 
 impl GatedPass {
     const COUNT: usize = 20;
-}
-
-/// Facts each function's body answers alone, kept across the fixed-point loop
-/// and re-derived only where one [`FunctionGate`] counted an edit since. What
-/// `of` reads beyond the function must hold still for the gate's lifetime, or
-/// the entries that read it be forgotten when it moves.
-pub struct BodyMemo<T> {
-    gate: Option<u64>,
-    edits: Vec<u64>,
-    facts: Vec<T>,
-    /// Where `assert_one_settled` resumes its rotation.
-    #[cfg(debug_assertions)]
-    cursor: usize,
-}
-
-/// The edit count a forgotten [`BodyMemo`] entry holds, which no gate reaches.
-const FORGOTTEN: u64 = u64::MAX;
-
-impl<T> Default for BodyMemo<T> {
-    fn default() -> Self {
-        Self {
-            gate: None,
-            edits: Vec::new(),
-            facts: Vec::new(),
-            #[cfg(debug_assertions)]
-            cursor: 0,
-        }
-    }
-}
-
-impl<T: PartialEq + std::fmt::Debug> BodyMemo<T> {
-    /// Forget the entries `stale` picks, for a caller whose facts read
-    /// something beyond the body that has since moved.
-    pub fn forget_where(&mut self, stale: impl Fn(&T) -> bool) {
-        for (edit, fact) in self.edits.iter_mut().zip(&self.facts) {
-            if stale(fact) {
-                *edit = FORGOTTEN;
-            }
-        }
-    }
-
-    /// The facts as the last refresh left them.
-    pub fn facts(&self) -> &[T] {
-        &self.facts
-    }
-
-    /// Every function's facts as `project` stands, indexed by store position.
-    /// Every rewrite since the last call must have been reported to `gate`.
-    pub fn refresh(
-        &mut self,
-        project: &NirPackage,
-        gate: &FunctionGate,
-        of: impl FnMut(&NirFunction) -> T,
-    ) -> &[T] {
-        self.refresh_observing(project, gate, of, |_, _, _| {})
-    }
-
-    /// [`Self::refresh`], handing `rederived` each entry it re-derives with
-    /// the entry it replaces, `None` for a function seen for the first time.
-    pub fn refresh_observing(
-        &mut self,
-        project: &NirPackage,
-        gate: &FunctionGate,
-        mut of: impl FnMut(&NirFunction) -> T,
-        mut rederived: impl FnMut(usize, Option<&T>, &T),
-    ) -> &[T] {
-        let len = project.functions.len();
-        if self.gate != Some(gate.id) || self.facts.len() > len {
-            *self = Self {
-                gate: Some(gate.id),
-                ..Self::default()
-            };
-        }
-        for (i, f) in project.functions.iter().enumerate() {
-            let edit = gate.edits(FuncId::new(i));
-            if self.edits.get(i) == Some(&edit) {
-                continue;
-            }
-            let fact = of(&f.borrow());
-            rederived(i, self.facts.get(i), &fact);
-            if i < self.facts.len() {
-                self.edits[i] = edit;
-                self.facts[i] = fact;
-            } else {
-                self.edits.push(edit);
-                self.facts.push(fact);
-            }
-        }
-        #[cfg(debug_assertions)]
-        self.assert_one_settled(project, of);
-        &self.facts
-    }
-
-    /// A body rewritten without a report to the gate keeps facts that no longer
-    /// answer for it. One function per refresh, rotating, keeps the check cheap.
-    #[cfg(debug_assertions)]
-    fn assert_one_settled(&mut self, project: &NirPackage, mut of: impl FnMut(&NirFunction) -> T) {
-        let Some(n) = self.cursor.checked_rem(self.facts.len()) else {
-            return;
-        };
-        self.cursor = n + 1;
-        let fresh = of(&project.functions[n].borrow());
-        assert!(
-            fresh == self.facts[n],
-            "memoized body facts went stale: function {n} was rewritten without \
-             `FunctionGate::mark_changed`\n  memo:  {:?}\n  fresh: {fresh:?}",
-            self.facts[n],
-        );
-    }
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -213,45 +107,44 @@ impl CallGraph {
 pub struct FunctionGate {
     id: u64,
     revision: Vec<u64>,
-    /// How often each function's own body was reported changed; unlike
-    /// `revision`, never bumped for a neighbour.
-    edits: Vec<u64>,
     watermarks: [Vec<u64>; GatedPass::COUNT],
     graph: CallGraph,
+    /// The threads a sweep's visits run on.
+    exec: Arc<Executor>,
 }
 
-/// Tells one gate's edit counts from another's.
+/// Tells one gate's state from another's.
 static NEXT_GATE_ID: AtomicU64 = AtomicU64::new(0);
 
 impl FunctionGate {
-    /// Build the gate for one optimizer run. Every function starts dirty
-    /// (`revision = 1`, watermarks `0`), so the first iteration processes
-    /// everything.
-    pub fn new(project: &NirPackage) -> Self {
+    /// Build the gate for one optimizer run, its sweeps running on `exec`.
+    /// Every function starts dirty (`revision = 1`, watermarks `0`), so the
+    /// first iteration processes everything.
+    pub fn new(project: &NirPackage, exec: &Arc<Executor>) -> Self {
         let n = project.functions.len();
-        Self::with_graph(n, CallGraph::build(project))
+        Self::with_graph(n, CallGraph::build(project), Arc::clone(exec))
     }
 
-    fn with_graph(n: usize, graph: CallGraph) -> Self {
+    fn with_graph(n: usize, graph: CallGraph, exec: Arc<Executor>) -> Self {
         Self {
             id: NEXT_GATE_ID.fetch_add(1, Ordering::Relaxed),
             revision: vec![1; n],
-            edits: vec![0; n],
             watermarks: std::array::from_fn(|_| vec![0; n]),
             graph,
+            exec,
         }
     }
 
-    /// Which gate this is, so a count taken from one is never read against
-    /// another's.
+    /// Which gate this is, so state kept for one optimizer run is never read
+    /// against another's.
     pub fn id(&self) -> u64 {
         self.id
     }
 
-    /// How many changes to `func`'s own body have been reported; a function
-    /// the gate has not yet seen has none.
-    pub fn edits(&self, func: FuncId) -> u64 {
-        self.edits.get(func.index()).copied().unwrap_or(0)
+    /// The threads this gate's sweeps run on, for the whole-program walks a
+    /// pass takes before its sweep.
+    pub fn exec(&self) -> &Arc<Executor> {
+        &self.exec
     }
 
     /// Grow the side-tables to cover `len` functions. A pass may add functions
@@ -264,7 +157,6 @@ impl FunctionGate {
     fn ensure(&mut self, len: usize) {
         while self.revision.len() < len {
             self.revision.push(1);
-            self.edits.push(0);
             for w in &mut self.watermarks {
                 w.push(0);
             }
@@ -306,7 +198,6 @@ impl FunctionGate {
         self.ensure(func.index() + 1);
         let i = func.index();
         self.revision[i] += 1;
-        self.edits[i] += 1;
         for &c in &self.graph.callers[i] {
             self.revision[c.index()] += 1;
         }
@@ -329,25 +220,79 @@ impl FunctionGate {
         (0..len).any(|i| self.needs(pass, FuncId::new(i)))
     }
 
-    /// Drive a gate-aware per-function pass: call `f` only for the functions
-    /// `pass` needs to (re)process, marking each seen afterwards and bumping the
-    /// gate when `f` reports a change. Returns whether any function changed.
-    /// `len` is the current function count (read once; these passes do not add
-    /// functions mid-pass).
+    /// The functions `pass` must (re)process, in store order. Unlike
+    /// [`Self::dirty_funcs`], marks none of them seen.
+    pub fn pending(&mut self, pass: GatedPass, len: usize) -> Vec<FuncId> {
+        (0..len)
+            .map(FuncId::new)
+            .filter(|&fid| self.needs(pass, fid))
+            .collect()
+    }
+
+    /// Drive a gate-aware per-function pass over one sweep: call `f` on each
+    /// function pending for `pass` when the sweep starts, mark each seen, and
+    /// mark the changed ones and their neighbours dirty once the sweep ends.
+    /// What one visit rewrites then decides neither which functions the sweep
+    /// visits nor what another visit sees (WEP: Parallel Optimizer). Returns
+    /// whether any function changed. `len` is the current function count
+    /// (read once; these passes do not add functions mid-pass).
     pub fn run_gated(
         &mut self,
         pass: GatedPass,
         len: usize,
         mut f: impl FnMut(FuncId) -> bool,
     ) -> bool {
-        let mut any = false;
-        for i in 0..len {
-            let fid = FuncId::new(i);
-            if !self.needs(pass, fid) {
-                continue;
-            }
-            let changed = f(fid);
+        let pending = self.pending(pass, len);
+        let changed: Vec<bool> = pending.iter().map(|&fid| f(fid)).collect();
+        self.close_sweep(pass, &pending, &changed)
+    }
+
+    /// [`Self::run_gated`] with the visits on the gate's threads. A visit holds
+    /// its own function mutably and reads everything else as the sweep found
+    /// it, so the order the visits run in changes nothing. Each visit gets its
+    /// thread's engine scratch buffers.
+    pub fn run_gated_par(
+        &mut self,
+        pass: GatedPass,
+        len: usize,
+        visit: impl Fn(&mut EngineBuffers, FuncId) -> bool + Sync,
+    ) -> bool {
+        let pending = self.pending(pass, len);
+        let changed = self
+            .exec
+            .map_init(&pending, EngineBuffers::default, |buffers, &fid| {
+                visit(buffers, fid)
+            });
+        self.close_sweep(pass, &pending, &changed)
+    }
+
+    /// [`Self::run_gated_par`] for a visit that hands back what it changed: a
+    /// `Some` marks the function changed. Returns the `Some`s in store order.
+    pub fn sweep_par<R: Send>(
+        &mut self,
+        pass: GatedPass,
+        len: usize,
+        visit: impl Fn(FuncId) -> Option<R> + Sync,
+    ) -> Vec<(FuncId, R)> {
+        let pending = self.pending(pass, len);
+        let outcomes = self.exec.map(&pending, |&fid| visit(fid));
+        let changed: Vec<bool> = outcomes.iter().map(Option::is_some).collect();
+        self.close_sweep(pass, &pending, &changed);
+        pending
+            .into_iter()
+            .zip(outcomes)
+            .filter_map(|(fid, outcome)| Some((fid, outcome?)))
+            .collect()
+    }
+
+    /// Mark the sweep's functions seen, then the changed ones and their
+    /// neighbours dirty. Returns whether any changed.
+    fn close_sweep(&mut self, pass: GatedPass, pending: &[FuncId], changed: &[bool]) -> bool {
+        for &fid in pending {
             self.seen(pass, fid);
+        }
+        let mut any = false;
+        for (&fid, &changed) in pending.iter().zip(changed) {
             if changed {
                 self.mark_changed(fid);
                 any = true;
@@ -426,7 +371,7 @@ mod tests {
             callees[caller].push(FuncId::new(callee));
             callers[callee].push(FuncId::new(caller));
         }
-        FunctionGate::with_graph(n, CallGraph { callees, callers })
+        FunctionGate::with_graph(n, CallGraph { callees, callers }, Arc::default())
     }
 
     #[test]

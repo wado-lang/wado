@@ -4,7 +4,7 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::builtin_facts::{SideEffect, Trap};
 use crate::hashmap::IndexSet;
@@ -17,9 +17,10 @@ use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::{
     expr_node_may_trap_typed, field_receiver_nonnull, operand_values_may_trap, unary_may_trap,
 };
+use crate::optimize::body_memo::BodyMemo;
 use crate::optimize::bounds::{self, Proofs};
-use crate::optimize::gate::{BodyMemo, FunctionGate};
 use crate::optimize::inline::recursive_scc_members;
+use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeTable};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
@@ -797,7 +798,7 @@ fn leaf_effects(project: &NirPackage) -> (Vec<FnEffect>, Vec<Option<&BuiltinDecl
 /// its body, both indexed by `func_id.index()`.
 pub(super) struct FnSummaries {
     pub effects: Vec<FnEffect>,
-    proofs: Vec<Rc<Proofs>>,
+    proofs: Vec<Arc<Proofs>>,
 }
 
 impl FnSummaries {
@@ -842,21 +843,23 @@ impl CallFacts<'_> {
 /// A cycle of mutually recursive functions that never touch a channel stays
 /// pure, which is what makes ordinary recursive helpers usable, but it may
 /// diverge.
-pub(super) fn compute_fn_effects(project: &NirPackage) -> Vec<FnEffect> {
-    summarize(project).0.effects
+pub(super) fn compute_fn_effects(project: &NirPackage, exec: &Executor) -> Vec<FnEffect> {
+    summarize(project, exec).0.effects
 }
 
 /// [`compute_fn_effects`] with each body's [`Proofs`], and what each builtin
 /// declared (indexed by `func_id.index()`), for a caller that proves a body
-/// again after changing it.
-pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&BuiltinDeclaration>>) {
+/// again after changing it. The bodies are summarized on `exec`'s threads.
+pub(super) fn summarize<'p>(
+    project: &'p NirPackage,
+    exec: &Executor,
+) -> (FnSummaries, Vec<Option<&'p BuiltinDeclaration>>) {
     let types = project.type_table.borrow();
+    let types = &*types;
     let (leaves, builtins) = leaf_effects(project);
-    let bodies: Vec<Option<BodySummary>> = project
-        .functions
-        .iter()
-        .map(|f| BodySummary::of(&f.borrow(), &types, &leaves, &builtins))
-        .collect();
+    let bodies: Vec<Option<BodySummary>> = exec.map(&project.functions, |f| {
+        BodySummary::of(&f.borrow(), types, &leaves, &builtins)
+    });
     let summaries = join_over_calls(leaves, bodies.iter().map(Option::as_ref));
     (summaries, builtins)
 }
@@ -868,7 +871,7 @@ pub(super) fn summarize(project: &NirPackage) -> (FnSummaries, Vec<Option<&Built
 struct BodySummary {
     own: FnEffect,
     callees: Vec<usize>,
-    proofs: Rc<Proofs>,
+    proofs: Arc<Proofs>,
 }
 
 impl BodySummary {
@@ -888,7 +891,7 @@ impl BodySummary {
             ..FnEffect::default()
         };
         let mut callees = Vec::new();
-        let mut stack = vec![NodeRef::Block(body.root)];
+        let mut stack = vec![NodeRef::Block(body.root())];
         while let Some(node) = stack.pop() {
             own.may_trap |= operand_values_may_trap(body, node);
             match node {
@@ -938,7 +941,7 @@ impl BodySummary {
         Some(Self {
             own,
             callees,
-            proofs: Rc::new(bounds.proofs),
+            proofs: Arc::new(bounds.proofs),
         })
     }
 }
@@ -949,7 +952,7 @@ fn join_over_calls<'b>(
     mut effects: Vec<FnEffect>,
     bodies: impl ExactSizeIterator<Item = Option<&'b BodySummary>>,
 ) -> FnSummaries {
-    let no_proofs = Rc::new(Proofs::default());
+    let no_proofs = Arc::new(Proofs::default());
     let mut call_graph: Vec<&[usize]> = Vec::with_capacity(bodies.len());
     let mut proofs = Vec::with_capacity(bodies.len());
     for (effect, body) in effects.iter_mut().zip(bodies) {
@@ -988,19 +991,20 @@ fn join_over_calls<'b>(
 }
 
 /// [`summarize`] kept across the fixed-point loop: a body's own part is
-/// re-derived only where its edit count moved, and the join over the call graph,
-/// which a rewrite anywhere can move, every time.
+/// re-derived only for a function written since, and the join over the call
+/// graph, which a rewrite anywhere can move, every time.
 #[derive(Default)]
 pub(super) struct SummaryCache(BodyMemo<Option<BodySummary>>);
 
 impl SummaryCache {
-    /// What [`summarize`] answers for `project` as it stands. Every rewrite
-    /// since the last call must have been reported to `gate`.
-    pub(super) fn summaries(&mut self, project: &NirPackage, gate: &FunctionGate) -> FnSummaries {
+    /// What [`summarize`] answers for `project` as it stands, the bodies
+    /// re-derived on `exec`'s threads.
+    pub(super) fn summaries(&mut self, project: &NirPackage, exec: &Executor) -> FnSummaries {
         let types = project.type_table.borrow();
+        let types = &*types;
         let (leaves, builtins) = leaf_effects(project);
-        let bodies = self.0.refresh(project, gate, |f| {
-            BodySummary::of(f, &types, &leaves, &builtins)
+        let bodies = self.0.refresh(project, exec, |f| {
+            BodySummary::of(f, types, &leaves, &builtins)
         });
         join_over_calls(leaves, bodies.iter().map(Option::as_ref))
     }

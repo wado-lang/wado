@@ -15,14 +15,11 @@
 //! reads. Ending the region at the last statement that can travel would take
 //! that shape, which `core:json`'s escape tail splits by hand for want of it.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
-    FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam, ParamAbi,
-    ReturnAbi,
+    FuncCell, FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam,
+    ParamAbi, ReturnAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, BlockId, BlockNode, Body, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId,
@@ -178,7 +175,7 @@ fn find_region(
 fn valueless_blocks(body: &Body, type_table: &TypeTable) -> Vec<(BlockId, bool)> {
     let unit = |id| matches!(type_table.get(id), ResolvedType::Unit);
     let mut out = Vec::new();
-    let mut stack = vec![(NodeRef::Block(body.root), false)];
+    let mut stack = vec![(NodeRef::Block(body.root()), false)];
     while let Some((node, under_loop)) = stack.pop() {
         let mut arms: Vec<BlockId> = Vec::new();
         let mut enters_loop = false;
@@ -278,7 +275,7 @@ fn free_vars(
         region.iter().map(|&s| NodeRef::Stmt(s)).collect(),
         &[],
     );
-    let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root)], region);
+    let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
         let crossing = if idx < param_count {
@@ -441,7 +438,7 @@ fn outline(project: &mut NirPackage, fi: usize, region: Region, ordinal: u32) {
     };
     let key = FunctionRef::from_resolved(&helper, helper.module_source.clone()).function_id();
     project.func_index.insert(key, id);
-    project.functions.push(Rc::new(RefCell::new(helper)));
+    project.functions.push(FuncCell::new(helper));
 
     let mut parent = project.functions[fi].borrow_mut();
     let span = parent.span;
@@ -524,7 +521,7 @@ fn build_helper(
             .iter()
             .map(|&s| splice_stmt(&mut body, parent_body, s, &ctx))
             .collect();
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: parent_body.blocks[region.block].span,
         });

@@ -18,12 +18,9 @@
 //! pass can see move to the clone, calls it cannot keep finding the original,
 //! and `dce` drops whichever of the two nothing reaches.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, ExprNode, NodeRef, Operand};
 use crate::nir_package::{FieldForm, NirPackage, ParamShape, Reshape, SroaParamProjection};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -32,7 +29,8 @@ use crate::token::Span;
 use cranelift_entity::EntityRef;
 
 use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
-use super::gate::{BodyMemo, FunctionGate, GatedPass};
+use super::body_memo::BodyMemo;
+use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
 use crate::nir::FuncId;
 use crate::nir_visitor::reachable_exprs;
@@ -169,8 +167,9 @@ fn collect_and_validate(
     let type_table = project.type_table.borrow();
     let field_table = build_field_table_index(project);
     let struct_fields = build_struct_fields_index(project);
-    let own = state.0.refresh(project, gate, |f| {
-        f.body.as_ref().map(|body| OwnWrites::of(body, &type_table))
+    let types = &*type_table;
+    let own = state.0.refresh(project, gate.exec(), |f| {
+        f.body.as_ref().map(|body| OwnWrites::of(body, types))
     });
     let (reachable_writes, write_targets) = transitive_reachable_writes(project, own);
 
@@ -793,7 +792,7 @@ fn param_field_use(
     idx: u32,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> FieldUse {
-    check_node(body, NodeRef::Block(body.root), idx, candidates)
+    check_node(body, NodeRef::Block(body.root()), idx, candidates)
 }
 
 fn check_node(
@@ -1041,7 +1040,7 @@ fn mint_scalarized_clones(
                 .map(|s| (s.local, s.scalar_type_id))
                 .collect();
             body.values.retype_locals(&retyped);
-            let root = body.root;
+            let root = body.root();
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }
 
@@ -1058,7 +1057,7 @@ fn mint_scalarized_clones(
             "a FuncId is its position"
         );
         touched.insert(id.index());
-        project.functions.push(Rc::new(RefCell::new(clone)));
+        project.functions.push(FuncCell::new(clone));
     }
     clones
 }
@@ -1208,6 +1207,11 @@ fn rewrite_call_sites(
     for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
         let Some(key) = func.id else { continue };
+        // Only a call to a candidate is rewritten. Asked before the body is
+        // borrowed mutably, so a function holding none is not written.
+        if !func.calls_any(|id| sroa_positions.contains_key(id)) {
+            continue;
+        }
         // Inside a clone the scalarized params already hold the field, so an
         // onward call at another candidate position passes them straight
         // through. Read from the package, not from this run's `clones`: a clone
@@ -1232,7 +1236,7 @@ fn rewrite_call_sites(
             })
             .unwrap_or_default();
         if let Some(body) = func.body.as_mut() {
-            let root = body.root;
+            let root = body.root();
             let type_table = type_table_rc.borrow();
             if rewrite_calls_node(
                 body,
@@ -1249,7 +1253,7 @@ fn rewrite_call_sites(
     let mut rewrote_global = false;
     for global in &mut project.globals {
         let body = global.init.slot_expr_mut().body_mut();
-        let root = body.root;
+        let root = body.root();
         let type_table = type_table_rc.borrow();
         rewrote_global |= rewrite_calls_node(
             body,

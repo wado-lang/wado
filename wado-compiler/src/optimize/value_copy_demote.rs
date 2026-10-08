@@ -14,7 +14,7 @@ use std::rc::Rc;
 use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
+use crate::nir::{FuncCell, FuncRef, FunctionKind, FunctionRef, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
@@ -146,7 +146,7 @@ pub fn demote_value_copies(
     // position and registered in the reverse index, so its callers stamp the
     // twin's id directly (`shallow_id`).
     let mut shallow_id: IndexMap<FuncKey, FuncId> = IndexMap::default();
-    let mut new_funcs: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
+    let mut new_funcs: Vec<FuncRef> = Vec::new();
     let mut next = project.next_func_id().index();
     for &deep_key in &demoted_keys {
         // The shallow twin's identity mirrors the deep helper's (a clone with a
@@ -183,7 +183,7 @@ pub fn demote_value_copies(
         let key = FunctionRef::from_resolved(&shallow, shallow.module_source.clone()).function_id();
         project.func_index.insert(key, id);
         shallow_id.insert(deep_key, id);
-        new_funcs.push(Rc::new(RefCell::new(shallow)));
+        new_funcs.push(FuncCell::new(shallow));
     }
 
     // Phase 2b: a pure mechanical rewrite — retarget exactly the
@@ -219,7 +219,7 @@ pub fn demote_value_copies(
 
 fn body_is_list_wrapper_copy(body: &Body, descriptors: &[FunctionRef]) -> bool {
     // `return StructLiteral { fields: [.., repr: Call(array_clone, ..), ..] }`
-    for s in &body.blocks[body.root].stmts {
+    for s in &body.blocks[body.root()].stmts {
         if let StmtKind::Return { value: Some(v) } = &body.stmts[*s].kind
             && let Some(ve) = v.as_expr()
             && let ExprKind::StructLiteral { fields, .. } = &body.exprs[ve].kind
@@ -573,7 +573,7 @@ fn retarget_wrapper_call(
 // ---------------------------------------------------------------------------
 
 struct Analyzer<'a> {
-    funcs: &'a [Rc<RefCell<NirFunction>>],
+    funcs: &'a [FuncRef],
     descriptors: &'a [FunctionRef],
     /// The builtins that hand back a handle into an array argument.
     element_accessors: IndexSet<FuncId>,
@@ -629,7 +629,7 @@ impl Analyzer<'_> {
                     visiting,
                     clean: true,
                 };
-                v.visit_node(&body, NodeRef::Block(body.root));
+                v.visit_node(&body, NodeRef::Block(body.root()));
                 v.clean
             }
             None => false,
@@ -658,7 +658,7 @@ impl Analyzer<'_> {
             idx,
             clean: true,
         };
-        v.visit_node(body, NodeRef::Block(body.root));
+        v.visit_node(body, NodeRef::Block(body.root()));
         v.clean
     }
 

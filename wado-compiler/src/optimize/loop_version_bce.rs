@@ -13,11 +13,12 @@ use std::ops::ControlFlow;
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
-use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncParts, FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::parallel::Executor;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
@@ -85,7 +86,11 @@ struct FastArm {
 }
 
 /// Version eligible loops in every function. Returns whether anything changed.
-pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCache) -> bool {
+pub(super) fn version_loops(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    exec: &Executor,
+) -> bool {
     let fill_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "array_fill".to_string(),
@@ -103,10 +108,10 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
     {
         return false;
     }
-    let (summaries, builtins) = summarize(project);
+    let (summaries, builtins) = summarize(project, exec);
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table);
+    let call_immutability = CallImmutability::new(project, &type_table, exec);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -118,14 +123,14 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
             continue;
         }
         let stores_aliased = func.stores_aliased_locals.clone();
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             address_taken_locals,
             stores_aliased_locals,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
             locals,
@@ -143,7 +148,7 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
 
         let binds = build_copy_bindings(&engine);
         let mut loops: Vec<(BlockId, StmtId, BlockId)> = Vec::new();
-        collect_loops(engine.body, engine.body.root, &mut loops);
+        collect_loops(engine.body, engine.body.root(), &mut loops);
         let plans: Vec<Plan> = loops
             .into_iter()
             .filter_map(|(parent, loop_stmt, loop_body)| {
@@ -1081,13 +1086,13 @@ fn collect_writes(body: &Body, node: NodeRef, out: &mut Vec<u32>) {
 /// does not run.
 fn confined_to(engine: &Engine, l: u32, version_if: StmtId) -> bool {
     let body = &engine.body;
-    let root = NodeRef::Block(body.root);
+    let root = NodeRef::Block(body.root());
     !mentions_local_except(body, root, Some(NodeRef::Stmt(version_if)), l)
 }
 
 /// Whether `block` sits inside a loop, and so may run more than once.
 fn block_repeats(body: &Body, block: BlockId) -> bool {
-    body.find_in_nodes_under(NodeRef::Block(body.root), |n| {
+    body.find_in_nodes_under(NodeRef::Block(body.root()), |n| {
         let NodeRef::Stmt(s) = n else { return None };
         let StmtKind::Loop { body: inner } = &body.stmts[s].kind else {
             return None;

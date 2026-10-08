@@ -16,7 +16,7 @@ use crate::nir::{FuncId, NirLocal};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
     ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
-    StmtNode,
+    StmtNode, Tracked,
 };
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
 use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
@@ -314,7 +314,7 @@ pub struct Engine<'a> {
     /// over a body with no owning function (a global initializer, a unit test)
     /// pass a scratch `Vec`; those bodies have no locals and their rules never
     /// allocate, so it stays empty.
-    locals: &'a mut Vec<NirLocal>,
+    locals: &'a mut Tracked<Vec<NirLocal>>,
     /// Per-session cache of the body's live `&local` / `&mut local` scan
     /// (see [`Body::collect_address_taken_locals`]). Computed on first use,
     /// cleared with [`Engine::invalidate_address_taken`] so a rescan picks up
@@ -375,7 +375,7 @@ impl<'a> Engine<'a> {
     pub fn new(
         body: &'a mut Body,
         buf: &'a mut EngineBuffers,
-        locals: &'a mut Vec<NirLocal>,
+        locals: &'a mut Tracked<Vec<NirLocal>>,
     ) -> Self {
         buf.reset_for(body, locals.len());
         let mut engine = Self {
@@ -518,7 +518,7 @@ impl<'a> Engine<'a> {
         if self.body.value_graph.is_none() || (forwardable.is_empty() && !include_fields) {
             return Vec::new();
         }
-        let root = self.body.root;
+        let root = self.body.root();
         let live_base = self.body.values.len() as u32;
         let mut scratch = self.body.values.clone();
         let empty = IndexMap::default();
@@ -594,7 +594,7 @@ impl<'a> Engine<'a> {
         if self.body.value_graph.is_none() {
             return FieldValues::default();
         }
-        let root = self.body.root;
+        let root = self.body.root();
         let mut scratch = self.body.values.clone();
         let empty = IndexMap::default();
         let scoped = builder::walk_scoped(
@@ -816,7 +816,7 @@ impl<'a> Engine<'a> {
             },
             self.vg_type_table,
         );
-        self.body.value_graph = Some(build);
+        *self.body.value_graph = Some(build);
     }
 
     /// Report that this rewrite deleted the binding that defined `local`, so
@@ -920,7 +920,7 @@ impl<'a> Engine<'a> {
         let mut stack = std::mem::take(&mut self.buf.walk_stack);
         let mut children = std::mem::take(&mut self.buf.walk_children);
         stack.clear();
-        stack.push((NodeRef::Block(self.body.root), false));
+        stack.push((NodeRef::Block(self.body.root()), false));
         while let Some((node, processed)) = stack.pop() {
             if processed {
                 self.enqueue(node);
@@ -1312,7 +1312,11 @@ impl<'a> Engine<'a> {
         } else {
             Vec::new()
         };
-        self.body.blocks[block].stmts = stmts;
+        // A write marks the function changed for its memos, so an unchanged
+        // list is not written back.
+        if self.body.blocks[block].stmts != stmts {
+            self.body.blocks[block].stmts = stmts;
+        }
         for s in arrived {
             self.census_add_subtree(NodeRef::Stmt(s));
         }
@@ -1819,7 +1823,7 @@ mod tests {
     fn mk_body(build: impl FnOnce(&mut Body) -> Vec<StmtId>) -> Body {
         let mut body = Body::empty();
         let stmts = build(&mut body);
-        body.root = body.blocks.push(BlockNode {
+        body.push_root(BlockNode {
             stmts,
             span: Span::default(),
         });
@@ -1908,7 +1912,7 @@ mod tests {
     fn use_index_tracks_def_and_reads() {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // local 0 is read once (the `return x`) and defined once (the `let`).
         assert_eq!(eng.local_reads(0).len(), 1);
@@ -1924,7 +1928,7 @@ mod tests {
     fn elided_local_with_a_surviving_read_trips_the_session_audit() {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // `sample_body` still contains `return x`, so claiming local 0 was
         // elided is exactly the bug the audit exists to catch.
@@ -1938,7 +1942,7 @@ mod tests {
     fn an_unreported_local_never_trips_the_session_audit() {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         eng.run(&[]);
     }
@@ -1946,9 +1950,9 @@ mod tests {
     #[test]
     fn parents_link_children_to_their_node() {
         let mut body = sample_body();
-        let root = body.root;
+        let root = body.root();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Every statement of the root block has the root block as its parent.
         for &s in &eng.body.blocks[root].stmts {
@@ -2006,12 +2010,12 @@ mod tests {
         });
         {
             let mut __buf_eng = EngineBuffers::default();
-            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng = Tracked::new(Vec::new());
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.run(&[&FoldAddMulConst]);
         }
         // The let's value is now the promoted constant 12.
-        let root = body.root;
+        let root = body.root();
         let s0 = body.blocks[root].stmts[0];
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
@@ -2026,7 +2030,7 @@ mod tests {
     fn clone_expr_deep_copies_into_fresh_nodes() {
         // `{ let x = 1 + 2; return x; }`; clone the `1 + 2` subtree.
         let mut body = sample_body();
-        let root = body.root;
+        let root = body.root();
         let s0 = body.blocks[root].stmts[0];
         let StmtKind::Let { value, .. } = &body.stmts[s0].kind else {
             panic!("expected let");
@@ -2039,7 +2043,7 @@ mod tests {
         let before = body.exprs.len();
         let clone = {
             let mut __buf_eng = EngineBuffers::default();
-            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng = Tracked::new(Vec::new());
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             eng.clone_expr(original)
         };
@@ -2090,11 +2094,11 @@ mod tests {
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]
         });
-        let root = body.root;
+        let root = body.root();
         assert_eq!(body.blocks[root].stmts.len(), 3);
         {
             let mut __buf_eng = EngineBuffers::default();
-            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng = Tracked::new(Vec::new());
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             assert!(eng.run(&[&DropUnitStmts]));
         }
@@ -2127,7 +2131,7 @@ mod tests {
             vec![let_stmt, assign_stmt]
         });
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert!(!eng.is_local_read(0));
 
@@ -2141,7 +2145,7 @@ mod tests {
             vec![let2, ret]
         });
         let mut __buf_eng2 = EngineBuffers::default();
-        let mut __locals_eng2: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng2 = Tracked::new(Vec::new());
         let eng2 = Engine::new(&mut body2, &mut __buf_eng2, &mut __locals_eng2);
         assert!(eng2.is_local_read(0));
     }
@@ -2158,7 +2162,7 @@ mod tests {
             let s_add = s(b, StmtKind::Expr(add.into()));
             vec![s_x, s_add]
         });
-        let root = body.root;
+        let root = body.root();
         let StmtKind::Expr(Operand::Expr(lx)) = body.stmts[body.blocks[root].stmts[0]].kind else {
             panic!("expected expr stmt");
         };
@@ -2167,7 +2171,7 @@ mod tests {
         };
         {
             let mut __buf_eng = EngineBuffers::default();
-            let mut __locals_eng: Vec<NirLocal> = Vec::new();
+            let mut __locals_eng = Tracked::new(Vec::new());
             let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
             // Before: local 0 is read only by the `x` node.
             assert_eq!(eng.local_reads(0), &[lx]);
@@ -2185,7 +2189,7 @@ mod tests {
         let mut body = sample_body();
         let total = body.exprs.len() + body.stmts.len() + body.blocks.len() + body.pats.len();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         let mut popped = 0;
         while eng.pop().is_some() {
@@ -2204,7 +2208,7 @@ mod tests {
     fn alloc_block_and_alloc_pat_extend_the_queued_maps() {
         let mut body = sample_body();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Drain the worklist seeded at construction so only the freshly
         // `alloc_*`'d nodes remain below.
@@ -2236,7 +2240,7 @@ mod tests {
     #[test]
     fn a_reused_engine_buffers_keeps_one_sessions_maps_out_of_the_next() {
         let mut buffers = EngineBuffers::default();
-        let mut locals: Vec<NirLocal> = Vec::new();
+        let mut locals = Tracked::new(Vec::new());
 
         // Session 1 over `{ let x = 1 + 2; return x; }`. Every node is
         // reachable, so the walk stamps a parent into expr slot 0.
@@ -2246,7 +2250,7 @@ mod tests {
         let add = bin(&mut big, one, NirBinaryOp::Add, two);
         let let_stmt = let_x(&mut big, add, false);
         let ret = ret_x(&mut big);
-        big.root = big.blocks.push(BlockNode {
+        big.push_root(BlockNode {
             stmts: vec![let_stmt, ret],
             span: Span::default(),
         });
@@ -2287,7 +2291,7 @@ mod tests {
         // An empty body, so the new local's index collides with no `Local`.
         let mut body = mk_body(|_| Vec::new());
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = Vec::new();
+        let mut __locals_eng = Tracked::new(Vec::new());
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
 
         let new_local = eng.alloc_minted_local("y", TypeTable::I32, false);
@@ -2320,9 +2324,9 @@ mod tests {
             );
             vec![let_x(b, init, false)]
         });
-        let root = body.root;
+        let root = body.root();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         // Fills the memo: nothing in the pool reads `x` yet.
         assert!(!eng.reads_promoted_local(0));
@@ -2372,7 +2376,7 @@ mod tests {
             vec![s1, s2]
         });
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
         let eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert_eq!(eng.local_def(0), first);
     }
@@ -2393,7 +2397,7 @@ mod tests {
             vec![let_x(b, init, /* is_mut */ true), ret_x(b)]
         });
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, true)];
+        let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, true)]);
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert!(eng.local_has_one_version(0));
     }
@@ -2422,7 +2426,7 @@ mod tests {
             vec![let_x(b, a, false), let_x(b, c, false), ret_x(b)]
         });
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
         assert!(!eng.local_has_one_version(0));
     }
@@ -2444,9 +2448,9 @@ mod tests {
             );
             vec![let_x(b, init, false)]
         });
-        let root = body.root;
+        let root = body.root();
         let mut __buf_eng = EngineBuffers::default();
-        let mut __locals_eng: Vec<NirLocal> = vec![NirLocal::synth(0, TypeTable::I32, false)];
+        let mut __locals_eng = Tracked::new(vec![NirLocal::synth(0, TypeTable::I32, false)]);
         let mut eng = Engine::new(&mut body, &mut __buf_eng, &mut __locals_eng);
 
         // Allocated detached: the operand names `x`, but nothing reaches it.

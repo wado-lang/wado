@@ -68,7 +68,7 @@ pub(super) fn analyze<'b>(
         out: Bounds::default(),
     };
     scan.count_writes();
-    scan.walk_block(body.root);
+    scan.walk_block(body.root());
     scan.out
 }
 

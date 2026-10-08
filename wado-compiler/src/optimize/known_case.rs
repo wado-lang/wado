@@ -263,6 +263,7 @@ fn refuses(body: &Body, pattern: PatId, case: u32) -> bool {
 mod tests {
     use super::*;
     use crate::nir::NirLocal;
+    use crate::nir_arena::Tracked;
     use crate::nir_arena::{BlockNode, ExprNode, StmtId, StmtNode};
     use crate::nir_engine::EngineBuffers;
     use crate::nir_value_graph::ValueKind;
@@ -285,7 +286,7 @@ mod tests {
             stmts: vec![],
             span: Span::default(),
         });
-        assert_eq!(root, body.root);
+        assert_eq!(root, body.root());
         let construct = expr(
             &mut body,
             ExprKind::VariantConstruct {
@@ -334,11 +335,11 @@ mod tests {
     }
 
     fn run_known_case(body: &mut Body) {
-        let mut locals = vec![NirLocal {
+        let mut locals = Tracked::new(vec![NirLocal {
             name: "p".into(),
             type_id: TypeTable::I32,
             is_mut: false,
-        }];
+        }]);
         let mut buffers = EngineBuffers::default();
         let rule = KnownCaseRule;
         let mut engine = Engine::new(body, &mut buffers, &mut locals);

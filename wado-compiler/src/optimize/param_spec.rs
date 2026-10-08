@@ -2,14 +2,13 @@
 //! on a constant field of one passed by reference.
 //! Compiler items and cached clones retain their contracts for synthesized calls.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirParam, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
+use crate::nir::{
+    FuncCell, FuncId, FuncParts, FuncRef, FunctionRef, NirFunction, NirParam, NirUnaryOp,
+};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind, Tracked};
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -17,18 +16,20 @@ use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctf
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::arena_query::{cold_exprs, cold_path_id};
+use super::body_memo::BodyMemo;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use super::extract::is_place_read;
-use super::gate::{BodyMemo, FunctionGate, GatedPass};
+use super::gate::{FunctionGate, GatedPass};
 use super::inline::{body_callees, recursive_functions};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
 use crate::name::param_spec_name;
 use crate::nir::NirLocal;
+use crate::parallel::Executor;
 
 /// Whole-module cap on synthesized clones, so a pathological program cannot
 /// trade unbounded code size for constant propagation.
@@ -489,16 +490,14 @@ struct ParamFacts {
 fn summarize_params(
     project: &NirPackage,
     signatures: &Signatures,
+    exec: &Executor,
 ) -> IndexMap<(FuncId, u32), ParamFacts> {
-    let mut facts: IndexMap<(FuncId, u32), ParamFacts> = IndexMap::default();
-    for (index, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
-        let Some(body) = &func.body else {
-            continue;
+    let functions = &project.functions;
+    let per_function = exec.map_indices(functions.len(), |index| {
+        let func = functions[index].borrow();
+        let Some(body) = func.body.as_ref().filter(|_| !func.is_dead) else {
+            return Vec::new();
         };
-        if func.is_dead {
-            continue;
-        }
         let id = FuncId::new(index);
         let tracked: IndexSet<u32> = signatures.param_struct[index]
             .iter()
@@ -507,24 +506,26 @@ fn summarize_params(
                 pointee.map(|_| signatures.param_locals[index][position])
             })
             .collect();
-        if tracked.is_empty() {
-            continue;
-        }
         let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
-        collect_local_uses(body, &tracked, &IndexSet::default(), signatures, &mut uses);
-        for local in tracked {
-            let use_facts = uses.swap_remove(&local).unwrap_or_default();
-            facts.insert(
-                (id, local),
-                ParamFacts {
+        if !tracked.is_empty() {
+            collect_local_uses(body, &tracked, &IndexSet::default(), signatures, &mut uses);
+        }
+        tracked
+            .into_iter()
+            .map(|local| {
+                let use_facts = uses.swap_remove(&local).unwrap_or_default();
+                let facts = ParamFacts {
                     writes: use_facts.written_fields(),
                     reads: use_facts.reads,
                     opaque: use_facts.opaque || !use_facts.rebinds.is_empty(),
                     forwards: use_facts.forwards,
-                },
-            );
-        }
-    }
+                };
+                ((id, local), facts)
+            })
+            .collect()
+    });
+    let mut facts: IndexMap<(FuncId, u32), ParamFacts> =
+        per_function.into_iter().flatten().collect();
 
     let mut changed = true;
     while changed {
@@ -977,8 +978,13 @@ pub(super) fn specialize_const_params(
         .chain(project.sroa_param_clones.iter())
         .copied()
         .collect();
-    let mut reachable =
-        reachable_function_positions(project, descriptors, &mut state.reachability, gate, cached);
+    let mut reachable = reachable_function_positions(
+        project,
+        descriptors,
+        &mut state.reachability,
+        gate.exec(),
+        cached,
+    );
     let mut changed = false;
     while specialize_round(project, state, gate, descriptors, &mut reachable) {
         changed = true;
@@ -996,16 +1002,25 @@ fn specialize_round(
     descriptors: &mut DescriptorCache,
     reachable: &mut IndexSet<usize>,
 ) -> bool {
-    let constants = collect_call_constants(project, reachable);
+    let constants = collect_call_constants(project, reachable, gate.exec());
     let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
-        let recursive = recursive_functions(state.callees.refresh(project, gate, body_callees));
+        let recursive =
+            recursive_functions(state.callees.refresh(project, gate.exec(), body_callees));
         Signatures::build(project, &types, &recursive)
     };
-    let facts = summarize_params(project, &signatures);
+    let facts = summarize_params(project, &signatures, gate.exec());
     let cold = cold_path_id(descriptors.descriptors(project));
-    let per_caller = collect_sites(project, state, &signatures, &facts, &constants, cold);
+    let per_caller = collect_sites(
+        project,
+        state,
+        &signatures,
+        &facts,
+        &constants,
+        cold,
+        gate.exec(),
+    );
     if per_caller.is_empty() {
         return propagated;
     }
@@ -1035,47 +1050,63 @@ fn specialize_round(
 /// at — which is what tells `select_sites` a clone is the only way to reach it.
 type CallConsts = IndexMap<FuncId, Vec<Option<FieldConst>>>;
 
-fn collect_call_constants(project: &NirPackage, reachable: &IndexSet<usize>) -> CallConsts {
-    let mut constants: CallConsts = IndexMap::default();
-    let mut collect = |body: &Body| {
-        body.for_each_reachable_node(|node| {
-            let NodeRef::Expr(e) = node else { return };
-            let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-                return;
-            };
-            let here: Vec<_> = args
-                .iter()
-                .map(|arg| {
-                    (!arg.is_mut)
-                        .then(|| FieldConst::of_operand(body, arg.expr))
-                        .flatten()
-                })
-                .collect();
-            if let Some(previous) = constants.get_mut(func_id) {
-                assert_eq!(previous.len(), here.len());
-                for (old, new) in previous.iter_mut().zip(here) {
-                    if *old != new {
-                        *old = None;
-                    }
-                }
-            } else {
-                constants.insert(*func_id, here);
-            }
-        });
-    };
-    for &pos in reachable {
-        let func = &project.functions[pos];
-        let func = func.borrow();
+fn collect_call_constants(
+    project: &NirPackage,
+    reachable: &IndexSet<usize>,
+    exec: &Executor,
+) -> CallConsts {
+    let functions = &project.functions;
+    let positions: Vec<usize> = reachable.iter().copied().collect();
+    let per_function = exec.map(&positions, |&pos| {
+        let func = functions[pos].borrow();
+        let mut constants = CallConsts::default();
         if !func.is_dead
             && let Some(body) = &func.body
         {
-            collect(body);
+            collect_body_call_constants(body, &mut constants);
         }
+        constants
+    });
+    let mut constants = CallConsts::default();
+    for (callee, here) in per_function.into_iter().flatten() {
+        join_call(&mut constants, callee, here);
     }
     for global in &project.globals {
-        collect(global.init.slot_expr().body());
+        collect_body_call_constants(global.init.slot_expr().body(), &mut constants);
     }
     constants
+}
+
+/// Join one call's arguments into what the earlier calls of `callee` agree on.
+fn join_call(into: &mut CallConsts, callee: FuncId, here: Vec<Option<FieldConst>>) {
+    let Some(previous) = into.get_mut(&callee) else {
+        into.insert(callee, here);
+        return;
+    };
+    assert_eq!(previous.len(), here.len());
+    for (old, new) in previous.iter_mut().zip(here) {
+        if *old != new {
+            *old = None;
+        }
+    }
+}
+
+fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
+    body.for_each_reachable_node(|node| {
+        let NodeRef::Expr(e) = node else { return };
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return;
+        };
+        let here: Vec<_> = args
+            .iter()
+            .map(|arg| {
+                (!arg.is_mut)
+                    .then(|| FieldConst::of_operand(body, arg.expr))
+                    .flatten()
+            })
+            .collect();
+        join_call(constants, *func_id, here);
+    });
 }
 
 /// A scalar agreed on by every caller needs no clone. DAE removes the parameter
@@ -1113,8 +1144,8 @@ fn propagate_scalar_constants(
         if bindings.is_empty() {
             continue;
         }
-        let NirFunction { body, locals, .. } = &mut *func;
-        let body = body.as_mut().expect("eligible function has a body");
+        let FuncParts { body, locals, .. } = func.parts();
+        let body = body.expect("eligible function has a body");
         if substitute_locals(body, locals, &mut buffers, &bindings) {
             gate.mark_changed(id);
             changed = true;
@@ -1132,24 +1163,21 @@ fn collect_sites(
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
     constants: &CallConsts,
     cold: Option<FuncId>,
+    exec: &Executor,
 ) -> Vec<(usize, Vec<Site>)> {
     let types = project.type_table.borrow();
-    let mut per_caller = Vec::new();
-    for (index, func_rc) in project.functions.iter().enumerate() {
-        let func = func_rc.borrow();
-        let Some(body) = &func.body else {
-            continue;
-        };
-        if func.is_dead {
-            continue;
-        }
+    let types: &TypeTable = &types;
+    let functions = &project.functions;
+    let per_caller = exec.map_indices(functions.len(), |index| {
+        let func = functions[index].borrow();
+        let body = func.body.as_ref().filter(|_| !func.is_dead)?;
         let seed = state.param_consts.get(&FuncId::new(index));
-        let roots = collect_roots(&func, body, &types, signatures, facts, seed);
+        let roots = collect_roots(&func, body, types, signatures, facts, seed);
         let cold_calls = cold.map(|c| cold_exprs(body, c)).unwrap_or_default();
         let mut sites = select_sites(
             &func.locals,
             body,
-            &types,
+            types,
             signatures,
             facts,
             &roots,
@@ -1159,11 +1187,9 @@ fn collect_sites(
         for site in &mut sites {
             site.cold = cold_calls.contains(&site.call);
         }
-        if !sites.is_empty() {
-            per_caller.push((index, sites));
-        }
-    }
-    per_caller
+        (!sites.is_empty()).then_some((index, sites))
+    });
+    per_caller.into_iter().flatten().collect()
 }
 
 /// One call to point at a clone: `(caller store position, call node, clone)`.
@@ -1231,7 +1257,7 @@ fn build_clones(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     planned: &[Planned<'_>],
-) -> Vec<Rc<RefCell<NirFunction>>> {
+) -> Vec<FuncRef> {
     if planned.is_empty() {
         return Vec::new();
     }
@@ -1273,7 +1299,7 @@ struct BranchSettler {
 impl BranchSettler {
     fn new(project: &NirPackage) -> Self {
         BranchSettler {
-            callees: build_callee_map(project),
+            callees: build_callee_map(project, &Executor::default(), |_| false),
             ctfe_builtins: build_ctfe_builtin_map(project),
             pure_builtin_callees: project.pure_builtin_callee_ids(),
         }
@@ -1298,7 +1324,7 @@ impl BranchSettler {
     fn settle(
         &self,
         body: &mut Body,
-        locals: &mut Vec<NirLocal>,
+        locals: &mut Tracked<Vec<NirLocal>>,
         buffers: &mut EngineBuffers,
         types: &TypeTable,
     ) {
@@ -1313,7 +1339,7 @@ impl BranchSettler {
 
 /// A freshly minted clone and the facts recorded for it.
 struct Clone {
-    function: Rc<RefCell<NirFunction>>,
+    function: FuncRef,
     param_consts: IndexMap<String, ParamSeed>,
 }
 
@@ -1385,7 +1411,7 @@ fn build_clone(
     copy_function_strings(project, &origin, (clone.module_source.clone(), name));
 
     Clone {
-        function: Rc::new(RefCell::new(clone)),
+        function: FuncCell::new(clone),
         param_consts,
     }
 }
@@ -1437,7 +1463,7 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 /// itself, and its clone exists to seed the callee it forwards to.
 fn substitute_fields(
     body: &mut Body,
-    locals: &mut Vec<NirLocal>,
+    locals: &mut Tracked<Vec<NirLocal>>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConsts>,
 ) -> bool {
@@ -1469,7 +1495,7 @@ fn substitute_fields(
 /// Replace every read of a bound local with its constant.
 fn substitute_locals(
     body: &mut Body,
-    locals: &mut Vec<NirLocal>,
+    locals: &mut Tracked<Vec<NirLocal>>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConst>,
 ) -> bool {

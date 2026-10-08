@@ -10,7 +10,7 @@ use crate::name::MangledName;
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
 use crate::name::{StructName, wir_enum_type_key, wir_type_key};
-use crate::nir::{FuncId, NirFunction};
+use crate::nir::{FuncId, FuncRef};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir::{
@@ -199,7 +199,7 @@ pub struct PendingFunctionBody {
     /// Index into WirContext.functions
     pub wir_func_index: usize,
     /// The TIR function to translate
-    pub tir_func: Rc<RefCell<NirFunction>>,
+    pub tir_func: FuncRef,
     /// The type table for this function's module
     pub type_table: Rc<RefCell<TypeTable>>,
 }
@@ -211,9 +211,7 @@ pub struct PendingFunctionBody {
 fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, TypeId)> {
     let mut set: IndexSet<(usize, TypeId)> = IndexSet::default();
     for func_rc in &package.functions {
-        let Ok(func) = func_rc.try_borrow() else {
-            continue;
-        };
+        let func = func_rc.borrow();
         // `dce` marks unreachable functions dead in place (Phase 4) rather than
         // removing them, so a dead `FnCanonicalDispatch` stub lingers; gate on
         // liveness, not mere presence.

@@ -7,6 +7,7 @@
 mod aggregate_forward;
 mod alias;
 mod arena_query;
+mod body_memo;
 mod bounds;
 mod census;
 mod clone_forward;
@@ -57,6 +58,8 @@ mod tuple_projection;
 mod value_copy;
 mod value_copy_demote;
 
+use std::sync::Arc;
+
 // The promoted-read audit is the only reader, and it is debug-only.
 #[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
@@ -96,6 +99,7 @@ use heap_effect::HeapEffectsCache;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
+use crate::parallel::Executor;
 use crate::{OptOverrides, compiler_trace};
 
 /// Configuration for optimization passes
@@ -148,11 +152,13 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
 /// sharply; `O1` and above run it twice, before the fixed-point loop to shrink
 /// the working set and after it to sweep what the loop made dead. What runs in
 /// between is the pass sequence below, scaled by [`OptLevel`] and by whatever
-/// `opt` overrides of that level's defaults.
+/// `opt` overrides of that level's defaults. Functions are visited on
+/// `parallelism` threads, which changes nothing in the result.
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
     opt: OptOverrides,
+    parallelism: usize,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
     let OptOverrides {
@@ -160,6 +166,7 @@ pub fn optimize(
         inline_growth,
         iterations: opt_iterations,
     } = opt;
+    let exec = Arc::new(Executor::new(parallelism));
     // Decide the short-string inline threshold once, from the opt level. Read
     // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
     // pick a constant `array.new_fixed<u8>` repr for strings at or below it —
@@ -177,6 +184,7 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
             // Dense-int / dense-enum `Match` → `Switch` is a codegen-
@@ -206,14 +214,16 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
             // Final DCE: clean up code made dead by optimizations
             run_dce(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::KeepEffects,
             );
         }
@@ -244,13 +254,15 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
             run_dce(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::KeepEffects,
             );
             if opt_level == OptLevel::Os {
@@ -276,13 +288,15 @@ pub fn optimize(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::DropUnread,
             );
-            run_optimization_passes(&mut project, &config, profiler, &mut descriptors);
+            run_optimization_passes(&mut project, &config, profiler, &mut descriptors, &exec);
             run_dce(
                 &mut project,
                 profiler,
                 &mut descriptors,
+                &exec,
                 Initializers::KeepEffects,
             );
         }
@@ -297,7 +311,12 @@ pub fn optimize(
     // const-local propagation keep it default-safe.
     if opt_level != OptLevel::O0 {
         run_pass("nir/promote_fields", &mut project, profiler, |p| {
-            extract::freeze_pure_arith(p, /* include_fields */ true, FreezePhase::Terminal)
+            extract::freeze_pure_arith(
+                p,
+                &exec,
+                /* include_fields */ true,
+                FreezePhase::Terminal,
+            )
         });
         // Re-run the structural BCE matcher now that `promote_fields` froze
         // invariant bounds (`arr.used`) into constant operands the in-loop
@@ -308,6 +327,7 @@ pub fn optimize(
             "nir/cond_impl_post_promote",
             &mut project,
             profiler,
+            &exec,
             |p, g| {
                 condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
             },
@@ -320,7 +340,7 @@ pub fn optimize(
         // checks are versioned, and before `select_lowering`, which
         // reshapes conditions out of matcher form.
         run_pass("nir/loop_version_bce", &mut project, profiler, |p| {
-            loop_version_bce::version_loops(p, &mut descriptors)
+            loop_version_bce::version_loops(p, &mut descriptors, &exec)
         });
     }
 
@@ -346,7 +366,12 @@ pub fn optimize(
     // root and are simply not emitted. (Early arith promotion already ran before
     // the loop; `FieldAccess` promotion ran above, after SROA.)
     run_pass("nir/freeze_pure_arith", &mut project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Terminal)
+        extract::freeze_pure_arith(
+            p,
+            &exec,
+            /* include_fields */ false,
+            FreezePhase::Terminal,
+        )
     });
 
     // The born-resolved invariant is now enforced by the type system: a call
@@ -362,6 +387,7 @@ fn run_dce(
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
     descriptors: &mut dce::DescriptorCache,
+    exec: &Executor,
     initializers: Initializers,
 ) {
     profiler.span_start("nir/dce");
@@ -374,13 +400,13 @@ fn run_dce(
         profiler.span_start(&span);
         let functions_before = live_bodies(project);
         let globals_before = project.globals.len();
-        let mut summaries = summarize(project).0;
+        let mut summaries = summarize(project, exec).0;
         if unhoist_unobserved_globals(project, descriptors, &summaries) {
             // A rewritten body only lost work, so its real summary shrank, and
             // the stale table refuses deletions nothing has a reason to refuse.
-            summaries = summarize(project).0;
+            summaries = summarize(project, exec).0;
         }
-        let analysis = analyze_dce(project, descriptors);
+        let analysis = analyze_dce(project, descriptors, exec);
         // Clearing an unreachable function's body leaves its entry describing
         // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
@@ -427,9 +453,10 @@ fn run_bounded_fixpoint(
     name: &'static str,
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
+    exec: &Arc<Executor>,
     mut step: impl FnMut(&mut NirPackage, &mut FunctionGate) -> bool,
 ) -> bool {
-    let mut gate = FunctionGate::new(project);
+    let mut gate = FunctionGate::new(project, exec);
     run_pass(name, project, profiler, |p| {
         let mut changed = false;
         for i in 0..POST_LOOP_FIXPOINT_CAP {
@@ -644,6 +671,7 @@ fn run_optimization_passes(
     config: &OptConfig,
     profiler: &dyn SpanEmitter,
     descriptor_cache: &mut dce::DescriptorCache,
+    exec: &Arc<Executor>,
 ) {
     // Before anything prices a body, so `nir/inline`'s cold discount describes
     // the function it copies. Ahead of the gate too, so the call graph is built
@@ -655,9 +683,9 @@ fn run_optimization_passes(
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
-    let mut gate = gate::FunctionGate::new(project);
-    // Keyed by `gate`'s edit counts, so each pass that reads heap effects
-    // re-solves only what the passes before it rewrote.
+    let mut gate = gate::FunctionGate::new(project, exec);
+    // Keyed by each function's write count, so each pass that reads heap
+    // effects re-solves only what the passes before it rewrote.
     let mut heap_effects = HeapEffectsCache::default();
     let mut mod_ref_summaries = SummaryCache::default();
     let mut sroa_param_state = SroaParamState::default();
@@ -683,7 +711,7 @@ fn run_optimization_passes(
     // the SROA passes), since SROA scalarizes the structs a promoted `FieldAccess`
     // would reference. See the late call in `optimize`.
     run_pass("nir/promote_pure_values_early", project, profiler, |p| {
-        extract::freeze_pure_arith(p, /* include_fields */ false, FreezePhase::Early)
+        extract::freeze_pure_arith(p, exec, /* include_fields */ false, FreezePhase::Early)
     });
     // What changed in the iteration just run, and so the convergence flag:
     // empty ends the loop, non-empty after it names what held the loop open.
@@ -899,6 +927,7 @@ fn run_optimization_passes(
         "nir/store_load_forward_post_scalarize",
         project,
         profiler,
+        exec,
         |p, g| {
             forward_stores_to_loads(p, g) | fold_constants_all(p, g) | prune_constant_branches(p, g)
         },
@@ -910,7 +939,7 @@ fn run_optimization_passes(
     // body directly. Iterate until convergence because one flatten can
     // expose another (e.g. single-stmt Block collapse on a freshly
     // produced `Block { Expr(tail) }`).
-    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p, g| {
+    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, exec, |p, g| {
         prune_template_block_wrappers(p, g)
     });
     // Body globalization: hoist constant, read-only aggregate `let` bindings
@@ -922,7 +951,7 @@ fn run_optimization_passes(
     // `wir_optimize::const_global`; the final `run_dce` reclaims the dead
     // binding locals.
     run_pass("nir/const_object_globalization", project, profiler, |p| {
-        globalize_const_objects(p)
+        globalize_const_objects(p, exec)
     });
     // Clean up after globalization: fold the `global:X.used` length reads it
     // exposes (recovered via `const_folding`'s `GlobalFieldEnv`) and prune the
@@ -931,9 +960,13 @@ fn run_optimization_passes(
     // `branch_prune` run here — re-entering the full loop is unsafe, since the
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
-    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
-        fold_constants_all(p, g) | prune_constant_branches(p, g)
-    });
+    run_bounded_fixpoint(
+        "nir/const_fold_post_global",
+        project,
+        profiler,
+        exec,
+        |p, g| fold_constants_all(p, g) | prune_constant_branches(p, g),
+    );
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
     // recognizer has matched its shape, so it only strips dead-weight locals.

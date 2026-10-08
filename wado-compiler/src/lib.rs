@@ -52,6 +52,7 @@ pub mod nir_value_graph;
 pub mod nir_visitor;
 pub mod optimize;
 pub mod package;
+pub mod parallel;
 pub mod param_resolution;
 pub mod parser;
 pub mod path;
@@ -421,6 +422,9 @@ pub struct CompilerOptions {
     /// When `Some`, instrument the modules this scope measures and carry
     /// their plan in the `org.wado-lang.coverage` section. Test world only.
     pub coverage: Option<coverage::CoverageScope>,
+    /// How many threads the optimizer visits functions on. The output does not
+    /// depend on it. A host compiling several files at once passes 1.
+    pub parallelism: usize,
 }
 
 impl Default for CompilerOptions {
@@ -444,6 +448,7 @@ impl Default for CompilerOptions {
             params: param_resolution::ParamInputs::default(),
             embed_wit_contract: None,
             coverage: None,
+            parallelism: 1,
         }
     }
 }
@@ -1856,7 +1861,13 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 11: Optimize (NirPackage → NirPackage) ===
     let nir = {
         let _span = logger.span("optimize");
-        optimize(nir, options.opt_level, options.opt, logger)
+        optimize(
+            nir,
+            options.opt_level,
+            options.opt,
+            options.parallelism,
+            logger,
+        )
     };
 
     prelower_reach::audit(prelower_reached.as_ref(), &nir);
@@ -2053,6 +2064,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         &[],
         &param_resolution::ParamInputs::default(),
         kiln::InvocationIndex::default(),
+        1,
     )
     .await
 }
@@ -2076,6 +2088,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     codegen_flags: &[String],
     params: &param_resolution::ParamInputs,
     invocations: kiln::InvocationIndex,
+    parallelism: usize,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
     let filename = filename.map(String::from);
@@ -2302,7 +2315,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Optimize
             let nir = {
                 let _span = logger.span("optimize");
-                optimize(nir, opt_level, opt, &logger)
+                optimize(nir, opt_level, opt, parallelism, &logger)
             };
 
             prelower_reach::audit(prelower_reached.as_ref(), &nir);

@@ -142,6 +142,7 @@ impl Opt {
         CompileKnobOpt::InlineThreshold,
         CompileKnobOpt::InlineGrowth,
         CompileKnobOpt::OptIterations,
+        CompileKnobOpt::OptThreads,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,

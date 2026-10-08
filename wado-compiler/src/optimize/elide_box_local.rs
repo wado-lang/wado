@@ -165,7 +165,7 @@ impl LocalStats {
 
 fn collect_local_stats(body: &Body) -> IndexMap<u32, LocalStats> {
     let mut stats: IndexMap<u32, LocalStats> = IndexMap::default();
-    stats_node(body, NodeRef::Block(body.root), &mut stats);
+    stats_node(body, NodeRef::Block(body.root()), &mut stats);
     stats
 }
 

@@ -7,13 +7,14 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncCell, FuncId, FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 use crate::{compiler_trace, nir_arena};
@@ -251,21 +252,29 @@ impl EditSink for BodySink<'_> {
 
 /// The [`CalleeMap`] over every function in `project` a compile-time frame can
 /// run. Its handles alias `project.functions`, so rebuilding it every optimizer
-/// iteration costs only refcount bumps.
-pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
-    let mut map = CalleeMap::default();
-    for func_rc in &project.functions {
+/// iteration costs only refcount bumps, except for the functions `frozen`
+/// picks: a sweep about to rewrite those reads them as they stand now, from a
+/// copy taken on `exec`'s threads (WEP: Parallel Optimizer).
+pub(crate) fn build_callee_map(
+    project: &NirPackage,
+    exec: &Executor,
+    frozen: impl Fn(FuncId) -> bool + Sync + Send,
+) -> CalleeMap {
+    let entries = exec.map(&project.functions, |func_rc| {
         let func = func_rc.borrow();
         if !is_ctfe_runnable(&func) {
-            continue;
+            return None;
         }
-        let Some(id) = func.id else {
-            continue;
+        let id = func.id?;
+        let handle = if frozen(id) {
+            FuncCell::new(func.clone())
+        } else {
+            func_rc.clone()
         };
         drop(func);
-        map.insert(id, Callee::new(func_rc.clone()));
-    }
-    map
+        Some((id, Callee::new(handle)))
+    });
+    entries.into_iter().flatten().collect()
 }
 
 /// Which callee ids are the builtins the engine evaluates.
@@ -365,7 +374,7 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     let mut loose: IndexSet<GlobalKey> = IndexSet::default();
     let mut visit = |body: &Body| {
         let mut enclosing: Vec<GlobalKey> = Vec::new();
-        let mut stack = vec![Step::Enter(NodeRef::Block(body.root))];
+        let mut stack = vec![Step::Enter(NodeRef::Block(body.root()))];
         while let Some(step) = stack.pop() {
             let node = match step {
                 Step::Leave(depth) => {

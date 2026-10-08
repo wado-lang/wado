@@ -160,6 +160,7 @@ impl Opt {
         CompileKnobOpt::InlineThreshold,
         CompileKnobOpt::InlineGrowth,
         CompileKnobOpt::OptIterations,
+        CompileKnobOpt::OptThreads,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
         CompileKnobOpt::NoCache,
@@ -339,9 +340,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
     // Tests compile unoptimized by default: the compile stage dominates a run,
-    // and `-O` opts back in.
+    // and `-O` opts back in. Each file's optimizer runs on one thread, since
+    // `--parallel` already spreads the files across the cores.
     let mut knobs = CompileKnobs {
         opt_level: OptLevel::O0,
+        opt_threads: Some(1),
         ..CompileKnobs::default()
     };
     // `core:log`'s own default is `trace`, which buries a run in the events a

@@ -530,6 +530,9 @@ async fn render_phases(
             &inputs.codegen_flags,
             &params,
             wado_compiler::kiln::InvocationIndex::default(),
+            // More than one, so a golden that depends on the thread count
+            // drifts from the one committed.
+            2,
         )
         .await;
 

@@ -2,8 +2,8 @@
 //! summarises each function over the call graph, [`HeapFrame`] one body's objects.
 
 use std::borrow::Cow;
-use std::cell::{OnceCell, RefCell};
-use std::rc::Rc;
+use std::cell::OnceCell;
+use std::sync::{Arc, Mutex};
 
 use cranelift_entity::EntityRef;
 
@@ -16,12 +16,14 @@ use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind,
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{
-    BuiltinDeclaration, ObjectTypes, ResolvedType, RetainInto, RetainSpec, ReturnConvention,
-    TypeId, TypeKey, TypeTable,
+    BuiltinDeclaration, BuiltinDeclarations, ObjectTypes, ResolvedType, RetainInto, RetainSpec,
+    ReturnConvention, TypeId, TypeKey, TypeTable,
 };
 
 use super::arena_query::holds_reference;
-use super::gate::{BodyMemo, FunctionGate};
+use super::body_memo::BodyMemo;
+use super::gate::FunctionGate;
+use crate::parallel::lock;
 
 /// Where a class's objects may come from: a bit per parameter (the last one
 /// standing for every later one) or a global. None means allocated here.
@@ -152,7 +154,7 @@ struct FunctionEntry {
 }
 
 impl FunctionEntry {
-    fn of(f: &NirFunction, project: &NirPackage) -> Self {
+    fn of(f: &NirFunction, declarations: &BuiltinDeclarations) -> Self {
         let mut calls = IndexSet::default();
         let mut calls_indirect = false;
         if let Some(body) = &f.body {
@@ -165,7 +167,7 @@ impl FunctionEntry {
             });
         }
         Self {
-            callee: classify_callee(f, project),
+            callee: classify_callee(f, declarations),
             closure: f.body.is_some() && f.is_closure_call(),
             calls,
             calls_indirect,
@@ -215,8 +217,8 @@ impl Layouts {
     }
 }
 
-/// The call-graph-wide summaries, kept across passes and re-solved only where
-/// a body changed since: entries are keyed by one [`FunctionGate`]'s edit counts.
+/// The call-graph-wide summaries, kept across one [`FunctionGate`]'s passes and
+/// re-solved only where a function was written since.
 #[derive(Default)]
 pub(super) struct HeapEffectsCache {
     gate: Option<u64>,
@@ -225,15 +227,16 @@ pub(super) struct HeapEffectsCache {
     summaries: Vec<Summary>,
     /// The join over every closure body, which is what an indirect call runs.
     indirect: Summary,
-    reach_memo: RefCell<IndexMap<TypeKey, Rc<ObjectTypes>>>,
+    /// Filled during a sweep by whichever visit asks first; its values depend
+    /// only on the type, so the order changes nothing.
+    reach_memo: Mutex<IndexMap<TypeKey, Arc<ObjectTypes>>>,
     /// Where `assert_one_settled` resumes its rotation.
     #[cfg(debug_assertions)]
     cursor: usize,
 }
 
 impl HeapEffectsCache {
-    /// The summaries of `project` as it stands. Every rewrite since the last
-    /// call must have been reported to `gate`.
+    /// The summaries of `project` as it stands.
     pub(super) fn effects<'t>(
         &'t mut self,
         project: &NirPackage,
@@ -260,10 +263,11 @@ impl HeapEffectsCache {
         let mut edited = vec![false; len];
         // Whether a node's answer to its callers moved; the last is the indirect one.
         let mut moved = vec![false; len + 1];
+        let declarations = &project.builtin_declarations;
         self.functions.refresh_observing(
             project,
-            gate,
-            |f| FunctionEntry::of(f, project),
+            gate.exec(),
+            |f| FunctionEntry::of(f, declarations),
             |i, old, new| {
                 edited[i] = true;
                 moved[i] = old.is_none_or(|old| old.shape() != new.shape());
@@ -407,8 +411,8 @@ impl HeapEffectsCache {
         }
     }
 
-    /// A body rewritten without a report to the gate keeps a summary that no
-    /// longer answers for it. One node per refresh, rotating, keeps the check cheap.
+    /// A summary the solver left behind a moved callee no longer answers for
+    /// its function. One node per refresh, rotating, keeps the check cheap.
     #[cfg(debug_assertions)]
     fn assert_one_settled(&mut self, project: &NirPackage, type_table: &TypeTable) {
         let nodes = self.summaries.len() + 1;
@@ -418,8 +422,7 @@ impl HeapEffectsCache {
         let summary = self.summarize(project, type_table, n);
         assert!(
             summary == *self.summary_mut(n),
-            "a heap-effect summary went stale: function {n} was rewritten without \
-             `FunctionGate::mark_changed`"
+            "the heap-effect summary of node {n} went stale"
         );
     }
 }
@@ -545,7 +548,7 @@ impl HeapEffects<'_> {
 
     /// Every object type an element of the list `ty` may reach, or `None` where
     /// `ty` is no list.
-    pub(super) fn element_reach(&self, ty: TypeId) -> Option<Rc<ObjectTypes>> {
+    pub(super) fn element_reach(&self, ty: TypeId) -> Option<Arc<ObjectTypes>> {
         let tt = self.type_table;
         let ty = tt.strip_handles(ty);
         let ResolvedType::GenericInstance { type_args, .. } = tt.get(ty) else {
@@ -558,19 +561,16 @@ impl HeapEffects<'_> {
     }
 
     /// Every object type a value of `ty` may reach, itself included.
-    pub(super) fn reach(&self, ty: TypeId) -> Rc<ObjectTypes> {
+    pub(super) fn reach(&self, ty: TypeId) -> Arc<ObjectTypes> {
         let key = self.type_table.type_key(ty);
-        if let Some(hit) = self.cache.reach_memo.borrow().get(&key) {
-            return Rc::clone(hit);
+        if let Some(hit) = lock(&self.cache.reach_memo).get(&key) {
+            return Arc::clone(hit);
         }
         let mut out = ObjectTypes::default();
         let mut seen = IndexSet::default();
         self.reach_into(ty, &mut seen, &mut out);
-        let out = Rc::new(out);
-        self.cache
-            .reach_memo
-            .borrow_mut()
-            .insert(key, Rc::clone(&out));
+        let out = Arc::new(out);
+        lock(&self.cache.reach_memo).insert(key, Arc::clone(&out));
         out
     }
 
@@ -737,11 +737,11 @@ impl HeapEffects<'_> {
     }
 }
 
-fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
+fn classify_callee(f: &NirFunction, declarations: &BuiltinDeclarations) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    match project.builtin_declarations.get(f) {
+    match declarations.get(f) {
         Some(declaration) => match declaration.facts.side_effect {
             SideEffect::Listed { .. } => Callee::Builtin(Box::new(declaration.clone())),
             SideEffect::Opaque | SideEffect::BlackBox => Callee::Opaque {
@@ -771,13 +771,13 @@ enum OperandNode {
 
 enum Keys {
     One(TypeKey),
-    Set(Rc<ObjectTypes>),
+    Set(Arc<ObjectTypes>),
 }
 
 impl Keys {
     fn of(effects: &HeapEffects, ty: Option<TypeId>) -> Self {
         ty.and_then(|t| effects.type_table.heap_object_key(t))
-            .map_or_else(|| Keys::Set(Rc::new(ObjectTypes::everything())), Keys::One)
+            .map_or_else(|| Keys::Set(Arc::new(ObjectTypes::everything())), Keys::One)
     }
 
     fn contains(&self, key: TypeKey) -> bool {
@@ -929,7 +929,7 @@ impl HeapFrame {
                 NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
         }
-        if let Some(tail) = body.block_tail(body.root) {
+        if let Some(tail) = body.block_tail(body.root()) {
             frame.unify_op(effects, body, RET, tail);
         }
         frame.finish();
@@ -1661,12 +1661,12 @@ impl HeapFrame {
         &self,
         effects: &HeapEffects,
         body: &Body,
-        keys: &Rc<ObjectTypes>,
+        keys: &Arc<ObjectTypes>,
         local: u32,
         answered: impl Fn(Operand) -> bool,
     ) -> bool {
         let h = self.local_root(local);
-        let wanted = Keys::Set(Rc::clone(keys));
+        let wanted = Keys::Set(Arc::clone(keys));
         self.accesses.iter().any(|a| {
             a.effect == Effect::Write
                 && a.keys.meets(keys)
@@ -1766,7 +1766,7 @@ fn builtin_touches(
     effects: &HeapEffects,
     declaration: &BuiltinDeclaration,
     ty: TypeId,
-) -> Rc<ObjectTypes> {
+) -> Arc<ObjectTypes> {
     let reaches_elements = matches!(
         declaration.facts.storage,
         Storage::CopiesArgs | Storage::Opaque
@@ -1776,7 +1776,7 @@ fn builtin_touches(
     if reaches_elements || !is_array {
         return effects.reach(ty);
     }
-    Rc::new(
+    Arc::new(
         tt.heap_object_key(ty)
             .map_or_else(ObjectTypes::everything, ObjectTypes::one),
     )

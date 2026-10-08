@@ -312,7 +312,7 @@ pub fn build(
     // `Operand::Value` resolves through the same ids), grow it during the walk,
     // and write it back. `body.values` is the one persistent pool — ids stay
     // stable across builds (it only grows), the prerequisite for build-once.
-    let seed = std::mem::take(&mut body.values);
+    let seed = std::mem::take(&mut *body.values);
     let (pool, loop_entry_values) = {
         let mut b = Builder::new(&*body, alias, type_table, seed);
         b.pure_calls.clone_from(calls.pure);
@@ -322,10 +322,10 @@ pub fn build(
         b.ctfe_builtins.clone_from(calls.ctfe_builtins);
         b.call_writes.clone_from(calls.writes);
         b.seed_params(param_locals);
-        b.walk_block(body.root);
+        b.walk_block(body.root());
         (b.pool, b.loop_entry_values)
     };
-    body.values = pool;
+    *body.values = pool;
     ValueGraphBuild { loop_entry_values }
 }
 
@@ -2627,7 +2627,7 @@ mod tests {
             type_id: TypeTable::I32,
             is_mut: true,
         };
-        b.locals = vec![mut_local("a"), mut_local("b")];
+        *b.locals = vec![mut_local("a"), mut_local("b")];
         let call = b.exprs.push(ExprNode {
             kind: ExprKind::Call {
                 func_id: FuncId::from_u32(0),
@@ -2666,7 +2666,7 @@ mod tests {
             kind: StmtKind::Expr(Operand::Expr(add)),
             span,
         });
-        b.root = b.blocks.push(BlockNode {
+        b.push_root(BlockNode {
             stmts: vec![s_call, s_add],
             span,
         });
@@ -2722,7 +2722,7 @@ mod tests {
         use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
         use crate::token::Span;
         let span = Span::new(0, 0, 0, 0);
-        body.locals = vec![NirLocal {
+        *body.locals = vec![NirLocal {
             name: "self".to_string(),
             type_id: TypeTable::I32,
             is_mut: false,
@@ -2849,7 +2849,7 @@ mod tests {
                 },
                 None,
             );
-            body.values.values
+            body.values.values.clone()
         };
 
         assert_eq!(build_with(&escaped([0, 1])), build_with(&escaped([1, 0])));

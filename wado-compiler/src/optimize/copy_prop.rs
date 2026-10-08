@@ -10,11 +10,11 @@ use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -297,7 +297,7 @@ fn scan_blocks(
     let mut frames: Vec<(BlockId, usize)> = Vec::new();
     scan_node(
         body,
-        NodeRef::Block(body.root),
+        NodeRef::Block(body.root()),
         type_table,
         oracle,
         aliases,
@@ -389,7 +389,7 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
         usage: IndexMap::default(),
         promoted_reads: IndexSet::default(),
     };
-    analyze_block(body, body.root, &mut result, ctx);
+    analyze_block(body, body.root(), &mut result, ctx);
     // A local read only through a promoted `Operand::Value` (`Opaque(Local)`) is
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
@@ -948,7 +948,7 @@ fn propagate_at_root(
         }
         let dead_locals: IndexSet<u32> = substitutions.keys().copied().collect();
         substitute_promoted_reads(engine, &substitutions);
-        let root = engine.body.root;
+        let root = engine.body.root();
         apply_in_block(engine, root, &substitutions, &dead_locals);
         for &local in &dead_locals {
             engine.note_elided_local(local);
@@ -1002,26 +1002,27 @@ pub fn propagate_copies(
     let type_table = project.type_table.borrow();
     let param_mut = build_param_mut(project);
     let effects = heap.effects(project, &type_table, gate);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::CopyProp, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    let len = functions.len();
+    gate.run_gated_par(GatedPass::CopyProp, len, |buffers, fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
         let rule = CopyPropRule {
-            type_table: &type_table,
+            type_table,
             oracle: MutationOracle::new(&param_mut),
             copy_value_id,
             param_count: func.params.len(),
             effects: &effects,
             applied: Cell::new(false),
         };
-        let NirFunction {
+        let FuncParts {
             body, locals, name, ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        } = func.parts();
+        let body = body.expect("checked above");
+        let mut engine = Engine::new(body, buffers, locals);
         let changed = engine.run(&[&rule]);
         if changed {
             compiler_trace!("opt_loop", "copy_prop changed {name}");

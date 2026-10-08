@@ -25,6 +25,7 @@ fn monomorphized_tir(source: &str) -> String {
         &[],
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
+        1,
     ))
     .expect("dump succeeds");
     dump.monomorphized_tir_text

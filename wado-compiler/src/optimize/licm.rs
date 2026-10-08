@@ -11,11 +11,11 @@ use crate::compiler_trace;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{LICM_HOIST, is_licm_hoist, minted_what};
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
@@ -197,25 +197,25 @@ pub fn apply_licm(
 ) -> bool {
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
-    let call_immutability = CallImmutability::new(project, &type_table);
+    let call_immutability = CallImmutability::new(project, &type_table, gate.exec());
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let effects = heap.effects(project, &type_table, gate);
-    let len = project.functions.len();
-    let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::Licm, len, |fid| {
-        let mut func = project.functions[fid.index()].borrow_mut();
+    let type_table = &*type_table;
+    let functions = &project.functions;
+    gate.run_gated_par(GatedPass::Licm, functions.len(), |buffers, fid| {
+        let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
         }
         let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
         let rule = LicmRule {
-            type_table: &type_table,
+            type_table,
             effects: &effects,
             params: &param_locals,
             applied: Cell::new(false),
         };
-        let NirFunction {
+        let FuncParts {
             body,
             locals,
             params,
@@ -223,20 +223,20 @@ pub fn apply_licm(
             stores_aliased_locals,
             name,
             ..
-        } = &mut *func;
-        let body = body.as_mut().expect("checked above");
+        } = func.parts();
+        let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
             stores_aliased_locals,
-            &type_table,
+            type_table,
             &first_param_types,
             &call_immutability,
         );
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(&type_table);
+        engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -274,7 +274,7 @@ impl Rule for LicmRule<'_> {
         if self.applied.replace(true) {
             return false;
         }
-        let root = engine.body.root;
+        let root = engine.body.root();
         let mut ctx = LicmCtx::new(self.type_table, self.effects, self.params, engine.locals());
         let mut outer_aliases: Vec<(u32, u32)> = Vec::new();
         licm_block(engine, root, &mut ctx, &mut outer_aliases)
