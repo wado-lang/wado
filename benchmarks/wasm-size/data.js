@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791463986074,
+  "lastUpdate": 1791495752426,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65441,6 +65441,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8adb9b23b863a5d53baa34a70dab2ff96fa3549b"
         },
         "date": 1791463985065,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338626,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "33447bcd6be350d03208385800d7168832796f8d",
+          "message": "Merge pull request #2313 from wado-lang/optimize-fixed-cost\n\nperf(optimize): run dae, drve, sroa_param, container_sroa and value_copy_demote on the optimizer's threads",
+          "timestamp": "2026-10-09T06:23:48+09:00",
+          "tree_id": "36d288715294ea0d9c88baa8f9e7de1e6d5c60a2",
+          "url": "https://github.com/wado-lang/wado/commit/33447bcd6be350d03208385800d7168832796f8d"
+        },
+        "date": 1791495751603,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
