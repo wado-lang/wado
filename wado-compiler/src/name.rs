@@ -527,6 +527,14 @@ pub fn closure_capture_field(index: u32) -> String {
     format!("{INTERNAL_PREFIX}capture_{index}")
 }
 
+/// The name a closure's `$call` gives its `index`-th parameter where the source
+/// discards it with `_`: each `$call` parameter needs a name of its own, since
+/// the function-table wrapper finds it among the closure's by name.
+#[must_use]
+pub fn discarded_param_name(index: usize) -> String {
+    minted_name("discarded", index)
+}
+
 /// Display name of a capture read through the `&mut` box a mutating closure
 /// holds, where the slot rather than the binding names the read.
 #[must_use]
