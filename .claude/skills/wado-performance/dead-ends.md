@@ -728,6 +728,13 @@ back. "The traversal has a blind spot" is a claim about the code, not about what
 closing it is worth — and bytes alone would have retired this for the wrong
 reason, since they do not track speed.
 
+Since 2026-10-08 the root is a region in a function called from more than one
+site, `$initialize_modules` excepted. That is the hot leaf above: the coverage
+probe, inlined whole into every region, compiled stdlib coverage 3.4× slower.
+The init guard is excepted by name, not by its sites: it has two (`run` and
+`$cm_export__run`), and split, it keeps the `$modules_initialized` flag that WIR
+otherwise deletes along with an emptied init.
+
 ## Hoisting `HighlightVisitor::classify`'s common path to get it inlined (2026-09-02)
 
 `classify` is one call per token and per trivia, ~5300 on syntax-highlight, and
