@@ -2585,7 +2585,7 @@ impl Parser {
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     p.atn_ret_pending = 10;
-    _parse_x(p, 0);
+    _parse_x(p);
     p.site = 1;
     p.atn_ret_pending = 12;
     _parse_nb(p, follow_then(FOLLOW_MASK_0, 8, follow));
@@ -2608,28 +2608,28 @@ fn _parse_s(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_x__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_x__inner_alt_0(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_x__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_x__inner_alt_1(p: &mut Parser) -> () {
     p.expect(TK_LIT_a, &SYNC_0, false);
     p.expect(TK_LIT_b, &SYNC_1, false);
     p.expect(TK_LIT_c, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_x__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_x__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
         let _atn_alt = atn_predict_once(&ATN_SIM, 0, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
         if _atn_alt == 1 {
-            return _parse_x__inner_alt_1(p, follow);
+            return _parse_x__inner_alt_1(p);
         }
-        return _parse_x__inner_alt_0(p, follow);
+        return _parse_x__inner_alt_0(p);
     }
     p.no_viable(
         "no alternative of x matches",
@@ -2639,7 +2639,7 @@ fn _parse_x__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_x(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_x(p: &mut Parser) -> () {
     let _atn_ret = p.atn_ret_pending;
     p.atn_ret_pending = -1;
     if p.recovering { return; }
@@ -2647,7 +2647,7 @@ fn _parse_x(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_X, _start);
-    _parse_x__inner(p, follow);
+    _parse_x__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_X, "x", -1); }
     p.b.finish_node(p.last_end());
     p.atn.stack.pop();

@@ -1609,7 +1609,7 @@ impl Parser {
     }
 }
 
-fn scan_assign(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_assign(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
@@ -1707,16 +1707,16 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if gd_best >= 0 {
         if gd_winner == 2 {
             p.site = 4;
-            _parse_name(p, follow_then(FOLLOW_MASK_2, 16, follow));
+            _parse_name(p);
             p.expect(TK_LIT_DOT, &SYNC_2, false);
             p.site = 5;
-            _parse_name(p, follow);
+            _parse_name(p);
         } else if gd_winner == 0 {
             p.site = 2;
-            _parse_name(p, follow);
+            _parse_name(p);
         } else {
             p.site = 3;
-            _parse_word(p, follow);
+            _parse_word(p);
         }
     }
     return;
@@ -1741,7 +1741,7 @@ fn _parse_wild__inner(p: &mut Parser, follow: i64 = 0) -> () {
         gd_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_assign(tokens, pos, follow);
+            pos = scan_assign(tokens, pos);
             if pos < 0 { break gd_scan; }
             gd_end = pos;
         }
@@ -1765,7 +1765,7 @@ fn _parse_wild__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if gd_best >= 0 {
         if gd_winner == 0 {
             p.site = 6;
-            _parse_assign(p, follow);
+            _parse_assign(p);
         } else {
             p.any();
         }
@@ -1784,25 +1784,25 @@ fn _parse_wild(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_assign__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_assign__inner(p: &mut Parser) -> () {
     p.expect(TK_ID, &SYNC_3, false);
     p.expect(TK_LIT_EQ, &SYNC_4, false);
     p.expect(TK_ID, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_assign(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_assign(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ASSIGN, _start);
-    _parse_assign__inner(p, follow);
+    _parse_assign__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_ASSIGN, "assign", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_name(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_name(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -1813,7 +1813,7 @@ fn _parse_name(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_word(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_word(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -1900,8 +1900,7 @@ global SYNC_2: List<i32> = [507];
 global SYNC_3: List<i32> = [256];
 global SYNC_4: List<i32> = [1];
 
-global FOLLOW_SETS: List<List<i32>> = [[32], [4], [128], [1]];
+global FOLLOW_SETS: List<List<i32>> = [[32], [4]];
 global FOLLOW_MASK_0: i64 = 513;
 global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 1027;
 

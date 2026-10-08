@@ -1660,7 +1660,7 @@ struct AVals {
     _span_hi_inner: i32 = -1,
 }
 
-fn scan_sub(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
+fn scan_sub(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_x { return -1; }
     pos += 1;
@@ -1698,14 +1698,14 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
     if kind == TK_LIT_x {
         vals._span_lo_my_label = p.pos;
         p.site = 1;
-        let my_label = _parse_sub(p, follow_then(FOLLOW_MASK_1, 16, follow));
+        let my_label = _parse_sub(p);
         vals._span_hi_my_label = p.pos - 1;
         if !p.speculating {
             p.emit(`${p.text_between(vals._span_lo_my_label, vals._span_hi_my_label)}\n`);
         }
         vals._span_lo_tail = p.pos;
         p.site = 2;
-        let tail = _parse_sub(p, follow);
+        let tail = _parse_sub(p);
         vals._span_hi_tail = p.pos - 1;
         if !p.speculating {
             p.emit(`${p.text_between(vals._span_lo_tail, vals._span_hi_tail)}\n`);
@@ -1729,7 +1729,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
                 rep_scan: {
                     let tokens = &p.kinds;
                     let mut pos: i32 = p.pos;
-                    pos = scan_sub(tokens, pos, 0);
+                    pos = scan_sub(tokens, pos);
                     if pos < 0 { break rep_scan; }
                     if pos <= p.pos { break rep_scan; }
                     rep_scan_pos = pos;
@@ -1752,7 +1752,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> AVals {
             _plus_first = false;
             vals._span_lo_inner = p.pos;
             p.site = 3;
-            let inner = _parse_sub(p, 0);
+            let inner = _parse_sub(p);
             vals._span_hi_inner = p.pos - 1;
             if !p.speculating {
                 p.emit(`${p.text_between(vals._span_lo_inner, vals._span_hi_inner)}\n`);
@@ -1780,18 +1780,18 @@ fn _parse_a(p: &mut Parser, follow: i64 = 0) -> AVals {
     return __vals;
 }
 
-fn _parse_sub__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_sub__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_x, &SYNC_2, false);
     p.expect(TK_LIT_z, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_sub(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_sub(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SUB, _start);
-    _parse_sub__inner(p, follow);
+    _parse_sub__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_SUB, "sub", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -1887,6 +1887,5 @@ global EXPECTED_0: List<i32> = [TK_EOF, TK_LIT_g, TK_LIT_x, TK_LIT_y];
 global EXPECTED_1: List<i32> = [TK_LIT_g, TK_LIT_x, TK_LIT_y];
 global SYNC_2: List<i32> = [64];
 
-global FOLLOW_SETS: List<List<i32>> = [[32], [64]];
-global FOLLOW_MASK_1: i64 = 513;
+global FOLLOW_SETS: List<List<i32>> = [];
 

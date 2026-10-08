@@ -2476,7 +2476,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_6(tokens[pos]) {
         let sp = pos;
-        pos = scan_html_misc(tokens, pos, memo, 0);
+        pos = scan_html_misc(tokens, pos, memo);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -2484,7 +2484,7 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fo
     if pos < 0 { return -1; }
     while pos < tokens.len() && _kind_set_6(tokens[pos]) && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
-        pos = scan_html_misc(tokens, pos, memo, 0);
+        pos = scan_html_misc(tokens, pos, memo);
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_8 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2558,14 +2558,14 @@ fn scan_html_element(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, fol
         return pos;
     } else if kind == TK_SCRIPT_OPEN {
         try_2: {
-            pos = scan_script(tokens, pos, memo, follow);
+            pos = scan_script(tokens, pos, memo);
             if pos < 0 { break try_2; }
             return pos;
         }
         return -1;
     } else if kind == TK_STYLE_OPEN {
         try_3: {
-            pos = scan_style(tokens, pos, memo, follow);
+            pos = scan_style(tokens, pos, memo);
             if pos < 0 { break try_3; }
             return pos;
         }
@@ -2663,7 +2663,7 @@ fn scan_html_attribute(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, f
     return pos;
 }
 
-fn scan_html_misc(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_html_misc(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2674,7 +2674,7 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow
     return -1;
 }
 
-fn scan_script(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_script(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_SCRIPT_OPEN { return -1; }
     pos += 1;
@@ -2683,7 +2683,7 @@ fn scan_script(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i
     return pos;
 }
 
-fn scan_style(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_style(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_STYLE_OPEN { return -1; }
     pos += 1;
@@ -2750,7 +2750,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 0;
-                _parse_scriptlet_or_sea_ws(p, 0);
+                _parse_scriptlet_or_sea_ws(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -2759,7 +2759,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             break;
         }
         p.site = 0;
-        _parse_scriptlet_or_sea_ws(p, 0);
+        _parse_scriptlet_or_sea_ws(p);
     }
     if p.peek_kind() == TK_XML && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_3((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
         p.take();
@@ -2812,7 +2812,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 1;
-                _parse_scriptlet_or_sea_ws(p, 0);
+                _parse_scriptlet_or_sea_ws(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -2821,7 +2821,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             break;
         }
         p.site = 1;
-        _parse_scriptlet_or_sea_ws(p, 0);
+        _parse_scriptlet_or_sea_ws(p);
     }
     if p.peek_kind() == TK_DTD && (!follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || (_kind_set_2((if p.pos + 1 < p.kinds.len() { p.kinds[p.pos + 1] } else { TK_EOF })) || follow_resumes(&p.kinds, p.pos + 1, follow, &FOLLOW_SETS, TK_EOF))) {
         p.take();
@@ -2865,7 +2865,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 2;
-                _parse_scriptlet_or_sea_ws(p, 0);
+                _parse_scriptlet_or_sea_ws(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -2874,7 +2874,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
             break;
         }
         p.site = 2;
-        _parse_scriptlet_or_sea_ws(p, 0);
+        _parse_scriptlet_or_sea_ws(p);
     }
     while !p.recovering && _kind_set_2(p.peek_kind()) {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -2895,7 +2895,7 @@ fn _parse_html_document(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
@@ -2910,12 +2910,12 @@ fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_scriptlet_or_sea_ws(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_scriptlet_or_sea_ws(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SCRIPTLET_OR_SEA_WS, _start);
-    _parse_scriptlet_or_sea_ws__inner(p, follow);
+    _parse_scriptlet_or_sea_ws__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_SCRIPTLET_OR_SEA_WS, "scriptletOrSeaWs", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -2929,7 +2929,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, &mut p.memo, 0);
+            pos = scan_html_misc(tokens, pos, &mut p.memo);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
@@ -2942,7 +2942,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 4;
-                _parse_html_misc(p, 0);
+                _parse_html_misc(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -2951,7 +2951,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
             break;
         }
         p.site = 4;
-        _parse_html_misc(p, 0);
+        _parse_html_misc(p);
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_1, &EXPECTED_1); }
     }
     p.site = 5;
@@ -2963,7 +2963,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_html_misc(tokens, pos, &mut p.memo, 0);
+            pos = scan_html_misc(tokens, pos, &mut p.memo);
             if pos < 0 { break rep_scan_2; }
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
@@ -2989,7 +2989,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let _rec_spec = p.speculating;
                 p.speculating = true;
                 p.site = 6;
-                _parse_html_misc(p, 0);
+                _parse_html_misc(p);
                 p.speculating = _rec_spec;
                 p.recovering = _rec_sav;
                 p.pos = _rec_pos;
@@ -2998,7 +2998,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
             break;
         }
         p.site = 6;
-        _parse_html_misc(p, 0);
+        _parse_html_misc(p);
     }
     return;
 }
@@ -3065,11 +3065,11 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
         return;
     } else if kind == TK_SCRIPT_OPEN {
         p.site = 9;
-        _parse_script(p, follow);
+        _parse_script(p);
         return;
     } else if kind == TK_STYLE_OPEN {
         p.site = 10;
-        _parse_style(p, follow);
+        _parse_style(p);
         return;
     }
     p.no_viable(
@@ -3106,7 +3106,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     if opt_enter {
         p.site = 11;
-        _parse_html_chardata(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_7)));
+        _parse_html_chardata(p);
     }
     loop {
         if p.recovering { break; }
@@ -3169,7 +3169,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
             p.take();
         } else if _kind_set_17(grp_kind) {
             p.site = 13;
-            _parse_html_comment(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
+            _parse_html_comment(p);
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_8);
         }
@@ -3187,7 +3187,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
         }
         if opt_enter {
             p.site = 14;
-            _parse_html_chardata(p, follow);
+            _parse_html_chardata(p);
         }
     }
     return;
@@ -3224,7 +3224,7 @@ fn _parse_html_attribute(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_html_chardata__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_html_chardata__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_10, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_10, &EXPECTED_10); }
     let kind = p.peek_kind();
     if _kind_set_13(kind) {
@@ -3239,23 +3239,23 @@ fn _parse_html_chardata__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_html_chardata(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_html_chardata(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_CHARDATA, _start);
-    _parse_html_chardata__inner(p, follow);
+    _parse_html_chardata__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_HTML_CHARDATA, "htmlChardata", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_html_misc__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_html_misc__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if _kind_set_17(kind) {
         p.site = 15;
-        _parse_html_comment(p, follow);
+        _parse_html_comment(p);
         return;
     } else if kind == TK_SEA_WS {
         p.take();
@@ -3269,18 +3269,18 @@ fn _parse_html_misc__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_html_misc(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_html_misc(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_MISC, _start);
-    _parse_html_misc__inner(p, follow);
+    _parse_html_misc__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_HTML_MISC, "htmlMisc", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_html_comment__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_html_comment__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_12, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_12, &EXPECTED_12); }
     let kind = p.peek_kind();
     if _kind_set_17(kind) {
@@ -3295,48 +3295,48 @@ fn _parse_html_comment__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_html_comment(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_html_comment(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_HTML_COMMENT, _start);
-    _parse_html_comment__inner(p, follow);
+    _parse_html_comment__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_HTML_COMMENT, "htmlComment", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_script__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_script__inner(p: &mut Parser) -> () {
     p.expect(TK_SCRIPT_OPEN, &SYNC_13, false);
     if !kind_set_has(&SYNC_13, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_13, &EXPECTED_13); }
     p.expect_set(&SYNC_13, &EXPECTED_13);
     return;
 }
 
-fn _parse_script(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_script(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_SCRIPT, _start);
-    _parse_script__inner(p, follow);
+    _parse_script__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_SCRIPT, "script", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_style__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_style__inner(p: &mut Parser) -> () {
     p.expect(TK_STYLE_OPEN, &SYNC_14, false);
     if !kind_set_has(&SYNC_14, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_14, &EXPECTED_14); }
     p.expect_set(&SYNC_14, &EXPECTED_14);
     return;
 }
 
-fn _parse_style(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_style(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_STYLE, _start);
-    _parse_style__inner(p, follow);
+    _parse_style__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_STYLE, "style", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -3539,9 +3539,8 @@ global EXPECTED_13: List<i32> = [TK_SCRIPT_BODY, TK_SCRIPT_SHORT_BODY];
 global SYNC_14: List<i32> = [1572864];
 global EXPECTED_14: List<i32> = [TK_STYLE_BODY, TK_STYLE_SHORT_BODY];
 
-global FOLLOW_SETS: List<List<i32>> = [[67], [512], [8192], [32768], [2048], [939], [1088]];
+global FOLLOW_SETS: List<List<i32>> = [[67], [512], [8192], [32768], [2048], [1088]];
 global FOLLOW_MASK_4: i64 = 1;
 global FOLLOW_MASK_6: i64 = 84148994;
-global FOLLOW_MASK_7: i64 = 6;
-global FOLLOW_MASK_8: i64 = 7;
+global FOLLOW_MASK_8: i64 = 6;
 

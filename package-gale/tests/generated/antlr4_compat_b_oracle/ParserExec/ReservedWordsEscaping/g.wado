@@ -1905,7 +1905,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
     if kind == TK_FOR {
         p.b.set_alt(0);
         p.site = 1;
-        _parse_for(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_0)));
+        _parse_for(p);
         let mut opt_enter: bool = p.peek_kind() == TK_FOR;
         if opt_enter && (follow_admits(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) || p.peek_kind() == TK_CONTINUE_) {
             let mut opt_scan_pos: i32 = -1;
@@ -1920,7 +1920,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         }
         if opt_enter {
             p.site = 2;
-            _parse_for(p, follow);
+            _parse_for(p);
         }
         if !p.speculating {
             if 1 != 1 {
@@ -1956,7 +1956,7 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         let grp_kind = p.peek_kind();
         if grp_kind == TK_FOR {
             p.site = 3;
-            _parse_for(p, follow);
+            _parse_for(p);
         } else if grp_kind == TK_IF {
             p.take();
         } else {
@@ -2036,27 +2036,27 @@ fn _parse_continue(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> Contin
     return __vals;
 }
 
-fn _parse_args__inner(p: &mut Parser, follow: i64 = 0, else_: i32 = 0) -> ArgsVals {
+fn _parse_args__inner(p: &mut Parser, else_: i32 = 0) -> ArgsVals {
     let mut vals = ArgsVals {};
     vals.else = else_;
     p.site = 5;
-    _parse_for(p, follow);
+    _parse_for(p);
     return vals;
 }
 
-fn _parse_args(p: &mut Parser, follow: i64 = 0, else_: i32 = 0) -> ArgsVals {
+fn _parse_args(p: &mut Parser, else_: i32 = 0) -> ArgsVals {
     if p.recovering { return ArgsVals {}; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ARGS, _start);
-    let __vals = _parse_args__inner(p, follow, else_);
+    let __vals = _parse_args__inner(p, else_);
     if p.recovering { let _ = p.recover_rule(RK_ARGS, "args", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
     return __vals;
 }
 
-fn _parse_for(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_for(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -2143,6 +2143,5 @@ global EXPECTED_1: List<i32> = [TK_BREAK];
 global EXPECTED_2: List<i32> = [TK_FOR, TK_IF];
 global SYNC_3: List<i32> = [12];
 
-global FOLLOW_SETS: List<List<i32>> = [[1]];
-global FOLLOW_MASK_0: i64 = 1;
+global FOLLOW_SETS: List<List<i32>> = [];
 

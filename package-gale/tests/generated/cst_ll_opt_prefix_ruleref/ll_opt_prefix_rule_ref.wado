@@ -1629,7 +1629,7 @@ fn _parse_seg__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if p.peek_kind() == TK_SEP && p.peek_at(1) == TK_LT && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
         p.site = 2;
-        _parse_args(p, follow);
+        _parse_args(p);
     }
     return;
 }
@@ -1645,19 +1645,19 @@ fn _parse_seg(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_args__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_args__inner(p: &mut Parser) -> () {
     p.expect(TK_LT, &SYNC_2, false);
     p.expect(TK_ID, &SYNC_3, false);
     p.expect(TK_GT, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_args(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_args(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_ARGS, _start);
-    _parse_args__inner(p, follow);
+    _parse_args__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_ARGS, "args", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();

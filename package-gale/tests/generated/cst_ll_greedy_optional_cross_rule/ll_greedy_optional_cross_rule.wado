@@ -1812,14 +1812,14 @@ fn scan_if_expr(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: 
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
     pos += 1;
-    pos = scan_block(tokens, pos, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
+    pos = scan_block(tokens, pos, memo);
     if pos < 0 { return -1; }
     if pos < tokens.len() && tokens[pos] == TK_LIT_else && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
         sg_0_done: {
             sg_0: {
                 pos += 1;
-                pos = scan_block(tokens, pos, memo, follow);
+                pos = scan_block(tokens, pos, memo);
                 if pos < 0 { break sg_0; }
                 break sg_0_done;
             }
@@ -1830,7 +1830,7 @@ fn scan_if_expr(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: 
     return pos;
 }
 
-fn scan_block(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_block(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACE { return -1; }
     pos += 1;
@@ -1869,7 +1869,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_LIT_LBRACE {
         p.take();
         p.site = 2;
-        _parse_block(p, follow_then(FOLLOW_MASK_1, 8, follow));
+        _parse_block(p);
     }
     p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
     return;
@@ -1947,11 +1947,11 @@ fn _parse_if_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_if, &SYNC_0, false);
     p.expect(TK_ID, &SYNC_2, false);
     p.site = 6;
-    _parse_block(p, follow_open_with(follow, follow_open_set(FOLLOW_MASK_2)));
+    _parse_block(p);
     if p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_LIT_LBRACE && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
         p.site = 7;
-        _parse_block(p, follow);
+        _parse_block(p);
     }
     return;
 }
@@ -1967,19 +1967,19 @@ fn _parse_if_expr(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_block__inner(p: &mut Parser) -> () {
     p.expect(TK_LIT_LBRACE, &SYNC_5, false);
     p.expect(TK_INT, &SYNC_6, false);
     p.expect(TK_LIT_RBRACE, &EMPTY_SYNC, true);
     return;
 }
 
-fn _parse_block(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_block(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_BLOCK, _start);
-    _parse_block__inner(p, follow);
+    _parse_block__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_BLOCK, "block", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -2060,8 +2060,6 @@ global EXPECTED_4: List<i32> = [TK_INT, TK_LIT_if];
 global SYNC_5: List<i32> = [2];
 global SYNC_6: List<i32> = [4096];
 
-global FOLLOW_SETS: List<List<i32>> = [[8], [256], [128]];
+global FOLLOW_SETS: List<List<i32>> = [[8]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
 

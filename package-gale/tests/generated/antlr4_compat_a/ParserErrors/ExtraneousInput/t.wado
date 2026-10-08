@@ -1524,7 +1524,7 @@ impl Parser {
     }
 }
 
-fn _parse_member(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_member(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -1539,7 +1539,7 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
     while !p.recovering && p.peek_kind() == TK_LIT_a {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.site = 0;
-        _parse_member(p, 0);
+        _parse_member(p);
     }
     return;
 }

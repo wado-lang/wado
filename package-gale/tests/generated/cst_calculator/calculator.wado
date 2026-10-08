@@ -1854,7 +1854,7 @@ fn _parse_equation__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 0;
     _parse_expression(p, FOLLOW_MASK_0);
     p.site = 1;
-    _parse_relop(p, FOLLOW_MASK_1);
+    _parse_relop(p);
     p.site = 2;
     _parse_expression(p, follow_then(FOLLOW_MASK_2, 8, follow));
     p.expect(TK_EOF, &EMPTY_SYNC, true);
@@ -1987,15 +1987,15 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_SCIENTIFIC_NUMBER {
         p.site = 13;
-        _parse_scientific(p, follow);
+        _parse_scientific(p);
         return;
     } else if kind == TK_VARIABLE {
         p.site = 14;
-        _parse_variable(p, follow);
+        _parse_variable(p);
         return;
     } else if _kind_set_4(kind) {
         p.site = 15;
-        _parse_constant(p, follow);
+        _parse_constant(p);
         return;
     } else if kind == TK_LPAREN {
         p.take();
@@ -2023,7 +2023,7 @@ fn _parse_atom(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_scientific(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_scientific(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -2034,7 +2034,7 @@ fn _parse_scientific(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_constant__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_constant__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
@@ -2049,18 +2049,18 @@ fn _parse_constant__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_constant(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_constant(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_CONSTANT, _start);
-    _parse_constant__inner(p, follow);
+    _parse_constant__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_CONSTANT, "constant", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_variable(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_variable(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
@@ -2073,7 +2073,7 @@ fn _parse_variable(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_func___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 17;
-    _parse_funcname(p, FOLLOW_MASK_7);
+    _parse_funcname(p);
     p.expect(TK_LPAREN, &SYNC_0, false);
     p.site = 18;
     _parse_expression(p, follow_or(FOLLOW_MASK_8, 16, follow_then(FOLLOW_MASK_6, 8, follow)));
@@ -2099,7 +2099,7 @@ fn _parse_func_(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_funcname__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_funcname__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
     let kind = p.peek_kind();
     if _kind_set_2(kind) {
@@ -2114,18 +2114,18 @@ fn _parse_funcname__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_funcname(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_funcname(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_FUNCNAME, _start);
-    _parse_funcname__inner(p, follow);
+    _parse_funcname__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_FUNCNAME, "funcname", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
 }
 
-fn _parse_relop__inner(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_relop__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_6, &EXPECTED_6); }
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
@@ -2140,12 +2140,12 @@ fn _parse_relop__inner(p: &mut Parser, follow: i64 = 0) -> () {
     return;
 }
 
-fn _parse_relop(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_relop(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
     p.b.start_node(RK_RELOP, _start);
-    _parse_relop__inner(p, follow);
+    _parse_relop__inner(p);
     if p.recovering { let _ = p.recover_rule(RK_RELOP, "relop", -1); }
     p.b.finish_node(p.last_end());
     p.sites.pop();
@@ -2281,14 +2281,12 @@ global EXPECTED_5: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG
 global SYNC_6: List<i32> = [229376];
 global EXPECTED_6: List<i32> = [TK_EQ, TK_GT, TK_LT];
 
-global FOLLOW_SETS: List<List<i32>> = [[229376], [65018879], [134217728], [6144], [24576], [1048576], [1024], [512], [262144]];
+global FOLLOW_SETS: List<List<i32>> = [[229376], [134217728], [6144], [65018879], [24576], [1048576], [1024], [262144]];
 global FOLLOW_MASK_0: i64 = 1;
-global FOLLOW_MASK_1: i64 = 2;
-global FOLLOW_MASK_2: i64 = 3;
-global FOLLOW_MASK_3: i64 = 516;
-global FOLLOW_MASK_4: i64 = 517;
-global FOLLOW_MASK_5: i64 = 518;
+global FOLLOW_MASK_2: i64 = 2;
+global FOLLOW_MASK_3: i64 = 1027;
+global FOLLOW_MASK_4: i64 = 1029;
+global FOLLOW_MASK_5: i64 = 1030;
 global FOLLOW_MASK_6: i64 = 7;
-global FOLLOW_MASK_7: i64 = 520;
-global FOLLOW_MASK_8: i64 = 521;
+global FOLLOW_MASK_8: i64 = 1032;
 

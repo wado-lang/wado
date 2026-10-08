@@ -1606,7 +1606,7 @@ fn _parse_block__inner(p: &mut Parser, follow: i64 = 0) -> () {
     }
     p.expect(TK_OR, &SYNC_0, false);
     p.site = 2;
-    _parse_body(p, follow);
+    _parse_body(p);
     return;
 }
 
@@ -1697,7 +1697,7 @@ fn _parse_name(p: &mut Parser, follow: i64 = 0) -> () {
     p.sites.pop();
 }
 
-fn _parse_body(p: &mut Parser, follow: i64 = 0) -> () {
+fn _parse_body(p: &mut Parser) -> () {
     if p.recovering { return; }
     p.sites.push(p.site);
     let _start = p.peek_start();
