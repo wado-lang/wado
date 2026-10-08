@@ -89,10 +89,10 @@ pub fn demote_value_copies(
         return false;
     }
 
-    let type_table = project.type_table.clone();
-    let heap_types = type_table.borrow();
-    let effects = heap.effects(project, &heap_types, gate);
-    let type_table: &TypeTable = &heap_types;
+    let type_table_rc = project.type_table.clone();
+    let type_table = type_table_rc.borrow();
+    let type_table: &TypeTable = &type_table;
+    let effects = heap.effects(project, type_table, gate);
     let element_accessors = element_accessors(project);
 
     // Phase 1: per `(function, target-local)`, AND-combine the eligibility

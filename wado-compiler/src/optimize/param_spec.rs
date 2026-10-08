@@ -1168,7 +1168,7 @@ fn collect_sites(
     let types = project.type_table.borrow();
     let types: &TypeTable = &types;
     let functions = &project.functions;
-    let per_caller = exec.map_indices(functions.len(), |index| {
+    exec.filter_map_indices(functions.len(), |index| {
         let func = functions[index].borrow();
         let body = func.body.as_ref().filter(|_| !func.is_dead)?;
         let seed = state.param_consts.get(&FuncId::new(index));
@@ -1188,8 +1188,7 @@ fn collect_sites(
             site.cold = cold_calls.contains(&site.call);
         }
         (!sites.is_empty()).then_some((index, sites))
-    });
-    per_caller.into_iter().flatten().collect()
+    })
 }
 
 /// One call to point at a clone: `(caller store position, call node, clone)`.
