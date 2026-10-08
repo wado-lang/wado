@@ -18,7 +18,7 @@ use crate::nir_arena::{
     ArenaStructField, BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId,
     StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
@@ -102,7 +102,7 @@ pub fn hoist_template_buffers(
     let idents = TmplIdents::resolve(project, type_table);
     let effects = heap.effects(project, type_table, gate);
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::TmplHoist, functions.len(), |fid| {
+    gate.run_gated_par(GatedPass::TmplHoist, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
@@ -117,8 +117,7 @@ pub fn hoist_template_buffers(
         };
         let FuncParts { body, locals, .. } = func.parts();
         let body = body.expect("checked above");
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         engine.run(&[&rule])
     })
 }

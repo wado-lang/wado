@@ -14,7 +14,7 @@ use crate::nir::{FuncId, FuncParts, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -1005,7 +1005,7 @@ pub fn propagate_copies(
     let type_table = &*type_table;
     let functions = &project.functions;
     let len = functions.len();
-    gate.run_gated_par(GatedPass::CopyProp, len, |fid| {
+    gate.run_gated_par(GatedPass::CopyProp, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
@@ -1022,8 +1022,7 @@ pub fn propagate_copies(
             body, locals, name, ..
         } = func.parts();
         let body = body.expect("checked above");
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         let changed = engine.run(&[&rule]);
         if changed {
             compiler_trace!("opt_loop", "copy_prop changed {name}");

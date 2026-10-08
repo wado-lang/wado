@@ -52,6 +52,23 @@ impl Executor {
         items.iter().map(f).collect()
     }
 
+    /// [`Self::map`], each thread handing `f` one scratch state made by
+    /// `init` and reused across the items it visits. What `f` returns must not
+    /// depend on what an earlier item left in the state.
+    pub fn map_init<T: Sync, S, R: Send>(
+        &self,
+        items: &[T],
+        init: impl Fn() -> S + Sync + Send,
+        f: impl Fn(&mut S, &T) -> R + Sync + Send,
+    ) -> Vec<R> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(pool) = &self.pool {
+            return pool.install(|| items.par_iter().map_init(init, f).collect());
+        }
+        let mut state = init();
+        items.iter().map(|item| f(&mut state, item)).collect()
+    }
+
     /// `f` of each index below `len`, in index order.
     pub fn map_indices<R: Send>(&self, len: usize, f: impl Fn(usize) -> R + Sync + Send) -> Vec<R> {
         #[cfg(not(target_arch = "wasm32"))]

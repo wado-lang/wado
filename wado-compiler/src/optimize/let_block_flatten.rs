@@ -6,7 +6,7 @@ use cranelift_entity::EntityRef;
 use crate::compiler_trace;
 use crate::nir::{FuncParts, NirUnaryOp};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::{block_contains_loop, strip_refs};
@@ -22,16 +22,19 @@ use super::gate::{FunctionGate, GatedPass};
 pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let rule = LetBlockFlattenRule;
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::LetBlockFlatten, functions.len(), |fid| {
-        let mut func = functions[fid.index()].borrow_mut();
-        let FuncParts { body, locals, .. } = func.parts();
-        let Some(body) = body else {
-            return false;
-        };
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.run(&[&rule])
-    })
+    gate.run_gated_par(
+        GatedPass::LetBlockFlatten,
+        functions.len(),
+        |buffers, fid| {
+            let mut func = functions[fid.index()].borrow_mut();
+            let FuncParts { body, locals, .. } = func.parts();
+            let Some(body) = body else {
+                return false;
+            };
+            let mut engine = Engine::new(body, buffers, locals);
+            engine.run(&[&rule])
+        },
+    )
 }
 
 pub(super) struct LetBlockFlattenRule;
@@ -188,6 +191,7 @@ mod tests {
     use super::*;
     use crate::call_args::CallArgs;
     use crate::nir_arena::Tracked;
+    use crate::nir_engine::EngineBuffers;
     use std::assert_matches;
 
     use crate::hashmap::IndexSet;

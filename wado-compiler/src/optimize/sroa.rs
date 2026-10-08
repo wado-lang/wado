@@ -17,7 +17,7 @@ use crate::nir::{FuncId, FuncParts, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap, build_ctfe_builtin_map};
@@ -93,7 +93,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
     let value_copy_ids = project.value_copy_func_ids();
     let builtins = build_ctfe_builtin_map(project);
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::Sroa, functions.len(), |fid| {
+    gate.run_gated_par(GatedPass::Sroa, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
@@ -110,8 +110,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         let changed = {
             let FuncParts { body, locals, .. } = func.parts();
             let body = body.expect("checked above");
-            let mut buffers = EngineBuffers::default();
-            let mut engine = Engine::new(body, &mut buffers, locals);
+            let mut engine = Engine::new(body, buffers, locals);
             engine.run(&[&rule])
         };
         let newly = rule.newly_aliased.into_inner();

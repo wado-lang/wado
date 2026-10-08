@@ -8,7 +8,7 @@ use cranelift_entity::EntityRef;
 
 use crate::nir::FuncParts;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 
@@ -29,14 +29,13 @@ pub fn forward_scalar_temps(project: &mut NirPackage, gate: &mut FunctionGate) -
     let type_table = project.type_table.borrow();
     let rule = ScalarForwardRule::new(&type_table);
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |fid| {
+    gate.run_gated_par(GatedPass::ScalarForward, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         let FuncParts { body, locals, .. } = func.parts();
         let Some(body) = body else {
             return false;
         };
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         engine.run(&[&rule])
     })
 }

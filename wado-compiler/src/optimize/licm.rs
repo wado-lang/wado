@@ -15,7 +15,7 @@ use crate::nir::{FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
@@ -203,7 +203,7 @@ pub fn apply_licm(
     let effects = heap.effects(project, &type_table, gate);
     let type_table = &*type_table;
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::Licm, functions.len(), |fid| {
+    gate.run_gated_par(GatedPass::Licm, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
@@ -234,8 +234,7 @@ pub fn apply_licm(
             &first_param_types,
             &call_immutability,
         );
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(params.iter().map(|p| p.local_index).collect());

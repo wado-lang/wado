@@ -37,10 +37,11 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let type_table = &*type_table;
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::StoreLoadForward, len, |fid| {
+    gate.run_gated_par(GatedPass::StoreLoadForward, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         forward_one(
             &mut func,
+            buffers,
             type_table,
             &first_param_types,
             &call_immutability,
@@ -54,6 +55,7 @@ pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate
 /// changed.
 fn forward_one(
     func: &mut FuncWriteGuard<'_>,
+    buffers: &mut EngineBuffers,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
@@ -93,8 +95,7 @@ fn forward_one(
         first_param_types,
         call_immutability,
     );
-    let mut buffers = EngineBuffers::default();
-    let mut engine = Engine::new(body, &mut buffers, locals);
+    let mut engine = Engine::new(body, buffers, locals);
     engine.set_alias_sets(alias);
     engine.set_value_graph_type_table(type_table);
     engine.set_pure_builtin_callees(pure_builtin_callees);

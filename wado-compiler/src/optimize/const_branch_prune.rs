@@ -7,7 +7,7 @@ use crate::nir::FuncParts;
 use crate::nir_arena::{
     BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::optimize::gate::{FunctionGate, GatedPass};
 
@@ -53,14 +53,13 @@ fn run_rule(project: &mut NirPackage, mode: PruneMode, gate: &mut FunctionGate) 
     let type_table = &*type_table;
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::BranchPrune, len, |fid| {
+    gate.run_gated_par(GatedPass::BranchPrune, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         let FuncParts { body, locals, .. } = func.parts();
         let Some(body) = body else {
             return false;
         };
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         // A pruned break value that is a promoted constant is re-materialized.
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

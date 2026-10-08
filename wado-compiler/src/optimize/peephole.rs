@@ -8,7 +8,7 @@ use cranelift_entity::EntityRef;
 
 use crate::hashmap::IndexSet;
 use crate::nir::{FuncId, FuncParts};
-use crate::nir_engine::{Engine, EngineBuffers, Rule};
+use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
@@ -97,7 +97,7 @@ pub(super) fn run_peephole(
     let summaries = mod_ref.summaries(project, gate.exec());
     let type_table = &*type_table;
     let functions = &project.functions;
-    gate.run_gated_par(gated_pass, len, |fid| {
+    gate.run_gated_par(gated_pass, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
         // rebuilt for each body.
@@ -201,8 +201,7 @@ pub(super) fn run_peephole(
         if let Some(append_fuse_rule) = append_fuse_rule.as_ref() {
             rules.push(append_fuse_rule);
         }
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         // `MatchToSwitchRule` materializes promoted constant scrutinees / arm
         // bodies; the extractor reads `prim` from the type table for literal repr.
         engine.set_value_graph_type_table(type_table);

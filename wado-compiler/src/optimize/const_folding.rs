@@ -78,17 +78,17 @@ fn fold_pass(
     project: &NirPackage,
     exec: &Executor,
     frozen: impl Fn(FuncId) -> bool + Sync + Send,
-    drive: impl FnOnce(&(dyn Fn(FuncId) -> bool + Sync)) -> bool,
+    drive: impl FnOnce(&(dyn Fn(&mut EngineBuffers, FuncId) -> bool + Sync)) -> bool,
 ) -> bool {
     let type_table = project.type_table.borrow();
     let type_table = &*type_table;
     let maps = build_fold_maps(project, type_table, exec, frozen);
     let globals = build_global_view(project, type_table, &maps, exec);
     let functions = &project.functions;
-    drive(&|fid| {
+    drive(&|buffers, fid| {
         let func = &functions[fid.index()];
         let mut visitor = new_visitor(type_table, &maps, &globals);
-        let changed = fold_function(func, &mut visitor, type_table);
+        let changed = fold_function(func, &mut visitor, buffers, type_table);
         if changed {
             compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
@@ -124,7 +124,9 @@ pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> 
         &exec,
         |_| true,
         |fold| {
-            let changed = exec.map(&all, |&fid| fold(fid));
+            let changed = exec.map_init(&all, EngineBuffers::default, |buffers, &fid| {
+                fold(buffers, fid)
+            });
             for (&fid, &changed) in all.iter().zip(&changed) {
                 if changed {
                     gate.mark_changed(fid);
@@ -157,6 +159,7 @@ fn new_visitor<'a>(
 fn fold_function(
     func_rc: &FuncCell,
     visitor: &mut ConstFoldVisitor<'_>,
+    buffers: &mut EngineBuffers,
     type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
@@ -172,8 +175,7 @@ fn fold_function(
     visitor
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
-    let mut buffers = EngineBuffers::default();
-    let mut engine = Engine::new(body, &mut buffers, locals);
+    let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
 }

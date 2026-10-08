@@ -320,125 +320,129 @@ pub(super) fn freeze_pure_arith(
     let effects = gate
         .as_ref()
         .map(|gate| heap.effects(project, type_table, gate));
-    let outcomes = exec.map(&project.functions, |func_rc| {
-        let mut refusals = Refusals::new();
-        let mut changed = false;
-        let mut func = func_rc.borrow_mut();
-        if func.body.is_none() {
-            return (changed, refusals);
-        }
-        let mut buffers = EngineBuffers::default();
-        let FuncParts {
-            body,
-            locals,
-            params,
-            address_taken_locals,
-            stores_aliased_locals,
-            ..
-        } = func.parts();
-        let body = body.expect("checked above");
-        // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
-        // receivers by the receiver-stability gate. Cloned before `Engine::new`.
-        let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
-        let alias = builder_alias_sets(
-            body,
-            locals,
-            address_taken_locals,
-            stores_aliased_locals,
-            type_table,
-            &first_param_types,
-            &call_immutability,
-        );
-        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let local_count = locals.len();
-        let param_set: hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
-        // Locals a call may mutate through a `&mut` escape (`reference`'s
-        // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
-        // build-once graph cannot keep it across the structural passes; an
-        // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
-        // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
-        let mut_escaped_leaf = alias.mut_escaped.clone();
-        let verdicts = call_verdicts(body, type_table, &first_param_types, &call_immutability);
-        let call_writes = effects
-            .as_ref()
-            .map(|e| e.body_call_writes(body))
-            .unwrap_or_default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        engine.set_alias_sets(alias);
-        engine.set_value_graph_type_table(type_table);
-        engine.set_param_locals(param_locals);
-        engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
-        engine.set_call_writes(call_writes);
-        engine.set_pure_builtin_callees(&pure_builtin_callees);
-
-        // Locals a frozen value may not name, from the same predicate that
-        // decides whether a `Local` read resolves at all.
-        let multi_version_locals: hashmap::IndexSet<u32> = (0..local_count as u32)
-            .filter(|&i| !engine.local_has_one_version(i))
-            .collect();
-
-        // Field reads have no value on the maintained graph.
-        let found = if include_fields {
-            engine.scoped_field_values()
-        } else {
-            FieldValues::default()
-        };
-        let field_values: hashmap::IndexMap<ExprId, ValueId> =
-            found.reads.iter().copied().collect();
-
-        // Phase 1: decide every freeze on the clean, unedited graph. A value
-        // query never mutates the skeleton, so the verify oracle (which fires
-        // on graph queries) only compares build-vs-rebuild here — clean. (A
-        // node frozen mid-walk would, inside a loop, leave the maintained
-        // graph's recurrence state stale until the next query and read as a
-        // spurious over-merge; deciding up front avoids that — and the
-        // post-edit graph is not consumed, this being the last pass.)
-        let ctx = FreezeCtx {
-            type_table,
-            mut_escaped_leaf: &mut_escaped_leaf,
-            multi_version_locals: &multi_version_locals,
-            address_taken: &address_taken,
-            param_set: &param_set,
-            field_values: &field_values,
-            phase,
-            include_fields,
-        };
-        let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
-        let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
-        for id in candidates {
-            let verdict = classify_candidate(&mut engine, &ctx, id);
-            refusals.note(&engine.body.exprs[id].kind, verdict.err());
-            if let Ok(entry) = verdict {
-                to_freeze.push(entry);
+    let outcomes = exec.map_init(
+        &project.functions,
+        EngineBuffers::default,
+        |buffers, func_rc| {
+            let mut refusals = Refusals::new();
+            let mut changed = false;
+            let mut func = func_rc.borrow_mut();
+            if func.body.is_none() {
+                return (changed, refusals);
             }
-        }
+            let FuncParts {
+                body,
+                locals,
+                params,
+                address_taken_locals,
+                stores_aliased_locals,
+                ..
+            } = func.parts();
+            let body = body.expect("checked above");
+            // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
+            // receivers by the receiver-stability gate. Cloned before `Engine::new`.
+            let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
+            let alias = builder_alias_sets(
+                body,
+                locals,
+                address_taken_locals,
+                stores_aliased_locals,
+                type_table,
+                &first_param_types,
+                &call_immutability,
+            );
+            let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
+            let local_count = locals.len();
+            let param_set: hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
+            // Locals a call may mutate through a `&mut` escape (`reference`'s
+            // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
+            // build-once graph cannot keep it across the structural passes; an
+            // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
+            // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
+            let mut_escaped_leaf = alias.mut_escaped.clone();
+            let verdicts = call_verdicts(body, type_table, &first_param_types, &call_immutability);
+            let call_writes = effects
+                .as_ref()
+                .map(|e| e.body_call_writes(body))
+                .unwrap_or_default();
+            let mut engine = Engine::new(body, buffers, locals);
+            engine.set_alias_sets(alias);
+            engine.set_value_graph_type_table(type_table);
+            engine.set_param_locals(param_locals);
+            engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
+            engine.set_call_writes(call_writes);
+            engine.set_pure_builtin_callees(&pure_builtin_callees);
 
-        // Phase 2: apply. No further graph queries. Group by representative so a
-        // value used by several slots can be **materialised once** (availability
-        // extraction) — a single pre-header `let _av = <value>` whose uses
-        // read `local.get _av` — instead of re-emitting the computation at each
-        // use. `record_value_tree_types` stamps the tree's width and skips a
-        // width-conflicting value; the two apply strategies then diverge on whether
-        // the representative is a `FieldAccess`.
-        let mut by_rep: hashmap::IndexMap<ValueId, Vec<ExprId>> = hashmap::IndexMap::default();
-        for (id, rep) in to_freeze {
-            by_rep.entry(rep).or_default().push(id);
-        }
-        for (rep, ids) in by_rep {
-            let id_ty = engine.body.exprs[ids[0]].type_id;
-            if !record_value_tree_types(&mut engine, rep, id_ty) {
-                continue;
-            }
-            let is_field = matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
-            if is_field {
-                changed |=
-                    apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set, &found);
+            // Locals a frozen value may not name, from the same predicate that
+            // decides whether a `Local` read resolves at all.
+            let multi_version_locals: hashmap::IndexSet<u32> = (0..local_count as u32)
+                .filter(|&i| !engine.local_has_one_version(i))
+                .collect();
+
+            // Field reads have no value on the maintained graph.
+            let found = if include_fields {
+                engine.scoped_field_values()
             } else {
-                changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
+                FieldValues::default()
+            };
+            let field_values: hashmap::IndexMap<ExprId, ValueId> =
+                found.reads.iter().copied().collect();
+
+            // Phase 1: decide every freeze on the clean, unedited graph. A value
+            // query never mutates the skeleton, so the verify oracle (which fires
+            // on graph queries) only compares build-vs-rebuild here — clean. (A
+            // node frozen mid-walk would, inside a loop, leave the maintained
+            // graph's recurrence state stale until the next query and read as a
+            // spurious over-merge; deciding up front avoids that — and the
+            // post-edit graph is not consumed, this being the last pass.)
+            let ctx = FreezeCtx {
+                type_table,
+                mut_escaped_leaf: &mut_escaped_leaf,
+                multi_version_locals: &multi_version_locals,
+                address_taken: &address_taken,
+                param_set: &param_set,
+                field_values: &field_values,
+                phase,
+                include_fields,
+            };
+            let candidates: Vec<ExprId> = engine.body.exprs.keys().collect();
+            let mut to_freeze: Vec<(ExprId, ValueId)> = Vec::new();
+            for id in candidates {
+                let verdict = classify_candidate(&mut engine, &ctx, id);
+                refusals.note(&engine.body.exprs[id].kind, verdict.err());
+                if let Ok(entry) = verdict {
+                    to_freeze.push(entry);
+                }
             }
-        }
-        (changed, refusals)
-    });
+
+            // Phase 2: apply. No further graph queries. Group by representative so a
+            // value used by several slots can be **materialised once** (availability
+            // extraction) — a single pre-header `let _av = <value>` whose uses
+            // read `local.get _av` — instead of re-emitting the computation at each
+            // use. `record_value_tree_types` stamps the tree's width and skips a
+            // width-conflicting value; the two apply strategies then diverge on whether
+            // the representative is a `FieldAccess`.
+            let mut by_rep: hashmap::IndexMap<ValueId, Vec<ExprId>> = hashmap::IndexMap::default();
+            for (id, rep) in to_freeze {
+                by_rep.entry(rep).or_default().push(id);
+            }
+            for (rep, ids) in by_rep {
+                let id_ty = engine.body.exprs[ids[0]].type_id;
+                if !record_value_tree_types(&mut engine, rep, id_ty) {
+                    continue;
+                }
+                let is_field =
+                    matches!(engine.body.values.kind(rep), ValueKind::FieldAccess { .. });
+                if is_field {
+                    changed |=
+                        apply_field_materialise(&mut engine, rep, &ids, id_ty, &param_set, &found);
+                } else {
+                    changed |= apply_value_freeze(&mut engine, rep, &ids, id_ty, &param_set);
+                }
+            }
+            (changed, refusals)
+        },
+    );
     let mut refusals = Refusals::new();
     let mut changed = false;
     for (changed_one, refused) in outcomes {

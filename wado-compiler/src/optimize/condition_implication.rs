@@ -15,7 +15,7 @@ use crate::nir::{FuncId, FuncParts, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::nir_engine::{Engine, EngineBuffers};
+use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
@@ -100,7 +100,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let type_table = &*type_table;
     let functions = &project.functions;
-    gate.run_gated_par(GatedPass::CondImplPostPromote, len, |fid| {
+    gate.run_gated_par(GatedPass::CondImplPostPromote, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
         if func.body.is_none() {
             return false;
@@ -124,8 +124,7 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             &call_immutability,
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals);
         engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(type_table);
         engine.set_param_locals(param_locals);

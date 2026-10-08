@@ -17,6 +17,7 @@ use cranelift_entity::EntityRef;
 use crate::hashmap::IndexSet;
 use crate::nir::FuncId;
 use crate::nir_arena::ExprKind;
+use crate::nir_engine::EngineBuffers;
 use crate::nir_package::NirPackage;
 use crate::parallel::Executor;
 
@@ -249,15 +250,20 @@ impl FunctionGate {
     /// [`Self::run_gated`] with the visits on the gate's threads. A visit holds
     /// its own function mutably and reads everything else as the sweep found
     /// it, so the order the visits run in changes nothing.
+    /// Each visit gets its thread's engine scratch buffers.
     pub fn run_gated_par(
         &mut self,
         pass: GatedPass,
         len: usize,
-        visit: impl Fn(FuncId) -> bool + Sync,
+        visit: impl Fn(&mut EngineBuffers, FuncId) -> bool + Sync,
     ) -> bool {
-        !self
-            .sweep_par(pass, len, |fid| visit(fid).then_some(()))
-            .is_empty()
+        let pending = self.pending(pass, len);
+        let changed = self
+            .exec
+            .map_init(&pending, EngineBuffers::default, |buffers, &fid| {
+                visit(buffers, fid)
+            });
+        self.close_sweep(pass, &pending, &changed)
     }
 
     /// [`Self::run_gated_par`] for a visit that hands back what it changed: a
