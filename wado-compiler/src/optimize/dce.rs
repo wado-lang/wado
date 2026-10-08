@@ -78,6 +78,10 @@ struct FunctionAnalysis {
     /// The functions whose names `callees` and `pending_inspects` hold, by
     /// store position: a rename of one stales them.
     named: IndexSet<FuncId>,
+    /// The signatures this function's `fn(..)^Inspect` calls receive.
+    inspect_signatures: InspectableSignatures,
+    /// Each `T` this function calls `array_clone::<T>` on.
+    array_clone_elems: IndexSet<TypeId>,
 }
 
 /// Combined DCE analysis: which functions / globals / types are
@@ -162,7 +166,7 @@ pub(super) fn analyze_dce(
     let mut graph = build_analysis_graph(project, descriptors, exec);
 
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = compute_function_reachability(project, descriptors, &mut graph);
+    analysis.functions = compute_function_reachability(project, &mut graph);
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
     populate_type_reachability(project, descriptors, &graph, &mut analysis);
     analysis
@@ -180,7 +184,7 @@ pub(super) fn reachable_function_positions(
     let functors = functor_methods(project);
     let analyses = walks.analyses(project, exec, descriptors, &functors);
     let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
-    let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
+    let mut reachable = compute_function_reachability(project, &mut graph);
     let roots = cached
         .into_iter()
         .map(|id| function_id_for(&project.functions[id.index()].borrow()));
@@ -258,7 +262,6 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 /// is known.
 fn compute_function_reachability(
     project: &mut NirPackage,
-    descriptors: &[FunctionRef],
     graph: &mut AnalysisGraph,
 ) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
@@ -271,8 +274,7 @@ fn compute_function_reachability(
     // per-functor impls themselves don't issue any `Fn^Inspect` calls (they
     // just write per-literal strings), so the inspectable set is stable under
     // this expansion — no fixpoint iteration is needed.
-    let inspectable =
-        collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
+    let inspectable = inspectable_signatures(graph, &reachable_v1);
     apply_inspect_edges(&mut graph.call_graph, &graph.pending_inspects, &inspectable);
 
     // Phase 2c: re-compute the reachable set from the augmented graph.
@@ -281,7 +283,7 @@ fn compute_function_reachability(
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
     // A pass may *synthesize* calls during the optimization loop. Their targets
     // must survive the DCE that runs before it, or the rewrite cannot fire.
-    extend_reachable_for_optimizer_passes(project, descriptors, &graph.call_graph, &mut reachable);
+    extend_reachable_for_optimizer_passes(project, graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
     resolve_imports(project, &reachable, &graph.effect_usage);
@@ -311,10 +313,10 @@ fn compute_reachable_positions(
 /// `nir/string_push`'s append primitives and `array_clone::<T>`'s helper.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
-    descriptors: &[FunctionRef],
-    call_graph: &CallGraph,
+    graph: &AnalysisGraph,
     reachable: &mut IndexSet<FunctionId>,
 ) {
+    let call_graph = &graph.call_graph;
     use crate::compiler_item::CompilerItem;
 
     // `push_str` is generic over `AsStrSlice`, so the item marks one id per
@@ -362,26 +364,16 @@ fn extend_reachable_for_optimizer_passes(
     // would find no function for the helper its clone loop calls. Only a
     // reachable body seeds anything, so each is scanned once, when reached.
     let type_table = project.type_table.borrow();
-    let ids: Vec<FunctionId> = project
-        .functions
-        .iter()
-        .map(|func_rc| function_id_for(&func_rc.borrow()))
-        .collect();
+    let ids = &graph.func_positions;
     let mut scanned = vec![false; ids.len()];
     loop {
         let mut fresh: Vec<FunctionId> = Vec::new();
-        for (index, func_rc) in project.functions.iter().enumerate() {
-            if scanned[index] || !reachable.contains(&ids[index]) {
+        for (index, (id, _)) in ids.iter().enumerate() {
+            if scanned[index] || !reachable.contains(id) {
                 continue;
             }
             scanned[index] = true;
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref() else {
-                continue;
-            };
-            let mut needed: IndexSet<tir::TypeId> = IndexSet::default();
-            collect_array_clone_element_types(body, descriptors, &mut needed);
-            for type_id in needed {
+            for &type_id in &graph.analyses[index].array_clone_elems {
                 // A stale `array_clone::<T>` can name a type already
                 // pruned from the table; it has no helper, so skip it
                 // rather than resolve an absent id (the structural key
@@ -392,7 +384,9 @@ fn extend_reachable_for_optimizer_passes(
                     continue;
                 }
                 if let Some(helper) = project.value_copy_helpers.get(type_id, &type_table) {
-                    let helper_id = &ids[helper.index()];
+                    let (helper_id, _) = ids
+                        .get_index(helper.index())
+                        .expect("a helper is in the store");
                     if !reachable.contains(helper_id) {
                         fresh.push(helper_id.clone());
                     }
@@ -681,6 +675,16 @@ fn function_analysis(
         for ty in body.values.recorded_types() {
             analysis.used_types.insert(ty);
         }
+        if let Some(inspect) = type_table.compiler_items().trait_def(CompilerItem::Inspect) {
+            scan_inspect_signatures_block(
+                body,
+                type_table,
+                descriptors,
+                inspect,
+                &mut analysis.inspect_signatures,
+            );
+        }
+        collect_array_clone_element_types(body, descriptors, &mut analysis.array_clone_elems);
     }
     analysis
 }
@@ -792,32 +796,19 @@ fn apply_inspect_edges(
 /// caller those impls cannot be invoked indirectly.
 type InspectableSignatures = IndexSet<(usize, TypeId)>;
 
-/// Compute the inspectable `(arity, return_type)` set from the bodies
-/// of *reachable* functions only. Restricting the scan to live code
-/// keeps a dead `:?`/`:#?` call from forcing per-functor inspect impls
-/// to stay alive for an unrelated reachable closure of the same
-/// signature.
-fn collect_inspectable_signatures_from_reachable(
-    project: &NirPackage,
-    descriptors: &[FunctionRef],
+/// The inspectable `(arity, return_type)` set of the *reachable* functions
+/// only. Restricting it to live code keeps a dead `:?`/`:#?` call from forcing
+/// per-functor inspect impls to stay alive for an unrelated reachable closure of
+/// the same signature.
+fn inspectable_signatures(
+    graph: &AnalysisGraph,
     reachable: &IndexSet<FunctionId>,
 ) -> InspectableSignatures {
-    let mut sigs = InspectableSignatures::default();
-    let type_table = &*project.type_table.borrow();
-    let Some(inspect) = type_table.compiler_items().trait_def(CompilerItem::Inspect) else {
-        return sigs;
-    };
-    for func_rc in &project.functions {
-        let func = func_rc.borrow();
-        let func_id = function_id_for(&func);
-        if !reachable.contains(&func_id) {
-            continue;
-        }
-        if let Some(body) = func.body.as_ref() {
-            scan_inspect_signatures_block(body, type_table, descriptors, inspect, &mut sigs);
-        }
-    }
-    sigs
+    reachable
+        .iter()
+        .filter_map(|id| graph.func_positions.get(id))
+        .flat_map(|&pos| graph.analyses[pos].inspect_signatures.iter().copied())
+        .collect()
 }
 
 /// Compute the `FunctionId` used by the call graph for a NIR function.

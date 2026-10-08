@@ -24,6 +24,7 @@ use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
 use crate::nir_visitor::reachable_exprs;
+use crate::parallel::Executor;
 
 /// Widest result tuple the scalarized return may use, counting the tag. Matches
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
@@ -206,7 +207,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
             variant_type: *variant_type,
         });
     }
-    rewrite_call_sites(project, &all, &mut touched);
+    rewrite_call_sites(project, &all, gate.exec(), &mut touched);
     touched.extend(project.rename_reshaped(candidates.keys().copied()));
     scalarize_variant_locals(project, &dirty, &mut touched);
     // A round with no new candidates still does work: `nir/inline` plants call
@@ -242,29 +243,39 @@ fn rebox_stragglers(
     if scalarized.is_empty() {
         return false;
     }
+    let exec = gate.exec().clone();
+    let reboxed = {
+        let type_table = project.type_table.borrow();
+        let type_table: &TypeTable = &type_table;
+        let functions = &project.functions;
+        let positions: Vec<usize> = (0..functions.len()).collect();
+        exec.map(&positions, |&i| {
+            let mut func = functions[i].borrow_mut();
+            // Every step below keys on a call to a scalarized callee. Asked before
+            // the body is taken, so a function it leaves alone is not written.
+            if !func
+                .body
+                .as_ref()
+                .is_some_and(|b| b.calls_any(|id| scalarized.contains_key(id)))
+            {
+                return false;
+            }
+            let own_return = func.return_type;
+            let mut body = func.body.take().expect("checked above");
+            let span = func.span;
+            let bound = handled_call_sites(&body, scalarized, own_return, type_table);
+            let targets = straggler_calls(&body, scalarized, &bound);
+            let reboxed = !targets.is_empty();
+            for call in targets {
+                compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
+                rebox_call(&mut body, &mut func.locals, call, scalarized, span);
+            }
+            func.body = Some(body);
+            reboxed
+        })
+    };
     let mut changed = false;
-    for i in 0..project.functions.len() {
-        let mut func = project.functions[i].borrow_mut();
-        // Every step below keys on a call to a scalarized callee. Asked before
-        // the body is taken, so a function it leaves alone is not written.
-        if !func
-            .body
-            .as_ref()
-            .is_some_and(|b| b.calls_any(|id| scalarized.contains_key(id)))
-        {
-            continue;
-        }
-        let own_return = func.return_type;
-        let mut body = func.body.take().expect("checked above");
-        let span = func.span;
-        let bound = handled_call_sites(&body, scalarized, own_return, &project.type_table.borrow());
-        let targets = straggler_calls(&body, scalarized, &bound);
-        let reboxed = !targets.is_empty();
-        for call in targets {
-            compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
-            rebox_call(&mut body, &mut func.locals, call, scalarized, span);
-        }
-        func.body = Some(body);
+    for (i, reboxed) in reboxed.into_iter().enumerate() {
         if reboxed {
             gate.mark_changed(FuncId::new(i));
             changed = true;
@@ -2071,12 +2082,17 @@ fn pad_value(body: &mut Body, pad: Pad, option: &OptionCases, span: Span) -> Ope
 // -----------------------------------------------------------------------
 
 fn rewrite_call_sites(
-    project: &mut NirPackage,
+    project: &NirPackage,
     candidates: &IndexMap<FuncId, Candidate>,
+    exec: &Executor,
     touched: &mut IndexSet<usize>,
 ) {
-    for i in 0..project.functions.len() {
-        let mut func = project.functions[i].borrow_mut();
+    let type_table = project.type_table.borrow();
+    let type_table: &TypeTable = &type_table;
+    let functions = &project.functions;
+    let positions: Vec<usize> = (0..functions.len()).collect();
+    let rewritten = exec.map(&positions, |&i| {
+        let mut func = functions[i].borrow_mut();
         // Every step below keys on a call to a candidate. Asked before the body
         // is taken, so a function it leaves alone is not written.
         if !func
@@ -2084,15 +2100,14 @@ fn rewrite_call_sites(
             .as_ref()
             .is_some_and(|b| b.calls_any(|id| candidates.contains_key(id)))
         {
-            continue;
+            return false;
         }
         let mut body = func.body.take().expect("checked above");
         let span = func.span;
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing
         // local, so a `Rebind` taken here still describes every payload binding.
-        let type_table = project.type_table.borrow();
-        let rebind = Rebind::new(&func, &type_table);
+        let rebind = Rebind::new(&func, type_table);
         changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, &rebind, span);
         let mut bound = bound_temps(&body, candidates, func.return_type);
         // Re-check every temp: a site inherited from an earlier round never
@@ -2129,10 +2144,9 @@ fn rewrite_call_sites(
             changed |= rewrite_temp_uses(&mut body, NodeRef::Block(root), &mut cx);
         }
         func.body = Some(body);
-        if changed {
-            touched.insert(i);
-        }
-    }
+        changed
+    });
+    touched.extend(positions.into_iter().filter(|&i| rewritten[i]));
 }
 
 // -----------------------------------------------------------------------
