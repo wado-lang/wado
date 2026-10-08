@@ -16,7 +16,7 @@ use crate::ast::{
     walk_stmt,
 };
 use crate::attribute;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -228,12 +228,12 @@ impl CoverageMap {
     pub fn build<'a>(
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
         contract_checks: bool,
-        names_rt_unreachable: NamesRtUnreachable<'_>,
+        rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = Self::default();
         for (source, module) in modules {
             let (plan, sites, for_of_bodies) =
-                plan_module(source, module, contract_checks, names_rt_unreachable);
+                plan_module(source, module, contract_checks, rt_unreachable_calls);
             let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
             let first_function = map.function_probes.len();
             map.function_probes
@@ -466,18 +466,16 @@ fn plan_path(source: &ModuleSource) -> String {
 /// The regions each `for-of` body holds, by the loop's node.
 type ForOfBodies = Vec<(AstId, Range<u32>)>;
 
-/// Whether the callee written at a site resolves to `core:rt`'s `unreachable`.
-pub type NamesRtUnreachable<'a> = &'a dyn Fn(AstId) -> bool;
-
 /// Plan one module, compiled with or without its `contract_checks`: its
 /// regions, the site each region's probe goes at, and the regions of each
-/// `for-of` body.
+/// `for-of` body. `rt_unreachable_calls` holds the callee sites that name
+/// `core:rt`'s `unreachable`.
 #[must_use]
 pub(crate) fn plan_module(
     source: &ModuleSource,
     module: &ast::Module,
     contract_checks: bool,
-    names_rt_unreachable: NamesRtUnreachable<'_>,
+    rt_unreachable_calls: &IndexSet<AstId>,
 ) -> (ModulePlan, Sites, ForOfBodies) {
     let mut planner = Planner {
         plan: ModulePlan {
@@ -485,7 +483,7 @@ pub(crate) fn plan_module(
             ..ModulePlan::default()
         },
         contract_checks,
-        names_rt_unreachable,
+        rt_unreachable_calls,
         sites: Vec::new(),
         function: 0,
         region: None,
@@ -514,7 +512,7 @@ struct Planner<'a> {
     plan: ModulePlan,
     /// Whether a contract check's body is compiled, and so holds lines.
     contract_checks: bool,
-    names_rt_unreachable: NamesRtUnreachable<'a>,
+    rt_unreachable_calls: &'a IndexSet<AstId>,
     sites: Sites,
     function: u32,
     /// The innermost region the walk is in, `None` outside a function.
@@ -619,7 +617,7 @@ impl Planner<'_> {
         is_builtin_call(call, "unreachable")
             || (call.args.is_empty()
                 && call.type_args.is_empty()
-                && matches!(&call.callee, Expr::Ident(ident) if (self.names_rt_unreachable)(ident.id)))
+                && matches!(&call.callee, Expr::Ident(ident) if self.rt_unreachable_calls.contains(&ident.id)))
     }
 
     /// Whether a run entering `stmts` reaches nothing but an
@@ -1379,10 +1377,12 @@ mod tests {
         let module = parse(
             "fn f(i: i32) {\n    let j = i;\n    if builtin::contract_checks() {\n        assert j > 0;\n    }\n}\n",
         );
-        let (plan, sites, _) =
-            plan_module(&ModuleSource::builtin(), &module, contract_checks, &|_| {
-                false
-            });
+        let (plan, sites, _) = plan_module(
+            &ModuleSource::builtin(),
+            &module,
+            contract_checks,
+            &IndexSet::default(),
+        );
         (plan, sites)
     }
 
@@ -1431,25 +1431,23 @@ mod tests {
     /// spelled `unreachable` standing for `core:rt`'s, as resolution says of
     /// the prelude's.
     fn plan_kinds(body: &str) -> Vec<RegionKind> {
-        struct Spelled(Vec<AstId>);
+        struct Spelled(IndexSet<AstId>);
         impl AstVisitor for Spelled {
             fn visit_expr(&mut self, expr: &Expr) {
                 if let Expr::Ident(ident) = expr
                     && ident.name == "unreachable"
                 {
-                    self.0.push(ident.id);
+                    self.0.insert(ident.id);
                 }
                 walk_expr(self, expr);
             }
         }
         let module = parse(&format!("fn f(x: bool, y: bool) -> i32 {{\n{body}\n}}\n"));
-        let mut spelled = Spelled(Vec::new());
+        let mut spelled = Spelled(IndexSet::default());
         for item in &module.items {
             spelled.visit_item(item);
         }
-        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, true, &|site| {
-            spelled.0.contains(&site)
-        });
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, true, &spelled.0);
         plan.regions.iter().map(|r| r.kind).collect()
     }
 

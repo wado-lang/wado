@@ -1575,13 +1575,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The plan reads which callee names `core:rt`'s `unreachable`, so it
         // waits for the bodies to resolve.
         state.coverage = coverage.map(|request| {
-            let calls = rt_unreachable_calls(state, symbols);
             CoverageMap::build(
                 modules
                     .iter()
                     .filter(|(source, _)| request.scope.measures(source)),
                 request.contract_checks,
-                &|site| calls.contains(&site),
+                &rt_unreachable_calls(state, symbols),
             )
         });
 

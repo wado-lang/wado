@@ -147,10 +147,12 @@ impl Semantics {
     pub fn coverage_plan_text(&self, contract_checks: bool) -> Option<String> {
         let state = self.state.as_ref()?;
         let module = self.modules.get(&self.entry_module_source)?;
-        let calls = rt_unreachable_calls(state, &self.symbols);
-        let (plan, ..) = plan_module(&self.entry_module_source, module, contract_checks, &|site| {
-            calls.contains(&site)
-        });
+        let (plan, ..) = plan_module(
+            &self.entry_module_source,
+            module,
+            contract_checks,
+            &rt_unreachable_calls(state, &self.symbols),
+        );
         Some(render_plan(&plan))
     }
 
