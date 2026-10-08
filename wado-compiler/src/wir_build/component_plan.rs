@@ -6,7 +6,7 @@
 use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
-use crate::name::{INTERNAL_PREFIX, kebab_export_name};
+use crate::name::{INTERNAL_PREFIX, kebab_export_name, to_kebab};
 use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{
@@ -295,11 +295,17 @@ fn build_world_export_plans(
             // the CM type engine. The WASI worlds resolve to `CmExportType`
             // here via the registry-backed `resolve_cm_export_type`, whose set
             // of recognised shapes is the WASI export surface only.
+            // A parameter crosses under its CM name, which is kebab-case: a
+            // Wado parameter is snake_case, and a WASI world's is kebab already.
             let (cm_params, cm_result, param_types, result_type) = if is_lib_world {
                 (
                     Vec::new(),
                     Some(CmExportType::Unit),
-                    export.params.clone(),
+                    export
+                        .params
+                        .iter()
+                        .map(|(name, ty)| (to_kebab(name), ty.clone()))
+                        .collect(),
                     export.return_type.clone(),
                 )
             } else {
@@ -308,7 +314,7 @@ fn build_world_export_plans(
                     .iter()
                     .map(|(name, ty)| {
                         (
-                            name.clone(),
+                            to_kebab(name),
                             resolve_cm_export_type(
                                 ty,
                                 cm_interface_registry,

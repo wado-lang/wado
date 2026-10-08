@@ -44,6 +44,7 @@ mod lib_async_task_return_free;
 mod lib_async_void_export;
 mod lib_export_alias_user_struct_as_primitive;
 mod lib_future_payload_name_collides_with_cli;
+mod lib_snake_case_param;
 mod lib_sync_lift_post_return;
 mod lib_unrestricted_handle_export;
 mod literals;
