@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791455348207,
+  "lastUpdate": 1791460575121,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65309,6 +65309,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7802be568dd5cbe8cedb6d816ab8ee795b5f2fa8"
         },
         "date": 1791455347596,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20673,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338620,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b091ba71ef5f676775c6db80b8ffca8a9d84eb3e",
+          "message": "Merge pull request #2310 from wado-lang/ccr-6eef68df-rnwy5d\n\nfix(marl): stop the formatter from rewriting paragraphs into other blocks",
+          "timestamp": "2026-10-08T20:39:14+09:00",
+          "tree_id": "cb45a9b5eadba0f3c35d5f51759c6d5306b05f89",
+          "url": "https://github.com/wado-lang/wado/commit/b091ba71ef5f676775c6db80b8ffca8a9d84eb3e"
+        },
+        "date": 1791460574095,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
