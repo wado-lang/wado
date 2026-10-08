@@ -206,8 +206,6 @@ fn engine_config(opt_level: OptLevel) -> Config {
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
     config.wasm_component_model_map(true);
-    // On by default from wasmtime 49, which `wado run` links.
-    config.wasm_wide_arithmetic(true);
     config.wasm_branch_hinting(true);
     config.collector(Collector::Copying);
     config.gc_heap_initial_size(GC_HEAP_INITIAL_SIZE);

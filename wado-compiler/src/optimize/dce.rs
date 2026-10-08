@@ -1,10 +1,12 @@
 //! Reachability analysis and dead-code elimination for the NIR package.
 
+use std::borrow::Cow;
 use std::ops::ControlFlow;
 
 use cranelift_entity::EntityRef;
 
 use super::arena_query::is_pure_nontrapping_operand_typed;
+use super::gate::{BodyMemo, FunctionGate};
 use super::mod_ref::{CallFacts, FnSummaries};
 
 use crate::canonical::CmCallTarget;
@@ -43,7 +45,7 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 /// walk. The edge is only added to the graph once the inspectable signature set
 /// (computed from the reachable-without-inspect-roots set) is known. Storing them
 /// out-of-band lets us build the call graph in a single AST walk instead of twice.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct PendingInspectEdge {
     /// The functor's `^Inspect` impl.
     inspect: FunctionId,
@@ -52,7 +54,7 @@ struct PendingInspectEdge {
 }
 
 /// Analysis results for a single function
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 struct FunctionAnalysis {
     /// Functions called by this function
     callees: IndexSet<FunctionId>,
@@ -71,6 +73,9 @@ struct FunctionAnalysis {
     /// Transitive closure happens later in
     /// [`populate_type_reachability`]'s Phase 2.
     used_types: IndexSet<TypeId>,
+    /// The functions whose names `callees` and `pending_inspects` hold, by
+    /// store position: a rename of one stales them.
+    named: IndexSet<FuncId>,
 }
 
 /// Combined DCE analysis: which functions / globals / types are
@@ -161,10 +166,14 @@ pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache)
 pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
+    walks: &mut ReachabilityCache,
+    gate: &FunctionGate,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     let descriptors = cache.descriptors(project);
-    let mut graph = build_analysis_graph(project, descriptors);
+    let functors = functor_methods(project);
+    let analyses = walks.analyses(project, gate, descriptors, &functors);
+    let mut graph = assemble_analysis_graph(project, Cow::Borrowed(analyses), functors);
     let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
     let roots = cached
         .into_iter()
@@ -617,19 +626,15 @@ type FuncPositions = IndexMap<FunctionId, usize>;
 /// `project.functions` so that `remove_unreachable_functions` can keep
 /// surviving functions by index instead of rebuilding `FunctionId`s and
 /// hashing them again.
-struct AnalysisGraph {
+struct AnalysisGraph<'a> {
     call_graph: CallGraph,
     effect_usage: EffectUsageMap,
     pending_inspects: PendingInspectsByCaller,
     func_positions: FuncPositions,
-    /// Per-function globals read, indexed by position in
-    /// `project.functions`. Aggregated for reachable positions by
-    /// [`compute_global_reachability`].
-    per_func_globals: Vec<IndexSet<(String, String)>>,
-    /// Per-function types directly used, indexed by position in
-    /// `project.functions`. Seeded into [`DceAnalysis::types`] by
-    /// [`populate_type_reachability`]'s Phase 1.
-    per_func_types: Vec<IndexSet<TypeId>>,
+    /// Each function's facts, indexed by position in `project.functions`:
+    /// [`compute_global_reachability`] and [`populate_type_reachability`]
+    /// aggregate the reachable ones.
+    analyses: Cow<'a, [FunctionAnalysis]>,
     functors: FunctorMethods,
 }
 
@@ -639,7 +644,81 @@ struct AnalysisGraph {
 /// `populate_type_reachability`) then union per-function facts for the
 /// reachable subset instead of re-walking bodies — three independent
 /// walks collapsed into one.
-fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> AnalysisGraph {
+fn build_analysis_graph(
+    project: &NirPackage,
+    descriptors: &[FunctionRef],
+) -> AnalysisGraph<'static> {
+    let type_table = &*project.type_table.borrow();
+    let functors = functor_methods(project);
+    let analyses: Vec<FunctionAnalysis> = project
+        .functions
+        .iter()
+        .map(|f| function_analysis(&f.borrow(), type_table, descriptors, &functors))
+        .collect();
+    assemble_analysis_graph(project, Cow::Owned(analyses), functors)
+}
+
+/// One function's facts for the [`AnalysisGraph`], from its signature and body.
+fn function_analysis(
+    func: &NirFunction,
+    type_table: &TypeTable,
+    descriptors: &[FunctionRef],
+    functors: &FunctorMethods,
+) -> FunctionAnalysis {
+    let mut walker = DceWalker::new(type_table, &func.module_source, descriptors, functors);
+    walker.analyze(func);
+    let mut analysis = walker.analysis;
+    // Promoted operands hold their source type in the body's value pool, not
+    // in an `ExprNode`, so the walker misses them. Keep those types reachable
+    // (a literal of an otherwise-unreachable newtype) — else its `TypeId`
+    // dangles after `remove_unreachable_types`.
+    if let Some(body) = &func.body {
+        for ty in body.values.recorded_types() {
+            analysis.used_types.insert(ty);
+        }
+    }
+    analysis
+}
+
+/// The [`DceWalker`] results [`reachable_function_positions`] reads, kept
+/// across the fixed-point loop.
+#[derive(Default)]
+pub(super) struct ReachabilityCache {
+    walks: BodyMemo<FunctionAnalysis>,
+    renames_seen: usize,
+}
+
+impl ReachabilityCache {
+    /// Every function's [`function_analysis`] as `project` stands. Every
+    /// rewrite since the last call must have been reported to `gate`.
+    fn analyses(
+        &mut self,
+        project: &NirPackage,
+        gate: &FunctionGate,
+        descriptors: &[FunctionRef],
+        functors: &FunctorMethods,
+    ) -> &[FunctionAnalysis] {
+        let renamed: IndexSet<FuncId> = project.renamed[self.renames_seen..]
+            .iter()
+            .copied()
+            .collect();
+        self.renames_seen = project.renamed.len();
+        if !renamed.is_empty() {
+            self.walks
+                .forget_where(|walk| !walk.named.is_disjoint(&renamed));
+        }
+        let type_table = &*project.type_table.borrow();
+        self.walks.refresh(project, gate, |f| {
+            function_analysis(f, type_table, descriptors, functors)
+        })
+    }
+}
+
+fn assemble_analysis_graph<'a>(
+    project: &NirPackage,
+    analyses: Cow<'a, [FunctionAnalysis]>,
+    functors: FunctorMethods,
+) -> AnalysisGraph<'a> {
     let n = project.functions.len();
     // `call_graph` and `func_positions` get exactly one entry per function,
     // so size them up front to avoid the incremental rehashing that an
@@ -650,29 +729,10 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
     let mut pending_inspects: PendingInspectsByCaller = IndexMap::default();
     let mut func_positions: FuncPositions =
         IndexMap::with_capacity_and_hasher(n, rustc_hash::FxBuildHasher);
-    let mut per_func_globals: Vec<IndexSet<(String, String)>> = Vec::with_capacity(n);
-    let mut per_func_types: Vec<IndexSet<TypeId>> = Vec::with_capacity(n);
 
-    let type_table = &*project.type_table.borrow();
-    let functors = functor_methods(project);
-
-    for (pos, func_rc) in project.functions.iter().enumerate() {
+    for ((pos, func_rc), analysis) in project.functions.iter().enumerate().zip(analyses.iter()) {
         let func = func_rc.borrow();
-        let module_source = &func.module_source;
         let func_id = function_id_for(&func);
-
-        let mut walker = DceWalker::new(type_table, module_source, descriptors, &functors);
-        walker.analyze(&func);
-        let mut analysis = walker.analysis;
-        // Promoted operands hold their source type in the body's value pool, not
-        // in an `ExprNode`, so the walker misses them. Keep those types reachable
-        // (a literal of an otherwise-unreachable newtype) — else its `TypeId`
-        // dangles after `remove_unreachable_types`.
-        if let Some(body) = &func.body {
-            for ty in body.values.recorded_types() {
-                analysis.used_types.insert(ty);
-            }
-        }
 
         if let Some(prior) = func_positions.insert(func_id.clone(), pos) {
             let prior = project.functions[prior].borrow();
@@ -684,15 +744,13 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
                 prior.name, func.name,
             );
         }
-        call_graph.insert(func_id.clone(), analysis.callees);
+        call_graph.insert(func_id.clone(), analysis.callees.clone());
         if !analysis.effect_calls.is_empty() {
-            effect_usage.insert(func_id.clone(), analysis.effect_calls);
+            effect_usage.insert(func_id.clone(), analysis.effect_calls.clone());
         }
         if !analysis.pending_inspects.is_empty() {
-            pending_inspects.insert(func_id, analysis.pending_inspects);
+            pending_inspects.insert(func_id, analysis.pending_inspects.clone());
         }
-        per_func_globals.push(analysis.used_globals);
-        per_func_types.push(analysis.used_types);
     }
 
     AnalysisGraph {
@@ -700,8 +758,7 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
         effect_usage,
         pending_inspects,
         func_positions,
-        per_func_globals,
-        per_func_types,
+        analyses,
         functors,
     }
 }
@@ -837,7 +894,22 @@ struct DceWalker<'a> {
 /// Each closure functor's `$call` and `^Inspect` impl, by `(module, functor id)`,
 /// as their records name them: `dae` renames what it reshapes, so a name built
 /// from the functor id would miss one.
-type FunctorMethods = IndexMap<(ModuleSource, u32), (FunctionId, FunctionId)>;
+type FunctorMethods = IndexMap<(ModuleSource, u32), (FunctorMethod, FunctorMethod)>;
+
+/// One of a functor's methods: its name, and where the name lives.
+struct FunctorMethod {
+    name: FunctionId,
+    id: FuncId,
+}
+
+impl FunctorMethod {
+    fn of(func: &NirFunction) -> Self {
+        Self {
+            name: function_id_for(func),
+            id: func.id.expect("func_id assigned at lower"),
+        }
+    }
+}
 
 fn functor_methods(project: &NirPackage) -> FunctorMethods {
     project
@@ -845,8 +917,8 @@ fn functor_methods(project: &NirPackage) -> FunctorMethods {
         .iter()
         .map(|f| {
             let methods = (
-                function_id_for(&f.call_method.borrow()),
-                function_id_for(&f.inspect_method.borrow()),
+                FunctorMethod::of(&f.call_method.borrow()),
+                FunctorMethod::of(&f.inspect_method.borrow()),
             );
             ((f.module_source.clone(), f.id), methods)
         })
@@ -1243,7 +1315,8 @@ impl<'a> DceWalker<'a> {
             .expect(
                 "a functor whose closure a live body converts reaches its `$call`, so DCE keeps it",
             );
-        self.analysis.callees.insert(call.clone());
+        self.analysis.callees.insert(call.name.clone());
+        self.analysis.named.extend([call.id, inspect.id]);
 
         // A per-functor `$Closure_N^Inspect` impl only needs to stay alive
         // when its matching `fn(..)^Inspect` dispatch stub is reachable, so a
@@ -1258,7 +1331,7 @@ impl<'a> DceWalker<'a> {
         } = self.type_table.get(target_fn_type)
         {
             self.analysis.pending_inspects.push(PendingInspectEdge {
-                inspect: inspect.clone(),
+                inspect: inspect.name.clone(),
                 key: (params.len(), *return_type),
             });
         }
@@ -1282,6 +1355,7 @@ impl DceWalker<'_> {
                 self.add_type(body.exprs[e].type_id);
                 match &body.exprs[e].kind {
                     ExprKind::Call { func_id, .. } => {
+                        self.analysis.named.insert(*func_id);
                         let d = self.descriptors;
                         match body.exprs[e].kind.as_method_call() {
                             Some((receiver, _, _)) => {
@@ -1569,8 +1643,8 @@ fn populate_type_reachability(
 
         // Sum per-function used-types for reachable functions only.
         for &pos in &analysis.functions {
-            if let Some(per_func) = graph.per_func_types.get(pos) {
-                for &id in per_func {
+            if let Some(per_func) = graph.analyses.get(pos) {
+                for &id in &per_func.used_types {
                     analysis.types.insert(id);
                 }
             }
@@ -2320,8 +2394,8 @@ fn compute_global_reachability(
 ) -> IndexSet<(String, String)> {
     let mut used_globals: IndexSet<(String, String)> = IndexSet::default();
     for &pos in reachable_functions {
-        if let Some(per_func) = graph.per_func_globals.get(pos) {
-            for entry in per_func {
+        if let Some(per_func) = graph.analyses.get(pos) {
+            for entry in &per_func.used_globals {
                 used_globals.insert(entry.clone());
             }
         }

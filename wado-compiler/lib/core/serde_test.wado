@@ -20,9 +20,15 @@ use {
     report_duplicate_field,
     TextKeySerializer,
     Visitor,
+    FieldSchema,
+    IgnoredAny,
 } from "core:serde";
 use { TreeMap } from "core:collections";
 use json from "core:json";
+use cbor from "core:cbor";
+use { Value } from "core:value";
+use { Uuid } from "core:uuid";
+use { Instant } from "core:temporal";
 
 struct MockWriter {
     buf: String,
@@ -600,6 +606,673 @@ test "an enum or a variant reads its case by discriminant" {
     assert json::from_string::<ReadByDisc<Light>>(`"1"`) matches { Ok(r) && r.value == Light::Green };
     assert json::from_string::<ReadByDisc<Reading>>(`{"1":5}`) matches { Ok(r) && r.value matches { Level(5) } };
     assert json::from_string::<ReadByDisc<Reading>>(`"0"`) matches { Ok(r) && r.value matches { Missing } };
+}
+
+// --- every fallible step, failed in turn ---
+//
+// `Flaky<T>` reads or writes `T` through wrappers that let `BUDGET` calls
+// through and fail the next, so stepping the budget up from zero fails each call
+// a derivation makes, one at a time. The wrappers reach the format only at the
+// top level: a nested value is read by the format's own access.
+
+global mut BUDGET: i32 = -1;
+
+fn spend() -> bool {
+    if BUDGET == 0 {
+        return false;
+    }
+    BUDGET -= 1;
+    return true;
+}
+
+fn gate() -> Result<(), DeserializeError> {
+    if spend() {
+        return Result::Ok(());
+    }
+    return Result::Err(DeserializeError::malformed("injected"));
+}
+
+fn sgate() -> Result<(), SerializeError> {
+    if spend() {
+        return Result::Ok(());
+    }
+    return Result::Err(SerializeError::unsupported_value("injected"));
+}
+
+struct Flaky<T> {
+    value: T,
+}
+
+impl<T: Deserialize> Deserialize for Flaky<T> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Flaky<T>, DeserializeError> {
+        return T::deserialize(&mut FlakyDe { inner: d }).map(|value| Flaky { value });
+    }
+}
+
+impl<T: Serialize> Serialize for Flaky<T> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return self.value.serialize(&mut FlakySer { inner: s });
+    }
+}
+
+/// How many of the calls reading `input` as `T` fail it, each failed in turn.
+fn failures_reading<T: Deserialize>(input: String) -> i32 {
+    let mut n = 0;
+    loop {
+        BUDGET = n;
+        let r = json::from_string::<Flaky<T>>(input);
+        BUDGET = -1;
+        if r matches { Ok(_) } {
+            return n;
+        }
+        n += 1;
+    }
+}
+
+/// How many of the calls writing `value` as CBOR fail it, each failed in turn.
+fn failures_writing<T: Serialize>(value: T) -> i32 {
+    let mut n = 0;
+    loop {
+        BUDGET = n;
+        let r = cbor::to_bytes(&Flaky { value });
+        BUDGET = -1;
+        if r matches { Ok(_) } {
+            return n;
+        }
+        n += 1;
+    }
+}
+
+struct FlakyDe<D: Deserializer> {
+    inner: &mut D,
+}
+
+struct FlakySeq<A: DeserializeSeq> {
+    inner: A,
+}
+
+struct FlakySeqRef<A: DeserializeSeq> {
+    inner: &mut A,
+}
+
+struct FlakyMap<A: DeserializeMap> {
+    inner: A,
+}
+
+struct FlakyMapRef<A: DeserializeMap> {
+    inner: &mut A,
+}
+
+struct FlakyStruct<A: DeserializeStruct> {
+    inner: A,
+}
+
+struct FlakyVariant<A: DeserializeVariant> {
+    inner: A,
+}
+
+struct FlakyVisitor<V: Visitor> {
+    inner: &mut V,
+}
+
+#[coverage(off)]
+impl<A: DeserializeSeq> DeserializeSeq for FlakySeq<A> {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        gate()?;
+        return self.inner.next_element();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: DeserializeSeq> DeserializeSeq for FlakySeqRef<A> {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        gate()?;
+        return self.inner.next_element();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: DeserializeMap> DeserializeMap for FlakyMap<A> {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        gate()?;
+        return self.inner.next_key();
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        gate()?;
+        return self.inner.next_value();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: DeserializeMap> DeserializeMap for FlakyMapRef<A> {
+    fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
+        gate()?;
+        return self.inner.next_key();
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        gate()?;
+        return self.inner.next_value();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: DeserializeStruct> DeserializeStruct for FlakyStruct<A> {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        gate()?;
+        return self.inner.next_field::<S>();
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        gate()?;
+        return self.inner.value();
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.skip();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: DeserializeVariant> DeserializeVariant for FlakyVariant<A> {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        gate()?;
+        return self.inner.variant_name();
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        gate()?;
+        return self.inner.disc();
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        gate()?;
+        return self.inner.payload();
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        gate()?;
+        return self.inner.is_unit();
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        gate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<V: Visitor> Visitor for FlakyVisitor<V> {
+    type Value = V::Value;
+
+    fn visit_null(&mut self) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_null();
+    }
+
+    fn visit_bool(&mut self, v: bool) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_bool(v);
+    }
+
+    fn visit_f64(&mut self, v: f64) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_f64(v);
+    }
+
+    fn visit_i64(&mut self, v: i64) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_i64(v);
+    }
+
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_string(v);
+    }
+
+    fn visit_seq<A: DeserializeSeq>(&mut self, seq: &mut A) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_seq(&mut FlakySeqRef { inner: seq });
+    }
+
+    fn visit_map<A: DeserializeMap>(&mut self, map: &mut A) -> Result<V::Value, DeserializeError> {
+        return self.inner.visit_map(&mut FlakyMapRef { inner: map });
+    }
+}
+
+// `deserialize_bytes` is left to the trait's default, which reads a sequence.
+#[coverage(off)]
+impl<D: Deserializer> Deserializer for FlakyDe<D> {
+    type SeqAccess = FlakySeq<D::SeqAccess>;
+    type MapAccess = FlakyMap<D::MapAccess>;
+    type StructAccess = FlakyStruct<D::StructAccess>;
+    type VariantAccess = FlakyVariant<D::VariantAccess>;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_i32();
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_i64();
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_u32();
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_u64();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_i128();
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_u128();
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_f32();
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_f64();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_f16();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_bf16();
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_bool();
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_char();
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_string();
+    }
+
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        gate()?;
+        return self.inner.is_null();
+    }
+
+    fn on_duplicate_field(&self) -> DuplicateFieldPolicy {
+        return self.inner.on_duplicate_field();
+    }
+
+    fn begin_seq(&mut self) -> Result<FlakySeq<D::SeqAccess>, DeserializeError> {
+        gate()?;
+        return Result::Ok(FlakySeq { inner: self.inner.begin_seq()? });
+    }
+
+    fn begin_map(&mut self) -> Result<FlakyMap<D::MapAccess>, DeserializeError> {
+        gate()?;
+        return Result::Ok(FlakyMap { inner: self.inner.begin_map()? });
+    }
+
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        num_fields: i32,
+    ) -> Result<FlakyStruct<D::StructAccess>, DeserializeError> {
+        gate()?;
+        return Result::Ok(FlakyStruct { inner: self.inner.begin_struct(name, num_fields)? });
+    }
+
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<FlakyVariant<D::VariantAccess>, DeserializeError> {
+        gate()?;
+        return Result::Ok(FlakyVariant { inner: self.inner.begin_variant(type_name, num_cases)? });
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        gate()?;
+        return self.inner.deserialize_any(&mut FlakyVisitor { inner: visitor });
+    }
+}
+
+struct FlakySer<S: Serializer> {
+    inner: &mut S,
+}
+
+struct FlakySerSeq<A: SerializeSeq> {
+    inner: A,
+}
+
+struct FlakySerMap<A: SerializeMap> {
+    inner: A,
+}
+
+struct FlakySerStruct<A: SerializeStruct> {
+    inner: A,
+}
+
+struct FlakySerVariant<A: SerializeVariant> {
+    inner: A,
+}
+
+#[coverage(off)]
+impl<A: SerializeSeq> SerializeSeq for FlakySerSeq<A> {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.element(value);
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: SerializeMap> SerializeMap for FlakySerMap<A> {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.key(key);
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.value(value);
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: SerializeStruct> SerializeStruct for FlakySerStruct<A> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.field(name, value);
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.end();
+    }
+}
+
+#[coverage(off)]
+impl<A: SerializeVariant> SerializeVariant for FlakySerVariant<A> {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.payload(value);
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.end();
+    }
+}
+
+// `serialize_bytes` is left to the trait's default, which writes a sequence.
+#[coverage(off)]
+impl<S: Serializer> Serializer for FlakySer<S> {
+    type SeqSerializer = FlakySerSeq<S::SeqSerializer>;
+    type MapSerializer = FlakySerMap<S::MapSerializer>;
+    type StructSerializer = FlakySerStruct<S::StructSerializer>;
+    type VariantSerializer = FlakySerVariant<S::VariantSerializer>;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_i32(v);
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_i64(v);
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_u32(v);
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_u64(v);
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_i128(v);
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_u128(v);
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_f32(v);
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_f64(v);
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_bool(v);
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_char(v);
+    }
+
+    fn serialize_string<T: AsStrSlice>(&mut self, v: T) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_string(v);
+    }
+
+    fn is_human_readable(&self) -> bool {
+        return self.inner.is_human_readable();
+    }
+
+    fn serialize_tag(&mut self, tag: u64) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_tag(tag);
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_null();
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<FlakySerSeq<S::SeqSerializer>, SerializeError> {
+        sgate()?;
+        return Result::Ok(FlakySerSeq { inner: self.inner.begin_seq(len)? });
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<FlakySerMap<S::MapSerializer>, SerializeError> {
+        sgate()?;
+        return Result::Ok(FlakySerMap { inner: self.inner.begin_map(len)? });
+    }
+
+    fn begin_struct<T: AsStrSlice>(
+        &mut self,
+        name: T,
+        fields: i32,
+    ) -> Result<FlakySerStruct<S::StructSerializer>, SerializeError> {
+        sgate()?;
+        return Result::Ok(FlakySerStruct { inner: self.inner.begin_struct(name, fields)? });
+    }
+
+    fn serialize_unit_variant<T: AsStrSlice, T1: AsStrSlice>(
+        &mut self,
+        type_name: T,
+        variant_name: T1,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        sgate()?;
+        return self.inner.serialize_unit_variant(type_name, variant_name, disc);
+    }
+
+    fn begin_variant<T: AsStrSlice, T1: AsStrSlice>(
+        &mut self,
+        type_name: T,
+        variant_name: T1,
+        disc: i32,
+    ) -> Result<FlakySerVariant<S::VariantSerializer>, SerializeError> {
+        sgate()?;
+        return Result::Ok(FlakySerVariant { inner: self.inner.begin_variant(type_name, variant_name, disc)? });
+    }
+}
+
+flags Perm {
+    Read,
+    Write,
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+test "a read fails at each step it takes" {
+    // begin, one step per element and one past the last, end
+    assert failures_reading::<List<i32>>("[1, 2]") == 5;
+    assert failures_reading::<List<i32>>("[]") == 3;
+    assert failures_reading::<[i32, String]>(`[1, "a"]`) == 4;
+    assert failures_reading::<ByteArray>("[1]") == 4;
+    assert failures_reading::<Perm>(`["Read"]`) == 4;
+    // begin, case, payload, end
+    assert failures_reading::<Result<i32, i32>>(`{"Ok": 1}`) == 4;
+    assert failures_reading::<Result<i32, i32>>(`{"Err": 1}`) == 4;
+    // begin, discriminant, name, then the payload and end a payload takes
+    assert failures_reading::<Light>(`"Green"`) == 4;
+    assert failures_reading::<Shape>(`"Dot"`) == 4;
+    assert failures_reading::<Shape>(`{"Line": 1}`) == 5;
+    // begin, a field and its value twice, one past the last, end
+    assert failures_reading::<Pair>(`{"a": 1, "b": 2}`) == 7;
+    assert failures_reading::<()>("null") == 1;
+    assert failures_reading::<i8>("1") == 1;
+    assert failures_reading::<i16>("1") == 1;
+    assert failures_reading::<u8>("1") == 1;
+    assert failures_reading::<u16>("1") == 1;
+    assert failures_reading::<IgnoredAny>(`[1, {"a": 2}]`) == 5;
+    assert failures_reading::<IgnoredAny>(`{"a": [1]}`) == 5;
+    assert failures_reading::<Value>("[1]") == 4;
+    assert failures_reading::<Value>(`{"a": 1}`) == 5;
+}
+
+test "a write fails at each step it takes" {
+    let mut map = TreeMap::<String, Value>::new();
+    map["a"] = Value::Int(1);
+    assert failures_writing::<Result<i32, i32>>(Result::Ok(1)) == 3;
+    assert failures_writing::<Result<i32, i32>>(Result::Err(1)) == 3;
+    assert failures_writing::<Shape>(Shape::Line(1)) == 3;
+    assert failures_writing::<List<i32>>([1]) == 3;
+    assert failures_writing::<[i32, String]>([1, "a"]) == 4;
+    assert failures_writing::<Perm>(Perm::Read | Perm::Write) == 4;
+    assert failures_writing::<ByteArray>([1, 2] as ByteArray) == 4;
+    assert failures_writing::<Value>(Value::Object(map)) == 4;
+    assert failures_writing::<u16>(7) == 1;
+    // CBOR tags both, and writes a UUID's 16 bytes one by one through the
+    // default `serialize_bytes`
+    assert failures_writing::<Uuid>(Uuid::nil()) == 19;
+    assert failures_writing::<Instant>(Instant::from_epoch_seconds(0)) == 2;
+}
+
+test "flags round-trip as their set names" {
+    let both = Perm::Read | Perm::Write;
+    assert json::to_string(&both) matches { Ok(s) && s == `["Read","Write"]` };
+    assert json::to_string(&Perm::Write) matches { Ok(s) && s == `["Write"]` };
+    assert json::from_string::<Perm>(`["Write"]`) matches { Ok(p) && p == Perm::Write };
+    assert json::from_string::<Perm>(`["Exec"]`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
+}
+
+test "a narrow integer out of its range overflows" {
+    assert json::from_string::<i8>("300") matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert json::from_string::<i16>("-40000") matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert json::from_string::<u16>("70000") matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert json::from_string::<u16>("7") matches { Ok(7) };
+}
+
+test "a tuple shorter than its type ends early" {
+    assert json::from_string::<[i32, i32]>("[1]") matches { Err(e) && e.kind == DeserializeErrorKind::Eof };
+}
+
+test "a Result names its case" {
+    assert json::from_string::<Result<i32, String>>(`{"Err": "x"}`) matches { Ok(Err(s)) && s == "x" };
+    assert json::from_string::<Result<i32, String>>(`{"Maybe": 1}`) matches { Err(e) && e.kind == DeserializeErrorKind::UnknownVariant };
+}
+
+test "an ignored value may be any shape" {
+    assert json::from_string::<IgnoredAny>("true") matches { Ok(_) };
+    assert cbor::from_bytes::<IgnoredAny>(b"\x41\x01") matches { Ok(_) };
+    assert cbor::from_bytes::<IgnoredAny>(b"\xf0", false) matches { Ok(_) };
+}
+
+test "the mock serializer writes every shape" {
+    assert mock_serialize(&[1_i128, 2_i128]) == "[1,2]";
+    assert mock_serialize(&3_u128) == "3";
+    assert mock_serialize(&1.5_f32) == "1.5";
+    assert mock_serialize(&'c') == `"c"`;
+    let mut map = TreeMap::<String, i32>::new();
+    map["k"] = 1;
+    map["l"] = 2;
+    assert mock_serialize(&map) == `{"k":1,"l":2}`;
+    assert mock_serialize(&Pair { a: 1, b: 2 }) == `{"a":1,"b":2}`;
+    assert mock_serialize(&Light::Green) == `"Green"`;
+    assert mock_serialize(&Shape::Line(4)) == `{"Line":4}`;
 }
 
 test "a discriminant no case has is an unknown one" {

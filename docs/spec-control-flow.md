@@ -613,6 +613,12 @@ Two prelude functions trap on purpose:
 - `panic(message)` writes `message` to standard error, then traps.
 - `unreachable()` traps.
 
+They differ in what reaching them means. `panic` and `assert` check a contract:
+a caller that breaks it reaches them, so a test may too. `unreachable()` claims
+that no input reaches it, not even one that breaks a contract. Reaching it is a
+bug in the code around it, and [test coverage](./spec-testing.md#coverage) plans
+no region that leads only to the call.
+
 <!-- {"fixture":"spec_control_flow_errors.wado"} -->
 
 ```wado

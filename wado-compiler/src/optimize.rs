@@ -81,10 +81,10 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
-use mod_ref::summarize;
+use mod_ref::{SummaryCache, summarize};
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
-use sroa_param::sroa_single_field_parameters;
+use sroa_param::{SroaParamState, sroa_single_field_parameters};
 use sroa_variant_return::scalarize_variant_returns;
 use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
@@ -659,6 +659,8 @@ fn run_optimization_passes(
     // Keyed by `gate`'s edit counts, so each pass that reads heap effects
     // re-solves only what the passes before it rewrote.
     let mut heap_effects = HeapEffectsCache::default();
+    let mut mod_ref_summaries = SummaryCache::default();
+    let mut sroa_param_state = SroaParamState::default();
     let mut param_spec_state = param_spec::ParamSpecState::default();
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
@@ -666,6 +668,7 @@ fn run_optimization_passes(
     // Also held across the loop: released once the loop has converged with
     // functions still held, which is when a hold can no longer pay.
     let mut inline_holds = inline::InlineHolds::default();
+    let mut inline_scans = inline::InlineScans::default();
     // Dense `Match` → `Switch` in global initializer bodies. Functions are
     // lowered by `MatchToSwitchRule` inside the unified peephole session; the
     // function-level loop never mutates global initializer bodies, so a single
@@ -743,7 +746,7 @@ fn run_optimization_passes(
         // Hosts `MatchToSwitchRule` (`include_match = true`), so `inline` copies
         // `Switch`-shaped bodies, and `const_branch_prune`.
         gated!("nir/peephole", GatedPass::PeepholePre, |p, g| {
-            peephole::run_peephole(p, g, true, &mut heap_effects)
+            peephole::run_peephole(p, g, true, &mut heap_effects, &mut mod_ref_summaries)
         });
         // Demote deep `$value_copy$T` copies of `List<E>` to shallow spine
         // copies when the binding's elements are provably never mutated through
@@ -761,11 +764,9 @@ fn run_optimization_passes(
         // so the inliner sees post-SROA signatures and can propagate the
         // scalar through call chains. NIR analog of WIR's `sroa_param`; see
         // `optimize/sroa_param.rs`.
-        gated!(
-            "nir/sroa_param",
-            GatedPass::SroaParam,
-            sroa_single_field_parameters
-        );
+        gated!("nir/sroa_param", GatedPass::SroaParam, |p, g| {
+            sroa_single_field_parameters(p, g, &mut sroa_param_state)
+        });
         // Variant returns become tuple returns: `Result<T, E>` -> `[tag, slots]`.
         // Runs beside `sroa_param` and before `nir/inline` for the same reason —
         // the inliner, and every value pass after it, then sees an integer tag
@@ -787,12 +788,14 @@ fn run_optimization_passes(
             &mut inline_holds,
             g,
             descriptor_cache,
+            &mut mod_ref_summaries,
+            &mut inline_scans,
         ));
         // Peephole engine, post-inline run. `elide_local` runs again over
         // inline's freshly dead bindings. No `MatchToSwitchRule` — the
         // pre-inline run lowered every reachable `Match` already.
         gated!("nir/peephole", GatedPass::PeepholePost, |p, g| {
-            peephole::run_peephole(p, g, false, &mut heap_effects)
+            peephole::run_peephole(p, g, false, &mut heap_effects, &mut mod_ref_summaries)
         });
         // `labeled_block_fusion` moved into the post-inline `nir/peephole`
         // session as `LabeledBlockFusionRule`; see `optimize/peephole.rs`.

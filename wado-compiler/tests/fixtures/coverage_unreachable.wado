@@ -1,0 +1,103 @@
+// A region holding only `unreachable()` claims no run enters it, so it is not
+// planned. `panic` checks a contract a caller can break, so its region is.
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+fn sign(x: i32) -> i32 {
+    if x > 0 {
+        return 1;
+    }
+    if x < 0 {
+        return -1;
+    }
+    if x == 0 {
+        return 0;
+    }
+    unreachable();
+}
+
+fn width(s: Shape) -> i32 {
+    match s {
+        Line(n) => {
+            return n;
+        },
+        Dot => {
+            return 0;
+        },
+    }
+    builtin::unreachable();
+}
+
+fn parity(x: i32) -> i32 {
+    return match x % 2 {
+        0 => 0,
+        1 | -1 => 1,
+        _ => unreachable(),
+    };
+}
+
+fn head(xs: List<i32>) -> i32 {
+    let Some(x) = xs.first() else {
+        unreachable();
+    };
+    if x < 0 {
+        unreachable();
+    } else {
+        return x;
+    }
+}
+
+fn never() -> i32 {
+    unreachable();
+}
+
+fn checked(x: i32) -> i32 {
+    if x < 0 {
+        panic("negative");
+    }
+    return x;
+}
+
+// The innermost `else if` omits its `else`, whose path also reaches only the
+// trap after the chain.
+fn chain(x: i32) -> i32 {
+    if x > 0 {
+        return 1;
+    } else if x < 0 {
+        return -1;
+    } else if x == 0 {
+        return 0;
+    }
+    return unreachable();
+}
+
+// A parameter that shadows the name is a path a caller takes.
+fn call_back(#[allow(shadowed_name)] unreachable: fn() -> i32, go: bool) -> i32 {
+    if go {
+        return unreachable();
+    }
+    return 0;
+}
+
+test "the paths a run can take" {
+    assert chain(2) + chain(-2) + chain(0) == 0;
+    assert call_back(|| 1, false) == 0;
+    assert sign(3) + sign(-3) + sign(0) == 0;
+    assert width(Shape::Line(2)) == 2;
+    assert width(Shape::Dot) == 0;
+    assert parity(3) + parity(-3) + parity(2) == 2;
+    assert head([4]) == 4;
+    assert checked(1) == 1;
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [58, 79],
+    "uncovered_branches": ["57:5 then", "78:5 then"],
+    "uncovered_functions": []
+  }
+}

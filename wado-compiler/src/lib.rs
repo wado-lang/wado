@@ -315,6 +315,8 @@ pub struct DumpResult {
     /// Power-assert capture plans, one block per `assert` (unparsed text).
     /// See `docs/wep-2026-08-19-power-assert-coverage.md`.
     pub assert_plan_text: Option<String>,
+    /// The entry module's coverage plan (unparsed text).
+    pub coverage_plan_text: Option<String>,
     /// Monomorphized TIR snapshot (unparsed text)
     pub monomorphized_tir_text: Option<String>,
     /// Lowered TIR snapshot (unparsed text)
@@ -2160,6 +2162,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let tir_modules_by_source: Option<IndexMap<ModuleSource, tir::TirModule>> =
         sem.is_complete().then(|| sem.tir_modules.clone());
     let assert_plan_text = sem.assert_plan_text();
+    // What `wado test --coverage` plans: the test world's flags, whatever world
+    // this dump compiles.
+    let test_flags = parse_codegen_flags(codegen_flags, opt_level, true, &logger)?;
+    let coverage_plan_text = sem.coverage_plan_text(test_flags.contract_checks);
     let export_mappings = sem.export_mappings.clone();
 
     // === Phase 7b+8+9+10: Build Package and run remaining phases ===
@@ -2323,6 +2329,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         entry_module_source: entry_module_source_out,
         tir_modules: tir_modules_by_source,
         assert_plan_text,
+        coverage_plan_text,
         monomorphized_tir_text,
         lowered_nir_text,
         optimized_package,

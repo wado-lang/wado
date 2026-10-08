@@ -389,3 +389,40 @@ test "jumping and drawing commute" {
 
     assert long_first == long_second;
 }
+
+test "random_range reaches every integer width at both ends" {
+    let mut rng = xoshiro(29);
+    for let mut i = 0; i < 64; i += 1 {
+        assert -3_i8 <= rng.random_range(-3_i8..<3_i8) < 3_i8;
+        assert -3_i16 <= rng.random_range(-3_i16..<3_i16) < 3_i16;
+        assert -3_i64 <= rng.random_range(-3_i64..<3_i64) < 3_i64;
+        assert rng.random_range(0_u8..=200_u8) <= 200_u8;
+        assert rng.random_range(0_u16..=200_u16) <= 200_u16;
+        assert rng.random_range(0_u32..=200_u32) <= 200_u32;
+        assert rng.random_range(0_u64..=200_u64) <= 200_u64;
+    }
+}
+
+/// Answers the words it holds, in order.
+struct Scripted {
+    words: List<u64>,
+    at: i32 = 0,
+}
+
+impl Rng for Scripted {
+    fn next_u64(&mut self) -> u64 {
+        let word = self.words[self.at];
+        self.at += 1;
+        return word;
+    }
+}
+
+// Over three values the threshold is 2^64 mod 3 = 1, so only a draw whose
+// product lands on 0 mod 2^64, the word 0, is rejected.
+test "random_range redraws the biased low end of the multiply" {
+    let mut rng = Scripted {
+        words: [0, 0, 1],
+    };
+    assert rng.random_range(0_u64..<3_u64) == 0;
+    assert rng.at == 3;
+}

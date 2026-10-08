@@ -1,5 +1,5 @@
 use fs from "core:fs";
-use { ErrorCode, Preopens } from "core:fs";
+use { ErrorCode, Preopens, Descriptor, FsError } from "core:fs";
 
 // `wado test` preopens the working directory, so each test owns a directory
 // under the gitignored `target/` and reads only what it wrote there. The
@@ -576,4 +576,82 @@ test "an error with no path renders its cause alone" {
 test "an unnamed cause keeps the code WASI gave" {
     let e = fs::FsError { path: "x", kind: fs::FsErrorKind::Io(ErrorCode::Access) };
     assert `${e}` == "x: ErrorCode::Access";
+}
+
+// Hands the host's preopens to the first `left` lookups and none after, so a
+// call fails at the lookup after the ones that got it there.
+struct Rationed {
+    left: i32,
+}
+
+impl Preopens for Rationed {
+    fn get_directories(&mut self) -> List<[Descriptor, String]> with Preopens {
+        if self.left == 0 {
+            resume [];
+        } else {
+            self.left -= 1;
+            resume Preopens::get_directories();
+        }
+    }
+}
+
+fn no_preopen<T>(r: Result<T, FsError>) -> bool {
+    return r matches { Err(e) && e.kind matches { NoPreopen } };
+}
+
+test "with nothing preopened, every call that reaches the filesystem fails" {
+    let dir = scratch("no-preopen");
+    let path = `${dir}/x`;
+    let mut none = Rationed { left: 0 };
+    with Preopens => &mut none do {
+        assert no_preopen(fs::root());
+        assert no_preopen(fs::read(&path));
+        assert no_preopen(fs::write(&path, &"x"));
+        assert no_preopen(fs::write_in_place(&path, &"x"));
+        assert no_preopen(fs::rename(&path, &path));
+        assert no_preopen(fs::remove_file(&path));
+        assert no_preopen(fs::remove_dir(&path));
+        assert no_preopen(fs::create_dir(&path));
+        assert no_preopen(fs::create_dir_all(&path));
+        assert no_preopen(fs::metadata(&path));
+        assert no_preopen(fs::try_exists(&path));
+    };
+}
+
+test "create_dir_all on the preopen itself creates nothing" {
+    fs::create_dir_all("").unwrap();
+    fs::create_dir_all(".").unwrap();
+}
+
+test "a failure partway through a tree is reported, not skipped" {
+    let dir = scratch("partway");
+    fs::create_dir_all(`${dir}/only-dir/sub`).unwrap();
+    fs::create_dir_all(`${dir}/only-file`).unwrap();
+    fs::write(`${dir}/only-file/file.txt`, &"x").unwrap();
+    fs::write(`${dir}/file.txt`, &"x").unwrap();
+
+    // One lookup lists the directory; the next, for what it holds, fails.
+    let mut one = Rationed { left: 1 };
+    with Preopens => &mut one do {
+        assert no_preopen(fs::walk_dir(`${dir}/only-dir`));
+    };
+    one.left = 1;
+    with Preopens => &mut one do {
+        assert no_preopen(fs::remove_dir_all(`${dir}/only-dir`));
+    };
+    one.left = 1;
+    with Preopens => &mut one do {
+        assert no_preopen(fs::remove_dir_all(`${dir}/only-file`));
+    };
+    // create_dir finds the directory there; the look that says so fails.
+    one.left = 1;
+    with Preopens => &mut one do {
+        assert no_preopen(fs::create_dir_all(&dir));
+    };
+    // The temporary file opens; the look at the target fails.
+    one.left = 1;
+    with Preopens => &mut one do {
+        assert no_preopen(fs::write(`${dir}/file.txt`, &"y"));
+    };
+    assert fs::read_to_string(`${dir}/file.txt`).unwrap() == "x";
 }

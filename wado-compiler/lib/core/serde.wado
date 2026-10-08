@@ -987,7 +987,6 @@ pub struct NoCompound {
     unbuilt: (),
 }
 
-#[coverage(off)]
 impl SerializeSeq for NoCompound {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         return unreachable();
@@ -998,7 +997,6 @@ impl SerializeSeq for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl SerializeMap for NoCompound {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         return unreachable();
@@ -1013,7 +1011,6 @@ impl SerializeMap for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl SerializeStruct for NoCompound {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         return unreachable();
@@ -1024,7 +1021,6 @@ impl SerializeStruct for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl SerializeVariant for NoCompound {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         return unreachable();
@@ -1035,7 +1031,6 @@ impl SerializeVariant for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl DeserializeSeq for NoCompound {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         return unreachable();
@@ -1046,7 +1041,6 @@ impl DeserializeSeq for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl DeserializeMap for NoCompound {
     fn next_key<K: Deserialize>(&mut self) -> Result<Option<K>, DeserializeError> {
         return unreachable();
@@ -1061,7 +1055,6 @@ impl DeserializeMap for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl DeserializeStruct for NoCompound {
     fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
         return unreachable();
@@ -1080,7 +1073,6 @@ impl DeserializeStruct for NoCompound {
     }
 }
 
-#[coverage(off)]
 impl DeserializeVariant for NoCompound {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
         return unreachable();
@@ -1408,7 +1400,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
                 return var.end();
             }
         }
-        return Result::Err(SerializeError::unsupported_value(`unknown case of ${type_name}`));
+        unreachable();
     }
 }
 
@@ -1426,7 +1418,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
                 );
             }
         }
-        return Result::Err(SerializeError::unsupported_value(`unknown discriminant of ${Reflect::<E>::type_name()}`));
+        unreachable();
     }
 }
 
@@ -1620,13 +1612,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Deserialize for L {
                 }
             } else {
                 seq.end()?;
-                if let Some(v) = ReflectFlags::<L>::from_bits(raw) {
-                    return Result::Ok(v);
-                }
-                return Result::Err(DeserializeError::invalid_value(
-                    `unknown bits of ${Reflect::<L>::type_name()}`,
-                    -1,
-                ));
+                return Result::Ok(ReflectFlags::<L>::from_bits(raw).expect("only members' bits were set"));
             }
         }
     }
@@ -1684,9 +1670,7 @@ fn case_separator(style: CaseStyle) -> u8 {
         ScreamingSnake => 95,
         Kebab => 45,
         ScreamingKebab => 45,
-        Identity => 0,
-        Camel => 0,
-        Pascal => 0,
+        Identity | Camel | Pascal => 0,
     };
 }
 

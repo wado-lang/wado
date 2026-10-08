@@ -16,7 +16,7 @@ use crate::ast::{
     walk_stmt,
 };
 use crate::attribute;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -228,10 +228,12 @@ impl CoverageMap {
     pub fn build<'a>(
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
         contract_checks: bool,
+        rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
         let mut map = Self::default();
         for (source, module) in modules {
-            let (plan, sites, for_of_bodies) = plan_module(source, module, contract_checks);
+            let (plan, sites, for_of_bodies) =
+                plan_module(source, module, contract_checks, rt_unreachable_calls);
             let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
             let first_function = map.function_probes.len();
             map.function_probes
@@ -466,12 +468,14 @@ type ForOfBodies = Vec<(AstId, Range<u32>)>;
 
 /// Plan one module, compiled with or without its `contract_checks`: its
 /// regions, the site each region's probe goes at, and the regions of each
-/// `for-of` body.
+/// `for-of` body. `rt_unreachable_calls` holds the callee sites that name
+/// `core:rt`'s `unreachable`.
 #[must_use]
-pub fn plan_module(
+pub(crate) fn plan_module(
     source: &ModuleSource,
     module: &ast::Module,
     contract_checks: bool,
+    rt_unreachable_calls: &IndexSet<AstId>,
 ) -> (ModulePlan, Sites, ForOfBodies) {
     let mut planner = Planner {
         plan: ModulePlan {
@@ -479,6 +483,7 @@ pub fn plan_module(
             ..ModulePlan::default()
         },
         contract_checks,
+        rt_unreachable_calls,
         sites: Vec::new(),
         function: 0,
         region: None,
@@ -503,10 +508,11 @@ pub fn plan_module(
     (plan, sites, for_of_bodies)
 }
 
-struct Planner {
+struct Planner<'a> {
     plan: ModulePlan,
     /// Whether a contract check's body is compiled, and so holds lines.
     contract_checks: bool,
+    rt_unreachable_calls: &'a IndexSet<AstId>,
     sites: Sites,
     function: u32,
     /// The innermost region the walk is in, `None` outside a function.
@@ -518,7 +524,7 @@ struct Planner {
     for_of_bodies: ForOfBodies,
 }
 
-impl Planner {
+impl Planner<'_> {
     fn item(&mut self, item: &Item) {
         match item {
             Item::Function(f) => self.function(f),
@@ -542,7 +548,7 @@ impl Planner {
 
     fn function(&mut self, f: &Function) {
         let Some(body) = &f.body else { return };
-        if attribute::coverage_off(&f.attrs) {
+        if attribute::coverage_off(&f.attrs) || self.reaches_only_unreachable(&body.stmts, false) {
             return;
         }
         let name = match &self.owner {
@@ -554,7 +560,7 @@ impl Planner {
         let saved = (self.function, self.region);
         let region = self.new_function(name, f.name_span, RegionKind::Function, body.span);
         self.sites.push((ProbeSite::BlockStart, body.id, region));
-        self.block_of(region, body);
+        self.block_of(region, body, false);
         (self.function, self.region) = saved;
     }
 
@@ -601,7 +607,55 @@ impl Planner {
         self.plan.lines.push((span.line as u32, region));
     }
 
-    fn branch_block(&mut self, kind: RegionKind, block: &Block, choice: (Pos, u32)) {
+    /// Whether `expr` calls `unreachable` with nothing to evaluate first: its
+    /// author's claim that no run reaches it. `panic` and `assert` are not
+    /// such a claim, since a caller breaking a contract reaches them.
+    fn is_unreachable_call(&self, expr: &Expr) -> bool {
+        let Expr::Call(call) = expr else {
+            return false;
+        };
+        is_builtin_call(call, "unreachable")
+            || (call.args.is_empty()
+                && call.type_args.is_empty()
+                && matches!(&call.callee, Expr::Ident(ident) if self.rt_unreachable_calls.contains(&ident.id)))
+    }
+
+    /// Whether a run entering `stmts` reaches nothing but an
+    /// [`unreachable` call](Self::is_unreachable_call), where `after` says the
+    /// same of what control reaches on leaving them. Such a run is no path to
+    /// plan.
+    fn reaches_only_unreachable(&self, stmts: &[Stmt], after: bool) -> bool {
+        match stmts {
+            [] => after,
+            [Stmt::Expr(s)] => self.expr_reaches_only_unreachable(&s.expr, after),
+            [Stmt::Return(r)] => r
+                .value
+                .as_ref()
+                .is_some_and(|v| self.is_unreachable_call(v)),
+            _ => false,
+        }
+    }
+
+    /// [`Self::reaches_only_unreachable`] for a body written as an expression.
+    fn expr_reaches_only_unreachable(&self, body: &Expr, after: bool) -> bool {
+        match body {
+            Expr::Block(block) => self.reaches_only_unreachable(&block.stmts, after),
+            _ => self.is_unreachable_call(body),
+        }
+    }
+
+    /// The region `block` is, unless it
+    /// [reaches only `unreachable`](Self::reaches_only_unreachable).
+    fn branch_block(
+        &mut self,
+        kind: RegionKind,
+        block: &Block,
+        choice: (Pos, u32),
+        after: bool,
+    ) -> Option<u32> {
+        if self.reaches_only_unreachable(&block.stmts, after) {
+            return None;
+        }
         let region = self.new_region(
             kind,
             Pos::start(block.span),
@@ -609,43 +663,57 @@ impl Planner {
             Some(choice),
         );
         self.sites.push((ProbeSite::BlockStart, block.id, region));
-        self.block_of(region, block);
+        self.block_of(region, block, after);
+        Some(region)
     }
 
-    /// An `if`, statement or expression. Both branches are regions, and an
-    /// omitted `else` is one too: the path that skips the `then` block.
+    /// An `if`, statement or expression, which control leaves to what `after`
+    /// describes. Both branches are regions, and an omitted `else` is one too:
+    /// the path that skips the `then` block.
     fn if_branches(
         &mut self,
         id: AstId,
         span: Span,
         then_block: &Block,
         else_block: Option<&Block>,
+        after: bool,
     ) {
         let at = Pos::start(span);
-        let then_region = self.plan.regions.len() as u32;
-        self.branch_block(RegionKind::Then, then_block, (at, 0));
-        let else_region = self.plan.regions.len() as u32;
-        if let Some(block) = else_block {
-            self.branch_block(RegionKind::Else, block, (at, 1));
+        let then_region = self.branch_block(RegionKind::Then, then_block, (at, 0), after);
+        let else_region = if let Some(block) = else_block {
+            self.branch_block(RegionKind::Else, block, (at, 1), after)
+        } else if after {
+            None
         } else {
-            self.new_region(
+            let region = self.new_region(
                 RegionKind::Else,
                 Pos::end(span),
                 Pos::end(span),
                 Some((at, 1)),
             );
-            self.sites.push((ProbeSite::ImplicitElse, id, else_region));
-        }
-        self.last_choice = vec![then_region, else_region];
+            self.sites.push((ProbeSite::ImplicitElse, id, region));
+            Some(region)
+        };
+        self.last_choice = then_region.into_iter().chain(else_region).collect();
     }
 
-    fn match_arms(&mut self, m: &MatchExpr) {
+    fn if_stmt(&mut self, s: &ast::IfStmt, after: bool) {
+        self.visit_condition(&s.condition);
+        self.if_branches(s.id, s.span, &s.then_block, s.else_block.as_ref(), after);
+    }
+
+    /// A `match`, statement or expression, which control leaves to what
+    /// `after` describes.
+    fn match_arms(&mut self, m: &MatchExpr, after: bool) {
         self.visit_expr(&m.expr);
         let at = Pos::start(m.span);
         let mut sides = Vec::new();
         for (side, arm) in m.arms.iter().enumerate() {
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
+            }
+            if self.expr_reaches_only_unreachable(&arm.body, after) {
+                continue;
             }
             let body = arm.body.span();
             let region = self.new_region(
@@ -655,7 +723,7 @@ impl Planner {
                 Some((at, side as u32)),
             );
             self.sites.push((ProbeSite::Around, arm.body.id(), region));
-            self.expr_body(region, &arm.body);
+            self.expr_body(region, &arm.body, after);
             sides.push(region);
         }
         self.last_choice = sides;
@@ -663,9 +731,9 @@ impl Planner {
 
     /// The body of `region` written as an expression: a block counts its
     /// statements, any other expression is one line.
-    fn expr_body(&mut self, region: u32, body: &Expr) {
+    fn expr_body(&mut self, region: u32, body: &Expr, after: bool) {
         match body {
-            Expr::Block(block) => self.block_of(region, block),
+            Expr::Block(block) => self.block_of(region, block, after),
             _ => self.in_region(region, |p| {
                 p.line(body.span());
                 p.visit_expr(body);
@@ -674,6 +742,9 @@ impl Planner {
     }
 
     fn loop_body(&mut self, body: &Block) {
+        if self.reaches_only_unreachable(&body.stmts, false) {
+            return;
+        }
         let region = self.new_region(
             RegionKind::Loop,
             Pos::start(body.span),
@@ -681,24 +752,28 @@ impl Planner {
             None,
         );
         self.sites.push((ProbeSite::BlockStart, body.id, region));
-        self.block_of(region, body);
+        self.block_of(region, body, false);
     }
 
     /// `block`, walked inside `region`, which it starts.
-    fn block_of(&mut self, region: u32, block: &Block) {
-        self.statements(block, Some(region));
+    fn block_of(&mut self, region: u32, block: &Block, after: bool) {
+        self.statements(block, Some(region), after);
     }
 
-    /// Walk `block`'s statements. A run of statements that some region
-    /// starts with, `open`, derives that region from the first choice it
-    /// reaches, when nothing before the choice can leave the block.
-    fn statements(&mut self, block: &Block, mut open: Option<u32>) {
+    /// Walk `block`'s statements, which control leaves to what `after`
+    /// describes. A run of statements that some region starts with, `open`,
+    /// derives that region from the first choice it reaches, when nothing
+    /// before the choice can leave the block.
+    fn statements(&mut self, block: &Block, mut open: Option<u32>, after: bool) {
         let saved = self.region;
         if open.is_some() {
             self.region = open;
         }
         let mut leaves = false;
-        for stmt in &block.stmts {
+        for (index, stmt) in block.stmts.iter().enumerate() {
+            if leaves && self.reaches_only_unreachable(&block.stmts[index..], after) {
+                break;
+            }
             if leaves {
                 let region = self.new_region(
                     RegionKind::Continuation,
@@ -714,7 +789,12 @@ impl Planner {
             if !matches!(stmt, Stmt::Item(_) | Stmt::Error(_)) && !deleted_check {
                 self.line(stmt.span());
             }
-            self.visit_stmt(stmt);
+            let rest = self.reaches_only_unreachable(&block.stmts[index + 1..], after);
+            match stmt {
+                Stmt::If(s) if !is_contract_check(stmt) => self.if_stmt(s, rest),
+                Stmt::Match(m) => self.match_arms(m, rest),
+                _ => self.visit_stmt(stmt),
+            }
             leaves = leaves_early(stmt);
             if let Some(region) = open {
                 if enters_choice(stmt) {
@@ -734,13 +814,13 @@ impl Planner {
     }
 }
 
-impl AstVisitor for Planner {
+impl AstVisitor for Planner<'_> {
     fn visit_item(&mut self, item: &Item) {
         self.item(item);
     }
 
     fn visit_block(&mut self, block: &Block) {
-        self.statements(block, None);
+        self.statements(block, None, false);
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
@@ -749,7 +829,11 @@ impl AstVisitor for Planner {
                 if let Some(value) = &s.value {
                     self.visit_expr(value);
                 }
-                if let Some(block) = &s.else_block {
+                if let Some(block) = s
+                    .else_block
+                    .as_ref()
+                    .filter(|b| !self.reaches_only_unreachable(&b.stmts, false))
+                {
                     let region = self.new_region(
                         RegionKind::LetElse,
                         Pos::start(block.span),
@@ -757,18 +841,15 @@ impl AstVisitor for Planner {
                         Some((Pos::start(s.span), 0)),
                     );
                     self.sites.push((ProbeSite::BlockStart, block.id, region));
-                    self.block_of(region, block);
+                    self.block_of(region, block, false);
                 }
             }
             Stmt::If(s) if is_contract_check(stmt) => {
                 if self.contract_checks {
-                    self.statements(&s.then_block, None);
+                    self.statements(&s.then_block, None, false);
                 }
             }
-            Stmt::If(s) => {
-                self.visit_condition(&s.condition);
-                self.if_branches(s.id, s.span, &s.then_block, s.else_block.as_ref());
-            }
+            Stmt::If(s) => self.if_stmt(s, false),
             Stmt::While(s) => {
                 self.visit_condition(&s.condition);
                 self.loop_body(&s.body);
@@ -793,7 +874,7 @@ impl AstVisitor for Planner {
                     .push((s.id, first..self.plan.regions.len() as u32));
             }
             Stmt::Loop(s) => self.loop_body(&s.body),
-            Stmt::Match(m) => self.match_arms(m),
+            Stmt::Match(m) => self.match_arms(m, false),
             // Power-assert rewrites the condition, so its operands are not
             // the source's regions.
             Stmt::Assert(_) => {}
@@ -803,7 +884,10 @@ impl AstVisitor for Planner {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or) => {
+            Expr::Binary(b)
+                if matches!(b.op, BinaryOp::And | BinaryOp::Or)
+                    && !self.is_unreachable_call(&b.right) =>
+            {
                 self.visit_expr(&b.left);
                 let right = b.right.span();
                 let region = self.new_region(
@@ -817,16 +901,17 @@ impl AstVisitor for Planner {
             }
             Expr::If(e) => {
                 self.visit_condition(&e.condition);
-                self.if_branches(e.id, e.span, &e.then_block, e.else_block.as_ref());
+                self.if_branches(e.id, e.span, &e.then_block, e.else_block.as_ref(), false);
             }
-            Expr::Match(m) => self.match_arms(m),
+            Expr::Match(m) => self.match_arms(m, false),
+            Expr::Closure(c) if self.expr_reaches_only_unreachable(&c.body, false) => {}
             Expr::Closure(c) => {
                 let outer_name = &self.plan.functions[self.function as usize].name;
                 let name = format!("{outer_name}::{{closure:{}}}", c.span.line);
                 let saved = (self.function, self.region);
                 let region = self.new_function(name, c.span, RegionKind::Closure, c.body.span());
                 self.sites.push((ProbeSite::Around, c.body.id(), region));
-                self.expr_body(region, &c.body);
+                self.expr_body(region, &c.body, false);
                 (self.function, self.region) = saved;
             }
             Expr::TryOp(t) => {
@@ -894,11 +979,17 @@ pub(crate) fn contract_check_call(s: &ast::IfStmt) -> Option<AstId> {
     let ast::Condition::Expr(Expr::Call(call)) = &s.condition else {
         return None;
     };
-    let canonical = s.else_block.is_none()
-        && call.args.is_empty()
+    (s.else_block.is_none() && is_builtin_call(call, "contract_checks")).then_some(call.id)
+}
+
+/// Whether `call` is `builtin::<name>()`, with no argument and no turbofish.
+/// `builtin::` names `core:builtin` whatever the module declares, so the
+/// spelling identifies the callee.
+fn is_builtin_call(call: &ast::CallExpr, name: &str) -> bool {
+    call.args.is_empty()
         && call.type_args.is_empty()
-        && matches!(&call.callee, Expr::Ident(ident) if ident.name == "builtin::contract_checks");
-    canonical.then_some(call.id)
+        && matches!(&call.callee, Expr::Ident(ident)
+            if ident.name.strip_prefix("builtin::") == Some(name))
 }
 
 fn is_contract_check(stmt: &Stmt) -> bool {
@@ -1286,7 +1377,12 @@ mod tests {
         let module = parse(
             "fn f(i: i32) {\n    let j = i;\n    if builtin::contract_checks() {\n        assert j > 0;\n    }\n}\n",
         );
-        let (plan, sites, _) = plan_module(&ModuleSource::builtin(), &module, contract_checks);
+        let (plan, sites, _) = plan_module(
+            &ModuleSource::builtin(),
+            &module,
+            contract_checks,
+            &IndexSet::default(),
+        );
         (plan, sites)
     }
 
@@ -1329,6 +1425,70 @@ mod tests {
         let (plan, _) = plan_check(false);
         assert_eq!(plan.regions.len(), 1);
         assert_eq!(plan.lines, vec![(2, 0)]);
+    }
+
+    /// The kinds of the regions `body` plans as `fn f`'s, with every callee
+    /// spelled `unreachable` standing for `core:rt`'s, as resolution says of
+    /// the prelude's.
+    fn plan_kinds(body: &str) -> Vec<RegionKind> {
+        struct Spelled(IndexSet<AstId>);
+        impl AstVisitor for Spelled {
+            fn visit_expr(&mut self, expr: &Expr) {
+                if let Expr::Ident(ident) = expr
+                    && ident.name == "unreachable"
+                {
+                    self.0.insert(ident.id);
+                }
+                walk_expr(self, expr);
+            }
+        }
+        let module = parse(&format!("fn f(x: bool, y: bool) -> i32 {{\n{body}\n}}\n"));
+        let mut spelled = Spelled(IndexSet::default());
+        for item in &module.items {
+            spelled.visit_item(item);
+        }
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, true, &spelled.0);
+        plan.regions.iter().map(|r| r.kind).collect()
+    }
+
+    #[test]
+    fn only_an_unreachable_call_claims_a_region_unreached() {
+        use RegionKind::{Else, Function, Then};
+        let unplanned = vec![Function, Else];
+        let planned = vec![Function, Then, Else];
+        let shapes = [
+            ("unreachable();", &unplanned),
+            ("builtin::unreachable();", &unplanned),
+            ("return unreachable();", &unplanned),
+            ("panic(\"x\");", &planned),
+            ("return panic(\"x\");", &planned),
+            ("unreachable::<i32>();", &planned),
+            ("g(); unreachable();", &planned),
+        ];
+        for (then, kinds) in shapes {
+            let body = format!("    if x {{ {then} }}");
+            assert_eq!(&plan_kinds(&body), kinds, "{then}");
+        }
+    }
+
+    #[test]
+    fn a_path_falling_into_unreachable_is_no_branch() {
+        use RegionKind::{Arm, Else, Function, Then};
+        let shapes = [
+            ("if x { return 1; }", vec![Function, Then]),
+            (
+                "if x { return 1; } else if y { return 2; }",
+                vec![Function, Then, Else, Then],
+            ),
+            (
+                "match x { true => { return 1; }, false => {}, }",
+                vec![Function, Arm],
+            ),
+        ];
+        for (head, kinds) in shapes {
+            let body = format!("    {head}\n    unreachable();");
+            assert_eq!(plan_kinds(&body), kinds, "{head}");
+        }
     }
 
     #[test]

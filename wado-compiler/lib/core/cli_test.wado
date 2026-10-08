@@ -1,6 +1,7 @@
 use { println, eprintln, print, eprint, print_bytes, args, program_name, cwd, env } from "core:cli";
 use { Stdout, Stderr } from "core:cli";
 use { ErrorCode } from "wasi:cli";
+use { eval, Status } from "core:eval";
 
 // Captures what the helpers write. `write_via_stream` records which of the two
 // streams the next write belongs to, since one handler answers for both.
@@ -128,4 +129,16 @@ test "the program name is this file, and args holds nothing after it" {
 
 test "cwd answers without trapping" {
     let _ = cwd();
+}
+
+// An exit never returns, so only a host that runs the program sees its status.
+fn exit_status(call: String) -> Status {
+    return eval(`use { exit, exit_error, exit_success, Exit } from "core:cli";
+export fn run() with Exit { ${call}; }`).unwrap().status;
+}
+
+test "each exit helper hands the host its status" {
+    assert exit_status("exit_success()") matches { Exited(0) };
+    assert exit_status("exit_error()") matches { Exited(1) };
+    assert exit_status("exit(3)") matches { Exited(3) };
 }

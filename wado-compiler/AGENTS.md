@@ -89,9 +89,12 @@ code, tested from `<module>_test.wado` like any other module.
 The stdlib tests aim at 100% coverage of the stdlib, whatever the fixtures
 cover. `mise run test-stdlib-coverage` holds the stdlib to
 `scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
-a difference either way. New code gets a test, or `#[coverage(off)]` where no
-test can reach it. Remove what the tests now reach with
-`mise run update-stdlib-coverage-baseline`; never add to it.
+a difference either way. `mise run update-stdlib-coverage-baseline` rewrites it.
+
+Coverage serves the code, not the reverse: never bend correct, fast code to fit
+the baseline. New code gets a test. A region that never runs says so in the code
+(`unreachable()`, `#[coverage(off)]`). One that runs, but under no stdlib test,
+is added to the baseline.
 
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the

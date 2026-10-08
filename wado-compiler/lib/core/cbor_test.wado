@@ -52,26 +52,19 @@ fn decodes_err<T: Deserialize>(b: ByteList) -> bool {
     return from_bytes::<T, ByteList>(b) matches { Err(_) };
 }
 
-fn decode_err_kind<T: Deserialize>(b: ByteList) -> Option<DeserializeErrorKind> {
-    return match from_bytes::<T, ByteList>(b) {
-        Ok(_) => Option::None,
-        Err(e) => Option::Some(e.kind),
-    };
+/// The kind of error decoding `b` as `T` fails with; it must fail.
+fn decode_err_kind<T: Deserialize>(b: ByteList) -> DeserializeErrorKind {
+    return from_bytes::<T, ByteList>(b).unwrap_err().kind;
 }
 
 /// Whether decoding `input` (hex) as `T` fails with exactly `kind`.
 fn fails_with<T: Deserialize>(input: String, kind: DeserializeErrorKind) -> bool {
-    return decode_err_kind::<T>(hex(input)) matches { Some(k) && k == kind };
+    return decode_err_kind::<T>(hex(input)) == kind;
 }
 
 /// Decode `input` (hex) as `T`, which must succeed.
 fn dec<T: Deserialize>(input: String) -> T {
-    return match from_bytes::<T, ByteList>(hex(input)) {
-        Ok(v) => v,
-        Err(e) => {
-            panic(`decode failed: ${e}`);
-        },
-    };
+    return from_bytes::<T, ByteList>(hex(input)).unwrap();
 }
 
 /// Decode `input` (hex) as a `Value` without `strict`.
@@ -610,7 +603,7 @@ fn nested_more(levels: i32) -> ByteList {
 
 test "reject: deeply nested recursive variant exceeds the depth bound" {
     // A depth bound is a resource limit: these bytes are well-formed CBOR.
-    assert decode_err_kind::<Nest>(nested_more(400)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+    assert decode_err_kind::<Nest>(nested_more(400)) == DeserializeErrorKind::DepthLimitExceeded;
 }
 
 test "nesting within the depth bound decodes" {
@@ -666,8 +659,8 @@ test "an unsigned target names the item's type, and overflow only for a negative
 test "skipping an unknown field is depth-bounded like the typed path" {
     // Skipping does not move the deserializer's level, so the skip threads
     // its own depth; reading the deserializer's leaves it unbounded.
-    assert decode_err_kind::<Small>(nested_skip(200000)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
-    assert decode_err_kind::<Small>(nested_skip(3000)) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+    assert decode_err_kind::<Small>(nested_skip(200000)) == DeserializeErrorKind::DepthLimitExceeded;
+    assert decode_err_kind::<Small>(nested_skip(3000)) == DeserializeErrorKind::DepthLimitExceeded;
     assert from_bytes::<Small, ByteList>(nested_skip(5)) matches { Ok(_) };
 }
 
@@ -693,8 +686,8 @@ test "skipping nested maps is depth-bounded" {
         indefinite.push(0xbf);
         indefinite.push(0x00);
     }
-    assert decode_err_kind::<Small>(definite) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
-    assert decode_err_kind::<Small>(indefinite) matches { Some(DeserializeErrorKind::DepthLimitExceeded) };
+    assert decode_err_kind::<Small>(definite) == DeserializeErrorKind::DepthLimitExceeded;
+    assert decode_err_kind::<Small>(indefinite) == DeserializeErrorKind::DepthLimitExceeded;
 }
 
 test "decode: unknown fields of every major type are skipped" {
@@ -964,8 +957,9 @@ struct Tagged {
 impl Deserialize for Tagged {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Tagged, DeserializeError> {
         let mut va = d.begin_variant("Tagged", 2)?;
-        let name = va.variant_name()?;
-        let payload: Option<i32> = if va.is_unit()? { null } else { Option::Some(va.payload::<i32>()?) };
+        // CBOR reads the name and the shape with the tag, so neither can fail here.
+        let name = va.variant_name().unwrap();
+        let payload: Option<i32> = if va.is_unit().unwrap() { null } else { Option::Some(va.payload::<i32>()?) };
         va.end()?;
         return Result::Ok(Tagged { name, payload });
     }
@@ -974,6 +968,15 @@ impl Deserialize for Tagged {
 test "decode: a hand-written variant tells a unit case from a payload" {
     assert dec::<Tagged>("63 446f74") == Tagged { name: "Dot", payload: null };
     assert dec::<Tagged>("a1 63416765 07") == Tagged { name: "Age", payload: Option::Some(7) };
+}
+
+test "decode: a hand-written variant reports each malformed shape" {
+    assert decodes_err::<Tagged>(hex("01"));  // neither a name nor a map
+    assert decodes_err::<Tagged>(hex("a1 01 07"));  // a key that is not a name
+    assert decodes_err::<Tagged>(hex("a1 63416765"));  // the payload missing
+    assert decodes_err::<Tagged>(hex("a1 63416765 6161"));  // a payload of the wrong type
+    assert decodes_err::<Tagged>(hex("a2 63416765 07 6142 07"));  // a second case
+    assert decodes_err::<Tagged>(hex("bf 63416765 07 6142 07 ff"));  // a second case, indefinite
 }
 
 test "decode: Value picks the narrowest integer case" {
@@ -1086,13 +1089,13 @@ struct IntKeyed {
 
 impl Serialize for IntKeyed {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut m = s.begin_map(3)?;
-        m.key(&-1)?;
-        m.value(&3)?;
-        m.key(&100)?;
-        m.value(&2)?;
-        m.key(&10)?;
-        m.value(&1)?;
+        let mut m = s.begin_map(3).unwrap();
+        m.key(&-1).unwrap();
+        m.value(&3).unwrap();
+        m.key(&100).unwrap();
+        m.value(&2).unwrap();
+        m.key(&10).unwrap();
+        m.value(&1).unwrap();
         return m.end();
     }
 }
@@ -1126,15 +1129,12 @@ struct BadEntry {
 
 impl Serialize for BadEntry {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut m = s.begin_map(1)?;
+        let mut m = s.begin_map(1).unwrap();
         if self.bad_key {
-            m.key(&Unencodable {})?;
-            m.value(&1)?;
-        } else {
-            m.key(&1)?;
-            m.value(&Unencodable {})?;
+            return m.key(&Unencodable {});
         }
-        return m.end();
+        m.key(&1).unwrap();
+        return m.value(&Unencodable {});
     }
 }
 

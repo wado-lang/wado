@@ -7,12 +7,7 @@
 use { to_string, from_string } from "core:json";
 
 fn ser(b: &ByteList) -> String {
-    return match to_string::<ByteList>(b) {
-        Ok(v) => v,
-        Err(_) => {
-            panic("serialize failed");
-        },
-    };
+    return to_string::<ByteList>(b).unwrap();
 }
 
 test "ByteList serializes as a base64url string, not an int array" {

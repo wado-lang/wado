@@ -216,6 +216,8 @@ fn report(label: String, elapsed_ns: u64, iterations: i32, work_per_iter: f64, u
 /// ceiling. When the estimate does not exceed `n` the loop has converged and
 /// the caller stops with the current measurement.
 fn next_iterations(n: i32, elapsed_ns: u64, target_ns: u64) -> i32 {
+    // Short of the target, the estimate is never below `n`.
+    assert n >= 1 && elapsed_ns < target_ns;
     let e = if elapsed_ns == 0 { 1_u64 } else { elapsed_ns };
     let mut est = n as u64 * target_ns / e;
     let hi = n as u64 * 100;
@@ -226,10 +228,13 @@ fn next_iterations(n: i32, elapsed_ns: u64, target_ns: u64) -> i32 {
     if est > ceiling {
         est = ceiling;
     }
-    if est < 1 {
-        est = 1;
-    }
     return est as i32;
+}
+
+test "next_iterations grows at most 100-fold, up to the ceiling" {
+    assert next_iterations(1, 0, 1_000_000) == 100;
+    assert next_iterations(20_000_000, 1, 1_000_000) == 1_000_000_000;
+    assert next_iterations(3, 900_000, 1_000_000) == 3;
 }
 
 /// Format a throughput figure: `total_work` units done over `elapsed_ns`
