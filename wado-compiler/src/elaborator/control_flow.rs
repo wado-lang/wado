@@ -143,9 +143,6 @@ fn expr_always_exits_past(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, exit_labels: &
                     .iter()
                     .all(|a| expr_always_exits_past(ctx, &a.body, exit_labels))
         }
-        // `resume value` transfers control out of the enclosing
-        // handler method — lowered to `return value`.
-        ast::Expr::Resume(_) => true,
         // `with … do { body }`: defer to body's definite-exit.
         ast::Expr::WithHandler(wh) => block_always_exits_past(ctx, &wh.body, exit_labels),
         _ => false,
@@ -652,8 +649,6 @@ fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &
             any_in_expr(ctx, &m.expr, probe)
                 || m.guard.as_ref().is_some_and(|g| any_in_expr(ctx, g, probe))
         }
-
-        ast::Expr::Resume(r) => any_in_expr(ctx, &r.value, probe),
         ast::Expr::Binary(b) => {
             any_in_expr(ctx, &b.left, probe) || any_in_expr(ctx, &b.right, probe)
         }

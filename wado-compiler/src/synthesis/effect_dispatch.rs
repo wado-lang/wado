@@ -26,7 +26,7 @@ use crate::tir::{
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
     TypeTable, positional_substitution,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
 
 /// Canonical identity of an effect or resource **declaration**:
@@ -1322,9 +1322,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                 lower_dispatch_in_expr(p, env, ctx);
             }
         }
-        TirExprKind::Resume { value } => {
-            lower_dispatch_in_expr(value, env, ctx);
-        }
         TirExprKind::WithHandler { .. } => {
             unreachable!(
                 "WithHandler is recursed and desugared inside \
@@ -1998,8 +1995,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
             }
             | TirExprKind::VariantTag { expr: inner }
             | TirExprKind::VariantTest { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Resume { value: inner } => {
+            | TirExprKind::VariantPayload { expr: inner, .. } => {
                 self.visit_expr(inner);
             }
             TirExprKind::VariadicTupleComprehension {
@@ -2900,9 +2896,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 rewrite_calls_in_expr(p, ctx);
             }
         }
-        TirExprKind::Resume { value } => {
-            rewrite_calls_in_expr(value, ctx);
-        }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
                 rewrite_calls_in_expr(&mut binding.handler, ctx);
@@ -2938,7 +2931,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
 /// and lets the wrapper fallbacks emit that same shape. `WithHandler`
 /// desugaring waits for [`synthesize_post_check`].
 pub fn synthesize_pre_cm_binding(mut project: Package) -> Result<Package, String> {
-    lower_resume_in_handler_methods(&mut project);
 
     let effect_index = build_effect_index(&project);
     let impl_index = build_handler_impl_index(&project, &effect_index);
@@ -3196,43 +3188,3 @@ fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
     }
 }
 
-/// Rewrite `Resume { value }` to `Return { value }` in every effect or resource
-/// handler method. The MVP has no post-resume continuation, so the two agree.
-fn lower_resume_in_handler_methods(project: &mut Package) {
-    for module in project.tir_modules.values_mut() {
-        let type_table = module.type_table.borrow();
-        for func_rc in &module.functions {
-            let mut func = func_rc.borrow_mut();
-            let handles = func
-                .method_info
-                .as_ref()
-                .and_then(LocalMethodName::trait_decl)
-                .is_some_and(|trait_| type_table.defs().kind(trait_).is_effect());
-            if !handles {
-                continue;
-            }
-            if let Some(body) = &mut func.body {
-                ResumeToReturn.visit_block(body);
-            }
-        }
-    }
-}
-
-/// Rewrites every `Resume { value }`, in whatever position, to a return of
-/// `value`. The elaborator accepts `resume` wherever its definite-exit analysis
-/// sees one, so this pass may not skip a position that analysis counts.
-struct ResumeToReturn;
-
-impl TirMutVisitor for ResumeToReturn {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        self.walk_expr(expr);
-        let TirExprKind::Resume { value } = &mut expr.kind else {
-            return;
-        };
-        let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span);
-        let value = std::mem::replace(value.as_mut(), placeholder);
-        let ret = TirStmt::new(TirStmtKind::Return { value: Some(value) }, expr.span);
-        expr.kind = TirExprKind::Block(TirBlock::new(vec![ret], expr.span));
-        expr.type_id = TypeTable::NEVER;
-    }
-}

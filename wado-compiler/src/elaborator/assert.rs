@@ -597,7 +597,6 @@ impl CaptureScanner {
             // so nothing after one of these binds ahead of a place.
             Expr::Literal(_) | Expr::Error(_) => {}
             Expr::WithHandler(_)
-            | Expr::Resume(_)
             | Expr::Spread(_, _)
             | Expr::Assign(_)
             | Expr::CompoundAssign(_)

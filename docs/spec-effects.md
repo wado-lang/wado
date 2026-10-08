@@ -645,7 +645,7 @@ A handler method may declare effects in a `with` clause, like any function.
 
 ### `resume`
 
-`resume value` hands `value` to the operation's caller and ends the handler method. The value is checked against the operation's return type.
+`resume value;` hands `value` to the operation's caller and ends the handler method. The value is checked against the operation's return type. It is a statement, like `return value;`, and has no value of its own, so `let x = resume 1;` is a parse error.
 
 Every path through a handler method ends in a `resume` or diverges. A path that reaches the end of the body is a compile error, even for an operation that returns `()`, which writes `resume ()`. `return` and `?` are compile errors in a handler method, since each would end it without a `resume`. A closure written inside one is a function of its own, so both stay legal in its body.
 

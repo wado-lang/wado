@@ -6,7 +6,7 @@
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
@@ -388,36 +388,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn handler_impl_target(&self, handler_type: TypeId) -> ImplTargetKey {
         let name = self.tysys.handler_impl_target_name(handler_type);
         self.impl_target_of(handler_type, &DeclName::new(name))
-    }
-
-    /// Annotate `resume value`, which yields `()` — at source level it is
-    /// control flow, and dispatch synthesis later lowers it to `Return { value }`
-    /// for the ordinary return-type rules to check. Returns a placeholder:
-    /// missing-return analysis reads the definite exit off the AST and reify
-    /// rebuilds the node, so this walk only resolves the value for its facts.
-    pub(super) fn resolve_resume(
-        &mut self,
-        resume: &ast::ResumeExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
-        if !ctx.in_handler_method {
-            let _ = self.emit(TypeError::ResumeOutsideHandler { span: resume.span });
-        }
-
-        // The operation's return type is the expected type, so a literal
-        // coerces to it (`resume 0` → `i64`).
-        let expected = if ctx.in_handler_method {
-            Some(ctx.return_type)
-        } else {
-            None
-        };
-        let value = self.resolve_expr(&resume.value, ctx, expected);
-
-        if ctx.in_handler_method {
-            self.typecheck(value, ctx.return_type, resume.span);
-        }
-
-        TypeTable::UNIT
     }
 }
 

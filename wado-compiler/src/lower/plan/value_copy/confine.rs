@@ -570,7 +570,7 @@ fn body_defies_model(body: &TirBlock) -> bool {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if matches!(
                 expr.kind,
-                TirExprKind::WithHandler { .. } | TirExprKind::Resume { .. }
+                TirExprKind::WithHandler { .. }
             ) {
                 self.found = true;
             }

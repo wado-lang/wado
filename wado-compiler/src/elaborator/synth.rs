@@ -396,7 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TupleLiteral(_) | Expr::Spread(_, _) => {
                 ArgClass::Opaque(OpaqueReason::CompoundLiteral)
             }
-            Expr::TryOp(_) | Expr::Resume(_) | Expr::TupleComprehension(_) => {
+            Expr::TryOp(_) | Expr::TupleComprehension(_) => {
                 ArgClass::Opaque(OpaqueReason::Inference)
             }
             Expr::Error(_) => ArgClass::Opaque(OpaqueReason::Unresolved),

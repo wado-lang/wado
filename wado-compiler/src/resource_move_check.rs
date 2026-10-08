@@ -530,7 +530,6 @@ impl MoveWalker<'_> {
                 }
                 self.visit_block(&w.body);
             }
-            Expr::Resume(r) => self.visit_value(&r.value),
             Expr::Range(r) => {
                 self.visit_expr(&r.start);
                 self.visit_expr(&r.end);

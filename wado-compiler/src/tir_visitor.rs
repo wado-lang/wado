@@ -242,9 +242,6 @@ pub trait TirMutVisitor {
                 }
                 self.visit_block(body);
             }
-            TirExprKind::Resume { value } => {
-                self.visit_expr(value);
-            }
         }
     }
 }
@@ -495,9 +492,6 @@ pub trait TirRefVisitor {
                     self.visit_expr(&binding.handler);
                 }
                 self.visit_block(body);
-            }
-            TirExprKind::Resume { value } => {
-                self.visit_expr(value);
             }
         }
     }
@@ -757,9 +751,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
             }
             changed |= visitor.visit_block(body);
         }
-        TirExprKind::Resume { value } => {
-            changed |= visitor.visit_expr(value);
-        }
     }
     changed
 }
@@ -890,7 +881,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         | TirExprKind::EnumConstruct { .. } => false,
         TirExprKind::TemplateString { .. } => false,
         TirExprKind::WithHandler { body, .. } => block_has_break_to(label, body),
-        TirExprKind::Resume { value } => expr_has_break_to(label, value),
     }
 }
 

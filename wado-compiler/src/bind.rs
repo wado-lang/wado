@@ -197,7 +197,6 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
                 .any(|b| expr_references_var(&b.handler, name))
                 || block_references_var(&w.body, name)
         }
-        Expr::Resume(r) => expr_references_var(&r.value, name),
 
         Expr::Literal(_) | Expr::Error(_) => false,
     }
@@ -941,10 +940,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_expr(&binding.handler)?;
                 }
                 self.bind_block(&with_handler.body)?;
-            }
-
-            Expr::Resume(resume_expr) => {
-                self.bind_expr(&resume_expr.value)?;
             }
 
             // Literals don't reference variables

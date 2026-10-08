@@ -1158,23 +1158,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a free function.
     fn reify_function(&mut self, func: &ast::Function) -> TirFunction {
-        self.reify_callable(func, func.name.clone(), false)
+        self.reify_callable(func, func.name.clone())
     }
 
     /// A function or method as its declaring walk resolved it, not yet placed on
     /// an impl. Parameters are added in declaration order, pinning the walk order.
-    fn reify_callable(
-        &mut self,
-        func: &ast::Function,
-        display_name: String,
-        in_handler_method: bool,
-    ) -> TirFunction {
+    fn reify_callable(&mut self, func: &ast::Function, display_name: String) -> TirFunction {
         let return_type = self
             .ann_fn_return_type(func.id)
             .expect("the declaring walk records the return type for every function reify emits");
 
         let mut ctx = FunctionContext::new(return_type, display_name.clone());
-        ctx.in_handler_method = in_handler_method;
         let task_return_type = self.declared_task_return(func, return_type);
         ctx.is_async = func.is_async;
         ctx.task_return_type = task_return_type;
@@ -1484,7 +1478,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             impl_type_params = Vec::new();
         }
 
-        let mut tir_func = self.reify_callable(func, display_name, facts.is_handler_method);
+        let mut tir_func = self.reify_callable(func, display_name);
         tir_func.name = mangled_name;
         tir_func.is_export = false;
         tir_func.impl_origin = Some(origin);
@@ -2642,25 +2636,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::StaticMethodCall(static_call) => {
                 self.reify_static_method_call(static_call, ctx, recorded_type)
-            }
-            ast::Expr::Resume(resume) => {
-                // `resume value` inside a handler method. Reify the
-                // value with the function's return type as expected
-                // (matches `Elaborator::resolve_resume`), then emit
-                // `TirExprKind::Resume`.
-                let expected = if ctx.in_handler_method {
-                    Some(ctx.return_type)
-                } else {
-                    None
-                };
-                let value = self.reify_expr(&resume.value, ctx, expected);
-                TirExpr::new(
-                    TirExprKind::Resume {
-                        value: Box::new(value),
-                    },
-                    TypeTable::UNIT,
-                    span,
-                )
             }
             ast::Expr::LabeledBlock(lb) => {
                 // Annotate unified the breaks into the recorded type, so a `null` that only a

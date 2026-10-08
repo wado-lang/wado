@@ -1,0 +1,25 @@
+// Negative test: `resume` is a statement, like `return`, so it has no value
+// to bind.
+
+interface Ask {
+    fn ask() -> i32;
+}
+
+struct H {}
+
+impl Ask for H {
+    fn ask(&self) -> i32 {
+        let x = resume 1;
+        resume x
+    }
+}
+
+export fn run() {
+    let h = H {};
+    with Ask => &h do {
+        Ask::ask();
+    }
+}
+
+__DATA__
+{"compile_error": ":12:17: parse error: `resume` is a statement and has no value; write `resume value;` on its own", "compile_error_codes": ["INVALID_SYNTAX"]}

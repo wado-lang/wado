@@ -2022,10 +2022,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
-            let is_handler_method = trait_name
-                .as_ref()
-                .and_then(FqTraitName::canonical)
-                .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
             // what this block's methods are recorded under — owned, or the
@@ -2075,7 +2071,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 sem::types::ImplFacts {
                     trait_name: trait_name.clone(),
                     trait_type_args,
-                    is_handler_method,
                     is_ref_impl,
                     struct_name: qualified_struct_name,
                     receiver,

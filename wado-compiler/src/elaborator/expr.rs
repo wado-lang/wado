@@ -739,7 +739,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TryOp(qm) => self.resolve_question_mark(qm, ctx, expected_type),
             Expr::Range(range) => self.resolve_range(range, ctx, expected_type),
             Expr::WithHandler(w) => self.resolve_with_handler(w, ctx, expected_type),
-            Expr::Resume(r) => self.resolve_resume(r, ctx),
             // Parser error-recovery placeholder: the syntax error was already
             // reported, so resolve to the error type to suppress cascades.
             Expr::Error(_e) => TypeTable::ERROR,

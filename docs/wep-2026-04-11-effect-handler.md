@@ -8,13 +8,15 @@ The full dispatch protocol — front-end, elaborator/effect-check, synthesis pas
 codegen — is shipping. Detailed development history is in the git log; this
 section records only the current state.
 
-- [x] Front-end: `with E => h do { ... }`, `resume value`, and an explicit
+- [x] Front-end: `with E => h do { ... }`, `resume value;`, and an explicit
   `..trap` / `..forward` rest clause in `impl Effect for Type`. Bare `..`
-  is rejected.
-- [x] Elaborator / effect-check: `TirExprKind::WithHandler` and
-  `TirExprKind::Resume` carry the structure through TIR. The elaborator
-  validates effect-decl reference, handler-impls-effect relationship,
-  and `resume`-only-in-handler-method. Effect-check skips handled
+  is rejected. `resume value;` parses to a `Stmt::Return` carrying
+  `ReturnKeyword::Resume`.
+- [x] Elaborator / effect-check: `TirExprKind::WithHandler` carries the
+  structure through TIR, and `resume` reifies to `TirStmtKind::Return`. The
+  elaborator validates effect-decl reference, handler-impls-effect
+  relationship, and which of `return` / `resume` a body may write.
+  Effect-check skips handled
   effects from caller requirements while walking the body.
 - [x] Dispatch synthesis (`synthesis/effect_dispatch.rs`) emits, per effect:
   a `$Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
@@ -297,7 +299,7 @@ impl TcpSocket for MinimalTcp {
 
 ### Resume Keyword
 
-`resume` is a control flow expression similar to `return`. It passes a value to the computation and transfers control. The expression `resume` itself evaluates to `()`.
+`resume value;` is a statement, like `return value;`: it passes a value to the computation and transfers control, and has no value of its own. Writing it where an expression goes (`let x = resume 1;`) is a parse error.
 
 A handler always resumes its caller: Wado has no abort. So every path through a handler method ends in a `resume` or diverges, and `return`, `?`, and falling off the end are compile errors, even for an operation that returns `()`: there is no implicit `resume ()`.
 
@@ -757,9 +759,10 @@ them as keywords in unambiguous positions:
 
 - `do` is recognised in the trailing position of a `with ... do { ... }`
   clause, immediately after the handler binding list.
-- `resume` is recognised only in expression position. In statement /
-  pattern positions (e.g. `let resume = ...;`) it remains an ordinary
-  identifier.
+- `resume` is recognised at the start of a statement or a match arm body,
+  and rejected in any other expression position. In pattern positions
+  (e.g. `let resume = ...;`) it remains an ordinary identifier, which
+  the binding rules then reject.
 
 This keeps both words available as variable names and avoids breaking
 generated Wado source (e.g. ANTLR4 driver output that uses `let do = …`

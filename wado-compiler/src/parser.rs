@@ -14,7 +14,7 @@ use crate::ast::{
     InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
     LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
     NamespacedGenericType, Newtype, NumericSuffix, Param, PathSegment, Pattern, RangeExpr,
-    RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt, SelfKind,
+    RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TryOpExpr,
@@ -2479,6 +2479,10 @@ impl Parser {
             return self.parse_let_stmt();
         }
 
+        if self.at_resume() {
+            return self.parse_resume_stmt();
+        }
+
         match self.peek_kind() {
             TokenKind::Return => self.parse_return_stmt(),
             TokenKind::If => self.parse_if_stmt(),
@@ -2701,6 +2705,7 @@ impl Parser {
 
         Ok(Stmt::Return(ReturnStmt {
             id,
+            keyword: ReturnKeyword::Return,
             value,
             span: start_span.merge(&end_span),
         }))
@@ -4433,11 +4438,11 @@ impl Parser {
 
         // Handle identifiers and contextual keywords (flags, type)
         if let Some(name) = self.peek_kind().as_ident_name() {
-            // Contextual keyword `resume` in expression position. Only matched
-            // here; outside of expressions (e.g. `let resume = ...`), `resume`
-            // remains an ordinary identifier.
             if name == "resume" {
-                return self.parse_resume_expr();
+                return Err(self.error_at_span(
+                    start_span,
+                    "`resume` is a statement and has no value; write `resume value;` on its own",
+                ));
             }
             let name = name.to_string();
             self.mark_keyword_name();
@@ -4860,17 +4865,34 @@ impl Parser {
         })
     }
 
-    /// Parse a `resume value` expression. Valid only inside an effect handler
-    /// method body; the elaborator (later phase) is responsible for that check.
-    /// `resume` is a contextual keyword: the lexer hands it to us as an Ident,
-    /// so we consume it by name rather than via a dedicated `TokenKind`.
-    fn parse_resume_expr(&mut self) -> ParseResult<Expr> {
+    /// Whether the next token is the contextual keyword `resume`. The lexer
+    /// hands it over as an identifier, and no name can spell it.
+    fn at_resume(&self) -> bool {
+        self.peek_kind().as_ident_name() == Some("resume")
+    }
+
+    /// Parse `resume value;`. Valid only inside an effect handler method body;
+    /// the elaborator is responsible for that check.
+    fn parse_resume_stmt(&mut self) -> ParseResult<Stmt> {
+        let start_span = self.peek().span;
+        let id = self.alloc_ast_id();
+        let value = self.parse_resume_value()?;
+        let end_span = self.expect_stmt_separator(value.span())?;
+        Ok(Stmt::Return(ReturnStmt {
+            id,
+            keyword: ReturnKeyword::Resume,
+            value: Some(value),
+            span: start_span.merge(&end_span),
+        }))
+    }
+
+    /// Consume `resume` and the value it requires.
+    fn parse_resume_value(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         self.mark_contextual_keyword(start_span);
         self.advance(); // consume `resume` ident
-        let id = self.alloc_ast_id();
         let value_start = self.peek().span;
-        let value = self.parse_expr().map_err(|err| {
+        self.parse_expr().map_err(|err| {
             if err.span.start != value_start.start {
                 return err;
             }
@@ -4881,9 +4903,7 @@ impl Parser {
                 ),
                 span: start_span,
             }
-        })?;
-        let span = start_span.merge(&value.span());
-        Ok(Expr::Resume(Box::new(ResumeExpr { id, value, span })))
+        })
     }
 
     /// Parse match expression: `match expr { pattern => body, ... }`
@@ -4947,20 +4967,27 @@ impl Parser {
             // Block body: `{ ... }`
             let block = self.parse_block()?;
             Expr::Block(Box::new(block))
-        } else if self.check(&TokenKind::Return) {
-            // Return in match arm: `return expr` — wrap in a synthetic block.
-            // The comma/closing brace terminates the arm; no semicolon needed.
+        } else if self.check(&TokenKind::Return) || self.at_resume() {
+            // `return expr` or `resume expr` as an arm, wrapped in a synthetic
+            // block. The comma/closing brace terminates the arm; no semicolon
+            // needed.
             let ret_start = self.peek().span;
-            self.advance(); // consume 'return'
-            let value = if self.check(&TokenKind::Comma) || self.check(&TokenKind::RBrace) {
-                None
+            let (keyword, value) = if self.at_resume() {
+                (ReturnKeyword::Resume, Some(self.parse_resume_value()?))
             } else {
-                Some(self.parse_expr()?)
+                self.advance(); // consume 'return'
+                let value = if self.check(&TokenKind::Comma) || self.check(&TokenKind::RBrace) {
+                    None
+                } else {
+                    Some(self.parse_expr()?)
+                };
+                (ReturnKeyword::Return, value)
             };
             let ret_end = value.as_ref().map_or(ret_start, Expr::span);
             let ret_span = ret_start.merge(&ret_end);
             let ret_stmt = Stmt::Return(ReturnStmt {
                 id: self.alloc_ast_id(),
+                keyword,
                 value,
                 span: ret_span,
             });
@@ -9159,12 +9186,16 @@ line 2
     }
 
     #[test]
-    fn parse_resume_expression() {
-        let expr = parse_expr_from("resume 42");
-        let Expr::Resume(r) = expr else {
-            panic!("expected Resume");
+    fn parse_resume_statement() {
+        let module = parse("fn f() -> i32 { resume 42; }").unwrap();
+        let Item::Function(f) = &module.items[0] else {
+            panic!("expected function");
         };
-        assert_matches!(r.value, Expr::Literal(_));
+        let Stmt::Return(r) = &f.body.as_ref().unwrap().stmts[0] else {
+            panic!("expected a return statement");
+        };
+        assert_eq!(r.keyword, ReturnKeyword::Resume);
+        assert_matches!(r.value, Some(Expr::Literal(_)));
     }
 
     #[test]
