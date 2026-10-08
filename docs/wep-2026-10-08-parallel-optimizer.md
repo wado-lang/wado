@@ -97,7 +97,7 @@ changes nothing still invalidates its memo entries. Measured on
 | Mutable dereferences counted |         53.3 |
 
 The difference is memo entries re-derived for visited functions, read-only
-walks that roadmap step 5 runs in parallel.
+walks that [run in parallel](#what-runs-in-parallel).
 
 The type table stays behind the package's `RefCell`. A sweep borrows it once
 and hands each visit the shared reference.
@@ -119,6 +119,11 @@ read-only:
   the heap effects. A memo filled lazily during the sweep holds pure values and
   sits behind a thread-safe cell, so which thread fills it changes nothing.
 
+A memo that answers a cycle provisionally while the real verdict is in flight
+answers by query order. Each visit keeps its own, as
+`const_object_globalization`'s callee verdicts do. One that settles an exact
+fixpoint, such as `SharedEscape`'s, is shared.
+
 A visit does not add a function. A pass that mints functions plans them during
 the sweep and appends them after it, in function order.
 
@@ -130,8 +135,9 @@ becomes `Arc`, so that `Body`, `NirFunction` and `TypeTable` are `Send` and
 
 `CompilerOptions` carries the degree of parallelism, and the compiler never
 picks one itself. The library default is one. The CLI passes the available
-cores for `compile`, `check`, `run` and `serve`, and one for `wado test`, which
-parallelizes across files instead. A shared knob (`-j`) overrides it.
+cores for `compile`, `build`, `run`, `serve` and `dump`, and one for
+`wado test`, which parallelizes across files instead. `--optimize-threads <n>`
+overrides it on each of them.
 
 The compiler uses `rayon`, already in the workspace through `wasmtime`, behind
 a `cfg` that leaves it out on `wasm32`. There the same code runs sequentially.
@@ -140,37 +146,61 @@ a `cfg` that leaves it out on `wasm32`. There the same code runs sequentially.
 
 In order of what each is worth on the table above:
 
-1. The per-function loop passes, through `run_gated`.
+1. The per-function loop passes, through `run_gated_par`.
 2. The read-only walks every pass starts with: `BodyMemo` refreshes, the DCE
-   walks, and `param_spec`'s `summarize_params` and `collect_sites`.
+   and mod/ref walks, the interpreter's callee map, `CallImmutability`'s
+   receiver summaries, the stores into immutable globals `const_fold` reads,
+   `param_spec`'s call constants, parameter facts and sites, and `inline`'s
+   argument facts and candidate classification.
 3. The per-function passes after the loop: `store_load_forward`'s fixpoint,
-   `const_object_globalization`'s candidate collection, condition
-   implication.
+   the global constant folding, condition implication, `freeze_pure_arith`,
+   and `const_object_globalization`'s candidate collection and hoists.
 4. `inline`'s splicing, one caller per visit. The candidates are already
    copies, so a caller reads nothing another visit writes.
+5. `sroa_variant_return`'s call-site rewrites.
+
+A fact a whole-program walk reads off each body every round is taken once per
+body version instead. The DCE reachability `param_spec` reads each round
+carries each body's inspect signatures and `array_clone` element types.
 
 The decisions an interprocedural pass makes about the whole program, such as
 which callees to clone or which parameters to drop, stay sequential.
 
 ## Roadmap
 
-1. Make `Body`, `NirFunction` and `TypeTable` `Send` and `Sync`. Done when the
-   static assertion compiles.
-2. Replace `Rc<RefCell<NirFunction>>` with `Arc<FuncCell>`, and key every
-   `BodyMemo` on the cell's write count. Done when no
-   `Rc<RefCell<NirFunction>>` remains, the gate no longer counts edits, and the
-   memo hit rate on `package-gale` is measured.
-3. Adopt the sweep semantics in `run_gated`, still sequential, with reads of
-   other functions served from the sweep-start copies. Done when the tests and
-   `test-wado` pass and no `benchmark/` row is more than 5% slower.
-4. Add the executor and the thread-count option, and run the per-function loop
-   passes in parallel. Done when `package-gale`'s loop time is measured against
-   step 3.
-5. Run the read-only whole-program walks in parallel.
-6. Run the post-loop per-function passes and `inline`'s splicing in parallel.
+- [x] Make `Body`, `NirFunction` and `TypeTable` `Send` and `Sync`. Done when
+  the static assertion compiles.
+- [x] Replace `Rc<RefCell<NirFunction>>` with `Arc<FuncCell>`, and key every
+  `BodyMemo` on the cell's write count. Done when no
+  `Rc<RefCell<NirFunction>>` remains, the gate no longer counts edits, and the
+  memo hit rate on `package-gale` is measured.
+- [x] Adopt the sweep semantics in `run_gated`, still sequential, with reads of
+  other functions served from the sweep-start copies. Done when the tests and
+  `test-wado` pass and no `benchmark/` row is more than 5% slower.
+- [x] Add the executor and the thread-count option, and run the per-function
+  loop passes in parallel. Done when `package-gale`'s loop time is measured
+  against the sequential sweep.
+- [x] Run the read-only whole-program walks in parallel.
+- [x] Run the post-loop per-function passes and `inline`'s splicing in
+  parallel.
+
+`package-gale` compiled with a dev build, `wado compile --optimize-threads <n>
+src/main.wado`, emits the same bytes on every row:
+
+| Build                  | Seconds |
+| ---------------------- | ------: |
+| `main`                 |    75.5 |
+| This design, 1 thread  |    84.7 |
+| This design, 16 threads |   46.1 |
 
 ## Known gaps
 
+- On one thread a compile is slower than on `main`: memos keyed on write
+  counts re-derive more, and a sweep copies the callees it may read.
+- `value_copy_demote`'s analysis memo answers a recursive call provisionally,
+  `container_sroa` interns types during its visits, and `dae`, `drve`,
+  `sroa_param` and the DCE closure decide over the whole program. All run on
+  one thread.
 - Developer traces (`WADO_TRACE`) interleave across threads, so their order
   varies between runs.
 - The frontend and the backend stay sequential.
