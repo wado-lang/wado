@@ -1223,11 +1223,18 @@ pub struct StructSpec {
     pub name: String,
     fields: List<FieldSpec>,
     visibility: Vis,
+    /// Generic type parameters, each rendered verbatim after the name.
+    generics: List<String>,
 }
 
 impl StructSpec {
     pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> StructSpec {
-        return StructSpec { name: name.to_string(), fields: [], visibility };
+        return StructSpec { name: name.to_string(), fields: [], visibility, generics: [] };
+    }
+
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut StructSpec {
+        self.generics.push(generic.to_string());
+        return self;
     }
 
     pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
@@ -1261,7 +1268,7 @@ impl StructSpec {
     }
 
     pub fn emit(&self, w: &mut CodeWriter) {
-        let head = `${self.visibility.prefix()}struct ${self.name}`;
+        let head = `${self.visibility.prefix()}struct ${self.name}${generic_list(&self.generics)}`;
         if self.fields.is_empty() {
             w.line(`${head} {}`);
             return;
@@ -1502,10 +1509,7 @@ impl FnSpec {
         } else {
             sig.push_str(&self.visibility.prefix());
         }
-        sig.push_str(`fn ${self.name}`);
-        if self.generics.len() > 0 {
-            sig.push_str(`<${join_comma(&self.generics)}>`);
-        }
+        sig.push_str(`fn ${self.name}${generic_list(&self.generics)}`);
         sig.push_str("(");
         let mut first = true;
         if let Some(recv) = &self.receiver {
@@ -1588,25 +1592,42 @@ impl GlobalSpec {
 pub struct ImplSpec {
     type_name: String,
     trait_name: Option<String>,
+    /// The impl's type parameters, each rendered verbatim after `impl`.
+    generics: List<String>,
 }
 
 impl ImplSpec {
     pub fn new<S: AsStrSlice>(type_name: S) -> ImplSpec {
-        return ImplSpec { type_name: type_name.to_string(), trait_name: null };
+        return ImplSpec { type_name: type_name.to_string(), trait_name: null, generics: [] };
     }
 
     pub fn new_trait<S: AsStrSlice, S1: AsStrSlice>(trait_name: S, type_name: S1) -> ImplSpec {
         return ImplSpec {
             type_name: type_name.to_string(),
             trait_name: Option::<String>::Some(trait_name.to_string()),
+            generics: [],
         };
     }
 
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut ImplSpec {
+        self.generics.push(generic.to_string());
+        return self;
+    }
+
     pub fn emit_begin(&self, w: &mut CodeWriter) {
+        let head = `impl${generic_list(&self.generics)}`;
         if let Some(t) = &self.trait_name {
-            w.begin(`impl ${*t} for ${self.type_name}`);
+            w.begin(`${head} ${*t} for ${self.type_name}`);
         } else {
-            w.begin(`impl ${self.type_name}`);
+            w.begin(`${head} ${self.type_name}`);
         }
     }
+}
+
+/// `<A, B>` for the parameters `generics`, or nothing for none.
+fn generic_list(generics: &List<String>) -> String {
+    if generics.is_empty() {
+        return "";
+    }
+    return `<${join_comma(generics)}>`;
 }
