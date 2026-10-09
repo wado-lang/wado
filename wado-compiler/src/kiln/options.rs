@@ -4,6 +4,8 @@
 //! byte layout. Deliberately strict — only shapes that round-trip through the
 //! Component-Model canonical encoder. See WEP 2026-04-12.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::ast::Visibility;
@@ -13,7 +15,9 @@ use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::symbol::SymbolKind;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 /// Structural description of a generator's `pub struct Options`.
@@ -170,11 +174,23 @@ pub fn extract_options_descriptor(
         return Ok(OptionsDescriptor { fields: vec![] });
     };
     let declaring = symbol.module_source();
-    let options_struct = sem
+    let Some(options_struct) = sem
         .tir_modules
         .get(declaring)
         .and_then(|declared_in| declared_in.find_struct(&symbol.name))
-        .expect("a struct symbol has its TIR struct in the module declaring it");
+    else {
+        diagnostics.push(Diagnostic {
+            severity: Severity::Error,
+            code: Code::GeneratorOptionsUnsupported,
+            message: format!(
+                "kiln: `Options` names `{}` in {:?}, which declares no Wado struct of that name",
+                symbol.name,
+                declaring.source_path()
+            ),
+            span: None,
+        });
+        return Err(diagnostics);
+    };
 
     if !sem
         .symbols
@@ -184,7 +200,8 @@ pub fn extract_options_descriptor(
         diagnostics.push(Diagnostic {
             severity: Severity::Error,
             code: Code::GeneratorOptionsUnsupported,
-            message: "kiln: `Options` struct must be declared `pub`".to_string(),
+            message: "kiln: `Options` must be `pub`, and so must a `use` re-exporting it"
+                .to_string(),
             span: Some(span_of(&options_struct.span, declaring)),
         });
     }
@@ -542,13 +559,14 @@ fn evaluate_literal(
             if let Some(pairs) = coerced_array(expr)
                 && let Some(pairs) = pairs.iter().map(literal_pair).collect::<Option<Vec<_>>>() =>
         {
-            let mut entries = Vec::with_capacity(pairs.len());
+            // A repeated key keeps its last value, as the `TreeMap` the
+            // literal builds does.
+            let mut entries = BTreeMap::new();
             for (key, value) in pairs {
                 let value = evaluate_literal(value, inner, types, module, field_name, diagnostics)?;
-                entries.push((key.to_string(), value));
+                entries.insert(key.to_string(), value);
             }
-            entries.sort_by(|a, b| a.0.cmp(&b.0));
-            Some(CanonicalValue::Map(entries))
+            Some(CanonicalValue::Map(entries.into_iter().collect()))
         }
         _ => {
             push_unsupported(
@@ -563,19 +581,32 @@ fn evaluate_literal(
 }
 
 /// The elements of a `[…]` or `{ k: v, … }` literal, which literal coercion
-/// hands to the target's `From<Array<…>>` (WEP 2026-08-24).
+/// hands to the target's `From<Array<…>>` (WEP 2026-08-24). Any other call
+/// computes its value, so its argument is not the default.
 fn coerced_array(expr: &TirExpr) -> Option<&[TirExpr]> {
-    match &expr.kind {
-        TirExprKind::ArrayLiteral { elements } => Some(elements),
-        TirExprKind::Call { args, .. } => match args.split() {
-            (None, [arg]) => match &arg.expr.kind {
-                TirExprKind::ArrayLiteral { elements } => Some(elements),
-                _ => None,
-            },
+    let TirExprKind::Call { func, args, .. } = &expr.kind else {
+        return None;
+    };
+    if !is_prelude_from(func) {
+        return None;
+    }
+    match args.split() {
+        (None, [arg]) => match &arg.expr.kind {
+            TirExprKind::ArrayLiteral { elements } => Some(elements),
             _ => None,
         },
         _ => None,
     }
+}
+
+/// Whether `func` is an impl of the prelude's `From::from`.
+fn is_prelude_from(func: &FunctionRef) -> bool {
+    func.method_info.as_ref().is_some_and(|method| {
+        method.method_name == "from"
+            && method.trait_name.as_ref().is_some_and(|t| {
+                t.base_name() == "From" && t.module().is_some_and(ModuleSource::is_prelude)
+            })
+    })
 }
 
 /// The key and value of one `k: v` member of a key-value literal.

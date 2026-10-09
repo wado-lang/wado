@@ -6,7 +6,7 @@ use { Deserialize } from "core:serde";
 use { parse } from "core:args";
 use { from_string } from "core:json";
 use fs from "core:fs";
-use { Preopens } from "core:fs";
+use { FsError, FsErrorKind, Preopens } from "core:fs";
 use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
 use { Model, Options, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
 use { render_dump } from "./dump.wado";
@@ -141,8 +141,14 @@ fn read_file(path: &String) -> Result<ByteList, String> with Preopens {
 /// reads one.
 fn read_file_header(path: &String) -> Result<ByteList, String> with Preopens {
     let root = fs::root().map_err(|e| `loam: ${e}`)?;
-    let Ok(file) = root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() else {
-        return Result::Err(`loam: '${*path}': cannot open`);
+    let file = match root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() {
+        Ok(file) => file,
+        Err(NoEntry) => {
+            return Result::Err(`loam: ${FsError { path: *path, kind: FsErrorKind::NotFound }}`);
+        },
+        Err(code) => {
+            return Result::Err(`loam: ${FsError { path: *path, kind: FsErrorKind::Io(code) }}`);
+        },
     };
     let [content, done] = file.read_via_stream(0 as Filesize);
     let header = read_header(content);

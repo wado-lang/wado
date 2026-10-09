@@ -382,11 +382,10 @@ impl DirGrants {
         (self.explicit || self.suppressed).then_some(self.dirs)
     }
 
+    /// The grants, the current directory where no flag spells any.
     #[must_use]
-    pub fn finish(mut self) -> Vec<(String, String)> {
-        if !self.explicit && !self.suppressed {
-            self.dirs.push((".".to_owned(), ".".to_owned()));
-        }
-        self.dirs
+    pub fn finish(self) -> Vec<(String, String)> {
+        self.given()
+            .unwrap_or_else(|| vec![(".".to_owned(), ".".to_owned())])
     }
 }

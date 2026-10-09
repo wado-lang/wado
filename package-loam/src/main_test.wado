@@ -251,6 +251,12 @@ test "an options file that is not the options' JSON names the file" {
     assert refused.starts_with(`loam: '${dir}/options.json': `), refused;
 }
 
+test "a missing checkpoint is reported with its path and why" {
+    let dir = scratch("absent-checkpoint");
+    let refused = on_graph("gen", &dir, ["--checkpoint", `${dir}/absent.safetensors`]).unwrap_err();
+    assert refused == `loam: ${dir}/absent.safetensors: no such file or directory`;
+}
+
 test "a missing file is reported with its path" {
     let refused = loam(["dump", "--type", "onnx", "target/loam-main-test/absent.onnx"]).unwrap_err();
     assert refused.contains("target/loam-main-test/absent.onnx"), refused;
