@@ -43,6 +43,9 @@ use crate::{Span, token};
 /// The builtin that reads an `Array<T>` out of a byte literal.
 pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
 
+/// A bound's argument waits on a type slot the call has not answered yet.
+struct AwaitsSlot;
+
 /// An expression as a byte literal.
 enum ByteLiteral {
     Not,
@@ -3556,7 +3559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     let trait_ = self.tysys.resolutions.bound_decl(bound);
-                    let Some(trait_args) =
+                    let Ok(trait_args) =
                         self.bound_args_at_call(bound, trait_, owner_ty, &names, args)
                     else {
                         continue;
@@ -3645,8 +3648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The arguments `bound` reaches `trait_` on `owner` at, read at the call's
-    /// `args` for the callee's `names`: `Some(None)` where it writes none, and
-    /// `None` while one waits on a slot the call has not answered.
+    /// `args` for the callee's `names`: `Ok(None)` where it writes none.
     fn bound_args_at_call(
         &mut self,
         bound: &ast::TraitBound,
@@ -3654,18 +3656,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: TypeId,
         names: &[String],
         args: &[TypeId],
-    ) -> Option<Option<Vec<TypeId>>> {
+    ) -> Result<Option<Vec<TypeId>>, AwaitsSlot> {
         let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
-            return Some(None);
+            return Ok(None);
         };
         let written = self.with_type_params_bound(names, args, |e| e.written_bound_args(bound));
         if written
             .iter()
             .any(|&ty| self.tysys.type_table.borrow().contains_undecided(ty))
         {
-            return None;
+            return Err(AwaitsSlot);
         }
-        Some(self.trait_args_at(trait_, owner, &written))
+        Ok(self.trait_args_at(trait_, owner, &written))
     }
 
     /// Fit flat turbofish type args to `declared`, grouping them into one
