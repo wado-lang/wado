@@ -329,16 +329,17 @@ impl FunctionTranslator<'_, '_> {
                 _ => None,
             })
             .collect();
-        // Each scalar result lands in its local as it is, so none can be a `Box`.
-        for &local_index in bindings.iter().flatten() {
+        // Each scalar result lands in its local as it is, so a boxed binding (one
+        // borrowed and captured) takes the tuple-struct path, which boxes it.
+        let boxed = bindings.iter().flatten().any(|&local_index| {
             let local_type = self.tir_func.locals[local_index as usize].type_id;
-            assert!(
-                !matches!(
-                    self.ctx.type_id_to_wir_type(self.type_table, local_type),
-                    WirType::Ref { .. }
-                ),
-                "a multivalue builtin binds a boxed local"
-            );
+            matches!(
+                self.ctx.type_id_to_wir_type(self.type_table, local_type),
+                WirType::Ref { .. }
+            )
+        });
+        if boxed {
+            return None;
         }
         let locals: Vec<Option<String>> = bindings
             .iter()

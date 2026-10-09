@@ -345,7 +345,9 @@ pub fn cache_root() -> Option<PathBuf> {
 /// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
 /// and inline-git resolution paths so all three locate an entry the same way.
 pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
-    if dep_path.is_file() {
+    let metadata =
+        std::fs::metadata(dep_path).map_err(|e| format!("cannot read {}: {e}", dep_path.display()))?;
+    if metadata.is_file() {
         return Ok(dep_path.to_path_buf());
     }
     let manifest_path = dep_path.join("wado.toml");
@@ -481,6 +483,17 @@ mod tests {
         let solo = tmp.path().join("solo.g4");
         std::fs::write(&solo, "pub fn f() {}\n").unwrap();
         assert_eq!(package_lib_entry(&solo).unwrap(), solo);
+    }
+
+    #[test]
+    fn a_missing_path_is_named_itself() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("solo.wado");
+        let error = package_lib_entry(&missing).unwrap_err();
+        assert!(
+            error.starts_with(&format!("cannot read {}: ", missing.display())),
+            "{error}"
+        );
     }
 
     #[test]

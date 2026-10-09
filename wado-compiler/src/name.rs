@@ -437,6 +437,12 @@ pub fn to_cm_name(name: &str) -> String {
     name.to_kebab_case()
 }
 
+/// What the Component Model compares the CM name `cm_name` by when it requires
+/// names in one scope to be strongly unique: `a-b`, `ab` and `A-B` share one.
+pub fn cm_name_key(cm_name: &str) -> String {
+    cm_name.replace('-', "").to_ascii_lowercase()
+}
+
 /// Prefix the compiler stamps onto every synthesised closure-functor
 /// struct (`$Closure_0`, `$Closure_1`, …). Like
 /// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal

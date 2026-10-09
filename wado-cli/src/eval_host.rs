@@ -139,6 +139,8 @@ pub struct EvalHost {
     /// One slot per key being evaluated, so calls sharing a key at once
     /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
+    /// Each calling file's dependencies, resolved once per run.
+    dependencies: Mutex<IndexMap<PathBuf, Arc<Dependencies>>>,
     /// The runner's CPU budget. A test gives its permit back inside `eval`,
     /// which takes one here for each piece of work it does itself, so nothing
     /// waiting inside `eval` holds one.
@@ -160,6 +162,7 @@ impl EvalHost {
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
+            dependencies: Mutex::new(IndexMap::default()),
             cpu,
             strandable: Arc::new(Semaphore::new(parallelism - 1)),
         }
@@ -170,10 +173,16 @@ impl EvalHost {
     fn key(&self, source: &str, fuel: u64, deps: &Dependencies) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.compiler_digest);
-        hasher.update((deps.index.resolved.len() as u64).to_le_bytes());
-        for (name, entry) in &deps.index.resolved {
-            hash_field(&mut hasher, name.as_bytes());
-            hash_field(&mut hasher, entry.as_bytes());
+        for entries in [
+            &deps.index.resolved,
+            &deps.index.components,
+            &deps.index.unresolved,
+        ] {
+            hasher.update((entries.len() as u64).to_le_bytes());
+            for (name, entry) in entries {
+                hash_field(&mut hasher, name.as_bytes());
+                hash_field(&mut hasher, entry.as_bytes());
+            }
         }
         hash_field(
             &mut hasher,
@@ -197,12 +206,21 @@ impl EvalHost {
             .expect("the CPU semaphore is never closed")
     }
 
+    fn dependencies_of(&self, caller: &Path) -> Arc<Dependencies> {
+        let mut dependencies = lock(&self.dependencies);
+        Arc::clone(
+            dependencies
+                .entry(caller.to_path_buf())
+                .or_insert_with(|| Arc::new(Dependencies::of(caller))),
+        )
+    }
+
     async fn outcome(self: &Arc<Self>, caller: &Path, source: String, fuel: u64) -> Outcome {
-        let deps = Dependencies::of(caller);
+        let deps = self.dependencies_of(caller);
         let key = self.key(&source, fuel, &deps);
         let slot = Arc::clone(lock(&self.slots).entry(key).or_default());
         let outcome = slot
-            .get_or_init(|| self.cached_or_evaluate(key, caller, source, fuel, deps))
+            .get_or_init(|| self.cached_or_evaluate(key, source, fuel, deps))
             .await
             .clone();
         let mut slots = lock(&self.slots);
@@ -216,12 +234,14 @@ impl EvalHost {
     async fn cached_or_evaluate(
         self: &Arc<Self>,
         key: [u8; 32],
-        caller: &Path,
         source: String,
         fuel: u64,
-        deps: Dependencies,
+        deps: Arc<Dependencies>,
     ) -> Outcome {
-        let path = cache_dir(caller).map(|dir| dir.join(format!("{}.json", hex32(&key))));
+        let path = deps
+            .cache_dir
+            .as_ref()
+            .map(|dir| dir.join(format!("{}.json", hex32(&key))));
         if !self.knobs.no_cache
             && let Some(path) = &path
             && let Some(entry) = std::fs::read(path)
@@ -242,7 +262,7 @@ impl EvalHost {
         entry.outcome
     }
 
-    async fn evaluate(self: &Arc<Self>, source: String, fuel: u64, deps: Dependencies) -> Entry {
+    async fn evaluate(self: &Arc<Self>, source: String, fuel: u64, deps: Arc<Dependencies>) -> Entry {
         let (compiled, inputs) = self.compile(source, deps).await;
         let wasm = match compiled {
             Compiled::Wasm(wasm) => wasm,
@@ -282,7 +302,7 @@ impl EvalHost {
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
-    async fn compile(&self, source: String, deps: Dependencies) -> (Compiled, Vec<Input>) {
+    async fn compile(&self, source: String, deps: Arc<Dependencies>) -> (Compiled, Vec<Input>) {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
             codegen_flags: self.knobs.codegen_flags.clone(),
@@ -341,9 +361,15 @@ struct Dependencies {
     /// The root of each source dependency, absolute and normalized: the package
     /// whose `lib` its entry is, or the entry's own directory.
     roots: Vec<PathBuf>,
+    /// The file of each component dependency, absolute and normalized.
+    components: Vec<PathBuf>,
     /// The calling package's root, which no dependency's files include, even
     /// a dependency whose package holds it.
     caller_root: Option<PathBuf>,
+    /// Where outcomes are cached: `build/eval/` under the calling package's
+    /// root, or under the caller's directory when it is in no package. `None`,
+    /// and so no cache, when the package's manifest is invalid.
+    cache_dir: Option<PathBuf>,
 }
 
 impl Dependencies {
@@ -354,31 +380,39 @@ impl Dependencies {
             .parent()
             .expect("the caller is a file, so it has a parent")
             .to_path_buf();
-        let Ok(Some(project)) = load_nearest_manifest(caller) else {
-            return Self {
-                base,
-                index: DependencyIndex::default(),
-                roots: Vec::new(),
-                caller_root: None,
-            };
+        let none = |cache_dir| Self {
+            base: base.clone(),
+            index: DependencyIndex::default(),
+            roots: Vec::new(),
+            components: Vec::new(),
+            caller_root: None,
+            cache_dir,
+        };
+        let project = match load_nearest_manifest(caller) {
+            Ok(Some(project)) => project,
+            Ok(None) => return none(Some(build_dir(&base).join("eval"))),
+            Err(_) => return none(None),
         };
         let index = dependency_index_from(&project.manifest, &project.root, &base);
-        let roots = index
-            .resolved
-            .values()
-            .map(|entry| dependency_root(&normalize_path(&absolutize(&base.join(entry)))))
-            .collect();
+        let absolute = |entry: &String| normalize_path(&absolutize(&base.join(entry)));
         Self {
+            roots: index
+                .resolved
+                .values()
+                .map(|entry| dependency_root(&absolute(entry)))
+                .collect(),
+            components: index.components.values().map(absolute).collect(),
+            caller_root: Some(normalize_path(&absolutize(&project.root))),
+            cache_dir: Some(build_dir(&project.root).join("eval")),
             base,
             index,
-            roots,
-            caller_root: Some(normalize_path(&absolutize(&project.root))),
         }
     }
 
     /// Whether `file` is one of a dependency's own.
     fn holds(&self, file: &Path) -> bool {
-        self.roots.iter().any(|root| {
+        self.components.iter().any(|component| component == file)
+            || self.roots.iter().any(|root| {
             file.starts_with(root)
                 && !self
                     .caller_root
@@ -412,13 +446,13 @@ fn dependency_root(entry: &Path) -> PathBuf {
 /// The compiler host an evaluated program compiles on: it serves the files of
 /// the calling package's dependencies and records each one it reads.
 struct DependencyHost {
-    deps: Dependencies,
+    deps: Arc<Dependencies>,
     diagnostics: Mutex<Vec<Diagnostic>>,
     read: Mutex<Vec<Input>>,
 }
 
 impl DependencyHost {
-    fn new(deps: Dependencies) -> Self {
+    fn new(deps: Arc<Dependencies>) -> Self {
         Self {
             deps,
             diagnostics: Mutex::default(),
@@ -504,7 +538,7 @@ struct Entry {
 fn spawn_compile(
     source: String,
     options: CompilerOptions,
-    deps: Dependencies,
+    deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
 ) -> oneshot::Receiver<std::thread::Result<(Compiled, Vec<Input>)>> {
     let (report, compiled) = oneshot::channel();
@@ -540,20 +574,6 @@ fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
             .map(|d| d.code.to_string())
             .collect(),
     }
-}
-
-/// Outcomes live in `build/eval/` under the calling file's package root, or
-/// under its directory when it is in no package. `None`, and so no cache, when
-/// the package's manifest is invalid: the caller's own compile reports that.
-fn cache_dir(caller: &Path) -> Option<PathBuf> {
-    let root = match load_nearest_manifest(caller).ok()? {
-        Some(project) => project.root,
-        None => caller
-            .parent()
-            .expect("the caller is a file, so it has a parent")
-            .to_path_buf(),
-    };
-    Some(build_dir(&root).join("eval"))
 }
 
 fn current_thread_runtime() -> tokio::runtime::Runtime {

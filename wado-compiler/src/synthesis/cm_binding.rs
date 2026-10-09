@@ -31,7 +31,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, to_cm_name,
+    DeclPath, cm_export_func_name, cm_post_return_func_name, cm_name_key, is_test_function,
+    to_cm_name,
 };
 use crate::package::{Package, test_selected};
 use crate::tir::{
@@ -787,7 +788,7 @@ fn validate_lib_interface_names(
                 names.join(" and "),
             ));
         }
-        let key = cm_name.to_ascii_lowercase();
+        let key = cm_name_key(cm_name);
         if let Some(previous) = claimed.get(&key) {
             return Err(format!(
                 "{} and {} both claim the name `{cm_name}` in this library's \
@@ -801,7 +802,7 @@ fn validate_lib_interface_names(
     }
     for export in &world_info.exports {
         let cm_name = to_cm_name(&export.name);
-        let key = cm_name.to_ascii_lowercase();
+        let key = cm_name_key(&cm_name);
         if let Some(previous) = claimed.get(&key) {
             return Err(format!(
                 "export `{}` becomes `{cm_name}` in this library's Component \

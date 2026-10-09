@@ -42,6 +42,7 @@ mod lexer_recovery;
 mod lib_aliased_import_export;
 mod lib_async_task_return_free;
 mod lib_async_void_export;
+mod lib_cm_name_uniqueness;
 mod lib_export_alias_user_struct_as_primitive;
 mod lib_future_payload_name_collides_with_cli;
 mod lib_snake_case_param;

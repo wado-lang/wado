@@ -132,6 +132,56 @@ fn a_dependency_file_that_appears_misses_the_cache() {
         .success();
 }
 
+/// A registry dependency is a prebuilt component in the warm cache, outside
+/// every source dependency's root.
+#[test]
+fn an_evaluated_program_imports_a_registry_dependency() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cache = tmp.path().join("cache");
+    let lib = tmp.path().join("lib");
+    fs::create_dir_all(lib.join("src")).unwrap();
+    fs::write(
+        lib.join("wado.toml"),
+        "[package]\nname = \"demo-lib\"\nnamespace = \"acme\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib.join("src/lib.wado"),
+        "export fn greet() -> String { return \"hi from the registry\"; }\n",
+    )
+    .unwrap();
+    wado_in(&lib).args(["build", "--lib"]).assert().success();
+    let cached = cache.join("ghcr.io/acme/demo-lib/0.1.2");
+    fs::create_dir_all(&cached).unwrap();
+    fs::copy(lib.join("build/lib.wasm"), cached.join("component.wasm")).unwrap();
+
+    let app = tmp.path().join("app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[registries]\ndefault = \"oci://ghcr.io\"\n\n[dependencies]\n\"acme:demo-lib\" = { version = \"^0.1\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("app_test.wado"),
+        r#"use { eval } from "core:eval";
+
+test "the program reaches the registry dependency" {
+    let out = eval(`use { println, Stdout } from "core:cli";
+use { greet } from "acme:demo-lib";
+export fn run() with Stdout { println(greet()); }`).unwrap();
+    assert out.stdout == "hi from the registry\n", out.stdout;
+}
+"#,
+    )
+    .unwrap();
+    wado_in(&app)
+        .env("WADO_ROOT", &cache)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn a_caller_inside_its_dependency_reads_none_of_its_own_files() {
     let tmp = tempfile::tempdir().unwrap();

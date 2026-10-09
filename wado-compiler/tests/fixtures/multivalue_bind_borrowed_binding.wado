@@ -1,0 +1,23 @@
+// Regression test: a binding of a multi-value builtin that is borrowed `&mut`
+// and captured by a closure is boxed, so the builtin's results cannot land in
+// its local as they are. Binding them straight in once tripped an assertion
+// that the local was never boxed.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i64) {
+    *x += 1;
+}
+
+export fn run() with Stdout {
+    let a = builtin::black_box(3_i64);
+    let [mut lo, hi] = builtin::i64_mul_wide_u(a, a);
+    bump(&mut lo);
+    let f = || lo + hi;
+    println(`${f()}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n"
+}
