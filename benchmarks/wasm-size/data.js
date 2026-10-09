@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791530856159,
+  "lastUpdate": 1791535353819,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65573,6 +65573,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b1f1e2a067ee83905feb6f261b0d58f6937c7156"
         },
         "date": 1791530855039,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "205172c9d411b6f5e2a7c4c40c2e169efbbe7b94",
+          "message": "Merge pull request #2316 from wado-lang/loam-tokenizer\n\nfeat(loam): a tokenizer.json becomes a Tokenizer, and a use site names each file's type",
+          "timestamp": "2026-10-09T17:23:03+09:00",
+          "tree_id": "973a422022637c18ea222848722aa34d16f04866",
+          "url": "https://github.com/wado-lang/wado/commit/205172c9d411b6f5e2a7c4c40c2e169efbbe7b94"
+        },
+        "date": 1791535352878,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
