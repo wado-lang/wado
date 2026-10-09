@@ -399,8 +399,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let (expected_referent, _) = unwrap_ref(expected, &table);
-        let is_pack_element = matches!(table.get(expected_referent), ResolvedType::TypePack { .. });
-        if !is_pack_element {
+        let (actual_referent, _) = unwrap_ref(actual, &table);
+        if let ResolvedType::TypePack { name: pack, .. } = table.get(expected_referent) {
+            // Inside an expansion the bare pack name spells the step's element.
+            if matches!(table.get(actual_referent), ResolvedType::TypeParam { name, .. } if name == pack)
+            {
+                return;
+            }
+        } else {
             let Some(layout) = table.tuple_layout(expected) else {
                 return;
             };
