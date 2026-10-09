@@ -206,7 +206,8 @@ name twice is a redeclaration too. Only a name that binds counts: a bare name
 that a case or a constant pattern answers binds nothing, so writing
 `let None = a else { … };` twice in one scope redeclares nothing.
 
-Any other binder taking a name that already reaches a symbol is legal, and the
+A binder that takes a name already reaching a symbol, without deriving its value
+from that name as above, is legal, and the
 [`shadowed_name`](./spec-diagnostics.md#the-shadowed_name-lint) lint warns.
 
 ## Local Item Definitions

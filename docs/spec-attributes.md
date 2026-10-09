@@ -103,7 +103,8 @@ test {
 
 ### `#[allow(...)]`
 
-Waives a lint on the item carrying it. As the module inner attribute
+Waives a lint on the item carrying it, and `shadowed_name` also on a binder
+carrying it: a parameter or a `let`. As the module inner attribute
 `#![allow(...)]` it waives the lint for every item in the file. There is no
 `#[deny(...)]`. [Diagnostics](./spec-diagnostics.md) lists the lints.
 

@@ -6,21 +6,20 @@ rest of the specification says. A remark is a milder warning, for code that is
 not yet wrong. This chapter states the warnings and remarks that come from
 lints, the checks the compiler runs on code it accepts.
 
-A lint is waived by [`#[allow(...)]`](./spec-attributes.md#allow) on the item
-that holds the code, or by `#![allow(...)]` for the whole file. A lint reports
+[`#[allow(...)]`](./spec-attributes.md#allow) waives a lint. A lint reports
 only in the user's own modules, never in the standard library.
 
 The lints are:
 
-| Lint                  | Reports                                                                     |
-| --------------------- | --------------------------------------------------------------------------- |
-| `literal_cast`        | a cast that types a literal a suffix could type                             |
-| `shadowed_name`       | a binder that takes a name already reaching a known symbol                  |
-| `self_comparison`     | a comparison of an expression with itself                                   |
-| `arithmetic_overflow` | integer literals that overflow their type, or a shift amount past its width |
-| `unconditional_trap`  | an integer division that always traps                                       |
-| `undecided_effects`   | a trait head that writes no `with` clause                                   |
-| `dead_code`           | an unused or test-only free function or global                              |
+| Lint                                                   | Reports                                                                         |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| [`literal_cast`](#the-literal_cast-lint)               | a cast that types a literal a suffix could type                                 |
+| [`shadowed_name`](#the-shadowed_name-lint)             | a binder that takes a name already reaching a known symbol                      |
+| [`self_comparison`](#the-self_comparison-lint)         | a comparison of an expression with itself                                       |
+| [`arithmetic_overflow`](#the-arithmetic_overflow-lint) | constant integer arithmetic that wraps, or a constant shift amount out of range |
+| [`unconditional_trap`](#the-unconditional_trap-lint)   | an integer division that always traps                                           |
+| [`undecided_effects`](#the-undecided_effects-lint)     | a trait head that writes no `with` clause                                       |
+| [`dead_code`](#the-dead_code-lint)                     | an unused or test-only free function or global                                  |
 
 ## The `literal_cast` Lint
 
@@ -171,11 +170,34 @@ test "divides by zero" {
 
 ## The `undecided_effects` Lint
 
-A trait head that writes no `with` clause reads as `with _`
-([The Trait Head](./spec-effects.md#the-trait-head)), so a bare trait is open
-rather than effect-free. The `undecided_effects` lint reports such a head as an
-undecided contract: a `pub` trait warns, and a file-private or `internal` one
-remarks. Waive it while the decision is pending.
+The `undecided_effects` lint reports a trait head that writes no `with` clause,
+which [The Trait Head](./spec-effects.md#the-trait-head) leaves open. A `pub`
+trait warns, and a file-private or `internal` one remarks. Waive it while the
+decision is pending.
+
+<!-- {"fixture":"effect_trait_head_undecided.wado", "assert": false} -->
+
+```wado
+pub trait Undecided {
+    fn next(&mut self) -> i32;
+}
+
+#[allow(undecided_effects)]
+pub trait Deciding {
+    fn next(&mut self) -> i32;
+}
+
+trait Private {
+    fn next(&mut self) -> i32;
+}
+
+pub trait Settled with () {
+    fn next(&mut self) -> i32;
+}
+```
+
+`Undecided` warns, `Private` remarks, and `Deciding` and `Settled` report
+nothing.
 
 ## The `dead_code` Lint
 
