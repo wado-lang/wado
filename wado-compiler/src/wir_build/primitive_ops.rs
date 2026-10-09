@@ -342,7 +342,8 @@ impl FunctionTranslator<'_, '_> {
     /// `i16` or `u16` operand needs the mask.
     fn narrow_shift_amount(&self, amount: WirInstr, type_id: TypeId) -> WirInstr {
         let head = self.type_table.representation_head(type_id);
-        let bits = prim_of(head, self.type_table).map_or(32, int_bit_width);
+        let prim = prim_of(head, self.type_table).expect("a shift operand is a primitive integer");
+        let bits = int_bit_width(prim);
         if bits >= 32 {
             return amount;
         }

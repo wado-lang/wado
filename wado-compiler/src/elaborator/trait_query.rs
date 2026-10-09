@@ -667,7 +667,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected.return_type,
                     written.decl.return_type.unwrap_or(TypeTable::UNIT),
                 )));
-            for (position, expected, found) in positions.collect::<Vec<_>>() {
+            for (position, expected, found) in positions {
                 let table = self.tysys.type_table.borrow();
                 // A projection left open names a type only an instantiation
                 // settles, so two spellings of it are not comparable here.

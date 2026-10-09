@@ -986,14 +986,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(decl) = trait_env.decl_header_of(&decl_key) else {
                 continue;
             };
-            // A derivation request asks for an impl rather than writing one, so
-            // it has no members to compare.
             if let Some(trait_ty) = header.trait_ty()
                 && let Some(surplus) =
                     decl.surplus_type_args(written_arg_nodes(trait_ty).len(), trait_ty.span())
             {
                 let _ = logger.error_in(&header.module, surplus);
             }
+            // A derivation request asks for an impl rather than writing one, so
+            // it has no members to compare.
             if header.is_synthesize_request {
                 debug_assert!(header.associated_types.is_empty() && header.methods.is_empty());
                 continue;

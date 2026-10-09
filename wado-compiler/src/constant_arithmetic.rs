@@ -100,10 +100,7 @@ impl IntType {
 
     /// `value` wrapped into the type's range, as the operator computes it.
     fn wrap(self, value: Value) -> Value {
-        let bits = match value {
-            Value::Negative(v) => v as u128,
-            Value::NonNegative(v) => v,
-        };
+        let bits = value.bits();
         let low = if self.bits == 128 {
             bits
         } else {
@@ -135,6 +132,14 @@ impl Value {
         match self {
             Value::Negative(v) => Some(v),
             Value::NonNegative(v) => i128::try_from(v).ok(),
+        }
+    }
+
+    /// The value's two's-complement bits, 128 wide.
+    fn bits(self) -> u128 {
+        match self {
+            Value::Negative(v) => v as u128,
+            Value::NonNegative(v) => v,
         }
     }
 
@@ -176,11 +181,7 @@ fn exact(op: BinaryOp, left: Value, right: Value) -> Option<Value> {
 
 /// `left op right` wrapped to `ty`, by two's complement on the low bits.
 fn wrapping(op: BinaryOp, left: Value, right: Value, ty: IntType) -> Value {
-    let bits = |v: Value| match v {
-        Value::Negative(v) => v as u128,
-        Value::NonNegative(v) => v,
-    };
-    let (l, r) = (bits(left), bits(right));
+    let (l, r) = (left.bits(), right.bits());
     let low = match op {
         BinaryOp::Add => l.wrapping_add(r),
         BinaryOp::Sub => l.wrapping_sub(r),
@@ -246,20 +247,7 @@ impl ConstantArithmetic<'_> {
     fn binary(&mut self, expr: &Expr, binary: &BinaryExpr) -> Option<Value> {
         let left = self.value(&binary.left);
         let right = self.value(&binary.right);
-        let ty = self.int_type(expr);
-        let ty = match binary.op {
-            BinaryOp::Add
-            | BinaryOp::Sub
-            | BinaryOp::Mul
-            | BinaryOp::Div
-            | BinaryOp::Mod
-            | BinaryOp::BitAnd
-            | BinaryOp::BitOr
-            | BinaryOp::BitXor
-            | BinaryOp::Shl
-            | BinaryOp::Shr => ty?,
-            _ => return None,
-        };
+        let ty = self.int_type(expr)?;
         match binary.op {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul => {
                 let (l, r) = (left?, right?);
@@ -284,30 +272,42 @@ impl ConstantArithmetic<'_> {
             BinaryOp::Shl | BinaryOp::Shr => {
                 let amount = right?;
                 let width = u128::from(ty.bits);
-                let bits = match amount {
-                    Value::NonNegative(n) if n < width => return None,
-                    Value::NonNegative(n) => n,
-                    Value::Negative(n) => n as u128,
-                };
+                if matches!(amount, Value::NonNegative(n) if n < width) {
+                    return None;
+                }
                 // The width is a power of two, so the low bits are the residue.
                 let message = format!(
                     "`{}` shifts by {}, which `{}` takes modulo {width} as {}",
                     unparse_expr_source(expr),
                     amount.render(),
                     self.type_name(expr),
-                    bits % width,
+                    amount.bits() % width,
                 );
                 self.report_overflow_message(expr, message);
                 None
             }
-            _ => None,
+            BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor => None,
+            BinaryOp::Eq
+            | BinaryOp::NotEq
+            | BinaryOp::Lt
+            | BinaryOp::LtEq
+            | BinaryOp::Gt
+            | BinaryOp::GtEq
+            | BinaryOp::And
+            | BinaryOp::Or => unreachable!(
+                "`{:?}` answers a `bool`, which `int_type` refused",
+                binary.op
+            ),
         }
     }
 
+    /// The name of `expr`'s type, which `int_type` has already read.
     fn type_name(&self, expr: &Expr) -> String {
-        self.sem
+        let ty = self
+            .sem
             .expression_type(expr.id())
-            .map_or_else(String::new, |ty| self.sem.types.type_name(ty))
+            .expect("an operation the lints report has an integer type");
+        self.sem.types.type_name(ty)
     }
 
     fn report_overflow(&mut self, expr: &Expr, ty: IntType, wrapped: Value) {
@@ -346,6 +346,17 @@ impl ConstantArithmetic<'_> {
             });
         }
     }
+
+    /// Run `body` with each lint the attributes `#[allow]` turned off.
+    fn waiving(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+        let saved = (self.overflow, self.trap);
+        self.overflow &= !attrs_allow(attrs, lint::ARITHMETIC_OVERFLOW);
+        self.trap &= !attrs_allow(attrs, lint::UNCONDITIONAL_TRAP);
+        if self.overflow || self.trap {
+            body(self);
+        }
+        (self.overflow, self.trap) = saved;
+    }
 }
 
 impl AstVisitor for ConstantArithmetic<'_> {
@@ -364,18 +375,5 @@ impl AstVisitor for ConstantArithmetic<'_> {
             }
             _ => walk_expr(self, expr),
         }
-    }
-}
-
-impl ConstantArithmetic<'_> {
-    /// Run `body` with each lint the attributes `#[allow]` turned off.
-    fn waiving(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
-        let saved = (self.overflow, self.trap);
-        self.overflow &= !attrs_allow(attrs, lint::ARITHMETIC_OVERFLOW);
-        self.trap &= !attrs_allow(attrs, lint::UNCONDITIONAL_TRAP);
-        if self.overflow || self.trap {
-            body(self);
-        }
-        (self.overflow, self.trap) = saved;
     }
 }
