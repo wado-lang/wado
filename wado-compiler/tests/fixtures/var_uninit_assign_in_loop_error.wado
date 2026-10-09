@@ -1,0 +1,12 @@
+// Error: an assignment in a loop body runs again on the next iteration, so an
+// immutable variable cannot take it.
+
+export fn run() {
+    let x: i32;
+    for let i of 0..<3 {
+        x = i;
+    }
+}
+
+__DATA__
+{"compile_error": ":7:9: analysis error: cannot assign twice to immutable variable 'x'"}

@@ -1,0 +1,14 @@
+// Error: a tuple comprehension runs its body once per element, so an immutable
+// variable cannot take an assignment there.
+
+fn walk<..T>(t: [..T]) {
+    let x: i32;
+    let _u = [for let v of t { x = 1 }];
+}
+
+export fn run() {
+    walk([1, 2, 3]);
+}
+
+__DATA__
+{"compile_error": ":6:32: analysis error: cannot assign twice to immutable variable 'x'"}

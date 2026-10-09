@@ -1,0 +1,15 @@
+// Error: a let chain stops at the first element that fails, so what a later
+// element assigns does not reach the `else` block.
+
+export fn run() {
+    let x: i32;
+    let o = builtin::black_box(Option::<i32>::None);
+    if let Some(_v) = o && match builtin::black_box(1) { _ => { x = 1; true } } {
+        return;
+    } else {
+        assert x == 1;
+    }
+}
+
+__DATA__
+{"compile_error": ":10:16: analysis error: 'x' is used before initialization"}

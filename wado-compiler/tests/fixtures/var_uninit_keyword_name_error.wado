@@ -1,0 +1,11 @@
+// Error: a keyword as the name of a deferred let is reported once, and the
+// loops after it are still checked.
+
+export fn run() {
+    let resume: i32;
+    let mut i = 0;
+    while i < 3 { i += 1; }
+}
+
+__DATA__
+{"compile_error": ":5:5: analysis error: `resume` cannot be a name: it is the keyword that begins `resume value;`", "compile_error_codes": ["INVALID_SYNTAX"]}

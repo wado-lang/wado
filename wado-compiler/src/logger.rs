@@ -122,6 +122,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         }
     }
 
+    /// Whether a [`Self::quiet`] scope is open, so a walk that only reports
+    /// can skip the work.
+    pub fn is_quiet(&self) -> bool {
+        self.quiet_depth.get() > 0
+    }
+
     /// The one way a diagnostic reaches the host, so nothing leaves without the
     /// file its span indexes. Severity decides nothing here: a warning from a
     /// foreign body is as misfiled as an error would be.

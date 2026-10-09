@@ -1,0 +1,12 @@
+// Error: the value a `break` carries is read like any other expression.
+
+export fn run() {
+    let x: i32;
+    let y = done: {
+        break done: x;
+    };
+    assert y == 1;
+}
+
+__DATA__
+{"compile_error": ":6:21: analysis error: 'x' is used before initialization"}
