@@ -61,8 +61,7 @@ test {
 }
 ```
 
-Mark the binder `#[allow(shadowed_name)]` where the shadowing is deliberate, or
-the module `#![allow(shadowed_name)]`:
+Where the shadowing is deliberate, mark the binder:
 
 <!-- {"fixture":"spec_lexical_shadowed_name_allow.wado"} -->
 
@@ -74,7 +73,8 @@ test {
 }
 ```
 
-Only a name that binds counts, as for redeclaration.
+Only a name that binds counts, as for
+[redeclaration](./spec-expressions.md#variable-scoping).
 [Patterns](./spec-patterns.md#patterns-that-cannot-fail) says which reading a
 bare name takes. In a `let` or `for` binding a name reaching a `global` binds,
 so the lint reports it.
