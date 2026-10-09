@@ -590,12 +590,14 @@ test "u128 shift by zero" {
     assert a >> 0 == a;
 }
 
+#[allow(arithmetic_overflow)]
 test "u128 shift left by 128 shifts by 0" {
     let a: u128 = 1;
     assert a << 128 == a;
     assert a << 129 == 2;
 }
 
+#[allow(arithmetic_overflow)]
 test "u128 shift right by 128 shifts by 0" {
     let a: u128 = 18446744073709551616;  // 2^64
     assert a >> 128 == a;
@@ -608,12 +610,14 @@ test "i128 shift by zero" {
     assert a >> 0 == a;
 }
 
+#[allow(arithmetic_overflow)]
 test "i128 shift left by 128 shifts by 0" {
     let a: i128 = 1;
     assert a << 128 == a;
     assert a << 255 == i128::MIN;
 }
 
+#[allow(arithmetic_overflow)]
 test "i128 negative shift right by 127 fills sign" {
     let a: i128 = i128::MIN;
     assert a >> 127 == -1;
