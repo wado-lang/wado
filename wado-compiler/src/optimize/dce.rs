@@ -1312,16 +1312,20 @@ impl DceWalker<'_> {
                 // Every expression has a result type that needs to stay alive.
                 self.add_type(body.exprs[e].type_id);
                 match &body.exprs[e].kind {
-                    ExprKind::Call {
-                        func_id, type_args, ..
-                    } => {
+                    ExprKind::Call { func_id, args, .. } => {
                         self.analysis.named.insert(*func_id);
                         let callee = callee_descriptor(self.descriptors, *func_id);
                         // An element-copying builtin reaches its helper by the
-                        // element type the call node carries, not by a call edge.
+                        // element type of its first operand's array, as WIR
+                        // build reads it, not by a call edge.
                         if copies_array_elements(callee.intrinsic())
-                            && let Some(&elem) = type_args.first()
+                            && let Some(array) = args.first()
                         {
+                            let array = self.type_table.peel_refs(body.operand_type(array.expr));
+                            let elem = self
+                                .type_table
+                                .seq_element(array)
+                                .expect("an element-copying builtin's first operand is an array");
                             self.analysis.copied_elems.insert(elem);
                         }
                         match body.exprs[e].kind.as_method_call() {

@@ -885,14 +885,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let bindings = self.unify_expected_return(ret);
         let tt = self.tysys.type_table.borrow();
+        // A pack's variable is no `InferVar`, and an element hint does not
+        // reach a pack's literal anyway.
         bindings
             .into_iter()
             .filter(|&(var, answer)| own_vars.contains(&var) && !tt.contains_infer_var(answer))
-            .map(|(var, answer)| {
-                let ResolvedType::InferVar(id) = *tt.get(var) else {
-                    unreachable!("a call's own variables are inference variables");
-                };
-                (id, answer)
+            .filter_map(|(var, answer)| match *tt.get(var) {
+                ResolvedType::InferVar(id) => Some((id, answer)),
+                _ => None,
             })
             .collect()
     }
