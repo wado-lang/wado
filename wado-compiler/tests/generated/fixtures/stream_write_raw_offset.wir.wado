@@ -105,32 +105,32 @@ fn "stream_write_raw_offset.wado/run"() with Stderr {
     let rx_7: i32;
     let tx_8: i32;
     let elements: ref Array<u8>;
-    let out: ref Array<u8>;
-    let end_22: i32;
-    let self_23: ref "core:prelude/slice.wado//Slice<u8>";
+    let end_21: i32;
+    let self_22: ref "core:prelude/slice.wado//Slice<u8>";
     let s: i32;
-    let a_47: i32;
+    let a_46: i32;
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_7 = "stream_write_raw_offset.wado/$cm_binding__Stderr_write_via_stream"(rx_7);
     elements = array.new_fixed<u8>(88, 88, 101, 114, 114, 32, 109, 115, 103, 10, 89, 89);
-    builtin::array_copy<u8>(local.tee out(builtin::array_new<u8>(12)), 0, elements, 0, 12);
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(12)), 0, elements, 0, 12);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        end_22 = builtin::array_len(out);
-        self_23 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: out, start: 0, end: end_22 };
-        if @unlikely(0 > end_22) {
+        end_21 = builtin::array_len($array_clone_dst_2);
+        self_22 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $array_clone_dst_2, start: 0, end: end_21 };
+        if @unlikely(0 > end_21) {
             cold_path;
-            "core:prelude/primitive.wado/i32::clamp$cold0$dae[value]"(0, end_22);
+            "core:prelude/primitive.wado/i32::clamp$cold0$dae[value]"(0, end_21);
             unreachable;
         }
-        if @unlikely(local.tee s(select i32(2 < end_22, 2, end_22)) > end_22) {
+        if @unlikely(local.tee s(select i32(2 < end_21, 2, end_21)) > end_21) {
             cold_path;
-            "core:prelude/primitive.wado/i32::clamp$cold0$dae[value]"(s, end_22);
+            "core:prelude/primitive.wado/i32::clamp$cold0$dae[value]"(s, end_21);
             unreachable;
         }
-        end_22 = select i32(a_47 < end_22, local.tee a_47(select i32(10 > s, 10, s)), end_22);
-        out = self_23.repr;
-        "core:rt/cm_stream_write_raw_all_u8"(tx_8, out, s, end_22);
+        end_21 = select i32(a_46 < end_21, local.tee a_46(select i32(10 > s, 10, s)), end_21);
+        $array_clone_dst_2 = self_22.repr;
+        "core:rt/cm_stream_write_raw_all_u8"(tx_8, $array_clone_dst_2, s, end_21);
     });
     "wasi/stream-drop-writable"(tx_8);
     drop("stream_write_raw_offset.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"(rx_7));

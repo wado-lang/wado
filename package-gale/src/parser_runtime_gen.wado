@@ -6,7 +6,7 @@
 
 use { Grammar } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
-use { GenContext, SCAN_MEMO_HANDLE } from "./gen_context.wado";
+use { EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
 use { join_kinds } from "./gen_util.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
@@ -19,8 +19,8 @@ internal struct RecoverFragmentEntry {
     first_ids: List<i32>,
 }
 
-internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
-    let names = *ctx.fragment_entries();
+internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -> List<RecoverFragmentEntry> {
+    let names = ctx.settings.fragment_entries;
     let mut result: List<RecoverFragmentEntry> = [];
     let mut seen: List<String> = [];
     for let name of &names {
@@ -36,7 +36,7 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) ->
             }
         }
         if found < 0 {
-            ctx.warn(
+            ctx.diagnostics.warn(
                 &DiagnosticOwner::host("fragment_entries"),
                 DiagnosticKind::FragmentEntry,
                 `fragment_entries: unknown parser rule '${*name}'`,
@@ -47,20 +47,21 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) ->
         let snake = grammar.parser_rules[found].snake_name;
         let emits_vals = entry_emits_vals(ctx, &rule_name);
         let mut visiting: List<String> = [];
-        let first_ids = ctx.first_ids_of_rule(&rule_name, &mut visiting);
+        let first_ids = ctx.analysis.first_ids_of_rule(&rule_name, &mut visiting);
         let call = if emits_vals { `let _ = _parse_${snake}(p);` } else { `_parse_${snake}(p);` };
         result.push(RecoverFragmentEntry { call, first_ids });
     }
     return result;
 }
 
-internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &GenContext) {
+internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &EmitContext) {
+    let mut starts: List<i32> = [];
     for let mut i = 0; i < entries.len(); i += 1 {
         w.line(`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&kind_bitset_words(&entries[i].first_ids))}];`);
+        starts.extend(&entries[i].first_ids);
     }
-    if !entries.is_empty() {
-        w.blank();
-    }
+    w.line(`global _FRAGMENT_STARTS: List<i32> = [${join_kinds(&kind_bitset_words(&starts))}];`);
+    w.blank();
 
     let mut d = FnSpec::new("_recover_fragment");
     d.add_param("p", "&mut Parser");
@@ -101,17 +102,17 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
 
 /// The same clause in function-type position, for the rule entry
 /// `_run_parse_entry` takes as a value.
-fn parser_super_fn_clause(ctx: &GenContext) -> String {
-    if ctx.has_parser_superclass() {
-        return ` with ${*ctx.parser_superclass_name()}`;
+fn parser_super_fn_clause(ctx: &EmitContext) -> String {
+    if ctx.settings.has_parser_superclass() {
+        return ` with ${ctx.settings.parser_superclass_name}`;
     }
     return "";
 }
 
 /// The ` with Foo` clause a parse-entry fn carries: the lexer's base (it
 /// tokenizes) and the parser's (its rules evaluate predicates).
-fn superclass_clause(ctx: &GenContext) -> String {
-    let bases = ctx.base_effects();
+fn superclass_clause(ctx: &EmitContext) -> String {
+    let bases = ctx.settings.base_effects();
     return match bases.len() {
         0 => "",
         1 => ` with ${bases[0]}`,
@@ -124,7 +125,7 @@ fn superclass_clause(ctx: &GenContext) -> String {
 /// infallible; a failure leaves `p.recovering` set and the deepest error in
 /// `p.pending`, surfaced as one diagnostic. The partial tree (open nodes folded
 /// by each wrapper's `finish_node`) is still returned.
-pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &EmitContext) {
     if lowered.parser_rules.len() == 0 {
         return;
     }
@@ -151,7 +152,7 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenCo
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in), fold the
 /// partial tree, and on error push a single diagnostic (deepest of the
 /// propagated error and `p.pending`).
-fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
+fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &EmitContext) {
     w.begin(
         `fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(
             ctx,
@@ -174,7 +175,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.end();
     w.line("merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);");
     w.line("resolve_positions(&mut p.diagnostics, p.tokens.chars);");
-    if ctx.emit_actions() {
+    if ctx.settings.emit_actions {
         // Lexer prints precede parser prints in the one sink, as on ANTLR4's stdout.
         w.line(
             "return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics, output: p.tokens.output };",
@@ -188,7 +189,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
 /// Emit one `pub fn parse_<rule>(input) -> ParseResult` entry as a thin wrapper
 /// over `_run_parse_entry`. The closure defers to `_parse_<rule>(p)` so a follow-gated
 /// or LR entry's defaulted `follow` / `min_prec` arguments fill in.
-fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
+fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &EmitContext) {
     let header = rule_header(rule);
     w.begin(
         `pub fn parse_${header.snake_name}<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(
@@ -229,9 +230,18 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line("if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
 }
 
+/// Whether recovery may stop at `k` with `set` as its sync set, asked of the
+/// `parser` expression. A fragment start joins every set at the root only: the
+/// start rule's `EOF` descends into the fragment it begins, and a nested rule
+/// cannot.
+pub fn syncs_on<P: AsStrSlice, S: AsStrSlice, K: AsStrSlice>(fragment_recovery: bool, parser: P, set: S, k: K) -> String {
+    let member = `kind_set_has(${set}, ${k})`;
+    return if fragment_recovery { `(${member} || ${parser}.root_fragment_start(${k}))` } else { member };
+}
+
 /// ANTLR4's rule-level recovery and decision sync: the parser methods a failed
 /// rule and a mismatched decision recover through.
-fn gen_rule_recovery(w: &mut CodeWriter) {
+fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
     let mut rr = FnSpec::new("recover_rule");
     rr.set_receiver("&mut self");
     rr.add_param("rule", "NodeKind");
@@ -322,11 +332,22 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     su.emit_begin(w);
     w.begin("loop");
     w.line("let k = self.kinds[self.pos];");
-    w.line("if k == TK_EOF || kind_set_has(set, k) { break; }");
+    w.line(`if k == TK_EOF || ${syncs_on(fragment_recovery, "self", "set", "k")} { break; }`);
     w.line("self.skip_one();");
     w.end();
     w.end();
     w.blank();
+
+    if fragment_recovery {
+        let mut rf = FnSpec::new("root_fragment_start");
+        rf.set_receiver("&self");
+        rf.add_param("k", "i32");
+        rf.set_return_type("bool");
+        rf.emit_begin(w);
+        w.line("return self.sites.len() == 1 && kind_set_has(&_FRAGMENT_STARTS, k);");
+        w.end();
+        w.blank();
+    }
 
     let mut so = FnSpec::new("skip_one");
     so.set_receiver("&mut self");
@@ -343,7 +364,14 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     sd.add_param("expected", "&List<i32>");
     sd.set_return_type("bool");
     sd.emit_begin(w);
-    w.begin("if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(sync, self.peek_at(1))");
+    w.begin(
+        `if self.speculating || self.kinds[self.pos] == TK_EOF || !${syncs_on(
+            fragment_recovery,
+            "self",
+            "sync",
+            "self.peek_at(1)",
+        )}`,
+    );
     w.line("return false;");
     w.end();
     w.line("self.report_extraneous(expected, RecoveryAction::Deleted);");
@@ -848,7 +876,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    gen_rule_recovery(w);
+    gen_rule_recovery(w, fragment_recovery);
 
     // `trace_fail` is its only caller.
     if trace {
@@ -993,7 +1021,12 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // single-token insertion: the current token continues the rule, or the
     // rules under way once this one ends, so the expected one is missing.
     w.begin(
-        "if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])",
+        `if ${syncs_on(
+            fragment_recovery,
+            "self",
+            "sync",
+            "self.kinds[self.pos]",
+        )} || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])`,
     );
     w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
@@ -1015,7 +1048,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
     w.begin("loop");
     w.line("let _k = self.kinds[self.pos];");
-    w.line("if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }");
+    w.line(`if _k == TK_EOF || _k == kind || ${syncs_on(fragment_recovery, "self", "sync", "_k")} { break; }`);
     w.line("self.skip_one();");
     w.end();
     w.line("self.b.finish_node(self.last_end());");
@@ -1222,7 +1255,7 @@ pub fn emit_atn_claim_return(w: &mut CodeWriter) {
 }
 
 /// Emit a rule entry's push of its claimed return state onto `stack`, the
-/// `GenContext::atn_stack_place`.
+/// `EmitContext::atn_stack_place`.
 pub fn emit_atn_enter<S: AsStrSlice>(w: &mut CodeWriter, stack: S) {
     w.line(`${stack}.push(_atn_ret);`);
 }

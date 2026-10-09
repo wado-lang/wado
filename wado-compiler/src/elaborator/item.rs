@@ -1399,6 +1399,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .map(|p| p.self_kind)
                 .unwrap_or(ast::SelfKind::None);
             let method_def = frame_scope.tysys.def_at(method.id);
+            let defaults_module = frame_scope.current_module_source.clone();
             frame_scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -1427,7 +1428,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     is_async: method.is_async,
                     // A trait impl takes the trait's, once every module's
                     // declarations are assembled.
-                    defaults_module: None,
+                    defaults_module,
                 },
             );
         }
@@ -1937,7 +1938,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         own_params: own_params_of(&method.type_params),
                         cm_name: method.attrs.iter().find_map(Attribute::cm_identifier),
                         is_async: method.is_async,
-                        defaults_module: None,
+                        defaults_module: method_scope.current_module_source.clone(),
                     },
                     default_body: method
                         .body
@@ -2142,6 +2143,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 SelfKind::None
             };
             let method_def = scope.tysys.def_at(method.id);
+            let defaults_module = scope.current_module_source.clone();
             scope.sem.decls.method_sigs.insert(
                 method_def,
                 MethodSig {
@@ -2163,7 +2165,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     own_params: Vec::new(),
                     cm_name: cm_name.clone(),
                     is_async: method.is_async,
-                    defaults_module: None,
+                    defaults_module,
                 },
             );
 

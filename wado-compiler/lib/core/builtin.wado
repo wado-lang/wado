@@ -164,11 +164,20 @@ pub fn array_get_ref_mut<T: RefMut>(arr: &mut Array<T>, idx: i32) -> &mut T;
 #[side_effect(trap, outside = [arr], at = [idx])]
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 
-/// Copies elements between builtin::arrays.
-/// Copies `len` elements from src[src_offset..] to dst[dst_offset..].
+/// Copies `len` elements from src[src_offset..] to dst[dst_offset..], each as
+/// a value copy makes it, as if through a buffer. A value-typed element costs
+/// its `$value_copy$` apiece; any other is one `array.copy`.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+
+/// Moves `len` elements from src[src_offset..] to dst[dst_offset..], as if
+/// through a buffer: one `array.copy`, so `dst` holds the elements themselves.
+/// Sound only where `src` stops reading them as values of its own, as when a
+/// collection grows or shifts its backing array.
+#[storage(stores_args)]
+#[side_effect(trap, outside = [dst, src], at = [dst_offset, src_offset], count = len)]
+pub fn array_move<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 
 /// Allocates a new Array<T> and copies every element of `src` into
 /// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
@@ -192,8 +201,9 @@ pub fn array_clone_shallow<T>(src: &Array<T>) -> Array<T>;
 #[side_effect(trap, outside = [src], count = len)]
 pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 
-/// Fills a Array<T> with a value.
-/// Fills `len` elements starting at `offset` with `value`.
+/// Fills `len` elements starting at `offset` with copies of `value`, one
+/// apiece. A value-typed element costs its `$value_copy$` apiece; any other is
+/// one `array.fill`.
 #[storage(stores_args)]
 #[side_effect(trap, outside = [arr], at = [offset], count = len)]
 pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);

@@ -1,0 +1,101 @@
+//! What a generation is asked for and what the grammar's actions bring with
+//! them, settled once before lowering and read by every phase after it: the
+//! generator options, the action language and its members, the scan gate's
+//! fields, and the `superClass` bases.
+
+use { ActionLanguage } from "./ir.wado";
+use { SuperOp } from "./superclass.wado";
+use { MemberNames } from "./java2wado/jmembers.wado";
+use { gate_body_of } from "./scan_gate.wado";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
+
+/// The settings of one generation. `codegen::install_action_context` builds
+/// them; nothing changes them afterwards.
+pub struct GenSettings {
+    /// When set, parser emit adds trace logging (rule enter/ok/fail plus
+    /// multi-alt scan/pick/try decisions) — the `trace: true` generator
+    /// option.
+    pub trace: bool = false,
+    /// Rule names a fragment is a sequence of (`fragment_entries` option); empty
+    /// disables fragment recovery.
+    pub fragment_entries: List<String> = [],
+    /// When set, parser emit executes retained actions (Stage C) instead of
+    /// discarding them: true for grammars whose action language Gale can
+    /// currently emit (`language = Wado`). Actionless / other-language
+    /// grammars stay byte-identical.
+    pub emit_actions: bool = false,
+    /// The grammar's action language (`options { language = X }`), so the
+    /// action / predicate splice sites route to the right translator front
+    /// end (identity for Wado, java2wado for Java).
+    pub action_language: ActionLanguage = ActionLanguage::Wado,
+    /// The grammar name and its `@members` declarations, so the java2wado front
+    /// end resolves `T.CONST` token constants, `this.m()` / `m()` calls and bare
+    /// field reads against real declarations.
+    pub grammar_name: String = "",
+    pub action_members: MemberNames = MemberNames {},
+    /// The members fields a scan simulates: assigned only integer literals, so
+    /// a walk can run their actions without a parser. See `scan_gate.wado`.
+    pub scan_gate_fields: List<String> = [],
+    /// Each gate-relevant action body as the translator renders it, by
+    /// `ActionSource::action_id`. Java and Wado spell a member write
+    /// differently in the grammar and identically after translation, so this is
+    /// the one form the gate analysis reads. Reading the grammar text instead
+    /// meant predicting what the translator would name the member.
+    pub gate_bodies: HashMap<i32, String> = HashMap::<i32, String>::with_seed(GALE_SEED),
+    /// The lexer's `superClass` base effect-interface name, or `""` when none.
+    /// See `action.md`, "SuperClass — an effect interface".
+    pub superclass_name: String = "",
+    /// The synthesized effect operations, one per distinct `this.<method>` site.
+    pub superclass_ops: List<SuperOp> = [],
+    /// The parser's base, the same way. A lexer + parser pair declares two, so
+    /// a generated module can carry both interfaces.
+    pub parser_superclass_name: String = "",
+    pub parser_superclass_ops: List<SuperOp> = [],
+    /// The grammar declares a parser base, wired or refused. A refusal reported
+    /// the cause, so a body left naming `this` is dropped under it.
+    pub parser_superclass_declared: bool = false,
+}
+
+impl GenSettings {
+    /// The translated body for `action_id`, or `""` where the translator
+    /// refused it.
+    pub fn gate_body(&self, action_id: i32) -> String {
+        return gate_body_of(&self.gate_bodies, action_id);
+    }
+
+    /// Whether the generated parser carries a scan gate at all. Off
+    /// leaves every scan byte-identical to one emitted before it existed.
+    pub fn emit_scan_gate(&self) -> bool {
+        return self.emit_actions && !self.scan_gate_fields.is_empty();
+    }
+
+    /// Whether the generated parser recovers a fragment under the start rule.
+    /// Off leaves every parser byte-identical to one emitted before it existed.
+    pub fn emit_fragment_recovery(&self) -> bool {
+        return !self.fragment_entries.is_empty();
+    }
+
+    /// Whether a lexer base is wired.
+    pub fn has_superclass(&self) -> bool {
+        return !self.superclass_name.is_empty();
+    }
+
+    /// Whether a parser base is wired.
+    pub fn has_parser_superclass(&self) -> bool {
+        return !self.parser_superclass_name.is_empty();
+    }
+
+    /// The base interfaces an entry that lexes or parses performs: the lexer's,
+    /// then the parser's.
+    pub fn base_effects(&self) -> List<String> {
+        let mut bases: List<String> = [];
+        if self.has_superclass() {
+            bases.push(self.superclass_name);
+        }
+        if self.has_parser_superclass() {
+            bases.push(self.parser_superclass_name);
+        }
+        return bases;
+    }
+}

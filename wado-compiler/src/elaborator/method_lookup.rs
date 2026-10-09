@@ -137,7 +137,7 @@ impl MethodInfo {
             from_concrete_impl: false,
             consumes_self: sig.self_kind == ast::SelfKind::Value,
             inherent_visibility: None,
-            defaults_module: sig.defaults_module.clone(),
+            defaults_module: Some(sig.defaults_module.clone()),
             impl_type_bindings: Vec::new(),
         }
     }
@@ -1099,10 +1099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !sig.own_params.iter().any(|p| p.default.is_some()) {
             return false;
         }
-        let declaring_module = sig.defaults_module.clone().or_else(|| {
-            sig.declaring_impl
-                .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
-        });
+        let declaring_module = Some(sig.defaults_module.clone());
         let trait_decl = self.tysys.signatures.declaring_trait(sig);
         self.fill_defaulted_method_type_args(
             &sig.own_params,
@@ -2175,7 +2172,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // spelling in this frame would otherwise supply the default body,
             // its module, and the slots it is instantiated in.
             let declaring = scope.tysys.trait_sig_of(&trait_decl);
-            let trait_module = declaring.map(|sig| sig.module.clone());
             if let Some(default_method) = declaring
                 .and_then(|sig| sig.method(method_name))
                 .filter(|m| m.is_inherited())
@@ -2208,9 +2204,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_block: Some(impl_ref.0),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
-                        // The body and its defaults are the trait's, so both
-                        // resolve where the trait wrote them.
-                        defaults_module: trait_module,
                         ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
@@ -3361,7 +3354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &args,
                 &param_types,
                 &defaults,
-                Some(defaults_module.clone()),
+                defaults_module.clone(),
                 &type_bindings,
                 ctx,
             );

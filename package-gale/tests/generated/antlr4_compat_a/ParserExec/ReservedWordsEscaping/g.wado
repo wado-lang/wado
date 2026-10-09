@@ -1934,25 +1934,12 @@ fn _parse_continue__inner_atom(p: &mut Parser, follow: i64 = 0, vals: ContinueVa
         p.take();
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         let mut _plus_first = true;
-        loop {
-            if p.recovering { break; }
-            if !_plus_first {
-                let mut rep_scan_pos: i32 = -1;
-                rep_scan: {
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    if pos >= tokens.len() || tokens[pos] != TK_BREAK { break rep_scan; }
-                    pos += 1;
-                    if pos <= p.pos { break rep_scan; }
-                    rep_scan_pos = pos;
-                }
-                if rep_scan_pos < 0 { break; }
-            }
+        while !p.recovering && (_plus_first || p.peek_kind() == TK_BREAK) {
             _plus_first = false;
             p.expect(TK_BREAK, &SYNC_0, false);
             if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
         }
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_FOR {
             p.site = 3;
@@ -2101,7 +2088,7 @@ pub fn parse_for<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseRe
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_for(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[7], [15], [8], []];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[7], [9], [8], []];
 global CALL_FOLLOW: List<i32> = [0, 1, 2, 2, 3, 3];
 global CALL_FOLLOW_ENDS: List<bool> = [true, true, true, true, false, true];
 
@@ -2140,6 +2127,7 @@ global SYNC_0: List<i32> = [7];
 global EXPECTED_0: List<i32> = [TK_BREAK, TK_FOR, TK_IF];
 global SYNC_1: List<i32> = [2];
 global EXPECTED_1: List<i32> = [TK_BREAK];
+global SYNC_2: List<i32> = [5];
 global EXPECTED_2: List<i32> = [TK_FOR, TK_IF];
 global SYNC_3: List<i32> = [12];
 

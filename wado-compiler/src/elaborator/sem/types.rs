@@ -748,8 +748,9 @@ pub(crate) struct CalleeParams {
     pub(crate) param_defaults: Vec<(String, Option<Expr>)>,
     pub(crate) param_types: Vec<TypeId>,
     pub(crate) self_in_args: bool,
-    /// The module the defaults were written in, when that is not the callee's
-    /// own: the trait it implements. See
+    /// The module the defaults were written in: the declaring module, or the
+    /// trait's for a method implementing one. `None` only where no signature
+    /// answered, which leaves no default to resolve. See
     /// [`StaticMethodDispatch::defaults_module`].
     pub(crate) defaults_module: Option<ModuleSource>,
 }
@@ -783,7 +784,7 @@ impl CalleeParams {
             // declares one, which is exactly where the spelling writes one.
             param_types: sig.decl.param_types.clone(),
             self_in_args: receiver,
-            defaults_module: sig.defaults_module.clone(),
+            defaults_module: Some(sig.defaults_module.clone()),
         }
     }
 }

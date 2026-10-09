@@ -1626,7 +1626,7 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
             _parse_a(p, follow_then(FOLLOW_MASK_1, 8, follow));
         }
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1644,7 +1644,7 @@ fn _parse_r(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
     let kind = p.peek_kind();
     if kind == TK_X {
         p.take();
@@ -1659,7 +1659,7 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of a matches",
         p.peek_span(),
-        &EXPECTED_1,
+        &EXPECTED_0,
     );
     return;
 }
@@ -1716,7 +1716,7 @@ pub fn parse_b<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResu
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[7], [16]];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[2], [16]];
 global CALL_FOLLOW: List<i32> = [0, 1, 1];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false];
 
@@ -1747,10 +1747,8 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [7];
-global EXPECTED_0: List<i32> = [TK_X, TK_Y, TK_Z];
-global SYNC_1: List<i32> = [5];
-global EXPECTED_1: List<i32> = [TK_X, TK_Z];
+global SYNC_0: List<i32> = [5];
+global EXPECTED_0: List<i32> = [TK_X, TK_Z];
 
 global FOLLOW_SETS: List<List<i32>> = [[2], [16]];
 global FOLLOW_MASK_0: i64 = 513;

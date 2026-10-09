@@ -1,0 +1,373 @@
+//! What the generated parser is made of, decided once lowering and the ATN are
+//! done and read by every emit site after: which machinery it carries (FOLLOW
+//! slots, the ATN simulator, the scan memo), the ATN's decision tables, the
+//! recovery sets, and what each rule's actions read off its calls.
+
+use { Grammar } from "./ir.wado";
+use { LoweredGrammar, Op, Rule } from "./gir.wado";
+use { GrammarAnalysis, close_over_callers } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { LowerMarks } from "./lower_context.wado";
+use { Atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
+use { RecoverySets, empty_recovery_sets, recovery_sets } from "./recovery_sets.wado";
+use {
+    action_reads_rule_ctx,
+    action_reads_rule_span,
+    rule_action_bodies,
+    rule_binding_reads,
+} from "./action_translate.wado";
+use { HashMap, HashSet } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
+
+/// The labeled rule calls of one rule whose capture an action reads: `spans`
+/// carry the call's token range (`$x.text`), `nodes` its builder row (`$x.ctx`).
+pub struct RuleCaptures {
+    pub spans: List<String> = [],
+    pub nodes: List<String> = [],
+}
+
+impl RuleCaptures {
+    /// Whether no action reads a capture of the rule.
+    pub fn is_empty(&self) -> bool {
+        return self.spans.is_empty() && self.nodes.is_empty();
+    }
+}
+
+global NO_CAPTURES: RuleCaptures = RuleCaptures {};
+
+/// The decisions emit reads. Lists are per rule index unless they say
+/// otherwise; a default plan carries none of the optional machinery.
+pub struct ParserPlan {
+    /// Lowering built a caller-FOLLOW gate, so the parser threads the FOLLOW
+    /// slots (the `follow` parameter, its call-site arguments, and the
+    /// `FOLLOW_MASK_<id>` globals). Off, `follow` would be threaded but never
+    /// read, so it is pruned entirely.
+    pub emit_follow: bool = false,
+    /// Rules whose functions carry the FOLLOW slots, by snake name: the same
+    /// answer for the declaration and every call site.
+    follow_rule_snakes: HashSet<String> = HashSet::with_seed(GALE_SEED),
+    /// Only a `LeftRecursive` rule carries a `min_prec` parameter, by snake name.
+    pub lr_rule_snakes: HashSet<String> = HashSet::with_seed(GALE_SEED),
+    /// A decision routes to the runtime ATN simulator: the parser carries its
+    /// infrastructure (the `ATN_SIM` blob, `Parser.atn`, rule-entry stack
+    /// maintenance), and every scan borrows the parser's ATN state.
+    pub needs_atn: bool = false,
+    /// `ATN_SIM` carries the LR tables `atn_lr_loop_decision` reads.
+    pub needs_lr_atn: bool = false,
+    rule_asks_simulator: List<bool> = [],
+    rule_body_predicts: List<bool> = [],
+    /// A call to the rule can reach one that asks the simulator, so the call
+    /// pushes the return state the prediction reads.
+    rule_reaches_simulator: List<bool> = [],
+    /// Left-recursive and rescanned rules' scans answer from the parser's memo.
+    pub scan_memo: bool = false,
+    /// The rule's scan is memoized (`GrammarAnalysis::rule_rescans`).
+    rescanned: List<bool> = [],
+    /// The ATN decision of each rule's LR loop entry, -1 for a rule with none.
+    lr_loop_entry_decisions: List<i32> = [],
+    /// The ATN decision of each rule's top-level alternation, which an
+    /// `AtEndConflict` site predicts at; -1 for a single-alt or LR rule.
+    atn_rule_body_decisions: List<i32> = [],
+    /// By surface call site (`RuleRefElement.atn_call_site`), the ATN return
+    /// state a rule call pushes. Empty without the ATN.
+    atn_call_site_returns: List<i32> = [],
+    /// By surface decision site, the ATN decision number. Empty without the ATN.
+    atn_decision_sites: List<i32> = [],
+    recovery: RecoverySets = empty_recovery_sets(),
+    /// By rule name, the labeled rule calls whose capture an action reads.
+    /// Their value-struct fields are what `$x.text` / `$x.ctx` resolve to.
+    rule_captures: HashMap<String, RuleCaptures> = HashMap::with_seed(GALE_SEED),
+    /// The binding bases each rule's actions read (`rule_binding_reads`).
+    binding_reads: List<Option<List<String>>> = [],
+}
+
+/// Decide the parser `grammar` lowers to.
+///
+/// The scan memo answers each left-recursive or rescanned rule's scan once per
+/// reading of a position. Candidates of a scan tournament that share a prefix
+/// each scan the operand under it, so nesting one inside another doubles the
+/// work at every level; `rule_rescans` names the other way a scan doubles. A
+/// scan decides nothing and reads only its arguments, so its answer can be kept
+/// for the parse. A prediction reads the caller stack too, which no key here
+/// holds: the walk hides it, and an answer that needed it is not kept. A
+/// left-recursion loop the simulator decides reads the callers outside that, so
+/// it leaves no memo.
+pub fn plan_parser(
+    grammar: &Grammar,
+    lowered: &LoweredGrammar,
+    analysis: &mut GrammarAnalysis,
+    settings: &GenSettings,
+    marks: &LowerMarks,
+    atn: &Atn,
+) -> ParserPlan {
+    assert lowered.parser_rules.len() == grammar.parser_rules.len(), "`lower` lowers each parser rule in order";
+    let rule_count = grammar.parser_rules.len();
+    let needs_atn = marks.needs_atn();
+    let rescanned = analysis.rule_rescans();
+    let any_lr = lowered.parser_rules.iter_ref().any(|r| r matches { LeftRecursive(_) });
+    let mut lr_snakes: List<String> = [];
+    for let mut i = 0; i < rule_count; i += 1 {
+        if let LeftRecursive(_) = &lowered.parser_rules[i] {
+            lr_snakes.push(grammar.parser_rules[i].snake_name);
+        }
+    }
+    let mut lr_decs: List<i32> = [];
+    let mut body_decs: List<i32> = [];
+    if needs_atn {
+        for let mut r = 0; r < rule_count; r += 1 {
+            let lr_dec = lr_loop_entry_decision(atn, r);
+            lr_decs.push(lr_dec);
+            // -1 for LR rules: the atom-block decision's edge indices exclude the
+            // LR alts, so they would not equal the grammar alt indices `_alt_N`
+            // uses (AtEndConflict routing is non-LR only).
+            body_decs.push(if lr_dec >= 0 { -1 } else { rule_body_decision(atn, r) });
+        }
+    }
+    let mut binding_reads: List<Option<List<String>>> = [];
+    if settings.emit_actions {
+        binding_reads = grammar.parser_rules.iter_ref().map(|r| rule_binding_reads(r, &grammar.parser_rules)).collect();
+    }
+    return ParserPlan {
+        emit_follow: marks.caller_follow_gate,
+        follow_rule_snakes: name_set(&marks.follow_rule_snakes),
+        lr_rule_snakes: name_set(&lr_snakes),
+        needs_atn,
+        needs_lr_atn: marks.needs_lr_atn,
+        rule_asks_simulator: marks.rule_asks_simulator,
+        rule_body_predicts: marks.rule_body_predicts,
+        rule_reaches_simulator: close_over_callers(&analysis.scannable_callees(), marks.rule_asks_simulator),
+        scan_memo: !marks.needs_lr_atn && (rescanned.contains(&true) || any_lr),
+        rescanned,
+        lr_loop_entry_decisions: lr_decs,
+        atn_rule_body_decisions: body_decs,
+        atn_call_site_returns: if needs_atn { atn.call_site_returns } else { [] },
+        atn_decision_sites: if needs_atn { atn.decision_sites } else { [] },
+        // Every grammar reads its recovery sets off the ATN; only the
+        // simulator's grammars also embed it.
+        recovery: recovery_sets(atn, analysis.eof_kind_id()),
+        rule_captures: if settings.emit_actions {
+            rule_captures_of(grammar, lowered);
+        } else {
+            HashMap::with_seed(GALE_SEED);
+        },
+        binding_reads,
+    };
+}
+
+impl ParserPlan {
+    /// The plan of `rule_count` rules lowering marked nothing in: no FOLLOW
+    /// gate, simulator decision or rescanned rule.
+    pub fn unmarked(rule_count: i32) -> ParserPlan {
+        let none = List::<bool>::filled(rule_count, false);
+        return ParserPlan {
+            rule_asks_simulator: none,
+            rule_body_predicts: none,
+            rule_reaches_simulator: none,
+            rescanned: none,
+        };
+    }
+
+    /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
+    /// declaration and at every call site, so the two cannot disagree.
+    pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
+        return self.emit_follow && self.follow_rule_snakes.contains_str(snake);
+    }
+
+    /// Whether a call to `snake` passes `min_prec`: only a left-recursive rule takes one.
+    pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
+        return self.lr_rule_snakes.contains_str(snake);
+    }
+
+    /// Whether rule `rule` makes a decision the simulator decides.
+    pub fn rule_asks_simulator(&self, rule: i32) -> bool {
+        return self.rule_asks_simulator[rule];
+    }
+
+    /// Whether the simulator decides inside rule `rule`'s body.
+    pub fn rule_body_predicts(&self, rule: i32) -> bool {
+        return self.rule_body_predicts[rule];
+    }
+
+    /// Whether a call to rule `rule` can reach a decision the simulator
+    /// decides, so the scan pushes the return state the prediction reads.
+    pub fn rule_reaches_simulator(&self, rule: i32) -> bool {
+        return self.rule_reaches_simulator[rule];
+    }
+
+    /// Whether rule `rule`'s scan is memoized.
+    pub fn rule_is_rescanned(&self, rule: i32) -> bool {
+        return self.rescanned[rule];
+    }
+
+    /// The ATN loop-entry decision number for `rule`, or -1 if none / unbuilt.
+    pub fn lr_loop_entry_decision(&self, rule: i32) -> i32 {
+        return entry_or_none(&self.lr_loop_entry_decisions, rule);
+    }
+
+    /// The ATN decision number for `rule`'s top-level alternation, or -1 if
+    /// single-alt / unbuilt. Used to route an `AtEndConflict` site to the simulator.
+    pub fn atn_rule_body_decision(&self, rule: i32) -> i32 {
+        return entry_or_none(&self.atn_rule_body_decisions, rule);
+    }
+
+    /// The exact ATN return state for surface call site `call_site`, or -1
+    /// when unknown (no ATN built, the id is out of range, or the call site
+    /// never got a `RuleRef` segment — e.g. the stripped leading LR self-ref).
+    pub fn atn_call_site_return(&self, call_site: i32) -> i32 {
+        return entry_or_none(&self.atn_call_site_returns, call_site);
+    }
+
+    /// The exact ATN decision number for surface decision site `site`, or -1
+    /// when unknown (no ATN built, the id is out of range, or the node marked
+    /// no decision — e.g. a single-alt group).
+    pub fn atn_decision_site(&self, site: i32) -> i32 {
+        return entry_or_none(&self.atn_decision_sites, site);
+    }
+
+    /// What error recovery expects and resynchronizes on, read off the ATN.
+    pub fn recovery_sets(&self) -> &RecoverySets {
+        return &self.recovery;
+    }
+
+    /// What may follow terminal `leaf_site` inside its rule, as kind ids,
+    /// and whether the rule may end after it.
+    pub fn leaf_follow(&self, leaf_site: i32) -> [List<i32>, bool] {
+        let r = &self.recovery;
+        assert leaf_site >= 0 && leaf_site < r.leaf_follow.len(), `terminal ${leaf_site} has an ATN state`;
+        return [r.leaf_follow[leaf_site], r.leaf_follow_ends[leaf_site]];
+    }
+
+    /// What a subrule expects on entry, as kind ids; `null` where its
+    /// rule may end there instead, or the site names no decision.
+    pub fn decision_entry_expect(&self, site: i32) -> Option<List<i32>> {
+        return expect_ids(&self.recovery.decision_entry, site);
+    }
+
+    /// What a `*` / `+` expects after an iteration.
+    pub fn decision_back_expect(&self, site: i32) -> Option<List<i32>> {
+        return expect_ids(&self.recovery.decision_back, site);
+    }
+
+    /// What a rule's own alternative block expects on entry.
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<i32>> {
+        assert rule >= 0 && rule < self.recovery.rule_entry.len(), `rule_entry_expect: rule ${rule} has no entry set`;
+        return expect_ids(&self.recovery.rule_entry, rule);
+    }
+
+    /// The labeled calls of `rule_name` an action reads the capture of.
+    pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures {
+        if let Some(captures) = self.rule_captures.get_ref_str(rule_name) {
+            return captures;
+        }
+        return &NO_CAPTURES;
+    }
+
+    /// Whether an action of rule `rule` reads the binding `base`.
+    pub fn reads_binding<S: AsStrSlice>(&self, rule: i32, base: S) -> bool {
+        assert rule < self.binding_reads.len(), "an emit that reads bindings runs with actions on";
+        return match &self.binding_reads[rule] {
+            Some(reads) => reads.contains_str(base),
+            None => true,
+        };
+    }
+}
+
+fn entry_or_none(table: &List<i32>, i: i32) -> i32 {
+    if i < 0 || i >= table.len() {
+        return -1;
+    }
+    return table[i];
+}
+
+fn expect_ids(sets: &List<Option<List<i32>>>, i: i32) -> Option<List<i32>> {
+    // `Atn.decision_sites` is sparse: a site past its end marks no decision.
+    if i < 0 || i >= sets.len() {
+        return null;
+    }
+    return sets[i];
+}
+
+fn name_set(names: &List<String>) -> HashSet<String> {
+    let mut set = HashSet::<String>::with_seed(GALE_SEED);
+    for let name of names {
+        set.insert(*name);
+    }
+    return set;
+}
+
+/// What every rule's actions read off its labeled rule calls, so the value
+/// struct, the capture emit, and the reference all read one answer.
+fn rule_captures_of(grammar: &Grammar, lowered: &LoweredGrammar) -> HashMap<String, RuleCaptures> {
+    let mut captures: HashMap<String, RuleCaptures> = HashMap::with_seed(GALE_SEED);
+    for let mut i = 0; i < grammar.parser_rules.len(); i += 1 {
+        let rule = &grammar.parser_rules[i];
+        let bodies = rule_action_bodies(rule);
+        if bodies.is_empty() {
+            continue;
+        }
+        let mut c = RuleCaptures {};
+        for let call of &rule_call_bindings(&lowered.parser_rules[i]) {
+            if body_reads_any(&bodies, &call.0, false) && !c.spans.contains(&call.1) {
+                c.spans.push(call.1);
+            }
+            if body_reads_any(&bodies, &call.0, true) && !c.nodes.contains(&call.1) {
+                c.nodes.push(call.1);
+            }
+        }
+        if !c.is_empty() {
+            captures[rule.name] = c;
+        }
+    }
+    return captures;
+}
+
+fn body_reads_any<S: AsStrSlice>(bodies: &List<String>, base: S, want_node: bool) -> bool {
+    return bodies.iter_ref().any(|b: &String| if want_node {
+        action_reads_rule_ctx(b, base);
+    } else {
+        action_reads_rule_span(b, base);
+    });
+}
+
+/// Every rule call in the rule's bodies, as `[dedup_base, field]`.
+fn rule_call_bindings(rule: &Rule) -> List<[String, String]> {
+    let mut out: List<[String, String]> = [];
+    match rule {
+        Simple(s) => push_rule_call_bindings(&s.body.ops, &mut out),
+        MultiAlt(m) => {
+            for let a of &m.alts {
+                push_rule_call_bindings(&a.ops, &mut out);
+            }
+        },
+        LeftRecursive(l) => {
+            for let a of &l.atom.alts {
+                push_rule_call_bindings(&a.ops, &mut out);
+            }
+            for let lr of &l.lr_alts {
+                push_rule_call_bindings(&lr.suffix.ops, &mut out);
+            }
+        },
+    }
+    return out;
+}
+
+fn push_rule_call_bindings(ops: &List<Op>, out: &mut List<[String, String]>) {
+    for let op of ops {
+        push_op_rule_call_bindings(op, out);
+    }
+}
+
+fn push_op_rule_call_bindings(op: &Op, out: &mut List<[String, String]>) {
+    match op {
+        RuleCall(rc) => out.push([rc.dedup_base, rc.field]),
+        Repeat(rep) => push_op_rule_call_bindings(&rep.body, out),
+        ListLabel(ll) => push_op_rule_call_bindings(&ll.inner, out),
+        Group(g) => {
+            for let a of &g.alts {
+                push_rule_call_bindings(&a.ops, out);
+            }
+        },
+        _ => {
+        },
+    }
+}

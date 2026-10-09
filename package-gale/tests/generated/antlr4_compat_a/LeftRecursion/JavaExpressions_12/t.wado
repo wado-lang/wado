@@ -4066,7 +4066,7 @@ fn scan_e__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut S
 }
 
 fn _parse_e__inner_alt_12(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LIT_LPAREN, &SYNC_0, false);
+    p.expect(TK_LIT_LPAREN, &SYNC_2, false);
     p.site = 16;
     p.atn_ret_pending = 90;
     _parse_typespec(p);
@@ -4110,7 +4110,7 @@ fn _parse_e__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 4;
     p.atn_ret_pending = 53;
     _parse_typespec(p);
-    p.expect(TK_LIT_DOT, &SYNC_2, false);
+    p.expect(TK_LIT_DOT, &SYNC_3, false);
     p.expect(TK_LIT_class, &SYNC_1, true);
     return;
 }
@@ -4192,11 +4192,11 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
         p.site = 11;
         p.atn_ret_pending = 62;
         _parse_typespec(p);
-        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
         let grp_kind = p.peek_kind();
         if grp_kind == TK_LIT_LPAREN {
             p.take();
-            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+            if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
             if _kind_set_1(p.peek_kind()) {
                 p.site = 12;
                 p.atn_ret_pending = 71;
@@ -4204,7 +4204,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
             }
             p.expect(TK_LIT_RPAREN, &SYNC_1, true);
         } else if grp_kind == TK_LIT_LBRACKET {
-            if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
+            if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_6, &EXPECTED_6); }
             let mut _plus_first = true;
             loop {
                 if p.recovering { break; }
@@ -4241,7 +4241,7 @@ fn _parse_e__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> (
                 p.expect(TK_LIT_RBRACKET, &SYNC_1, true);
             }
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_3);
+            p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_4);
         }
         return;
     }
@@ -4308,9 +4308,9 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
                     p.take();
-                    p.expect(TK_LIT_super, &SYNC_6, false);
-                    p.expect(TK_LIT_LPAREN, &SYNC_4, false);
-                    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+                    p.expect(TK_LIT_super, &SYNC_7, false);
+                    p.expect(TK_LIT_LPAREN, &SYNC_5, false);
+                    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
                     let mut opt_scan_pos: i32 = -1;
                     opt_scan: {
                         let tokens = &p.kinds;
@@ -4338,10 +4338,10 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     }
                     p.b.start_node_at(_cp, RK_E, _start);
                     p.take();
-                    p.expect(TK_LIT_new, &SYNC_7, false);
-                    p.expect(TK_ID, &SYNC_6, false);
-                    p.expect(TK_LIT_LPAREN, &SYNC_4, false);
-                    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+                    p.expect(TK_LIT_new, &SYNC_8, false);
+                    p.expect(TK_ID, &SYNC_7, false);
+                    p.expect(TK_LIT_LPAREN, &SYNC_5, false);
+                    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
                     let mut opt_scan_pos_2: i32 = -1;
                     opt_scan_2: {
                         let tokens = &p.kinds;
@@ -4396,7 +4396,7 @@ fn _parse_e__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                 }
                 p.b.start_node_at(_cp, RK_E, _start);
                 p.take();
-                if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+                if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
                 let mut opt_scan_pos_3: i32 = -1;
                 opt_scan_3: {
                     let tokens = &p.kinds;
@@ -4636,8 +4636,8 @@ fn scan_typespec__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
 }
 
 fn _parse_typespec__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_ID, &SYNC_5, false);
-    p.expect(TK_LIT_LBRACKET, &SYNC_8, false);
+    p.expect(TK_ID, &SYNC_6, false);
+    p.expect(TK_LIT_LBRACKET, &SYNC_9, false);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -4666,8 +4666,8 @@ fn scan_typespec__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
 }
 
 fn _parse_typespec__inner_alt_3(p: &mut Parser) -> () {
-    p.expect(TK_LIT_int, &SYNC_5, false);
-    p.expect(TK_LIT_LBRACKET, &SYNC_8, false);
+    p.expect(TK_LIT_int, &SYNC_6, false);
+    p.expect(TK_LIT_LBRACKET, &SYNC_9, false);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
     return;
 }
@@ -4684,7 +4684,7 @@ fn scan_typespec__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
 }
 
 fn _parse_typespec__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_9, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_9, &EXPECTED_9); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_ID {
         let _atn_alt = atn_predict_once(&ATN_SIM, 18, &mut p.atn, &p.kinds, p.pos, TK_EOF, 0);
@@ -4703,7 +4703,7 @@ fn _parse_typespec__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of typespec matches",
         p.peek_span(),
-        &EXPECTED_9,
+        &EXPECTED_2,
     );
     return;
 }
@@ -4831,18 +4831,18 @@ global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [2069315, 2097152];
 global EXPECTED_0: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_TILDE, TK_LIT_int, TK_LIT_new, TK_LIT_super, TK_LIT_this];
 global SYNC_1: List<i32> = [-1596352, 2096895];
-global SYNC_2: List<i32> = [2048];
-global SYNC_3: List<i32> = [8256];
-global EXPECTED_3: List<i32> = [TK_LIT_LBRACKET, TK_LIT_LPAREN];
-global SYNC_4: List<i32> = [2069443, 2097152];
-global EXPECTED_4: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_RPAREN, TK_LIT_TILDE, TK_LIT_int, TK_LIT_new, TK_LIT_super, TK_LIT_this];
-global SYNC_5: List<i32> = [8192];
-global EXPECTED_5: List<i32> = [TK_LIT_LBRACKET];
-global SYNC_6: List<i32> = [64];
-global SYNC_7: List<i32> = [1];
-global SYNC_8: List<i32> = [16384];
-global SYNC_9: List<i32> = [1, 2097152];
-global EXPECTED_9: List<i32> = [TK_ID, TK_LIT_int];
+global SYNC_2: List<i32> = [1, 2097152];
+global EXPECTED_2: List<i32> = [TK_ID, TK_LIT_int];
+global SYNC_3: List<i32> = [2048];
+global SYNC_4: List<i32> = [8256];
+global EXPECTED_4: List<i32> = [TK_LIT_LBRACKET, TK_LIT_LPAREN];
+global SYNC_5: List<i32> = [2069443, 2097152];
+global EXPECTED_5: List<i32> = [TK_ID, TK_INT, TK_LIT_BANG, TK_LIT_LPAREN, TK_LIT_MINUS, TK_LIT_MINUSMINUS, TK_LIT_PLUS, TK_LIT_PLUSPLUS, TK_LIT_RPAREN, TK_LIT_TILDE, TK_LIT_int, TK_LIT_new, TK_LIT_super, TK_LIT_this];
+global SYNC_6: List<i32> = [8192];
+global EXPECTED_6: List<i32> = [TK_LIT_LBRACKET];
+global SYNC_7: List<i32> = [64];
+global SYNC_8: List<i32> = [1];
+global SYNC_9: List<i32> = [16384];
 
 global FOLLOW_SETS: List<List<i32>> = [[8], [32], [2069315, 2097152], [128], [16384], [0, 256]];
 global FOLLOW_MASK_0: i64 = 1;

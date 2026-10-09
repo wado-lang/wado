@@ -725,3 +725,77 @@ test "contains_str on an empty list" {
     let names: List<String> = [];
     assert !names.contains_str("alpha");
 }
+
+// An element a list takes in, by any route, is a value of its own: a write
+// through it reaches neither the source nor a sibling.
+test "filled gives each element its own value" {
+    let mut rows = List::<List<i32>>::filled(2, []);
+    rows[0].push(1);
+    assert rows[1].is_empty();
+}
+
+test "extend copies the elements it appends" {
+    let src: List<List<i32>> = [[]];
+    let mut dst: List<List<i32>> = [];
+    dst.extend(&src);
+    dst[0].push(1);
+    assert src[0].is_empty();
+}
+
+test "extend_from_slice copies the elements it appends" {
+    let src: List<List<i32>> = [[], []];
+    let mut dst: List<List<i32>> = [];
+    dst.extend_from_slice(src.slice(1, 2));
+    dst[0].push(1);
+    assert src[1].is_empty();
+}
+
+test "repeat copies each repetition" {
+    let src: List<List<i32>> = [[]];
+    let mut out = src.repeat(2);
+    out[0].push(1);
+    assert out[1].is_empty();
+    assert src[0].is_empty();
+}
+
+test "copy_within_append copies the elements it appends" {
+    let mut rows: List<List<i32>> = [[]];
+    rows.copy_within_append(0, 1);
+    rows[1].push(1);
+    assert rows[0].is_empty();
+}
+
+test "to_array copies the elements" {
+    let src: List<List<i32>> = [[]];
+    let mut out = src.to_array();
+    out[0].push(1);
+    assert src[0].is_empty();
+}
+
+test "sorted copies the elements" {
+    let src: List<List<i32>> = [[]];
+    let mut out = src.sorted();
+    out[0].push(1);
+    assert src[0].is_empty();
+}
+
+test "sorted_by copies the elements" {
+    let src: List<List<i32>> = [[]];
+    let mut out = src.sorted_by(|a, b| a.cmp(b));
+    out[0].push(1);
+    assert src[0].is_empty();
+}
+
+test "a slice's to_array copies the elements" {
+    let src: List<List<i32>> = [[], []];
+    let mut out = src.slice(1, 2).to_array();
+    out[0].push(1);
+    assert src[1].is_empty();
+}
+
+test "collecting a slice's values copies the elements" {
+    let src: List<List<i32>> = [[], []];
+    let mut out = src.slice(1, 2).iter_value().collect();
+    out[0].push(1);
+    assert src[1].is_empty();
+}

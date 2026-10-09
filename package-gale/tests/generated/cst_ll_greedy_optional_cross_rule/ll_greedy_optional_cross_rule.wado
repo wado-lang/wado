@@ -1900,7 +1900,7 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
     p.no_viable(
         "no alternative of expression matches",
         p.peek_span(),
-        &EXPECTED_4,
+        &EXPECTED_2,
     );
     return;
 }
@@ -1945,7 +1945,7 @@ fn _parse_expression(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
 
 fn _parse_if_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LIT_if, &SYNC_0, false);
-    p.expect(TK_ID, &SYNC_2, false);
+    p.expect(TK_ID, &SYNC_4, false);
     p.site = 6;
     _parse_block(p);
     if p.peek_kind() == TK_LIT_else && p.peek_at(1) == TK_LIT_LBRACE && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
@@ -2052,11 +2052,11 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [1];
 global SYNC_1: List<i32> = [64];
-global SYNC_2: List<i32> = [3106];
-global EXPECTED_2: List<i32> = [TK_INT, TK_LIT_LBRACE, TK_LIT_if, TK_LIT_let];
+global SYNC_2: List<i32> = [1026];
+global EXPECTED_2: List<i32> = [TK_INT, TK_LIT_if];
 global SYNC_3: List<i32> = [384];
 global EXPECTED_3: List<i32> = [TK_LIT_SEMI, TK_LIT_else];
-global EXPECTED_4: List<i32> = [TK_INT, TK_LIT_if];
+global SYNC_4: List<i32> = [2048];
 global SYNC_5: List<i32> = [2];
 global SYNC_6: List<i32> = [4096];
 

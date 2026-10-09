@@ -1,0 +1,65 @@
+// The type a call's site expects reaches its arguments first, as a hint: a
+// sequence literal or a struct literal without a name takes it, where it would
+// otherwise settle the type parameter before the expected type is read.
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn fill<T>(n: i32, e: T) -> List<T> {
+    return List::filled(n, e);
+}
+
+struct Holder<T> {
+    v: T,
+}
+
+impl<T> Holder<T> {
+    fn of(v: T) -> Holder<T> {
+        return Holder { v };
+    }
+}
+
+fn rows() -> List<List<i32>> {
+    return List::filled(2, []);
+}
+
+test "an empty sequence literal takes the expected type" {
+    let l: List<i32> = identity([]);
+    assert l.is_empty();
+}
+
+test "element literals take the expected element type" {
+    let l: List<List<i64>> = fill(2, [1]);
+    let wide: i64 = l[1][0];
+    assert wide == 1;
+}
+
+test "a static method's argument takes the expected type" {
+    let h: Holder<List<String>> = Holder::of(["a"]);
+    assert h.v[0] == "a";
+}
+
+struct Point {
+    x: i32,
+}
+
+test "a struct literal without a name takes the expected type" {
+    let h: Holder<Point> = Holder::of({ x: 1 });
+    assert h.v.x == 1;
+}
+
+test "a return type is the expected type" {
+    let mut r = rows();
+    r[0].push(1);
+    assert r[1].is_empty();
+}
+
+test "a typed argument still decides" {
+    let mut n = 1;
+    let r: &i32 = identity(&mut n);
+    assert *r == 1;
+    let t = [1, 2];
+    let u = identity(t);
+    assert u.1 == 2;
+}

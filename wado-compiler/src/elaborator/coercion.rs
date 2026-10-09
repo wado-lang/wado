@@ -22,7 +22,7 @@ use crate::escape::{unescape_byte, unescape_bytes};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{InferVarId, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Whether `expr` is a literal — the only position implicit conversion reaches
@@ -870,6 +870,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(*answer) && is_numeric_literal_target(&tt, *answer)
         });
         hints
+    }
+
+    /// What `ret` says of each of `own_vars` its declared type names, as the
+    /// substitution [`Elaborator::context_literal_expected`] applies: the
+    /// type a call's site expects reaches its arguments first, as a hint.
+    pub(super) fn expected_return_hints(
+        &mut self,
+        own_vars: &[TypeId],
+        ret: Option<ExpectedReturn>,
+    ) -> IndexMap<InferVarId, TypeId> {
+        let Some(ret) = ret else {
+            return IndexMap::default();
+        };
+        let bindings = self.unify_expected_return(ret);
+        let tt = self.tysys.type_table.borrow();
+        // A pack's variable is no `InferVar`, and an element hint does not
+        // reach a pack's literal anyway.
+        bindings
+            .into_iter()
+            .filter(|&(var, answer)| own_vars.contains(&var) && !tt.contains_infer_var(answer))
+            .filter_map(|(var, answer)| match *tt.get(var) {
+                ResolvedType::InferVar(id) => Some((id, answer)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The type `arg` is checked against where it is a literal that takes its
+    /// type from context: `expected` with `hints` substituted, so `[]` for a
+    /// `T` the site expects to be `List<i32>` is a `List<i32>`, not the empty
+    /// tuple. A typed argument is checked against `expected` alone, so it
+    /// still decides what the hint only suggests.
+    pub(super) fn context_literal_expected(
+        &mut self,
+        arg: &Expr,
+        expected: TypeId,
+        hints: &IndexMap<InferVarId, TypeId>,
+    ) -> TypeId {
+        let takes_context = match arg {
+            Expr::TupleLiteral(_) => true,
+            Expr::StructLiteral(lit) => lit.name.is_none(),
+            _ => false,
+        };
+        if !takes_context || hints.is_empty() {
+            return expected;
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_infer_vars(expected, hints)
     }
 
     fn unify_expected_return(&mut self, ret: ExpectedReturn) -> IndexMap<TypeId, TypeId> {

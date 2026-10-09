@@ -191,7 +191,9 @@ tokens the start rule can't derive (e.g. a top-level statement under an `item*`
 start rule) is otherwise left unconsumed, so nested-only constructs build no
 subtree. Naming the unit rule(s) makes the start rule's `expect(EOF)` sweep the
 remainder into an `<error>` region under the root and parse each entry, so a bare
-statement fragment builds full subtrees (opt-in, byte-identical when empty). See
+statement fragment builds full subtrees (opt-in, byte-identical when empty). An
+entry's first tokens are sync points only while the call stack holds the start
+rule alone (`root_fragment_start`), so nested recovery is unchanged. See
 "Parsing a fragment" in `README.md`.
 
 ### Deferred

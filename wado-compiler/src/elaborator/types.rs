@@ -3045,9 +3045,9 @@ pub(super) struct MethodInfo {
     /// An inherent member's declared rung. `None` where the member does not
     /// decide its own reach: trait impls, resource methods, builtins.
     pub(super) inherent_visibility: Option<Visibility>,
-    /// Where [`Self::param_defaults`] were written, when that is not the
-    /// selected method's own module: the trait it implements declares them
-    /// (WEP 2026-04-11), and a default resolves in the scope that wrote it.
+    /// Where [`Self::param_defaults`] were written (WEP 2026-04-11): a default
+    /// resolves in the scope that wrote it. `None` only where no declaration
+    /// backs the method.
     pub(super) defaults_module: Option<ModuleSource>,
     /// The matched `impl` block's type parameters, standing for the receiver's
     /// type arguments. A default naming one (`v: T = T::default()`) resolves

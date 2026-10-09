@@ -50,7 +50,7 @@ struct TokenKinds {
 ```
 
 `names` is the _only_ place `TK_*` strings live long-term — one shared table,
-replacing the thousands of copies now in the caches. Passed into `GenContext`.
+replacing the thousands of copies now in the caches. Passed into `GrammarAnalysis`.
 
 ### 2. The token _is_ an integer: `kind_id` on the terminal IR
 
@@ -90,7 +90,7 @@ Output must stay byte-identical for every grammar. Three ordering rules:
    reproduces the same sequence.
 2. **Kind-set canonical order**: canonicalisation must still order **by name**
    (kind ids sort in declaration order, not name order). Landed 2026-08 as
-   `GenContext::canonical_kind_ids`: a lazily rebuilt `kind_rank` table
+   `GrammarAnalysis::canonical_kind_ids`: a lazily rebuilt `kind_rank` table
    (`rank[id]` = lexicographic rank of the name) sorts the ids with integer
    compares, and the joined id list is the registry key. Rank order equals
    name order, so canonical order and helper ids match the former name sort.
@@ -111,9 +111,9 @@ integer.
 SQLite md5; GC measured `--collector copying` vs `null` on SQLite)
 
 - **P0 — table + ids, unused.** Build `TokenKinds` in codegen; add `kind_id` to
-  the two elements; one resolution pass; pass table to `GenContext`. No analysis
+  the two elements; one resolution pass; pass table to `GrammarAnalysis`. No analysis
   change yet → byte-identical by construction.
-- **P1 — gen_context FIRST → `List<i32>`.** `first_of_*` use `elem.kind_id`;
+- **P1 — grammar_analysis FIRST → `List<i32>`.** `first_of_*` use `elem.kind_id`;
   `first_cache` int. Keep thin `first_of_*` String wrappers (via `names`) so
   unconverted consumers still build; they are removed in P4.
 - **P2 — prediction → int.** `sll_*`, `build_sll_node`, `try_expand_opaque`,
@@ -135,7 +135,7 @@ small grammar). Expect the biggest effect on TS/Rust (keyword-dense, GC-bound).
 - **`single_token_first`** (`gen_util.wado`)
   already centralises `TokenRef→"TK_name"` / `Literal→const_name`; the `kind_id`
   resolution pass routes through them, and open-coded `` `TK_{t.name}` `` sites
-  (enumerated: lower, parser_gen, prediction, gen_context, atn, dump) migrate to
+  (enumerated: lower, parser_gen, prediction, grammar_analysis, atn, dump) migrate to
   reading `elem.kind_id`.
 - **`follow_env`'s private `TokenInterner`** — deleted (2026-08); the FOLLOW
   bitsets index the canonical kind-id space directly.
@@ -151,6 +151,6 @@ small grammar). Expect the biggest effect on TS/Rust (keyword-dense, GC-bound).
 - **Numeric `-> type(N)` tokens** (lexer_gen.wado:236) get extra `TK_<N>`
   globals but never appear in a parser FIRST set, so they need no id in the
   analysis table.
-- **`GenContext` currently lacks `lexer_rules`.** The table is built in codegen
+- **`GrammarAnalysis` currently lacks `lexer_rules`.** The table is built in codegen
   (which has the `Grammar`) and injected, so `token_slot_order`'s inputs are
   available at construction.

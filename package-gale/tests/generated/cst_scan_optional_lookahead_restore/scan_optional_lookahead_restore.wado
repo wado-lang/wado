@@ -1803,7 +1803,7 @@ fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of stmt matches",
         p.peek_span(),
-        &EXPECTED_1,
+        &EXPECTED_0,
     );
     return;
 }
@@ -1823,7 +1823,7 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 3;
     _parse_name(p);
     if p.peek_kind() == TK_LIT_as && _kind_set_0(p.peek_at(1)) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         if p.peek_kind() == TK_LIT_as {
             p.take();
         }
@@ -1867,7 +1867,7 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
             p.site = 5;
             _parse_name(p);
         } else {
-            p.expect(TK_LIT_no, &SYNC_3, false);
+            p.expect(TK_LIT_no, &SYNC_2, false);
             p.expect(TK_LIT_idx, &EMPTY_SYNC, true);
         }
     }
@@ -1930,7 +1930,7 @@ fn scan_item__alt_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 fn _parse_item__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     p.site = 6;
     _parse_name(p);
-    p.expect(TK_LIT_LPAREN, &SYNC_0, false);
+    p.expect(TK_LIT_LPAREN, &SYNC_3, false);
     p.site = 7;
     _parse_inner(p);
     p.expect(TK_LIT_RPAREN, &EMPTY_SYNC, true);
@@ -2001,7 +2001,7 @@ fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of item matches",
         p.peek_span(),
-        &EXPECTED_1,
+        &EXPECTED_0,
     );
     return;
 }
@@ -2050,7 +2050,7 @@ fn _parse_alias(p: &mut Parser) -> () {
 }
 
 fn _parse_inner__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if kind == TK_NUMBER {
         p.take();
@@ -2065,7 +2065,7 @@ fn _parse_inner__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of inner matches",
         p.peek_span(),
-        &EXPECTED_5,
+        &EXPECTED_3,
     );
     return;
 }
@@ -2134,7 +2134,7 @@ pub fn parse_name<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseR
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_name(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[8], [], [32], [963], [384], [512], [1024]];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[8], [], [32], [961], [384], [512], [1024]];
 global CALL_FOLLOW: List<i32> = [0, 1, 2, 3, 4, 1, 5, 6, 6, 6];
 global CALL_FOLLOW_ENDS: List<bool> = [false, true, false, true, true, true, false, false, false, false];
 
@@ -2173,16 +2173,15 @@ fn _kind_set_2(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [515];
-global EXPECTED_0: List<i32> = [TK_ID, TK_LIT_LPAREN, TK_NUMBER];
-global EXPECTED_1: List<i32> = [TK_ID];
-global SYNC_2: List<i32> = [579];
-global EXPECTED_2: List<i32> = [TK_ID, TK_LIT_LPAREN, TK_LIT_as, TK_NUMBER];
-global SYNC_3: List<i32> = [128];
+global SYNC_0: List<i32> = [1];
+global EXPECTED_0: List<i32> = [TK_ID];
+global SYNC_1: List<i32> = [577];
+global EXPECTED_1: List<i32> = [TK_ID, TK_LIT_LPAREN, TK_LIT_as];
+global SYNC_2: List<i32> = [128];
+global SYNC_3: List<i32> = [514];
+global EXPECTED_3: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
 global SYNC_4: List<i32> = [513];
 global EXPECTED_4: List<i32> = [TK_ID, TK_LIT_LPAREN];
-global SYNC_5: List<i32> = [514];
-global EXPECTED_5: List<i32> = [TK_LIT_LPAREN, TK_NUMBER];
 
 global FOLLOW_SETS: List<List<i32>> = [[8], [32]];
 global FOLLOW_MASK_0: i64 = 1;

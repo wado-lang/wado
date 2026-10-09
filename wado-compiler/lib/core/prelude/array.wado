@@ -44,7 +44,7 @@ impl<T> Array<T> {
         return builtin::array_new(len);
     }
 
-    /// Creates a new array of `len` elements, each set to `value`.
+    /// Creates a new array of `len` elements, each set to a copy of `value`.
     pub fn filled(len: i32, value: T) -> Array<T> {
         let mut a: Array<T> = builtin::array_new(len);
         builtin::array_fill(&mut a, 0, value, len);
@@ -62,13 +62,13 @@ impl<T> Array<T> {
         builtin::array_set(self, index, value);
     }
 
-    /// Sets every element to `value` (`array.fill`).
+    /// Sets every element to a copy of `value`.
     pub fn fill(&mut self, value: T) {
         builtin::array_fill(self, 0, value, builtin::array_len(self));
     }
 
     /// Copies `len` elements of `src` starting at `src_off` into self
-    /// starting at `dst` (`array.copy`).
+    /// starting at `dst`, as if through a buffer, so `src` may be `self`.
     pub fn copy_from(&mut self, dst: i32, src: &Array<T>, src_off: i32, len: i32) {
         builtin::array_copy(self, dst, src, src_off, len);
     }

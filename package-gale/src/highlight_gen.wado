@@ -2,8 +2,8 @@ use { Grammar, LexerRule, ParserRule, lexer_alias_text } from "./ir.wado";
 use { LitToken, TokenSlot, token_slot_order } from "./lexer_gen.wado";
 use { CodeWriter, FnSpec, Vis, wado } from "lib:wadopoet";
 use { HighlightRule, TokenSelector } from "./highlight_query.wado";
-use { GenContext } from "./gen_context.wado";
-use { DiagnosticKind, DiagnosticOwner } from "./gir.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { Diagnostics, DiagnosticKind, DiagnosticOwner } from "./gir.wado";
 use { rule_kind_const } from "./gen_util.wado";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
@@ -19,7 +19,8 @@ pub fn gen_highlight(
     grammar: &Grammar,
     lit_tokens: &List<LitToken>,
     query: &List<HighlightRule>,
-    ctx: &mut GenContext,
+    settings: &GenSettings,
+    diagnostics: &mut Diagnostics,
 ) {
     gen_highlight_mapping(
         w,
@@ -27,7 +28,7 @@ pub fn gen_highlight(
         &grammar.parser_rules,
         lit_tokens,
         query,
-        ctx,
+        diagnostics,
     );
     if grammar.parser_rules.len() > 0 {
         let mut fr = FnSpec::new("highlight_result", Vis::Pub);
@@ -43,14 +44,14 @@ pub fn gen_highlight(
         w.end();
         w.blank();
 
-        let mut f = highlight_entry(ctx);
+        let mut f = highlight_entry(settings);
         f.emit_begin(w);
         w.line("let result = parse(input);");
         w.line("return highlight_result(&result, input);");
         w.end();
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
-        let mut f = highlight_entry(ctx);
+        let mut f = highlight_entry(settings);
         f.emit_begin(w);
         w.line("let mut visitor = HighlightVisitor::new(&HIGHLIGHT_MAPPING);");
         w.line("let tokens = tokenize(input);");
@@ -65,12 +66,12 @@ pub fn gen_highlight(
 
 /// The `highlight(input) -> String` signature, performing what lexing and
 /// parsing it does.
-fn highlight_entry(ctx: &GenContext) -> FnSpec {
+fn highlight_entry(settings: &GenSettings) -> FnSpec {
     let mut f = FnSpec::new("highlight", Vis::Pub);
     f.add_generic("S: AsStrSlice");
     f.add_param("input", "S");
     f.set_return_type("String");
-    for let base of &ctx.base_effects() {
+    for let base of &settings.base_effects() {
         f.add_effect(base);
     }
     return f;
@@ -272,7 +273,7 @@ fn resolve_query(
     parser_rules: &List<ParserRule>,
     idx: &KindIndex,
     query: &List<HighlightRule>,
-    ctx: &mut GenContext,
+    diagnostics: &mut Diagnostics,
 ) -> ResolvedQuery {
     let mut resolved = ResolvedQuery {
         default_by_kind: HashMap::<i32, String>::with_seed(GALE_SEED),
@@ -289,7 +290,7 @@ fn resolve_query(
                     let mut visiting: List<String> = [captured.name];
                     match rule_token_kinds(captured, parser_rules, idx, &mut visiting) {
                         Some(kinds) => resolved.push_rule_capture(at, kinds, rule.capture, order),
-                        None => ctx.warn(
+                        None => diagnostics.warn(
                             &DiagnosticOwner::host("highlight"),
                             DiagnosticKind::HighlightQuery,
                             `highlight query: '(${captured.name}) @${rule.capture}' needs every alternative of '${captured.name}' to be a single token, or a delegation to a rule that is`,
@@ -302,7 +303,7 @@ fn resolve_query(
         let kind = match resolve_selector(idx, &rule.selector) {
             Some(k) => k,
             None => {
-                ctx.warn(
+                diagnostics.warn(
                     &DiagnosticOwner::host("highlight"),
                     DiagnosticKind::HighlightQuery,
                     `highlight query: unknown token ${selector_desc(&rule.selector)}`,
@@ -317,7 +318,7 @@ fn resolve_query(
             Some(rctx) => {
                 let at = parser_rule_index(parser_rules, rctx);
                 if at < 0 {
-                    ctx.warn(
+                    diagnostics.warn(
                         &DiagnosticOwner::host("highlight"),
                         DiagnosticKind::HighlightQuery,
                         `highlight query: unknown parser rule '${*rctx}'`,
@@ -374,13 +375,13 @@ fn gen_highlight_mapping(
     parser_rules: &List<ParserRule>,
     lit_tokens: &List<LitToken>,
     query: &List<HighlightRule>,
-    ctx: &mut GenContext,
+    diagnostics: &mut Diagnostics,
 ) {
     // Token kind ids follow `token_slot_order` — including deferred
     // `more` / `type(...)` rules and the conditional `TK_ERROR` sentinel.
     let slots = token_slot_order(lexer_rules, lit_tokens);
     let idx = build_kind_index(lexer_rules, lit_tokens, &slots);
-    let resolved = resolve_query(parser_rules, &idx, query, ctx);
+    let resolved = resolve_query(parser_rules, &idx, query, diagnostics);
     let vocabulary = resolved.vocabulary();
     let mut capture_ids = HashMap::<String, i32>::with_seed(GALE_SEED);
     let mut classes: List<String> = [];

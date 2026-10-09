@@ -1,0 +1,1848 @@
+//! What a grammar's parser rules derive, independent of any phase that reads
+//! it: FIRST, nullability, scannability and the other structural queries, the
+//! token-kind table they are spelled in, and the memo caches that make them
+//! cheap. Lowering, prediction and emit all ask the same `GrammarAnalysis`, so
+//! the caches are paid once per grammar.
+
+use {
+    ParserRule,
+    Alternative,
+    Element,
+    LiteralElement,
+    RepeatElement,
+    AltAction,
+    push_alt_actions,
+    compute_scan_cyclic,
+    edges_reach_self,
+    peel_labels,
+} from "./ir.wado";
+use {
+    is_single_alt_group,
+    single_alt_group_type_name,
+    dedup_append_arr,
+    all_alts_are_single_token,
+    single_token_first,
+} from "./gen_util.wado";
+use {
+    TokenKinds,
+    append_ids,
+    bits_of,
+    bits_is_empty,
+    bits_equal,
+    bits_ids,
+    bits_set,
+    bits_test,
+    bits_union_into,
+} from "./token_kinds.wado";
+use { HashMap } from "core:collections";
+use { GALE_SEED } from "./hash_seed.wado";
+
+/// The structural queries over a grammar's parser rules, with their memo
+/// caches and the token-kind table their answers are spelled in.
+pub struct GrammarAnalysis {
+    parser_rules: List<ParserRule>,
+    /// Per-rule flag (parallel to `parser_rules`): true when the rule's scan can
+    /// re-enter itself at the same input position (`compute_scan_cyclic`). Its
+    /// mandatory groups are emitted strict to break that zero-consumption cycle.
+    scan_cyclic: List<bool>,
+    rule_index: HashMap<String, i32>,
+    snake_index: HashMap<String, i32>,
+    /// Canonical token-kind table (id <-> `TK_*` name). FIRST sets are carried
+    /// as `List<i32>` of these ids; names are recovered here at the emit
+    /// boundary. The production path passes the table the grammar's
+    /// `Element::kind_id`s were resolved against; the test path starts empty
+    /// and `intern` assigns ids lazily.
+    token_kinds: TokenKinds,
+    /// `kind_rank[id]` is the lexicographic rank of `token_kinds.names[id]`,
+    /// rebuilt lazily whenever the table has grown. Kind-set canonicalisation
+    /// orders ids by rank, i.e. by token name.
+    kind_rank: List<i32>,
+    /// The inverse of `kind_rank`: the id at each rank.
+    kind_by_rank: List<i32>,
+    /// Vocabulary display names by kind id (`vocab_display_names`), the names an
+    /// expected-token set renders through.
+    vocab_names: List<String>,
+    /// Per-rule memo caches indexed by dense rule id (position in
+    /// `parser_rules`, i.e. what `rule_index_of` returns). `null` means
+    /// "not yet computed"; `Some(v)` is the memoized value. A cache probe on
+    /// the hot first/nullable/scannable recursion is then an index, with no
+    /// rule name to hash.
+    first_cache: List<Option<List<i32>>>,
+    single_token_cache: List<Option<bool>>,
+    nullable_cache: List<Option<bool>>,
+    scannable_cache: List<Option<bool>>,
+    open_end_cache: List<Option<bool>>,
+    tail_greedy_cache: List<Option<List<String>>>,
+    /// By rule name, the ways a rule begins that `first2_of_element` found
+    /// without meeting a cycle.
+    first2_cache: HashMap<String, Heads>,
+    /// Maps single-alt group type name → the rule name that first defines it.
+    /// Used to resolve general group type names inside shared single-alt groups.
+    single_alt_owner: HashMap<String, String>,
+    /// By snake name, the kinds of each rule whose scan is one token test.
+    one_token_rules: HashMap<String, List<String>>,
+    predicate_fn_owners: HashMap<i32, i32>,
+}
+
+/// By action id, the id of the grammar's first predicate with the same text:
+/// the one `pred_<id>` fn every copy of that body calls. Derived from the
+/// grammar rather than from registration, so a condition rendered before its
+/// predicate is registered names the same fn.
+fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> HashMap<i32, i32> {
+    let mut actions: List<&AltAction> = [];
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            push_alt_actions(alt, &mut actions);
+        }
+    }
+    let mut by_text = HashMap::<String, i32>::with_seed(GALE_SEED);
+    let mut owners = HashMap::<i32, i32>::with_seed(GALE_SEED);
+    for let a of &actions {
+        if a.kind matches { Predicate } {
+            let id = a.source.action_id;
+            owners[id] = by_text.get_or_insert(a.source.text.trim().to_string(), id);
+        }
+    }
+    return owners;
+}
+
+fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
+    if !all_alts_are_single_token(&rule.alternatives) || rule.alternatives.iter_ref().any(|a| !a.actions.is_empty()) {
+        return null;
+    }
+    let mut kinds: List<String> = [];
+    for let alt of &rule.alternatives {
+        let k = single_token_first(&alt.elements[0]);
+        if !kinds.contains(&k) {
+            kinds.push(k);
+        }
+    }
+    return Option::Some(kinds);
+}
+
+impl GrammarAnalysis {
+    pub fn new(
+        parser_rules: &List<ParserRule>,
+        token_kinds: TokenKinds = TokenKinds::empty(),
+        vocab_names: List<String> = [],
+    ) -> GrammarAnalysis {
+        let mut rule_index = HashMap::<String, i32>::with_seed(GALE_SEED);
+        let mut one_token_rules = HashMap::<String, List<String>>::with_seed(GALE_SEED);
+        let mut snake_index = HashMap::<String, i32>::with_seed(GALE_SEED);
+        for let mut i = 0; i < parser_rules.len(); i += 1 {
+            rule_index[parser_rules[i].name] = i;
+            snake_index[parser_rules[i].snake_name] = i;
+            if let Some(kinds) = one_token_rule_kinds(&parser_rules[i]) {
+                one_token_rules[parser_rules[i].snake_name] = kinds;
+            }
+        }
+        let rule_count = parser_rules.len();
+        return GrammarAnalysis {
+            parser_rules: *parser_rules,
+            scan_cyclic: compute_scan_cyclic(parser_rules),
+            rule_index,
+            snake_index,
+            token_kinds,
+            kind_rank: [],
+            kind_by_rank: [],
+            vocab_names,
+            first_cache: none_cache(rule_count),
+            single_token_cache: none_cache(rule_count),
+            nullable_cache: none_cache(rule_count),
+            scannable_cache: none_cache(rule_count),
+            open_end_cache: none_cache(rule_count),
+            tail_greedy_cache: none_cache(rule_count),
+            first2_cache: HashMap::with_seed(GALE_SEED),
+            single_alt_owner: build_single_alt_owner_map(parser_rules),
+            one_token_rules,
+            predicate_fn_owners: predicate_fn_owners(parser_rules),
+        };
+    }
+
+    /// The parser-rule table (for action attribute resolution, which validates
+    /// cross-rule members against a referenced rule's `returns`).
+    pub fn parser_rules(&self) -> &List<ParserRule> {
+        return &self.parser_rules;
+    }
+
+    /// Index of a parser rule by name (position in `parser_rules`), or -1.
+    /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
+    /// parser can push this onto its caller stack for full-context prediction.
+    pub fn rule_index_of<S: AsStrSlice>(&self, name: S) -> i32 {
+        if let Some(i) = self.rule_index.get_str(name) {
+            return i;
+        }
+        return -1;
+    }
+
+    /// Index of the parser rule whose snake name is `snake`.
+    pub fn snake_rule_index<S: AsStrSlice>(&self, snake: S) -> i32 {
+        return self.snake_index[snake.to_string()];
+    }
+
+    pub fn find_rule<S: AsStrSlice>(&self, name: S) -> Option<&ParserRule> {
+        let idx = self.rule_index.get_str(name);
+        if let Some(i) = idx {
+            return Option::Some(&self.parser_rules[i]);
+        }
+        return null;
+    }
+
+    /// The id naming the `pred_<id>` fn that predicate `id` calls: the first
+    /// predicate in the grammar with the same text.
+    pub fn predicate_fn_id(&self, id: i32) -> i32 {
+        return self.predicate_fn_owners.get(id).expect("a gated predicate is one of the grammar's");
+    }
+
+    /// The kinds a rule matches when its scan is one token test, or `null`.
+    pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
+        return self.one_token_rules.get_str(snake);
+    }
+
+    /// True when rule `idx`'s scan can re-enter itself at the same input
+    /// position (a zero-consumption scan cycle). A mandatory group in such a
+    /// rule must scan strict to break the cycle (issue #1671).
+    pub fn is_rule_scan_cyclic(&self, idx: i32) -> bool {
+        return self.scan_cyclic[idx];
+    }
+
+    /// Whether the scan of the rule called by `snake` always consumes a token
+    /// when it matches: a single-alt scan guards that itself, and a multi-alt
+    /// one does where every alternative opens on an element that consumes.
+    pub fn scan_callee_consumes<S: AsStrSlice>(&mut self, snake: S) -> bool {
+        let mut visiting: List<i32> = [];
+        return self.rule_scan_consumes(self.snake_index[snake.to_string()], &mut visiting);
+    }
+
+    fn rule_scan_consumes(&mut self, i: i32, visiting: &mut List<i32>) -> bool {
+        if visiting.contains(&i) {
+            return false;
+        }
+        let rule = &self.parser_rules[i];
+        if rule.alternatives.len() == 1 {
+            let name = rule.name;
+            let mut nullable_visiting: List<String> = [];
+            return !self.rule_is_nullable(&name, &mut nullable_visiting);
+        }
+        visiting.push(i);
+        let alts = rule.alternatives;
+        for let alt of &alts {
+            if alt.elements.is_empty() || !self.element_scan_consumes(&alt.elements[0], visiting) {
+                visiting.pop();
+                return false;
+            }
+        }
+        visiting.pop();
+        return true;
+    }
+
+    fn element_scan_consumes(&mut self, e: &Element, visiting: &mut List<i32>) -> bool {
+        return match e {
+            TokenRef(_) | Literal(_) => true,
+            Label(l) => self.element_scan_consumes(&l.element, visiting),
+            RuleRef(r) => self.rule_scan_consumes(self.rule_index[r.name], visiting),
+            _ => false,
+        };
+    }
+
+    /// Per rule, whether a failing repeat body can repeat the rule's scan at the
+    /// same position: a recursive rule called inside an optional or loop body
+    /// with a required element after it. Where that element fails, the body
+    /// rewinds, and what encloses it scans the same tokens again: an unclosed
+    /// HTML element scans its siblings as its content, and each of them does
+    /// the same, which doubles per element.
+    pub fn rule_rescans(&self) -> List<bool> {
+        let callees = self.scannable_callees();
+        let mut late_failing: List<String> = [];
+        for let rule of &self.parser_rules {
+            for let alt of &rule.alternatives {
+                collect_late_failing_calls(&alt.elements, false, &mut late_failing);
+            }
+        }
+        let mut rescanned: List<bool> = [];
+        for let i of 0..<callees.len() {
+            rescanned.push(late_failing.contains_str(self.parser_rules[i].name) && edges_reach_self(&callees, i));
+        }
+        return rescanned;
+    }
+
+    /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`: the
+    /// display names in kind order, braced unless the set holds one.
+    pub fn render_expected(&mut self, kinds: &List<String>) -> String {
+        if self.vocab_names.is_empty() {
+            return String::new();
+        }
+        // EOF is type -1 upstream, so it renders `<EOF>` before every real kind.
+        let eof = self.eof_kind_id();
+        let mut ids: List<i32> = [];
+        let mut names: List<String> = [];
+        for let k of kinds {
+            let id = self.token_kinds.intern(k);
+            if id == eof {
+                names = ["<EOF>"];
+            } else if id < self.vocab_names.len() && !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        for let id of &ids.sorted() {
+            names.push(self.vocab_names[*id]);
+        }
+        // ANTLR4 never reaches a state whose expected set is empty, so nothing
+        // here is not the set `{}` — it is codegen having no answer to give.
+        if names.is_empty() {
+            return String::new();
+        }
+        if names.len() == 1 {
+            return names[0];
+        }
+        return `{${names.join(", ")}}`;
+    }
+
+    /// Kind id of the EOF terminal (`TK_EOF`). Always present in a production
+    /// table (`token_slot_order` emits the Eof slot); the intern lazily
+    /// extends only a test-path table built without one.
+    pub fn eof_kind_id(&mut self) -> i32 {
+        return self.token_kinds.intern("TK_EOF");
+    }
+
+    /// Kind id for a terminal element, using the resolved `kind_id` when
+    /// present (the fast path — no string, no lookup) and falling back to a
+    /// lazy intern for unresolved IR (unit tests).
+    pub fn token_ref_id<S: AsStrSlice>(&mut self, name: S, kind_id: i32) -> i32 {
+        if kind_id >= 0 {
+            return kind_id;
+        }
+        return self.token_kinds.intern(`TK_${name}`);
+    }
+
+    pub fn literal_id(&mut self, lit: &LiteralElement) -> i32 {
+        if lit.kind_id >= 0 {
+            return lit.kind_id;
+        }
+        return self.token_kinds.intern(&lit.const_name);
+    }
+
+    /// Recover terminal names for interned ids (the emit / String-boundary).
+    pub fn token_names_of(&self, ids: &List<i32>) -> List<String> {
+        return self.token_kinds.names_of(ids);
+    }
+
+    /// Recover a single terminal name for an interned id.
+    pub fn token_name(&self, id: i32) -> String {
+        return self.token_kinds.name_of(id);
+    }
+
+    /// Map `TK_*` names to their kind ids, in the given order.
+    pub fn names_to_ids(&mut self, names: &List<String>) -> List<i32> {
+        let mut out: List<i32> = [];
+        for let n of names {
+            out.push(self.token_kinds.intern(n));
+        }
+        return out;
+    }
+
+    /// Canonical form of a kind set as ids: sorted by token name (rank order)
+    /// and deduplicated. Two `matches { ... }` checks over equal sets
+    /// (regardless of order or repeated elements) collapse to the same
+    /// canonical form and therefore the same interned table.
+    pub fn canonical_kind_ids(&mut self, tokens: &List<String>) -> List<i32> {
+        return self.canonical_ids(self.names_to_ids(tokens));
+    }
+
+    pub fn canonical_ids(&mut self, ids: List<i32>) -> List<i32> {
+        self.ensure_kind_rank();
+        let mut ranks: List<u64> = [];
+        for let id of &ids {
+            bits_set(&mut ranks, self.kind_rank[*id]);
+        }
+        let mut out: List<i32> = [];
+        for let rank of bits_ids(&ranks) {
+            out.push(self.kind_by_rank[rank]);
+        }
+        return out;
+    }
+
+    /// Rebuild `kind_rank` when the token table has grown (lazy interns on
+    /// the test path; a no-op on the production path after the first call).
+    fn ensure_kind_rank(&mut self) {
+        let n = self.token_kinds.len();
+        if self.kind_rank.len() == n {
+            return;
+        }
+        let mut order: List<i32> = [];
+        for let mut id = 0; id < n; id += 1 {
+            order.push(id);
+        }
+        let names = &self.token_kinds.names;
+        order.sort_by(|a: &i32, b: &i32| names[*a].cmp(&names[*b]));
+        let mut rank: List<i32> = [];
+        for let mut id = 0; id < n; id += 1 {
+            rank.push(0);
+        }
+        for let mut pos = 0; pos < n; pos += 1 {
+            rank[order[pos]] = pos;
+        }
+        self.kind_rank = rank;
+        self.kind_by_rank = order;
+    }
+
+    pub fn first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<String> {
+        let ids = self.first_ids_of_rule(name, visiting);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    /// FIRST set as interned kind ids (the internal representation). Public
+    /// callers that want names go through `first_of_rule`.
+    pub fn first_ids_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<i32> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_rule_at(name, visiting, &mut min_cycle);
+    }
+
+    /// FIRST set with SCC-aware memoization; see `is_rule_scannable_at` for the
+    /// `min_cycle` mechanism. A FIRST set computed while ancestors are on the
+    /// stack may under-count (a cycle contributes the empty set), so it is only
+    /// cached once its whole SCC has closed at this frame (`local_min >= p`).
+    fn first_of_rule_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<i32> {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.first_cache[rid];
+            if let Some(result) = cached {
+                return result;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return [];
+        }
+
+        let p = visiting.len();
+        visiting.push(name.to_string());
+
+        let mut local_min = i32::MAX;
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
+
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            for let alt of &rule.alternatives {
+                let af = self.first_of_alt_at(alt, visiting, &mut local_min);
+                append_ids(&mut result, &mut seen, &af);
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.first_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
+        let ids = self.first_ids_of_element(elem, visiting);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn first_ids_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<i32> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_element_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn first_of_element_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
+        return match elem {
+            TokenRef(t) => [self.token_ref_id(&t.name, t.kind_id)],
+            Literal(l) => [self.literal_id(l)],
+            RuleRef(r) => self.first_of_rule_at(&r.name, visiting, min_cycle),
+            Group(g) => {
+                let mut result: List<i32> = [];
+                let mut seen: List<u64> = [];
+                for let alt of &g.alternatives {
+                    let af = self.first_of_alt_at(alt, visiting, min_cycle);
+                    append_ids(&mut result, &mut seen, &af);
+                }
+                result;
+            },
+            Repeat(rep) => self.first_of_element_at(&rep.element, visiting, min_cycle),
+            Label(lab) => self.first_of_element_at(&lab.element, visiting, min_cycle),
+            // Wildcard and Not match an open-ended set of tokens; we cannot
+            // enumerate FIRST statically. Returning [] disables static prediction
+            // for alternatives starting with them — such alternatives must either
+            // be in a single-alt rule, used as a fallback, or be distinguished
+            // from their siblings by later elements.
+            Wildcard(_) | Not(_) => [],
+        };
+    }
+
+    pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<String> {
+        let ids = self.first_ids_of_alt(alt, visiting);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn first_ids_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<i32> {
+        let mut min_cycle = i32::MAX;
+        return self.first_of_alt_at(alt, visiting, &mut min_cycle);
+    }
+
+    fn first_of_alt_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
+
+        for let elem of &alt.elements {
+            let elem_first = self.first_of_element_at(elem, visiting, min_cycle);
+            append_ids(&mut result, &mut seen, &elem_first);
+            // Deep: a `RuleRef` to a rule deriving nothing (`mods : 'pub'?`)
+            // is nullable, so FIRST has to reach past it.
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nv) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
+        let ids = self.first_ids_of_elements_from(elements, start);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
+
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut visiting: List<String> = [];
+            let elem_first = self.first_ids_of_element(&elements[i], &mut visiting);
+            append_ids(&mut result, &mut seen, &elem_first);
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut nv) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    /// Returns FIRST sets indexed by INPUT TOKEN position relative to the alt start.
+    ///
+    /// Invariant: `result[d]` is the set of possible first tokens at input offset `d`
+    /// **assuming the alt matches successfully up to that point**. Guards built from
+    /// this mapping are sound disambiguators for caller-side lookahead.
+    ///
+    /// To maintain the element-pos-to-input-pos alignment, we only advance past an
+    /// element if it is guaranteed to consume exactly 1 input token (non-nullable,
+    /// single-token). Nullable or multi-token elements halt accumulation — the
+    /// caller gets a shorter (but always sound) sequence.
+    ///
+    /// Thin wrapper around [`position_first_sets_from`] with `start = 0` —
+    /// the generic form supports computing FIRST sets at an arbitrary
+    /// suffix offset (the multi-token follow-mask path).
+    pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> List<List<String>> {
+        return self.position_first_sets_from(&alt.elements, 0, max_depth);
+    }
+
+    /// Deep version of [`position_first_sets_from`] that expands
+    /// `RuleRef` elements into the referenced rule's body. Used by
+    /// `compute_follow_arg` to build a caller's multi-depth FOLLOW mask
+    /// — `position_first_sets_from` halts at a `RuleRef` to a
+    /// multi-token rule, hiding the depths the runtime gate needs to
+    /// disambiguate iter vs. exit.
+    ///
+    /// Only single-alt non-cyclic `RuleRef`s are expanded; multi-alt
+    /// `RuleRef`s halt accumulation (per-depth union of multi-alt
+    /// prefixes would over-yield by matching cross-alt sequences that
+    /// no real alt admits).
+    ///
+    /// Returns `(prefix, consumed_elements)`. `consumed_elements` is the
+    /// number of surface elements from `elements[start..]` that the
+    /// walk fully traversed (not the same as `prefix.len()` — a
+    /// single-alt `RuleRef` consumes one surface element but its
+    /// expanded body may contribute multiple depths). Callers needing
+    /// to follow the suffix past the walk must use the element count,
+    /// not the depth count.
+    pub fn deep_position_first_sets_from(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+        visiting: &mut List<String>,
+    ) -> [List<List<String>>, i32] {
+        let mut result: List<List<String>> = [];
+        let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
+        return [result, final_cursor - start];
+    }
+
+    /// The two positions every way `elements` begins, where they are exact: each
+    /// sequence is two tokens long and every pairing of a first token with a
+    /// second one begins some sequence. Unlike `deep_position_first_sets_from`,
+    /// this sees through alternatives and nullable tails, since exactness is
+    /// checked on the pairs rather than assumed of the walk. Empty otherwise.
+    pub fn exact_two_position_first_sets(&mut self, elements: &List<Element>) -> List<List<String>> {
+        let none: List<List<String>> = [];
+        let mut visiting: List<String> = [];
+        let Some(heads) = self.first2_of_elements(elements, 0, &mut visiting) else {
+            return none;
+        };
+        if heads.empty || !bits_is_empty(&heads.singles) || heads.pairs.is_empty() {
+            return none;
+        }
+        let mut firsts: List<u64> = [];
+        let mut seconds: List<u64> = [];
+        for let pair of &heads.pairs {
+            bits_union_into(&mut firsts, &pair.firsts);
+            bits_union_into(&mut seconds, &pair.seconds);
+        }
+        for let first of &bits_ids(&firsts) {
+            let mut followers: List<u64> = [];
+            for let pair of &heads.pairs {
+                if bits_test(&pair.firsts, *first) {
+                    bits_union_into(&mut followers, &pair.seconds);
+                }
+            }
+            if !bits_equal(&followers, &seconds) {
+                return none;
+            }
+        }
+        return [
+            self.token_kinds.names_of(&bits_ids(&firsts)),
+            self.token_kinds.names_of(&bits_ids(&seconds)),
+        ];
+    }
+
+    /// Every way `elements[start..]` begins, at most two tokens deep. `null`
+    /// where a head is a `.`, a `~X` or a left-recursive rule, which no list of
+    /// names spells.
+    fn first2_of_elements(&mut self, elements: &List<Element>, start: i32, visiting: &mut List<String>) -> Option<Heads> {
+        let mut out = Heads::new();
+        if start >= elements.len() {
+            out.empty = true;
+            return Option::Some(out);
+        }
+        let Some(head) = self.first2_of_element(&elements[start], visiting) else {
+            return null;
+        };
+        for let pair of &head.pairs {
+            out.add_pairs(pair);
+        }
+        if !bits_is_empty(&head.singles) {
+            if self.elements_reach_open_end(elements, start + 1) {
+                return null;
+            }
+            out.add_pairs(&self.pairs_before(&head.singles, elements, start + 1));
+            if self.tail_is_nullable_deep(elements, start + 1) {
+                bits_union_into(&mut out.singles, &head.singles);
+            }
+        }
+        if head.empty {
+            let Some(rest) = self.first2_of_elements(elements, start + 1, visiting) else {
+                return null;
+            };
+            out.add(&rest);
+        }
+        return Option::Some(out);
+    }
+
+    fn first2_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> Option<Heads> {
+        return match elem {
+            TokenRef(_) | Literal(_) => {
+                let mut out = Heads::new();
+                out.singles = bits_of(&self.first_ids_of_element(elem, visiting));
+                Option::Some(out);
+            },
+            Label(lab) => self.first2_of_element(&lab.element, visiting),
+            RuleRef(r) => self.first2_of_rule(&r.name, visiting),
+            Group(g) => self.first2_of_alternatives(&g.alternatives, visiting),
+            Repeat(rep) => self.first2_of_repeat(rep, visiting),
+            Wildcard(_) | Not(_) => null,
+        };
+    }
+
+    /// A rule's answer is cached only where it met no cycle: then no rule on
+    /// `visiting` was reached, so any other `visiting` gives the same answer.
+    fn first2_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> Option<Heads> {
+        if let Some(cached) = self.first2_cache.get(*name) {
+            return Option::Some(cached);
+        }
+        if visiting.contains(name) {
+            return null;
+        }
+        let Some(rule) = self.find_rule(name) else {
+            return null;
+        };
+        let alts = rule.alternatives;
+        visiting.push(*name);
+        let found = self.first2_of_alternatives(&alts, visiting);
+        remove_from_visiting(visiting, name);
+        if let Some(heads) = found {
+            self.first2_cache[*name] = heads;
+        }
+        return found;
+    }
+
+    fn first2_of_alternatives(&mut self, alts: &List<Alternative>, visiting: &mut List<String>) -> Option<Heads> {
+        let mut out = Heads::new();
+        for let alt of alts {
+            let Some(heads) = self.first2_of_elements(&alt.elements, 0, visiting) else {
+                return null;
+            };
+            out.add(&heads);
+        }
+        return Option::Some(out);
+    }
+
+    /// Each of `firsts` followed by a token `elements[start..]` begins with.
+    fn pairs_before(&mut self, firsts: &List<u64>, elements: &List<Element>, start: i32) -> Pairs {
+        return Pairs { firsts: *firsts, seconds: bits_of(&self.first_ids_of_elements_from(elements, start)) };
+    }
+
+    fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<Heads> {
+        let Some(body) = self.first2_of_element(&rep.element, visiting) else {
+            return null;
+        };
+        let mut out = Heads::new();
+        out.empty = !rep.kind matches { Plus };
+        let loops = !rep.kind matches { Optional };
+        let body_elements: List<Element> = [rep.element];
+        if loops && self.elements_reach_open_end(&body_elements, 0) {
+            return null;
+        }
+        out.add(&body);
+        if loops && !bits_is_empty(&body.singles) {
+            out.add_pairs(&self.pairs_before(&body.singles, &body_elements, 0));
+        }
+        return Option::Some(out);
+    }
+
+    /// Internal walker. Returns the cursor index reached when the walk
+    /// finished — equal to `elements.len()` when fully consumed, less
+    /// when the walk halted (early return after a multi-alt RuleRef,
+    /// nullable suffix, `Group` / `Repeat` / `Wildcard`, etc.). The
+    /// return value tells callers whether subsequent elements can be
+    /// safely indexed (when fully consumed) or whether the walk hit a
+    /// non-deterministic position (halted).
+    fn deep_position_walk(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+        result: &mut List<List<String>>,
+        visiting: &mut List<String>,
+    ) -> i32 {
+        let mut cursor = start;
+        while result.len() < max_depth && cursor < elements.len() {
+            // Suffix from `cursor` must consume ≥1 token — otherwise the
+            // alignment from position-d-set to input-offset-d breaks.
+            if self.tail_is_nullable_deep(elements, cursor) {
+                return cursor;
+            }
+            let elem = &elements[cursor];
+            match elem {
+                TokenRef(_) | Literal(_) => {
+                    let mut fv: List<String> = [];
+                    let first = self.first_of_element(elem, &mut fv);
+                    if first.is_empty() {
+                        return cursor;
+                    }
+                    result.push(first);
+                    cursor += 1;
+                },
+                Label(lab) => {
+                    // A label is positionally identical to its inner;
+                    // recurse on a single-element sequence wrapping the
+                    // labelled element. If that recursion halts (didn't
+                    // walk the whole `[lab.element]`), this outer walk
+                    // must halt too — otherwise we'd keep consuming
+                    // subsequent surface elements at depths that no
+                    // longer align with the un-fully-walked label.
+                    let single: List<Element> = [lab.element];
+                    let inner_final = self.deep_position_walk(&single, 0, max_depth, result, visiting);
+                    if inner_final < single.len() {
+                        return cursor;
+                    }
+                    cursor += 1;
+                },
+                RuleRef(r) => {
+                    if visiting.contains(&r.name) {
+                        return cursor;
+                    }
+                    let rule = self.find_rule(&r.name);
+                    if let Some(rule) = rule {
+                        if rule.alternatives.len() != 1 {
+                            // Multi-alt: the per-depth union over-yields past
+                            // the head, where the alts diverge. At the head it
+                            // is exact, so contribute that one position and
+                            // halt. A nullable rule contributes none — the
+                            // position may be the next element's.
+                            let mut null_visiting: List<String> = [];
+                            if !self.rule_is_nullable(&r.name, &mut null_visiting) {
+                                let mut first_visiting: List<String> = [];
+                                let first = self.first_of_element(elem, &mut first_visiting);
+                                if !first.is_empty() {
+                                    result.push(first);
+                                }
+                            }
+                            return cursor;
+                        }
+                        visiting.push(r.name);
+                        let inner_elements = &rule.alternatives[0].elements;
+                        let inner_final = self.deep_position_walk(inner_elements, 0, max_depth, result, visiting);
+                        remove_from_visiting(visiting, &r.name);
+                        // If the expansion halted inside the rule body
+                        // (didn't reach `inner_elements.len()`), the
+                        // surface element index of subsequent elements
+                        // no longer corresponds to a contiguous input
+                        // depth — halt the outer walk too.
+                        if inner_final < inner_elements.len() {
+                            return cursor;
+                        }
+                    } else {
+                        return cursor;
+                    }
+                    cursor += 1;
+                },
+                Group(_) => {
+                    // Same shape as a multi-alt `RuleRef` above: the alts
+                    // diverge past their head, so a per-depth union would
+                    // over-yield, but at the head it is exact. Contribute that
+                    // one position and halt. A nullable group contributes none
+                    // — the position may be the next element's.
+                    let mut null_visiting: List<String> = [];
+                    if !self.element_is_nullable_deep(elem, &mut null_visiting) {
+                        let mut first_visiting: List<String> = [];
+                        let first = self.first_of_element(elem, &mut first_visiting);
+                        if !first.is_empty() {
+                            result.push(first);
+                        }
+                    }
+                    return cursor;
+                },
+                Repeat(_) | Wildcard(_) | Not(_) => {
+                    // Conservative halt: a repeat's head is also the position
+                    // after it when it iterates zero times, and a static
+                    // wildcard can't be enumerated.
+                    return cursor;
+                },
+            }
+        }
+        return cursor;
+    }
+
+    /// Returns FIRST sets indexed by INPUT TOKEN position relative to the
+    /// suffix starting at `elements[start..]`. Generalises
+    /// [`alt_position_first_sets`] by accepting an arbitrary `start`
+    /// offset — used by the multi-token follow-mask path to read out a
+    /// caller's K-token continuation prefix at a `RuleRef` call site.
+    ///
+    /// Halts (returns a shorter sequence) at the first nullable or
+    /// multi-token element — preserving the input-offset alignment that
+    /// makes the result a sound lookahead predictor. See
+    /// [`alt_position_first_sets`] for the invariant details.
+    pub fn position_first_sets_from(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        max_depth: i32,
+    ) -> List<List<String>> {
+        let mut result: List<List<String>> = [];
+        let mut cursor = start;
+        while result.len() < max_depth && cursor < elements.len() {
+            // If the tail from `cursor` onwards is entirely nullable, the
+            // alt can match 0 tokens from this offset — input[result.len()]
+            // is in the follow-set, which `first` doesn't include. Guard
+            // would be unsound. Halt.
+            if self.tail_is_nullable_deep(elements, cursor) {
+                break;
+            }
+            // Deep first-set: accumulate across deeply-nullable elements so the
+            // set covers every token that can legitimately appear at this offset
+            // when the alt matches.
+            let first = self.deep_first_of_elements_from(elements, cursor);
+            if first.len() == 0 {
+                break;
+            }
+            result.push(first);
+
+            // Advance past element[cursor] only if it consumes exactly 1 token;
+            // otherwise result[d+1] would not align with input offset d+1.
+            let mut visiting: List<String> = [];
+            if !self.element_is_single_token(&elements[cursor], &mut visiting) {
+                break;
+            }
+            cursor += 1;
+        }
+        return result;
+    }
+
+    /// Like `first_of_elements_from` but uses deep nullability so it correctly
+    /// flows through `RuleRef`s whose underlying rule matches zero tokens.
+    pub fn deep_first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
+        let ids = self.deep_first_ids_of_elements_from(elements, start);
+        return self.token_kinds.names_of(&ids);
+    }
+
+    pub fn deep_first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
+        let mut result: List<i32> = [];
+        let mut seen: List<u64> = [];
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut fv: List<String> = [];
+            let elem_first = self.first_ids_of_element(&elements[i], &mut fv);
+            append_ids(&mut result, &mut seen, &elem_first);
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut nv) {
+                break;
+            }
+        }
+        return result;
+    }
+
+    /// Deep nullability: true if every element from `start` onwards can match
+    /// zero input tokens, recursively checking referenced rules (unlike the
+    /// shallow `is_nullable` which only inspects top-level Repeat kind).
+    ///
+    /// Used both as "is the suffix from `start` nullable?" (by alt
+    /// walkers gating follow propagation) and as "is the rule body
+    /// nullable?" (by tail-greedy analysis).
+    pub fn tail_is_nullable_deep(&mut self, elements: &List<Element>, start: i32) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            let mut visiting: List<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut visiting) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.element_is_nullable_deep_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn element_is_nullable_deep_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => false,
+            RuleRef(r) => self.rule_is_nullable_at(&r.name, visiting, min_cycle),
+            Label(lab) => self.element_is_nullable_deep_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => match rep.kind {
+                Star | Optional => true,
+                _ => self.element_is_nullable_deep_at(&rep.element, visiting, min_cycle),
+            },
+            Group(g) => {
+                let mut any_nullable = false;
+                for let alt of &g.alternatives {
+                    let mut all_null = true;
+                    for let e of &alt.elements {
+                        if !self.element_is_nullable_deep_at(e, visiting, min_cycle) {
+                            all_null = false;
+                            break;
+                        }
+                    }
+                    if all_null {
+                        any_nullable = true;
+                        break;
+                    }
+                }
+                any_nullable;
+            },
+        };
+    }
+
+    pub fn rule_is_nullable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.rule_is_nullable_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Nullability with SCC-aware memoization (see `is_rule_scannable_at`). A
+    /// value computed while ancestors are on the stack may be provisional (a
+    /// cycle assumes not-nullable), so it is cached only once its SCC has
+    /// closed at this frame (`local_min >= p`).
+    fn rule_is_nullable_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.nullable_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return false;
+        }
+
+        let p = visiting.len();
+        visiting.push(name.to_string());
+
+        let mut local_min = i32::MAX;
+        let mut result = false;
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            for let alt of &rule.alternatives {
+                let mut all_null = true;
+                for let e of &alt.elements {
+                    if !self.element_is_nullable_deep_at(e, visiting, &mut local_min) {
+                        all_null = false;
+                        break;
+                    }
+                }
+                if all_null {
+                    result = true;
+                    break;
+                }
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.nullable_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    /// Whether a position the alternative can reach — every element before it
+    /// nullable — matches a token no first set names. Having a first set
+    /// settles nothing: `A? .` is selected by `a` and by every other token too.
+    pub fn alt_reaches_open_end(&mut self, alt: &Alternative, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.alt_reaches_open_end_at(alt, visiting, &mut min_cycle);
+    }
+
+    /// `alt_reaches_open_end` for the elements from `start` on.
+    pub fn elements_reach_open_end(&mut self, elements: &List<Element>, start: i32) -> bool {
+        let mut visiting: List<String> = [];
+        let mut min_cycle = i32::MAX;
+        return self.elements_reach_open_end_at(elements, start, &mut visiting, &mut min_cycle);
+    }
+
+    fn alt_reaches_open_end_at(&mut self, alt: &Alternative, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        return self.elements_reach_open_end_at(&alt.elements, 0, visiting, min_cycle);
+    }
+
+    fn elements_reach_open_end_at(
+        &mut self,
+        elements: &List<Element>,
+        start: i32,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            if self.element_reaches_open_end_at(&elements[i], visiting, min_cycle) {
+                return true;
+            }
+            let mut nullable_visiting: List<String> = [];
+            if !self.element_is_nullable_deep(&elements[i], &mut nullable_visiting) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /// Whether the element matches a token of any kind. A label, a `( … )`, a
+    /// repeat and a rule reference all pass through to what is behind them.
+    pub fn element_reaches_open_end(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.element_reaches_open_end_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn element_reaches_open_end_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        return match elem {
+            Wildcard(_) | Not(_) => true,
+            Label(lab) => self.element_reaches_open_end_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => self.element_reaches_open_end_at(&rep.element, visiting, min_cycle),
+            Group(g) => {
+                let mut any = false;
+                for let alt of &g.alternatives {
+                    if self.alt_reaches_open_end_at(alt, visiting, min_cycle) {
+                        any = true;
+                        break;
+                    }
+                }
+                any;
+            },
+            RuleRef(r) => self.rule_reaches_open_end_at(&r.name, visiting, min_cycle),
+            TokenRef(_) | Literal(_) => false,
+        };
+    }
+
+    /// Open-endedness of a rule, with `rule_is_nullable_at`'s SCC-aware memo:
+    /// every decision site asks, and the rule graph is transitive.
+    fn rule_reaches_open_end_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            if let Some(val) = self.open_end_cache[rid] {
+                return val;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return false;
+        }
+
+        let p = visiting.len();
+        visiting.push(name.to_string());
+
+        let mut local_min = i32::MAX;
+        let mut result = false;
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            for let alt of &rule.alternatives {
+                if self.alt_reaches_open_end_at(alt, visiting, &mut local_min) {
+                    result = true;
+                    break;
+                }
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.open_end_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    /// True if the element always consumes exactly 1 input token on match.
+    /// Used to keep `alt_position_first_sets` element-to-input-position aligned.
+    pub fn element_is_single_token(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => true,
+            RuleRef(r) => self.rule_is_single_token(&r.name, visiting),
+            Label(lab) => self.element_is_single_token(&lab.element, visiting),
+            Group(_) | Repeat(_) => false,
+        };
+    }
+
+    /// True if this element's `first` set is an *exact* predictor: i.e.
+    /// "the first-set token is present at the input position" implies
+    /// "this element will successfully consume that token (and only
+    /// that token) when it matches". The criterion underlying LL repair
+    /// for nullable suffixes: a deep-nullable suffix
+    /// can contribute its first set to a `RuleRef`'s caller-follow only
+    /// when every walked element is first-exact. Otherwise the
+    /// suffix's first might be a multi-element alt's leading token
+    /// whose suppression at the preceding `RuleRef` would leave the
+    /// runtime stranded — this is the css3 selector / HTMLParser
+    /// htmlContent hazard, "First-exact deep-nullable suffix" in
+    /// `antlr4-compatibility.md`.
+    ///
+    /// Single-token elements are trivially first-exact. A `Repeat`
+    /// inherits first-exactness from its inner: `b?` where `b : Y` has
+    /// a single-token inner so its first is exactly `{Y}`. A `Group`
+    /// is first-exact only when every alt is a single first-exact
+    /// element — anything more complex risks the multi-element alt
+    /// hazard.
+    pub fn element_is_first_exact(&mut self, elem: &Element) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => true,
+            RuleRef(r) => {
+                let mut visiting: List<String> = [];
+                self.rule_is_single_token(&r.name, &mut visiting);
+            },
+            Label(lab) => self.element_is_first_exact(&lab.element),
+            Repeat(rep) => self.element_is_first_exact(&rep.element),
+            Group(g) => {
+                let mut all_exact = true;
+                for let alt of &g.alternatives {
+                    if alt.elements.len() != 1 {
+                        all_exact = false;
+                        break;
+                    }
+                    if !self.element_is_first_exact(&alt.elements[0]) {
+                        all_exact = false;
+                        break;
+                    }
+                }
+                all_exact;
+            },
+        };
+    }
+
+    /// True if every element of `elements[start..]` is first-exact —
+    /// the precondition for unioning the suffix's first set into a
+    /// preceding `RuleRef`'s caller-follow when the suffix is
+    /// deep-nullable. See `element_is_first_exact` for the semantic
+    /// argument.
+    pub fn deep_suffix_is_first_exact(&mut self, elements: &List<Element>, start: i32) -> bool {
+        for let mut i = start; i < elements.len(); i += 1 {
+            if !self.element_is_first_exact(&elements[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Per-call-site caller-FOLLOW for the element at index `i` in
+    /// `elements`. Single source of truth for the `FollowArg` mask
+    /// `lower` builds at each `RuleRef` site (`compute_follow_arg`).
+    ///
+    /// Three cases:
+    ///
+    /// - Suffix is non-nullable: the immediate suffix's `first` set is
+    ///   the only thing that can follow.
+    /// - Suffix is deep-nullable AND first-exact (every walked element's
+    ///   first uniquely predicts that element matching, see
+    ///   `element_is_first_exact`): keep the suffix's `first`. This
+    ///   closes `ll_nullable_suffix`'s gap.
+    /// - Suffix is deep-nullable but NOT first-exact: drop the suffix's
+    ///   first and return empty. This is the "first-exact deep-nullable
+    ///   suffix" soundness invariant in `antlr4-compatibility.md`.
+    ///
+    /// Only the first case is the whole answer; ask
+    /// `call_site_follow_is_exact` which one this is.
+    pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32) -> List<String> {
+        let first = self.first_of_elements_from(elements, i + 1);
+        if !self.tail_is_nullable_deep(elements, i + 1) {
+            return first;
+        }
+        if self.deep_suffix_is_first_exact(elements, i + 1) {
+            return first;
+        }
+        return [] as List<String>;
+    }
+
+    /// Whether `compute_call_site_follow` at `i` is the whole answer: a
+    /// nullable suffix lets the caller's FOLLOW extend it, so what comes back
+    /// there is a prefix, and a decision reading it as the answer rejects
+    /// every lookahead the caller could still supply.
+    pub fn call_site_follow_is_exact(&mut self, elements: &List<Element>, i: i32) -> bool {
+        return !self.tail_is_nullable_deep(elements, i + 1);
+    }
+
+    pub fn rule_is_single_token<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.rule_is_single_token_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Single-token classification with SCC-aware memoization (see
+    /// `is_rule_scannable_at`): cache only once the SCC has closed at this
+    /// frame (`local_min >= p`).
+    fn rule_is_single_token_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.single_token_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return false;
+        }
+
+        let p = visiting.len();
+        visiting.push(name.to_string());
+
+        let mut local_min = i32::MAX;
+        let mut result = false;
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            let mut all_alts_ok = true;
+            for let alt of &rule.alternatives {
+                let mut non_nullable_count = 0;
+                let mut single_ok = false;
+                let mut has_nullable = false;
+                for let elem of &alt.elements {
+                    if is_nullable(elem) {
+                        // A nullable element (Star/Optional Repeat) can consume
+                        // additional tokens when its inner matches. e.g.
+                        // `'-'? Integer` is 1 token without `-` but 2 with `-`.
+                        // Treat any nullable element as disqualifying so the
+                        // rule isn't misclassified as strictly single-token.
+                        has_nullable = true;
+                        break;
+                    }
+                    non_nullable_count += 1;
+                    if non_nullable_count > 1 {
+                        break;
+                    }
+                    if let TokenRef(_) | Literal(_) = elem {
+                        single_ok = true;
+                    } else if let RuleRef(r) = elem {
+                        single_ok = self.rule_is_single_token_at(&r.name, visiting, &mut local_min);
+                    }
+                }
+                if has_nullable || non_nullable_count != 1 || !single_ok {
+                    all_alts_ok = false;
+                    break;
+                }
+            }
+            result = all_alts_ok;
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.single_token_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    /// Whether the rule is safe to scan as a predicate prefix. A
+    /// left-recursive one is: its scan climbs precedence as its parse does.
+    pub fn is_rule_scannable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_rule_scannable_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Scannability with SCC-aware memoization. `min_cycle` is an out-parameter:
+    /// the shallowest `visiting` index this computation cycled back to
+    /// (`i32::MAX` if none). Only top-level results were cacheable before,
+    /// because a value computed while ancestors are on the `visiting` stack
+    /// depends on the optimistic "cycle = scannable" assumption — recomputing
+    /// every non-top-level call is exponential for deeply mutually-recursive
+    /// grammars (Rust/TypeScript/css3). Tracking the cycle depth lets us cache
+    /// far more: a result is final once it no longer depends on an unresolved
+    /// ancestor, which the SCC condition below decides. Results stay identical
+    /// to the top-level-only scheme; only the number of recomputations drops.
+    fn is_rule_scannable_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.scannable_cache[rid];
+            if let Some(val) = cached {
+                return val;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            // Cycle back to an on-stack rule: assume scannable (the analysis's
+            // optimistic fixpoint) and record how shallow the cycle reached.
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return true;
+        }
+
+        let p = visiting.len();
+        visiting.push(name.to_string());
+
+        let mut local_min = i32::MAX;
+        let mut result = false;
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            let mut all_ok = true;
+            for let alt of &rule.alternatives {
+                if !self.is_alt_scannable_at(&alt.elements, visiting, &mut local_min) {
+                    all_ok = false;
+                    break;
+                }
+            }
+            result = all_ok;
+        }
+
+        remove_from_visiting(visiting, name);
+
+        // Cache once the result no longer depends on an unresolved ancestor's
+        // optimistic assumption: a `false` never does (cycles only make things
+        // optimistically `true`), and a `true` is final once its whole SCC
+        // closed at or below this frame (`local_min >= p`). Otherwise the value
+        // is provisional — propagate the escaping cycle depth to the caller.
+        if !result || local_min >= p {
+            if rid >= 0 {
+                self.scannable_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    /// Returns true if every element in the sequence is scannable.
+    pub fn is_alt_scannable(&mut self, elements: &List<Element>, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_alt_scannable_at(elements, visiting, &mut min_cycle);
+    }
+
+    fn is_alt_scannable_at(
+        &mut self,
+        elements: &List<Element>,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
+        for let elem of elements {
+            if !self.is_element_scannable_at(elem, visiting, min_cycle) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Returns true if a single element is scannable.
+    pub fn is_element_scannable(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
+        let mut min_cycle = i32::MAX;
+        return self.is_element_scannable_at(elem, visiting, &mut min_cycle);
+    }
+
+    fn is_element_scannable_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+        return match elem {
+            TokenRef(_) | Literal(_) => true,
+            RuleRef(r) => self.is_rule_scannable_at(&r.name, visiting, min_cycle),
+            Label(lab) => self.is_element_scannable_at(&lab.element, visiting, min_cycle),
+            Repeat(rep) => self.is_element_scannable_at(&rep.element, visiting, min_cycle),
+            Group(g) => {
+                for let alt of &g.alternatives {
+                    if !self.is_alt_scannable_at(&alt.elements, visiting, min_cycle) {
+                        return false;
+                    }
+                }
+                return true;
+            },
+            // Wildcard advances by exactly one token (unless at EOF).
+            Wildcard(_) => true,
+            // `~ X` advances by one token when the current token is not in
+            // the complement set. The inner element is required to be a
+            // terminal or a simple terminal set, both of which are scannable.
+            Not(_) => true,
+        };
+    }
+
+    /// Seed `scannable_cache` for every parser rule. Scannability is pure
+    /// reachability — a rule is non-scannable iff it can reach a reference to a
+    /// name that is not a parser rule, the only `false` source in
+    /// `is_element_scannable_at` — so one O(V+E) fixpoint replaces the recursive
+    /// check, which was exponential on large mutual-recursion SCCs (see perf.md).
+    pub fn precompute_scannability(&mut self) {
+        let callees = self.scannable_callees();
+        let mut undefined_ref: List<bool> = [];
+        for let c of &callees {
+            undefined_ref.push(c.contains(&-1));
+        }
+        let bad = close_over_callers(&callees, undefined_ref);
+        for let mut rid = 0; rid < bad.len(); rid += 1 {
+            self.scannable_cache[rid] = Option::Some(!bad[rid]);
+        }
+    }
+
+    /// Per rule index, the rules a scan of it calls, `-1` standing for a name
+    /// no parser rule has.
+    pub fn scannable_callees(&self) -> List<List<i32>> {
+        let mut callees: List<List<i32>> = [];
+        for let rule of &self.parser_rules {
+            let mut names: List<String> = [];
+            for let alt of &rule.alternatives {
+                collect_scannable_refs(&alt.elements, &mut names);
+            }
+            let mut indices: List<i32> = [];
+            for let name of &names {
+                indices.push(self.rule_index_of(name));
+            }
+            callees.push(indices);
+        }
+        return callees;
+    }
+
+    /// Get the rule name that owns the general group types inside a given
+    /// single-alt group. Returns `fallback` if the type name is not a
+    /// shared single-alt group (in practice every reached single-alt
+    /// group is in the map; callers pass the surrounding rule's name as
+    /// a defensive fallback).
+    pub fn general_group_rule_name<S: AsStrSlice, S1: AsStrSlice>(
+        &self,
+        single_alt_type_name: S,
+        fallback: S1,
+    ) -> String {
+        if let Some(owner) = self.single_alt_owner.get_str(single_alt_type_name) {
+            return owner;
+        }
+        return fallback.to_string();
+    }
+
+    /// Returns the set of token kinds that the rule's body may greedily
+    /// consume at tail position, i.e. tokens that would be claimed by an
+    /// `Optional` / `Star` / `Plus` element which has no required element
+    /// after it in the alt.
+    ///
+    /// Used to gate the caller-FOLLOW repair: if a `RuleRef` call
+    /// site's caller-local `FOLLOW` does not intersect this set, the
+    /// callee's tail-greedy elements cannot collide with the caller's
+    /// expectations and no FOLLOW argument is needed.
+    pub fn tail_greedy_first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<String> {
+        let mut min_cycle = i32::MAX;
+        return self.tail_greedy_first_of_rule_at(name, visiting, &mut min_cycle);
+    }
+
+    /// Tail-greedy FIRST with SCC-aware memoization (see `is_rule_scannable_at`):
+    /// cache only once the SCC has closed at this frame (`local_min >= p`).
+    fn tail_greedy_first_of_rule_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
+        let rid = self.rule_index_of(name);
+        if rid >= 0 {
+            let cached = self.tail_greedy_cache[rid];
+            if let Some(result) = cached {
+                return result;
+            }
+        }
+
+        let on_stack = visiting_index(visiting, name);
+        if on_stack >= 0 {
+            if on_stack < *min_cycle {
+                *min_cycle = on_stack;
+            }
+            return [];
+        }
+
+        let p = visiting.len();
+        visiting.push(name.to_string());
+
+        let mut local_min = i32::MAX;
+        let mut result: List<String> = [];
+        if rid >= 0 {
+            let rule = &self.parser_rules[rid];
+            for let alt of &rule.alternatives {
+                let af = self.tail_greedy_first_of_elements(&alt.elements, visiting, &mut local_min);
+                dedup_append_arr(&mut result, &af);
+            }
+        }
+
+        remove_from_visiting(visiting, name);
+
+        if local_min >= p {
+            if rid >= 0 {
+                self.tail_greedy_cache[rid] = Option::Some(result);
+            }
+        } else if local_min < *min_cycle {
+            *min_cycle = local_min;
+        }
+
+        return result;
+    }
+
+    /// Walk an alt element list from the tail, collecting tail-greedy
+    /// first sets. Stops at the first non-deeply-nullable element. A
+    /// `Repeat (Optional|Star|Plus)` contributes `first_of_element(inner)`.
+    /// A nested `Group` recurses per alt. A `RuleRef` to a rule with a
+    /// non-empty `tail_greedy_first` contributes that set transitively.
+    fn tail_greedy_first_of_elements(
+        &mut self,
+        elements: &List<Element>,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
+        let mut result: List<String> = [];
+        let mut i = elements.len() - 1;
+        while i >= 0 {
+            let elem = &elements[i];
+            let tg = self.tail_greedy_first_of_element(elem, visiting, min_cycle);
+            dedup_append_arr(&mut result, &tg);
+            let mut nv: List<String> = [];
+            if !self.element_is_nullable_deep(elem, &mut nv) {
+                break;
+            }
+            i -= 1;
+        }
+        return result;
+    }
+
+    fn tail_greedy_first_of_element(
+        &mut self,
+        elem: &Element,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<String> {
+        return match elem {
+            Repeat(rep) => {
+                // Only count Repeats whose inner consumes EXACTLY one
+                // token per iteration. Multi-token bodies like
+                // `(htmlElement | CDATA | htmlComment) htmlChardata?`
+                // in HTMLParser's `htmlContent` rule cannot be safely
+                // suppressed by a follow mask: the outer caller's
+                // follow set legitimately overlaps with the inner's
+                // first set (e.g. TAG_OPEN starts a nested htmlElement
+                // AS WELL AS the closing `</div>` tag), and the
+                // runtime lookahead-2 distinguishes them in a way
+                // static analysis cannot. Restricting to single-token
+                // inners keeps the LL repair (`Y?` in `a : X Y?`)
+                // working without breaking those grammars.
+                let mut stv: List<String> = [];
+                let single = self.element_is_single_token(&rep.element, &mut stv);
+                let result: List<String> = if !single {
+                    [];
+                } else {
+                    let mut fv: List<String> = [];
+                    self.first_of_element(&rep.element, &mut fv);
+                };
+                result;
+            },
+            Group(g) => {
+                let mut acc: List<String> = [];
+                for let alt of &g.alternatives {
+                    let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting, min_cycle);
+                    dedup_append_arr(&mut acc, &inner);
+                }
+                acc;
+            },
+            Label(lab) => self.tail_greedy_first_of_element(&lab.element, visiting, min_cycle),
+            RuleRef(r) => self.tail_greedy_first_of_rule_at(&r.name, visiting, min_cycle),
+            // Token / Literal / Wildcard / Not consume exactly one token
+            // and never leak — they are the "stop" condition.
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => [],
+        };
+    }
+}
+
+/// Build a map from single-alt group type name to the first rule that contains it.
+/// This ensures parser gen uses the same type names as the type gen for shared groups.
+fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> HashMap<String, String> {
+    let mut map = HashMap::<String, String>::with_seed(GALE_SEED);
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            scan_elements_for_single_alt_groups(&alt.elements, &rule.name, &mut map);
+        }
+    }
+    return map;
+}
+
+fn scan_elements_for_single_alt_groups<S: AsStrSlice>(
+    elements: &List<Element>,
+    rule_name: S,
+    map: &mut HashMap<String, String>,
+) {
+    for let elem of elements {
+        scan_element_for_single_alt_groups(elem, rule_name, map);
+    }
+}
+
+fn scan_element_for_single_alt_groups<S: AsStrSlice>(elem: &Element, rule_name: S, map: &mut HashMap<String, String>) {
+    let alts = extract_group_alts_for_scan(elem);
+    if let Some(group_alts) = alts {
+        if is_single_alt_group(group_alts) {
+            let type_name = single_alt_group_type_name(&group_alts[0]);
+            if !map.contains_key(type_name) {
+                map[type_name] = rule_name.to_string();
+            }
+            // Recurse into the single-alt group's elements
+            scan_elements_for_single_alt_groups(&group_alts[0].elements, rule_name, map);
+        } else {
+            // Recurse into multi-alt group alts
+            for let alt of group_alts {
+                scan_elements_for_single_alt_groups(&alt.elements, rule_name, map);
+            }
+        }
+        return;
+    }
+    match elem {
+        Repeat(rep) => scan_element_for_single_alt_groups(&rep.element, rule_name, map),
+        Label(lab) => scan_element_for_single_alt_groups(&lab.element, rule_name, map),
+        Group(_) | TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => (),
+    }
+}
+
+fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> {
+    return match elem {
+        Group(g) => Option::Some(&g.alternatives),
+        Repeat(rep) => if let Group(g) = &rep.element {
+            Option::Some(&g.alternatives);
+        } else {
+            null;
+        },
+        TokenRef(_) | Literal(_) | RuleRef(_) | Label(_) | Wildcard(_) | Not(_) => null,
+    };
+}
+
+pub fn is_nullable(elem: &Element) -> bool {
+    if let Repeat(rep) = elem {
+        if let Star | Optional = rep.kind {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Dense `null`-initialised memo cache of length `n`, indexed by rule id.
+fn none_cache<T>(n: i32) -> List<Option<T>> {
+    return List::<Option<T>>::filled(n, null);
+}
+
+/// Index of `name` in the visiting stack, or -1. Used by the scannability
+/// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
+fn visiting_index<S: AsStrSlice>(visiting: &List<String>, name: S) -> i32 {
+    for let mut i = 0; i < visiting.len(); i += 1 {
+        if visiting[i] == name.as_str_slice() {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/// `marked` closed over callers: a rule is marked once a rule `callees` lists
+/// for it is. A callee of `-1` names no rule and marks nothing.
+pub fn close_over_callers(callees: &List<List<i32>>, marked: List<bool>) -> List<bool> {
+    let mut out = marked;
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for let mut r = 0; r < callees.len(); r += 1 {
+            if !out[r] && callees[r].iter_ref().any(|c| *c >= 0 && out[*c]) {
+                out[r] = true;
+                changed = true;
+            }
+        }
+    }
+    return out;
+}
+
+/// The rules called inside a repeat body with a required element after the
+/// call in the same alternative. `in_repeat` says `elements` lie in one.
+fn collect_late_failing_calls(elements: &List<Element>, in_repeat: bool, out: &mut List<String>) {
+    for let i of 0..<elements.len() {
+        let elem = peel_labels(&elements[i]);
+        match elem {
+            RuleRef(r) => if in_repeat && elements.iter_ref().skip(i + 1).any(|e| is_required(e)) {
+                out.push(r.name);
+            },
+            Repeat(rep) => collect_late_failing_calls(&[rep.element], true, out),
+            Group(g) => {
+                for let alt of &g.alternatives {
+                    collect_late_failing_calls(&alt.elements, in_repeat, out);
+                }
+            },
+            TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+            },
+            Label(_) => unreachable(),
+        }
+    }
+}
+
+/// Whether an element must match something: anything but an optional or a
+/// star. A rule call counts, though its rule may be nullable.
+fn is_required(elem: &Element) -> bool {
+    return !peel_labels(elem) matches { Repeat(rep) && !rep.kind matches { Plus } };
+}
+
+/// Collect the parser-rule names an element sequence references for
+/// scannability, mirroring the descent in `is_element_scannable_at`
+/// (RuleRef / Label / Repeat / Group descend; terminals and `Not` do not).
+fn collect_scannable_refs(elements: &List<Element>, out: &mut List<String>) {
+    for let e of elements {
+        collect_scannable_refs_element(e, out);
+    }
+}
+
+fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
+    match elem {
+        RuleRef(r) => out.push(r.name),
+        Label(lab) => collect_scannable_refs_element(&lab.element, out),
+        Repeat(rep) => collect_scannable_refs_element(&rep.element, out),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                collect_scannable_refs(&alt.elements, out);
+            }
+        },
+        TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
+        },
+    }
+}
+
+/// Every way a stretch of the grammar begins, at most two tokens deep: with
+/// nothing, with one token and then nothing, or with a pair. Tokens are kind-id
+/// sets.
+struct Heads {
+    empty: bool,
+    singles: List<u64>,
+    /// Pairs held as products, so a rule whose heads pair every first token
+    /// with every second one costs two sets rather than their product.
+    pairs: List<Pairs>,
+}
+
+/// Every pairing of a token in `firsts` with a token in `seconds`.
+struct Pairs {
+    firsts: List<u64>,
+    seconds: List<u64>,
+}
+
+impl Heads {
+    fn new() -> Heads {
+        return Heads { empty: false, singles: [], pairs: [] };
+    }
+
+    fn add(&mut self, other: &Heads) {
+        self.empty = self.empty || other.empty;
+        bits_union_into(&mut self.singles, &other.singles);
+        for let pair of &other.pairs {
+            self.add_pairs(pair);
+        }
+    }
+
+    /// Products sharing their second set merge, which bounds `pairs` by the
+    /// distinct second sets rather than by the paths reaching them.
+    fn add_pairs(&mut self, pairs: &Pairs) {
+        if bits_is_empty(&pairs.firsts) || bits_is_empty(&pairs.seconds) {
+            return;
+        }
+        for let held of &mut self.pairs {
+            if bits_equal(&held.seconds, &pairs.seconds) {
+                bits_union_into(&mut held.firsts, &pairs.firsts);
+                return;
+            }
+        }
+        self.pairs.push(*pairs);
+    }
+}
+
+fn remove_from_visiting<S: AsStrSlice>(visiting: &mut List<String>, name: S) {
+    // `visiting` is a stack: every caller pushes `name`, recurses (inner frames
+    // pop their own names), then removes `name` — so `name` is on top. Pop in
+    // O(1). The old `filter().collect()` rebuilt the whole list on every
+    // recursion frame; on deeply-recursive grammars that per-frame allocation
+    // dominated allocation and GC. Fall back to a scan if the invariant is ever
+    // violated.
+    let n = visiting.len();
+    if n > 0 && visiting[n - 1] == name.as_str_slice() {
+        visiting.pop();
+        return;
+    }
+    *visiting = visiting.iter_value().filter(|v: String| v != name.as_str_slice()).collect();
+}

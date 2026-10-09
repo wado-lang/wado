@@ -291,7 +291,7 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("array_len") => CtfeBuiltin::ArrayLen,
             Some("array_new") => CtfeBuiltin::ArrayNew,
             Some("array_set" | "array_set_u8") => CtfeBuiltin::ArraySet,
-            Some("array_copy") => CtfeBuiltin::ArrayCopy,
+            Some("array_copy" | "array_move") => CtfeBuiltin::ArrayCopy,
             Some("array_clone_prefix") => CtfeBuiltin::ArrayClonePrefix,
             Some("array_release") => CtfeBuiltin::ArrayRelease,
             Some("cold_path") => CtfeBuiltin::ColdPath,

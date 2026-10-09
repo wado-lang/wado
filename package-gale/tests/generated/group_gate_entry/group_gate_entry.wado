@@ -1820,10 +1820,10 @@ fn _parse_solo_opt(p: &mut Parser) -> () {
 }
 
 fn _parse_shape_opt__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_A {
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         if p.peek_kind() == TK_A && p.peek_at(1) == TK_B && p.peek_at(2) == TK_A && pred_0(p) {
             p.site = 0;
             _parse_ra(p);
@@ -1837,7 +1837,7 @@ fn _parse_shape_opt__inner(p: &mut Parser) -> () {
             _parse_ra(p);
             p.expect(TK_A, &SYNC_1, false);
         }
-        p.expect(TK_A, &SYNC_5, false);
+        p.expect(TK_A, &SYNC_4, false);
         p.expect(TK_EOF, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_C {
@@ -1971,7 +1971,5 @@ global EXPECTED_1: List<i32> = [TK_A];
 global SYNC_2: List<i32> = [5];
 global EXPECTED_2: List<i32> = [TK_A, TK_C];
 global SYNC_3: List<i32> = [2];
-global SYNC_4: List<i32> = [7];
-global EXPECTED_4: List<i32> = [TK_A, TK_B, TK_C];
-global SYNC_5: List<i32> = [16];
+global SYNC_4: List<i32> = [16];
 
