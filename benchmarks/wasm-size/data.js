@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791569990877,
+  "lastUpdate": 1791578087686,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65705,6 +65705,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6bd13c1385da1ca0a4e05fcb23a4f959b56bbc15"
         },
         "date": 1791569990332,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c77528b9ad58618f76978595c21dd9c5a9e224e",
+          "message": "Merge pull request #2318 from wado-lang/loam-prepared-weights\n\nfeat(loam): forward reads weights prepared once by the backend",
+          "timestamp": "2026-10-10T05:18:36+09:00",
+          "tree_id": "a3e8ee9a721f9617544a5859e80638f079f58930",
+          "url": "https://github.com/wado-lang/wado/commit/3c77528b9ad58618f76978595c21dd9c5a9e224e"
+        },
+        "date": 1791578086940,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
