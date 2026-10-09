@@ -8,7 +8,7 @@ use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, unalias_namespace_member};
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, InferVarId, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -508,6 +508,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ret: Option<ExpectedReturn>,
     ) -> Vec<TypeId> {
         let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
+        let hints = self.expected_return_hints(own_vars, ret);
         self.chain_expected_return(own_vars, ret);
         let collection = PendingLiterals::of_call(own_vars);
         let (mut resolved, pending) = self.collecting_pending_literals(collection, |this| {
@@ -519,11 +520,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     deferred.push(i);
                     continue;
                 }
-                resolved[i] = Some(this.resolve_arg_against_param(arg, ctx, param, own_vars));
+                resolved[i] =
+                    Some(this.resolve_arg_against_param(arg, ctx, param, own_vars, &hints));
             }
             for i in deferred {
                 let param = param_types.get(i).copied();
-                resolved[i] = Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars));
+                resolved[i] =
+                    Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars, &hints));
             }
             resolved
                 .into_iter()
@@ -555,19 +558,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve one argument and pin what it answers about `own_vars`. A numeric
-    /// literal pins later, in [`Self::resolve_args_against_params`].
+    /// literal pins later, in [`Self::resolve_args_against_params`]. `hints` is
+    /// what the call's site expects of `own_vars`.
     fn resolve_arg_against_param(
         &mut self,
         arg: &ast::Expr,
         ctx: &mut FunctionContext,
         param_type: Option<TypeId>,
         own_vars: &[TypeId],
+        hints: &IndexMap<InferVarId, TypeId>,
     ) -> TypeId {
         let Some(param_type) = param_type else {
             return self.resolve_expr(arg, ctx, None);
         };
         let expected = self.apply_infer_holes(param_type);
-        let resolved = self.resolve_expr(arg, ctx, Some(expected));
+        let checked_against = self.sequence_literal_expected(arg, expected, hints);
+        let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
             let answerable = self.answerable_vars(own_vars);
             self.solve_own_infer_holes_against(expected, resolved, &answerable);

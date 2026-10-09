@@ -1186,6 +1186,14 @@ expected of the call does: `let y: u64 = pick(Box { value: 1 }, 2)` is
 literals: `f64` if one of them is a float, else `u8` if every one is a byte
 literal, else `i32`.
 
+The type expected of a call reaches its arguments first, as a hint. A literal
+whose type comes from context, a sequence literal (`[]`, `[1]`) or a struct
+literal without a name, is checked against its parameter with the hint
+substituted, so `let l: List<i32> = identity([])` is `identity::<List<i32>>`
+rather than a mismatch with the empty tuple. Any other argument is checked
+against the parameter alone, so a typed argument still decides what the hint
+only suggests.
+
 Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
 so does a literal behind a field, method or subscript of a generic call's or
 constructor's result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a
