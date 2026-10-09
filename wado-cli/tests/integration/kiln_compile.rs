@@ -591,7 +591,11 @@ fn a_comment_edit_moves_the_source_hash() {
     std::fs::create_dir_all(&tmp).unwrap();
 
     let payload_path = tmp.join("payload.wado");
-    std::fs::write(&payload_path, "// before\npub fn answer() -> i32 { return 42; }\n").unwrap();
+    std::fs::write(
+        &payload_path,
+        "// before\npub fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
 
     let entry_src = r#"
 use { Request, Response, Error } from "core:kiln";
@@ -614,7 +618,11 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let baseline = runtime()
         .block_on(async { provider.resolve(&module).await })
         .expect("baseline compile should succeed");
-    std::fs::write(&payload_path, "// after\npub fn answer() -> i32 { return 42; }\n").unwrap();
+    std::fs::write(
+        &payload_path,
+        "// after\npub fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
     let after = runtime()
         .block_on(async { provider.resolve(&module).await })
         .expect("post-edit compile should succeed");

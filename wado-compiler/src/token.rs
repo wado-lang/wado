@@ -480,5 +480,3 @@ impl Span {
         self
     }
 }
-
-
