@@ -1346,6 +1346,12 @@ does. An `enum` has cases with no payload, a `variant` has cases that may carry
 one, and a `flags` type is a set of bits. Each crosses a component boundary as
 the Component Model type of the same name.
 
+Each case of an `enum` or a `variant` has a discriminant: its position in
+declaration order, counting from 0. No syntax assigns one, so reordering the
+cases renumbers them. The discriminant is what crosses a component boundary and
+what a serializer writes, and
+[`ReflectEnum` and `ReflectVariant`](./spec-reflection.md) read it.
+
 ### Enums
 
 <!-- {"fixture":"spec_types_enum.wado"} -->
