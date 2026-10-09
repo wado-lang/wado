@@ -1,7 +1,8 @@
 // Regression test: `with _` on a method settles from the type arguments of
 // its impl and of the method itself, as it does on a free function. Over
 // impls whose methods perform nothing, the call requires nothing, whether the
-// arguments are inferred or spelled.
+// arguments are inferred, spelled, or nested in the impl's target.
+// `effect_wildcard_union_rejected` shows the calls that still require one.
 
 use { println, Stdout } from "core:cli";
 
@@ -53,12 +54,23 @@ impl Plain {
     }
 }
 
+struct Nest<T> {
+    inner: T,
+}
+
+impl<T: Tick> Nest<List<T>> {
+    fn first(&mut self) -> i32 with _ {
+        return self.inner[0].tick();
+    }
+}
+
 fn quiet() -> i32 {
     let mut q = Quiet {};
     let r = Runner::<Quiet> { count: 10, marker: null };
     let p = Plain {};
+    let mut n = Nest { inner: [Quiet {}] as List<Quiet> };
     return Runner::once(&mut q) + Runner::<Quiet>::once(&mut q) + r.twice(&mut q) + Plain::once(&mut q)
-        + p.again(&mut q);
+        + p.again(&mut q) + n.first();
 }
 
 export fn run() with Stdout {
@@ -70,5 +82,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "16\ntick\n2\ntick\n2\n"
+    "stdout": "17\ntick\n2\ntick\n2\n"
 }

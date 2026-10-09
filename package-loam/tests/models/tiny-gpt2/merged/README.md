@@ -10,7 +10,7 @@ set of weights, held once at the top of the graph.
 on Hugging Face at commit `bc3de2f77e05b49d622b4e963ed068c61c4674f2` (SHA-256
 `a0ec0acc8897b2c98fca29549ff71ded54b86d4e9152d0791db6c093dd10f99f`), licensed
 under the MIT License as its model card states. It is renamed as `../model.onnx`
-is. The graph carries its weights, so it runs from `Weights::embedded()`.
+is. The graph carries its weights, so it runs from `Prepared::embedded`.
 
 The repository ships no expected outputs, so the `test_data_set_<n>/`
 directories are onnxruntime's. `oracle.mjs` writes them with onnxruntime-node

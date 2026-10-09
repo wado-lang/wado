@@ -1232,6 +1232,7 @@ impl StructSpec {
         return StructSpec { name: name.to_string(), fields: [], visibility, generics: [] };
     }
 
+    /// Adds a type parameter, written as it renders (`"T: Default"`).
     pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut StructSpec {
         self.generics.push(generic.to_string());
         return self;
@@ -1609,6 +1610,7 @@ impl ImplSpec {
         };
     }
 
+    /// Adds a type parameter of the impl, written as it renders (`"T: Default"`).
     pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut ImplSpec {
         self.generics.push(generic.to_string());
         return self;
