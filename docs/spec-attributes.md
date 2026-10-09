@@ -107,10 +107,12 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#![allow(...)]` it waives the lint for every item in the file. There is no
 `#[deny(...)]`. The lints are:
 
+- `arithmetic_overflow`: integer literals that overflow their type (see [The `arithmetic_overflow` Lint](./spec-diagnostics.md#the-arithmetic_overflow-lint)).
 - `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
 - `literal_cast`: a cast that types a literal a suffix could type (see [The `literal_cast` Lint](./spec-literals.md#the-literal_cast-lint)).
 - `self_comparison`: a comparison of an expression with itself (see [The `self_comparison` Lint](./spec-expressions.md#the-self_comparison-lint)).
 - `shadowed_name`: a binder that takes a name already reaching a known symbol (see [The `shadowed_name` Lint](./spec-expressions.md#the-shadowed_name-lint)).
+- `unconditional_trap`: an integer division that always traps (see [The `unconditional_trap` Lint](./spec-diagnostics.md#the-unconditional_trap-lint)).
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
 <!-- {"fixture":"spec_attributes_allow.wado"} -->

@@ -476,6 +476,9 @@ the quotient is one past `MAX`. A signed `MIN % -1` is 0, as `rem_s` gives. A
 float operation follows IEEE 754: dividing by zero gives an infinity, or NaN for
 `0.0 / 0.0`.
 
+Where literals alone decide that an operation wraps or traps, the compiler warns
+([Constant Integer Arithmetic](./spec-diagnostics.md#constant-integer-arithmetic)).
+
 <!-- {"fixture":"spec_lexical_arithmetic.wado"} -->
 
 ```wado

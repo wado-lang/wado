@@ -1645,6 +1645,10 @@ pub mod lint {
     pub const LITERAL_CAST: &str = "literal_cast";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
+    /// Integer literals alone overflowing their type: `200_u8 + 100_u8`.
+    pub const ARITHMETIC_OVERFLOW: &str = "arithmetic_overflow";
+    /// An integer `/` or `%` that always traps: `x / 0`.
+    pub const UNCONDITIONAL_TRAP: &str = "unconditional_trap";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow
