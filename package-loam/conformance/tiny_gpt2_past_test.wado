@@ -282,7 +282,7 @@ fn past(cache: &Cache, i: i32) -> Tensor<f32, [step::Batch, step::Head, step::Pa
 fn decode(
     token: i64,
     cache: &Cache,
-    weights: &step::Weights,
+    weights: &step::Prepared<Cpu>,
 ) -> [Tensor<f32, [step::Batch, step::Seq, step::Vocab]>, Cache] {
     let length = cache[0].1[2] + 1;
     let o = step::forward(
@@ -325,7 +325,7 @@ fn decode(
 /// The prompt's logits, and the keys and values it leaves.
 fn prefill(input_ids: ByteList) -> [Tensor<f32, [prompt::Batch, prompt::Seq, prompt::Vocab]>, Cache] {
     let [ids, extents] = ints_of(input_ids);
-    let weights = prompt::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = prompt::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let o = prompt::forward(
         &mut Cpu {},
         &Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: ids, extents },
@@ -360,7 +360,7 @@ test "the prompt returns the logits it did without the cache, and a key and valu
 
 test "each step after the prompt computes one position against the cache, as onnxruntime does" {
     let [_, prefilled] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    let weights = step::Weights::embedded();
+    let weights = step::Prepared::embedded(&mut Cpu {});
     let mut cache = prefilled;
     let data: List<[ByteList, ByteList]> = [
         [
@@ -409,6 +409,6 @@ test "a mask that is not one position longer than the cache stops the step" {
             data: [1, 1, 1, 1],
             extents: [1, 4],
         },
-        &step::Weights::embedded(),
+        &step::Prepared::embedded(&mut Cpu {}),
     );
 }

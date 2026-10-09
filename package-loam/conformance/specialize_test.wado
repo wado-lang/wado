@@ -27,7 +27,7 @@ test "a fixed batch lets the kept output regroup" {
             data,
             extents: [2, 2, 3],
         },
-        &Weights {},
+        &Weights {}.prepare(&mut Cpu {}),
     );
     assert got.extents == [2, 6];
     assert got.data == data;

@@ -146,14 +146,14 @@ use gpt2 from "./gpt2.onnxtext"
 
 /// GPT-2 with its weights loaded.
 pub struct Model {
-    weights: gpt2::Weights,
+    weights: gpt2::Prepared<Cpu>,
 }
 
 impl Model {
     /// Loads the weights from a safetensors checkpoint laid out as
     /// `gpt2-header.safetensors` says.
     pub fn load(checkpoint: &ByteList) -> Result<Model, LoadError> {
-        return Ok(Model { weights: gpt2::Weights::load(checkpoint)? });
+        return Ok(Model { weights: gpt2::Prepared::load(&mut Cpu {}, checkpoint)? });
     }
 
     /// How many positions the model reads: one per row of `wpe`.

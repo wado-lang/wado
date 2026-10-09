@@ -303,7 +303,7 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 global RUNTIME_NAMES: List<String> = [
     "Backend", "BinaryOp", "Expected", "LoadError", "Merged", "Tensor", "UnaryOp", "Window", "axis_mismatch", "ceil_div",
     "constant", "extent_mismatch", "floor_div", "from_end", "input_mismatch", "narrow", "operand", "read_checkpoint",
-    "refuse", "to_extent", "unmet", "widen",
+    "refuse", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -321,6 +321,7 @@ fn module_idents() -> TreeSet<String> {
     reserved.insert("Outputs");
     reserved.insert("weights");
     reserved.insert("Weights");
+    reserved.insert(PREPARED);
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
     return reserved;
@@ -349,16 +350,57 @@ fn sanitize(name: &String) -> String {
     return `t_${out}`;
 }
 
-/// The graph's initializers, as the struct `forward` reads them from.
+/// The graph's initializers twice: `Weights` on the host as the graph holds
+/// them, and `Prepared`, which `forward` reads, as the backend computes with
+/// them.
 fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
+    let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
+    prepared.add_generic(`${BACKEND_PARAM}: Backend`);
     for let vi of &graph.initializers {
-        weights.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
+        let ident = names.get(&vi.name);
+        weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
+        prepared.add_pub_field(ident, prepared_type(checked, &vi.name));
     }
     w.blank();
-    w.line("/// The graph's initializers.");
+    w.line("/// The graph's initializers, held on the host as the graph holds them.");
     weights.emit(w);
-    emit_constructor(w, graph, &checked.shapes, names, held);
+    w.blank();
+    ImplSpec::new("Weights").emit_begin(w);
+    w.line("/// These weights as `backend` computes with them.");
+    FnSpec::new("prepare", Vis::Pub).add_generic(`${BACKEND_PARAM}: Backend`).set_receiver("&self").add_param(
+        "backend",
+        `&mut ${BACKEND_PARAM}`,
+    ).set_return_type(PREPARED_TYPE).add_effect("_").emit_begin(w);
+    w.begin(`return ${PREPARED}`);
+    for let vi of &graph.initializers {
+        let ident = names.get(&vi.name);
+        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`)},`);
+    }
+    w.end_with(";");
+    w.end();
+    w.end();
+    w.blank();
+    w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
+    prepared.emit(w);
+    emit_constructor(w, graph, checked, names, held);
+}
+
+/// The struct `forward` reads the weights from, and its type over the backend.
+global PREPARED: String = "Prepared";
+global PREPARED_TYPE: String = "Prepared<Bk>";
+
+/// A weight as the backend holds it: in the primitive the kernels compute in.
+fn prepared_type(checked: &Checked, tensor: &String) -> String {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    return `${BACKEND_PARAM}::Tensor<${checked.primitives.get(*tensor).unwrap()}, [${axis_list(&shape)}]>`;
+}
+
+/// The call making the host tensor `host`, a reference, the backend's: a
+/// half-precision one is converted once here, so `forward` converts none.
+fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String) -> String {
+    let verb = if converted(checked, held, tensor) { "prepare" } else { "upload" };
+    return `backend.${verb}(${host})`;
 }
 
 /// Whether some initializer's data is left to a checkpoint.
@@ -371,42 +413,47 @@ fn loads_weights(graph: &Graph) -> bool {
     return false;
 }
 
-/// `Weights::embedded()` where the graph carries every initializer's data, and
-/// `Weights::load` reading the rest from a safetensors checkpoint otherwise.
+/// `Prepared::embedded` where the graph carries every initializer's data, and
+/// `Prepared::load` reading the rest from a safetensors checkpoint otherwise.
+/// Each tensor is prepared as it is read, so the host copy of one weight at a
+/// time is all that lives beside the prepared ones.
 fn emit_constructor(
     w: &mut CodeWriter,
     graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
+    checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
 ) {
     let loads = loads_weights(graph);
     w.blank();
-    ImplSpec::new("Weights").emit_begin(w);
+    let mut block = ImplSpec::new(PREPARED_TYPE);
+    block.add_generic(`${BACKEND_PARAM}: Backend`);
+    block.emit_begin(w);
     if loads {
         w.line("/// The weights, those the graph does not carry read from a safetensors checkpoint.");
-        FnSpec::new("load", Vis::Pub).add_param("checkpoint", "&ByteList").set_return_type("Result<Weights, LoadError>").emit_begin(
-            w,
-        );
+        FnSpec::new("load", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(
+            "checkpoint",
+            "&ByteList",
+        ).set_return_type(`Result<${PREPARED_TYPE}, LoadError>`).add_effect("_").emit_begin(w);
         w.line("let header = read_checkpoint(checkpoint)?;");
-        w.begin("return Result::Ok(Weights");
+        w.begin(`return Result::Ok(${PREPARED}`);
     } else {
         w.line("/// The weights the graph carries.");
-        FnSpec::new("embedded", Vis::Pub).set_return_type("Weights").emit_begin(w);
-        w.begin("return Weights");
+        FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
+            PREPARED_TYPE,
+        ).add_effect("_").emit_begin(w);
+        w.begin(`return ${PREPARED}`);
     }
     for let vi of &graph.initializers {
         let primitive = held.get(vi.name).unwrap();
-        let shape = shapes.get(vi.name).unwrap();
+        let shape = checked.shapes.get(vi.name).unwrap();
         let e = expected(vi, &shape);
         let data = match vi.data {
             Some(bytes) => byte_string_literal(&bytes),
             None => checkpoint_payload(&e),
         };
-        w.begin(`${names.get(&vi.name)}: Tensor::<${primitive}, [${axis_list(&shape)}]>`);
-        w.line(`data: List::<${primitive}>::from_le_bytes(${data}),`);
-        w.line(`extents: ${e.extents},`);
-        w.end_with(",");
+        let host = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
+        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host)},`);
     }
     w.end_with(if loads { ");" } else { ";" });
     w.end();
@@ -584,34 +631,22 @@ fn emit_forward(
     };
     let mut forward = FnSpec::new("forward", Vis::Pub);
     forward.add_generic(`${BACKEND_PARAM}: Backend`).add_param("backend", `&mut ${BACKEND_PARAM}`);
-    let mut widened: List<String> = [];
-    // Each input and weight on the host, as the backend then holds it. The
-    // checks and the symbols read the host's, so the upload comes after them.
+    // Each input on the host, as the backend then holds it. The checks and the
+    // symbols read the host's, so the upload comes after them. The weights are
+    // the backend's already.
     let mut uploads: List<String> = [];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
-        if converted(checked, held, &vi.name) {
-            widened.push(`let ${ident} = widen(${ident});`);
-            uploads.push(`let ${ident} = backend.upload(&${ident});`);
-        } else {
-            uploads.push(`let ${ident} = backend.upload(${ident});`);
-        }
+        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident)};`);
         exprs.values[vi.name] = ident;
     }
     for let vi of &graph.initializers {
-        let ident = names.get(&vi.name);
-        if converted(checked, held, &vi.name) {
-            widened.push(`let ${ident} = widen(&weights.${ident});`);
-            uploads.push(`let ${ident} = backend.upload(&${ident});`);
-        } else {
-            uploads.push(`let ${ident} = backend.upload(&weights.${ident});`);
-        }
-        exprs.values[vi.name] = ident;
+        exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
     }
     let several = graph.outputs.len() > 1;
     let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
-    forward.add_param("weights", "&Weights").set_return_type(returned_type).add_effect("_");
+    forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
 
     if several {
         emit_outputs(w, graph, checked, names, held);
@@ -620,9 +655,6 @@ fn emit_forward(
     w.line("/// The graph's forward pass, one kernel call per operator.");
     forward.emit_begin(w);
     let spelled_axes = emit_input_checks(w, graph, shapes, names);
-    for let line of widened {
-        w.line(&line);
-    }
     // A symbol is bound once something spells it, which the body decides.
     let body = scope_body(graph, checked, names, &mut exprs, literals, &mut symbols)?;
     let mut owed: List<String> = [];

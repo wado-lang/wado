@@ -4,7 +4,7 @@
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Batch, In, Out, Weights, forward } from "../tests/onnx/pytorch-converted/test_Linear_no_bias/model.onnx"
+use { Batch, In, Out, Prepared, forward } from "../tests/onnx/pytorch-converted/test_Linear_no_bias/model.onnx"
     with {
         type: "onnx",
         generator: {
@@ -32,7 +32,7 @@ test "MatMul reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-converted/test_Linear_no_bias/test_data_set_0/output_0.pb"),
     );
 
-    let got = forward(&mut Cpu {}, &Tensor::<f32, [Batch, In]> { data: x, extents: x_extents }, &Weights::embedded());
+    let got = forward(&mut Cpu {}, &Tensor::<f32, [Batch, In]> { data: x, extents: x_extents }, &Prepared::embedded(&mut Cpu {}));
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);

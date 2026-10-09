@@ -79,12 +79,12 @@ fn ones_input() -> Tensor<f32, [Batch, In]> {
 
 export fn run() with Stdout {
     let x = ones_input();
-    let y = forward(&mut Cpu {}, &x, &weights());
+    let y = forward(&mut Cpu {}, &x, &weights().prepare(&mut Cpu {}));
     println(`batch ${batch_size(&x)}, logits ${y.extents[1]}, first ${y.data[0]}`);
 }
 
 test "the generated forward pass runs the graph's operators" {
-    let y = forward(&mut Cpu {}, &ones_input(), &weights());
+    let y = forward(&mut Cpu {}, &ones_input(), &weights().prepare(&mut Cpu {}));
 
     assert y.extents == [1, 10] as List<i32>;
     // Each hidden unit sums 128 ones, `Relu` keeps them, each logit sums 64

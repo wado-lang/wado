@@ -39,7 +39,7 @@ test "the generated graph reproduces the output ONNX ships" {
         &mut Cpu {},
         &Tensor::<f32, [N]> { data: a, extents: a_extents },
         &Tensor::<f32, [N]> { data: b, extents: b_extents },
-        &Weights {},
+        &Weights {}.prepare(&mut Cpu {}),
     );
 
     assert got.extents == want_extents;

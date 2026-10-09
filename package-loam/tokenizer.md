@@ -55,7 +55,7 @@ interpret at run time:
   written once in the runtime. Unicode classes such as `\p{L}` come from
   `core:icu`.
 - The vocabulary and the merges are embedded as data, one entry to a line in a
-  byte literal, as `Weights::embedded()` embeds a graph's weights.
+  byte literal, as `Prepared::embedded` embeds a graph's weights.
 
 The stages run in Loam's runtime library beside the tensor kernels
 (`BpeTokenizer` in `src/runtime/tokenizer.wado`), and the generated module

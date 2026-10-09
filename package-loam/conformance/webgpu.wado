@@ -121,8 +121,8 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         C: tensor([29], 5),
         BW: tensor([2, 1], 9),
     };
-    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &w);
-    let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &w);
+    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &w.prepare(&mut Cpu {}));
+    let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &w.prepare(&mut gpu));
     println(`Z ${on_gpu.Z.extents:?} ${deviation(&on_gpu.Z.data, &on_cpu.Z.data)}`);
     println(`S ${on_gpu.S.extents:?} ${deviation(&on_gpu.S.data, &on_cpu.S.data)}`);
     println(`R ${on_gpu.R.extents:?} ${deviation(&on_gpu.R.data, &on_cpu.R.data)}`);

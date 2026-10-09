@@ -2,7 +2,7 @@
 //! picks it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Embed, One, Past, Seq, Total, Weights, forward } from "./branch.onnxtext"
+use { Embed, One, Past, Prepared, Seq, Total, forward } from "./branch.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -69,14 +69,14 @@ fn past(data: List<f32>) -> Tensor<f32, [Past, Embed]> {
 }
 
 test "the then branch joins the past to the sequence" {
-    let o = forward(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &Weights::embedded());
+    let o = forward(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &weights());
     assert o.Y.extents == [2, 2];
     assert o.Y.data == [3.0, 4.0, 1.0, 2.0];
     assert o.Z.data == [14.0, -26.0];
 }
 
 test "the else branch reads the sequence alone" {
-    let o = forward(&mut Cpu {}, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &Weights::embedded());
+    let o = forward(&mut Cpu {}, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &weights());
     assert o.Y.extents == [1, 2];
     assert o.Y.data == [0.0, 2.0];
     assert o.Z.data == [-11.0, -18.0];
@@ -89,12 +89,16 @@ test "what one branch owes is not checked where the other runs" {
         &x([1.0, 2.0]),
         &past([]),
         &x([3.0, 4.0, 5.0, 6.0]),
-        &Weights::embedded(),
+        &weights(),
     );
     assert o.Z.data == [-9.0, -18.0];
 }
 
 #[expect_trap]
 test "what a branch owes is checked where it runs" {
-    forward(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([]), &x([3.0, 4.0, 5.0, 6.0]), &Weights::embedded());
+    forward(&mut Cpu {}, &cond(true), &x([1.0, 2.0]), &past([]), &x([3.0, 4.0, 5.0, 6.0]), &weights());
+}
+
+fn weights() -> Prepared<Cpu> {
+    return Prepared::embedded(&mut Cpu {});
 }

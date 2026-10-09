@@ -2,7 +2,7 @@
 //! literal tensor.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Batch, Hidden, Seq, Weights, forward } from "./embedding.onnxtext"
+use { Batch, Hidden, Prepared, Seq, forward } from "./embedding.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -37,7 +37,7 @@ test "each token's row adds its position's row, and -1 names the last token" {
             data: [3, 0, -1],
             extents: [1, 3],
         },
-        &Weights::embedded(),
+        &Prepared::embedded(&mut Cpu {}),
     );
     assert got.extents == [1, 3, 2];
     assert got.data == [13.0, 23.5, 30.0, 40.5, 53.0, 63.5];

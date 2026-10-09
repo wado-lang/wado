@@ -143,7 +143,7 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
 
-    let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let got = gpt2::forward(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
@@ -177,7 +177,7 @@ test "the same module reproduces them for seven" {
 test "a sequence longer than the mask stops forward" {
     let ids = List::<i64>::filled(513, 0);
     let mask = List::<i64>::filled(513, 1);
-    let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     gpt2::forward(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
@@ -201,6 +201,6 @@ test "a checkpoint of another model names the axis it disagrees on" {
             data: ByteList::filled(1024 * 64 * 4, 0),
         },
     ]);
-    let e = gpt2::Weights::load(&other).unwrap_err();
+    let e = gpt2::Prepared::load(&mut Cpu {}, &other).unwrap_err();
     assert `${e}` == "transformer.wte.weight: axis Embed is 64 in the checkpoint and 32 in the graph";
 }

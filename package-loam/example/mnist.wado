@@ -125,7 +125,7 @@ fn image_of(rows: &List<String>) -> Tensor<f32, [mnist::Batch, mnist::Gray, mnis
 }
 
 fn classify(image: &Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]>) -> i32 {
-    let logits = mnist::forward(&mut Cpu {}, image, &mnist::Weights::embedded());
+    let logits = mnist::forward(&mut Cpu {}, image, &mnist::Prepared::embedded(&mut Cpu {}));
     let mut best = 0;
     for let [digit, v] of logits.data.into_iter().enumerate() {
         if v > logits.data[best] {

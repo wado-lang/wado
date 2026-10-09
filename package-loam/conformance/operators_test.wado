@@ -92,11 +92,12 @@ fn computed(model: ByteList, case: &Case) -> String {
     for let input of case.inputs {
         args.push_str(`&Tensor { data: ${input.literal()}, extents: ${input.extents} }, `);
     }
-    let weights = if source.contains("fn embedded") { "Weights::embedded()" } else { "Weights {}" };
     let shown = if case.output.element == "f32" { "v.to_bits()" } else { "v" };
     let program = `${program_over(&source)}
 export fn run() with Stdout {
-    let got = forward(&mut Opaque::new(), ${args}&${weights});
+    let mut opaque = Opaque::new();
+    let weights = Prepared::embedded(&mut opaque);
+    let got = forward(&mut opaque, ${args}&weights);
     let extents: List<String> = got.extents.into_iter().map(|e| \`\${e}\`).collect();
     let data: List<String> = got.data.into_iter().map(|v| \`\${${shown}}\`).collect();
     println(\`output ${case.output.element} [\${extents.join(",")}] [\${data.join(",")}]\`);

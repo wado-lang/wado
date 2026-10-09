@@ -46,7 +46,7 @@ test "Gemm reproduces the output ONNX ships" {
         &Tensor::<f32, [Batch, In]> { data: a, extents: a_extents },
         &Tensor::<f32, [In, Out]> { data: b, extents: b_extents },
         &Tensor::<f32, [Out]> { data: c, extents: c_extents },
-        &Weights {},
+        &Weights {}.prepare(&mut Cpu {}),
     );
 
     assert got.extents == want_extents;

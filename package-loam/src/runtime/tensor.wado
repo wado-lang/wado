@@ -1099,6 +1099,12 @@ pub trait Backend with _ {
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
     /// `t` back on the host.
     fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
+    /// `t`, held in half precision on the host, as this backend computes with
+    /// it. How it stores the result is its own: the type says only that the
+    /// kernels read it as f32.
+    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
+        return self.upload(&widen(t));
+    }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Self::Tensor<i64, [A]>;

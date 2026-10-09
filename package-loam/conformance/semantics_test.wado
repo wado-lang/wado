@@ -97,7 +97,9 @@ fn joined<T: Display>(values: List<T>) -> String {
 
 export fn run() with Stdout {
     for let n of ${LENGTHS:?} as List<i32> {
-        let got = forward(&mut Opaque::new(), ${args}&Weights {});
+        let mut opaque = Opaque::new();
+        let weights = Prepared::embedded(&mut opaque);
+        let got = forward(&mut opaque, ${args}&weights);
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
 }

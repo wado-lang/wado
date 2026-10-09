@@ -7,7 +7,7 @@
 //! imports, so the tests discover none of it, and `program_over` in
 //! `oracle.wado` splices it.
 
-use { Cpu, Element, Expr } from "lib:loam";
+use { Cpu, Element, Expr, Held, widen } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {
@@ -15,16 +15,17 @@ struct Handle<E, Axes> {
 }
 
 /// The CPU's kernels behind handles, counting the tensors that cross the seam
-/// each way.
+/// each way, and the half-precision ones converted on the way in.
 struct Opaque {
     cpu: Cpu,
     uploads: i32,
     downloads: i32,
+    prepared: i32,
 }
 
 impl Opaque {
     fn new() -> Opaque {
-        return Opaque { cpu: Cpu {}, uploads: 0, downloads: 0 };
+        return Opaque { cpu: Cpu {}, uploads: 0, downloads: 0, prepared: 0 };
     }
 }
 
@@ -43,6 +44,11 @@ impl Backend for Opaque {
     fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
         self.downloads += 1;
         return t.held;
+    }
+
+    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<f32, Axes> {
+        self.prepared += 1;
+        return handle(widen(t));
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Handle<E, Axes> {

@@ -42,7 +42,7 @@ test "a scalar Constant folds into the Gemm bias" {
         &mut Cpu {},
         &Tensor::<f32, [Batch, In]> { data: a, extents: a_extents },
         &Tensor::<f32, [In, Out]> { data: b, extents: b_extents },
-        &Weights {},
+        &Weights {}.prepare(&mut Cpu {}),
     );
 
     assert got.extents == want_extents;
