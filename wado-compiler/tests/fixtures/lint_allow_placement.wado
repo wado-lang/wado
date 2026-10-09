@@ -1,0 +1,76 @@
+// `#[allow(...)]` waives a lint over everything the node carrying it encloses:
+// a `let`, a parameter's default, a field's default, an associated constant.
+// The unwaived twin of each reports, so the waiver is what silences it.
+
+use { println, eprintln, print } from "core:cli";
+
+struct Config {
+    #[allow(literal_cast)]
+    waived: u8 = 10 as u8,
+    kept: u8 = 11 as u8,
+}
+
+impl Config {
+    #[allow(arithmetic_overflow)]
+    const WAIVED: u8 = 250_u8 + 7_u8;
+    const KEPT: u8 = 250_u8 + 8_u8;
+}
+
+fn scale(#[allow(literal_cast)] a: u8 = 12 as u8, b: u8 = 13 as u8) -> u8 {
+    return a + b;
+}
+
+#[allow(shadowed_name)]
+fn waived_body() -> i32 {
+    let println = 1;
+    return println;
+}
+
+fn kept_body() -> i32 {
+    #[allow(shadowed_name)]
+    let waived = |eprintln: i32| eprintln;
+    let print = 2;
+    return waived(print);
+}
+
+test {
+    #[allow(literal_cast)]
+    let a = 14 as u8;
+    let b = 15 as u8;
+    #[allow(arithmetic_overflow)]
+    let c = 240_u8 + 20_u8;
+    let d = 240_u8 + 21_u8;
+    let x = builtin::black_box(1);
+    #[allow(self_comparison)]
+    let e = x == x;
+    let f = x <= x;
+    let config = Config {};
+    assert a + b == 29_u8 && c == 4_u8 && d == 5_u8 && e && f;
+    assert config.waived + config.kept == 21_u8 && scale() == 25_u8;
+    assert Config::WAIVED == 1_u8 && Config::KEPT == 2_u8;
+    assert waived_body() == 1 && kept_body() == 2;
+}
+
+__DATA__
+{
+  "test": {},
+  "warnings_contains": [
+    "write `11_u8` for `11 as u8`",
+    "`250_u8 + 8_u8`",
+    "write `13_u8` for `13 as u8`",
+    "write `15_u8` for `15 as u8`",
+    "`240_u8 + 21_u8`",
+    "`x <= x`",
+    "`print` shadows"
+  ],
+  "warnings_not_contains": [
+    "10 as u8",
+    "250_u8 + 7_u8",
+    "12 as u8",
+    "14 as u8",
+    "240_u8 + 20_u8",
+    "`x == x`",
+    "`println` shadows",
+    "`eprintln` shadows"
+  ]
+}

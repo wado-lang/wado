@@ -3,8 +3,8 @@
 //! `docs/spec-diagnostics.md`.
 
 use crate::ast::{
-    AstVisitor, Attribute, BinaryExpr, BinaryOp, Expr, Function, Item, Literal, UnaryOp,
-    attrs_allow, inner_attrs_allow, lint, walk_expr, walk_function, walk_item,
+    AstVisitor, Attribute, BinaryExpr, BinaryOp, Expr, Literal, UnaryOp, attrs_allow,
+    inner_attrs_allow, lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
@@ -346,9 +346,10 @@ impl ConstantArithmetic<'_> {
             });
         }
     }
+}
 
-    /// Run `body` with each lint the attributes `#[allow]` turned off.
-    fn waiving(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+impl AstVisitor for ConstantArithmetic<'_> {
+    fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         let saved = (self.overflow, self.trap);
         self.overflow &= !attrs_allow(attrs, lint::ARITHMETIC_OVERFLOW);
         self.trap &= !attrs_allow(attrs, lint::UNCONDITIONAL_TRAP);
@@ -356,16 +357,6 @@ impl ConstantArithmetic<'_> {
             body(self);
         }
         (self.overflow, self.trap) = saved;
-    }
-}
-
-impl AstVisitor for ConstantArithmetic<'_> {
-    fn visit_item(&mut self, item: &Item) {
-        self.waiving(item.attrs(), |walk| walk_item(walk, item));
-    }
-
-    fn visit_function(&mut self, func: &Function) {
-        self.waiving(&func.attrs, |walk| walk_function(walk, func));
     }
 
     fn visit_expr(&mut self, expr: &Expr) {

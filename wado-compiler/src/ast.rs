@@ -413,6 +413,13 @@ pub trait AstVisitor: Sized {
         self.visit_id(effect.id, effect.span);
     }
 
+    /// `body`, the code written under `attrs`: an item, a function, a `let`, a
+    /// parameter's default, a field's default, an associated constant's value.
+    /// Overridable because an attribute such as `#[allow]` scopes to it.
+    fn visit_attributed(&mut self, _attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+        body(self);
+    }
+
     fn visit_item(&mut self, item: &Item) {
         walk_item(self, item);
     }
@@ -577,6 +584,15 @@ pub fn for_each_function<'a>(
 }
 
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
+    // `walk_function` scopes a function's attributes, a method's among them.
+    if let Item::Function(func) = item {
+        v.visit_function(func);
+        return;
+    }
+    v.visit_attributed(item.attrs(), |v| walk_item_body(v, item));
+}
+
+fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
         Item::Use(u) => {
             v.visit_id(u.id, u.span);
@@ -615,7 +631,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
                 // A field default is an expression written here; see
                 // `walk_function`'s parameter defaults.
                 if let Some(default) = &field.default {
-                    v.visit_expr(default);
+                    v.visit_attributed(&field.attrs, |v| v.visit_expr(default));
                 }
             }
         }
@@ -669,7 +685,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             for c in &i.constants {
                 v.visit_id(c.id, c.span);
                 v.visit_type(&c.ty);
-                v.visit_expr(&c.value);
+                v.visit_attributed(&c.attrs, |v| v.visit_expr(&c.value));
             }
             for m in &i.methods {
                 v.visit_function(m);
@@ -736,16 +752,18 @@ fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
         // module, so its names are reference sites like any other and the
         // walk answers for them from that vantage (WEP 2026-08-12 §3).
         if let Some(default) = &param.default {
-            v.visit_expr(default);
+            v.visit_attributed(&param.attrs, |v| v.visit_expr(default));
         }
     }
 }
 
 pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
-    walk_function_signature(v, func);
-    if let Some(body) = &func.body {
-        v.visit_block(body);
-    }
+    v.visit_attributed(&func.attrs, |v| {
+        walk_function_signature(v, func);
+        if let Some(body) = &func.body {
+            v.visit_block(body);
+        }
+    });
 }
 
 /// Everything [`walk_function`] visits but the body.
@@ -772,7 +790,7 @@ pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
 pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
     v.visit_id(stmt.id(), stmt.span());
     match stmt {
-        Stmt::Let(s) => {
+        Stmt::Let(s) => v.visit_attributed(&s.attrs, |v| {
             if let Some(ty) = &s.ty {
                 v.visit_type(ty);
             }
@@ -785,7 +803,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
                 v.visit_block(eb);
             }
             v.visit_pattern(&s.pattern);
-        }
+        }),
         Stmt::Expr(s) => v.visit_expr(&s.expr),
         Stmt::Return(s) => {
             if let Some(val) = &s.value {
