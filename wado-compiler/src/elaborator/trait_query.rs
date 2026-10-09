@@ -3218,7 +3218,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Each parameter with the type a call writes for it, as [`asked_at`] reads them.
+    /// Each parameter with the type a call writes for it, then each impl
+    /// parameter with the type the receiver settles, as [`asked_at`] reads them.
     /// A parameter the call leaves parametric contributes nothing, so a bound keeps its binder.
     pub(super) fn call_site_types(
         &self,

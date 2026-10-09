@@ -192,9 +192,9 @@ pub(super) struct MethodInferenceInput<'a> {
     /// [`Elaborator::fill_defaulted_method_type_args`].
     pub declaring_module: Option<ModuleSource>,
     /// The matched `impl` block's parameters at the receiver's arguments
-    /// ([`MethodInfo::impl_type_bindings`]), which a method bound may name:
-    /// `R` in `fn go<T: Mix<R, Out = Q>, Q>` under `impl<R> Holder<R>`.
-    pub impl_bindings: &'a [DefaultTypeBinding],
+    /// ([`settled_impl_args`]), which a method bound may name: `R` in
+    /// `fn go<T: Mix<R, Out = Q>, Q>` under `impl<R> Holder<R>`.
+    pub impl_args: &'a [(String, TypeId)],
     /// Call-site span, used to anchor a "cannot infer type parameter"
     /// diagnostic when inference leaves a method type parameter dangling.
     pub span: Span,
@@ -1393,10 +1393,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
-        let impl_args = settled_impl_args(input.impl_bindings);
-        let (names, ids): (Vec<String>, Vec<TypeId>) = impl_args.iter().cloned().unzip();
+        let (names, ids): (Vec<String>, Vec<TypeId>) = input.impl_args.iter().cloned().unzip();
         self.with_type_params_bound(&names, &ids, |e| {
-            e.bind_method_type_args_in_impl_frame(explicit, input, &impl_args)
+            e.bind_method_type_args_in_impl_frame(explicit, input)
         })
     }
 
@@ -1404,9 +1403,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
-        impl_args: &[(String, TypeId)],
     ) -> (Vec<TypeId>, SubstitutionContext) {
-        let (slots, own_params, span) = (input.slots, input.own_params, input.span);
+        let (slots, own_params, impl_args, span) =
+            (input.slots, input.own_params, input.impl_args, input.span);
         let self_binding = self
             .tysys
             .base_self_binding(input.receiver_type, input.trait_decl);
@@ -1463,7 +1462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             expected_return_type,
             trait_decl,
             declaring_module,
-            impl_bindings,
+            impl_args,
             span,
         } = input;
 
@@ -1478,7 +1477,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let self_binding = Some(self.tysys.base_self_binding(receiver_type, trait_decl));
-        let impl_args = settled_impl_args(impl_bindings);
         let inst = self.instantiate(
             slots,
             &Instantiation {
@@ -1487,10 +1485,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
                 type_args: written,
                 self_binding,
-                impl_args: &impl_args,
+                impl_args,
             },
         );
-        self.record_slot_bounds(&inst, &method_type_params, self_binding, &impl_args, span);
+        self.record_slot_bounds(&inst, &method_type_params, self_binding, impl_args, span);
         let param_types = self.instantiate_types(param_types, &inst);
         let decl_return_type = self.instantiate_type(decl_return_type, &inst);
 
@@ -3321,6 +3319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A `_` resolves to UNKNOWN, and inference fills it below.
         let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
 
+        let impl_args = settled_impl_args(&impl_type_bindings);
         // This path answers the call, so it runs the method's own inference too:
         // a subscript receiver does not decide whether an argument gets a type.
         let args = self.resolve_args_through_slots(
@@ -3338,7 +3337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     output_type,
                     method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 )),
-                impl_args: &settled_impl_args(&impl_type_bindings),
+                impl_args: &impl_args,
             },
             expected_type.map(|expected| ExpectedReturn {
                 declared: return_type,
@@ -3361,7 +3360,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_return_type: expected_type,
                 trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: impl_module.clone(),
-                impl_bindings: &impl_type_bindings,
+                impl_args: &impl_args,
                 span: method_call.span,
             },
         );
