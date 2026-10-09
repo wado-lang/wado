@@ -175,6 +175,7 @@ use {
     gen_parser_struct,
     gen_recover_helpers,
     gen_trace_helpers,
+    syncs_on,
 } from "./parser_runtime_gen.wado";
 use { gen_parser_super_interface } from "./superclass.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
@@ -3784,9 +3785,9 @@ fn gen_decision_sync<S: AsStrSlice>(
     }
     let set = ctx.sync_set(ids);
     let bits = ctx.sync_bits_ref(set);
-    let fragment = if ctx.settings.emit_fragment_recovery() { " && !p.root_fragment_start(p.kinds[p.pos])" } else { "" };
+    let syncs = syncs_on(ctx.settings.emit_fragment_recovery(), "p", `&${bits}`, "p.kinds[p.pos]");
     w.line(
-        `if !kind_set_has(&${bits}, p.kinds[p.pos])${fragment} { builtin::cold_path(); p.${method}(&${bits}, &${ctx.sync_list_ref(
+        `if !${syncs} { builtin::cold_path(); p.${method}(&${bits}, &${ctx.sync_list_ref(
             set,
         )}); }`,
     );

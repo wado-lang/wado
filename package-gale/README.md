@@ -306,7 +306,9 @@ of `statement` nodes instead of being dropped. List several unit rules
 color a snippet's interpolations and its keywords in context.
 
 The fragment is still reported as incomplete — `result.ok()` is `false`, with a
-diagnostic — the option only adds the structure. Unset, it costs nothing.
+diagnostic — the option only adds the structure. It acts only where recovery is
+back at the start rule, so an error inside a nested rule recovers as it would
+without it. Unset, it costs nothing.
 
 ## The generated parser API
 

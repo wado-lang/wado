@@ -873,7 +873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What `ret` says of each of `own_vars` its declared type names, as the
-    /// substitution [`Elaborator::sequence_literal_expected`] applies: the
+    /// substitution [`Elaborator::context_literal_expected`] applies: the
     /// type a call's site expects reaches its arguments first, as a hint.
     pub(super) fn expected_return_hints(
         &mut self,
@@ -902,7 +902,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `T` the site expects to be `List<i32>` is a `List<i32>`, not the empty
     /// tuple. A typed argument is checked against `expected` alone, so it
     /// still decides what the hint only suggests.
-    pub(super) fn sequence_literal_expected(
+    pub(super) fn context_literal_expected(
         &mut self,
         arg: &Expr,
         expected: TypeId,

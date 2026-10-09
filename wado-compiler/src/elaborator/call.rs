@@ -572,7 +572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_expr(arg, ctx, None);
         };
         let expected = self.apply_infer_holes(param_type);
-        let checked_against = self.sequence_literal_expected(arg, expected, hints);
+        let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
             let answerable = self.answerable_vars(own_vars);

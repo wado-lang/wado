@@ -376,7 +376,7 @@ fn extend_reachable_for_optimizer_passes(
             }
             scanned[index] = true;
             for &type_id in &graph.analyses[index].copied_elems {
-                // A stale `array_clone::<T>` can name a type already
+                // A stale element-copying call can name a type already
                 // pruned from the table; it has no helper, so skip it
                 // rather than resolve an absent id (the structural key
                 // recurses through `TypeTable::get`, which panics on a

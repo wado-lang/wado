@@ -230,12 +230,13 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line("if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
 }
 
-/// Whether recovery may stop at `k` with `set` as its sync set. A fragment
-/// start joins every set at the root only: the start rule's `EOF` descends
-/// into the fragment it begins, and a nested rule cannot.
-fn syncs_on<S: AsStrSlice, K: AsStrSlice>(fragment_recovery: bool, set: S, k: K) -> String {
+/// Whether recovery may stop at `k` with `set` as its sync set, asked of the
+/// `parser` expression. A fragment start joins every set at the root only: the
+/// start rule's `EOF` descends into the fragment it begins, and a nested rule
+/// cannot.
+pub fn syncs_on<P: AsStrSlice, S: AsStrSlice, K: AsStrSlice>(fragment_recovery: bool, parser: P, set: S, k: K) -> String {
     let member = `kind_set_has(${set}, ${k})`;
-    return if fragment_recovery { `(${member} || self.root_fragment_start(${k}))` } else { member };
+    return if fragment_recovery { `(${member} || ${parser}.root_fragment_start(${k}))` } else { member };
 }
 
 /// ANTLR4's rule-level recovery and decision sync: the parser methods a failed
@@ -331,7 +332,7 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
     su.emit_begin(w);
     w.begin("loop");
     w.line("let k = self.kinds[self.pos];");
-    w.line(`if k == TK_EOF || ${syncs_on(fragment_recovery, "set", "k")} { break; }`);
+    w.line(`if k == TK_EOF || ${syncs_on(fragment_recovery, "self", "set", "k")} { break; }`);
     w.line("self.skip_one();");
     w.end();
     w.end();
@@ -364,7 +365,12 @@ fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
     sd.set_return_type("bool");
     sd.emit_begin(w);
     w.begin(
-        `if self.speculating || self.kinds[self.pos] == TK_EOF || !${syncs_on(fragment_recovery, "sync", "self.peek_at(1)")}`,
+        `if self.speculating || self.kinds[self.pos] == TK_EOF || !${syncs_on(
+            fragment_recovery,
+            "self",
+            "sync",
+            "self.peek_at(1)",
+        )}`,
     );
     w.line("return false;");
     w.end();
@@ -1017,6 +1023,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.begin(
         `if ${syncs_on(
             fragment_recovery,
+            "self",
             "sync",
             "self.kinds[self.pos]",
         )} || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])`,
@@ -1041,7 +1048,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
     w.begin("loop");
     w.line("let _k = self.kinds[self.pos];");
-    w.line(`if _k == TK_EOF || _k == kind || ${syncs_on(fragment_recovery, "sync", "_k")} { break; }`);
+    w.line(`if _k == TK_EOF || _k == kind || ${syncs_on(fragment_recovery, "self", "sync", "_k")} { break; }`);
     w.line("self.skip_one();");
     w.end();
     w.line("self.b.finish_node(self.last_end());");
