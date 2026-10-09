@@ -1194,7 +1194,7 @@ rather than a mismatch with the empty tuple. Any other argument is checked
 against the parameter alone, so a typed argument still decides what the hint
 only suggests.
 
-<!-- {"fixture":"infer_expected_type_hints_sequence_literal.wado"} -->
+<!-- {"fixture":"infer_expected_type_hints_context_literal.wado"} -->
 
 ```wado
 let l: List<i32> = identity([]);
