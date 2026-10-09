@@ -62,7 +62,7 @@ impl<T> List<T> {
         let capacity = self.repr.len();
         let new_capacity = i32::max(capacity * 2, 4);
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
-        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
+        builtin::array_move(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
@@ -73,7 +73,7 @@ impl<T> List<T> {
         }
         let new_capacity = i32::max(i32::max(capacity * 2, min_capacity), 4);
         let mut new_repr: Array<T> = builtin::array_new(new_capacity);
-        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
+        builtin::array_move(&mut new_repr, 0, &self.repr, 0, self.used);
         self.repr = new_repr;
     }
 
@@ -160,9 +160,7 @@ impl<T> List<T> {
     /// generated parser over a fixed token stream) avoid that per-access cost.
     /// Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
     pub fn to_array(&self) -> Array<T> {
-        let mut out: Array<T> = builtin::array_new(self.used);
-        builtin::array_copy(&mut out, 0, &self.repr, 0, self.used);
-        return out;
+        return builtin::array_clone_prefix(&self.repr, self.used);
     }
 
     /// Inserts an element at the given index, shifting all elements after it to the right.
@@ -174,7 +172,7 @@ impl<T> List<T> {
             self.grow();
         }
         // Shift elements right
-        builtin::array_copy(&mut self.repr, index + 1, &self.repr, index, self.used - index);
+        builtin::array_move(&mut self.repr, index + 1, &self.repr, index, self.used - index);
         self.repr[index] = value;
         self.used += 1;
     }
@@ -185,7 +183,7 @@ impl<T> List<T> {
         assert 0 <= index < self.used, "index out of bounds";
         let value = self.repr[index];
         // Shift elements left
-        builtin::array_copy(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
+        builtin::array_move(&mut self.repr, index, &self.repr, index + 1, self.used - 1 - index);
         self.used -= 1;
         builtin::array_release(&mut self.repr, self.used, 1);
         return value;
@@ -233,7 +231,7 @@ impl<T> List<T> {
         let capacity = self.repr.len();
         if capacity > self.used {
             let mut new_repr: Array<T> = builtin::array_new(self.used);
-            builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
+            builtin::array_move(&mut new_repr, 0, &self.repr, 0, self.used);
             self.repr = new_repr;
         }
     }
@@ -311,7 +309,7 @@ impl<T> List<T> {
             builtin::cold_path();
             let new_capacity = i32::max(new_used, capacity * 2);
             let mut new_repr: Array<T> = builtin::array_new(new_capacity);
-            builtin::array_copy(&mut new_repr, 0, &self.repr, 0, self.used);
+            builtin::array_move(&mut new_repr, 0, &self.repr, 0, self.used);
             self.repr = new_repr;
         }
         let base = self.used;
@@ -490,7 +488,7 @@ impl<T> List<T> {
                         j += 1;
                     }
                 }
-                builtin::array_copy(&mut self.repr, start, &buf, start, end - start);
+                builtin::array_move(&mut self.repr, start, &buf, start, end - start);
                 start = end;
             }
             if width >= n - width {
@@ -501,10 +499,7 @@ impl<T> List<T> {
     }
 
     pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T> {
-        let n = self.used;
-        let mut new_repr: Array<T> = builtin::array_new(n);
-        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, n);
-        let mut copy = List { repr: new_repr, used: n };
+        let mut copy = List { repr: builtin::array_clone_prefix(&self.repr, self.used), used: self.used };
         copy.sort_by(cmp);
         return copy;
     }
@@ -564,10 +559,7 @@ impl<T: Ord> List<T> {
     }
 
     pub fn sorted(&self) -> List<T> {
-        let n = self.used;
-        let mut new_repr: Array<T> = builtin::array_new(n);
-        builtin::array_copy(&mut new_repr, 0, &self.repr, 0, n);
-        let mut copy = List { repr: new_repr, used: n };
+        let mut copy = List { repr: builtin::array_clone_prefix(&self.repr, self.used), used: self.used };
         copy.sort();
         return copy;
     }

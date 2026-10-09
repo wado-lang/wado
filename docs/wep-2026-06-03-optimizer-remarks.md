@@ -96,9 +96,9 @@ shallow spine copy, lowered as a `builtin::array_clone` /
 `array_clone_shallow` call on the backing array. So a value copy that survives
 optimization appears in the final NIR as one of: a remaining `$value_copy$T(...)`
 call, or an `array_clone` / `array_clone_shallow` / `copy_value` call. The remark
-collects all of these in the entry package's functions. (`array_copy` is
-excluded — it is bulk buffer movement inside stdlib helpers like `String::push`,
-not a value-semantic copy.) Example output (`--log-level info`), where `b` is a
+collects all of these in the entry package's functions. (`array_copy` and
+`array_move` are excluded: stdlib helpers like `String::push` write them
+themselves, so no remark can move one.) Example output (`--log-level info`), where `b` is a
 `List<i32>` copied then mutated:
 
 ```

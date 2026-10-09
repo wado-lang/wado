@@ -50,8 +50,7 @@ impl LowerMarks {
         let flags = List::<bool>::filled(rule_count, false);
         return LowerMarks {
             rule_reads_follow: flags,
-            // Built one by one: `filled` would share one list among the rules.
-            follow_forward_edges: (0..<rule_count).map(|_| [] as List<String>).collect(),
+            follow_forward_edges: List::<List<String>>::filled(rule_count, []),
             rule_asks_simulator: flags,
             rule_body_predicts: flags,
         };

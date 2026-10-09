@@ -249,3 +249,31 @@ test "Array has a default" {
     assert d.len() == 0;
     assert d.is_empty();
 }
+
+test "filled gives each element its own value" {
+    let mut a = Array::<List<i32>>::filled(2, []);
+    a[0].push(1);
+    assert a[1].is_empty();
+}
+
+test "fill gives each element its own value" {
+    let mut a = Array::<List<i32>>::filled(2, []);
+    a.fill([0]);
+    a[0].push(1);
+    assert a[1].len() == 1;
+}
+
+test "copy_from copies the elements" {
+    let src = Array::<List<i32>>::filled(1, []);
+    let mut dst = Array::<List<i32>>::filled(1, [9]);
+    dst.copy_from(0, &src, 0, 1);
+    dst[0].push(1);
+    assert src[0].is_empty();
+}
+
+test "copy_from within one array copies the elements" {
+    let mut a = Array::<List<i32>>::filled(2, []);
+    a.copy_from(1, &a, 0, 1);
+    a[1].push(1);
+    assert a[0].is_empty();
+}

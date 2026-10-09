@@ -25,7 +25,7 @@ use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
-use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
+use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::name::value_copy_helper_name;
 use crate::{hashmap, tir};
 
@@ -85,9 +85,9 @@ pub fn synthesize_helpers(
 
 /// Walk a newly-generated helper body and collect every `TypeId` that
 /// appears as a nested `copy_value::<NestedT>` marker (so the worklist
-/// closes the transitive set of helpers) and every `array_clone::<T>`
-/// element type (so codegen's per-element `$value_copy$T` call finds a
-/// registered helper at lower time).
+/// closes the transitive set of helpers) and every element type an
+/// element-copying builtin names (so codegen's per-element `$value_copy$T`
+/// call finds a registered helper at lower time).
 struct Collector<'a> {
     out: IndexSet<TypeId>,
     type_table: &'a TypeTable,
@@ -100,12 +100,12 @@ impl TirRefVisitor for Collector<'_> {
         {
             self.out.insert(t);
         }
-        // When `T` is value-typed, WIR build lowers `array_clone::<T>(arr)` to
-        // a loop calling `T`'s `$value_copy$` on each element, so each
+        // When `T` is value-typed, WIR build lowers `array_clone::<T>(arr)` and
+        // its kin to a loop calling `T`'s `$value_copy$` on each element, so each
         // destination element is fresh rather than an aliased ref. The helper
         // has to exist by then, so collect such element types into the
         // worklist alongside direct `copy_value::<T>` callers.
-        if let Some(t) = array_clone_element_type_arg(expr)
+        if let Some(t) = copied_element_type_arg(expr)
             && value_copy::needs_value_copy(t, self.type_table)
         {
             self.out.insert(t);
