@@ -37,10 +37,10 @@ pub struct WorldExportPlan {
     /// Export function name (e.g., "run", "handle"). Used as-is for the core
     /// module alias (`{name}-core`).
     pub name: String,
-    /// Kebab-case CM extern name for the component boundary (underscores → hyphens).
-    /// Computed once here so codegen emits the plan as-is rather than owning the
-    /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
-    /// already kebab-safe, so this equals `name` for them.
+    /// The CM extern name for the component boundary, `to_cm_name(name)`.
+    /// Computed here so codegen emits the plan as-is rather than knowing a name
+    /// format. WASI names (`run`, `handle`, `generate`) are labels already, so
+    /// this equals `name` for them.
     pub cm_export_name: String,
     /// Core function name in the Wasm module (e.g., `"$cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
@@ -465,20 +465,14 @@ mod tests {
     #[test]
     fn test_export_names() {
         // Simple case
-        assert_eq!(
-            test_export_name("$test_0_simple"),
-            "test-0-simple"
-        );
+        assert_eq!(test_export_name("$test_0_simple"), "test-0-simple");
         // Consecutive underscores from parentheses in test name
         assert_eq!(
             test_export_name("$test_23_compression_level_0__stored__round_trip"),
             "test-23-compression-level-0-stored-round-trip"
         );
         // Trailing underscores
-        assert_eq!(
-            test_export_name("$test_1_trailing__"),
-            "test-1-trailing"
-        );
+        assert_eq!(test_export_name("$test_1_trailing__"), "test-1-trailing");
         // Unnamed test (no name part)
         assert_eq!(test_export_name("$test_5"), "test-5");
         // expect_trap tests

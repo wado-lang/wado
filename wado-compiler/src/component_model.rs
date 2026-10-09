@@ -3553,11 +3553,10 @@ impl CmInterfaceRegistry {
     ) -> Result<(), String> {
         let interface_path = wasi.interface_path();
 
-        // Get the WASI function name from the attribute, or derive from method name
         let wasi_func_name = wasi
             .function
             .clone()
-            .unwrap_or_else(|| method_name.replace('_', "-"));
+            .unwrap_or_else(|| to_cm_name(method_name));
         let (params, callbacks) = self.value_params(params);
         let func_info = CmFunctionInfo {
             namespace: wasi.namespace.clone(),

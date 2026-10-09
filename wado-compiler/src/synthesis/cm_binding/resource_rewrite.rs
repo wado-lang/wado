@@ -2010,8 +2010,6 @@ fn registered_cm_name(
         .map(str::to_string)
 }
 
-/// Mechanical `PascalCase` → kebab-case fallback for stream element types
-/// not registered with a `#[cm("…")]` name (i.e., user-authored types).
 #[cfg(test)]
 mod cm_binding_tests {
     use super::*;

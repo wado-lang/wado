@@ -2418,6 +2418,16 @@ mod tests {
     use std::assert_matches;
 
     #[test]
+    fn cm_names() {
+        assert_eq!(to_cm_name("distance"), "distance");
+        assert_eq!(to_cm_name("MyApi"), "my-api");
+        assert_eq!(to_cm_name("set_level"), "set-level");
+        assert_eq!(to_cm_name("HTTPServer"), "http-server");
+        assert_eq!(to_cm_name("parse2html"), "parse2html");
+        assert_eq!(to_cm_name("a_1"), "a-1");
+    }
+
+    #[test]
     fn a_function_type_name_spells_as_its_mangle_and_substitutes_inside() {
         let i32_ = FqTypeName::builtin("i32");
         let t = FqTypeName::binder("T");

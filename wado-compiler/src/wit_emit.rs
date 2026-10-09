@@ -869,7 +869,7 @@ impl<'a> Emitter<'a> {
         name: &str,
         _type_id: TypeId,
     ) -> Result<Option<TypeDef>, WitEmitError> {
-        let kebab = to_cm_name(name);
+        let cm_name = to_cm_name(name);
         if let Some(s) = self.decls.structs.get(name).copied() {
             let mut fields = Vec::new();
             for field in &s.fields {
@@ -878,11 +878,11 @@ impl<'a> Emitter<'a> {
                     self.map_type(field.type_id)?,
                 ));
             }
-            return Ok(Some(TypeDef::record(kebab, fields)));
+            return Ok(Some(TypeDef::record(cm_name, fields)));
         }
         if let Some(e) = self.decls.enums.get(name).copied() {
             let cases = e.cases.iter().map(|c| to_cm_name(&c.name));
-            return Ok(Some(TypeDef::enum_(kebab, cases)));
+            return Ok(Some(TypeDef::enum_(cm_name, cases)));
         }
         if let Some(v) = self.decls.variants.get(name).copied() {
             let mut cases = Vec::new();
@@ -893,11 +893,11 @@ impl<'a> Emitter<'a> {
                     None => VariantCase::empty(to_cm_name(&case.name)),
                 });
             }
-            return Ok(Some(TypeDef::variant(kebab, cases)));
+            return Ok(Some(TypeDef::variant(cm_name, cases)));
         }
         if let Some(fl) = self.decls.flags.get(name).copied() {
             let members = fl.members.iter().map(|m| Flag::new(to_cm_name(&m.name)));
-            return Ok(Some(TypeDef::flags(kebab, members)));
+            return Ok(Some(TypeDef::flags(cm_name, members)));
         }
         if let Some(type_id) = self
             .decls
@@ -913,7 +913,7 @@ impl<'a> Emitter<'a> {
                 _ => type_id,
             };
             let base = self.map_type(base_id)?;
-            return Ok(Some(TypeDef::type_(kebab, base)));
+            return Ok(Some(TypeDef::type_(cm_name, base)));
         }
         Err(WitEmitError::UnrepresentableType {
             description: format!("`{name}` has no emittable declaration"),
@@ -1358,15 +1358,6 @@ fn world_local_name(world_fq: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn kebab_cases() {
-        assert_eq!(to_cm_name("distance"), "distance");
-        assert_eq!(to_cm_name("MyApi"), "my-api");
-        assert_eq!(to_cm_name("set_level"), "set-level");
-        assert_eq!(to_cm_name("HTTPServer"), "http-server");
-        assert_eq!(to_cm_name("parse2html"), "parse2html");
-    }
 
     #[test]
     fn world_local_names() {
