@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791519663287,
+  "lastUpdate": 1791530856159,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65549,6 +65549,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 338626,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b1f1e2a067ee83905feb6f261b0d58f6937c7156",
+          "message": "Merge pull request #2315 from wado-lang/ccr-4953e732-b39nhn\n\nfix(prelude): copy the elements a List or Array takes in, not share them",
+          "timestamp": "2026-10-09T16:08:34+09:00",
+          "tree_id": "d0d7fc46d85a89432b3b6a040420c83be19ceccb",
+          "url": "https://github.com/wado-lang/wado/commit/b1f1e2a067ee83905feb6f261b0d58f6937c7156"
+        },
+        "date": 1791530855039,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
             "unit": "bytes"
           }
         ]
