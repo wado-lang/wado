@@ -262,7 +262,12 @@ impl EvalHost {
         entry.outcome
     }
 
-    async fn evaluate(self: &Arc<Self>, source: String, fuel: u64, deps: Arc<Dependencies>) -> Entry {
+    async fn evaluate(
+        self: &Arc<Self>,
+        source: String,
+        fuel: u64,
+        deps: Arc<Dependencies>,
+    ) -> Entry {
         let (compiled, inputs) = self.compile(source, deps).await;
         let wasm = match compiled {
             Compiled::Wasm(wasm) => wasm,
@@ -413,12 +418,12 @@ impl Dependencies {
     fn holds(&self, file: &Path) -> bool {
         self.components.iter().any(|component| component == file)
             || self.roots.iter().any(|root| {
-            file.starts_with(root)
-                && !self
-                    .caller_root
-                    .as_ref()
-                    .is_some_and(|caller| caller.starts_with(root) && file.starts_with(caller))
-        })
+                file.starts_with(root)
+                    && !self
+                        .caller_root
+                        .as_ref()
+                        .is_some_and(|caller| caller.starts_with(root) && file.starts_with(caller))
+            })
     }
 }
 

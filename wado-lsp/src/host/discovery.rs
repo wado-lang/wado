@@ -345,8 +345,8 @@ pub fn cache_root() -> Option<PathBuf> {
 /// a file, otherwise the directory's `[package].lib`. Shared by the path, git,
 /// and inline-git resolution paths so all three locate an entry the same way.
 pub fn package_lib_entry(dep_path: &Path) -> Result<PathBuf, String> {
-    let metadata =
-        std::fs::metadata(dep_path).map_err(|e| format!("cannot read {}: {e}", dep_path.display()))?;
+    let metadata = std::fs::metadata(dep_path)
+        .map_err(|e| format!("cannot read {}: {e}", dep_path.display()))?;
     if metadata.is_file() {
         return Ok(dep_path.to_path_buf());
     }
