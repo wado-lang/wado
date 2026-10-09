@@ -478,8 +478,8 @@ does not say so, and this WEP is not where a reader of the language will look.
 Reflection reaches a type's fields and cases, but not the functions a module
 exports or the methods a type or trait declares. A code generator that must
 not mint a name its output already binds keeps such a list by hand. Loam's
-`RUNTIME_NAMES` copies what `lib:loam` exports, and nothing checks the copy
-against the module.
+`RUNTIME_NAMES` lists the names its generated modules import from `lib:loam`,
+and nothing checks the list against what the module exports.
 
 ## Related WEPs
 
