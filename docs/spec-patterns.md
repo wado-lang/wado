@@ -105,7 +105,7 @@ it names a case of the type it matches, and a binding otherwise. It never names
 a global: a constant pattern can always fail, so reading one here could only be
 rejected. So `let [None, n] = pair` tests its first element, and is an error
 since `None` may not match. `let limit = 1` binds even where a `global limit` is
-in scope, and [`shadowed_name`](./spec-expressions.md#the-shadowed_name-lint)
+in scope, and [`shadowed_name`](./spec-diagnostics.md#the-shadowed_name-lint)
 warns. A refutable pattern reads such a name differently
 ([Constant Patterns](#constant-patterns)).
 

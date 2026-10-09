@@ -378,26 +378,8 @@ let wide = 1_i64 << 40;      // an i64: `1 << 40` alone is an i32
 assert wide == 1_099_511_627_776;
 ```
 
-#### The `literal_cast` Lint
-
-A cast whose operand is an unsuffixed literal, bare or negated, warns where the
-suffix of its target types the literal as the cast does, and the warning gives
-the suffixed spelling. A float literal cast to an integer type converts, so it
-does not warn, and neither does a cast that no suffix can write.
-`#[allow(literal_cast)]` waives the lint (see
-[`#[allow(...)]`](./spec-attributes.md#allow)).
-
-<!-- {"fixture":"literal_cast_lint.wado", "assert": false} -->
-
-```wado
-let a = 255 as u8;           // warns: write `255_u8` for `255 as u8`
-let b = -128 as i8;          // warns: write `-128_i8` for `-128 as i8`
-let c = 1.5 as f32;          // warns: write `1.5_f32` for `1.5 as f32`
-let d = 0xFF as u64;         // warns: write `0xFF_u64` for `0xFF as u64`
-let e = 0x10 as f64;         // no warning: a hex literal takes no float suffix
-let f = 1.5 as i32;          // no warning: this cast converts, to 1
-let g = 4 as Meters;         // no warning: a newtype has no suffix
-```
+A cast of an unsuffixed literal that a suffix could write instead warns
+([`literal_cast`](./spec-diagnostics.md#the-literal_cast-lint)).
 
 ## String Literals
 
