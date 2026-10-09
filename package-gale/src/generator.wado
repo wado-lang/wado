@@ -70,8 +70,8 @@ fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
-    // Route supplementary inputs by extension: `.scm` files are highlight
-    // queries (compiled into the highlighter), everything else is a `.g4`
+    // Route supplementary inputs by their `type`: `"highlights"` is a highlight
+    // query (compiled into the highlighter), and an input with none is a
     // grammar half merged into the primary.
     let primary_path = req.primary.path;
     let primary_text = decode_input(&primary_path, req.primary.content)?;
@@ -82,10 +82,14 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     for let supp of req.inputs {
         let path = supp.path;
         let text = decode_input(&path, supp.content)?;
-        if path.ends_with(".scm") {
-            scm_inputs.push([path, text]);
-        } else {
-            g4_inputs.push([path, text]);
+        match supp.type {
+            None => g4_inputs.push([path, text]),
+            Some("highlights") => scm_inputs.push([path, text]),
+            Some(other) => {
+                return Result::Err(Error::Unsupported(
+                    `gale: '${path}' is given \`type: "${other}"\`; an input is a grammar, or \`type: "highlights"\``,
+                ));
+            },
         }
     }
     let mut grammar = match assemble_grammar(&g4_inputs) {

@@ -75,7 +75,7 @@ forward-compatible (widen the accepted subset as the runtime grows), reuses the
 capture vocabulary Gale already emits, and — Gale being a parser toolkit —
 parsing S-expressions is cheap and on-brand.
 
-### Delivery: a Kiln input, routed by extension
+### Delivery: a Kiln input, routed by its type
 
 Kiln generators are pure `(inputs, options) → outputs` functions; they cannot
 read ambient files. Every input must be statically enumerable and is pre-loaded
@@ -86,19 +86,24 @@ same channel as supplementary `.g4` grammars:
 use hl from "./JSON.g4" with {
     generator: {
         module: "wado-lang:gale",
-        inputs: ["./JSON.highlights.scm"],
+        inputs: [{ path: "./JSON.highlights.scm", type: "highlights" }],
     },
 };
 ```
 
-The generator routes `req.inputs` by extension: `.g4` → grammar assembly,
-`.scm` → highlight query. Because inputs are hashed into the Kiln cache key,
-editing the query re-generates the parser with no extra wiring.
+The generator routes `req.inputs` by each input's `type`: `"highlights"` → a
+highlight query, none → grammar assembly, and any other `type` stops the build.
+No generator looks at an extension
+([How an Import Is Read](./spec-modules.md#how-an-import-is-read)). The first
+cut routed by extension, `.g4` and `.scm`, and the input's `type` replaced it.
+`gale gen` takes a query as `--highlights <file>` for the same reason. Because
+inputs are hashed into the Kiln cache key, editing the query re-generates the
+parser with no extra wiring.
 
 ### Presence enables; the `highlight` option is removed
 
 The old `highlight: bool` generator option is deleted. Highlighting is emitted
-**iff a `.scm` query input is present**. This removes the "turned it on but got
+**iff a highlight query input is present**. This removes the "turned it on but got
 nothing" failure mode and makes the enable signal a single fact. The highlight
 runtime fragment and tables stay fully gated: a grammar with no query is
 byte-identical to before.

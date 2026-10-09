@@ -78,13 +78,9 @@ pub fn check_cm_imports<H: CompilerHost>(
     count
 }
 
-/// The wire parameter carrying the use site's `type`, which a host matches by
-/// its CM name, `use-type`.
-const USE_TYPE_PARAM: &str = "use_type";
-
 /// Rewrite a kiln generator's `fn generate(req: Request<T>)` into the
-/// typed-options wire shape: `req` becomes `primary`, `inputs`, `module`,
-/// `use_type` and `options`, and the body opens with `let req = Request { primary, … };`,
+/// typed-options wire shape: `req` becomes `primary`, `inputs`, `module` and
+/// `options`, and the body opens with `let req = Request { primary, … };`,
 /// which same-scope shadowing keeps looking like the author's `req`. A
 /// `NoOptions` generator omits `options`, an empty record having no CM form.
 pub fn inject_kiln_request_adapter(
@@ -156,46 +152,34 @@ pub fn inject_kiln_request_adapter(
         span,
     };
 
-    let string_ty = |module: &mut Module| {
-        Type::Named(NamedType::new(
-            module.alloc_ast_id(),
-            "String".to_string(),
-            span,
-        ))
-    };
-    let generic_ty = |module: &mut Module, name: &str, arg: Type| {
-        Type::Generic(GenericType {
-            id: module.alloc_ast_id(),
-            name: name.to_string(),
-            args: vec![arg],
-            span,
-        })
-    };
-
     let primary_ty = input_file_ty(module);
     let primary_param = param(module, "primary", primary_ty);
     let inputs_elem = input_file_ty(module);
-    let inputs_ty = generic_ty(module, "List", inputs_elem);
+    let inputs_ty = Type::Generic(GenericType {
+        id: module.alloc_ast_id(),
+        name: "List".to_string(),
+        args: vec![inputs_elem],
+        span,
+    });
     let inputs_param = param(module, "inputs", inputs_ty);
-    let module_ty = string_ty(module);
+    let module_ty = Type::Named(NamedType::new(
+        module.alloc_ast_id(),
+        "String".to_string(),
+        span,
+    ));
     let module_param = param(module, "module", module_ty);
-    let type_string = string_ty(module);
-    let use_type_ty = generic_ty(module, "Option", type_string);
-    // `type` is a WIT keyword, so the wire parameter is named apart from the field.
-    let use_type_param = param(module, USE_TYPE_PARAM, use_type_ty);
     let options_param = has_options.then(|| param(module, "options", options_type));
 
-    // `Request { primary, inputs, module, type: use_type, options }`, where
-    // `options` is the typed `options` argument (or a literal `NoOptions {}`
-    // for a no-options generator). Same-scope shadowing rebinds `<param_name>`
-    // to `Request<T>`.
-    let named_field = |module: &mut Module, field: &str, param: &str| StructLiteralField {
-        name: field.to_string(),
+    // `Request { primary, inputs, module, options }`, where `options` is the typed
+    // `options` argument (or a literal `NoOptions {}` for a no-options
+    // generator). Same-scope shadowing rebinds `<param_name>` to `Request<T>`.
+    let ident_field = |module: &mut Module, name: &str| StructLiteralField {
+        name: name.to_string(),
         name_id: module.alloc_ast_id(),
         name_span: span,
         value: Expr::Ident(IdentExpr {
             id: module.alloc_ast_id(),
-            name: param.to_string(),
+            name: name.to_string(),
             span,
             segments: Vec::new(),
             type_args: Vec::new(),
@@ -204,11 +188,9 @@ pub fn inject_kiln_request_adapter(
         is_shorthand: false,
         span,
     };
-    let ident_field = |module: &mut Module, name: &str| named_field(module, name, name);
     let primary_field = ident_field(module, "primary");
     let inputs_field = ident_field(module, "inputs");
     let module_field = ident_field(module, "module");
-    let type_field = named_field(module, "type", USE_TYPE_PARAM);
     let options_field = if has_options {
         ident_field(module, "options")
     } else {
@@ -237,13 +219,7 @@ pub fn inject_kiln_request_adapter(
         name_id: Some(module.alloc_ast_id()),
         name_span: Some(span),
         type_args: Vec::new(),
-        fields: vec![
-            primary_field,
-            inputs_field,
-            module_field,
-            type_field,
-            options_field,
-        ],
+        fields: vec![primary_field, inputs_field, module_field, options_field],
         spreads: Vec::new(),
         has_trailing_comma: false,
         span,
@@ -273,7 +249,7 @@ pub fn inject_kiln_request_adapter(
     ensure_kiln_imports(module, span, &needed);
 
     if let Some(Item::Function(func)) = module.items.get_mut(item_idx) {
-        let mut params = vec![primary_param, inputs_param, module_param, use_type_param];
+        let mut params = vec![primary_param, inputs_param, module_param];
         if let Some(options_param) = options_param {
             params.push(options_param);
         }

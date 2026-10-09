@@ -10,6 +10,11 @@ pub struct InputFile {
     pub path: String,
     #[cm("content")]
     pub content: Stream<u8>,
+    /// The `type` the use site gave the file, which says how the
+    /// generator reads it: the `type` beside `generator` for the primary
+    /// input, an input's own for the rest. `none` where it gave none.
+    #[cm("type")]
+    pub type: Option<String>,
 }
 
 /// One generated Wado file. `path` is relative to the invocation's

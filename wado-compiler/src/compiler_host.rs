@@ -587,8 +587,6 @@ pub struct GeneratorRequest {
     pub inputs: Vec<GeneratorInputFile>,
     /// How the use site named the generator: the invocation's `invoked_as`.
     pub module: String,
-    /// The use site's `type` beside `generator`: the invocation's `use_type`.
-    pub use_type: Option<String>,
     /// The validated, typed options for this invocation. The host builds a
     /// Component-Model value from it — shaped by the generator component's own
     /// introspected `generate` options parameter — and passes it as a typed
@@ -618,6 +616,9 @@ pub struct GeneratorInputFile {
     /// Raw bytes of the file. A checkpoint is not text, and the generator
     /// receives these as a `stream<u8>` it reads only as far as it needs.
     pub content: Vec<u8>,
+    /// The `type` the use site gave the file, which says how the generator
+    /// reads it.
+    pub use_type: Option<String>,
 }
 
 /// Response returned by a Kiln generator.
@@ -829,10 +830,10 @@ mod tests {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
                         content: b"syntax = \"proto3\";".to_vec(),
+                        use_type: None,
                     },
                     inputs: vec![],
                     module: "ns:proto@1.0.0".to_string(),
-                    use_type: None,
                     options: CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;

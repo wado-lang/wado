@@ -122,8 +122,8 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
         return refused(req, KilnError::Unsupported(reason));
     };
-    let Some(spelling) = spelling_of(&req.type) else {
-        let given = match req.type {
+    let Some(spelling) = spelling_of(&req.primary.type) else {
+        let given = match req.primary.type {
             Some(t) => `\`type: "${t}"\``,
             None => "no `type`",
         };

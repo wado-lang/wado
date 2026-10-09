@@ -30,6 +30,8 @@ struct GenArgs {
     trace: bool = false,
     log_level: Option<String> = null,
     output: Option<String> = null,
+    /// Highlight query files, each named by its own `--highlights`.
+    highlights: List<String> = [],
     #[wire(positional)]
     grammars: List<String> = [],
 }
@@ -65,7 +67,7 @@ internal fn gale() -> Result<(), String> with (Stdout, Environment, Preopens) {
     return match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
             apply_log_level(&g.log_level)?;
-            cmd_gen(g.grammars, &g.output, g.trace);
+            cmd_gen(g.grammars, g.highlights, &g.output, g.trace);
         },
         Ok(Command::Dump(d)) => {
             apply_log_level(&d.log_level)?;
@@ -84,7 +86,7 @@ fn command_name(argv: &List<String>) -> String {
     return "gale";
 }
 
-global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]
+global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
        gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
        <level> is trace, debug, info, warn or error (default warn)";
 
@@ -105,18 +107,12 @@ fn apply_log_level(spec: &Option<String>) -> Result<(), String> {
     return Result::Ok(());
 }
 
-fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) -> Result<(), String> with (Stdout, Preopens) {
-    // Route inputs by extension: `.scm` is a highlight query, everything else
-    // is a `.g4` grammar half.
-    let mut g4_paths: List<String> = [];
-    let mut scm_paths: List<String> = [];
-    for let p of &paths {
-        if p.ends_with(".scm") {
-            scm_paths.push(*p);
-        } else {
-            g4_paths.push(*p);
-        }
-    }
+fn cmd_gen(
+    g4_paths: List<String>,
+    scm_paths: List<String>,
+    output: &Option<String>,
+    trace: bool,
+) -> Result<(), String> with (Stdout, Preopens) {
     if g4_paths.is_empty() {
         return Result::Err("gale gen: no grammar files given");
     }

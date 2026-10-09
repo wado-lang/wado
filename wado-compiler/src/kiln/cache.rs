@@ -298,9 +298,9 @@ where
     let primary_bytes = read_primary(&invocation.from)?;
     let primary = file_hash(&invocation.from, &primary_bytes);
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
-    for path in &invocation.inputs {
-        let bytes = read_input(path)?;
-        inputs.push(file_hash(path, &bytes));
+    for input in &invocation.inputs {
+        let bytes = read_input(&input.path)?;
+        inputs.push(file_hash(&input.path, &bytes));
     }
     Ok((primary, inputs))
 }
@@ -336,7 +336,7 @@ fn write_file_hash(h: &mut Sha256, f: &FileHash) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kiln::invocation::{DeclSite, GeneratorModule, Invocation};
+    use crate::kiln::invocation::{DeclSite, GeneratorModule, Invocation, InvocationInput};
     use crate::token::Span;
 
     fn fh(path: &str, hash_byte: u8) -> FileHash {
@@ -448,7 +448,10 @@ mod tests {
             invoked_as: "ns:p@1.0.0".to_string(),
             use_type: None,
             from: InvocationPath::normalize("schema.proto"),
-            inputs: vec![InvocationPath::normalize("dep.proto")],
+            inputs: vec![InvocationInput {
+                path: InvocationPath::normalize("dep.proto"),
+                use_type: None,
+            }],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options: CanonicalOptions::default(),
             raw_options: None,

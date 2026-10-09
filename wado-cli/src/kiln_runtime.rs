@@ -161,16 +161,33 @@ fn content_stream(
         })
 }
 
-/// Build an `input-file` record `Val` (`{ path, content }`).
+/// Build an `input-file` record `Val` of the shape `record` declares. A
+/// component built before `type` existed declares only `path` and `content`.
 fn input_file_val(
     store: &mut Store<KilnHostState>,
     f: &GeneratorInputFile,
+    record: &Type,
 ) -> Result<Val, GeneratorRunnerError> {
-    let content = content_stream(store, f)?;
-    Ok(Val::Record(vec![
-        ("path".to_string(), Val::String(f.path.clone())),
-        ("content".to_string(), content),
-    ]))
+    let Type::Record(record) = record else {
+        unreachable!("`input-file` is a record in every generator world");
+    };
+    let mut fields = Vec::with_capacity(3);
+    for field in record.fields() {
+        fields.push((
+            field.name.to_string(),
+            match field.name {
+                "path" => Val::String(f.path.clone()),
+                "content" => content_stream(store, f)?,
+                "type" => Val::Option(f.use_type.clone().map(|t| Box::new(Val::String(t)))),
+                other => {
+                    return Err(GeneratorRunnerError::Host(format!(
+                        "`input-file` has an unknown field `{other}`"
+                    )));
+                }
+            },
+        ));
+    }
+    Ok(Val::Record(fields))
 }
 
 /// Lift a `response` record payload (`{ files: list<output-file> }`) into the
@@ -429,18 +446,21 @@ pub async fn run_generator(
         let mut args: Vec<Val> = Vec::with_capacity(params.len());
         for (name, ty) in &params {
             args.push(match name.as_str() {
-                "primary" => input_file_val(&mut store, &request.primary)?,
-                "inputs" => Val::List(
-                    request
-                        .inputs
-                        .iter()
-                        .map(|f| input_file_val(&mut store, f))
-                        .collect::<Result<_, _>>()?,
-                ),
-                "module" => Val::String(request.module.clone()),
-                "use-type" => {
-                    Val::Option(request.use_type.clone().map(|t| Box::new(Val::String(t))))
+                "primary" => input_file_val(&mut store, &request.primary, ty)?,
+                "inputs" => {
+                    let Type::List(list) = ty else {
+                        unreachable!("`inputs` is a list in every generator world");
+                    };
+                    let element = list.ty();
+                    Val::List(
+                        request
+                            .inputs
+                            .iter()
+                            .map(|f| input_file_val(&mut store, f, &element))
+                            .collect::<Result<_, _>>()?,
+                    )
                 }
+                "module" => Val::String(request.module.clone()),
                 "options" => options_to_val(&request.options, ty)
                     .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
                 other => {
@@ -709,10 +729,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             primary: GeneratorInputFile {
                 path: "schema.txt".to_string(),
                 content: b"hello".to_vec(),
+                use_type: None,
             },
             inputs: vec![],
             module: "../gen".to_string(),
-            use_type: None,
             options,
         };
 
@@ -802,10 +822,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             primary: GeneratorInputFile {
                 path: "schema.txt".to_string(),
                 content: b"hello".to_vec(),
+                use_type: None,
             },
             inputs: vec![],
             module: "../gen".to_string(),
-            use_type: None,
             options,
         };
 

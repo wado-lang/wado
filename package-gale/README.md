@@ -372,8 +372,8 @@ wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 wado run package-gale gen --trace Grammar.g4
 wado run package-gale gen --log-level info Grammar.g4
 
-# A `.scm` positional arg is a highlight query (see "Syntax highlighting").
-wado run package-gale gen Grammar.g4 Grammar.highlights.scm
+# A highlight query is named by --highlights (see "Syntax highlighting").
+wado run package-gale gen --highlights Grammar.highlights.scm Grammar.g4
 
 # Inspect the prediction decision for every parser rule.
 wado run package-gale dump Grammar.g4
@@ -383,7 +383,7 @@ wado run package-gale dump --lexer Grammar.g4  # the lexer's per-rule emit strat
 
 Multiple `.g4` files are merged (e.g. a split lexer/parser grammar). The
 `trace` option is available on the `use ... with` generator config; a
-highlight query rides in as a `.scm` input (see below).
+highlight query rides in as an input of `type: "highlights"` (see below).
 
 A traced parser logs through [`core:log`](../docs/stdlib-core-log.md) at
 `Trace`, under the target `gale.trace`. That is below what `core:log` admits
@@ -401,15 +401,18 @@ in a test needs `wado test -D log.level=trace` as well.
 
 Gale can emit a `highlight(input) -> String` function that renders source to
 HTML `<span class="…">` spans. It is enabled by supplying a **highlight query**
-— a `.scm` file (a subset of tree-sitter's `highlights.scm`) — as a generator
-input. No query, no highlighter (output stays byte-identical).
+— a subset of tree-sitter's `highlights.scm` — as a generator input of
+`type: "highlights"`. Gale reads an input by its `type`, never its extension,
+and an input with no `type` is a grammar. No query, no highlighter (output
+stays byte-identical).
 
 ```wado
 use hl from "./JSON.g4"
     with {
         generator: {
             module: "wado-lang:gale",
-            inputs: ["./JSON.highlights.scm"],   // presence enables highlighting
+            // presence enables highlighting
+            inputs: [{ path: "./JSON.highlights.scm", type: "highlights" }],
         },
     };
 
@@ -505,7 +508,7 @@ stream. [`example/`](./example) carries a three-grammar demo of it.
 [`MiniHtml.g4`](./example/MiniHtml.g4) imports
 [`MiniCss.g4`](./example/MiniCss.g4) and [`MiniJs.g4`](./example/MiniJs.g4), so
 one `use` builds a single recognizer: one lexer with three modes, one parser,
-one tree. The three `.scm` queries ride in beside the grammars and are
+one tree. The three highlight queries ride in beside the grammars and are
 concatenated, so each language keeps its own.
 
 Embedding is the vehicle. The point is one line of

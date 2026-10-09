@@ -15,7 +15,9 @@ use crate::name::resolve_module_path;
 use crate::path::is_cwd_relative;
 
 use super::cache::{encode_written_options, hex_digest};
-use super::invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
+use super::invocation::{
+    DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationInput, InvocationPath,
+};
 use super::options::OptionsDescriptor;
 use super::options_check::{CanonicalOptions, OptionsAnchor, clause_error, validate};
 
@@ -324,26 +326,10 @@ fn lower_inline(
         Some(AttrValue::Array(items)) => items
             .iter()
             .enumerate()
-            .filter_map(|(i, item)| match &item.value {
-                AttrValue::String(s) => Some(resolve_or_reject(
-                    module_path,
-                    s,
-                    manifest_root,
-                    &format!("generator.inputs[{i}]"),
-                    use_decl,
-                    &mut errors,
-                )),
-                other => {
-                    errors.push(use_error(
-                        module_path,
-                        use_decl,
-                        format!(
-                            "kiln: `generator.inputs[{i}]` must be a string, got {}",
-                            other.kind(),
-                        ),
-                    ));
-                    None
-                }
+            .filter_map(|(i, item)| {
+                let field = format!("generator.inputs[{i}]");
+                let anchor = (module_path, manifest_root, use_decl);
+                lower_input(&field, &item.value, anchor, &mut errors)
             })
             .collect(),
         Some(other) => {
@@ -351,7 +337,7 @@ fn lower_inline(
                 module_path,
                 use_decl,
                 format!(
-                    "kiln: `generator.inputs` must be an array of strings, got {}",
+                    "kiln: `generator.inputs` must be an array of paths, got {}",
                     other.kind(),
                 ),
             ));
@@ -437,6 +423,64 @@ fn lower_inline(
         raw_options: options_entry.map(|entry| entry.value.clone()),
         options_span,
     })
+}
+
+/// One `generator.inputs` element: a path, or `{ path, type }` naming how the
+/// generator reads it. `anchor` is the declaring file, the manifest root, and
+/// the `use`.
+fn lower_input(
+    field: &str,
+    value: &AttrValue,
+    (module_path, manifest_root, use_decl): (&str, &str, &UseDecl),
+    errors: &mut Vec<Diagnostic>,
+) -> Option<InvocationInput> {
+    let mut error = |message: String| errors.push(use_error(module_path, use_decl, message));
+    let (path, use_type) = match value {
+        AttrValue::String(path) => (path, None),
+        AttrValue::Object(fields) => {
+            for key in fields.keys() {
+                if key != "path" && key != ImportAttributes::TYPE {
+                    error(format!(
+                        "kiln: unknown `{field}` field `{key}`; the fields are `path` and `type`"
+                    ));
+                }
+            }
+            let use_type = match attr_value(fields, ImportAttributes::TYPE) {
+                None => None,
+                Some(AttrValue::String(t)) => Some(t.clone()),
+                Some(other) => {
+                    error(format!(
+                        "kiln: `{field}.type` must be a string, got {}",
+                        other.kind()
+                    ));
+                    None
+                }
+            };
+            match attr_value(fields, "path") {
+                Some(AttrValue::String(path)) => (path, use_type),
+                Some(other) => {
+                    error(format!(
+                        "kiln: `{field}.path` must be a string, got {}",
+                        other.kind()
+                    ));
+                    return None;
+                }
+                None => {
+                    error(format!("kiln: `{field}` names no `path`"));
+                    return None;
+                }
+            }
+        }
+        other => {
+            error(format!(
+                "kiln: `{field}` must be a path or `{{ path, type }}`, got {}",
+                other.kind()
+            ));
+            return None;
+        }
+    };
+    let path = resolve_or_reject(module_path, path, manifest_root, field, use_decl, errors);
+    Some(InvocationInput { path, use_type })
 }
 
 /// Resolve a `./` or `../` path written in a `use` clause relative to the
@@ -623,21 +667,17 @@ fn clause_digest(
     module: &GeneratorModule,
     use_type: Option<&str>,
     from: &str,
-    inputs: &[InvocationPath],
+    inputs: &[InvocationInput],
     output_dir: Option<&str>,
     options: &[u8],
 ) -> String {
     let mut h = Sha256::new();
     h.update(module_key(module).as_bytes());
-    // Only a `type` adds bytes, so a clause without one keeps the id it had.
-    if let Some(t) = use_type {
-        h.update([1u8]);
-        h.update((t.len() as u64).to_le_bytes());
-        h.update(t.as_bytes());
-    }
+    hash_type(&mut h, use_type);
     h.update(from.as_bytes());
-    for p in inputs {
-        h.update(p.as_str().as_bytes());
+    for input in inputs {
+        h.update(input.path.as_str().as_bytes());
+        hash_type(&mut h, input.use_type.as_deref());
         h.update([0u8]);
     }
     if let Some(dir) = output_dir {
@@ -648,6 +688,15 @@ fn clause_digest(
     hex_digest(&digest)
 }
 
+/// Only a `type` adds bytes, so a file without one keeps the id it had.
+fn hash_type(h: &mut Sha256, use_type: Option<&str>) {
+    if let Some(t) = use_type {
+        h.update([1u8]);
+        h.update((t.len() as u64).to_le_bytes());
+        h.update(t.as_bytes());
+    }
+}
+
 /// A clause error with no key of its own, blamed on the whole `use`.
 fn use_error(module_path: &str, use_decl: &UseDecl, message: String) -> Diagnostic {
     clause_error(module_path, &use_decl.span, message)
@@ -656,7 +705,7 @@ fn use_error(module_path: &str, use_decl: &UseDecl, message: String) -> Diagnost
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstId, UseItem, Visibility};
+    use crate::ast::{AstId, AttrItem, UseItem, Visibility};
     use crate::compiler_host::{Code, Severity};
     use crate::token::Span;
     use std::assert_matches;
@@ -956,6 +1005,130 @@ mod tests {
             Some("tokenizer")
         );
         assert_eq!(invocation_typed(None).use_type, None);
+    }
+
+    /// The inputs a `use` of `./Calc.g4` lowers to, its `generator.inputs`
+    /// being `inputs`.
+    fn lowered_inputs(inputs: Vec<AttrValue>) -> Vec<InvocationInput> {
+        let items = inputs
+            .into_iter()
+            .map(|value| AttrItem {
+                span: span(),
+                value,
+            })
+            .collect();
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::String("lib:gen".to_string())),
+            ("inputs", AttrValue::Array(items)),
+        ]);
+        let module = module_with_use("./Calc.g4", attrs);
+        let mut result = expect_ok(collect_inline_invocations(
+            [("src/main.wado", &module)],
+            &IndexMap::default(),
+            "",
+        ));
+        result.remove(0).inputs
+    }
+
+    fn input_object(fields: &[(&str, &str)]) -> AttrValue {
+        let mut object = AttrObject::default();
+        for (key, value) in fields {
+            object.insert(
+                (*key).to_string(),
+                entry(AttrValue::String((*value).to_string())),
+            );
+        }
+        AttrValue::Object(object)
+    }
+
+    #[test]
+    fn an_input_may_carry_a_type() {
+        let inputs = lowered_inputs(vec![
+            AttrValue::String("./Lexer.g4".to_string()),
+            input_object(&[("path", "./Calc.highlights.scm"), ("type", "highlights")]),
+        ]);
+        assert_eq!(
+            inputs,
+            [
+                InvocationInput {
+                    path: InvocationPath::normalize("src/Lexer.g4"),
+                    use_type: None,
+                },
+                InvocationInput {
+                    path: InvocationPath::normalize("src/Calc.highlights.scm"),
+                    use_type: Some("highlights".to_string()),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn an_input_object_names_its_path_and_type_and_nothing_else() {
+        let attrs_with = |input: AttrValue| {
+            attr_with_generator(&[
+                ("module", AttrValue::String("lib:gen".to_string())),
+                (
+                    "inputs",
+                    AttrValue::Array(vec![AttrItem {
+                        span: span(),
+                        value: input,
+                    }]),
+                ),
+            ])
+        };
+        let errors = |input: AttrValue| {
+            let module = module_with_use("./Calc.g4", attrs_with(input));
+            expect_errors(collect_inline_invocations(
+                [("src/main.wado", &module)],
+                &IndexMap::default(),
+                "",
+            ))
+            .into_iter()
+            .map(|d| d.message)
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            errors(input_object(&[("type", "highlights")])),
+            ["kiln: `generator.inputs[0]` names no `path`"]
+        );
+        assert_eq!(
+            errors(input_object(&[("path", "./a.scm"), ("kind", "highlights")])),
+            ["kiln: unknown `generator.inputs[0]` field `kind`; the fields are `path` and `type`"]
+        );
+    }
+
+    #[test]
+    fn an_input_type_is_part_of_the_invocation() {
+        let digest_of = |input: AttrValue| {
+            let attrs = attr_with_generator(&[
+                ("module", AttrValue::String("lib:gen".to_string())),
+                (
+                    "inputs",
+                    AttrValue::Array(vec![AttrItem {
+                        span: span(),
+                        value: input,
+                    }]),
+                ),
+            ]);
+            let module = module_with_use("./Calc.g4", attrs);
+            expect_ok(collect_inline_invocations(
+                [("src/main.wado", &module)],
+                &IndexMap::default(),
+                "",
+            ))
+            .remove(0)
+            .decl_site()
+            .synthetic_id
+            .clone()
+        };
+        assert_eq!(
+            digest_of(AttrValue::String("./a.scm".to_string())),
+            digest_of(input_object(&[("path", "./a.scm")])),
+        );
+        assert_ne!(
+            digest_of(input_object(&[("path", "./a.scm")])),
+            digest_of(input_object(&[("path", "./a.scm"), ("type", "highlights")])),
+        );
     }
 
     #[test]

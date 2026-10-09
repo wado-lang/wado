@@ -57,14 +57,14 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 /// No-options ergonomic form: the author declares no `Options` struct and
 /// writes the bare `fn generate(req: Request)`. `Request`'s default type
 /// argument is `NoOptions`, so the adapter binds an empty options blob. It
-/// echoes `req.module` and `req.type`, so a test sees how the generator was
+/// echoes `req.module` and the primary input's `type`, so a test sees how the generator was
 /// invoked.
 const NO_OPTIONS_GENERATOR: &str = r#"
 use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
     let _ = req.primary.path;
-    let content = `${req.module} ${req.type.unwrap_or("none")}`;
+    let content = `${req.module} ${req.primary.type.unwrap_or("none")}`;
     return Result::Ok(Response { files: [OutputFile { path: "out.wado", content, is_entry: true }] });
 }
 "#;
@@ -263,10 +263,10 @@ fn no_options_generator_compiles_and_runs() {
         primary: GeneratorInputFile {
             path: "schema.proto".to_string(),
             content: b"syntax = \"proto3\";".to_vec(),
+            use_type: Some("tokenizer".to_string()),
         },
         inputs: vec![],
         module: "wado-lang:proto/gen".to_string(),
-        use_type: Some("tokenizer".to_string()),
         options: wado_compiler::kiln::CanonicalOptions::default(),
     };
     let response = runtime()
@@ -794,10 +794,10 @@ fn host_caches_compiled_component_across_run_generator_calls() {
         primary: GeneratorInputFile {
             path: "schema.proto".to_string(),
             content: b"syntax = \"proto3\";".to_vec(),
+            use_type: None,
         },
         inputs: vec![],
         module: "../gen".to_string(),
-        use_type: None,
         options: wado_compiler::kiln::CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
             values: vec![(
@@ -954,10 +954,10 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
         primary: GeneratorInputFile {
             path: "schema.proto".to_string(),
             content: b"syntax = \"proto3\";".to_vec(),
+            use_type: None,
         },
         inputs: vec![],
         module: "../gen".to_string(),
-        use_type: None,
         options: wado_compiler::kiln::CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
             values: vec![(
@@ -1027,10 +1027,10 @@ fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
                         content: b"syntax = \"proto3\";".to_vec(),
+                        use_type: None,
                     },
                     inputs: vec![],
                     module: "../gen".to_string(),
-                    use_type: None,
                     options: wado_compiler::kiln::CanonicalOptions {
                         descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
                         values: vec![(

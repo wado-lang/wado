@@ -476,11 +476,11 @@ mod tests {
     }
 
     #[test]
-    fn a_single_wado_file_is_its_own_entry() {
-        assert_eq!(
-            package_lib_entry(Path::new("/pkg/solo.wado")).unwrap(),
-            PathBuf::from("/pkg/solo.wado"),
-        );
+    fn a_single_file_is_its_own_entry_whatever_its_extension() {
+        let tmp = tempfile::tempdir().unwrap();
+        let solo = tmp.path().join("solo.g4");
+        std::fs::write(&solo, "pub fn f() {}\n").unwrap();
+        assert_eq!(package_lib_entry(&solo).unwrap(), solo);
     }
 
     #[test]

@@ -37,6 +37,10 @@ interface types {
     record input-file {
         path: string,
         content: stream<u8>,
+        /// The `type` the use site gave the file, which says how the
+        /// generator reads it: the `type` beside `generator` for the primary
+        /// input, an input's own for the rest. `none` where it gave none.
+        %type: option<string>,
     }
 
     /// One generated Wado file. `path` is relative to the invocation's

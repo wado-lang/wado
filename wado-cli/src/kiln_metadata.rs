@@ -147,17 +147,18 @@ mod tests {
             invocation: "kiln-deadbeef".to_string(),
             generator: "local:src/generator.wado".to_string(),
             invoked_as: "src/generator.wado".to_string(),
-            use_type: None,
             generator_source_hash: "sha256:gen".to_string(),
             primary: FileHash {
                 path: "schemas/x.proto".to_string(),
                 hash: "sha256:aa".to_string(),
                 extent: None,
+                use_type: None,
             },
             inputs: vec![FileHash {
                 path: "schemas/y.proto".to_string(),
                 hash: "sha256:bb".to_string(),
                 extent: None,
+                use_type: None,
             }],
             options_hash: "sha256:cc".to_string(),
             outputs: vec![OutputEntry {

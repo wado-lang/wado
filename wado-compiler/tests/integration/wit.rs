@@ -119,7 +119,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     .expect("emit_wit_text must succeed for the generator world (issue #1478)");
     assert!(
         text.contains(
-            "generate: func(primary: input-file, inputs: list<input-file>, module: string, use-type: option<string>, options: options)"
+            "generate: func(primary: input-file, inputs: list<input-file>, module: string, options: options)"
         ),
         "generate must export the representable typed params:\n{text}"
     );
