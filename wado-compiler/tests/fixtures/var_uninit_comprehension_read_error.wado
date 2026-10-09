@@ -1,0 +1,15 @@
+// Error: a tuple comprehension runs its body once per element, so over an
+// empty tuple it never assigns.
+
+fn walk<..T>(t: [..T]) -> i32 {
+    let mut x: i32;
+    let _u = [for let v of t { x = 1 }];
+    return x;
+}
+
+export fn run() {
+    assert walk([]) == 1;
+}
+
+__DATA__
+{"compile_error": ":7:12: analysis error: 'x' is used before initialization"}

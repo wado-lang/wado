@@ -18,6 +18,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::operation_key;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
+use crate::lower::plan::value_copy::copies_array_elements;
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTypeName, FreeFunctionName, FunctionId, MODULE_INIT_FUNCTION, MethodName, UNIT_TYPE_NAME,
@@ -80,8 +81,9 @@ struct FunctionAnalysis {
     named: IndexSet<FuncId>,
     /// The signatures this function's `fn(..)^Inspect` calls receive.
     inspect_signatures: InspectableSignatures,
-    /// Each `T` this function calls `array_clone::<T>` on.
-    array_clone_elems: IndexSet<TypeId>,
+    /// Each `T` this function calls an element-copying builtin
+    /// (`copies_array_elements`) on.
+    copied_elems: IndexSet<TypeId>,
 }
 
 /// Combined DCE analysis: which functions / globals / types are
@@ -373,8 +375,8 @@ fn extend_reachable_for_optimizer_passes(
                 continue;
             }
             scanned[index] = true;
-            for &type_id in &graph.analyses[index].array_clone_elems {
-                // A stale `array_clone::<T>` can name a type already
+            for &type_id in &graph.analyses[index].copied_elems {
+                // A stale element-copying call can name a type already
                 // pruned from the table; it has no helper, so skip it
                 // rather than resolve an absent id (the structural key
                 // recurses through `TypeTable::get`, which panics on a
@@ -1310,19 +1312,21 @@ impl DceWalker<'_> {
                 // Every expression has a result type that needs to stay alive.
                 self.add_type(body.exprs[e].type_id);
                 match &body.exprs[e].kind {
-                    ExprKind::Call {
-                        func_id, type_args, ..
-                    } => {
+                    ExprKind::Call { func_id, args, .. } => {
                         self.analysis.named.insert(*func_id);
                         let callee = callee_descriptor(self.descriptors, *func_id);
-                        // `array_clone` reaches its helper by the element type
-                        // the call node carries, not by a call edge.
-                        if matches!(
-                            callee.intrinsic(),
-                            Some("array_clone" | "array_clone_prefix")
-                        ) && let Some(&elem) = type_args.first()
+                        // An element-copying builtin reaches its helper by the
+                        // element type of its first operand's array, as WIR
+                        // build reads it, not by a call edge.
+                        if copies_array_elements(callee.intrinsic())
+                            && let Some(array) = args.first()
                         {
-                            self.analysis.array_clone_elems.insert(elem);
+                            let array = self.type_table.peel_refs(body.operand_type(array.expr));
+                            let elem = self
+                                .type_table
+                                .seq_element(array)
+                                .expect("an element-copying builtin's first operand is an array");
+                            self.analysis.copied_elems.insert(elem);
                         }
                         match body.exprs[e].kind.as_method_call() {
                             Some((receiver, _, _)) => {

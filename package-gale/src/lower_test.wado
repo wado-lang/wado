@@ -22,7 +22,6 @@ use {
 } from "./ir.wado";
 use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
-use { GenContext } from "./gen_context.wado";
 use { assert_canonical_shape, assign_atn_call_sites, canonicalize_empty_alt_groups } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
 use {
@@ -147,6 +146,7 @@ test "lower simple rule with RuleRef" {
             [],
             [alt_of([Element::RuleRef(RuleRefElement::new("expr"))])],
         ),
+        ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
     let lowered = lower(&g, &no_lit_tokens());
@@ -1280,6 +1280,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
                 ]),
             ],
         ),
+        ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
     let lowered = lower(&g, &no_lit_tokens());

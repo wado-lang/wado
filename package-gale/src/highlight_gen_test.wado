@@ -6,8 +6,8 @@ use { parse } from "./g4/parser.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { gen_highlight } from "./highlight_gen.wado";
 use { parse_highlight_query } from "./highlight_query.wado";
-use { GenContext } from "./gen_context.wado";
-use { Diagnostic } from "./gir.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { Diagnostic, Diagnostics } from "./gir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { count_occurrences } from "../tests/support/text.wado";
 
@@ -24,12 +24,12 @@ fn highlight_run<S: AsStrSlice, S1: AsStrSlice>(input: S, query_src: S1) -> [Str
     alias_parser_literals(&mut g);
     let lits = collect_literal_tokens(&g.parser_rules);
     let query = parse_highlight_query(&query_src).unwrap();
-    let mut ctx = GenContext::new(&g.parser_rules, &lits);
+    let mut diagnostics = Diagnostics {};
     let mut w = CodeWriter::new();
-    gen_highlight(&mut w, &g, &lits, &query, &mut ctx);
+    gen_highlight(&mut w, &g, &lits, &query, &GenSettings {}, &mut diagnostics);
     return [
         w.to_string(),
-        ctx.copy_diagnostics(),
+        diagnostics.to_list(),
     ];
 }
 

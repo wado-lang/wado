@@ -177,7 +177,7 @@ A failing optional or loop body repeats a scan too. HTML's `htmlElement` scans
 sibling after it as its content before the close fails. Each of those siblings
 does the same, so without a memo the time doubles with every two `<br>`s, and a
 40 KB page takes 157 s. The memo also keeps the answer of a recursive rule that
-a repeat body calls with a required element after it (`close_rule_rescans`).
+a repeat body calls with a required element after it (`GrammarAnalysis::rule_rescans`).
 Keeping every recursive rule costs the Rust parse a third of its speed: that
 memoizes 145 rules, and most of them are never scanned twice.
 
@@ -368,7 +368,7 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
 
 - **The dominant cost was not GC — it was an exponential analysis (2026-07,
   fixed).** `gale gen` on TypeScript (30 min+) and Rust was ~99% inside
-  `GenContext::is_rule_scannable_at`, the recursive scannability check the
+  `GrammarAnalysis::is_rule_scannable_at`, the recursive scannability check the
   optional-scan-guard lowering runs per optional/repeat element. Profiling the
   exploding run (guest profiler with a `WADO_PROFILE_MAX_SECS` bounded flush —
   the profile only writes on clean exit, so an unbounded 30-min run is unusable)

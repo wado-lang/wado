@@ -7,7 +7,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::last_use::RefTargets;
-use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
+use crate::lower::plan::value_copy::{copied_element_type_arg, copy_value_type_arg};
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
@@ -15,7 +15,7 @@ use crate::tir::{
 use crate::tir_visitor::TirRefVisitor;
 
 /// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, and the element
-/// types of the `array_clone::<T>(...)` calls codegen routes through it.
+/// types of the element-copying builtin calls codegen routes through it.
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let mut walker = SeedWalker {
@@ -61,9 +61,10 @@ impl SeedWalker<'_> {
 impl TirRefVisitor for SeedWalker<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         self.record(expr.type_id);
-        // An `array_clone::<T>` element is copied through the same helper, and
-        // its type is the call's type argument rather than the call's own.
-        if let Some(element) = array_clone_element_type_arg(expr) {
+        // An element `array_clone::<T>` or `array_copy::<T>` copies goes
+        // through the same helper, and its type is the call's type argument
+        // rather than the call's own.
+        if let Some(element) = copied_element_type_arg(expr) {
             self.record(element);
         }
         // A `copy_value::<T>` the source wrote is rewritten into the helper for

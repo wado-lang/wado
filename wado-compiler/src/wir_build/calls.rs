@@ -339,7 +339,8 @@ impl FunctionTranslator<'_, '_> {
                 seq.extend(self.deep_clone_loop(
                     label,
                     type_id,
-                    [&src_get, &dst_get, &len_get],
+                    [&src_get, &dst_get],
+                    [WirInstr::I32Const(0), len_get],
                     element_copy,
                 ));
             }
@@ -348,13 +349,14 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::Seq(seq)
     }
 
-    /// `dst[i] = element_copy(src[i])` for each `i < len`, a null element
-    /// copied as it is.
+    /// `dst[i] = element_copy(src[i])` for each `start <= i < end`, a null
+    /// element copied as it is.
     fn deep_clone_loop(
         &mut self,
         label: &str,
         type_id: WirTypeId,
-        [src, dst, len]: [&WirInstr; 3],
+        [src, dst]: [&WirInstr; 2],
+        [start, end]: [WirInstr; 2],
         element_copy: WirFuncId,
     ) -> [WirInstr; 4] {
         let i_name = self.fresh_local("$array_clone_i");
@@ -378,7 +380,7 @@ impl FunctionTranslator<'_, '_> {
         let body = vec![
             WirInstr::BrIf {
                 depth: 1,
-                condition: Box::new(WirInstr::I32GeS(Box::new(i.clone()), Box::new(len.clone()))),
+                condition: Box::new(WirInstr::I32GeS(Box::new(i.clone()), Box::new(end))),
             },
             WirInstr::LocalSet {
                 name: elem_name.clone(),
@@ -404,8 +406,7 @@ impl FunctionTranslator<'_, '_> {
             },
             WirInstr::Br { depth: 0 },
         ];
-        let [declare_i, init_i] =
-            declare_and_set_local(i_name, WirType::I32, WirInstr::I32Const(0));
+        let [declare_i, init_i] = declare_and_set_local(i_name, WirType::I32, start);
         [
             declare_i,
             init_i,
@@ -419,6 +420,44 @@ impl FunctionTranslator<'_, '_> {
                 body: vec![WirInstr::Loop { label: None, body }],
             },
         ]
+    }
+
+    /// Each of `args`, evaluated in order into a fresh local of the type
+    /// `tys` gives it, for a lowering that reads an operand twice: the
+    /// declarations, and a read of each local.
+    fn spill_operands<const N: usize>(
+        &mut self,
+        args: &[ArenaCallArg],
+        tys: [WirType; N],
+    ) -> (Vec<WirInstr>, [WirInstr; N]) {
+        let mut seq = Vec::with_capacity(2 * N);
+        let reads = std::array::from_fn(|i| {
+            let name = self.fresh_local("$builtin_arg");
+            let value = self.translate_operand(args[i].expr);
+            let read = local_get(&name, &tys[i]);
+            seq.extend(declare_and_set_local(name, tys[i].clone(), value));
+            read
+        });
+        (seq, reads)
+    }
+
+    /// `arr[i] = element_copy(arr[i])` for the `len` elements from `offset`:
+    /// what turns the shared elements a bulk `array.copy` / `array.fill` left
+    /// into values of their own.
+    fn copy_elements_in_place(
+        &mut self,
+        type_id: WirTypeId,
+        [arr, offset, len]: [WirInstr; 3],
+        element_copy: WirFuncId,
+    ) -> [WirInstr; 4] {
+        let end = WirInstr::I32Add(Box::new(offset.clone()), Box::new(len));
+        self.deep_clone_loop(
+            "$array_copy_deep",
+            type_id,
+            [&arr, &arr],
+            [offset, end],
+            element_copy,
+        )
     }
 
     /// Translate a call to a builtin.
@@ -668,22 +707,55 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
-            "array_copy" => {
-                let dst = self.translate_operand(args[0].expr);
-                let dst_offset = self.translate_operand(args[1].expr);
-                let src = self.translate_operand(args[2].expr);
-                let src_offset = self.translate_operand(args[3].expr);
-                let len = self.translate_operand(args[4].expr);
-                let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
-                Some(WirInstr::ArrayCopy {
+            "array_copy" | "array_move" => {
+                let array_type_id = self.operand_type_id(args[0].expr);
+                let type_id = self.ref_type_id(array_type_id);
+                let element_copy = match builtin_name {
+                    "array_copy" => self.array_element_copy(array_type_id),
+                    _ => None,
+                };
+                let Some(element_copy) = element_copy else {
+                    let [dst, dst_offset, src, src_offset, len] =
+                        std::array::from_fn(|i| self.translate_operand(args[i].expr));
+                    return Some(WirInstr::ArrayCopy {
+                        dest_type_id: type_id.clone(),
+                        src_type_id: type_id,
+                        dest: Box::new(dst),
+                        dest_offset: Box::new(dst_offset),
+                        src: Box::new(src),
+                        src_offset: Box::new(src_offset),
+                        len: Box::new(len),
+                    });
+                };
+                let array_ty = WirType::Ref {
+                    type_id: type_id.clone(),
+                    nullable: false,
+                };
+                let (mut seq, [dst, dst_offset, src, src_offset, len]) = self.spill_operands(
+                    args,
+                    [
+                        array_ty.clone(),
+                        WirType::I32,
+                        array_ty,
+                        WirType::I32,
+                        WirType::I32,
+                    ],
+                );
+                seq.push(WirInstr::ArrayCopy {
                     dest_type_id: type_id.clone(),
-                    src_type_id: type_id,
-                    dest: Box::new(dst),
-                    dest_offset: Box::new(dst_offset),
+                    src_type_id: type_id.clone(),
+                    dest: Box::new(dst.clone()),
+                    dest_offset: Box::new(dst_offset.clone()),
                     src: Box::new(src),
                     src_offset: Box::new(src_offset),
-                    len: Box::new(len),
-                })
+                    len: Box::new(len.clone()),
+                });
+                seq.extend(self.copy_elements_in_place(
+                    type_id,
+                    [dst, dst_offset, len],
+                    element_copy,
+                ));
+                Some(WirInstr::Seq(seq))
             }
             "array_clone" | "array_clone_prefix" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
@@ -700,17 +772,35 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.build_array_clone(type_id, src, len, None))
             }
             "array_fill" => {
-                let arr = self.translate_operand(args[0].expr);
-                let offset = self.translate_operand(args[1].expr);
-                let val = self.translate_operand(args[2].expr);
-                let len = self.translate_operand(args[3].expr);
-                Some(WirInstr::ArrayFill {
-                    type_id: self.ref_type_id(self.operand_type_id(args[0].expr)),
-                    array: Box::new(arr),
-                    offset: Box::new(offset),
-                    value: Box::new(val),
-                    len: Box::new(len),
-                })
+                let array_type_id = self.operand_type_id(args[0].expr);
+                let type_id = self.ref_type_id(array_type_id);
+                let Some(element_copy) = self.array_element_copy(array_type_id) else {
+                    let [arr, offset, value, len] =
+                        std::array::from_fn(|i| self.translate_operand(args[i].expr));
+                    return Some(WirInstr::ArrayFill {
+                        type_id,
+                        array: Box::new(arr),
+                        offset: Box::new(offset),
+                        value: Box::new(value),
+                        len: Box::new(len),
+                    });
+                };
+                let array_ty = WirType::Ref {
+                    type_id: type_id.clone(),
+                    nullable: false,
+                };
+                let element_ty = self.array_element_wir_type(&type_id);
+                let (mut seq, [arr, offset, value, len]) =
+                    self.spill_operands(args, [array_ty, WirType::I32, element_ty, WirType::I32]);
+                seq.push(WirInstr::ArrayFill {
+                    type_id: type_id.clone(),
+                    array: Box::new(arr.clone()),
+                    offset: Box::new(offset.clone()),
+                    value: Box::new(value),
+                    len: Box::new(len.clone()),
+                });
+                seq.extend(self.copy_elements_in_place(type_id, [arr, offset, len], element_copy));
+                Some(WirInstr::Seq(seq))
             }
             "array_release" => Some(self.translate_array_release(args)),
 

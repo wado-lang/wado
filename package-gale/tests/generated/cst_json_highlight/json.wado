@@ -1989,7 +1989,7 @@ fn _parse_obj(p: &mut Parser) -> () {
 
 fn _parse_pair__inner(p: &mut Parser) -> () {
     p.expect(TK_STRING, &SYNC_4, false);
-    p.expect(TK_LIT_COLON, &SYNC_0, false);
+    p.expect(TK_LIT_COLON, &SYNC_5, false);
     p.site = 3;
     _parse_value(p);
     return;
@@ -2007,28 +2007,28 @@ fn _parse_pair(p: &mut Parser) -> () {
 }
 
 fn _parse_arr__inner_alt_0(p: &mut Parser) -> () {
-    p.expect(TK_LIT_LBRACKET, &SYNC_0, false);
+    p.expect(TK_LIT_LBRACKET, &SYNC_5, false);
     p.site = 4;
     _parse_value(p);
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_6, &EXPECTED_6); }
     while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
         p.take();
         p.site = 5;
         _parse_value(p);
-        if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_5, &EXPECTED_5); }
+        if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_6, &EXPECTED_6); }
     }
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
     return;
 }
 
 fn _parse_arr__inner_alt_1(p: &mut Parser) -> () {
-    p.expect(TK_LIT_LBRACKET, &SYNC_6, false);
+    p.expect(TK_LIT_LBRACKET, &SYNC_7, false);
     p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC, true);
     return;
 }
 
 fn _parse_arr__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_7, &EXPECTED_7); }
+    if !kind_set_has(&SYNC_8, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_8, &EXPECTED_8); }
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
         if _kind_set_0(p.peek_at(1)) {
@@ -2040,7 +2040,7 @@ fn _parse_arr__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of arr matches",
         p.peek_span(),
-        &EXPECTED_7,
+        &EXPECTED_8,
     );
     return;
 }
@@ -2057,7 +2057,7 @@ fn _parse_arr(p: &mut Parser) -> () {
 }
 
 fn _parse_value__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         p.take();
@@ -2077,7 +2077,7 @@ fn _parse_value__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of value matches",
         p.peek_span(),
-        &EXPECTED_0,
+        &EXPECTED_5,
     );
     return;
 }
@@ -2228,17 +2228,18 @@ fn _kind_set_2(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [14883];
-global EXPECTED_0: List<i32> = [TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_false, TK_LIT_null, TK_LIT_true, TK_NUMBER, TK_STRING];
+global SYNC_0: List<i32> = [1];
 global SYNC_1: List<i32> = [192];
 global EXPECTED_1: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACE];
 global SYNC_2: List<i32> = [128];
 global SYNC_3: List<i32> = [32];
 global EXPECTED_3: List<i32> = [TK_LIT_LBRACE];
 global SYNC_4: List<i32> = [256];
-global SYNC_5: List<i32> = [1088];
-global EXPECTED_5: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACKET];
-global SYNC_6: List<i32> = [1024];
-global SYNC_7: List<i32> = [512];
-global EXPECTED_7: List<i32> = [TK_LIT_LBRACKET];
+global SYNC_5: List<i32> = [14883];
+global EXPECTED_5: List<i32> = [TK_LIT_LBRACE, TK_LIT_LBRACKET, TK_LIT_false, TK_LIT_null, TK_LIT_true, TK_NUMBER, TK_STRING];
+global SYNC_6: List<i32> = [1088];
+global EXPECTED_6: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACKET];
+global SYNC_7: List<i32> = [1024];
+global SYNC_8: List<i32> = [512];
+global EXPECTED_8: List<i32> = [TK_LIT_LBRACKET];
 

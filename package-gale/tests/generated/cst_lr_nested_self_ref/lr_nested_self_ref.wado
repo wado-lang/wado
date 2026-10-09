@@ -3388,7 +3388,7 @@ fn _parse_se__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 _parse_se(p);
                 if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
             }
-            p.expect(TK_LIT_GTGT, &SYNC_4, false);
+            p.expect(TK_LIT_GTGT, &SYNC_2, false);
             p.site = 8;
             p.atn_ret_pending = 76;
             _parse_se(p, 2);
@@ -3465,9 +3465,9 @@ fn _parse_pe__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
         let _lr_pos0 = p.pos;
         if _atn_alt == 0 {
             p.b.start_node_at(_cp, RK_PE, _start);
-            if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
+            if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
             _first_iter: {
-                p.expect(TK_LIT_PLUS, &SYNC_4, false);
+                p.expect(TK_LIT_PLUS, &SYNC_2, false);
                 p.site = 11;
                 p.atn_ret_pending = 99;
                 _parse_pe(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
@@ -3495,7 +3495,7 @@ fn _parse_pe__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) -> () {
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 { break; }
-                p.expect(TK_LIT_PLUS, &SYNC_4, false);
+                p.expect(TK_LIT_PLUS, &SYNC_2, false);
                 p.site = 11;
                 p.atn_ret_pending = 99;
                 _parse_pe(p, follow_then_opening(FOLLOW_MASK_2, 16, follow));
@@ -3711,12 +3711,12 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_INT];
 global SYNC_1: List<i32> = [32];
+global SYNC_2: List<i32> = [2];
 global EXPECTED_2: List<i32> = [TK_ID];
 global SYNC_3: List<i32> = [160];
 global EXPECTED_3: List<i32> = [TK_LIT_COMMA, TK_LIT_GTGT];
-global SYNC_4: List<i32> = [3];
-global SYNC_5: List<i32> = [256];
-global EXPECTED_5: List<i32> = [TK_LIT_PLUS];
+global SYNC_4: List<i32> = [256];
+global EXPECTED_4: List<i32> = [TK_LIT_PLUS];
 
 global FOLLOW_SETS: List<List<i32>> = [[8], [256], [2]];
 global FOLLOW_MASK_0: i64 = 1;

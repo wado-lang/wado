@@ -2,7 +2,7 @@
 //! order what it picks between: the one partition every group decision reads.
 
 use { Alternative, Element } from "./ir.wado";
-use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
+use { GrammarAnalysis, is_nullable } from "./grammar_analysis.wado";
 use {
     Admits,
     admits_everything,
@@ -17,7 +17,7 @@ use {
     alt_class_first_set,
     alt_class_is_open_ended,
 } from "./gir.wado";
-use { dedup_append_arr } from "./gen_util.wado";
+use { dedup_append_arr, sets_overlap } from "./gen_util.wado";
 
 /// One branch of a decision: what admits it, the predicate gating it, and the
 /// alternatives it holds. `alts` are in the index space of whatever the
@@ -183,12 +183,12 @@ pub fn dispatch_branches(d: &MultiAltDispatch) -> List<DecisionBranch> {
 
 /// The one classifier. Nullability and open-endedness are asked here and only
 /// here; `first_set` is the alternative's own, computed by the caller.
-pub fn alt_class(alt: &Alternative, first_set: &List<String>, ctx: &mut GenContext) -> AltClass {
-    if alt_is_open_ended(alt, ctx) {
+pub fn alt_class(alt: &Alternative, first_set: &List<String>, analysis: &mut GrammarAnalysis) -> AltClass {
+    if alt_is_open_ended(alt, analysis) {
         // `A? .` admits every token and still starts with `a`.
         return AltClass::OpenEnded(*first_set);
     }
-    if alt_is_nullable(alt, ctx) {
+    if alt_is_nullable(alt, analysis) {
         return AltClass::Nullable(*first_set);
     }
     assert !first_set.is_empty(), "an alternative that must match a token has a first set, unless it is open-ended";
@@ -197,10 +197,10 @@ pub fn alt_class(alt: &Alternative, first_set: &List<String>, ctx: &mut GenConte
 
 /// Whether the alternative can derive the empty string, through the rules it
 /// reaches as well as the elements written in place.
-fn alt_is_nullable(alt: &Alternative, ctx: &mut GenContext) -> bool {
+fn alt_is_nullable(alt: &Alternative, analysis: &mut GrammarAnalysis) -> bool {
     for let elem of &alt.elements {
         let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+        if !analysis.element_is_nullable_deep(elem, &mut visiting) {
             return false;
         }
     }
@@ -208,20 +208,20 @@ fn alt_is_nullable(alt: &Alternative, ctx: &mut GenContext) -> bool {
 }
 
 /// `alt_class` for a caller that has no first set to hand.
-pub fn alt_class_of(alt: &Alternative, ctx: &mut GenContext) -> AltClass {
+pub fn alt_class_of(alt: &Alternative, analysis: &mut GrammarAnalysis) -> AltClass {
     let mut visiting: List<String> = [];
-    let first = ctx.first_of_alt(alt, &mut visiting);
-    return alt_class(alt, &first, ctx);
+    let first = analysis.first_of_alt(alt, &mut visiting);
+    return alt_class(alt, &first, analysis);
 }
 
 /// True when `alt` consumes a token of any kind — a `.` or `~X` written in it
 /// or reached through a rule ref — and so is selected by every lookahead.
 /// The other way a first set comes out empty is an alternative that derives
-/// only epsilon, selected by nothing; the walk is `GenContext`'s so that both
+/// only epsilon, selected by nothing; the walk is `GrammarAnalysis`'s so that both
 /// cases are answered the same way behind a rule ref as in place.
-pub fn alt_is_open_ended(alt: &Alternative, ctx: &mut GenContext) -> bool {
+pub fn alt_is_open_ended(alt: &Alternative, analysis: &mut GrammarAnalysis) -> bool {
     let mut visiting: List<String> = [];
-    return ctx.alt_reaches_open_end(alt, &mut visiting);
+    return analysis.alt_reaches_open_end(alt, &mut visiting);
 }
 
 /// The classification of each alternative a partition covers, in the index
@@ -230,22 +230,22 @@ pub fn alt_classes(
     alt_of: &List<i32>,
     alts: &List<Alternative>,
     first_sets: &List<List<String>>,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
 ) -> List<AltClass> {
     assert alt_of.len() == first_sets.len(), "one alternative per first set";
     let mut out: List<AltClass> = [];
     for let mut slot = 0; slot < alt_of.len(); slot += 1 {
-        out.push(alt_class(&alts[alt_of[slot]], &first_sets[slot], ctx));
+        out.push(alt_class(&alts[alt_of[slot]], &first_sets[slot], analysis));
     }
     return out;
 }
 
 /// `alt_classes` over a whole alternative list, for a caller with no first
 /// sets to hand and no subset to map.
-pub fn alt_classes_of(alts: &List<Alternative>, ctx: &mut GenContext) -> List<AltClass> {
+pub fn alt_classes_of(alts: &List<Alternative>, analysis: &mut GrammarAnalysis) -> List<AltClass> {
     let mut out: List<AltClass> = [];
     for let alt of alts {
-        out.push(alt_class_of(alt, ctx));
+        out.push(alt_class_of(alt, analysis));
     }
     return out;
 }
@@ -370,11 +370,15 @@ pub fn alt_sort_priority(alt: &Alternative) -> i32 {
 /// `( a b | a )` sorts the two-element alt ahead on its mandatory `b`, and so
 /// does `( a b? | a )` where `b?` is first-exact; a nullable that is not falls
 /// to priority instead.
-pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) {
+pub fn sort_group_by_mandatory_count_desc(
+    group: &mut List<i32>,
+    alts: &List<Alternative>,
+    analysis: &mut GrammarAnalysis,
+) {
     let mut keyed: List<[i32, i32, i32]> = [];
     for let mut i = 0; i < group.len(); i += 1 {
         let idx = group[i];
-        let len = ll_match_length(&alts[idx], ctx);
+        let len = ll_match_length(&alts[idx], analysis);
         keyed.push([len, alt_sort_priority(&alts[idx]), idx]);
     }
     keyed.sort_by(|a: &[i32, i32, i32], b: &[i32, i32, i32]| {
@@ -395,15 +399,15 @@ pub fn sort_group_by_mandatory_count_desc(group: &mut List<i32>, alts: &List<Alt
 /// first-exact nullable one after a mandatory element, whose single token is
 /// decisive (`(a b? | a)` on `Y` wants alt 0). A *leading* nullable earns no
 /// bonus — nothing has committed there yet, so its length says nothing.
-pub fn ll_match_length(alt: &Alternative, ctx: &mut GenContext) -> i32 {
+pub fn ll_match_length(alt: &Alternative, analysis: &mut GrammarAnalysis) -> i32 {
     let mut count: i32 = 0;
     let mut seen_mandatory: bool = false;
     for let elem of &alt.elements {
         let mut visiting: List<String> = [];
-        if !ctx.element_is_nullable_deep(elem, &mut visiting) {
+        if !analysis.element_is_nullable_deep(elem, &mut visiting) {
             count += 1;
             seen_mandatory = true;
-        } else if seen_mandatory && ctx.element_is_first_exact(elem) {
+        } else if seen_mandatory && analysis.element_is_first_exact(elem) {
             count += 1;
         }
     }

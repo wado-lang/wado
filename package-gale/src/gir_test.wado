@@ -22,6 +22,7 @@ use {
     TournamentDispatch,
     Diagnostic,
     DiagnosticKind,
+    Diagnostics,
     diagnostic_level,
     DiagnosticOwner,
     DiagnosticSite,
@@ -502,4 +503,45 @@ test "a diagnostic's level says what a default build shows" {
     assert diagnostic_level(&DiagnosticKind::FragmentEntry) matches { Some(Warn) };
     assert diagnostic_level(&DiagnosticKind::OverlapTournament) matches { Some(Info) };
     assert diagnostic_level(&DiagnosticKind::OptionalScanGuardFallback) matches { None };
+}
+
+test "warn dedupes diagnostics with the same owner and message" {
+    // A single prediction decision is revisited by lowering: the
+    // parse and scan passes lower the same alts twice. Each revisit
+    // re-enters the same warn site with an identical (owner, message),
+    // so `warn` must
+    // collapse them — otherwise the same overlap warning is reported
+    // N+1 times in `gale dump` and on `gale gen` stderr.
+    let mut diagnostics = Diagnostics {};
+    let owner = DiagnosticOwner::rule_dispatch("r");
+    let msg = String::from("alts 0, 1 share lookahead {TK_ID}");
+    diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, msg);
+    diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
+    diagnostics.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
+    let diags = diagnostics.to_list();
+    assert diags.len() == 1, `expected 1 deduped diagnostic, got ${diags.len()}`;
+    assert diags[0].owner == owner;
+}
+
+test "warn keeps distinct diagnostics" {
+    // Different owner or different message → distinct warnings, not
+    // collapsed. Two decision sites in the same rule are distinct owners:
+    // the owner is structured, so two that render alike do not collide.
+    let mut diagnostics = Diagnostics {};
+    diagnostics.warn(&DiagnosticOwner::rule_dispatch("a"), DiagnosticKind::OverlapTournament, String::from(
+        "alts 0, 1 share lookahead {TK_ID}",
+    ));
+    diagnostics.warn(&DiagnosticOwner::rule_dispatch("b"), DiagnosticKind::OverlapTournament, String::from(
+        "alts 0, 1 share lookahead {TK_ID}",
+    ));
+    diagnostics.warn(&DiagnosticOwner::rule_dispatch("a"), DiagnosticKind::OverlapTournament, String::from(
+        "alts 0, 2 share lookahead {TK_X}",
+    ));
+    diagnostics.warn(
+        &DiagnosticOwner { rule: "a", site: DiagnosticSite::GeneralGroup(0) },
+        DiagnosticKind::OverlapTournament,
+        String::from("alts 0, 1 share lookahead {TK_ID}"),
+    );
+    let diags = diagnostics.to_list();
+    assert diags.len() == 4, `expected 4 distinct diagnostics, got ${diags.len()}`;
 }

@@ -1807,15 +1807,15 @@ fn _parse_item(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_targs__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LIT_LT, &SYNC_3, false);
+    p.expect(TK_LIT_LT, &SYNC_0, false);
     p.site = 6;
     _parse_item(p, follow_or(FOLLOW_MASK_1, 16, follow_then(FOLLOW_MASK_3, 8, follow)));
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     while !p.recovering && p.peek_kind() == TK_LIT_COMMA {
         p.take();
         p.site = 7;
         _parse_item(p, follow_then_opening(FOLLOW_MASK_1, 16, follow));
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_LIT_GT, &EMPTY_SYNC, true);
     return;
@@ -1899,13 +1899,12 @@ fn _kind_set_0(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [33];
 global EXPECTED_0: List<i32> = [TK_ID, TK_LIT_LBRACKET];
-global SYNC_1: List<i32> = [225];
-global EXPECTED_1: List<i32> = [TK_ID, TK_LIT_LBRACKET, TK_LIT_LT, TK_LIT_RBRACKET];
+global SYNC_1: List<i32> = [97];
+global EXPECTED_1: List<i32> = [TK_ID, TK_LIT_LBRACKET, TK_LIT_RBRACKET];
 global SYNC_2: List<i32> = [80];
 global EXPECTED_2: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACKET];
-global SYNC_3: List<i32> = [161];
-global SYNC_4: List<i32> = [272];
-global EXPECTED_4: List<i32> = [TK_LIT_COMMA, TK_LIT_GT];
+global SYNC_3: List<i32> = [272];
+global EXPECTED_3: List<i32> = [TK_LIT_COMMA, TK_LIT_GT];
 
 global FOLLOW_SETS: List<List<i32>> = [[4], [16], [33], [64], [256]];
 global FOLLOW_MASK_0: i64 = 1;

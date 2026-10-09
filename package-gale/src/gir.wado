@@ -109,6 +109,31 @@ pub struct Diagnostic {
     pub message: String,
 }
 
+/// The diagnostics one generation raises, in the order it raised them.
+pub struct Diagnostics {
+    items: List<Diagnostic> = [],
+}
+
+impl Diagnostics {
+    /// Record a diagnostic, deduped on `(owner, message)` so a decision site
+    /// lowering revisits — the parse and scan passes lower the same alts twice
+    /// — is reported once. `message` already encodes everything `kind` does,
+    /// so the pair keys it without an `Eq` on `DiagnosticKind`.
+    pub fn warn<S: AsStrSlice>(&mut self, owner: &DiagnosticOwner, kind: DiagnosticKind, message: S) {
+        for let d of &self.items {
+            if d.owner == *owner && d.message == message.as_str_slice() {
+                return;
+            }
+        }
+        self.items.push(Diagnostic { owner: *owner, kind, message: message.to_string() });
+    }
+
+    /// Everything raised so far.
+    pub fn to_list(&self) -> List<Diagnostic> {
+        return self.items;
+    }
+}
+
 /// The grammar construct a diagnostic belongs to.
 ///
 /// `rule` is the owning parser rule, empty for a grammar-level host. It is
@@ -329,7 +354,7 @@ pub struct LeftRecursiveRule {
     /// dispatch mis-commits here (it enters the `and`-loop and starves
     /// `between`'s mandatory `'and'`), so codegen routes the loop-entry
     /// through the runtime ATN simulator instead. Set by `lower_lr_rule`;
-    /// also flips `GenContext.needs_atn`. False for the common LR rule,
+    /// also flips `ParserPlan.needs_atn`. False for the common LR rule,
     /// whose static `scan_X_lr_*` fast path stays byte-identical.
     pub atn_class: bool = false,
     /// True when an alternative's mid-operand self-reference climbs a

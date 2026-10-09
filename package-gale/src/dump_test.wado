@@ -1,4 +1,4 @@
-//! Tests for `render_dump(Grammar, LoweredGrammar, GenContext) -> String`.
+//! Tests for `render_dump(Grammar, LoweredGrammar, LowerContext) -> String`.
 //!
 //! Most tests build a minimal `Grammar` via struct-literal syntax (no
 //! g4 parser), lower it, and assert on substrings of the rendered
@@ -19,11 +19,13 @@ use {
     merge_grammars,
     synthesize_implicit_tokens,
 } from "./ir.wado";
-use { LitToken, collect_literal_tokens } from "./lexer_gen.wado";
+use { LitToken } from "./lexer_gen.wado";
 use { lower } from "./lower.wado";
 use { LoweredGrammar } from "./gir.wado";
-use { GenContext } from "./gen_context.wado";
-use { canonicalize_for_analysis, analysis_context, install_action_context, lower_for_analysis } from "./codegen.wado";
+use { LowerContext } from "./lower_context.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { canonicalize_for_analysis, lower_for_analysis } from "./codegen.wado";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { parse } from "./g4/parser.wado";
 
@@ -36,7 +38,7 @@ use { parse } from "./g4/parser.wado";
 /// and for scannability. A hand-rolled prologue that skips either answers them
 /// by re-deriving them per query, which on `RustParser.g4` cost three orders
 /// of magnitude over generating the whole parser.
-fn dump_pipeline<S: AsStrSlice>(input: S) -> [String, GenContext] {
+fn dump_pipeline<S: AsStrSlice>(input: S) -> [String, LowerContext] {
     let mut merged = merged_source(input);
     let [lowered, mut ctx] = lower_pipeline(&mut merged);
     return [render_dump(&merged, &lowered, &mut ctx), ctx];
@@ -54,14 +56,10 @@ fn atn_dump_source<S: AsStrSlice>(input: S) -> String {
     return render_atn_dump(&merged, &lowered);
 }
 
-/// `cmd_dump`'s prologue, whole: `lower_for_analysis` asserts that
-/// `install_action_context` ran.
-fn lower_pipeline(merged: &mut Grammar) -> [LoweredGrammar, GenContext] {
+/// `cmd_dump`'s prologue, whole.
+fn lower_pipeline(merged: &mut Grammar) -> [LoweredGrammar, LowerContext] {
     let token_kinds = canonicalize_for_analysis(merged);
-    let lit = collect_literal_tokens(&merged.parser_rules);
-    let mut ctx = analysis_context(merged, &lit, token_kinds);
-    let _ = install_action_context(merged, &mut ctx);
-    return [lower_for_analysis(merged, &lit, &mut ctx), ctx];
+    return lower_for_analysis(merged, token_kinds);
 }
 
 fn dump_source<S: AsStrSlice>(input: S) -> String {
@@ -70,7 +68,7 @@ fn dump_source<S: AsStrSlice>(input: S) -> String {
 
 test "the dump lowers through the emitter's primed context" {
     let [_, ctx] = dump_pipeline("grammar G; a : B c ; c : C ; B : 'b' ; C : 'c' ;");
-    assert ctx.rule_follow_is_exact(), "the dump must install FOLLOW before lowering, as `generate` does";
+    assert ctx.follow.is_exact(), "the dump must install FOLLOW before lowering, as `generate` does";
 }
 
 // `--atn` reports the same grammar the GIR dump does, so it reports the same
@@ -88,7 +86,7 @@ test "the ATN dump builds off the lowering the dump already has" {
 /// `dump_pipeline` is the one that mirrors the command.
 fn dump_grammar(g: &Grammar) -> String {
     let lit_tokens = no_lit_tokens();
-    let mut ctx = GenContext::new(&g.parser_rules, &lit_tokens);
+    let mut ctx = LowerContext::new(GrammarAnalysis::new(&g.parser_rules), GenSettings {});
     let lowered = lower(g, &lit_tokens, &mut ctx);
     return render_dump(g, &lowered, &mut ctx);
 }

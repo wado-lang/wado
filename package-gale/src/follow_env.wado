@@ -1,6 +1,6 @@
-//! Static call-graph FOLLOW analysis, consumed by `codegen::install_rule_follow`
-//! (feeds `GenContext::at_end_conflict_routes`, which decides whether an
-//! at-end multi-alt conflict must route through the ATN).
+//! Static call-graph FOLLOW analysis. `settle_rule_follow` settles it into the
+//! `RuleFollow` lowering and emit read, whose `at_end_conflict_routes` decides
+//! whether an at-end multi-alt conflict must route through the ATN.
 //!
 //! The `rule_follow` fixed point represents each rule's FOLLOW set as a u64
 //! bitset over token-kind ids (`Element::kind_id`): union is a word-wise OR
@@ -13,7 +13,8 @@
 //! that form once per rule after the fixed point converges.
 
 use { ParserRule, Element, peel_labels } from "./ir.wado";
-use { GenContext } from "./gen_context.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { sets_overlap } from "./gen_util.wado";
 use { bits_ids, bits_set, bits_union_into } from "./token_kinds.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
@@ -43,7 +44,7 @@ impl FollowSet {
 /// no `CodeWriter`. Exposes two read-only views:
 ///
 /// * `tail_greedy` — per-rule snapshot of
-///   `GenContext::tail_greedy_first_of_rule`, lifted out of the
+///   `GrammarAnalysis::tail_greedy_first_of_rule`, lifted out of the
 ///   codegen cache so callers that only want the analysis (e.g.
 ///   LSP / tooling that doesn't run lower) don't have to instantiate
 ///   the full lower pipeline.
@@ -54,7 +55,7 @@ impl FollowSet {
 /// codegen to emit the `FOLLOW_MASK_<id>` globals — is intentionally
 /// NOT populated here. Lower's element walks (the only walker that
 /// needs to know every site's per-call-site `caller_follow`) mint
-/// registry entries directly via `GenContext::intern_follow_mask`, so
+/// registry entries directly via `LowerContext::intern_follow_mask`, so
 /// there is one authoritative element-walking pass that both builds
 /// the IR and registers masks. Duplicating that walk in
 /// `FollowEnv::build` to pre-populate the registry would only re-derive
@@ -65,7 +66,7 @@ pub struct FollowEnv {
     /// Token kinds the rule may *greedily* consume at tail position
     /// (Optional/Star/Plus elements with no required successor in the
     /// alt). Restricted to single-token-inner repeats: see
-    /// `gen_context::tail_greedy_first_of_element` for the soundness
+    /// `grammar_analysis::tail_greedy_first_of_element` for the soundness
     /// argument. Lifted into `FollowEnv` so subsequent Phase 1 steps
     /// can compute against a snapshot independent of the codegen-side
     /// cache.
@@ -108,6 +109,145 @@ impl FollowEnv {
     }
 }
 
+/// What may follow each parser rule, as lowering and emit ask it.
+pub struct RuleFollow {
+    kinds: HashMap<String, List<String>>,
+    /// Whether the FOLLOW fixed point converged exactly, so a per-rule set is
+    /// the real one rather than an over-approximation.
+    exact: bool,
+    /// The rules an `EOF` the grammar writes may follow.
+    before_eof_token: List<String>,
+    /// Per rule, the strings `r` for which `rule r EOF` can occur
+    /// (`rule_input_end`).
+    input_end: HashMap<String, List<List<List<String>>>>,
+}
+
+impl RuleFollow {
+    /// Nothing known, for a grammar with no parser rules: each FOLLOW query
+    /// answers conservatively, and `input_end` has no rule to be asked about.
+    pub fn unknown() -> RuleFollow {
+        return RuleFollow {
+            kinds: HashMap::with_seed(GALE_SEED),
+            exact: false,
+            before_eof_token: [],
+            input_end: HashMap::with_seed(GALE_SEED),
+        };
+    }
+
+    /// Whether the per-rule sets are the real FOLLOW, not an over-approximation.
+    pub fn is_exact(&self) -> bool {
+        return self.exact;
+    }
+
+    /// The rule's classical FOLLOW, for a probe whose scan ends at the
+    /// rule's tail — there, "can the caller continue" is exactly membership
+    /// in this set. Empty when the fixed point is not exact, which keeps the
+    /// probe on its previous answer. The set over-approximates (a union over
+    /// every call site), so conjoining it can only move a verdict from
+    /// "exit" to "iterate": a token it excludes cannot continue any caller.
+    pub fn for_probe<S: AsStrSlice>(&self, rule_name: S) -> List<String> {
+        if !self.exact {
+            return [];
+        }
+        let Some(follow) = self.kinds.get_str(rule_name) else {
+            return [];
+        };
+        return follow;
+    }
+
+    /// Whether an at-end conflict over `branch_tokens` in `rule_name` must route
+    /// to the simulator: a caller may continue on one of them, or FOLLOW is not
+    /// known exactly.
+    pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<String>) -> bool {
+        if !self.exact {
+            return true;
+        }
+        let Some(follow) = self.kinds.get_ref_str(rule_name) else {
+            return true;
+        };
+        return sets_overlap(branch_tokens, follow);
+    }
+
+    /// Whether an `EOF` the grammar writes may follow `rule_name`. The FOLLOW
+    /// above seeds the start rule with one the grammar need not write.
+    pub fn precedes_eof_token<S: AsStrSlice>(&self, rule_name: S) -> bool {
+        return self.before_eof_token.contains_str(rule_name);
+    }
+
+    /// The strings `r` for which `rule r EOF` can occur: entry `n - 1` holds
+    /// those of length `n` as one kind set per position.
+    pub fn input_end<S: AsStrSlice>(&self, rule_name: S) -> List<List<List<String>>> {
+        return self.input_end[rule_name.to_string()];
+    }
+}
+
+/// Settle what may follow each of `parser_rules`, the first being the start
+/// rule. Lowering reads it, so it is settled before any rule is lowered.
+pub fn settle_rule_follow(parser_rules: &List<ParserRule>, analysis: &mut GrammarAnalysis) -> RuleFollow {
+    if parser_rules.is_empty() {
+        return RuleFollow::unknown();
+    }
+    let fenv = build(parser_rules, analysis, &parser_rules[0].name);
+    let mut kinds = HashMap::<String, List<String>>::with_seed(GALE_SEED);
+    for let rule of parser_rules {
+        let fs = fenv.rule_follow(&rule.name);
+        let mut names: List<String> = [];
+        for let k of &fs.kinds {
+            names.push(k);
+        }
+        kinds[rule.name] = names;
+    }
+    // Unseeded, so EOF is in a rule's FOLLOW only where the grammar matches it.
+    let written = build(parser_rules, analysis, "");
+    let mut before_eof_token: List<String> = [];
+    for let rule of parser_rules {
+        if written.rule_follow(&rule.name).kinds.contains("TK_EOF") {
+            before_eof_token.push(rule.name);
+        }
+    }
+    return RuleFollow {
+        kinds,
+        exact: !grammar_has_open_first_element(parser_rules),
+        before_eof_token,
+        input_end: rule_input_end(parser_rules, analysis),
+    };
+}
+
+fn grammar_has_open_first_element(parser_rules: &List<ParserRule>) -> bool {
+    for let rule of parser_rules {
+        for let alt of &rule.alternatives {
+            for let e of &alt.elements {
+                if element_has_open_first(e) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+fn element_has_open_first(e: &Element) -> bool {
+    return match *e {
+        Wildcard(_) => true,
+        Not(_) => true,
+        Label(l) => element_has_open_first(&l.element),
+        Repeat(r) => element_has_open_first(&r.element),
+        Group(g) => {
+            for let alt of &g.alternatives {
+                for let inner of &alt.elements {
+                    if element_has_open_first(inner) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        },
+        RuleRef(_) => false,
+        TokenRef(_) => false,
+        Literal(_) => false,
+    };
+}
+
 /// Build the FOLLOW environment for a grammar.
 ///
 /// `start_rule` seeds `FOLLOW(start_rule) = {EOF, closed=true}`. When
@@ -115,14 +255,14 @@ impl FollowEnv {
 /// resulting `rule_follow` reflects only call-graph contributions —
 /// useful for sub-grammar analysis or tests that exercise propagation
 /// without an EOF anchor.
-pub fn build<S: AsStrSlice>(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: S) -> FollowEnv {
+pub fn build<S: AsStrSlice>(parser_rules: &List<ParserRule>, analysis: &mut GrammarAnalysis, start_rule: S) -> FollowEnv {
     let mut tail_greedy = HashMap::<String, List<String>>::with_seed(GALE_SEED);
     for let rule of parser_rules {
         let mut visiting: List<String> = [];
-        let tg = ctx.tail_greedy_first_of_rule(&rule.name, &mut visiting);
+        let tg = analysis.tail_greedy_first_of_rule(&rule.name, &mut visiting);
         tail_greedy[rule.name] = tg;
     }
-    let rule_follow = compute_rule_follow(parser_rules, ctx, start_rule);
+    let rule_follow = compute_rule_follow(parser_rules, analysis, start_rule);
     return FollowEnv { tail_greedy, rule_follow };
 }
 
@@ -145,7 +285,7 @@ pub fn build<S: AsStrSlice>(parser_rules: &List<ParserRule>, ctx: &mut GenContex
 /// in a finite token universe.
 fn compute_rule_follow<S: AsStrSlice>(
     parser_rules: &List<ParserRule>,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     start_rule: S,
 ) -> HashMap<String, FollowSet> {
     let mut plans: List<List<Contribution>> = [];
@@ -153,7 +293,7 @@ fn compute_rule_follow<S: AsStrSlice>(
         let mut plan: List<Contribution> = [];
         let outer = PlanFollow { bits: [], inherits: true };
         for let alt of &rule.alternatives {
-            plan_elements(&alt.elements, ctx, &outer, &mut plan);
+            plan_elements(&alt.elements, analysis, &outer, &mut plan);
         }
         plans.push(plan);
     }
@@ -163,10 +303,10 @@ fn compute_rule_follow<S: AsStrSlice>(
         env.push(FollowBits { bits: [], closed: false });
     }
     if !start_rule.is_empty() {
-        let si = ctx.rule_index_of(start_rule);
+        let si = analysis.rule_index_of(start_rule);
         if si >= 0 {
             let mut seed: List<u64> = [];
-            bits_set(&mut seed, ctx.eof_kind_id());
+            bits_set(&mut seed, analysis.eof_kind_id());
             env[si] = FollowBits { bits: seed, closed: true };
         }
     }
@@ -206,7 +346,7 @@ fn compute_rule_follow<S: AsStrSlice>(
     // rule — outside the fixed point, so the string cost is paid once.
     let mut result = HashMap::<String, FollowSet>::with_seed(GALE_SEED);
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
-        result[parser_rules[ri].name] = bits_to_follow_set(&env[ri], ctx);
+        result[parser_rules[ri].name] = bits_to_follow_set(&env[ri], analysis);
     }
     return result;
 }
@@ -233,24 +373,29 @@ struct PlanFollow {
 /// local follow at the group's position; `Repeat` recurses with
 /// `first(inner) ∪ local_follow` so that the inner's siblings (after one
 /// iteration) see the start-of-inner contributions plus the loop exit follow.
-fn plan_elements(elements: &List<Element>, ctx: &mut GenContext, outer: &PlanFollow, plan: &mut List<Contribution>) {
+fn plan_elements(
+    elements: &List<Element>,
+    analysis: &mut GrammarAnalysis,
+    outer: &PlanFollow,
+    plan: &mut List<Contribution>,
+) {
     for let mut i = 0; i < elements.len(); i += 1 {
-        let local = plan_local_follow(elements, i, ctx, outer);
-        plan_element(&elements[i], ctx, &local, plan);
+        let local = plan_local_follow(elements, i, analysis, outer);
+        plan_element(&elements[i], analysis, &local, plan);
     }
 }
 
-fn plan_element(elem: &Element, ctx: &mut GenContext, local: &PlanFollow, plan: &mut List<Contribution>) {
+fn plan_element(elem: &Element, analysis: &mut GrammarAnalysis, local: &PlanFollow, plan: &mut List<Contribution>) {
     match elem {
         RuleRef(r) => {
-            let callee = ctx.rule_index_of(&r.name);
+            let callee = analysis.rule_index_of(&r.name);
             if callee >= 0 {
                 plan.push(Contribution { callee, bits: local.bits, inherits_outer: local.inherits });
             }
         },
         Group(g) => {
             for let inner_alt of &g.alternatives {
-                plan_elements(&inner_alt.elements, ctx, local, plan);
+                plan_elements(&inner_alt.elements, analysis, local, plan);
             }
         },
         Repeat(rep) => {
@@ -258,12 +403,12 @@ fn plan_element(elem: &Element, ctx: &mut GenContext, local: &PlanFollow, plan: 
             // A `*` / `+` iteration can be followed by another, so the
             // inner also sees its own FIRST. An `?` cannot iterate.
             if !rep.kind matches { Optional } {
-                accumulate_first_bits(ctx, &rep.element, &mut inner_outer.bits);
+                accumulate_first_bits(analysis, &rep.element, &mut inner_outer.bits);
             }
-            plan_element(&rep.element, ctx, &inner_outer, plan);
+            plan_element(&rep.element, analysis, &inner_outer, plan);
         },
         Label(lab) => {
-            plan_element(&lab.element, ctx, local, plan);
+            plan_element(&lab.element, analysis, local, plan);
         },
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
@@ -272,11 +417,11 @@ fn plan_element(elem: &Element, ctx: &mut GenContext, local: &PlanFollow, plan: 
 
 /// Static effective follow at position `i` in `elements`:
 /// `first(elements[i+1..]) ∪ (suffix deep-nullable → outer)`.
-fn plan_local_follow(elements: &List<Element>, i: i32, ctx: &mut GenContext, outer: &PlanFollow) -> PlanFollow {
+fn plan_local_follow(elements: &List<Element>, i: i32, analysis: &mut GrammarAnalysis, outer: &PlanFollow) -> PlanFollow {
     let mut bits: List<u64> = [];
-    suffix_first_bits(ctx, elements, i + 1, &mut bits);
+    suffix_first_bits(analysis, elements, i + 1, &mut bits);
     let mut inherits = false;
-    if ctx.tail_is_nullable_deep(elements, i + 1) {
+    if analysis.tail_is_nullable_deep(elements, i + 1) {
         bits_union_into(&mut bits, &outer.bits);
         inherits = outer.inherits;
     }
@@ -295,20 +440,20 @@ struct FollowBits {
 /// a bitset. This is the deep first-of-suffix (`deep_first_of_elements_from`)
 /// without its `List<String>` + `dedup_append_arr` O(n²) merge: a bitset
 /// dedups by construction.
-fn suffix_first_bits(ctx: &mut GenContext, elements: &List<Element>, start: i32, bits: &mut List<u64>) {
+fn suffix_first_bits(analysis: &mut GrammarAnalysis, elements: &List<Element>, start: i32, bits: &mut List<u64>) {
     for let mut i = start; i < elements.len(); i += 1 {
-        accumulate_first_bits(ctx, &elements[i], bits);
+        accumulate_first_bits(analysis, &elements[i], bits);
         let mut nv: List<String> = [];
-        if !ctx.element_is_nullable_deep(&elements[i], &mut nv) {
+        if !analysis.element_is_nullable_deep(&elements[i], &mut nv) {
             break;
         }
     }
 }
 
 /// OR the FIRST set of a single element into `bits` (kind-id positions).
-fn accumulate_first_bits(ctx: &mut GenContext, elem: &Element, bits: &mut List<u64>) {
+fn accumulate_first_bits(analysis: &mut GrammarAnalysis, elem: &Element, bits: &mut List<u64>) {
     let mut fv: List<String> = [];
-    let ids = ctx.first_ids_of_element(elem, &mut fv);
+    let ids = analysis.first_ids_of_element(elem, &mut fv);
     for let id of &ids {
         bits_set(bits, *id);
     }
@@ -328,10 +473,10 @@ global INPUT_END_MAX_LEN: i32 = 4;
 /// here, so a string through one is missed.
 pub fn rule_input_end(
     parser_rules: &List<ParserRule>,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
 ) -> HashMap<String, List<List<List<String>>>> {
-    let eof = ctx.eof_kind_id();
-    let lang = rule_strings(parser_rules, ctx, eof);
+    let eof = analysis.eof_kind_id();
+    let lang = rule_strings(parser_rules, analysis, eof);
     let mut sites: List<EndSite> = [];
     for let mut ri = 0; ri < parser_rules.len(); ri += 1 {
         let outer = EndAfter {
@@ -339,7 +484,7 @@ pub fn rule_input_end(
             tail: strs_empty(),
         };
         for let alt of &parser_rules[ri].alternatives {
-            walk_end_sites(&alt.elements, &outer, ri, ctx, &lang, eof, &mut sites);
+            walk_end_sites(&alt.elements, &outer, ri, analysis, &lang, eof, &mut sites);
         }
     }
     let mut end: List<Strings> = [];
@@ -369,7 +514,7 @@ pub fn rule_input_end(
                 for let d of 0..<n {
                     let mut kinds: List<String> = [];
                     for let id of &slot_ids(&end[ri].at, slot(n, d)) {
-                        kinds.push(ctx.token_name(*id));
+                        kinds.push(analysis.token_name(*id));
                     }
                     positions.push(kinds);
                 }
@@ -503,8 +648,8 @@ fn strs_star(x: &Strings) -> Strings {
 
 /// Per rule, the strings it derives, to the fixed point. A rule is evaluated
 /// again only when a rule it calls has grown.
-fn rule_strings(parser_rules: &List<ParserRule>, ctx: &mut GenContext, eof: i32) -> List<Strings> {
-    let callees = ctx.scannable_callees();
+fn rule_strings(parser_rules: &List<ParserRule>, analysis: &mut GrammarAnalysis, eof: i32) -> List<Strings> {
+    let callees = analysis.scannable_callees();
     let mut callers: List<List<i32>> = [];
     let mut lang: List<Strings> = [];
     let mut queued: List<bool> = [];
@@ -526,7 +671,7 @@ fn rule_strings(parser_rules: &List<ParserRule>, ctx: &mut GenContext, eof: i32)
         queued[ri] = false;
         let mut grew = false;
         for let alt of &parser_rules[ri].alternatives {
-            grew = strs_union_into(&mut lang[ri], &sequence_strings(&alt.elements, ctx, &lang, eof)) || grew;
+            grew = strs_union_into(&mut lang[ri], &sequence_strings(&alt.elements, analysis, &lang, eof)) || grew;
         }
         if grew {
             for let caller of &callers[ri] {
@@ -540,21 +685,21 @@ fn rule_strings(parser_rules: &List<ParserRule>, ctx: &mut GenContext, eof: i32)
     return lang;
 }
 
-fn sequence_strings(elements: &List<Element>, ctx: &mut GenContext, lang: &List<Strings>, eof: i32) -> Strings {
+fn sequence_strings(elements: &List<Element>, analysis: &mut GrammarAnalysis, lang: &List<Strings>, eof: i32) -> Strings {
     let mut s = strs_empty();
     for let e of elements {
-        s = strs_concat(&s, &element_strings(e, ctx, lang, eof));
+        s = strs_concat(&s, &element_strings(e, analysis, lang, eof));
     }
     return s;
 }
 
 /// An `EOF` inside a rule derives the empty string here: what it ends is the
 /// walk's concern (`end_after_element`), not the rule's language.
-fn element_strings(elem: &Element, ctx: &mut GenContext, lang: &List<Strings>, eof: i32) -> Strings {
+fn element_strings(elem: &Element, analysis: &mut GrammarAnalysis, lang: &List<Strings>, eof: i32) -> Strings {
     return match elem {
         TokenRef(_) | Literal(_) => {
             let mut fv: List<String> = [];
-            let ids = ctx.first_ids_of_element(elem, &mut fv);
+            let ids = analysis.first_ids_of_element(elem, &mut fv);
             if ids.contains(&eof) {
                 strs_empty();
             } else {
@@ -562,7 +707,7 @@ fn element_strings(elem: &Element, ctx: &mut GenContext, lang: &List<Strings>, e
             }
         },
         RuleRef(r) => {
-            let idx = ctx.rule_index_of(&r.name);
+            let idx = analysis.rule_index_of(&r.name);
             if idx >= 0 {
                 lang[idx];
             } else {
@@ -572,12 +717,12 @@ fn element_strings(elem: &Element, ctx: &mut GenContext, lang: &List<Strings>, e
         Group(g) => {
             let mut s = strs_none();
             for let alt of &g.alternatives {
-                let _ = strs_union_into(&mut s, &sequence_strings(&alt.elements, ctx, lang, eof));
+                let _ = strs_union_into(&mut s, &sequence_strings(&alt.elements, analysis, lang, eof));
             }
             s;
         },
         Repeat(rep) => {
-            let body = element_strings(&rep.element, ctx, lang, eof);
+            let body = element_strings(&rep.element, analysis, lang, eof);
             match rep.kind {
                 Optional => {
                     let mut s = strs_empty();
@@ -588,7 +733,7 @@ fn element_strings(elem: &Element, ctx: &mut GenContext, lang: &List<Strings>, e
                 Plus => strs_concat(&body, &strs_star(&body)),
             }
         },
-        Label(lab) => element_strings(&lab.element, ctx, lang, eof),
+        Label(lab) => element_strings(&lab.element, analysis, lang, eof),
         Wildcard(_) | Not(_) => strs_none(),
     };
 }
@@ -613,15 +758,15 @@ fn walk_end_sites(
     elements: &List<Element>,
     outer: &EndAfter,
     caller: i32,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     lang: &List<Strings>,
     eof: i32,
     sites: &mut List<EndSite>,
 ) {
     let mut after = *outer;
     for let mut i = elements.len() - 1; i >= 0; i -= 1 {
-        walk_end_element(&elements[i], &after, caller, ctx, lang, eof, sites);
-        after = end_after_element(&elements[i], &after, ctx, lang, eof);
+        walk_end_element(&elements[i], &after, caller, analysis, lang, eof, sites);
+        after = end_after_element(&elements[i], &after, analysis, lang, eof);
     }
 }
 
@@ -629,37 +774,37 @@ fn walk_end_element(
     elem: &Element,
     after: &EndAfter,
     caller: i32,
-    ctx: &mut GenContext,
+    analysis: &mut GrammarAnalysis,
     lang: &List<Strings>,
     eof: i32,
     sites: &mut List<EndSite>,
 ) {
     match elem {
         RuleRef(r) => {
-            let callee = ctx.rule_index_of(&r.name);
+            let callee = analysis.rule_index_of(&r.name);
             if callee >= 0 {
                 sites.push(EndSite { caller, callee, ends: after.ends, tail: after.tail });
             }
         },
         Group(g) => {
             for let alt of &g.alternatives {
-                walk_end_sites(&alt.elements, after, caller, ctx, lang, eof, sites);
+                walk_end_sites(&alt.elements, after, caller, analysis, lang, eof, sites);
             }
         },
         Repeat(rep) => {
             if rep.kind matches { Optional } {
-                walk_end_element(&rep.element, after, caller, ctx, lang, eof, sites);
+                walk_end_element(&rep.element, after, caller, analysis, lang, eof, sites);
                 return;
             }
             // More iterations may follow one before the exit.
-            let more = strs_star(&element_strings(&rep.element, ctx, lang, eof));
+            let more = strs_star(&element_strings(&rep.element, analysis, lang, eof));
             let again = EndAfter {
                 ends: strs_concat(&more, &after.ends),
                 tail: strs_concat(&more, &after.tail),
             };
-            walk_end_element(&rep.element, &again, caller, ctx, lang, eof, sites);
+            walk_end_element(&rep.element, &again, caller, analysis, lang, eof, sites);
         },
-        Label(lab) => walk_end_element(&lab.element, after, caller, ctx, lang, eof, sites),
+        Label(lab) => walk_end_element(&lab.element, after, caller, analysis, lang, eof, sites),
         TokenRef(_) | Literal(_) | Wildcard(_) | Not(_) => {
         },
     }
@@ -667,18 +812,24 @@ fn walk_end_element(
 
 /// What can come after the position before `elem`, given `after` follows it.
 /// A written `EOF` ends the input there, whatever follows it.
-fn end_after_element(elem: &Element, after: &EndAfter, ctx: &mut GenContext, lang: &List<Strings>, eof: i32) -> EndAfter {
+fn end_after_element(
+    elem: &Element,
+    after: &EndAfter,
+    analysis: &mut GrammarAnalysis,
+    lang: &List<Strings>,
+    eof: i32,
+) -> EndAfter {
     let peeled = peel_labels(elem);
     if peeled matches { TokenRef(_) } {
         let mut fv: List<String> = [];
-        if ctx.first_ids_of_element(peeled, &mut fv).contains(&eof) {
+        if analysis.first_ids_of_element(peeled, &mut fv).contains(&eof) {
             return EndAfter {
                 ends: strs_empty(),
                 tail: strs_none(),
             };
         }
     }
-    let s = element_strings(elem, ctx, lang, eof);
+    let s = element_strings(elem, analysis, lang, eof);
     return EndAfter {
         ends: strs_concat(&s, &after.ends),
         tail: strs_concat(&s, &after.tail),
@@ -688,10 +839,10 @@ fn end_after_element(elem: &Element, after: &EndAfter, ctx: &mut GenContext, lan
 /// Materialise a bitset into the public `FollowSet` (a `HashSet<String>`).
 /// Called once per rule after convergence, so its string cost is off the
 /// hot path.
-fn bits_to_follow_set(fb: &FollowBits, ctx: &GenContext) -> FollowSet {
+fn bits_to_follow_set(fb: &FollowBits, analysis: &GrammarAnalysis) -> FollowSet {
     let mut kinds = HashSet::<String>::with_seed(GALE_SEED);
     for let id of &bits_ids(&fb.bits) {
-        kinds.insert(ctx.token_name(*id));
+        kinds.insert(analysis.token_name(*id));
     }
     return FollowSet { kinds, closed: fb.closed };
 }

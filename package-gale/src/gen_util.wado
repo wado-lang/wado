@@ -765,3 +765,15 @@ pub fn elements_match(consumed: &Element, expected: &Element) -> bool {
         RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
     };
 }
+
+/// Whether two token-kind sets share a kind.
+pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
+    return a.iter_ref().any(|x| b.contains(x));
+}
+
+/// The union of two token-kind arrays: `a` in order, then what `b` adds.
+pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
+    let mut result = *a;
+    dedup_append_arr(&mut result, b);
+    return result;
+}

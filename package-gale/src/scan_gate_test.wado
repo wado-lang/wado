@@ -1,18 +1,17 @@
 use { gate_assignment, gate_scope_of, reads_only_scan_gate_fields, scan_gate_fields } from "./scan_gate.wado";
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
-use { analysis_context, canonicalize_for_analysis, install_action_context } from "./codegen.wado";
-use { collect_literal_tokens } from "./lexer_gen.wado";
+use { canonicalize_for_analysis, install_action_context } from "./codegen.wado";
+use { GenSettings } from "./gen_settings.wado";
+use { Diagnostics } from "./gir.wado";
 
 /// The simulable field set, reached as `generate` reaches it. Asked directly, it sees
 /// no translated bodies, and every rejection below would pass for the wrong reason.
 fn gate_fields(g: &Grammar) -> List<String> {
     let mut grammar = *g;
-    let token_kinds = canonicalize_for_analysis(&mut grammar);
-    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    let mut ctx = analysis_context(&mut grammar, &lit_tokens, token_kinds);
-    install_action_context(&mut grammar, &mut ctx);
-    return *ctx.scan_gate_fields();
+    canonicalize_for_analysis(&mut grammar);
+    let mut diagnostics = Diagnostics {};
+    return install_action_context(&mut grammar, GenSettings {}, &mut diagnostics).settings.scan_gate_fields;
 }
 
 // `gate_assignment` reads the translated body, not grammar text, so each input

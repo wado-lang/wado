@@ -10,21 +10,11 @@ use {
     LabelElement,
     Visibility,
 } from "./ir.wado";
-use { GenContext } from "./gen_context.wado";
-use {
-    DiagnosticKind,
-    DiagnosticOwner,
-    DiagnosticSite,
-    admits_is_untestable,
-    admits_or_everything,
-    admits_or_untestable,
-} from "./gir.wado";
-use { LitToken } from "./lexer_gen.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
 
-fn mk_ctx() -> GenContext {
+fn mk_ctx() -> GrammarAnalysis {
     let rules: List<ParserRule> = [];
-    let toks: List<LitToken> = [];
-    return GenContext::new(&rules, &toks);
+    return GrammarAnalysis::new(&rules);
 }
 
 fn tk<S: AsStrSlice>(name: S) -> Element {
@@ -55,196 +45,8 @@ fn mk_rule<S: AsStrSlice>(name: S, alts: List<Alternative>) -> ParserRule {
     return ParserRule::new(name, Visibility::Private, [], alts);
 }
 
-fn mk_ctx_with(rules: List<ParserRule>) -> GenContext {
-    let toks: List<LitToken> = [];
-    return GenContext::new(&rules, &toks);
-}
-
-
-test "an empty set is not a condition until the site says what it admits" {
-    // The set does not carry the answer; the site does.
-    let mut ctx = mk_ctx();
-    let empty: List<String> = [];
-    // Both render `true`; they are still not the same answer. One admits every
-    // token and may keep its place among the arms, the other cannot be decided
-    // and belongs after every arm that can.
-    let exact = admits_or_everything(&empty);
-    let undecidable = admits_or_untestable(&empty);
-    assert ctx.admits_check_str(&exact, "k") == "true", "a wildcard admits every token";
-    assert ctx.admits_check_str(&undecidable, "k") == "true", "an untestable arm has no test to render";
-    assert !admits_is_untestable(&exact), "a wildcard decides; ordering it last loses the lowest-alternative rule";
-    assert admits_is_untestable(&undecidable), "an arm with no first set does not decide";
-}
-
-test "a non-empty set renders the same either way" {
-    let mut ctx = mk_ctx();
-    let toks: List<String> = ["TK_FOO"];
-    let narrows = ctx.admits_check_str(&admits_or_everything(&toks), "k");
-    let selects = ctx.admits_check_str(&admits_or_untestable(&toks), "k");
-    assert narrows == "k == TK_FOO", `expected "k == TK_FOO", got "${narrows}"`;
-    assert selects == narrows, "which reading an empty set takes cannot change a non-empty one";
-}
-
-test "kind_check_str: single token uses '==' not 'matches'" {
-    let mut ctx = mk_ctx();
-    let toks: List<String> = ["TK_FOO"];
-    let s = ctx.kind_check_str(&toks, "kind");
-    assert s == "kind == TK_FOO", `expected "kind == TK_FOO", got "${s}"`;
-    // Single-token check must NOT intern (no helper would be emitted).
-    assert ctx.kind_sets().is_empty(), "single-token check should not intern";
-}
-
-test "kind_check_str: multi-token uses helper call" {
-    let mut ctx = mk_ctx();
-    let toks: List<String> = ["TK_FOO", "TK_BAR"];
-    let s = ctx.kind_check_str(&toks, "k");
-    assert s == "_kind_set_0(k)", `expected helper call, got "${s}"`;
-    assert ctx.kind_sets().len() == 1;
-}
-
-
-test "intern_kind_set: same set returns same id (insertion order)" {
-    let mut ctx = mk_ctx();
-    let ab: List<String> = ["TK_A", "TK_B"];
-    let cd: List<String> = ["TK_C", "TK_D"];
-    let id1 = ctx.intern_kind_set(&ab);
-    let id2 = ctx.intern_kind_set(&cd);
-    let id1_again = ctx.intern_kind_set(&ab);
-    assert id1 == 0;
-    assert id2 == 1;
-    assert id1_again == id1, `expected reuse of id ${id1}, got ${id1_again}`;
-}
-
-test "intern_kind_set: order-independent (sets are unordered)" {
-    let mut ctx = mk_ctx();
-    let abc: List<String> = ["TK_A", "TK_B", "TK_C"];
-    let cab: List<String> = ["TK_C", "TK_A", "TK_B"];
-    let bca: List<String> = ["TK_B", "TK_C", "TK_A"];
-    let id1 = ctx.intern_kind_set(&abc);
-    let id2 = ctx.intern_kind_set(&cab);
-    let id3 = ctx.intern_kind_set(&bca);
-    assert id1 == id2 && id2 == id3, `permutations must collapse: ${id1} ${id2} ${id3}`;
-    assert ctx.kind_sets().len() == 1;
-}
-
-test "intern_kind_set: duplicates within a set are deduplicated" {
-    let mut ctx = mk_ctx();
-    let with_dup: List<String> = ["TK_A", "TK_B", "TK_A"];
-    let no_dup: List<String> = ["TK_A", "TK_B"];
-    let id1 = ctx.intern_kind_set(&with_dup);
-    let id2 = ctx.intern_kind_set(&no_dup);
-    assert id1 == id2, "duplicate-tolerant interning";
-    let entries = ctx.kind_sets();
-    assert entries.len() == 1;
-    assert entries[0].tokens.len() == 2, `expected 2 unique tokens, got ${entries[0].tokens.len()}`;
-}
-
-test "intern_kind_set: stored tokens are sorted" {
-    let mut ctx = mk_ctx();
-    let unsorted: List<String> = ["TK_C", "TK_A", "TK_B"];
-    ctx.intern_kind_set(&unsorted);
-    let entries = ctx.kind_sets();
-    assert entries.len() == 1;
-    let toks = ctx.token_names_of(&entries[0].tokens);
-    assert toks[0] == "TK_A";
-    assert toks[1] == "TK_B";
-    assert toks[2] == "TK_C";
-}
-
-test "intern_follow_mask: same mask returns same id, empty returns null" {
-    let mut ctx = mk_ctx();
-    let m1: List<List<String>> = [
-        ["TK_X"],
-        ["TK_Y"],
-    ];
-    let m2: List<List<String>> = [
-        ["TK_X"],
-        ["TK_Z"],
-    ];
-    let id1 = ctx.intern_follow_mask(&m1);
-    let id2 = ctx.intern_follow_mask(&m2);
-    let id1_again = ctx.intern_follow_mask(&m1);
-    assert id1 matches { Some(0) }, "first mask gets id 0";
-    assert id2 matches { Some(1) }, "distinct mask gets id 1";
-    assert id1_again == id1, "same mask reuses its id";
-    // A mask whose every depth-set is empty never gates → no global.
-    let empty_depths: List<List<String>> = [[], []];
-    let id_empty = ctx.intern_follow_mask(&empty_depths);
-    assert id_empty matches { None }, "all-empty mask interns to null";
-    assert ctx.follow_masks().len() == 2, "only the two real masks are registered";
-}
-
-test "a table reference belongs to the innermost function frame, else to the root" {
-    let mut ctx = mk_ctx();
-    let x: List<List<String>> = [
-        ["TK_X"],
-    ];
-    let y: List<List<String>> = [
-        ["TK_Y"],
-    ];
-    let Some(outer_mask) = ctx.intern_follow_mask(&x) else {
-        panic("a constrained mask interns");
-    };
-    let Some(inner_mask) = ctx.intern_follow_mask(&y) else {
-        panic("a constrained mask interns");
-    };
-    ctx.follow_mask_ref(outer_mask);
-    ctx.begin_ref_frame();
-    ctx.begin_ref_frame();
-    assert ctx.follow_mask_ref(inner_mask) == "FOLLOW_MASK_1";
-    let inner = ctx.end_ref_frame();
-    let outer = ctx.end_ref_frame();
-    assert inner.contains("FOLLOW_MASK_1") && inner.len() == 1;
-    assert outer.len() == 0;
-    let root = ctx.take_root_refs();
-    assert root.contains("FOLLOW_MASK_0") && root.len() == 1;
-}
-
-test "kind_sets: returns entries in insertion order" {
-    let mut ctx = mk_ctx();
-    let xy: List<String> = ["TK_X", "TK_Y"];
-    let ab: List<String> = ["TK_A", "TK_B"];
-    let mn: List<String> = ["TK_M", "TK_N"];
-    ctx.intern_kind_set(&xy);
-    ctx.intern_kind_set(&ab);
-    ctx.intern_kind_set(&mn);
-    let entries = ctx.kind_sets();
-    assert entries.len() == 3;
-    assert entries[0].id == 0;
-    assert entries[1].id == 1;
-    assert entries[2].id == 2;
-    // First-seen set should come first regardless of token order.
-    assert ctx.token_name(entries[0].tokens[0]) == "TK_X";
-    assert ctx.token_name(entries[1].tokens[0]) == "TK_A";
-    assert ctx.token_name(entries[2].tokens[0]) == "TK_M";
-}
-
-
-test "kind_negate_check_str: single token uses '!='" {
-    let mut ctx = mk_ctx();
-    let toks: List<String> = ["TK_FOO"];
-    let s = ctx.kind_negate_check_str(&toks, "k");
-    assert s == "k != TK_FOO", `expected "k != TK_FOO", got "${s}"`;
-    assert ctx.kind_sets().is_empty();
-}
-
-test "kind_negate_check_str: multi-token uses negated helper" {
-    let mut ctx = mk_ctx();
-    let toks: List<String> = ["TK_A", "TK_B"];
-    let s = ctx.kind_negate_check_str(&toks, "k");
-    assert s == "!_kind_set_0(k)", `expected negated helper, got "${s}"`;
-    assert ctx.kind_sets().len() == 1;
-}
-
-test "kind_negate_check_str: shares ids with kind_check_str" {
-    let mut ctx = mk_ctx();
-    let toks: List<String> = ["TK_A", "TK_B"];
-    let pos = ctx.kind_check_str(&toks, "k");
-    let neg = ctx.kind_negate_check_str(&toks, "k");
-    // Both reference the same helper id, just with/without the leading `!`.
-    assert pos == "_kind_set_0(k)";
-    assert neg == "!_kind_set_0(k)";
-    assert ctx.kind_sets().len() == 1, "positive and negative must share";
+fn mk_ctx_with(rules: List<ParserRule>) -> GrammarAnalysis {
+    return GrammarAnalysis::new(&rules);
 }
 
 
@@ -740,47 +542,6 @@ test "position_first_sets_from: matches alt_position_first_sets at start=0" {
         b_set.sort();
         assert a_set == b_set, `mismatch at depth ${d}: ${a_set} vs ${b_set}`;
     }
-}
-
-test "warn dedupes diagnostics with the same owner and message" {
-    // A single prediction decision is revisited by lowering: the
-    // parse and scan passes lower the same alts twice. Each revisit
-    // re-enters the same warn site with an identical (owner, message),
-    // so `warn` must
-    // collapse them — otherwise the same overlap warning is reported
-    // N+1 times in `gale dump` and on `gale gen` stderr.
-    let mut ctx = mk_ctx();
-    let owner = DiagnosticOwner::rule_dispatch("r");
-    let msg = String::from("alts 0, 1 share lookahead {TK_ID}");
-    ctx.warn(&owner, DiagnosticKind::OverlapTournament, msg);
-    ctx.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
-    ctx.warn(&owner, DiagnosticKind::OverlapTournament, String::from("alts 0, 1 share lookahead {TK_ID}"));
-    let diags = ctx.copy_diagnostics();
-    assert diags.len() == 1, `expected 1 deduped diagnostic, got ${diags.len()}`;
-    assert diags[0].owner == owner;
-}
-
-test "warn keeps distinct diagnostics" {
-    // Different owner or different message → distinct warnings, not
-    // collapsed. Two decision sites in the same rule are distinct owners:
-    // the owner is structured, so two that render alike do not collide.
-    let mut ctx = mk_ctx();
-    ctx.warn(&DiagnosticOwner::rule_dispatch("a"), DiagnosticKind::OverlapTournament, String::from(
-        "alts 0, 1 share lookahead {TK_ID}",
-    ));
-    ctx.warn(&DiagnosticOwner::rule_dispatch("b"), DiagnosticKind::OverlapTournament, String::from(
-        "alts 0, 1 share lookahead {TK_ID}",
-    ));
-    ctx.warn(&DiagnosticOwner::rule_dispatch("a"), DiagnosticKind::OverlapTournament, String::from(
-        "alts 0, 2 share lookahead {TK_X}",
-    ));
-    ctx.warn(
-        &DiagnosticOwner { rule: "a", site: DiagnosticSite::GeneralGroup(0) },
-        DiagnosticKind::OverlapTournament,
-        String::from("alts 0, 1 share lookahead {TK_ID}"),
-    );
-    let diags = ctx.copy_diagnostics();
-    assert diags.len() == 4, `expected 4 distinct diagnostics, got ${diags.len()}`;
 }
 
 test "precompute_scannability: mutually recursive defined rules are scannable" {

@@ -101,8 +101,8 @@ impl Collector<'_> {
         {
             return Some(type_id);
         }
-        // Lowered / demoted copies. `array_copy` is excluded on purpose: it is
-        // bulk buffer movement inside stdlib helpers, not a value-semantic copy.
+        // Lowered / demoted copies. `array_copy` and `array_move` are excluded
+        // on purpose: the stdlib writes them itself, so no remark can move one.
         match func.intrinsic() {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.

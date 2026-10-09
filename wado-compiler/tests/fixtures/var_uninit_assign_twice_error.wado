@@ -1,0 +1,14 @@
+// Error: an immutable variable declared without an initializer is assigned
+// at most once, on every path.
+
+export fn run() {
+    let x: i32;
+    if builtin::black_box(true) {
+        x = 1;
+    }
+    x = 2;
+    assert x == 2;
+}
+
+__DATA__
+{"compile_error": ":9:5: analysis error: cannot assign twice to immutable variable 'x'"}

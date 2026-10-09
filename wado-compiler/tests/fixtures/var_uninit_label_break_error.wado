@@ -1,0 +1,15 @@
+// Error: a `break` out of a labeled block skips the assignment after it.
+
+export fn run() {
+    let x: i32;
+    done: {
+        if builtin::black_box(true) {
+            break done;
+        }
+        x = 1;
+    }
+    assert x == 1;
+}
+
+__DATA__
+{"compile_error": ":11:12: analysis error: 'x' is used before initialization"}

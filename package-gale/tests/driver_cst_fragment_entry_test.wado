@@ -62,6 +62,27 @@ test "truncated trailing entry does not trap" {
     assert tree.contains("(stmt do x ;)"), `first island missing: ${tree}`;
 }
 
+// A fragment is what the start rule cannot derive, so the option acts only
+// where recovery is back at the root: an error a nested rule recovers from
+// reads the same with and without it, diagnostics included.
+fn assert_nested_recovery_unchanged<S: AsStrSlice>(input: S) {
+    let on = fe_on::parse(input);
+    let off = fe_off::parse(input);
+    let on_tree = fe_on::to_string_tree(&on);
+    let off_tree = fe_off::to_string_tree(&off);
+    assert on_tree == off_tree, `option changed a nested recovery:\n  on:  ${on_tree}\n  off: ${off_tree}`;
+    let on_diags = `${on.diagnostics:?}`;
+    let off_diags = `${off.diagnostics:?}`;
+    assert on_diags == off_diags, `option changed a nested diagnostic:\n  on:  ${on_diags}\n  off: ${off_diags}`;
+}
+
+test "a nested recovery is the same with the option" {
+    assert_nested_recovery_unchanged("main { do do ; }");
+    assert_nested_recovery_unchanged("main { do x do y ; }");
+    assert_nested_recovery_unchanged("main { set }");
+    assert_nested_recovery_unchanged("main { do ; }");
+}
+
 fn assert_balanced<S: AsStrSlice>(input: S) {
     let r = fe_on::parse(input);
     let mut depth = 0;

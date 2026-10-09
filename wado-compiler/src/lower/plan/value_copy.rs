@@ -38,13 +38,23 @@ pub fn copy_value_type_arg(func: &tir::FunctionRef) -> Option<TypeId> {
         .copied()
 }
 
-/// The element type `T` of a `builtin::array_clone::<T>` /
-/// `array_clone_prefix::<T>` call, or `None` for any other expression.
-fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
+/// Whether the builtin `intrinsic` copies its array's elements as values, so
+/// WIR build calls the element type's `$value_copy$` helper with no call edge
+/// to it.
+pub fn copies_array_elements(intrinsic: Option<&str>) -> bool {
+    matches!(
+        intrinsic,
+        Some("array_clone" | "array_clone_prefix" | "array_copy" | "array_fill")
+    )
+}
+
+/// The element type `T` of a builtin call [`copies_array_elements`] holds of,
+/// or `None` for any other expression.
+fn copied_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
     };
-    if !matches!(func.intrinsic(), Some("array_clone" | "array_clone_prefix")) {
+    if !copies_array_elements(func.intrinsic()) {
         return None;
     }
     func.monomorph_info
