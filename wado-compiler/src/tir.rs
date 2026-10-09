@@ -4252,16 +4252,19 @@ impl TypeTable {
             .clone();
         // A generic impl records the arguments it writes, which may read its
         // own parameters (`impl<T> Mix<T> for G<T>`), so each is compared at
-        // the instance's arguments. One that leaves a defaulted position out
-        // matches nothing here, and `bare` answers for it.
+        // the instance's arguments, defaults filled as `wanted`'s are.
         let reached = trait_args.and_then(|wanted| {
             answers.0.iter().find_map(|entry| {
-                let at: Vec<TypeId> = entry
-                    .written
-                    .iter()
-                    .map(|&arg| self.substitute_positional(arg, &type_args))
-                    .collect();
-                self.same_types(&at, wanted).then_some(entry.answer)
+                let at = TraitRef::new(
+                    *trait_key,
+                    entry
+                        .written
+                        .iter()
+                        .map(|&arg| self.substitute_positional(arg, &type_args))
+                        .collect(),
+                );
+                let filled = self.filled_trait_args(&at, concrete_id)?;
+                self.same_types(&filled, wanted).then_some(entry.answer)
             })
         });
         let def_type_id = reached.or_else(|| answers.bare())?;
