@@ -1,5 +1,5 @@
 //! A library export's parameter crosses the boundary under its kebab-case CM
-//! name, as the export itself does. A Wado parameter is snake_case, which the
+//! name, as the export itself does. A Wado parameter is `snake_case`, which the
 //! Component Model rejects as a name.
 
 use wado_compiler::OptLevel;
