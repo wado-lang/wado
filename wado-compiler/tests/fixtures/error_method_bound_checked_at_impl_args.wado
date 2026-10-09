@@ -1,0 +1,36 @@
+// A method's bound may name its impl's parameter, `T: Mix<R>`, which the
+// receiver settles. The bound is asked at what it settles `R` to, so the
+// report names `Mix<bool>` rather than the parameter.
+
+trait Mix<R> with () {
+    type Out;
+
+    fn mix(&self, r: R) -> Self::Out;
+}
+
+struct X {}
+
+impl Mix<i32> for X {
+    type Out = i32;
+
+    fn mix(&self, r: i32) -> i32 {
+        return r;
+    }
+}
+
+struct Holder<R> {
+    r: R,
+}
+
+impl<R> Holder<R> {
+    fn go<T: Mix<R, Out = Q>, Q>(&self, t: &T) -> Q {
+        return t.mix(self.r);
+    }
+}
+
+test {
+    let q = Holder::<bool> { r: true }.go(&X {});
+}
+
+__DATA__
+{ "compile_error": "type 'X' does not implement trait 'Mix<bool>' required by bound on 'T'" }

@@ -238,9 +238,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         let binders = &self.annotate_ctx.trait_ctx.type_params;
-        let fresh = PIN_NAMES
-            .iter()
-            .filter(|name| !binders.contains_key(**name) && **name != param_name);
+        let fresh = PIN_NAMES.iter().filter(|name| {
+            !binders.contains_key(**name) && **name != param_name && !self.names_type_at(None, name)
+        });
         let pinned = traits
             .iter()
             .zip(fresh)
@@ -414,6 +414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let family = table.resolve_trait_assoc_type_of_instance(
                                 self_type,
                                 &trait_key,
+                                None,
                                 &namespaced.name,
                             )?;
                             Some((trait_key, family))
@@ -1382,11 +1383,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        let type_args = bound.bound.type_args.clone();
-        let written: Vec<TypeId> = self.in_bound_frame(bound, space, |e| {
-            type_args.iter().map(|ty| e.resolve_type(ty)).collect()
-        });
+        let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
         self.trait_args_at(owner, base, &written)
+    }
+
+    /// The trait arguments `bound` writes, resolved in this frame.
+    pub(super) fn written_bound_args(&mut self, bound: &ast::TraitBound) -> Vec<TypeId> {
+        bound
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect()
     }
 
     /// `owner` reached on `base` at `written`, defaults filling the rest. A
@@ -1709,7 +1716,8 @@ pub(super) struct DeclaringSpace {
 }
 
 /// The names an ambiguity report offers for the parameters it pins each
-/// associated type to, those the site already binds skipped.
+/// associated type to, those the site already binds or that name a type there
+/// skipped.
 const PIN_NAMES: [&str; 7] = ["P", "Q", "R", "S", "U", "V", "W"];
 
 /// `spelled` with `assoc` pinned to `param`: `Mix<i32>` becomes

@@ -225,13 +225,17 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
 /// declaring item's parameter space, and become what the site wrote there.
 /// `None` where one stays a binder, which belongs to the site's own caller.
 fn asked_at(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
-    let asked = trait_.rewrite_args(&|name| {
-        at_call
-            .iter()
+    let asked = spelled_at(&trait_, at_call);
+    (!asked.args_mention_binder()).then_some(asked)
+}
+
+/// `trait_` with each binder `at` settles replaced by what it settles it to.
+pub(super) fn spelled_at(trait_: &FqTraitName, at: &[(FqTypeName, FqTypeName)]) -> FqTraitName {
+    trait_.rewrite_args(&|name| {
+        at.iter()
             .find(|(param, _)| param == name)
             .map(|(_, arg)| arg.clone())
-    });
-    (!asked.args_mention_binder()).then_some(asked)
+    })
 }
 
 /// Whether `actual` is the type a constraint written `expected` names. A
@@ -1492,7 +1496,7 @@ impl TypeSystem {
             bound.pinned_to_receiver.iter().all(|assoc| {
                 self.type_table
                     .borrow_mut()
-                    .resolve_trait_assoc_type_of_instance(subject, &trait_, assoc)
+                    .resolve_trait_assoc_type_of_instance(subject, &trait_, None, assoc)
                     .is_none_or(|actual| actual == subject)
             })
         })
@@ -2166,7 +2170,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        self.enforce_type_arg_bounds(&type_params, type_args, None, span);
+        self.enforce_type_arg_bounds(&type_params, type_args, &[], None, span);
     }
 
     /// Check the bounds on a generic type declaration's type arguments, for
@@ -2213,15 +2217,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// that is one type in the frame is enforced: a rigid parameter meets a
     /// bound from the bounds in force on it (spec-traits.md §Eligibility).
     /// `self_binding` is what a bound's `Self::Assoc` projects off where the
-    /// call binds one.
+    /// call binds one, and `impl_args` what the receiver binds the enclosing
+    /// impl's parameters to, which a method's bound may name.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
+        impl_args: &[(String, TypeId)],
         self_binding: Option<SelfBinding>,
         span: Span,
     ) {
-        let at_call = self.tysys.call_site_types(params, type_args);
+        let at_call = self.tysys.call_site_types(params, type_args, impl_args);
         let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         for (i, param) in params.iter().enumerate() {
             let Some(&type_arg) = type_args.get(i) else {
@@ -2235,7 +2241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A hole carries its own slot's bounds to finalize; this slot's
                 // go with an answer an enclosing call is still to give.
                 if self.awaits_pending_call(type_arg) {
-                    self.defer_bounds_to_answer(param, type_arg, self_binding, span);
+                    self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, span);
                 }
                 continue;
             }
@@ -2388,7 +2394,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 else {
                     return;
                 };
-                self.enforce_type_arg_bounds(&params, &type_args, None, span);
+                self.enforce_type_arg_bounds(&params, &type_args, &[], None, span);
             }
             Owed::TraitRefs {
                 type_arg,
@@ -2596,8 +2602,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let registered = self
                 .tysys
                 .type_table
-                .borrow()
-                .resolve_assoc_type_of_trait_at(
+                .borrow_mut()
+                .resolve_trait_assoc_type_of_instance(
                     type_arg,
                     &trait_,
                     trait_args.as_deref(),
@@ -2657,13 +2663,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return None;
         }
-        let written: Vec<TypeId> = self.under_self_binding(self_binding, |e| {
-            bound
-                .type_args
-                .iter()
-                .map(|ty| e.resolve_type(ty))
-                .collect()
-        });
+        let written = self.under_self_binding(self_binding, |e| e.written_bound_args(bound));
         self.trait_args_at(trait_, type_arg, &written)
     }
 
@@ -2697,7 +2697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut table = self.tysys.type_table.borrow_mut();
         if let Some(trait_) = binding.declaring_trait
             && let Some(resolved) =
-                table.resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, assoc)
+                table.resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, None, assoc)
         {
             return Some(resolved);
         }
@@ -3220,17 +3220,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// Each parameter with the type a call writes for it, as [`asked_at`] reads them.
     /// A parameter the call leaves parametric contributes nothing, so a bound keeps its binder.
-    fn call_site_types(
+    pub(super) fn call_site_types(
         &self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
+        impl_args: &[(String, TypeId)],
     ) -> Vec<(FqTypeName, FqTypeName)> {
         let tt = self.type_table.borrow();
         params
             .iter()
-            .zip(type_args)
-            .filter(|(_, arg)| !tt.contains_type_param(**arg))
-            .map(|(param, &arg)| (FqTypeName::binder(&param.name), tt.fq_type_name(arg)))
+            .map(|param| param.name.as_str())
+            .zip(type_args.iter().copied())
+            .chain(impl_args.iter().map(|(name, arg)| (name.as_str(), *arg)))
+            .filter(|(_, arg)| !tt.contains_type_param(*arg))
+            .map(|(name, arg)| (FqTypeName::binder(name), tt.fq_type_name(arg)))
             .collect()
     }
 

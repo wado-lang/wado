@@ -50,6 +50,39 @@ impl Solo for X {
     }
 }
 
+/// Generic, so its impls are found by the arguments they write rather than by
+/// the instance they fill.
+struct G<T> {
+    t: T,
+}
+
+impl<T> Mix<i32> for G<T> {
+    type Out = A;
+
+    fn mix(&self, r: i32) -> A {
+        return A { n: r };
+    }
+}
+
+impl<T> Mix<String> for G<T> {
+    type Out = B;
+
+    fn mix(&self, r: String) -> B {
+        return B { s: r };
+    }
+}
+
+/// The method's bound names the impl's `R`, which the receiver settles.
+struct Holder<R> {
+    r: R,
+}
+
+impl<R> Holder<R> {
+    fn go<T: Mix<R, Out = Q>, Q>(&self, t: &T) -> Q {
+        return t.mix(self.r);
+    }
+}
+
 fn second<T: Mix<String, Out = Q>, Q>(t: &T) -> Q {
     return t.mix("s");
 }
@@ -84,6 +117,15 @@ test "two pins of one trait each read their own impl" {
 test "a generic caller forwards its own projection" {
     assert forwards_pinned(&X {}).s == "s";
     assert forwards_unpinned(&X {}).s == "s";
+}
+
+test "a generic owner reads the impl its bound's arguments reach" {
+    assert second(&G { t: 1 }).s == "s";
+}
+
+test "a method's bound reads the impl parameter at the receiver" {
+    assert Holder::<String> { r: "s" }.go(&X {}).s == "s";
+    assert Holder::<i32> { r: 4 }.go(&X {}).n == 4;
 }
 
 test "a turbofish naming every parameter agrees" {

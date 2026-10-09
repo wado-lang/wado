@@ -21,7 +21,7 @@ use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiation};
-use super::method_lookup::MethodInferenceInput;
+use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
 use super::scope::ScopedBound;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
@@ -777,6 +777,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_id: self.tysys.get_base_type(receiver),
                     declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
                 }),
+                impl_args: &settled_impl_args(&impl_type_bindings),
             },
             expected_type.map(|expected| ExpectedReturn {
                 declared: return_type,
@@ -804,7 +805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Runs only where a value default names one of the method's own slots.
         // `Iterator::collect` would otherwise resolve `= List<Self::Item>` here,
         // before the receiver's associated types are registered.
-        let mut default_type_bindings = impl_type_bindings;
+        let mut default_type_bindings = impl_type_bindings.clone();
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
             let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
@@ -910,6 +911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_return_type: expected_type,
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: Some(callee_module.clone()),
+                impl_bindings: &impl_type_bindings,
                 span,
             },
         );
