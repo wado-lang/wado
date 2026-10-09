@@ -31,8 +31,8 @@ use crate::world_registry::WorldRegistry;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
-    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo,
-    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams,
+    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use super::{AbstractSelectionCache, Elaborator};
@@ -70,9 +70,10 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::{exported_interfaces, module_host_leaf_imports};
 
-/// What every trait bound a module writes, wherever it stands, gets wrong in
-/// the associated types it binds: one its trait does not declare, or one
-/// taking parameters, which a family is until a projection gives it some.
+/// What every trait bound a module writes, wherever it stands, gets wrong: a
+/// type argument past its trait's parameters, or an associated type its trait
+/// does not declare or that takes parameters, which a family is until a
+/// projection gives it some.
 struct BoundBindingsChecked<'a> {
     resolutions: &'a Resolutions,
     trait_env: &'a TraitEnv,
@@ -85,6 +86,18 @@ impl AstVisitor for BoundBindingsChecked<'_> {
             let Some(trait_) = self.resolutions.bound_decl(bound) else {
                 continue;
             };
+            // As for a type application, a pack swallows any surplus.
+            if let Some(header) = self.trait_env.decl_header_of(&trait_) {
+                let params = RealTypeParams::borrowed(&header.type_params);
+                if !params.iter().any(|p| p.is_pack) && bound.type_args.len() > params.len() {
+                    self.errors.push(TypeError::TypeArgumentCount {
+                        name: bound.name.clone(),
+                        expected: params.len(),
+                        found: bound.type_args.len(),
+                        span: bound.span,
+                    });
+                }
+            }
             for binding in &bound.assoc_types {
                 let declared = self
                     .trait_env

@@ -1,0 +1,14 @@
+// A bound writes no more type arguments than its trait declares.
+
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+fn show_it<T: Show<i32>>(t: &T) -> i32 {
+    return t.show();
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":7:15: type error: `Show` takes no type arguments, but 1 was supplied", "compile_error_codes": ["ARITY_MISMATCH"]}

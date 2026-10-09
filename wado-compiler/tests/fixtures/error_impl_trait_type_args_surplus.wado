@@ -1,0 +1,22 @@
+// A trait reference writes no more type arguments than the trait declares, in
+// an impl header as in a bound. The surplus used to be dropped, so the impl
+// implemented a trait other than the one it wrote.
+
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+struct Point {}
+
+impl Show<i32> for Point {
+    fn show(&self) -> i32 {
+        return 0;
+    }
+}
+
+export fn run() {
+    let _ = Point {}.show();
+}
+
+__DATA__
+{"compile_error": ":11:6: type error: `Show` takes no type arguments, but 1 was supplied", "compile_error_codes": ["ARITY_MISMATCH"]}

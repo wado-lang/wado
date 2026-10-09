@@ -188,6 +188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut scope = self.enter_impl_scope(impl_block);
                 scope.enforce_impl_assoc_type_bounds(impl_block);
                 scope.enforce_impl_supertraits(impl_block);
+                scope.enforce_impl_method_signatures(impl_block);
             }
         }
     }

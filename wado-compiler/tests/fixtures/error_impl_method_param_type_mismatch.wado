@@ -1,0 +1,25 @@
+// An impl method takes what its trait declares. A call through a bound is typed
+// against the trait, so an impl taking another type receives a value it was
+// never written for.
+
+trait Scale with () {
+    fn scale(&self, by: u32) -> i32;
+}
+
+struct Meter {
+    v: i32,
+}
+
+impl Scale for Meter {
+    fn scale(&self, by: i32) -> i32 {
+        return self.v * by;
+    }
+}
+
+export fn run() {
+    let m = Meter { v: 2 };
+    let _ = m.scale(3);
+}
+
+__DATA__
+{"compile_error": ":14:8: type error: method `scale` takes `i32` for parameter `by`, but `Scale` declares `u32`", "compile_error_codes": ["TYPE_MISMATCH"]}
