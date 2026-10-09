@@ -674,7 +674,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Stmt::Continue(_) => self.jump(None, true),
             Stmt::Assert(assert_stmt) => self.bind_assert(assert_stmt)?,
             Stmt::LabeledBlock(labeled_block) => {
-                self.bind_labeled_block(&labeled_block.label, &labeled_block.block)?
+                self.bind_labeled_block(&labeled_block.label, &labeled_block.block)?;
             }
             // Local type/impl declaration: only its methods (impl/trait) have
             // local scopes to bind, same as a top-level item.
