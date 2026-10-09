@@ -3705,6 +3705,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: struct_lit.span,
                 type_args: &[],
                 self_binding: None,
+                impl_args: &[],
             },
         );
         let open = self
@@ -4649,6 +4650,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A struct literal has no turbofish; its fields name the slots.
                 type_args: &[],
                 self_binding: None,
+                impl_args: &[],
             },
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();

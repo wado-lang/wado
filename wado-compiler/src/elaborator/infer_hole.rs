@@ -11,7 +11,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::infer::unify;
-use super::trait_query::SelfBinding;
+use super::trait_query::{SelfBinding, spelled_at};
 use super::types::TypeError;
 use super::tysys::TypeSystem;
 use crate::ast::{AstId, GenericParam};
@@ -106,7 +106,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The bounds `param` declares, each as the trait its own site names plus
-    /// the spelling that site wrote.
+    /// the spelling that site wrote, with the enclosing impl's parameters at
+    /// `impl_args`, which the solution is checked against long after the
+    /// receiver that settled them is gone.
     ///
     /// A bound whose site reaches no declaration is dropped: it is diagnosed
     /// where it was written, and there is nothing to enforce a solution
@@ -115,15 +117,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         param: &GenericParam,
         self_binding: Option<SelfBinding>,
+        impl_args: &[(String, TypeId)],
     ) -> Vec<DeclaredBound> {
+        let at_impl = self.tysys.call_site_types(&[], &[], impl_args);
         param
             .real_bounds()
             .into_iter()
             .filter_map(|b| {
                 let trait_ = self.tysys.bound_written(&b)?;
+                let trait_ = self.bound_trait_at_args(trait_, &b, &[], &[], self_binding);
                 Some(DeclaredBound {
-                    trait_: self.bound_trait_at_args(trait_, &b, &[], &[], self_binding),
-                    written: b.name.clone(),
+                    trait_: spelled_at(&trait_, &at_impl),
+                    written: b.name,
                 })
             })
             .collect()
@@ -187,9 +192,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: &GenericParam,
         type_arg: TypeId,
         self_binding: Option<SelfBinding>,
+        impl_args: &[(String, TypeId)],
         span: Span,
     ) {
-        let bounds = self.declared_bounds(param, self_binding);
+        let bounds = self.declared_bounds(param, self_binding, impl_args);
         if bounds.is_empty() {
             return;
         }

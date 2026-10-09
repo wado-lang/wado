@@ -1,0 +1,47 @@
+// A bound's binding (`T: Mix<i32, Out = P>`) is checked against the impl the
+// bound's own arguments reach. The check read the trait without its arguments,
+// found its two impls disagreeing, and skipped, so `P = B` was accepted where
+// `impl Mix<i32>` binds `Out = A`.
+
+trait Mix<R> with () {
+    type Out;
+
+    fn mix(&self, r: R) -> Self::Out;
+}
+
+struct A {
+    n: i32,
+}
+
+struct B {
+    s: String,
+}
+
+struct X {}
+
+impl Mix<i32> for X {
+    type Out = A;
+
+    fn mix(&self, r: i32) -> A {
+        return A { n: r };
+    }
+}
+
+impl Mix<String> for X {
+    type Out = B;
+
+    fn mix(&self, r: String) -> B {
+        return B { s: r };
+    }
+}
+
+fn pinned<T: Mix<i32, Out = P>, P>(t: &T, p: P) -> P {
+    return p;
+}
+
+test {
+    let r = pinned(&X {}, B { s: "x" });
+}
+
+__DATA__
+{ "compile_error": "type 'X' does not satisfy the associated type 'Mix::Out = B': it is 'A'" }

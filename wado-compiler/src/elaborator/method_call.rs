@@ -21,7 +21,7 @@ use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiation};
-use super::method_lookup::MethodInferenceInput;
+use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
 use super::scope::ScopedBound;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
@@ -760,6 +760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .substitute_newtype_in_type(return_type, base_type_id, newtype_id);
         }
 
+        let impl_args = settled_impl_args(&impl_type_bindings);
         // Only the method's own slots: the lookup instantiated the declaring
         // level already, so `Self::Item` is concrete here and `Acc` is not.
         let mut args: Vec<TypeId> = self.resolve_args_through_slots(
@@ -777,6 +778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_id: self.tysys.get_base_type(receiver),
                     declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
                 }),
+                impl_args: &impl_args,
             },
             expected_type.map(|expected| ExpectedReturn {
                 declared: return_type,
@@ -910,6 +912,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 expected_return_type: expected_type,
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: Some(callee_module.clone()),
+                impl_args: &impl_args,
                 span,
             },
         );

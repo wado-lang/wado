@@ -1,0 +1,137 @@
+// A type parameter pinned by a bound's binding (`T: Mix<String, Out = Q>`) is
+// inferred from the impl the bound's own arguments reach. The projection read
+// the trait without its arguments, and when the impls disagreed it fell back to
+// a lookup by name alone, which took `Solo::Out`: `Q` became `A`, so `.s`
+// named no field.
+
+trait Mix<R> with () {
+    type Out;
+
+    fn mix(&self, r: R) -> Self::Out;
+}
+
+trait Solo with () {
+    type Out;
+
+    fn solo(&self) -> Self::Out;
+}
+
+struct A {
+    n: i32,
+}
+
+struct B {
+    s: String,
+}
+
+struct X {}
+
+impl Mix<i32> for X {
+    type Out = A;
+
+    fn mix(&self, r: i32) -> A {
+        return A { n: r };
+    }
+}
+
+impl Mix<String> for X {
+    type Out = B;
+
+    fn mix(&self, r: String) -> B {
+        return B { s: r };
+    }
+}
+
+impl Solo for X {
+    type Out = A;
+
+    fn solo(&self) -> A {
+        return A { n: 0 };
+    }
+}
+
+/// Generic, so its impls are found by the arguments they write rather than by
+/// the instance they fill.
+struct G<T> {
+    t: T,
+}
+
+impl<T> Mix<i32> for G<T> {
+    type Out = A;
+
+    fn mix(&self, r: i32) -> A {
+        return A { n: r };
+    }
+}
+
+impl<T> Mix<String> for G<T> {
+    type Out = B;
+
+    fn mix(&self, r: String) -> B {
+        return B { s: r };
+    }
+}
+
+/// The method's bound names the impl's `R`, which the receiver settles.
+struct Holder<R> {
+    r: R,
+}
+
+impl<R> Holder<R> {
+    fn go<T: Mix<R, Out = Q>, Q>(&self, t: &T) -> Q {
+        return t.mix(self.r);
+    }
+}
+
+fn second<T: Mix<String, Out = Q>, Q>(t: &T) -> Q {
+    return t.mix("s");
+}
+
+fn both<T: Mix<i32, Out = P> + Mix<String, Out = Q>, P, Q>(t: &T) -> [P, Q] {
+    return [t.mix(1), t.mix("s")];
+}
+
+/// The owner is the caller's own parameter, so `Q` is its projection, which
+/// the caller's bound pins.
+fn forwards_pinned<U: Mix<i32, Out = P> + Mix<String, Out = W>, P, W>(u: &U) -> W {
+    let w = second(u);
+    return w;
+}
+
+/// No pin: `Q` stays the projection `U::Out`.
+fn forwards_unpinned<U: Mix<String>>(u: &U) -> U::Out {
+    let w = second(u);
+    return w;
+}
+
+test "one pin reads the impl its bound's arguments reach" {
+    assert second(&X {}).s == "s";
+}
+
+test "two pins of one trait each read their own impl" {
+    let r = both(&X {});
+    assert r.0.n == 1;
+    assert r.1.s == "s";
+}
+
+test "a generic caller forwards its own projection" {
+    assert forwards_pinned(&X {}).s == "s";
+    assert forwards_unpinned(&X {}).s == "s";
+}
+
+test "a generic owner reads the impl its bound's arguments reach" {
+    assert second(&G { t: 1 }).s == "s";
+}
+
+test "a method's bound reads the impl parameter at the receiver" {
+    assert Holder::<String> { r: "s" }.go(&X {}).s == "s";
+    assert Holder::<i32> { r: 4 }.go(&X {}).n == 4;
+}
+
+test "a turbofish naming every parameter agrees" {
+    let r = both::<X, A, B>(&X {});
+    assert r.1.s == "s";
+}
+
+__DATA__
+{"test": {}}

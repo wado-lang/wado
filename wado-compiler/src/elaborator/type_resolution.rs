@@ -207,9 +207,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if declaring.len() < 2 {
             return false;
         }
-        // Bounds that all pin the name to one type name one answer between
-        // them: `T: Add<Output = T> + Mul<Output = T>` is not a coin toss,
-        // where `Add<Output = Cm> + Mul<Output = Area>` is.
+        // Bounds pinning the name to one type still make `T::Output` a second
+        // spelling of it, so the report names the type to write instead.
         let pins: Vec<Option<FqTypeName>> = declaring
             .iter()
             .map(|bound| {
@@ -220,18 +219,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|constraint| written_type_arg(&constraint.ty, &self.tysys.resolutions))
             })
             .collect();
-        if pins.iter().all(|pin| pin.is_some() && *pin == pins[0]) {
-            return false;
-        }
+        let agreed = pins
+            .iter()
+            .all(|pin| pin.is_some() && *pin == pins[0])
+            .then(|| pins[0].as_ref().map(FqTypeName::to_display))
+            .flatten();
         let family = declaring.iter().any(|bound| {
             self.trait_decl_of(bound)
                 .and_then(|decl| self.tysys.trait_env.assoc_type_decl(&decl, assoc_name))
                 .is_some_and(|decl| !decl.type_params.is_empty())
         });
+        let traits: Vec<String> = declaring
+            .iter()
+            .map(|bound| {
+                self.tysys
+                    .bound_written(bound)
+                    .map_or_else(|| bound.name.clone(), |named| named.to_display())
+            })
+            .collect();
+        let binders = &self.annotate_ctx.trait_ctx.type_params;
+        let fresh = PIN_NAMES.iter().filter(|name| {
+            !binders.contains_key(**name) && **name != param_name && !self.names_type_at(None, name)
+        });
+        let pinned = traits
+            .iter()
+            .zip(fresh)
+            .map(|(spelled, fresh)| pin_assoc(spelled, assoc_name, fresh))
+            .collect();
         let _ = self.emit(TypeError::AmbiguousAssocType {
             assoc: assoc_name.to_string(),
             param: param_name.to_string(),
-            traits: declaring.iter().map(|bound| bound.name.clone()).collect(),
+            traits,
+            pinned,
+            agreed,
             family,
             span,
         });
@@ -394,6 +414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let family = table.resolve_trait_assoc_type_of_instance(
                                 self_type,
                                 &trait_key,
+                                None,
                                 &namespaced.name,
                             )?;
                             Some((trait_key, family))
@@ -1362,17 +1383,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         owner: DefId,
     ) -> Option<Vec<TypeId>> {
-        let type_args = bound.bound.type_args.clone();
-        let written: Vec<TypeId> = self.in_bound_frame(bound, space, |e| {
-            type_args.iter().map(|ty| e.resolve_type(ty)).collect()
-        });
+        let written = self.in_bound_frame(bound, space, |e| e.written_bound_args(&bound.bound));
         self.trait_args_at(owner, base, &written)
+    }
+
+    /// The trait arguments `bound` writes, resolved in this frame.
+    pub(super) fn written_bound_args(&mut self, bound: &ast::TraitBound) -> Vec<TypeId> {
+        bound
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect()
     }
 
     /// `owner` reached on `base` at `written`, defaults filling the rest. A
     /// default is written in the trait, where `Self` is `base`. `None` where an
     /// argument names no type.
-    fn trait_args_at(
+    pub(super) fn trait_args_at(
         &mut self,
         owner: DefId,
         base: TypeId,
@@ -1686,6 +1713,20 @@ pub(super) struct DeclaringSpace {
     pub(super) space: ParamSpace,
     /// The parameters it does not, which a written type must not read.
     unknown: Vec<String>,
+}
+
+/// The names an ambiguity report offers for the parameters it pins each
+/// associated type to, those the site already binds or that name a type there
+/// skipped.
+const PIN_NAMES: [&str; 7] = ["P", "Q", "R", "S", "U", "V", "W"];
+
+/// `spelled` with `assoc` pinned to `param`: `Mix<i32>` becomes
+/// `Mix<i32, Out = P>`.
+fn pin_assoc(spelled: &str, assoc: &str, param: &str) -> String {
+    match spelled.strip_suffix('>') {
+        Some(open) => format!("{open}, {assoc} = {param}>"),
+        None => format!("{spelled}<{assoc} = {param}>"),
+    }
 }
 
 impl DeclaringSpace {

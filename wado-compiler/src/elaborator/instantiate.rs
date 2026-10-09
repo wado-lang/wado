@@ -59,6 +59,9 @@ pub(super) struct Instantiation<'a> {
     /// The receiver a bound's `Self::Assoc` projects off, where the site has
     /// one. A free function has none, and `Self` names nothing there.
     pub(super) self_binding: Option<SelfBinding>,
+    /// What the receiver settles the enclosing impl's parameters to, which a
+    /// method's bound may name. Empty off a method.
+    pub(super) impl_args: &'a [(String, TypeId)],
 }
 
 /// A declaration's slots rewritten into one use site's variables.
@@ -207,7 +210,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_args_against_params(args_ast, ctx, param_types, None, None);
         }
         let inst = self.instantiate(slots, of);
-        self.record_slot_bounds(&inst, own_params, of.self_binding, of.span);
+        self.record_slot_bounds(&inst, own_params, of.self_binding, of.impl_args, of.span);
         let param_types = self.instantiate_types(param_types, &inst);
         let ret = ret.map(|ret| ExpectedReturn {
             declared: self.instantiate_type(ret.declared, &inst),
@@ -258,6 +261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inst: &Instantiated,
         params: &[GenericParam],
         self_binding: Option<SelfBinding>,
+        impl_args: &[(String, TypeId)],
         span: Span,
     ) {
         for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {
@@ -267,7 +271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if diag.is_none() {
                 continue;
             }
-            let bounds = self.declared_bounds(param, self_binding);
+            let bounds = self.declared_bounds(param, self_binding, impl_args);
             self.attach_infer_var_bounds(var, param.name.clone(), bounds, span);
         }
     }

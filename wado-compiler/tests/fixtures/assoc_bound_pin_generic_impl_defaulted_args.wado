@@ -1,0 +1,54 @@
+// A generic owner's impl records only the trait arguments it writes, while a
+// bound reaches the trait with its defaults filled: `Mix<String>` is
+// `Mix<String, i32>`. The two are compared with the impl's defaults filled
+// too, or neither impl matched and `Q` could not be inferred.
+
+trait Mix<R, S = i32> with () {
+    type Out;
+
+    fn mix(&self, r: R) -> Self::Out;
+}
+
+struct A {
+    n: i32,
+}
+
+struct B {
+    s: String,
+}
+
+struct G<T> {
+    t: T,
+}
+
+impl<T> Mix<i32> for G<T> {
+    type Out = A;
+
+    fn mix(&self, r: i32) -> A {
+        return A { n: r };
+    }
+}
+
+impl<T> Mix<String> for G<T> {
+    type Out = B;
+
+    fn mix(&self, r: String) -> B {
+        return B { s: r };
+    }
+}
+
+fn first<T: Mix<i32, Out = Q>, Q>(t: &T) -> Q {
+    return t.mix(3);
+}
+
+fn second<T: Mix<String, Out = Q>, Q>(t: &T) -> Q {
+    return t.mix("s");
+}
+
+test {
+    assert first(&G { t: 1 }).n == 3;
+    assert second(&G { t: 1 }).s == "s";
+}
+
+__DATA__
+{"test": {}}

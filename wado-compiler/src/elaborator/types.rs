@@ -764,6 +764,11 @@ pub enum TypeError {
         param: String,
         /// The bounds that declare it, in bound-list order.
         traits: Vec<String>,
+        /// Each of `traits` with the associated type pinned to a parameter of
+        /// its own, the way out the report suggests.
+        pinned: Vec<String>,
+        /// The type every bound pins it to, where they agree: what to write.
+        agreed: Option<String>,
         /// Whether it takes parameters of its own, which no bound can pin, so
         /// binding it is no way out.
         family: bool,
@@ -1980,6 +1985,8 @@ impl TypeError {
                 assoc,
                 param,
                 traits,
+                pinned,
+                agreed,
                 family,
                 span,
             } => {
@@ -1988,12 +1995,16 @@ impl TypeError {
                     .map(|t| format!("'{t}'"))
                     .collect::<Vec<_>>()
                     .join(" and ");
-                let message = if *family {
-                    format!("ambiguous associated type '{param}::{assoc}': declared by {declared}")
+                let head =
+                    format!("ambiguous associated type '{param}::{assoc}': declared by {declared}");
+                let message = if let Some(agreed) = agreed {
+                    format!("{head}; each pins it to '{agreed}', so write '{agreed}'")
+                } else if *family || pinned.len() < traits.len() {
+                    head
                 } else {
                     format!(
-                        "ambiguous associated type '{param}::{assoc}': declared by {declared}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
-                        traits.first().map(String::as_str).unwrap_or(assoc)
+                        "{head}; pin each to a type parameter of its own, e.g. '{param}: {}', and write that parameter",
+                        pinned.join(" + ")
                     )
                 };
                 (Code::AmbiguousCandidate, message, *span)

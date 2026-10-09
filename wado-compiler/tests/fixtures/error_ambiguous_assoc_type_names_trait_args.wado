@@ -1,0 +1,19 @@
+// `T::Out` under one trait bounded at two argument lists names two types, and
+// Wado has no qualified form to say which. The report names each bound with its
+// arguments, and suggests pinning each to a parameter of its own, skipping a
+// name the signature already binds (`P`) and one that names a type (`Q`).
+
+trait Mix<R> with () {
+    type Out;
+
+    fn mix(&self, r: R) -> Self::Out;
+}
+
+struct Q {}
+
+fn both<T: Mix<i32> + Mix<String>, P>(t: &T, p: P) -> T::Out {
+    return t.mix(1);
+}
+
+__DATA__
+{ "compile_error": "ambiguous associated type 'T::Out': declared by 'Mix<i32>' and 'Mix<String>'; pin each to a type parameter of its own, e.g. 'T: Mix<i32, Out = R> + Mix<String, Out = S>', and write that parameter" }

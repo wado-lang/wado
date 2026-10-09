@@ -3772,9 +3772,12 @@ impl TypeTable {
         // answered exactly, so two traits declaring the same associated-type
         // name on one implementor stay apart (WEP-2026-08-12). The name-keyed
         // forms below give up on that case rather than choosing.
-        if let Some(resolved) =
-            self.resolve_trait_assoc_type_of_instance(concrete, owning_trait, assoc_name)
-        {
+        if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
+            concrete,
+            owning_trait,
+            trait_args,
+            assoc_name,
+        ) {
             return Some(resolved);
         }
         if let Some(resolved) =
@@ -4003,22 +4006,6 @@ impl TypeTable {
             .then_some((trait_decl, def_id))
     }
 
-    /// [`Self::generic_assoc_type_def`] for a caller that knows the trait.
-    fn generic_assoc_type_def_of_trait(
-        &self,
-        base_decl: AstId,
-        trait_key: &DefId,
-        assoc_name: &str,
-    ) -> Option<TypeId> {
-        self.generic_assoc_type_defs
-            .get(&GenericAssocTypeKey {
-                target_decl: base_decl,
-                trait_decl: *trait_key,
-                assoc_name: assoc_name.to_string(),
-            })?
-            .bare()
-    }
-
     /// Register associated-type resolutions for a freshly monomorphized struct.
     /// A [`ResolvedType::Struct`] carries no type args, so `Foo<…>::Item` can no
     /// longer go through [`Self::resolve_generic_assoc_type`]; each definition on
@@ -4238,20 +4225,49 @@ impl TypeTable {
     /// trait declares the associated type. The untyped form scans every trait
     /// and gives up when two disagree, so a name several traits share — the
     /// reflection kinds all spell their member channel `Members` — is only
-    /// unambiguous here.
+    /// unambiguous here. `trait_args`, where known, pick the impl among the
+    /// trait's instantiations, as [`Self::resolve_assoc_type_of_trait_at`]
+    /// does.
     pub fn resolve_trait_assoc_type_of_instance(
         &mut self,
         concrete_id: TypeId,
         trait_key: &DefId,
+        trait_args: Option<&[TypeId]>,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        if let Some(resolved) = self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
+        if let Some(resolved) =
+            self.resolve_assoc_type_of_trait_at(concrete_id, trait_key, trait_args, assoc_name)
         {
             return Some(resolved);
         }
         let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
-        let def_type_id = self.generic_assoc_type_def_of_trait(decl, trait_key, assoc_name)?;
+        let answers = self
+            .generic_assoc_type_defs
+            .get(&GenericAssocTypeKey {
+                target_decl: decl,
+                trait_decl: *trait_key,
+                assoc_name: assoc_name.to_string(),
+            })?
+            .clone();
+        // A generic impl records the arguments it writes, which may read its
+        // own parameters (`impl<T> Mix<T> for G<T>`), so each is compared at
+        // the instance's arguments, defaults filled as `wanted`'s are.
+        let reached = trait_args.and_then(|wanted| {
+            answers.0.iter().find_map(|entry| {
+                let at = TraitRef::new(
+                    *trait_key,
+                    entry
+                        .written
+                        .iter()
+                        .map(|&arg| self.substitute_positional(arg, &type_args))
+                        .collect(),
+                );
+                let filled = self.filled_trait_args(&at, concrete_id)?;
+                self.same_types(&filled, wanted).then_some(entry.answer)
+            })
+        });
+        let def_type_id = reached.or_else(|| answers.bare())?;
         Some(self.substitute_positional(def_type_id, &type_args))
     }
 
@@ -7604,6 +7620,7 @@ impl TypeTable {
             let Some(concrete) = self.resolve_trait_assoc_type_of_instance(
                 source,
                 &projection.trait_,
+                None,
                 &projection.assoc,
             ) else {
                 continue;
