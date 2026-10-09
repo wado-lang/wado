@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791535353819,
+  "lastUpdate": 1791555800568,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65617,6 +65617,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/205172c9d411b6f5e2a7c4c40c2e169efbbe7b94"
         },
         "date": 1791535352878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d715283eae5c7912ecaa11b69c621b573862fa22",
+          "message": "Merge pull request #2317 from wado-lang/todo/21-numeric-ops\n\nfeat: shift by the operand's own type, and warn where literals already decide a wrap or trap",
+          "timestamp": "2026-10-09T23:05:00+09:00",
+          "tree_id": "5deb9a3f0495c912ad4f529a841c8d0abca8479c",
+          "url": "https://github.com/wado-lang/wado/commit/d715283eae5c7912ecaa11b69c621b573862fa22"
+        },
+        "date": 1791555800169,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
