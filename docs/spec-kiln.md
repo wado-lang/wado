@@ -400,10 +400,10 @@ let text = match read_text(file.content) {
 A generator that needs only a prefix reads the stream itself and drops it early.
 Loam reads a checkpoint only as far as its header ends:
 
-<!-- {"source": "package-loam/src/generator.wado"} -->
+<!-- {"source": "package-loam/src/compile.wado"} -->
 
 ```wado
-fn read_header(content: Stream<u8>) -> ByteList {
+pub fn read_header(content: Stream<u8>) -> ByteList {
     let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
     loop {
         let chunk = content.read(HEADER_CHUNK);
@@ -565,7 +565,7 @@ Loam reports a successful check as a hint:
 KilnHost::emit_diagnostic(KilnDiagnostic {
     level: DiagnosticLevel::Hint,
     span: null,
-    message: `loam: ${graph.name}: ${graph.nodes.len()} operators checked`,
+    message: `loam: ${model.graph.name}: ${model.graph.nodes.len()} operators checked`,
 });
 ```
 
