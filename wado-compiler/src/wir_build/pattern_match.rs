@@ -329,6 +329,17 @@ impl FunctionTranslator<'_, '_> {
                 _ => None,
             })
             .collect();
+        // Each scalar result lands in its local as it is, so none can be a `Box`.
+        for &local_index in bindings.iter().flatten() {
+            let local_type = self.tir_func.locals[local_index as usize].type_id;
+            assert!(
+                !matches!(
+                    self.ctx.type_id_to_wir_type(self.type_table, local_type),
+                    WirType::Ref { .. }
+                ),
+                "a multivalue builtin binds a boxed local"
+            );
+        }
         let locals: Vec<Option<String>> = bindings
             .iter()
             .map(|b| b.map(|local_index| self.local_name(local_index)))
@@ -377,30 +388,38 @@ impl FunctionTranslator<'_, '_> {
                         continue;
                     }
                     if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
-                        let local_name = self.local_name(*local_index);
                         let field_name_str = format!("{i}");
                         let field_result_ty = self.struct_field_wir_type(&type_id, &field_name_str);
-                        instrs.push(WirInstr::LocalSet {
-                            name: local_name,
-                            value: Box::new(WirInstr::StructGet {
-                                type_id: type_id.clone(),
-                                field_name: field_name_str,
-                                expr: Box::new(WirInstr::LocalGet {
-                                    name: temp_name.clone(),
-                                    result_ty: wir_type.clone(),
-                                }),
-                                result_ty: field_result_ty,
+                        let field = WirInstr::StructGet {
+                            type_id: type_id.clone(),
+                            field_name: field_name_str,
+                            expr: Box::new(WirInstr::LocalGet {
+                                name: temp_name.clone(),
+                                result_ty: wir_type.clone(),
                             }),
-                        });
+                            result_ty: field_result_ty.clone(),
+                        };
+                        self.emit_pattern_binding_set(
+                            *local_index,
+                            &field_result_ty,
+                            field,
+                            &mut instrs,
+                        );
                     }
                 }
 
                 WirInstr::Seq(instrs)
             }
-            PatKind::Binding { local_index, .. } => WirInstr::LocalSet {
-                name: self.local_name(*local_index),
-                value: Box::new(value_instr),
-            },
+            PatKind::Binding { local_index, .. } => {
+                let mut instrs = Vec::new();
+                self.emit_pattern_binding_set(
+                    *local_index,
+                    &self.wir_type(value_ty),
+                    value_instr,
+                    &mut instrs,
+                );
+                WirInstr::Seq(instrs)
+            }
             other => panic!(
                 "[WIR] pattern lowering left a `LetDestructure` this translator cannot bind: {other:?}"
             ),
@@ -1053,13 +1072,12 @@ impl FunctionTranslator<'_, '_> {
         let arena = self.body;
         match &arena.pats[pattern].kind {
             PatKind::Binding { local_index, .. } => {
-                instrs.push(WirInstr::LocalSet {
-                    name: self.local_name(*local_index),
-                    value: Box::new(WirInstr::LocalGet {
-                        name: scrut_local.to_string(),
-                        result_ty: self.wir_type(scrut_type),
-                    }),
-                });
+                let scrut_wir = self.wir_type(scrut_type);
+                let scrut = WirInstr::LocalGet {
+                    name: scrut_local.to_string(),
+                    result_ty: scrut_wir.clone(),
+                };
+                self.emit_pattern_binding_set(*local_index, &scrut_wir, scrut, instrs);
             }
             PatKind::Variant {
                 variant_name,
