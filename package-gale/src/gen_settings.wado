@@ -70,6 +70,12 @@ impl GenSettings {
         return self.emit_actions && !self.scan_gate_fields.is_empty();
     }
 
+    /// Whether the generated parser recovers a fragment under the start rule.
+    /// Off leaves every parser byte-identical to one emitted before it existed.
+    pub fn emit_fragment_recovery(&self) -> bool {
+        return !self.fragment_entries.is_empty();
+    }
+
     /// Whether a lexer base is wired.
     pub fn has_superclass(&self) -> bool {
         return !self.superclass_name.is_empty();

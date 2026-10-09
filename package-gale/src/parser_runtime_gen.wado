@@ -55,12 +55,13 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -
 }
 
 internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &EmitContext) {
+    let mut starts: List<i32> = [];
     for let mut i = 0; i < entries.len(); i += 1 {
         w.line(`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&kind_bitset_words(&entries[i].first_ids))}];`);
+        starts.extend(&entries[i].first_ids);
     }
-    if !entries.is_empty() {
-        w.blank();
-    }
+    w.line(`global _FRAGMENT_STARTS: List<i32> = [${join_kinds(&kind_bitset_words(&starts))}];`);
+    w.blank();
 
     let mut d = FnSpec::new("_recover_fragment");
     d.add_param("p", "&mut Parser");
@@ -229,9 +230,17 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line("if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }");
 }
 
+/// Whether recovery may stop at `k` with `set` as its sync set. A fragment
+/// start joins every set at the root only: the start rule's `EOF` descends
+/// into the fragment it begins, and a nested rule cannot.
+fn syncs_on<S: AsStrSlice, K: AsStrSlice>(fragment_recovery: bool, set: S, k: K) -> String {
+    let member = `kind_set_has(${set}, ${k})`;
+    return if fragment_recovery { `(${member} || self.root_fragment_start(${k}))` } else { member };
+}
+
 /// ANTLR4's rule-level recovery and decision sync: the parser methods a failed
 /// rule and a mismatched decision recover through.
-fn gen_rule_recovery(w: &mut CodeWriter) {
+fn gen_rule_recovery(w: &mut CodeWriter, fragment_recovery: bool) {
     let mut rr = FnSpec::new("recover_rule");
     rr.set_receiver("&mut self");
     rr.add_param("rule", "NodeKind");
@@ -322,11 +331,22 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     su.emit_begin(w);
     w.begin("loop");
     w.line("let k = self.kinds[self.pos];");
-    w.line("if k == TK_EOF || kind_set_has(set, k) { break; }");
+    w.line(`if k == TK_EOF || ${syncs_on(fragment_recovery, "set", "k")} { break; }`);
     w.line("self.skip_one();");
     w.end();
     w.end();
     w.blank();
+
+    if fragment_recovery {
+        let mut rf = FnSpec::new("root_fragment_start");
+        rf.set_receiver("&self");
+        rf.add_param("k", "i32");
+        rf.set_return_type("bool");
+        rf.emit_begin(w);
+        w.line("return self.sites.len() == 1 && kind_set_has(&_FRAGMENT_STARTS, k);");
+        w.end();
+        w.blank();
+    }
 
     let mut so = FnSpec::new("skip_one");
     so.set_receiver("&mut self");
@@ -343,7 +363,9 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     sd.add_param("expected", "&List<i32>");
     sd.set_return_type("bool");
     sd.emit_begin(w);
-    w.begin("if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(sync, self.peek_at(1))");
+    w.begin(
+        `if self.speculating || self.kinds[self.pos] == TK_EOF || !${syncs_on(fragment_recovery, "sync", "self.peek_at(1)")}`,
+    );
     w.line("return false;");
     w.end();
     w.line("self.report_extraneous(expected, RecoveryAction::Deleted);");
@@ -848,7 +870,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     w.blank();
 
-    gen_rule_recovery(w);
+    gen_rule_recovery(w, fragment_recovery);
 
     // `trace_fail` is its only caller.
     if trace {
@@ -993,7 +1015,11 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // single-token insertion: the current token continues the rule, or the
     // rules under way once this one ends, so the expected one is missing.
     w.begin(
-        "if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])",
+        `if ${syncs_on(
+            fragment_recovery,
+            "sync",
+            "self.kinds[self.pos]",
+        )} || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos])`,
     );
     w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
@@ -1015,7 +1041,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
     w.begin("loop");
     w.line("let _k = self.kinds[self.pos];");
-    w.line("if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }");
+    w.line(`if _k == TK_EOF || _k == kind || ${syncs_on(fragment_recovery, "sync", "_k")} { break; }`);
     w.line("self.skip_one();");
     w.end();
     w.line("self.b.finish_node(self.last_end());");

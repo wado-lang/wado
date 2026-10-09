@@ -1288,9 +1288,13 @@ impl Parser {
     fn skip_until(&mut self, set: &List<i32>) {
         loop {
             let k = self.kinds[self.pos];
-            if k == TK_EOF || kind_set_has(set, k) { break; }
+            if k == TK_EOF || (kind_set_has(set, k) || self.root_fragment_start(k)) { break; }
             self.skip_one();
         }
+    }
+
+    fn root_fragment_start(&self, k: i32) -> bool {
+        return self.sites.len() == 1 && kind_set_has(&_FRAGMENT_STARTS, k);
     }
 
     fn skip_one(&mut self) {
@@ -1300,7 +1304,7 @@ impl Parser {
     }
 
     fn sync_delete(&mut self, sync: &List<i32>, expected: &List<i32>) -> bool {
-        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(sync, self.peek_at(1)) {
+        if self.speculating || self.kinds[self.pos] == TK_EOF || !(kind_set_has(sync, self.peek_at(1)) || self.root_fragment_start(self.peek_at(1))) {
             return false;
         }
         self.report_extraneous(expected, RecoveryAction::Deleted);
@@ -1425,7 +1429,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        if kind_set_has(sync, self.kinds[self.pos]) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos]) {
+        if (kind_set_has(sync, self.kinds[self.pos]) || self.root_fragment_start(self.kinds[self.pos])) || may_end_rule && self.follows_rules_under_way(self.kinds[self.pos]) {
             self.report_missing(kind);
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
@@ -1441,7 +1445,7 @@ impl Parser {
                 self.b.start_error(self.tokens.span_at(self.pos).start);
                 loop {
                     let _k = self.kinds[self.pos];
-                    if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }
+                    if _k == TK_EOF || _k == kind || (kind_set_has(sync, _k) || self.root_fragment_start(_k)) { break; }
                     self.skip_one();
                 }
                 self.b.finish_node(self.last_end());
@@ -1516,13 +1520,13 @@ impl Parser {
 }
 
 fn _parse_prog__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) && !p.root_fragment_start(p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     while !p.recovering && _kind_set_0(p.peek_kind()) {
         p.site = 0;
         _parse_item(p);
-        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
+        if !kind_set_has(&SYNC_0, p.kinds[p.pos]) && !p.root_fragment_start(p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_0, &EXPECTED_0); }
     }
-    p.expect(TK_EOF, &SYNC_1, true);
+    p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
 }
 
@@ -1538,12 +1542,12 @@ fn _parse_prog(p: &mut Parser) -> () {
 }
 
 fn _parse_item__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) && !p.root_fragment_start(p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_LIT_set {
         p.take();
-        p.expect(TK_ID, &SYNC_3, false);
-        p.expect(TK_LIT_SEMI, &SYNC_1, true);
+        p.expect(TK_ID, &SYNC_2, false);
+        p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
         return;
     } else if kind == TK_LIT_main {
         p.site = 1;
@@ -1553,7 +1557,7 @@ fn _parse_item__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of item matches",
         p.peek_span(),
-        &EXPECTED_2,
+        &EXPECTED_1,
     );
     return;
 }
@@ -1570,15 +1574,15 @@ fn _parse_item(p: &mut Parser) -> () {
 }
 
 fn _parse_main__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_main, &SYNC_4, false);
-    p.expect(TK_LIT_LBRACE, &SYNC_5, false);
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_5, &EXPECTED_5); }
+    p.expect(TK_LIT_main, &SYNC_3, false);
+    p.expect(TK_LIT_LBRACE, &SYNC_4, false);
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) && !p.root_fragment_start(p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
     while !p.recovering && p.peek_kind() == TK_LIT_do {
         p.site = 2;
         _parse_stmt(p);
-        if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_5, &EXPECTED_5); }
+        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) && !p.root_fragment_start(p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
     }
-    p.expect(TK_LIT_RBRACE, &SYNC_1, true);
+    p.expect(TK_LIT_RBRACE, &EMPTY_SYNC, true);
     return;
 }
 
@@ -1594,9 +1598,9 @@ fn _parse_main(p: &mut Parser) -> () {
 }
 
 fn _parse_stmt__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_do, &SYNC_6, false);
-    p.expect(TK_ID, &SYNC_3, false);
-    p.expect(TK_LIT_SEMI, &SYNC_1, true);
+    p.expect(TK_LIT_do, &SYNC_5, false);
+    p.expect(TK_ID, &SYNC_2, false);
+    p.expect(TK_LIT_SEMI, &EMPTY_SYNC, true);
     return;
 }
 
@@ -1612,6 +1616,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 global _FRAGMENT_FIRST_0: List<i32> = [512];
+global _FRAGMENT_STARTS: List<i32> = [512];
 
 fn _recover_fragment(p: &mut Parser) -> bool {
     let _k = p.kinds[p.pos];
@@ -1699,14 +1704,13 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [596];
-global EXPECTED_0: List<i32> = [TK_EOF, TK_LIT_do, TK_LIT_main, TK_LIT_set];
-global SYNC_1: List<i32> = [512];
-global SYNC_2: List<i32> = [592];
-global EXPECTED_2: List<i32> = [TK_LIT_do, TK_LIT_main, TK_LIT_set];
-global SYNC_3: List<i32> = [544];
-global SYNC_4: List<i32> = [640];
-global SYNC_5: List<i32> = [768];
-global EXPECTED_5: List<i32> = [TK_LIT_RBRACE, TK_LIT_do];
-global SYNC_6: List<i32> = [513];
+global SYNC_0: List<i32> = [84];
+global EXPECTED_0: List<i32> = [TK_EOF, TK_LIT_main, TK_LIT_set];
+global SYNC_1: List<i32> = [80];
+global EXPECTED_1: List<i32> = [TK_LIT_main, TK_LIT_set];
+global SYNC_2: List<i32> = [32];
+global SYNC_3: List<i32> = [128];
+global SYNC_4: List<i32> = [768];
+global EXPECTED_4: List<i32> = [TK_LIT_RBRACE, TK_LIT_do];
+global SYNC_5: List<i32> = [1];
 

@@ -303,10 +303,6 @@ pub struct EmitContext {
     pub diagnostics: Diagnostics,
     pub plan: ParserPlan,
     pub cursor: EmitCursor,
-    /// The kinds a `fragment_entries` rule begins with. Each is a sync point
-    /// in every set: recovery must stop at one rather than skip it, so the
-    /// root's `EOF` can descend into the fragment it starts.
-    fragment_starts: List<i32>,
 }
 
 impl EmitContext {
@@ -320,15 +316,7 @@ impl EmitContext {
         plan: ParserPlan,
     ) -> EmitContext {
         let cursor = EmitCursor::new(analysis.parser_rules().len());
-        let mut analysis = analysis;
-        let mut fragment_starts: List<i32> = [];
-        for let name of &settings.fragment_entries {
-            if analysis.rule_index_of(name) >= 0 {
-                let mut visiting: List<String> = [];
-                fragment_starts.extend(&analysis.first_ids_of_rule(name, &mut visiting));
-            }
-        }
-        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, cursor, fragment_starts };
+        return EmitContext { analysis, settings, follow, tables, diagnostics, plan, cursor };
     }
 
     /// The rule being emitted.
@@ -616,8 +604,6 @@ impl EmitContext {
     /// Intern a recovery sync set (a leaf's FIRST-of-rest) given as kind ids.
     /// Returns the `SYNC_<id>` global's id, or `null` for an empty set.
     pub fn sync_set(&mut self, ids: List<i32>) -> Option<i32> {
-        let mut ids = ids;
-        ids.extend(&self.fragment_starts);
         return self.tables.intern_sync_set(self.analysis.canonical_ids(ids));
     }
 
