@@ -85,3 +85,94 @@ fn editing_the_dependency_misses_the_cache() {
         .assert()
         .success();
 }
+
+/// A test in `app` asserting the program printing `hello()` from `greet` fails
+/// to compile, or prints `expected`.
+fn write_expectation(app: &Path, expected: Option<&str>) {
+    let check = match expected {
+        None => "assert out matches { Err(_) };".to_string(),
+        Some(text) => format!("assert out matches {{ Ok(o) && o.stdout == \"{text}\\n\" }};"),
+    };
+    fs::write(
+        app.join("app_test.wado"),
+        format!(
+            r#"use {{ eval }} from "core:eval";
+
+test "the program reaches the caller's dependency" {{
+    let out = eval(`use {{ println, Stdout }} from "core:cli";
+use {{ hello }} from "greet";
+export fn run() with Stdout {{ println(hello()); }}`);
+    {check}
+}}
+"#
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_dependency_file_that_appears_misses_the_cache() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    write_packages(tmp.path(), "hello", "hello");
+    let part = tmp.path().join("greet/src/part.wado");
+    fs::remove_file(&part).unwrap();
+    write_expectation(&app, None);
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+
+    // The program is what it was: only the file its compile found missing is new.
+    fs::write(&part, "pub fn part(s: String) -> String { return s; }\n").unwrap();
+    write_expectation(&app, Some("hello"));
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn a_caller_inside_its_dependency_reads_none_of_its_own_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let lib = tmp.path().join("lib");
+    let app = lib.join("app");
+    fs::create_dir_all(lib.join("src")).unwrap();
+    fs::create_dir_all(&app).unwrap();
+    fs::write(
+        lib.join("wado.toml"),
+        "[package]\nname = \"lib\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib.join("src/lib.wado"),
+        "pub fn one() -> String { return \"1\"; }\n",
+    )
+    .unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nlib = { path = \"..\" }\n",
+    )
+    .unwrap();
+    fs::write(app.join("own.wado"), "pub fn two() -> i32 { return 2; }\n").unwrap();
+    fs::write(
+        app.join("app_test.wado"),
+        r#"use { eval } from "core:eval";
+
+test "the dependency is read and the caller's own file is not" {
+    let reached = eval(`use { println, Stdout } from "core:cli";
+use { one } from "lib";
+export fn run() with Stdout { println(one()); }`);
+    assert reached matches { Ok(o) && o.stdout == "1\n" };
+    let own = eval(`use { two } from "./own.wado";
+export fn run() { let _ = two(); }`);
+    assert own matches { Err(_) };
+}
+"#,
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["test", "app_test.wado"])
+        .assert()
+        .success();
+}

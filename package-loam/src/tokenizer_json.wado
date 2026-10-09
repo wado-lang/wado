@@ -5,6 +5,7 @@
 use { TreeMap } from "core:collections";
 use { from_string } from "core:json";
 use { Value } from "core:value";
+use { byte_chars } from "./runtime/tokenizer.wado";
 
 /// GPT-2's pipeline: text split by its pattern, each piece spelled as bytes
 /// and merged by BPE, the ids decoded back through the same byte spelling.
@@ -83,7 +84,50 @@ pub fn read(text: &String) -> Result<ByteLevelBpe, TokenizerError> {
     let tokens = tokens_of(&vocab)?;
     let merges = merges_of(&model)?;
     let specials = specials_of(&root, &vocab)?;
+    spelled_in_bytes(&vocab, &merges, &specials)?;
     return Result::Ok(ByteLevelBpe { tokens, merges, specials });
+}
+
+/// That the vocabulary spells every byte, every merge joins two tokens into a
+/// third, and every token but a special one is written in the byte alphabet:
+/// what `BpeTokenizer` encodes and decodes by.
+fn spelled_in_bytes(
+    vocab: &TreeMap<String, Value>,
+    merges: &List<String>,
+    specials: &List<String>,
+) -> Result<(), TokenizerError> {
+    let alphabet = byte_chars();
+    for let c of alphabet {
+        let mut spelled = String::new();
+        spelled.push(c);
+        if !vocab.contains_key(spelled) {
+            return refused(`model: the vocabulary has no token for the byte ${c}`);
+        }
+    }
+    for let merge of *merges {
+        let Some([left, right]) = merge.split_once(" ") else {
+            return refused(`model: merge ${merge} is not two tokens`);
+        };
+        let joined = `${left}${right}`;
+        for let part of [
+            left.to_string(),
+            right.to_string(),
+            joined,
+        ] {
+            if !vocab.contains_key(part) {
+                return refused(`model: merge ${merge} names ${part}, which the vocabulary lacks`);
+            }
+        }
+    }
+    for let [token, _] of vocab.entries() {
+        if specials.contains(token) {
+            continue;
+        }
+        if let Some(c) = token.chars().find(|c| !alphabet.contains(&c)) {
+            return refused(`model: ${*token} holds ${c}, which no byte is spelled as`);
+        }
+    }
+    return Result::Ok(());
 }
 
 /// The stage `key`, which must be one of `kinds`.

@@ -1,0 +1,11 @@
+// With `type` alone, the file is read as that type, and only `"wasm"` and
+// `"wat"` are types the compiler reads. Any other names a format for a
+// generator, so the use site must say which one reads it.
+
+use { greeting } from "./sub/use_reads_wado_whatever_the_extension.g4" with { type: "antlr4" };
+
+__DATA__
+{
+    "compile_error": ":5:79: analysis error: import attribute `type` is `\"wasm\"` or `\"wat\"` without a `generator`; another type is a generator's to read",
+    "compile_error_codes": ["IMPORT_ATTR_INVALID"]
+}

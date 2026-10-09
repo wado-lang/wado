@@ -985,6 +985,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         "import attribute `{key}` must be a string, got {}",
                         entry.value.kind(),
                     )
+                } else if key == ImportAttributes::TYPE
+                    && wasm_asset_kind_from_attrs(Some(attrs)).is_none()
+                {
+                    "import attribute `type` is `\"wasm\"` or `\"wat\"` without a `generator`; \
+                     another type is a generator's to read"
+                        .to_string()
                 } else {
                     continue;
                 };

@@ -2271,6 +2271,13 @@ impl ImportAttributes {
         self.get_str(Self::TYPE)
     }
 
+    /// Whether the file is Wado source: the clause names neither a generator
+    /// nor a `type`, whatever the path's extension.
+    #[must_use]
+    pub fn reads_as_source(&self) -> bool {
+        !self.is_generated() && self.type_hint().is_none()
+    }
+
     /// Whether the clause names a Kiln generator (`with { generator: … }`),
     /// whatever its value.
     #[must_use]

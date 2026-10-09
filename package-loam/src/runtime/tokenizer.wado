@@ -10,12 +10,20 @@ use icu from "core:icu";
 pub struct BpeTokenizer {
     ids: TreeMap<String, i32>,
     tokens: List<String>,
-    /// Each merge, written `"left right"`, by priority: the lowest merges first.
-    ranks: TreeMap<String, i32>,
+    /// Each mergeable pair of ids, keyed by `pair_key`, as `[rank, merged id]`:
+    /// the lowest rank merges first.
+    merges: TreeMap<i64, [i32, i32]>,
+    /// The special tokens, matched in the text as they stand before it is split.
     specials: List<String>,
-    byte_chars: List<char>,
-    /// The byte each of `byte_chars` stands for, indexed by code point.
+    /// Whether each id is a special token, which decodes as its own text.
+    special_ids: List<bool>,
+    /// The id of the token each byte is spelled as.
+    byte_ids: List<i32>,
+    /// The byte each of the byte alphabet's characters stands for, indexed by
+    /// code point.
     char_bytes: List<u8>,
+    letters: List<[u32, u32]>,
+    numbers: List<[u32, u32]>,
 }
 
 enum Class {
@@ -28,26 +36,53 @@ enum Class {
 impl BpeTokenizer {
     /// `tokens` holds one token per line, its id the line's index, and `merges`
     /// one merge per line, `"left right"` by rank. `specials` are matched in the
-    /// text as they stand, before it is split.
+    /// text as they stand, before it is split. Every byte's character is a
+    /// token, and every merge's halves and result are tokens.
     pub fn new(tokens: &ByteList, merges: &ByteList, specials: List<String>) -> BpeTokenizer {
         let tokens = lines_of(tokens);
         let mut ids = TreeMap::<String, i32>::new();
         for let [id, token] of tokens.into_iter().enumerate() {
             ids[token] = id;
         }
-        let mut ranks = TreeMap::<String, i32>::new();
+        let mut merge_ranks = TreeMap::<i64, [i32, i32]>::new();
         for let [rank, merge] of lines_of(merges).into_iter().enumerate() {
-            ranks[merge] = rank;
+            let Some([left, right]) = merge.split_once(" ") else {
+                unreachable();
+            };
+            let [left, right] = [
+                left.to_string(),
+                right.to_string(),
+            ];
+            let merged = ids.get(`${left}${right}`).unwrap();
+            merge_ranks.try_insert(pair_key(ids.get(left).unwrap(), ids.get(right).unwrap()), [rank, merged]);
+        }
+        let mut special_ids = List::<bool>::filled(tokens.len(), false);
+        for let special of specials {
+            special_ids[ids.get(special).unwrap()] = true;
         }
         let byte_chars = byte_chars();
+        let mut byte_ids: List<i32> = [];
         let mut char_bytes: List<u8> = [];
         for let [b, c] of byte_chars.into_iter().enumerate() {
+            let mut spelled = String::new();
+            spelled.push(c);
+            byte_ids.push(ids.get(spelled).unwrap());
             while char_bytes.len() <= c as i32 {
                 char_bytes.push(0);
             }
             char_bytes[c as i32] = b as u8;
         }
-        return BpeTokenizer { ids, tokens, ranks, specials, byte_chars, char_bytes };
+        return BpeTokenizer {
+            ids,
+            tokens,
+            merges: merge_ranks,
+            specials,
+            special_ids,
+            byte_ids,
+            char_bytes,
+            letters: icu::value_ranges("gc", "L").unwrap(),
+            numbers: icu::value_ranges("gc", "N").unwrap(),
+        };
     }
 
     /// The ids `text` encodes to.
@@ -65,11 +100,17 @@ impl BpeTokenizer {
         }
     }
 
-    /// The text `ids` decode to. A byte sequence that is not UTF-8 decodes with
-    /// U+FFFD in its place, as a token boundary can split a character.
+    /// The text `ids` decode to. A special token is its own text, and every
+    /// other token stands for the bytes its characters spell. A byte sequence
+    /// that is not UTF-8 decodes with U+FFFD in its place, as a token boundary
+    /// can split a character.
     pub fn decode(&self, ids: &List<i32>) -> String {
         let mut bytes: List<u8> = [];
         for let id of *ids {
+            if self.special_ids[id] {
+                bytes.extend(&(self.tokens[id].bytes().collect() as List<u8>));
+                continue;
+            }
             for let c of self.tokens[id].chars() {
                 bytes.push(self.char_bytes[c as i32]);
             }
@@ -77,14 +118,20 @@ impl BpeTokenizer {
         return String::from_utf8_lossy(bytes);
     }
 
-    /// The first special token in `text`, and where it starts.
+    /// The special token that starts first in `text`, the longest of those
+    /// starting there, and where it starts.
     fn next_special(&self, text: StrSlice) -> Option<[i32, String]> {
         let mut first: Option<[i32, String]> = null;
         for let special of self.specials {
-            if let Some(at) = text.find(&special) {
-                if !first matches { Some([earlier, _]) && earlier <= at } {
-                    first = Option::Some([at, special]);
-                }
+            let Some(at) = text.find(&special) else {
+                continue;
+            };
+            let better = match first {
+                None => true,
+                Some([earlier, held]) => at < earlier || at == earlier && special.len() > held.len(),
+            };
+            if better {
+                first = Option::Some([at, special]);
             }
         }
         return first;
@@ -115,11 +162,11 @@ impl BpeTokenizer {
                 }
             }
         }
-        let spaced = chars[at] == ' ' && at + 1 < n && !class_of(chars[at + 1]) matches { Space };
+        let spaced = chars[at] == ' ' && at + 1 < n && !self.class_of(chars[at + 1]) matches { Space };
         let lead = if spaced { at + 1 } else { at };
-        let class = class_of(chars[lead]);
+        let class = self.class_of(chars[lead]);
         let mut end = lead + 1;
-        while end < n && class_of(chars[end]) == class {
+        while end < n && self.class_of(chars[end]) == class {
             end += 1;
         }
         // A space run before a word leaves its last space to the word.
@@ -127,61 +174,76 @@ impl BpeTokenizer {
         return if leaves_one { end - 1 } else { end };
     }
 
-    /// Spells `piece` byte by byte, merges the adjacent pair of highest priority
-    /// until none has one, and appends the ids of what is left.
-    fn merge(&self, piece: &String, out: &mut List<i32>) {
-        let mut parts: List<String> = [];
-        for let b of piece.bytes() {
-            let mut part = String::new();
-            part.push(self.byte_chars[b as i32]);
-            parts.push(part);
+    fn class_of(&self, c: char) -> Class {
+        if c.is_whitespace() {
+            return Class::Space;
         }
+        if within(&self.letters, c as u32) {
+            return Class::Letter;
+        }
+        if within(&self.numbers, c as u32) {
+            return Class::Number;
+        }
+        return Class::Other;
+    }
+
+    /// Spells `piece` as the ids of its bytes, merges the adjacent pair of
+    /// lowest rank until no pair merges, and appends what is left.
+    fn merge(&self, piece: &String, out: &mut List<i32>) {
+        let mut parts: List<i32> = piece.bytes().map(|b| self.byte_ids[b as i32]).collect();
         loop {
             let mut best = -1;
             let mut best_rank = i32::MAX;
+            let mut merged_id = 0;
             for let mut i = 0; i + 1 < parts.len(); i += 1 {
-                if let Some(rank) = self.ranks.get(`${parts[i]} ${parts[i + 1]}`) {
-                    if rank < best_rank {
-                        best_rank = rank;
-                        best = i;
-                    }
+                if let Some([rank, merged]) = self.merges.get(pair_key(parts[i], parts[i + 1])) && rank < best_rank {
+                    best_rank = rank;
+                    best = i;
+                    merged_id = merged;
                 }
             }
             if best < 0 {
                 break;
             }
-            let left = parts[best];
-            let right = parts[best + 1];
-            let mut merged: List<String> = [];
+            let [left, right] = [parts[best], parts[best + 1]];
+            let mut next: List<i32> = [];
             let mut i = 0;
             while i < parts.len() {
                 if i + 1 < parts.len() && parts[i] == left && parts[i + 1] == right {
-                    merged.push(`${left}${right}`);
+                    next.push(merged_id);
                     i += 2;
                 } else {
-                    merged.push(parts[i]);
+                    next.push(parts[i]);
                     i += 1;
                 }
             }
-            parts = merged;
+            parts = next;
         }
-        for let part of parts {
-            out.push(self.ids.get(part).unwrap());
-        }
+        out.extend(&parts);
     }
 }
 
-fn class_of(c: char) -> Class {
-    if c.is_whitespace() {
-        return Class::Space;
+/// The key of the pair `left` then `right` among the merges.
+fn pair_key(left: i32, right: i32) -> i64 {
+    return left as i64 << 32 | right as i64;
+}
+
+/// Whether `code` is in one of `ranges`, inclusive and lowest first.
+fn within(ranges: &List<[u32, u32]>, code: u32) -> bool {
+    let mut low = 0;
+    let mut high = ranges.len();
+    while low < high {
+        let mid = (low + high) / 2;
+        let [start, end] = ranges[mid];
+        if code < start {
+            high = mid;
+        } else if code > end {
+            low = mid + 1;
+        } else {
+            return true;
+        }
     }
-    if icu::value_contains("gc", "L", c).unwrap() {
-        return Class::Letter;
-    }
-    if icu::value_contains("gc", "N", c).unwrap() {
-        return Class::Number;
-    }
-    return Class::Other;
+    return false;
 }
 
 /// The lines of `bytes`, UTF-8 that its writer wrote one entry to a line.
@@ -197,7 +259,7 @@ fn lines_of(bytes: &ByteList) -> List<String> {
 
 /// The printable character each byte is spelled as, so that a token is text:
 /// a printable byte is itself, and the rest are shifted past 255 in order.
-fn byte_chars() -> List<char> {
+pub fn byte_chars() -> List<char> {
     let mut chars: List<char> = [];
     let mut shifted: u32 = 256;
     for let b of 0..<256 {

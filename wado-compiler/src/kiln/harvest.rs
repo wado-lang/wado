@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 
-use crate::ast::{Item, Module};
+use crate::ast::{ImportAttributes, Item, Module};
 use crate::compiler_host::{Code, Diagnostic, Severity};
 use crate::hashmap::IndexMap;
 use crate::kiln::inline::InvocationIndex;
@@ -103,7 +103,7 @@ fn local_wado_imports(module: &Module) -> impl Iterator<Item = &str> {
         let is_source = use_decl
             .attributes
             .as_ref()
-            .is_none_or(|attrs| !attrs.is_generated() && attrs.type_hint().is_none());
+            .is_none_or(ImportAttributes::reads_as_source);
         (is_cwd_relative(src) && is_source).then_some(src)
     })
 }

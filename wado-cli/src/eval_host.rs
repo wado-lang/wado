@@ -338,8 +338,12 @@ struct Dependencies {
     /// The calling file's directory, which `index` is relative to.
     base: PathBuf,
     index: DependencyIndex,
-    /// The package root of each source dependency, absolute and normalized.
+    /// The root of each source dependency, absolute and normalized: the package
+    /// whose `lib` its entry is, or the entry's own directory.
     roots: Vec<PathBuf>,
+    /// The calling package's root, which no dependency's files include, even
+    /// a dependency whose package holds it.
+    caller_root: Option<PathBuf>,
 }
 
 impl Dependencies {
@@ -355,17 +359,54 @@ impl Dependencies {
                 base,
                 index: DependencyIndex::default(),
                 roots: Vec::new(),
+                caller_root: None,
             };
         };
         let index = dependency_index_from(&project.manifest, &project.root, &base);
         let roots = index
             .resolved
             .values()
-            .filter_map(|entry| load_nearest_manifest(&base.join(entry)).ok().flatten())
-            .map(|package| normalize_path(&absolutize(&package.root)))
+            .map(|entry| dependency_root(&normalize_path(&absolutize(&base.join(entry)))))
             .collect();
-        Self { base, index, roots }
+        Self {
+            base,
+            index,
+            roots,
+            caller_root: Some(normalize_path(&absolutize(&project.root))),
+        }
     }
+
+    /// Whether `file` is one of a dependency's own.
+    fn holds(&self, file: &Path) -> bool {
+        self.roots.iter().any(|root| {
+            file.starts_with(root)
+                && !self
+                    .caller_root
+                    .as_ref()
+                    .is_some_and(|caller| caller.starts_with(root) && file.starts_with(caller))
+        })
+    }
+}
+
+/// The directory a dependency whose entry module is `entry` reads from: its
+/// package's root where `entry` is that package's `lib`, and otherwise the
+/// directory holding `entry`, a single-file dependency.
+fn dependency_root(entry: &Path) -> PathBuf {
+    let directory = entry
+        .parent()
+        .expect("an entry module is a file, so it has a parent")
+        .to_path_buf();
+    let Ok(Some(package)) = load_nearest_manifest(entry) else {
+        return directory;
+    };
+    let root = normalize_path(&absolutize(&package.root));
+    let is_lib = package
+        .manifest
+        .package
+        .as_ref()
+        .and_then(|p| p.lib.as_ref())
+        .is_some_and(|lib| normalize_path(&root.join(lib)) == entry);
+    if is_lib { root } else { directory }
 }
 
 /// The compiler host an evaluated program compiles on: it serves the files of
@@ -389,22 +430,28 @@ impl DependencyHost {
 impl CompilerHost for DependencyHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
         let file = normalize_path(&absolutize(&self.deps.base.join(path)));
-        if !self.deps.roots.iter().any(|root| file.starts_with(root)) {
+        if !self.deps.holds(&file) {
             return Err(SourceError::NotFound {
                 path: path.to_string(),
             });
         }
-        let bytes = std::fs::read(&file).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => SourceError::NotFound {
-                path: path.to_string(),
-            },
-            _ => SourceError::IoError {
+        // An absent file is an input too: the outcome changes once it appears.
+        match std::fs::read(&file) {
+            Ok(bytes) => {
+                lock(&self.read).push(Input::of(file, Some(&bytes)));
+                Ok(bytes)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                lock(&self.read).push(Input::of(file, None));
+                Err(SourceError::NotFound {
+                    path: path.to_string(),
+                })
+            }
+            Err(e) => Err(SourceError::IoError {
                 path: path.to_string(),
                 message: e.to_string(),
-            },
-        })?;
-        lock(&self.read).push(Input::of(file, &bytes));
-        Ok(bytes)
+            }),
+        }
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
@@ -416,25 +463,32 @@ impl CompilerHost for DependencyHost {
     }
 }
 
-/// A file a compile read, known by its contents.
+/// A file a compile looked up, known by its contents, or by its absence.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Input {
     path: PathBuf,
-    sha256: String,
+    /// `None` where the file was absent.
+    sha256: Option<String>,
 }
 
 impl Input {
-    fn of(path: PathBuf, bytes: &[u8]) -> Self {
+    fn of(path: PathBuf, bytes: Option<&[u8]>) -> Self {
         Self {
             path,
-            sha256: hex32(&Sha256::digest(bytes).into()),
+            sha256: bytes.map(digest),
         }
     }
 
     fn unchanged(&self) -> bool {
-        std::fs::read(&self.path)
-            .is_ok_and(|bytes| hex32(&Sha256::digest(&bytes).into()) == self.sha256)
+        match std::fs::read(&self.path) {
+            Ok(bytes) => self.sha256.as_deref() == Some(digest(&bytes).as_str()),
+            Err(e) => e.kind() == std::io::ErrorKind::NotFound && self.sha256.is_none(),
+        }
     }
+}
+
+fn digest(bytes: &[u8]) -> String {
+    hex32(&Sha256::digest(bytes).into())
 }
 
 /// A cached outcome, valid while every file the compile read is unchanged.

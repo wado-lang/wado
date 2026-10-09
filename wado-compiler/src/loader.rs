@@ -1552,6 +1552,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.emit_kiln_no_generated_module(from_module_source, use_decl);
                     continue;
                 }
+                // A `type` no reader takes names a file that is not Wado, which
+                // analysis reports on the use site.
+                if !declares_generator
+                    && use_decl
+                        .attributes
+                        .as_ref()
+                        .is_some_and(|attrs| !attrs.reads_as_source())
+                {
+                    continue;
+                }
                 pending.push_back((from_module_source.clone(), resolved));
             }
         }
