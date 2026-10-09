@@ -1,0 +1,148 @@
+//! `loam dump`: what the generator decided for each operator of a checked
+//! graph, and the shape it proved for each tensor. See WEP 2026-09-20
+//! § "The Generator Reports Every Fusion Decision".
+
+use { CodeWriter } from "lib:wadopoet";
+use { Lowering, lowering_of, subgraph } from "./emit.wado";
+use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
+use { Checked } from "./infer.wado";
+use { Shape } from "./shape.wado";
+
+/// The report for `graph`, checked as `checked`.
+pub fn render_dump(graph: &Graph, checked: &Checked) -> String {
+    let mut w = CodeWriter::with_capacity(4096);
+    let opset = match graph.opset {
+        Some(v) => `${v}`,
+        None => "current",
+    };
+    w.line(`graph ${graph.name} (opset ${opset})`);
+    let mut tally = Tally {};
+    scope(&mut w, graph, checked, &mut tally);
+    w.blank();
+    w.line(
+        `${tally.kernels} kernels, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches`,
+    );
+    return w.to_string();
+}
+
+/// How many nodes each `Lowering` took, over every scope.
+struct Tally {
+    kernels: i32 = 0,
+    folded: i32 = 0,
+    aliases: i32 = 0,
+    branches: i32 = 0,
+}
+
+fn scope(w: &mut CodeWriter, graph: &Graph, checked: &Checked, tally: &mut Tally) {
+    boundary(w, "inputs", &graph.inputs, checked);
+    boundary(w, "weights", &graph.initializers, checked);
+    w.line("nodes");
+    w.indent();
+    for let node of &graph.nodes {
+        let lowering = lowering_of(node, checked);
+        match lowering {
+            Folded => tally.folded += 1,
+            Alias => tally.aliases += 1,
+            Branch => tally.branches += 1,
+            Kernel => tally.kernels += 1,
+        }
+        w.line(`${label(lowering)} ${application(node)}`);
+        w.indent();
+        for let output of node.outputs {
+            w.line(`${output}: ${tensor(checked, &output)}`);
+        }
+        if lowering matches { Branch } {
+            let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+            for let [attr, branch] of [
+                ["then_branch", then_scope],
+                ["else_branch", else_scope],
+            ] {
+                w.line(attr);
+                w.indent();
+                scope(w, &subgraph(node, attr), &branch, tally);
+                w.dedent();
+            }
+        }
+        w.dedent();
+    }
+    w.dedent();
+    boundary(w, "outputs", &graph.outputs, checked);
+    if !checked.owed.is_empty() {
+        w.line("owed");
+        w.indent();
+        for let c of &checked.owed {
+            w.line(`${c.reason} (where ${c.slack} >= 0)`);
+        }
+        w.dedent();
+    }
+}
+
+/// One heading over the tensors a graph declares, which a branch may leave empty.
+fn boundary(w: &mut CodeWriter, heading: String, declared: &List<ValueInfo>, checked: &Checked) {
+    if declared.is_empty() {
+        return;
+    }
+    w.line(heading);
+    w.indent();
+    for let vi of *declared {
+        let held = match element_of(&vi.dtype) {
+            Some(element) && element.primitive != element.computed => ` (held as ${element.primitive})`,
+            _ => "",
+        };
+        w.line(`${vi.name}: ${tensor(checked, &vi.name)}${held}`);
+    }
+    w.dedent();
+}
+
+/// `Kernel` as the left column reads it, all four one width.
+fn label(lowering: Lowering) -> String {
+    return match lowering {
+        Folded => "folded",
+        Alias => "alias ",
+        Branch => "branch",
+        Kernel => "kernel",
+    };
+}
+
+/// `outputs = Op(inputs)`, an absent optional input spelled `_`.
+fn application(node: &Node) -> String {
+    let inputs: List<String> = node.inputs.into_iter().map(|i| if i == "" { "_" } else { i }).collect();
+    return `${node.outputs.join(", ")} = ${node.op}(${inputs.join(", ")})`;
+}
+
+/// The element a tensor is computed in, its axes, and the elements stage 0
+/// folded it to. A folded tensor nothing reads as a tensor has extents and no
+/// axes.
+fn tensor(checked: &Checked, name: &String) -> String {
+    let element = checked.primitives[*name];
+    let known = checked.known.get(*name);
+    let shape = match checked.shapes.get(*name) {
+        Some(shape) => axes(&shape),
+        None => `${known.unwrap().extents}`,
+    };
+    let Some(k) = known else {
+        return `${element} ${shape}`;
+    };
+    return `${element} ${shape} = ${elements(&k)}`;
+}
+
+fn axes(shape: &Shape) -> String {
+    let spelled: List<String> = shape.axes.into_iter().map(|a| `${a.name}=${a.extent}`).collect();
+    return `[${spelled.join(", ")}]`;
+}
+
+/// A folded tensor's elements, the first `SHOWN` of them where it holds more.
+fn elements(k: &Known) -> String {
+    let spelled: List<String> = match &k.elements {
+        Ints(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
+        Symbolic(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
+        Floats(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
+        Bools(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
+    };
+    let more = if k.len() > SHOWN { `, … ${k.len() - SHOWN} more` } else { "" };
+    return `[${spelled.join(", ")}${more}]`;
+}
+
+/// Enough elements to tell a shape or an index list by, and few enough that a
+/// mask as large as the context stays one line.
+global SHOWN: i32 = 8;

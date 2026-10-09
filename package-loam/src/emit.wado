@@ -697,6 +697,33 @@ fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>,
     return Result::Ok(lines);
 }
 
+/// What `forward` does for one node.
+pub enum Lowering {
+    /// Nothing: stage 0 computed its outputs, which `forward` spells as
+    /// literals or folds into the kernels that read them.
+    Folded,
+    /// Nothing: its output is another name for its operand (`is_alias`).
+    Alias,
+    /// An `if` over the condition, each branch a block of its own.
+    Branch,
+    /// One kernel call per output.
+    Kernel,
+}
+
+/// How `forward` lowers `node`, in the scope `checked`.
+pub fn lowering_of(node: &Node, checked: &Checked) -> Lowering {
+    if checked.known.contains_key(node.outputs[0]) {
+        return Lowering::Folded;
+    }
+    if is_alias(node, checked) {
+        return Lowering::Alias;
+    }
+    if node.op == "If" {
+        return Lowering::Branch;
+    }
+    return Lowering::Kernel;
+}
+
 /// One scope's statements: the literals it spells that no scope around it
 /// did, then each node's kernel call.
 fn scope_body(
@@ -722,32 +749,41 @@ fn scope_body(
         }
     }
     for let node of &graph.nodes {
-        let produced = node.outputs[0];
-        if checked.known.contains_key(produced) {
-            continue;
-        }
-        if is_alias(node, checked) {
-            let source = node.inputs[0];
-            exprs.values[produced] = exprs.values.get(source).unwrap();
-            continue;
-        }
-        if node.op == "If" {
-            body.extend(&branch_block(node, checked, names, exprs, symbols)?);
-            continue;
-        }
-        let calls = if node.op == "Split" {
-            split_calls(node, checked, exprs, symbols)?;
-        } else {
-            [node_call(node, checked, exprs, symbols, graph.opset)?] as List<String>;
-        };
-        for let [i, call] of calls.into_iter().enumerate() {
-            let output = node.outputs[i];
-            let ident = names.get(&output);
-            body.push(`let ${ident} = ${call};`);
-            exprs.values[output] = ident;
+        match lowering_of(node, checked) {
+            Folded => {
+            },
+            Alias => {
+                exprs.values[node.outputs[0]] = exprs.values.get(node.inputs[0]).unwrap();
+            },
+            Branch => body.extend(&branch_block(node, checked, names, exprs, symbols)?),
+            Kernel => body.extend(&kernel_calls(node, checked, names, exprs, symbols, graph.opset)?),
         }
     }
     return Result::Ok(body);
+}
+
+/// A node's kernel calls, each bound to the output it computes.
+fn kernel_calls(
+    node: &Node,
+    checked: &Checked,
+    names: &Names,
+    exprs: &mut Operands,
+    symbols: &mut Symbols,
+    opset: Option<i64>,
+) -> Result<List<String>, EmitError> {
+    let calls = if node.op == "Split" {
+        split_calls(node, checked, exprs, symbols)?;
+    } else {
+        [node_call(node, checked, exprs, symbols, opset)?] as List<String>;
+    };
+    let mut lines: List<String> = [];
+    for let [i, call] of calls.into_iter().enumerate() {
+        let output = node.outputs[i];
+        let ident = names.get(&output);
+        lines.push(`let ${ident} = ${call};`);
+        exprs.values[output] = ident;
+    }
+    return Result::Ok(lines);
 }
 
 /// An `If` as one `if` over its condition's element, each branch a block
@@ -1652,7 +1688,7 @@ fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
 }
 
 /// The graph a branch attribute holds, which stage 0 has read.
-fn subgraph(node: &Node, attr: String) -> Graph {
+pub fn subgraph(node: &Node, attr: String) -> Graph {
     return node.attr(attr).unwrap().graph.unwrap();
 }
 

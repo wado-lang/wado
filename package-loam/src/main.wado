@@ -1,0 +1,163 @@
+//! The `loam` command: what the Kiln generator does, run on files named on the
+//! command line, and the report of what it decided.
+
+use { args, eprintln, exit, print, Environment, Exit, Stderr, Stdout } from "core:cli";
+use { Deserialize } from "core:serde";
+use { parse } from "core:args";
+use { from_string } from "core:json";
+use { TreeMap } from "core:collections";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
+use { Model, Spelling, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
+use { render_dump } from "./dump.wado";
+use { LayoutRule } from "./schema.wado";
+
+// The generator's `Options`, field for field. Importing that one would bring
+// the generator's `export fn generate`, whose signature this world has no
+// Component Model form for.
+struct Options {
+    layout: List<LayoutRule> = [],
+    dims: TreeMap<String, i32> = TreeMap::new(),
+    outputs: List<String> = [],
+}
+impl Deserialize for Options;
+
+// Each field is the `with` clause's word for it, so a use site reads as the
+// command line that reproduces it.
+struct GenArgs {
+    type: Option<String> = null,
+    /// A JSON file holding the `generator.options` a use site writes.
+    options: Option<String> = null,
+    /// A safetensors checkpoint, whose header the graph is checked against.
+    checkpoint: Option<String> = null,
+    /// The package spec the generated module imports its runtime from.
+    runtime: String = "lib:loam",
+    output: Option<String> = null,
+    #[wire(positional)]
+    files: List<String> = [],
+}
+impl Deserialize for GenArgs;
+
+struct DumpArgs {
+    type: Option<String> = null,
+    options: Option<String> = null,
+    #[wire(positional)]
+    files: List<String> = [],
+}
+impl Deserialize for DumpArgs;
+
+#[wire(name_policy = "kebab-case")]
+variant Command {
+    Gen(GenArgs),
+    Dump(DumpArgs),
+}
+impl Deserialize for Command;
+
+global USAGE: String = "Usage: loam gen --type <type> [--options <options.json>] [--checkpoint <file.safetensors>] [--runtime <spec>] [--output <file>] <file>
+       loam dump --type <type> [--options <options.json>] <file>
+       <type> is onnx, onnxtext or hf-tokenizer, as a use site's `type` says (dump reads a graph)";
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    match loam(args()) {
+        Ok(printed) => print(printed),
+        Err(report) => {
+            eprintln(report);
+            exit(1);
+        },
+    }
+}
+
+/// Run the subcommand `argv` names, and return what it prints. A failure is the
+/// report for stderr, returned rather than printed so `run` is the one place
+/// that ends the process.
+internal fn loam(argv: List<String>) -> Result<String, String> with Preopens {
+    return match parse::<Command>(argv) {
+        Ok(Command::Gen(g)) => cmd_gen(g),
+        Ok(Command::Dump(d)) => cmd_dump(d),
+        // `core:args` reports only what is wrong; the program name and the
+        // subcommand are loam's to add.
+        Err(e) => Result::Err(`${command_name(&argv)}: ${e.message}\n${USAGE}`),
+    };
+}
+
+fn command_name(argv: &List<String>) -> String {
+    if argv.len() > 0 && (argv[0] == "gen" || argv[0] == "dump") {
+        return `loam ${argv[0]}`;
+    }
+    return "loam";
+}
+
+fn cmd_gen(g: GenArgs) -> Result<String, String> with Preopens {
+    let path = one_file("loam gen", &g.files)?;
+    let source = if g.type matches { Some("hf-tokenizer") } {
+        if g.checkpoint matches { Some(_) } || g.options matches { Some(_) } {
+            return Result::Err("loam gen: a tokenizer takes no --checkpoint and no --options");
+        }
+        generate_tokenizer(&path, read_file(&path)?, &g.runtime)?;
+    } else {
+        let model = checked_model("loam gen", &path, &g.type, &g.options)?;
+        let mut headers: List<[String, ByteList]> = [];
+        if let Some(checkpoint) = g.checkpoint {
+            headers.push([checkpoint, read_file_header(&checkpoint)?]);
+        }
+        generate_model(&model, &path, headers, &g.runtime)?;
+    };
+    let Some(output) = g.output else {
+        return Result::Ok(source);
+    };
+    fs::write(&output, &source).map_err(|e| `loam: ${e}`)?;
+    return Result::Ok("");
+}
+
+fn cmd_dump(d: DumpArgs) -> Result<String, String> with Preopens {
+    let path = one_file("loam dump", &d.files)?;
+    let model = checked_model("loam dump", &path, &d.type, &d.options)?;
+    return Result::Ok(render_dump(&model.graph, &model.checked));
+}
+
+/// The one file a subcommand reads.
+fn one_file(command: String, files: &List<String>) -> Result<String, String> {
+    if files.len() != 1 {
+        return Result::Err(`${command}: name one file, and ${files.len()} are given\n${USAGE}`);
+    }
+    return Result::Ok(files[0]);
+}
+
+/// The graph at `path`, spelled as `type` says and checked under the options
+/// the JSON file `options` holds.
+fn checked_model(
+    command: String,
+    path: &String,
+    type: &Option<String>,
+    options: &Option<String>,
+) -> Result<Model, String> with Preopens {
+    let Some(spelling) = spelling_of(type) else {
+        return Result::Err(`${command}: --type is onnx or onnxtext for a graph\n${USAGE}`);
+    };
+    let options = match *options {
+        Some(file) => {
+            let text = String::from_utf8(read_file(&file)?).map_err(|e| `loam: '${file}' is not UTF-8: ${e}`)?;
+            from_string::<Options>(&text).map_err(|e| `loam: '${file}': ${e}`)?;
+        },
+        None => Options {},
+    };
+    return check(path, spelling, read_file(path)?, options.layout, &options.dims, &options.outputs);
+}
+
+fn read_file(path: &String) -> Result<ByteList, String> with Preopens {
+    return fs::read(path).map_err(|e| `loam: ${e}`);
+}
+
+/// A checkpoint's header, read without its payloads, as the Kiln generator
+/// reads one.
+fn read_file_header(path: &String) -> Result<ByteList, String> with Preopens {
+    let root = fs::root().map_err(|e| `loam: ${e}`)?;
+    let Ok(file) = root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() else {
+        return Result::Err(`loam: '${*path}': cannot open`);
+    };
+    let [content, done] = file.read_via_stream(0 as Filesize);
+    let header = read_header(content);
+    done.drop();
+    return Result::Ok(header);
+}
