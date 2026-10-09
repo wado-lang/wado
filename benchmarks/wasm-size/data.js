@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791555800568,
+  "lastUpdate": 1791569990877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65661,6 +65661,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d715283eae5c7912ecaa11b69c621b573862fa22"
         },
         "date": 1791555800169,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6bd13c1385da1ca0a4e05fcb23a4f959b56bbc15",
+          "message": "Merge pull request #2319 from wado-lang/ccr-c2a9003c-stb2yo\n\nfix: name each associated type of a trait bounded at two argument lists",
+          "timestamp": "2026-10-10T03:04:43+09:00",
+          "tree_id": "7a6c531b1c6470a5766d8f2fdf0987a757ef5d3c",
+          "url": "https://github.com/wado-lang/wado/commit/6bd13c1385da1ca0a4e05fcb23a4f959b56bbc15"
+        },
+        "date": 1791569990332,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
