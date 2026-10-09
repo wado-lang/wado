@@ -207,9 +207,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if declaring.len() < 2 {
             return false;
         }
-        // Bounds that all pin the name to one type name one answer between
-        // them: `T: Add<Output = T> + Mul<Output = T>` is not a coin toss,
-        // where `Add<Output = Cm> + Mul<Output = Area>` is.
+        // Bounds pinning the name to one type still make `T::Output` a second
+        // spelling of it, so the report names the type to write instead.
         let pins: Vec<Option<FqTypeName>> = declaring
             .iter()
             .map(|bound| {
@@ -220,9 +219,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|constraint| written_type_arg(&constraint.ty, &self.tysys.resolutions))
             })
             .collect();
-        if pins.iter().all(|pin| pin.is_some() && *pin == pins[0]) {
-            return false;
-        }
+        let agreed = pins
+            .iter()
+            .all(|pin| pin.is_some() && *pin == pins[0])
+            .then(|| pins[0].as_ref().map(FqTypeName::to_display))
+            .flatten();
         let family = declaring.iter().any(|bound| {
             self.trait_decl_of(bound)
                 .and_then(|decl| self.tysys.trait_env.assoc_type_decl(&decl, assoc_name))
@@ -250,6 +251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param: param_name.to_string(),
             traits,
             pinned,
+            agreed,
             family,
             span,
         });

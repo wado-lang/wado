@@ -798,10 +798,12 @@ bound `T: Mix<i32, Out = P>` settles `P` to the `Out` of the impl the bound's
 arguments reach, `impl Mix<i32>`. The call never names `P`. Where the call does
 settle `P` through an argument, the two must agree.
 
-`T::Out` is ambiguous where two of `T`'s bounds declare `Out` and do not pin it
-to the same type. Two argument lists of one trait are two such bounds. Wado has
-no qualified form such as `<T as Mix<i32>>::Out`. A signature pins each `Out` to
-a parameter of its own and writes that parameter instead:
+`T::Out` is ambiguous where two of `T`'s bounds declare `Out`, whatever they
+pin it to. Two argument lists of one trait are two such bounds. Where both pin
+`Out` to one type, the signature writes that type, as in
+`T: Add<Output = T> + Mul<Output = T>` returning `T`. Wado has no qualified
+form such as `<T as Mix<i32>>::Out`. A signature pins each `Out` to a parameter
+of its own and writes that parameter instead:
 
 <!-- {"fixture":"spec_traits_pin_per_argument_list.wado"} -->
 

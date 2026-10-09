@@ -1,8 +1,6 @@
-// Two bounds declaring `Output` are a coin toss only when they bind it
-// differently. Both pinning it to `T` names one answer between them, and
-// reporting them ambiguous rejected `T: Add<Output = T> + Mul<Output = T>`.
-use { println, Stdout } from "core:cli";
-
+// Two bounds declaring `Output` make `T::Output` ambiguous even where both pin
+// it to one type. The pin already names that type, so the report says to write
+// it: `T` rather than `T::Output`.
 struct Cm {
     v: i32,
 }
@@ -27,9 +25,9 @@ fn poly<T: Add<Output = T> + Mul<Output = T>>(a: T, b: T) -> T::Output {
     return a * b + a;
 }
 
-export fn run() with Stdout {
-    println(`${poly(Cm { v: 2 }, Cm { v: 3 }).v}`);
+export fn run() {
+    assert poly(Cm { v: 2 }, Cm { v: 3 }).v == 8;
 }
 
 __DATA__
-{"stdout": "8\n"}
+{ "compile_error": "ambiguous associated type 'T::Output': declared by 'Add' and 'Mul'; each pins it to 'T', so write 'T'" }
