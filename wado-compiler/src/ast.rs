@@ -413,9 +413,9 @@ pub trait AstVisitor: Sized {
         self.visit_id(effect.id, effect.span);
     }
 
-    /// `body`, the code written under `attrs`: an item, a function, a `let`, a
-    /// parameter's default, a field's default, an associated constant's value.
-    /// Overridable because an attribute such as `#[allow]` scopes to it.
+    /// `body`, the walk of a node carrying `attrs`: an item, a method, a `let`,
+    /// a parameter, a field, a case, an associated type or constant. Overridable
+    /// because an attribute such as `#[allow]` scopes to what the node encloses.
     fn visit_attributed(&mut self, _attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         body(self);
     }
@@ -583,16 +583,14 @@ pub fn for_each_function<'a>(
     }
 }
 
+/// Every attribute-carrying node is reached through
+/// [`AstVisitor::visit_attributed`], once, by the walk of what contains it.
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
-    // `walk_function` scopes a function's attributes, a method's among them.
-    if let Item::Function(func) = item {
-        v.visit_function(func);
-        return;
-    }
-    v.visit_attributed(item.attrs(), |v| walk_item_body(v, item));
+    v.visit_attributed(item.attrs(), |v| walk_item_contents(v, item));
 }
 
-fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
+/// What [`walk_item`] visits under the item's attributes.
+pub fn walk_item_contents<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
         Item::Use(u) => {
             v.visit_id(u.id, u.span);
@@ -618,44 +616,46 @@ fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
         Item::Function(func) => v.visit_function(func),
         Item::Interface(e) => {
             v.visit_id(e.id, e.span);
-            for m in &e.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &e.methods);
         }
         Item::Struct(s) => {
             v.visit_id(s.id, s.span);
             v.visit_generic_params(&s.type_params);
             for field in &s.fields {
-                v.visit_id(field.id, field.span);
-                v.visit_type(&field.ty);
-                // A field default is an expression written here; see
-                // `walk_function`'s parameter defaults.
-                if let Some(default) = &field.default {
-                    v.visit_attributed(&field.attrs, |v| v.visit_expr(default));
-                }
+                v.visit_attributed(&field.attrs, |v| {
+                    v.visit_id(field.id, field.span);
+                    v.visit_type(&field.ty);
+                    // A field default is an expression written here; see
+                    // `walk_params`'s parameter defaults.
+                    if let Some(default) = &field.default {
+                        v.visit_expr(default);
+                    }
+                });
             }
         }
         Item::Enum(e) => {
             v.visit_id(e.id, e.span);
             v.visit_generic_params(&e.type_params);
             for case in &e.cases {
-                v.visit_id(case.id, case.span);
+                v.visit_attributed(&case.attrs, |v| v.visit_id(case.id, case.span));
             }
         }
         Item::Variant(vr) => {
             v.visit_id(vr.id, vr.span);
             v.visit_generic_params(&vr.type_params);
             for case in &vr.cases {
-                v.visit_id(case.id, case.span);
-                if let Some(payload) = &case.payload {
-                    v.visit_type(payload);
-                }
+                v.visit_attributed(&case.attrs, |v| {
+                    v.visit_id(case.id, case.span);
+                    if let Some(payload) = &case.payload {
+                        v.visit_type(payload);
+                    }
+                });
             }
         }
         Item::Flags(fl) => {
             v.visit_id(fl.id, fl.span);
             for va in &fl.flags {
-                v.visit_id(va.id, va.span);
+                v.visit_attributed(&va.attrs, |v| v.visit_id(va.id, va.span));
             }
         }
         Item::Newtype(n) => {
@@ -679,17 +679,21 @@ fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
             }
             v.visit_type(&i.ty);
             for binding in &i.associated_types {
-                v.visit_id(binding.id, binding.span);
-                v.visit_assoc_type_params(&binding.type_params, |v| v.visit_type(&binding.ty));
+                v.visit_attributed(&binding.attrs, |v| {
+                    v.visit_id(binding.id, binding.span);
+                    v.visit_assoc_type_params(&binding.type_params, |v| {
+                        v.visit_type(&binding.ty);
+                    });
+                });
             }
             for c in &i.constants {
-                v.visit_id(c.id, c.span);
-                v.visit_type(&c.ty);
-                v.visit_attributed(&c.attrs, |v| v.visit_expr(&c.value));
+                v.visit_attributed(&c.attrs, |v| {
+                    v.visit_id(c.id, c.span);
+                    v.visit_type(&c.ty);
+                    v.visit_expr(&c.value);
+                });
             }
-            for m in &i.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &i.methods);
         }
         Item::Trait(t) => {
             v.visit_id(t.id, t.span);
@@ -704,9 +708,7 @@ fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
                     v.visit_trait_bounds(&assoc.bounds);
                 });
             }
-            for m in &t.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &t.methods);
         }
         Item::Resource(r) => {
             v.visit_id(r.id, r.span);
@@ -714,9 +716,7 @@ fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
             if let Some(parent) = &r.parent {
                 v.visit_type(parent);
             }
-            for m in &r.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &r.methods);
         }
         Item::World(w) => {
             v.visit_id(w.id, w.span);
@@ -743,27 +743,34 @@ fn walk_item_body<V: AstVisitor>(v: &mut V, item: &Item) {
     }
 }
 
+/// The methods of an `impl`, a trait, an interface or a resource.
+fn walk_methods<V: AstVisitor>(v: &mut V, methods: &[Function]) {
+    for method in methods {
+        v.visit_attributed(&method.attrs, |v| v.visit_function(method));
+    }
+}
+
 /// A parameter list wherever one is declared: a function's, a world export's.
 fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
     for param in params {
-        v.visit_id(param.id, param.span);
-        v.visit_type(&param.ty);
-        // A default argument is an expression written in the declaring
-        // module, so its names are reference sites like any other and the
-        // walk answers for them from that vantage (WEP 2026-08-12 §3).
-        if let Some(default) = &param.default {
-            v.visit_attributed(&param.attrs, |v| v.visit_expr(default));
-        }
+        v.visit_attributed(&param.attrs, |v| {
+            v.visit_id(param.id, param.span);
+            v.visit_type(&param.ty);
+            // A default argument is an expression written in the declaring
+            // module, so its names are reference sites like any other and the
+            // walk answers for them from that vantage (WEP 2026-08-12 §3).
+            if let Some(default) = &param.default {
+                v.visit_expr(default);
+            }
+        });
     }
 }
 
 pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
-    v.visit_attributed(&func.attrs, |v| {
-        walk_function_signature(v, func);
-        if let Some(body) = &func.body {
-            v.visit_block(body);
-        }
-    });
+    walk_function_signature(v, func);
+    if let Some(body) = &func.body {
+        v.visit_block(body);
+    }
 }
 
 /// Everything [`walk_function`] visits but the body.
@@ -981,10 +988,12 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::Closure(c) => {
             for p in &c.params {
-                v.visit_id(p.id, p.name_span);
-                if let Some(ty) = &p.ty {
-                    v.visit_type(ty);
-                }
+                v.visit_attributed(&p.attrs, |v| {
+                    v.visit_id(p.id, p.name_span);
+                    if let Some(ty) = &p.ty {
+                        v.visit_type(ty);
+                    }
+                });
             }
             if let Some(ty) = &c.return_type {
                 v.visit_type(ty);
@@ -1142,11 +1151,13 @@ pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
 /// id-collecting walk (WEP 2026-08-12).
 pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
     for p in params {
-        v.visit_id(p.id, p.span);
-        v.visit_trait_bounds(&p.bounds);
-        if let Some(default) = &p.default {
-            v.visit_type(default);
-        }
+        v.visit_attributed(&p.attrs, |v| {
+            v.visit_id(p.id, p.span);
+            v.visit_trait_bounds(&p.bounds);
+            if let Some(default) = &p.default {
+                v.visit_type(default);
+            }
+        });
     }
 }
 

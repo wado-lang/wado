@@ -1,8 +1,9 @@
 // `#[allow(...)]` waives a lint over everything the node carrying it encloses:
-// a `let`, a parameter's default, a field's default, an associated constant.
-// The unwaived twin of each reports, so the waiver is what silences it.
+// a field, a parameter, an associated constant or type, a method, an `impl`, a
+// function, a `let`. Each waived name or expression is spelled once, and the
+// unwaived twin of each reports, so the waiver is what silences it.
 
-use { println, eprintln, print } from "core:cli";
+use { println, eprintln, print, eprint } from "core:cli";
 
 struct Config {
     #[allow(literal_cast)]
@@ -14,6 +15,38 @@ impl Config {
     #[allow(arithmetic_overflow)]
     const WAIVED: u8 = 250_u8 + 7_u8;
     const KEPT: u8 = 250_u8 + 8_u8;
+
+    #[allow(unconditional_trap)]
+    fn waived_method(y: i32) -> i32 {
+        return y / 0;
+    }
+}
+
+struct Holder<T> {
+    value: T,
+}
+
+#[allow(shadowed_name)]
+impl<eprint> Holder<eprint> {
+    fn get(&self) -> eprint {
+        return self.value;
+    }
+}
+
+trait Store {
+    type Buf<E>;
+}
+
+impl Store for Config {
+    #[allow(shadowed_name)]
+    type Buf<String> = List<String>;
+}
+
+#[allow(dead_code)]
+fn divides(x: i32) -> i32 {
+    #[allow(unconditional_trap)]
+    let waived = x % 0;
+    return waived + x / 0 + Config::waived_method(x);
 }
 
 fn scale(#[allow(literal_cast)] a: u8 = 12 as u8, b: u8 = 13 as u8) -> u8 {
@@ -49,6 +82,7 @@ test {
     assert config.waived + config.kept == 21_u8 && scale() == 25_u8;
     assert Config::WAIVED == 1_u8 && Config::KEPT == 2_u8;
     assert waived_body() == 1 && kept_body() == 2;
+    assert Holder { value: 3 }.get() == 3;
 }
 
 __DATA__
@@ -61,7 +95,8 @@ __DATA__
     "write `15_u8` for `15 as u8`",
     "`240_u8 + 21_u8`",
     "`x <= x`",
-    "`print` shadows"
+    "`print` shadows",
+    "`x / 0`"
   ],
   "warnings_not_contains": [
     "10 as u8",
@@ -71,6 +106,10 @@ __DATA__
     "240_u8 + 20_u8",
     "`x == x`",
     "`println` shadows",
-    "`eprintln` shadows"
+    "`eprintln` shadows",
+    "`x % 0`",
+    "`y / 0`",
+    "`eprint` shadows",
+    "`String` shadows"
   ]
 }

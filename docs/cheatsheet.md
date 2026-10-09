@@ -180,7 +180,8 @@ let x = transform(x);   // OK: derives from old x
 // let x = 2;           // Error: does not reference old x
 
 // Any other binder taking a name that already reaches a known symbol warns
-// (`shadowed_name`). Waive it per binder or per module with `allow`.
+// (`shadowed_name`). `allow` on the binder, or on anything enclosing it (a
+// function, an item, the module), waives it.
 let println = 1;                                  // warns: shadows the function
 #[allow(shadowed_name)] let eprintln = 1;         // deliberate, no warning
 if let Some(x) = x { }                            // exempt: derives from old x

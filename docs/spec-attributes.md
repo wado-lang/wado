@@ -104,8 +104,8 @@ test {
 ### `#[allow(...)]`
 
 Waives a lint on the node carrying it and on everything that node encloses: an
-item, a parameter, a type parameter, a struct field, an associated constant, or
-a `let`. As the module inner attribute `#![allow(...)]` it waives the lint for
+item, a method, a parameter, a type parameter, a field, a case, an associated
+type or constant, or a `let`. As the module inner attribute `#![allow(...)]` it waives the lint for
 the whole file. There is no `#[deny(...)]`. [Diagnostics](./spec-diagnostics.md)
 lists the lints.
 
