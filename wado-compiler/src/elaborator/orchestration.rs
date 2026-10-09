@@ -31,8 +31,8 @@ use crate::world_registry::WorldRegistry;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
-    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams,
-    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo,
+    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use super::{AbstractSelectionCache, Elaborator};
@@ -86,17 +86,12 @@ impl AstVisitor for BoundBindingsChecked<'_> {
             let Some(trait_) = self.resolutions.bound_decl(bound) else {
                 continue;
             };
-            // As for a type application, a pack swallows any surplus.
-            if let Some(header) = self.trait_env.decl_header_of(&trait_) {
-                let params = RealTypeParams::borrowed(&header.type_params);
-                if !params.iter().any(|p| p.is_pack) && bound.type_args.len() > params.len() {
-                    self.errors.push(TypeError::TypeArgumentCount {
-                        name: bound.name.clone(),
-                        expected: params.len(),
-                        found: bound.type_args.len(),
-                        span: bound.span,
-                    });
-                }
+            if let Some(surplus) = self
+                .trait_env
+                .decl_header_of(&trait_)
+                .and_then(|header| header.surplus_type_args(bound.type_args.len(), bound.span))
+            {
+                self.errors.push(surplus);
             }
             for binding in &bound.assoc_types {
                 let declared = self
@@ -993,6 +988,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // A derivation request asks for an impl rather than writing one, so
             // it has no members to compare.
+            if let Some(trait_ty) = header.trait_ty()
+                && let Some(surplus) =
+                    decl.surplus_type_args(written_arg_nodes(trait_ty).len(), trait_ty.span())
+            {
+                let _ = logger.error_in(&header.module, surplus);
+            }
             if header.is_synthesize_request {
                 debug_assert!(header.associated_types.is_empty() && header.methods.is_empty());
                 continue;

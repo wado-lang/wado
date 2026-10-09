@@ -11,7 +11,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, FamilySite, ScopedBound};
 use super::trait_query::SelfBinding;
-use super::types::{RealTypeParams, TypeError, forward_type_param_defaults};
+use super::types::{TypeError, forward_type_param_defaults};
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
@@ -940,6 +940,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_generic_type_out_of_scope(site, name, args, span);
         };
         let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
+        // A trait head (`impl IndexValue<i32> for T`) keeps its parameters on
+        // its own declaration, so only a type declaration's list is a ceiling.
         let declared = struct_info
             .as_ref()
             .map(|info| info.type_params.clone())
@@ -950,12 +952,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| {
                 self.lookup_generic_newtype_of_decl(def)
                     .map(|info| info.type_params.clone())
-            })
-            .or_else(|| {
-                self.tysys
-                    .trait_env
-                    .decl_header_of(&def)
-                    .map(|header| RealTypeParams::of(&header.type_params))
             });
         if let Some(params) = declared
             && self.reject_surplus_type_args(name, &params, args, span)

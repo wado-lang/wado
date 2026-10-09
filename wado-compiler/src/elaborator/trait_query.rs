@@ -587,11 +587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl).cloned() else {
             return;
         };
-        let target = self
-            .tysys
-            .type_table
-            .borrow()
-            .impl_target_whole(impl_def);
+        let target = self.tysys.type_table.borrow().impl_target_whole(impl_def);
         let mut slots: IndexMap<u32, TypeId> = IndexMap::default();
         slots.insert(0, target);
         let defaults = header
@@ -653,11 +649,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_slots.insert(slot, *to);
                 }
             }
-            let expected =
-                declared
-                    .sig
-                    .decl
-                    .instantiate_slots_with(&self.tysys.type_table, &method_slots, &projections);
+            let expected = declared.sig.decl.instantiate_slots_with(
+                &self.tysys.type_table,
+                &method_slots,
+                &projections,
+            );
             let value_params = method
                 .params
                 .iter()

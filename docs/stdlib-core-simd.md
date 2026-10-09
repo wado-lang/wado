@@ -199,13 +199,13 @@ assert mins.extract_lane(3) == 4;
 
 ##### `fn bitnot(&self) -> i8x16`
 
-#### `impl Shl for i8x16`
+#### `impl Shl<u32> for i8x16`
 
-##### `fn shl(&self, rhs: u32) -> i8x16`
+##### `fn shl(&self, rhs: &u32) -> i8x16`
 
-#### `impl Shr for i8x16`
+#### `impl Shr<u32> for i8x16`
 
-##### `fn shr(&self, rhs: u32) -> i8x16`
+##### `fn shr(&self, rhs: &u32) -> i8x16`
 
 #### `impl From<Array<i32>> for i8x16`
 
@@ -321,13 +321,13 @@ assert mins.extract_lane(3) == 4;
 
 ##### `fn bitnot(&self) -> i16x8`
 
-#### `impl Shl for i16x8`
+#### `impl Shl<u32> for i16x8`
 
-##### `fn shl(&self, rhs: u32) -> i16x8`
+##### `fn shl(&self, rhs: &u32) -> i16x8`
 
-#### `impl Shr for i16x8`
+#### `impl Shr<u32> for i16x8`
 
-##### `fn shr(&self, rhs: u32) -> i16x8`
+##### `fn shr(&self, rhs: &u32) -> i16x8`
 
 #### `impl From<Array<i32>> for i16x8`
 
@@ -441,13 +441,13 @@ assert mins.extract_lane(3) == 4;
 
 ##### `fn bitnot(&self) -> i32x4`
 
-#### `impl Shl for i32x4`
+#### `impl Shl<u32> for i32x4`
 
-##### `fn shl(&self, rhs: u32) -> i32x4`
+##### `fn shl(&self, rhs: &u32) -> i32x4`
 
-#### `impl Shr for i32x4`
+#### `impl Shr<u32> for i32x4`
 
-##### `fn shr(&self, rhs: u32) -> i32x4`
+##### `fn shr(&self, rhs: &u32) -> i32x4`
 
 #### `impl From<Array<i32>> for i32x4`
 
@@ -529,13 +529,13 @@ assert mins.extract_lane(3) == 4;
 
 ##### `fn bitnot(&self) -> i64x2`
 
-#### `impl Shl for i64x2`
+#### `impl Shl<u32> for i64x2`
 
-##### `fn shl(&self, rhs: u32) -> i64x2`
+##### `fn shl(&self, rhs: &u32) -> i64x2`
 
-#### `impl Shr for i64x2`
+#### `impl Shr<u32> for i64x2`
 
-##### `fn shr(&self, rhs: u32) -> i64x2`
+##### `fn shr(&self, rhs: &u32) -> i64x2`
 
 #### `impl From<Array<i64>> for i64x2`
 
@@ -621,13 +621,13 @@ Append 16 bytes from this u8x16 to a String.
 
 ##### `fn bitnot(&self) -> u8x16`
 
-#### `impl Shl for u8x16`
+#### `impl Shl<u32> for u8x16`
 
-##### `fn shl(&self, rhs: u32) -> u8x16`
+##### `fn shl(&self, rhs: &u32) -> u8x16`
 
-#### `impl Shr for u8x16`
+#### `impl Shr<u32> for u8x16`
 
-##### `fn shr(&self, rhs: u32) -> u8x16`
+##### `fn shr(&self, rhs: &u32) -> u8x16`
 
 #### `impl From<Array<i32>> for u8x16`
 
@@ -697,13 +697,13 @@ Append 16 bytes from this u8x16 to a String.
 
 ##### `fn bitnot(&self) -> u16x8`
 
-#### `impl Shl for u16x8`
+#### `impl Shl<u32> for u16x8`
 
-##### `fn shl(&self, rhs: u32) -> u16x8`
+##### `fn shl(&self, rhs: &u32) -> u16x8`
 
-#### `impl Shr for u16x8`
+#### `impl Shr<u32> for u16x8`
 
-##### `fn shr(&self, rhs: u32) -> u16x8`
+##### `fn shr(&self, rhs: &u32) -> u16x8`
 
 #### `impl From<Array<i32>> for u16x8`
 
@@ -765,13 +765,13 @@ Append 16 bytes from this u8x16 to a String.
 
 ##### `fn bitnot(&self) -> u32x4`
 
-#### `impl Shl for u32x4`
+#### `impl Shl<u32> for u32x4`
 
-##### `fn shl(&self, rhs: u32) -> u32x4`
+##### `fn shl(&self, rhs: &u32) -> u32x4`
 
-#### `impl Shr for u32x4`
+#### `impl Shr<u32> for u32x4`
 
-##### `fn shr(&self, rhs: u32) -> u32x4`
+##### `fn shr(&self, rhs: &u32) -> u32x4`
 
 #### `impl From<Array<i32>> for u32x4`
 
@@ -821,13 +821,13 @@ Append 16 bytes from this u8x16 to a String.
 
 ##### `fn bitnot(&self) -> u64x2`
 
-#### `impl Shl for u64x2`
+#### `impl Shl<u32> for u64x2`
 
-##### `fn shl(&self, rhs: u32) -> u64x2`
+##### `fn shl(&self, rhs: &u32) -> u64x2`
 
-#### `impl Shr for u64x2`
+#### `impl Shr<u32> for u64x2`
 
-##### `fn shr(&self, rhs: u32) -> u64x2`
+##### `fn shr(&self, rhs: &u32) -> u64x2`
 
 #### `impl From<Array<i64>> for u64x2`
 

@@ -179,8 +179,8 @@ assert mask.extract_lane(0) == -1;
 ```
 
 `v128` itself takes no arithmetic, bitwise or shift operator. The lane types
-carry those, and each works lane by lane. A shift takes one `u32` count and
-shifts every lane by it.
+carry those, and each works lane by lane. A shift takes one `u32` count, modulo
+the lane's bit width, and shifts every lane by it.
 
 The comparison methods (`eq`, `ne`, `lt`, `le`, `gt`, `ge`) answer a mask:
 each lane is all ones where the comparison holds and all zeros where it does

@@ -386,9 +386,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.reject_pack_layout_mismatch(actual, expected, span);
     }
 
-    /// Reject a value carrying no pack where a tuple of packs this signature
-    /// declares is expected. `pack_shape_conflict` compares two tuples naming
-    /// the same packs; a value naming none is the case only a scope can settle.
+    /// Reject a value carrying no pack where one element of a pack, or a tuple
+    /// of packs, this signature declares is expected. `pack_shape_conflict`
+    /// compares two tuples naming the same packs; a value naming none is the
+    /// case only a scope can settle.
     fn reject_pack_layout_mismatch(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
         if !table.contains_type_pack(expected)
@@ -397,11 +398,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return;
         }
-        let Some(layout) = table.tuple_layout(expected) else {
-            return;
-        };
-        if table.tuple_layout(actual) == Some(layout) {
-            return;
+        let (expected_referent, _) = unwrap_ref(expected, &table);
+        let is_pack_element = matches!(table.get(expected_referent), ResolvedType::TypePack { .. });
+        if !is_pack_element {
+            let Some(layout) = table.tuple_layout(expected) else {
+                return;
+            };
+            if table.tuple_layout(actual) == Some(layout) {
+                return;
+            }
         }
         if !table
             .pack_names(expected)

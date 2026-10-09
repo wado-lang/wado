@@ -1,0 +1,18 @@
+// A bound's omitted `Rhs` defaults to `Self`, which for a pack element is the
+// element's own type. The right operand was left unchecked there, so a `u32`
+// reached an `i32` `add` that declares `&i32`.
+fn sum_pack<..T: Add<Output = i32>>(items: [..T]) -> i32 {
+    let s: u32 = 1;
+    let mut acc = 0;
+    for let v of items {
+        acc = acc + (v + s);
+    }
+    return acc;
+}
+
+export fn run() {
+    let _ = sum_pack([1, 2]);
+}
+
+__DATA__
+{ "compile_error": ":8:26: analysis error: type mismatch: expected '..T', found 'u32'" }

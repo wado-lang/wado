@@ -424,8 +424,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (item, method_name) = operator_trait_method(op)?;
         let trait_ = self.tysys.compiler_trait_def(item)?;
         // A type parameter has no impl block to read the rhs off; its bounds
-        // say it, and `Shl::shl(&self, rhs: u32)` is why a literal needs to be
-        // told. A bound cannot vary the declared rhs, so no selection arises.
+        // say it, as `T: Shl<u32>` does. The dispatch reports two bounds that
+        // disagree, so the hint selects nothing.
         let param_name = match self.tysys.type_table.borrow().get(self_type_id) {
             ResolvedType::TypeParam { name, .. } => Some(name.clone()),
             _ => None,

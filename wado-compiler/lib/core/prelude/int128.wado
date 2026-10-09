@@ -771,11 +771,8 @@ impl BitNot for u128 {
 impl Shl for u128 {
     type Output = u128;
 
-    pub fn shl(&self, rhs: u32) -> Self::Output {
-        let shift = rhs as i32;
-        if shift >= 128 {
-            return u128::zero();
-        }
+    pub fn shl(&self, rhs: &u128) -> Self::Output {
+        let shift = (rhs.low & 127) as i32;
         if shift >= 64 {
             // All low bits shift into high, low becomes 0
             let s = (shift - 64) as u64;
@@ -801,11 +798,8 @@ impl Shl for u128 {
 impl Shr for u128 {
     type Output = u128;
 
-    pub fn shr(&self, rhs: u32) -> Self::Output {
-        let shift = rhs as i32;
-        if shift >= 128 {
-            return u128::zero();
-        }
+    pub fn shr(&self, rhs: &u128) -> Self::Output {
+        let shift = (rhs.low & 127) as i32;
         if shift >= 64 {
             // All high bits shift into low, high becomes 0
             let s = (shift - 64) as u64;
@@ -1312,11 +1306,8 @@ impl BitNot for i128 {
 impl Shl for i128 {
     type Output = i128;
 
-    pub fn shl(&self, rhs: u32) -> Self::Output {
-        let shift = rhs as i32;
-        if shift >= 128 {
-            return 0;
-        }
+    pub fn shl(&self, rhs: &i128) -> Self::Output {
+        let shift = (rhs.low & 127) as i32;
         if shift >= 64 {
             // All low bits shift into high, low becomes 0
             let s = (shift - 64) as u64;
@@ -1342,19 +1333,8 @@ impl Shl for i128 {
 impl Shr for i128 {
     type Output = i128;
 
-    pub fn shr(&self, rhs: u32) -> Self::Output {
-        let shift = rhs as i32;
-        if shift >= 128 {
-            // Fill with sign bit
-            if self.high < 0 {
-                return i128 {
-                    low: 0xFFFFFFFFFFFFFFFF,
-                    high: -1,
-                };
-            } else {
-                return 0;
-            }
-        }
+    pub fn shr(&self, rhs: &i128) -> Self::Output {
+        let shift = (rhs.low & 127) as i32;
         if shift >= 64 {
             // All high bits shift into low, high becomes sign extension
             let s = (shift - 64) as i64;

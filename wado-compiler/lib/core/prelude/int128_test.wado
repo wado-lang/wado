@@ -590,16 +590,16 @@ test "u128 shift by zero" {
     assert a >> 0 == a;
 }
 
-test "u128 shift left by 128 returns zero" {
+test "u128 shift left by 128 shifts by 0" {
     let a: u128 = 1;
-    let zero: u128 = 0;
-    assert a << 128 == zero;
+    assert a << 128 == a;
+    assert a << 129 == 2;
 }
 
-test "u128 shift right by 128 returns zero" {
+test "u128 shift right by 128 shifts by 0" {
     let a: u128 = 18446744073709551616;  // 2^64
-    let zero: u128 = 0;
-    assert a >> 128 == zero;
+    assert a >> 128 == a;
+    assert a >> 192 == 1;
 }
 
 test "i128 shift by zero" {
@@ -608,16 +608,16 @@ test "i128 shift by zero" {
     assert a >> 0 == a;
 }
 
-test "i128 shift left by 128 returns zero" {
+test "i128 shift left by 128 shifts by 0" {
     let a: i128 = 1;
-    let zero: i128 = 0;
-    assert a << 128 == zero;
+    assert a << 128 == a;
+    assert a << 255 == i128::MIN;
 }
 
-test "i128 negative shift right by 128 fills sign" {
-    // Arithmetic shift fills with sign bit; -1 >> anything = -1
-    let a: i128 = -1;
-    assert a >> 128 == a;
+test "i128 negative shift right by 127 fills sign" {
+    let a: i128 = i128::MIN;
+    assert a >> 127 == -1;
+    assert a >> 255 == -1;
 }
 
 test "is_negative false for positive" {
@@ -914,8 +914,8 @@ test "u128 div_rem satisfies q * d + r == n with r < d" {
         // Sweep both operand widths so every path — native, 128÷64, 128÷128 —
         // and every normalization shift is exercised. Only a zero divisor is
         // substituted, leaving even ones and zero limbs in the sample.
-        let n = u128::from_pair(n_lo, n_hi) >> (i % 129) as u32;
-        let shifted = u128::from_pair(d_lo, d_hi) >> (i * 7 % 128) as u32;
+        let n = u128::from_pair(n_lo, n_hi) >> (i % 128) as u128;
+        let shifted = u128::from_pair(d_lo, d_hi) >> (i * 7 % 128) as u128;
         let d = if shifted == 0 { u128::one() } else { shifted };
         let [q, r] = n.div_rem(&d);
         assert r < d;
@@ -980,7 +980,7 @@ test "u128 to_string round-trips through from_str" {
         let hi = s;
         s = next_rand(s);
         let lo = s;
-        let v = u128::from_pair(lo, hi) >> (i % 129) as u32;
+        let v = u128::from_pair(lo, hi) >> (i % 128) as u128;
         assert u128::from_str(&v.to_string()) matches { Ok(p) && p == v };
     }
 }

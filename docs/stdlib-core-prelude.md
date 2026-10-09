@@ -425,19 +425,19 @@ Trait for the `~` operator (bitwise NOT).
 
 Returns the bitwise NOT of self.
 
-### `pub trait Shl with ()`
+### `pub trait Shl<Rhs = Self> with ()`
 
 Trait for the `<<` operator (left shift).
 
-#### `fn shl(&self, rhs: u32) -> Self::Output`
+#### `fn shl(&self, rhs: &Rhs) -> Self::Output`
 
 Returns self shifted left by rhs bits.
 
-### `pub trait Shr with ()`
+### `pub trait Shr<Rhs = Self> with ()`
 
 Trait for the `>>` operator (right shift).
 
-#### `fn shr(&self, rhs: u32) -> Self::Output`
+#### `fn shr(&self, rhs: &Rhs) -> Self::Output`
 
 Returns self shifted right by rhs bits.
 
@@ -4017,11 +4017,11 @@ Convert u128 to String (for template string interpolation)
 
 #### `impl Shl for u128`
 
-##### `pub fn shl(&self, rhs: u32) -> Self::Output`
+##### `pub fn shl(&self, rhs: &u128) -> Self::Output`
 
 #### `impl Shr for u128`
 
-##### `pub fn shr(&self, rhs: u32) -> Self::Output`
+##### `pub fn shr(&self, rhs: &u128) -> Self::Output`
 
 #### `impl Div for u128`
 
@@ -4272,11 +4272,11 @@ Convert i128 to String (for template string interpolation)
 
 #### `impl Shl for i128`
 
-##### `pub fn shl(&self, rhs: u32) -> Self::Output`
+##### `pub fn shl(&self, rhs: &i128) -> Self::Output`
 
 #### `impl Shr for i128`
 
-##### `pub fn shr(&self, rhs: u32) -> Self::Output`
+##### `pub fn shr(&self, rhs: &i128) -> Self::Output`
 
 #### `impl Div for i128`
 

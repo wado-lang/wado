@@ -17,15 +17,15 @@ impl Doubler for Cm {
     }
 }
 
-impl Shl for Cm {
+impl Shl<u32> for Cm {
     type Output = Cm;
 
-    fn shl(&self, rhs: u32) -> Cm {
+    fn shl(&self, rhs: &u32) -> Cm {
         return Cm { v: self.v * 2 };
     }
 }
 
-fn twice<T: Doubler + Shl<Output = T>>(a: T) -> T {
+fn twice<T: Doubler + Shl<u32, Output = T>>(a: T) -> T {
     return a << 1;
 }
 

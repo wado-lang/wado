@@ -506,6 +506,27 @@ test "signed MIN % -1 is 0" {
 }
 ```
 
+A shift's two operands have one type, as a binary arithmetic operator's do, so
+the amount of `x << n` is the type of `x`. The amount is taken modulo the
+operand's bit width at every width, as `i32.shl` and `i64.shl` take it, so it
+never traps and never shifts everything out. `>>` is arithmetic on a signed
+integer and logical on an unsigned one.
+
+`%`, the bitwise operators and the shifts take integers only: on a float each
+is a compile error. Wasm has no float remainder.
+
+<!-- {"fixture":"int_shift_amount_masked.wado"} -->
+
+```wado
+test "u8 and i8 shift modulo 8" {
+    assert builtin::black_box(1_u8) << builtin::black_box(9_u8) == 2;
+    assert builtin::black_box(-128_i8) >> builtin::black_box(15_i8) == -1;
+    assert builtin::black_box(0x80_u8) >> builtin::black_box(15_u8) == 1;
+    let one: u8 = 1;
+    assert one << 9 == 2;
+}
+```
+
 ### Type Cast (`as`)
 
 The `as` operator converts between primitive types. It also reinterprets a

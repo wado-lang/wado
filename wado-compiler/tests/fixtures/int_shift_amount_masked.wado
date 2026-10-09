@@ -1,0 +1,36 @@
+// A shift amount is reduced modulo the operand's bit width at every width, as
+// Wasm's `i32.shl` and `i64.shl` do. The `black_box` cases reach the runtime;
+// the others go through the constant folder, which must agree.
+
+test "u8 and i8 shift modulo 8" {
+    assert builtin::black_box(1_u8) << builtin::black_box(9_u8) == 2;
+    assert builtin::black_box(-128_i8) >> builtin::black_box(15_i8) == -1;
+    assert builtin::black_box(0x80_u8) >> builtin::black_box(15_u8) == 1;
+    let one: u8 = 1;
+    assert one << 9 == 2;
+}
+
+test "u16 and i16 shift modulo 16" {
+    assert builtin::black_box(1_u16) << builtin::black_box(17_u16) == 2;
+    assert builtin::black_box(-32768_i16) >> builtin::black_box(31_i16) == -1;
+    let one: i16 = 1;
+    assert one << 17 == 2;
+}
+
+test "i32 and i64 shift modulo 32 and 64" {
+    assert builtin::black_box(1) << builtin::black_box(33) == 2;
+    assert builtin::black_box(1_i64) << builtin::black_box(65_i64) == 2;
+    assert 1 << 33 == 2;
+}
+
+test "u128 and i128 shift modulo 128" {
+    assert builtin::black_box(1_u128) << builtin::black_box(129_u128) == 2;
+    assert builtin::black_box(1_i128) << builtin::black_box(129_i128) == 2;
+    assert builtin::black_box(i128::MIN) >> builtin::black_box(255_i128) == -1;
+    assert builtin::black_box(u128::MAX) >> builtin::black_box(255_u128) == 1;
+}
+
+test "signed >> is arithmetic, unsigned >> is logical" {
+    assert builtin::black_box(-8_i8) >> builtin::black_box(1_i8) == -4;
+    assert builtin::black_box(0xF8_u8) >> builtin::black_box(1_u8) == 0x7C;
+}

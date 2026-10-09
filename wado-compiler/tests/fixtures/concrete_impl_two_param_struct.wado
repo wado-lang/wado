@@ -27,10 +27,10 @@ impl Neg for Pair<i32, i64> {
     }
 }
 
-impl Shl for Pair<i32, i64> {
+impl Shl<u32> for Pair<i32, i64> {
     type Output = Pair<i32, i64>;
-    fn shl(&self, n: u32) -> Pair<i32, i64> {
-        return Pair { a: self.a << n as i32, b: self.b };
+    fn shl(&self, n: &u32) -> Pair<i32, i64> {
+        return Pair { a: self.a << *n as i32, b: self.b };
     }
 }
 
