@@ -3,7 +3,7 @@
 //! § "The Generator Reports Every Fusion Decision".
 
 use { CodeWriter } from "lib:wadopoet";
-use { Lowering, lowering_of, subgraph } from "./emit.wado";
+use { Lowering, branches, lowering_of } from "./emit.wado";
 use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
 use { Checked } from "./infer.wado";
 use { Shape } from "./shape.wado";
@@ -52,14 +52,10 @@ fn scope(w: &mut CodeWriter, graph: &Graph, checked: &Checked, tally: &mut Tally
             w.line(`${output}: ${tensor(checked, &output)}`);
         }
         if lowering matches { Branch } {
-            let [then_scope, else_scope] = checked.branches[node.outputs[0]];
-            for let [attr, branch] of [
-                ["then_branch", then_scope],
-                ["else_branch", else_scope],
-            ] {
-                w.line(attr);
+            for let b of branches(node, checked) {
+                w.line(b.attr);
                 w.indent();
-                scope(w, &subgraph(node, attr), &branch, tally);
+                scope(w, &b.graph, &b.checked, tally);
                 w.dedent();
             }
         }
@@ -94,7 +90,7 @@ fn boundary(w: &mut CodeWriter, heading: String, declared: &List<ValueInfo>, che
     w.dedent();
 }
 
-/// `Kernel` as the left column reads it, all four one width.
+/// A lowering as the left column reads it, each one width.
 fn label(lowering: Lowering) -> String {
     return match lowering {
         Folded => "folded",
@@ -133,14 +129,18 @@ fn axes(shape: &Shape) -> String {
 
 /// A folded tensor's elements, the first `SHOWN` of them where it holds more.
 fn elements(k: &Known) -> String {
-    let spelled: List<String> = match &k.elements {
-        Ints(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
-        Symbolic(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
-        Floats(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
-        Bools(v) => v.into_iter().take(SHOWN).map(|x| `${x}`).collect(),
+    let spelled = match &k.elements {
+        Ints(v) => shown(v),
+        Symbolic(v) => shown(v),
+        Floats(v) => shown(v),
+        Bools(v) => shown(v),
     };
     let more = if k.len() > SHOWN { `, … ${k.len() - SHOWN} more` } else { "" };
     return `[${spelled.join(", ")}${more}]`;
+}
+
+fn shown<T: Display>(values: &List<T>) -> List<String> {
+    return values.into_iter().take(SHOWN).map(|x| `${x}`).collect();
 }
 
 /// Enough elements to tell a shape or an index list by, and few enough that a

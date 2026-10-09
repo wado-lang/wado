@@ -796,15 +796,15 @@ fn branch_block(
     exprs: &mut Operands,
     symbols: &mut Symbols,
 ) -> Result<List<String>, EmitError> {
-    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+    let [then_branch, else_branch] = branches(node, checked);
     let outputs: List<String> = node.outputs.into_iter().map(|o| names.get(&o)).collect();
     let bound = if outputs.len() == 1 { outputs[0] } else { `[${outputs.join(", ")}]` };
     // The condition is read on the host, which on a GPU is a synchronization.
     let condition = `backend.download(${exprs.reference(&node.inputs[0])}).data[0]`;
     let mut lines: List<String> = [`let ${bound} = if ${condition} {`];
-    lines.extend(&indented(branch_lines(node, "then_branch", &then_scope, checked, names, exprs, symbols)?));
+    lines.extend(&indented(branch_lines(node, &then_branch, checked, names, exprs, symbols)?));
     lines.push("} else {");
-    lines.extend(&indented(branch_lines(node, "else_branch", &else_scope, checked, names, exprs, symbols)?));
+    lines.extend(&indented(branch_lines(node, &else_branch, checked, names, exprs, symbols)?));
     lines.push("};");
     for let [i, output] of node.outputs.into_iter().enumerate() {
         exprs.values[output] = outputs[i];
@@ -815,14 +815,14 @@ fn branch_block(
 /// One branch's block, in a copy of the operands around it.
 fn branch_lines(
     node: &Node,
-    attr: String,
-    branch: &Checked,
+    taken: &IfBranch,
     around: &Checked,
     names: &Names,
     exprs: &Operands,
     symbols: &mut Symbols,
 ) -> Result<List<String>, EmitError> {
-    let graph = subgraph(node, attr);
+    let graph = &taken.graph;
+    let branch = &taken.checked;
     let mut inner = Operands {
         values: exprs.values,
         scalars: scalar_literals(branch),
@@ -838,9 +838,9 @@ fn branch_lines(
             inner.values[*tensor] = relabeled(&around.primitives[*tensor], &from, &to, &exprs.reference(tensor));
         }
     }
-    let literals = literal_tensors(&graph, branch, &inner.scalars);
+    let literals = literal_tensors(graph, branch, &inner.scalars);
     let mut lines = owed_checks(branch, symbols)?;
-    lines.extend(&scope_body(&graph, branch, names, &mut inner, &literals, symbols)?);
+    lines.extend(&scope_body(graph, branch, names, &mut inner, &literals, symbols)?);
     let mut yielded: List<String> = [];
     for let [i, vi] of graph.outputs.into_iter().enumerate() {
         let from = branch.shapes[vi.name];
@@ -1678,18 +1678,36 @@ fn push_branch_axes(names: &mut List<String>, seen: &mut TreeSet<String>, graph:
 fn branches_of(graph: &Graph, checked: &Checked) -> List<[Graph, Checked]> {
     let mut found: List<[Graph, Checked]> = [];
     for let node of &graph.nodes {
-        let Some(scopes) = checked.branches.get(node.outputs[0]) else {
+        if !checked.branches.contains_key(node.outputs[0]) {
             continue;
-        };
-        found.push([subgraph(node, "then_branch"), scopes.0]);
-        found.push([subgraph(node, "else_branch"), scopes.1]);
+        }
+        for let b of branches(node, checked) {
+            found.push([b.graph, b.checked]);
+        }
     }
     return found;
 }
 
-/// The graph a branch attribute holds, which stage 0 has read.
-pub fn subgraph(node: &Node, attr: String) -> Graph {
-    return node.attr(attr).unwrap().graph.unwrap();
+/// One branch of an `If`: the attribute holding it, the graph stage 0 read
+/// from it, and the scope stage 0 checked it in.
+pub struct IfBranch {
+    pub attr: String,
+    pub graph: Graph,
+    pub checked: Checked,
+}
+
+/// An `If`'s two branches, then before else.
+pub fn branches(node: &Node, checked: &Checked) -> [IfBranch, IfBranch] {
+    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+    let branch = |attr: String, scope: Checked| IfBranch {
+        attr,
+        graph: node.attr(attr).unwrap().graph.unwrap(),
+        checked: scope,
+    };
+    return [
+        branch("then_branch", then_scope),
+        branch("else_branch", else_scope),
+    ];
 }
 
 fn push_axes(names: &mut List<String>, seen: &mut TreeSet<String>, shapes: &TreeMap<String, Shape>, tensor: &String) {

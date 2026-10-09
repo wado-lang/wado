@@ -154,9 +154,9 @@ runs, so a typo or a type mismatch is reported on the offending key.
   at its use sites every field is required unless its type is an `Option`, a
   `List`, or a `TreeMap`.
 
-Loam's options hold a list of structs, a map, and a list of strings. Its entry
-module re-exports them from the module the `loam` command reads them through as
-well:
+Loam's options hold a list of structs, a map, and a list of strings. They are
+declared in `compile.wado`, which the `loam` command reads too, and the entry
+module re-exports them:
 
 <!-- {"source": "package-loam/src/compile.wado"} -->
 

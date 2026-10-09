@@ -125,7 +125,7 @@ fn checked_model(
     };
     let options = match *options {
         Some(file) => {
-            let text = String::from_utf8(read_file(&file)?).map_err(|e| `loam: '${file}' is not UTF-8: ${e}`)?;
+            let text = fs::read_to_string(&file).map_err(|e| `loam: ${e}`)?;
             from_string::<Options>(&text).map_err(|e| `loam: '${file}': ${e}`)?;
         },
         None => Options {},
