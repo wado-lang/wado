@@ -128,7 +128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let trait_ = self.bound_trait_at_args(trait_, &b, &[], &[], self_binding);
                 Some(DeclaredBound {
                     trait_: spelled_at(&trait_, &at_impl),
-                    written: b.name.clone(),
+                    written: b.name,
                 })
             })
             .collect()
