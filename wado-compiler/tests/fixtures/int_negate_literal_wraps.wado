@@ -1,0 +1,23 @@
+// Negating a negative literal wraps at the literal's width, as unary `-` does at
+// run time. The fold of `-literal` negated as an `i64` and kept the bits, so
+// `-(-128_i8)` lowered to an `i8` holding 128.
+
+#![allow(arithmetic_overflow)]
+
+test "a negated MIN literal wraps to MIN" {
+    let a: i8 = -(-128_i8);
+    let b: i16 = -(-32768_i16);
+    let c: i32 = -(-2147483648);
+    let d: i64 = -(-9223372036854775808_i64);
+    assert a == -128;
+    assert b == -32768;
+    assert c == -2147483648;
+    assert d == i64::MIN;
+    assert -(-128_i8) == builtin::black_box(-128_i8);
+}
+
+test "in range negations are unchanged" {
+    let a: i8 = -(-127_i8);
+    assert a == 127;
+    assert -(-5_i128) == 5_i128;
+}

@@ -1,0 +1,25 @@
+// An impl method returns what its trait declares, `Self::X` read as the impl's
+// own binding.
+
+trait Make with () {
+    type Out;
+
+    fn make(&self) -> Self::Out;
+}
+
+struct Maker {}
+
+impl Make for Maker {
+    type Out = i64;
+
+    fn make(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let _ = Maker {}.make();
+}
+
+__DATA__
+{"compile_error": ":15:8: analysis error: method `make` returns `i32`, but `Make` declares `i64`", "compile_error_codes": ["TYPE_MISMATCH"]}

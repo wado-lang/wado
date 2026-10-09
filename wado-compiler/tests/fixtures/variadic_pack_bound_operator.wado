@@ -28,8 +28,8 @@ test "a bound naming a right-hand type other than Self" {
     assert xor_pack([1, 2, 4]) == 7;
 }
 
-fn shift_pack<..T: Shl<Output = i32>>(items: [..T]) -> i32 {
-    let by: u32 = 1;
+fn shift_pack<..T: Shl<i32, Output = i32>>(items: [..T]) -> i32 {
+    let by = 1;
     let mut acc = 0;
     for let v of items {
         acc = acc + (v << by);
@@ -37,7 +37,7 @@ fn shift_pack<..T: Shl<Output = i32>>(items: [..T]) -> i32 {
     return acc;
 }
 
-test "a shift reaches it too, where the right-hand side is a count" {
+test "a shift reaches it too" {
     assert shift_pack([1, 2, 4]) == 14;
 }
 

@@ -124,7 +124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// numeric-literal coercion, shared with [`Self::desugar_comparison_chain`].
     /// A primitive coerces the literal to the other operand's type; a struct type
     /// such as `i128` takes each expected type from the operator trait's method
-    /// signature, which covers an asymmetric `Shl::shl(&self, rhs: u32)`.
+    /// signature, which covers an asymmetric `impl Shl<u32> for i8x16`.
     pub(super) fn resolve_binary_operands_with_coercion(
         &mut self,
         left_ast: &ast::Expr,
@@ -556,8 +556,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Check if this is an arithmetic or bitwise operation on a non-primitive type
-        // Non-primitives use Add/Sub/Mul/Div/Rem/BitAnd/BitOr/BitXor traits
+        // Non-primitive operands dispatch through Add/Sub/Mul/Div/Rem,
+        // BitAnd/BitOr/BitXor and Shl/Shr.
         let is_arithmetic_or_bitwise = matches!(
             op,
             BinaryOp::Add
@@ -568,6 +568,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | BinaryOp::BitAnd
                 | BinaryOp::BitOr
                 | BinaryOp::BitXor
+                | BinaryOp::Shl
+                | BinaryOp::Shr
         );
 
         if is_arithmetic_or_bitwise {
@@ -648,73 +650,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 origin,
             ) {
                 return call;
-            }
-        }
-
-        // Check if this is a shift operation on a non-primitive type
-        // Non-primitives use Shl/Shr traits (with rhs: u32, not &Self)
-        let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
-
-        if is_shift {
-            let Some((item, method_name)) = operator_trait_method(&op) else {
-                unreachable!("a shift operator names its trait method")
-            };
-            if let Some(call) = self.dispatch_operator_through_bounds(
-                left,
-                item,
-                method_name,
-                Some((right, right_span)),
-                span,
-                origin,
-            ) {
-                return call;
-            }
-
-            if let Some(struct_name) = self.tysys.operator_receiver_name(left) {
-                let Some(trait_) = self.tysys.operator_trait_decl(&op) else {
-                    return TypeTable::ERROR;
-                };
-
-                // For newtypes, resolve base type for trait impl fallback
-                let (lookup_name, lookup_type_id) =
-                    self.tysys
-                        .trait_impl_base_lookup(&struct_name, left, trait_);
-
-                // Find the shift trait implementation. `Shl` / `Shr` declare
-                // `rhs: u32` and take no trait argument, so there is nothing
-                // to select between.
-                let found = self
-                    .find_arithmetic_trait_impl(&struct_name, left, trait_, method_name, None)
-                    .map(|info| OperatorImpl {
-                        info,
-                        impl_name: struct_name.clone(),
-                        impl_type_id: left,
-                    })
-                    .or_else(|| {
-                        self.find_arithmetic_trait_impl(
-                            &lookup_name,
-                            lookup_type_id,
-                            trait_,
-                            method_name,
-                            None,
-                        )
-                        .map(|info| OperatorImpl {
-                            info,
-                            impl_name: lookup_name.clone(),
-                            impl_type_id: lookup_type_id,
-                        })
-                    });
-                if let Some(found) = found {
-                    // Shift traits declare `rhs: u32` (not `&Self`), so
-                    // `dispatch_trait_op_method` checks against it and wraps no `&`.
-                    return self.dispatch_operator_impl(
-                        left,
-                        (right, right_span),
-                        found,
-                        method_name,
-                        origin,
-                    );
-                }
             }
         }
 
@@ -1890,8 +1825,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // base is dispatched through a newtype receiver. A parameterized
             // operator trait (`impl Add<Feet> for Meters`) declares a
             // *different* referent, and that one is what the operand must
-            // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
-            // the expected type is the parameter type itself.
+            // match. A by-value parameter is itself the expected type.
             let expected = if wrap {
                 let referent = self.tysys.through_ref(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a

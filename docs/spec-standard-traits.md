@@ -682,8 +682,8 @@ Rationale: [WEP: String Views](./wep-2026-09-13-string-slice.md).
 ## Arithmetic Operator Traits
 
 The prelude's binary operator traits (`Add`, `Sub`, `Mul`, `Div`, `Rem`,
-`BitAnd`, `BitOr`, `BitXor`) carry a right-hand type parameter defaulting to
-`Self`:
+`BitAnd`, `BitOr`, `BitXor`, `Shl`, `Shr`) carry a right-hand type parameter
+defaulting to `Self`:
 
 <!-- {"fixture":"spec_traits_add_decl.wado"} -->
 
@@ -724,11 +724,11 @@ test {
 
 Selection follows the same unique-or-error rule as a method call's argument
 lists (see [One Trait at Two Argument Lists](./spec-traits.md#one-trait-at-two-argument-lists)).
-`Neg` and `BitNot` are unary and take no argument; `Shl` / `Shr` declare
-`rhs: u32`.
+`Neg` and `BitNot` are unary and take no argument.
 
-The compiler supplies these impls for the integers, and for `f32` / `f64`
-except `Rem`. An unsigned integer has no `Neg`, as in Rust: `x.wrapping_neg()`
+The compiler supplies all of these for the integers, each with `Rhs = Self`, so
+a shift amount has the type of the value it shifts. For `f32` and `f64` it
+supplies `Add`, `Sub`, `Mul` and `Div`. An unsigned integer has no `Neg`, as in Rust: `x.wrapping_neg()`
 negates it modulo its width. `bool` holds one bit, so it gets the bit operators
 and no shift; `v128` gets none, since its arithmetic is lane-wise and only a lane type's own
 impl knows it.

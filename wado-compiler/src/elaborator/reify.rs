@@ -17,7 +17,7 @@ use crate::attribute::{
 use crate::builtin_facts::{self, BuiltinFacts, ParamShape, ReturnShape};
 use crate::call_args::CallArgs;
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
-use crate::const_eval::format_float_repr;
+use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
@@ -2537,7 +2537,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::IntLiteral { value, repr } => {
                             return TirExpr::new(
                                 TirExprKind::IntLiteral {
-                                    value: (*value as i64).wrapping_neg().cast_unsigned(),
+                                    value: self.tysys.negated_int_literal(*value, inner.type_id),
                                     repr: format!("-{repr}"),
                                 },
                                 inner.type_id,
@@ -2561,7 +2561,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             if let TirExprKind::IntLiteral { value, repr } = &cast_inner.kind {
                                 let neg_literal = TirExpr::new(
                                     TirExprKind::IntLiteral {
-                                        value: (*value as i64).wrapping_neg().cast_unsigned(),
+                                        value: self
+                                            .tysys
+                                            .negated_int_literal(*value, cast_inner.type_id),
                                         repr: format!("-{repr}"),
                                     },
                                     cast_inner.type_id,
@@ -9594,6 +9596,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 }
 
 impl TypeSystem {
+    /// The bits of `-value` for an integer literal of `type_id`, wrapped to its
+    /// width as the operator wraps: `-(-128_i8)` is `-128`.
+    fn negated_int_literal(&self, value: u64, type_id: TypeId) -> u64 {
+        let negated = (value as i64).wrapping_neg().cast_unsigned();
+        match self.type_table.borrow().primitive_head(type_id) {
+            Some(prim) => truncate_int(negated, prim),
+            None => negated,
+        }
+    }
+
     /// A type pattern that does not narrow keeps the scrutinee's reference kind
     /// on a target that drops it.
     fn ascribed_binding_type(&self, scrutinee_type: TypeId, target: TypeId) -> TypeId {

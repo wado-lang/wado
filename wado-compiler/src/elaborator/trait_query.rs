@@ -2,6 +2,7 @@
 //! and associated type resolution.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 
@@ -22,11 +23,11 @@ use super::scope::{
     trait_params_from_impl,
 };
 use super::sem::decls::{Owed, OwedBounds, PendingBounds};
-use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
+use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
-    MethodInfo, MethodOwner, OperatorImpl, ResolvedTraitMethod, TraitMethodMatch, TypeError,
-    TypeLookup,
+    MethodInfo, MethodOwner, OperatorImpl, ResolvedTraitMethod, SigPosition, TraitMethodMatch,
+    TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 use super::util;
@@ -561,6 +562,134 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 reason,
                 span: impl_block.span,
             });
+        }
+    }
+
+    /// Require each method an impl writes for its trait to take and return
+    /// what the trait declares, read at this impl: `Self` as the target, the
+    /// trait's parameters as the header's arguments, `Self::X` as the impl's
+    /// binding, and the method's own parameters as the impl method's. A call
+    /// through a bound is typed against the trait, so a disagreeing impl
+    /// receives values it was never written for.
+    pub(super) fn enforce_impl_method_signatures(&mut self, impl_block: &ast::ImplBlock) {
+        if impl_block.is_synthesize_request {
+            return;
+        }
+        let signatures = Rc::clone(&self.tysys.signatures);
+        let impl_def = self.tysys.def_at(impl_block.id);
+        let impl_sig = signatures.impl_sig(impl_def);
+        let Some(trait_decl) = impl_sig.trait_decl else {
+            return;
+        };
+        let Some(trait_sig) = signatures.trait_sig(trait_decl) else {
+            return;
+        };
+        let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl).cloned() else {
+            return;
+        };
+        let target = self.tysys.type_table.borrow().impl_target_whole(impl_def);
+        let mut slots: IndexMap<u32, TypeId> = IndexMap::default();
+        slots.insert(0, target);
+        let defaults = header
+            .type_params
+            .iter()
+            .zip(&header.default_args)
+            .filter(|(param, _)| param.fills_impl_slot())
+            .map(|(_, default)| default);
+        for (supplied, default) in
+            trait_params_from_impl(&header.type_params, &impl_sig.trait_type_args, None)
+                .into_iter()
+                .zip(defaults)
+        {
+            if !supplied.takes_a_slot {
+                continue;
+            }
+            let arg = match (supplied.arg, default) {
+                (Some(&arg), _) => arg,
+                (None, Some(DefaultArg::SelfTarget)) => target,
+                // A default naming another type resolves only in the trait's
+                // own module, which this frame cannot read from.
+                (None, Some(DefaultArg::Named(_)) | None) => return,
+            };
+            slots.insert(supplied.slot, arg);
+        }
+        let answers: Vec<ProjectionAnswer> = impl_sig
+            .associated_types
+            .iter()
+            .map(|(name, &answer)| ProjectionAnswer::at_any(trait_decl, name.clone(), answer))
+            .collect();
+        let projections = SlotProjections::from_iter([(0, answers)]);
+
+        for method in &impl_block.methods {
+            let Some(declared) = trait_sig.method(&method.name) else {
+                continue;
+            };
+            let Some(written) = signatures.method_sig(self.tysys.def_at(method.id)) else {
+                continue;
+            };
+            // A count disagreement is reported on its own, and leaves no
+            // positions to pair.
+            if declared.sig.decl.param_types.len() != written.decl.param_types.len()
+                || declared.sig.own_type_params().len() != written.own_type_params().len()
+            {
+                continue;
+            }
+            let mut method_slots = slots.clone();
+            {
+                let table = self.tysys.type_table.borrow();
+                for ((_, from), (_, to)) in declared
+                    .sig
+                    .own_type_params()
+                    .iter()
+                    .zip(written.own_type_params())
+                {
+                    let slot = table
+                        .param_slot(*from)
+                        .expect("a method's own type parameter is a slot");
+                    method_slots.insert(slot, *to);
+                }
+            }
+            let expected = declared.sig.decl.instantiate_slots_with(
+                &self.tysys.type_table,
+                &method_slots,
+                &projections,
+            );
+            let value_params = method
+                .params
+                .iter()
+                .filter(|p| p.self_kind == SelfKind::None);
+            let positions = std::iter::repeat_n(SigPosition::Receiver, written.first_value_param())
+                .chain(value_params.map(|p| SigPosition::Param(p.name.clone())))
+                .zip(expected.param_types.iter().zip(&written.decl.param_types))
+                .map(|(position, (&expected, &found))| (position, expected, found))
+                .chain(std::iter::once((
+                    SigPosition::Return,
+                    expected.return_type,
+                    written.decl.return_type.unwrap_or(TypeTable::UNIT),
+                )));
+            for (position, expected, found) in positions {
+                let table = self.tysys.type_table.borrow();
+                // A projection left open names a type only an instantiation
+                // settles, so two spellings of it are not comparable here.
+                let comparable = |id: TypeId| {
+                    !table.contains_assoc_type_projection(id) && !table.awaits_inference(id)
+                };
+                if !comparable(expected)
+                    || !comparable(found)
+                    || table.type_key(expected) == table.type_key(found)
+                {
+                    continue;
+                }
+                drop(table);
+                let _ = self.emit(TypeError::TraitMethodTypeMismatch {
+                    trait_name: header.name.clone(),
+                    method_name: method.name.clone(),
+                    position,
+                    expected: self.tysys.type_id_to_string(expected),
+                    found: self.tysys.type_id_to_string(found),
+                    span: method.name_span,
+                });
+            }
         }
     }
 

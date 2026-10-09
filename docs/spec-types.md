@@ -179,8 +179,8 @@ assert mask.extract_lane(0) == -1;
 ```
 
 `v128` itself takes no arithmetic, bitwise or shift operator. The lane types
-carry those, and each works lane by lane. A shift takes one `u32` count and
-shifts every lane by it.
+carry those, and each works lane by lane. A shift takes one `u32` count, modulo
+the lane's bit width, and shifts every lane by it.
 
 The comparison methods (`eq`, `ne`, `lt`, `le`, `gt`, `ge`) answer a mask:
 each lane is all ones where the comparison holds and all zeros where it does
@@ -1360,6 +1360,12 @@ Wado splits what Rust's `enum` covers into three kinds, as the Component Model
 does. An `enum` has cases with no payload, a `variant` has cases that may carry
 one, and a `flags` type is a set of bits. Each crosses a component boundary as
 the Component Model type of the same name.
+
+Each case of an `enum` or a `variant` has a discriminant: its position in
+declaration order, counting from 0. No syntax assigns one, so reordering the
+cases renumbers them. The discriminant is what crosses a component boundary and
+what a serializer writes, and
+[`ReflectEnum` and `ReflectVariant`](./spec-reflection.md) read it.
 
 ### Enums
 

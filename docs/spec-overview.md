@@ -99,7 +99,8 @@ Each chapter builds on the ones before it.
 18. [Components](./spec-components.md): the Component Model boundary, concurrency and resources.
 19. [Serialization](./spec-serialization.md): `Serialize`, `Deserialize` and wire formats.
 20. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
-21. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
+21. [Diagnostics](./spec-diagnostics.md): the warnings lints report on code the compiler accepts.
+22. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
 
 ## Design Philosophy
 

@@ -35,6 +35,7 @@
 - [Components](./spec-components.md)
 - [Serialization](./spec-serialization.md)
 - [Compiler Attributes](./spec-attributes.md)
+- [Diagnostics](./spec-diagnostics.md)
 - [Testing](./spec-testing.md)
 
 ## Wado Evolution Proposals

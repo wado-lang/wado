@@ -594,6 +594,24 @@ pub(super) struct TraitDeclHeader {
     pub(super) span: Span,
 }
 
+impl TraitDeclHeader {
+    /// Report a reference to this trait writing more type arguments than it
+    /// declares parameters. An `fn`-bound parameter takes an argument though no
+    /// slot, an effect parameter takes neither, and a pack takes any surplus.
+    pub(super) fn surplus_type_args(&self, written: usize, span: Span) -> Option<TypeError> {
+        if self.type_params.iter().any(|p| p.is_pack) {
+            return None;
+        }
+        let expected = self.type_params.iter().filter(|p| !p.is_effect).count();
+        (written > expected).then(|| TypeError::TypeArgumentCount {
+            name: self.name.clone(),
+            expected,
+            found: written,
+            span,
+        })
+    }
+}
+
 /// A trait type parameter's declared default (`trait Eq<Rhs = Self>`).
 #[derive(Clone, Debug)]
 pub(super) enum DefaultArg {

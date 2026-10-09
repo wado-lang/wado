@@ -70,9 +70,10 @@ use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::{exported_interfaces, module_host_leaf_imports};
 
-/// What every trait bound a module writes, wherever it stands, gets wrong in
-/// the associated types it binds: one its trait does not declare, or one
-/// taking parameters, which a family is until a projection gives it some.
+/// What every trait bound a module writes, wherever it stands, gets wrong: a
+/// type argument past its trait's parameters, or an associated type its trait
+/// does not declare or that takes parameters, which a family is until a
+/// projection gives it some.
 struct BoundBindingsChecked<'a> {
     resolutions: &'a Resolutions,
     trait_env: &'a TraitEnv,
@@ -85,6 +86,13 @@ impl AstVisitor for BoundBindingsChecked<'_> {
             let Some(trait_) = self.resolutions.bound_decl(bound) else {
                 continue;
             };
+            if let Some(surplus) = self
+                .trait_env
+                .decl_header_of(&trait_)
+                .and_then(|header| header.surplus_type_args(bound.type_args.len(), bound.span))
+            {
+                self.errors.push(surplus);
+            }
             for binding in &bound.assoc_types {
                 let declared = self
                     .trait_env
@@ -978,6 +986,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(decl) = trait_env.decl_header_of(&decl_key) else {
                 continue;
             };
+            if let Some(trait_ty) = header.trait_ty()
+                && let Some(surplus) =
+                    decl.surplus_type_args(written_arg_nodes(trait_ty).len(), trait_ty.span())
+            {
+                let _ = logger.error_in(&header.module, surplus);
+            }
             // A derivation request asks for an impl rather than writing one, so
             // it has no members to compare.
             if header.is_synthesize_request {

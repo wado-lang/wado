@@ -22,6 +22,7 @@ pub mod compiler_host;
 pub mod compiler_item;
 pub mod component_model;
 pub mod const_eval;
+pub mod constant_arithmetic;
 pub mod coverage;
 pub mod defs;
 pub mod doc;
@@ -126,6 +127,7 @@ pub use semantics::{
 };
 
 pub use compiler_host::InMemoryCompilerHost;
+use constant_arithmetic::constant_arithmetic_diagnostics;
 pub use effect_check::{
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
     check_effects_semantic, check_purity_semantic, check_semantics,
@@ -547,6 +549,7 @@ pub fn lint_diagnostics(
     lints.extend(undecided_effect_diagnostics(sem));
     lints.extend(literal_cast_diagnostics(sem));
     lints.extend(self_comparison_diagnostics(sem));
+    lints.extend(constant_arithmetic_diagnostics(sem));
     if unused {
         lints.extend(unused_diagnostics(sem, is_test_world));
     }

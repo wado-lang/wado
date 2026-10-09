@@ -1,0 +1,25 @@
+// An impl method takes its receiver as the trait declares it: a `&self` method
+// cannot mutate through a receiver the caller lent read-only.
+
+trait Bump with () {
+    fn bump(&self) -> i32;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Bump for Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+export fn run() {
+    let mut c = Counter { n: 0 };
+    let _ = c.bump();
+}
+
+__DATA__
+{"compile_error": ":13:8: analysis error: method `bump` takes `&mut Counter` for its receiver, but `Bump` declares `&Counter`", "compile_error_codes": ["TYPE_MISMATCH"]}

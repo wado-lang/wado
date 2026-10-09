@@ -421,6 +421,15 @@ impl ParamList {
     }
 }
 
+/// Where in a method's signature a type sits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SigPosition {
+    Receiver,
+    /// A value parameter, by the name the method gives it.
+    Param(String),
+    Return,
+}
+
 /// Errors from the type resolution phase
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -1113,6 +1122,17 @@ pub enum TypeError {
         /// Whether the trait declares a receiver, and whether the impl does.
         expected: bool,
         found: bool,
+        span: Span,
+    },
+
+    /// An `impl` method takes or returns a type other than its trait declares
+    /// there, read at the impl.
+    TraitMethodTypeMismatch {
+        trait_name: String,
+        method_name: String,
+        position: SigPosition,
+        expected: String,
+        found: String,
         span: Span,
     },
 
@@ -2441,6 +2461,28 @@ impl TypeError {
                         receiver(*found),
                         receiver(*expected)
                     )
+                },
+                *span,
+            ),
+            TypeError::TraitMethodTypeMismatch {
+                trait_name,
+                method_name,
+                position,
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                match position {
+                    SigPosition::Receiver => format!(
+                        "method `{method_name}` takes `{found}` for its receiver, but `{trait_name}` declares `{expected}`"
+                    ),
+                    SigPosition::Param(name) => format!(
+                        "method `{method_name}` takes `{found}` for parameter `{name}`, but `{trait_name}` declares `{expected}`"
+                    ),
+                    SigPosition::Return => format!(
+                        "method `{method_name}` returns `{found}`, but `{trait_name}` declares `{expected}`"
+                    ),
                 },
                 *span,
             ),

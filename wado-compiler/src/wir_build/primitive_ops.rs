@@ -145,6 +145,11 @@ impl FunctionTranslator<'_, '_> {
             return WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right)));
         }
         let kind = self.scalar_kind(left_type_id, op);
+        let right = if matches!(op, NirBinaryOp::Shl | NirBinaryOp::Shr) {
+            Box::new(self.narrow_shift_amount(*right, left_type_id))
+        } else {
+            right
+        };
 
         match op {
             NirBinaryOp::Add => match kind {
@@ -330,6 +335,20 @@ impl FunctionTranslator<'_, '_> {
             Box::new(WirInstr::I32DivS(Box::new(widened), right)),
             Box::new(WirInstr::I32Const(1 << shift)),
         )
+    }
+
+    /// The shift amount reduced modulo the operand's bit width. `i32.shl` and
+    /// `i64.shl` reduce it modulo 32 and 64 themselves, so only an `i8`, `u8`,
+    /// `i16` or `u16` operand needs the mask.
+    fn narrow_shift_amount(&self, amount: WirInstr, type_id: TypeId) -> WirInstr {
+        let head = self.type_table.representation_head(type_id);
+        let prim = prim_of(head, self.type_table).expect("a shift operand is a primitive integer");
+        let bits = int_bit_width(prim);
+        if bits >= 32 {
+            return amount;
+        }
+        let mask = WirInstr::I32Const((bits - 1) as i32);
+        WirInstr::I32And(Box::new(amount), Box::new(mask))
     }
 
     /// `left op right` under the float order, where every NaN is one value

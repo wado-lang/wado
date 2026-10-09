@@ -1,0 +1,43 @@
+// `unconditional_trap` warns where an integer `/` or `%` always traps: its
+// divisor is the literal zero, or both operands are literals and the quotient
+// overflows. The program still compiles and the operation traps at run time.
+
+#[expect_trap]
+test "divides by zero" {
+    let x = builtin::black_box(10);
+    let _ = x / 0;
+}
+
+#[expect_trap]
+test "takes a remainder by zero" {
+    let x = builtin::black_box(10_u64);
+    let _ = x % 0;
+}
+
+#[expect_trap]
+test "MIN / -1 overflows" {
+    let _ = -128_i8 / -1_i8;
+}
+
+test "a float divides by zero without trapping" {
+    let x = builtin::black_box(1.0);
+    assert x / 0.0 == f64::INFINITY;
+    assert -128_i8 % -1_i8 == 0;
+}
+
+#[allow(unconditional_trap)]
+#[expect_trap]
+test "allowed" {
+    let _ = builtin::black_box(7) / 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": [
+        "`x / 0` divides by zero, so it always traps",
+        "`x % 0` divides by zero, so it always traps",
+        "`-128_i8 / -1_i8` overflows `i8`, so it always traps"
+    ],
+    "warnings_not_contains": ["x / 0.0", "`-128_i8 % -1_i8`", "black_box(7)"]
+}

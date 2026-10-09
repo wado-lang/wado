@@ -26,16 +26,12 @@ fn flip<T: BitNot<Output = T>>(a: T) -> T {
     return ~a;
 }
 
-fn twice<T: Shl<Output = T>>(a: T) -> T {
-    return a << 1;
+fn shl_by<T: Shl<Output = T>>(x: T, n: T) -> T {
+    return x << n;
 }
 
-fn shl_by<T: Shl<Output = T>>(x: T) -> T {
-    return x << 3;
-}
-
-fn shr_by<T: Shr<Output = T>>(x: T) -> T {
-    return x >> 1;
+fn shr_by<T: Shr<Output = T>>(x: T, n: T) -> T {
+    return x >> n;
 }
 
 test "and" {
@@ -102,7 +98,7 @@ test "bitwise operators on a type parameter" {
     // compiled.
     assert mask(12, 10) == 8;
     assert flip(12) == -13;
-    assert twice(12) == 24;
+    assert shl_by(12, 1) == 24;
     assert mask(true, false) == false;
 }
 
@@ -120,17 +116,17 @@ test "bitnot on a bool complements one bit" {
 }
 
 test "shift on a type parameter keeps the receiver width" {
-    // `Shl` / `Shr` declare `rhs: u32` whatever the receiver is, and the native
-    // instruction takes both operands at one width. Relowering a 64-bit shift
-    // fed `i64.shl` an `i32` and produced an invalid module.
+    // The native instruction takes both operands at the receiver's width.
+    // Relowering a 64-bit shift once fed `i64.shl` an `i32` and produced an
+    // invalid module.
     let a = builtin::black_box(4 as i64);
     let b = builtin::black_box(8 as u64);
     let c = builtin::black_box(4 as i32);
     let d = builtin::black_box(4 as u8);
-    assert shl_by(a) == 32 as i64;
-    assert shr_by(b) == 4 as u64;
-    assert shl_by(c) == 32;
-    assert shl_by(d) == 32 as u8;
+    assert shl_by(a, 3) == 32 as i64;
+    assert shr_by(b, 1) == 4 as u64;
+    assert shl_by(c, 3) == 32;
+    assert shl_by(d, 3) == 32 as u8;
 }
 
 test "unary negation on a type parameter" {
