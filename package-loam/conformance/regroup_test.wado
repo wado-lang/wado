@@ -33,7 +33,7 @@ test "Flatten reproduces the output ONNX ships" {
             data: x,
             extents: x_extents,
         },
-        &flatten::Weights {},
+        &flatten::Weights {}.prepare(&mut Cpu {}),
     );
 
     assert got.extents == want_extents;

@@ -90,15 +90,17 @@ export fn run() with (Stdout, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice
         return;
     };
     let w = weights();
+    let on_host = w.prepare(&mut Cpu {});
+    let on_device = w.prepare(&mut gpu);
     let x = tensor::<[Batch, In]>([BATCH, 1024], 7, 1.0);
 
     let t0 = MonotonicClock::now();
-    let on_cpu = forward(&mut Cpu {}, &x, &w);
+    let on_cpu = forward(&mut Cpu {}, &x, &on_host);
     let t1 = MonotonicClock::now();
     // The first call compiles the shaders, which the second finds compiled.
-    let _ = forward(&mut gpu, &x, &w);
+    let _ = forward(&mut gpu, &x, &on_device);
     let t2 = MonotonicClock::now();
-    let on_gpu = forward(&mut gpu, &x, &w);
+    let on_gpu = forward(&mut gpu, &x, &on_device);
     let t3 = MonotonicClock::now();
 
     println(`logits ${on_gpu.extents:?}, largest deviation from the CPU ${deviation(&on_gpu.data, &on_cpu.data)}`);

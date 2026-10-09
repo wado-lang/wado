@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, is_test_function};
-use crate::resolve::Resolutions;
+use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TemplateId, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
@@ -351,7 +351,7 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
         return out;
     };
     let data = OwnedEffectData::build(sem, state, IndexSet::default());
-    run_effect_checks(sem, &data.index(), &mut out);
+    run_effect_checks(sem, &data.index(&sem.types), &mut out);
     out
 }
 
@@ -368,7 +368,7 @@ pub fn check_semantics(
         return diags;
     };
     let data = OwnedEffectData::build(sem, state, provided_import_fqs);
-    let index = data.index();
+    let index = data.index(&sem.types);
     run_effect_checks(sem, &index, &mut diags.effects);
     run_purity_checks(sem, &index, &mut diags.purity);
     diags
@@ -475,6 +475,128 @@ fn bound_traits_per_slot(
         .collect()
 }
 
+/// Where a bounded impl parameter sits in the impl's target, and the traits
+/// bounding it. The path indexes the receiver's type arguments, then theirs:
+/// `T` in `impl<T: Tick> W<List<T>>` is at `[0, 0]`, and `T` in
+/// `impl<T: Tick> Show for T` at `[]`, the receiver itself. `None` where no
+/// path through type arguments reaches it, as inside a tuple or a reference.
+type ReceiverBound = (Option<Vec<usize>>, Vec<DefId>);
+
+/// Every bounded impl parameter the impl's target names.
+fn receiver_bounds(block: &ImplBlock, resolutions: &Resolutions) -> Vec<ReceiverBound> {
+    let walk = ReceiverWalk {
+        params: block
+            .type_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .map(|p| p.id)
+            .collect(),
+        bounds: bound_traits_per_slot(&block.type_params, resolutions),
+        resolutions,
+    };
+    let mut out = Vec::new();
+    walk.collect(&block.ty, Some(&mut Vec::new()), &mut out);
+    out
+}
+
+/// Every declared method that takes `self`, wherever methods are declared.
+fn receiver_methods(sem: &Semantics) -> IndexSet<AstId> {
+    let mut out = IndexSet::default();
+    for module in sem.modules.values() {
+        for item in &module.items {
+            let methods: &[Function] = match item {
+                Item::Impl(block) => &block.methods,
+                Item::Trait(decl) => &decl.methods,
+                Item::Resource(decl) => &decl.methods,
+                Item::Interface(decl) => &decl.methods,
+                _ => continue,
+            };
+            out.extend(
+                methods
+                    .iter()
+                    .filter(|m| {
+                        m.params
+                            .first()
+                            .is_some_and(|p| p.self_kind != ast::SelfKind::None)
+                    })
+                    .map(|m| m.id),
+            );
+        }
+    }
+    out
+}
+
+/// The impl's type parameters, by binder, and the traits bounding each.
+struct ReceiverWalk<'a> {
+    params: Vec<AstId>,
+    bounds: Vec<Vec<DefId>>,
+    resolutions: &'a Resolutions,
+}
+
+impl ReceiverWalk<'_> {
+    /// Records each bounded parameter `ty` names, `path` reaching `ty` itself.
+    fn collect(&self, ty: &ast::Type, path: Option<&mut Vec<usize>>, out: &mut Vec<ReceiverBound>) {
+        match ty {
+            ast::Type::Named(named) => {
+                if let Resolution::Binder(binder) = self.resolutions.get(named.id)
+                    && let Some(slot) = self.params.iter().position(|p| *p == binder)
+                    && !self.bounds[slot].is_empty()
+                {
+                    out.push((path.map(|p| p.clone()), self.bounds[slot].clone()));
+                }
+            }
+            ast::Type::Generic(ast::GenericType { args, .. }) => self.collect_args(args, path, out),
+            ast::Type::NamespacedGeneric(generic) => self.collect_args(&generic.args, path, out),
+            ast::Type::Tuple(elements) => {
+                for element in elements {
+                    self.collect(element, None, out);
+                }
+            }
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                self.collect(inner, None, out);
+            }
+            ast::Type::Function(function) => {
+                for param in &function.params {
+                    self.collect(param, None, out);
+                }
+                self.collect(&function.return_type, None, out);
+            }
+            ast::Type::TypePackSpread(..) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
+        }
+    }
+
+    fn collect_args(
+        &self,
+        args: &[ast::Type],
+        mut path: Option<&mut Vec<usize>>,
+        out: &mut Vec<ReceiverBound>,
+    ) {
+        for (i, arg) in args.iter().enumerate() {
+            match path.as_deref_mut() {
+                Some(path) => {
+                    path.push(i);
+                    self.collect(arg, Some(path), out);
+                    path.pop();
+                }
+                None => self.collect(arg, None, out),
+            }
+        }
+    }
+}
+
+/// What a call's bounded type arguments bring to the callee's open effect
+/// parameter.
+#[derive(Default)]
+struct Brought {
+    /// The effects the impls the arguments select perform.
+    effects: IndexSet<EffectRef>,
+    /// Whether some argument is bounded by a trait leaving its effects open.
+    determined: bool,
+    /// Whether some such argument names no impl to read (a type parameter of
+    /// the caller's, say), which leaves the parameter a requirement.
+    open: bool,
+}
+
 /// Owns the cross-module effect maps so multiple checks (effects, default
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
@@ -490,6 +612,13 @@ struct OwnedEffectData {
     /// Per type-parameter slot of a function declaration, the traits bounding
     /// it, so a call site can read what its type arguments implement.
     fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>>,
+    /// The bounded parameters a generic impl's target names, by each method of
+    /// the impl, which share one list.
+    receiver_bounds: IndexMap<AstId, Rc<[ReceiverBound]>>,
+    /// The methods declaring `self`, of an `impl`, a `trait`, a `resource` or
+    /// an `interface`. A call's arguments line up with another's parameters
+    /// from the first.
+    receiver_methods: IndexSet<AstId>,
     /// Every effect an impl's methods declare, for resolving a trait head's
     /// effect hole against the type a call instantiates it with.
     impl_effects: IndexMap<ImplKey, Vec<EffectRef>>,
@@ -588,6 +717,9 @@ impl OwnedEffectData {
         }
 
         let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>> = IndexMap::default();
+        let mut receiver_bounds_by_method: IndexMap<AstId, Rc<[ReceiverBound]>> =
+            IndexMap::default();
+        let receiver_methods = receiver_methods(sem);
         let mut impl_effects: IndexMap<ImplKey, Vec<EffectRef>> = IndexMap::default();
         let mut block_effects: IndexMap<DefId, IndexSet<EffectRef>> = IndexMap::default();
         let mut forwarding_blocks: IndexSet<DefId> = IndexSet::default();
@@ -604,6 +736,21 @@ impl OwnedEffectData {
                         );
                     }
                     Item::Impl(block) => {
+                        let bounds: Rc<[ReceiverBound]> =
+                            receiver_bounds(block, resolutions).into();
+                        if !bounds.is_empty() {
+                            for method in &block.methods {
+                                receiver_bounds_by_method.insert(method.id, Rc::clone(&bounds));
+                            }
+                        }
+                        for method in &block.methods {
+                            if !method.type_params.is_empty() {
+                                fn_bound_traits.insert(
+                                    method.id,
+                                    bound_traits_per_slot(&method.type_params, resolutions),
+                                );
+                            }
+                        }
                         let declared: IndexSet<EffectRef> = block
                             .methods
                             .iter()
@@ -677,6 +824,8 @@ impl OwnedEffectData {
             trait_method_effects,
             open_traits,
             fn_bound_traits,
+            receiver_bounds: receiver_bounds_by_method,
+            receiver_methods,
             impl_effects,
             block_effects,
             forwarding_blocks,
@@ -691,8 +840,9 @@ impl OwnedEffectData {
         }
     }
 
-    fn index(&self) -> EffectIndex<'_> {
+    fn index<'a>(&'a self, types: &'a TypeTable) -> EffectIndex<'a> {
         EffectIndex {
+            types,
             fn_effects: &self.fn_effects,
             fn_params: &self.fn_params,
             mangled_index: &self.mangled_index,
@@ -700,6 +850,8 @@ impl OwnedEffectData {
             trait_method_effects: &self.trait_method_effects,
             open_traits: &self.open_traits,
             fn_bound_traits: &self.fn_bound_traits,
+            receiver_bounds: &self.receiver_bounds,
+            receiver_methods: &self.receiver_methods,
             impl_effects: &self.impl_effects,
             block_effects: &self.block_effects,
             forwarding_blocks: &self.forwarding_blocks,
@@ -717,6 +869,8 @@ impl OwnedEffectData {
 
 /// The cross-module effect data the body walk consults, assembled once.
 struct EffectIndex<'a> {
+    /// The program's types, which a static call's impl type arguments name.
+    types: &'a TypeTable,
     /// Declaration key → resolved effects (free calls resolve via `references`).
     fn_effects: &'a IndexMap<AstId, Vec<EffectRef>>,
     /// Declaration key → parameter type ids (for effect-parameter resolution).
@@ -730,8 +884,13 @@ struct EffectIndex<'a> {
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
     /// The traits that leave their effects to the impl.
     open_traits: &'a IndexSet<DefId>,
-    /// Per type-parameter slot of a function declaration, the traits bounding it.
+    /// Per type-parameter slot of a function or method declaration, the traits
+    /// bounding it.
     fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<DefId>>>,
+    /// The bounded parameters a generic impl's target names, by method.
+    receiver_bounds: &'a IndexMap<AstId, Rc<[ReceiverBound]>>,
+    /// The methods declaring `self`.
+    receiver_methods: &'a IndexSet<AstId>,
     /// Every effect one impl's methods declare.
     impl_effects: &'a IndexMap<ImplKey, Vec<EffectRef>>,
     /// Every effect one `impl` block's methods declare, by the block.
@@ -1359,8 +1518,12 @@ fn call_site_effects(
         && let Some(effects) = index.fn_effects.get(&def)
     {
         let params = index.fn_params.get(&def).cloned().unwrap_or_default();
-        let resolved = resolve_effect_params(sem, index, effects, &params, false, args);
-        let resolved = resolve_bound_effect_params(sem, index, annotations, def, id, resolved);
+        let brought = if effects.iter().any(EffectRef::is_param) {
+            brought_by_call(sem, index, annotations, def, id)
+        } else {
+            Brought::default()
+        };
+        let resolved = resolve_effect_params(sem, index, effects, &params, false, args, &brought);
         return vec![bare(ident.name.clone(), resolved)];
     }
     let dispatches = dispatches_at(annotations, id);
@@ -1384,17 +1547,11 @@ fn call_site_effects(
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
-            let effects = index.method_effects(&func_ref);
-            let params = index.method_param_types(&func_ref);
-            // A qualified (UFCS) call spells the receiver as its first
-            // argument, so the args already align with the callee's full
-            // parameter list — no self skip.
-            let is_method = func_ref.method_info.is_some() && !self_in_args;
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             CalleeEffects {
                 name: callee_name(callee).to_string(),
-                declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
+                declared: dispatch_effects(sem, index, &func_ref, self_in_args, args),
                 dispatched: if dispatches_through_path {
                     operation_requirements(sem, index, owner)
                 } else {
@@ -1403,6 +1560,41 @@ fn call_site_effects(
             }
         })
         .collect()
+}
+
+/// What a dispatch to `func_ref` with `args` requires. `self_in_args` says a
+/// qualified (UFCS) call spells the receiver as its first argument, so the
+/// arguments align with the callee's full parameter list.
+fn dispatch_effects(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    func_ref: &FunctionRef,
+    self_in_args: bool,
+    args: &[Expr],
+) -> Vec<EffectRef> {
+    // A synthesized template (a derived method) is a method of the type it is
+    // derived for, so it takes `self`.
+    let has_receiver = match &func_ref.template {
+        Some(TemplateId::Declared { def, .. }) => index
+            .receiver_methods
+            .contains(&index.resolutions.defs().ast_id(*def)),
+        Some(TemplateId::Synthesized { .. }) | None => func_ref.method_info.is_some(),
+    };
+    let effects = index.method_effects(func_ref);
+    let brought = if effects.iter().any(EffectRef::is_param) {
+        index.brought_by_dispatch(func_ref)
+    } else {
+        Brought::default()
+    };
+    resolve_effect_params(
+        sem,
+        index,
+        &effects,
+        &index.method_param_types(func_ref),
+        has_receiver && !self_in_args,
+        args,
+        &brought,
+    )
 }
 
 /// Walks a function body, checking that each call's required effects are held.
@@ -1433,7 +1625,6 @@ impl EffectIndex<'_> {
             Some(declared) => declared.to_vec(),
             None => self.callee_entry(func_ref, self.fn_effects, self.mangled_index),
         };
-        effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
             && let Some(def) = method_info.receiver().def()
@@ -1450,27 +1641,91 @@ impl EffectIndex<'_> {
         effects
     }
 
-    /// An open head's effect parameter, resolved against the receiver the
-    /// dispatch names. A receiver that is a type parameter names no impl.
-    fn resolve_open_head(&self, func_ref: &FunctionRef, effects: Vec<EffectRef>) -> Vec<EffectRef> {
-        if !effects.iter().any(EffectRef::is_param) {
-            return effects;
-        }
+    /// What a dispatch's type arguments bring to the callee's open effect
+    /// parameter: the impl of a trait method's receiver, and each bounded
+    /// parameter of the method's impl and of the method itself.
+    fn brought_by_dispatch(&self, func_ref: &FunctionRef) -> Brought {
+        let mut brought = Brought::default();
         let Some(method_info) = func_ref.method_info.as_ref() else {
-            return effects;
+            return brought;
         };
-        let Some(key) = method_info
-            .trait_name
-            .as_ref()
-            .and_then(|trait_name| impl_key(&method_info.fq_base_struct_name(), trait_name))
-        else {
-            return effects;
+        if let Some(trait_name) = &method_info.trait_name
+            && let Some((receiver, key)) = impl_key(&method_info.fq_base_struct_name(), trait_name)
+            && self.open_traits.contains(&key)
+        {
+            brought.determined = true;
+            match self.impl_effects.get(&(receiver, key)) {
+                Some(declared) => brought.effects.extend(self.close_over_args(
+                    declared,
+                    &key,
+                    &method_info.struct_type_args,
+                    0,
+                )),
+                None => brought.open = true,
+            }
+        }
+        let Some(TemplateId::Declared { def, .. }) = &func_ref.template else {
+            return brought;
         };
-        let Some(declared) = self.impl_effects.get(&key) else {
-            return effects;
+        let method = self.resolutions.defs().ast_id(*def);
+        let named = |args: &[TypeId]| -> Vec<FqTypeName> {
+            args.iter()
+                .map(|&arg| self.types.fq_base_type_name(arg))
+                .collect()
         };
-        let brought = self.close_over_args(declared, &key.1, &method_info.struct_type_args, 0);
-        substitute_effect_param(effects, &brought)
+        let info = func_ref.monomorph_info.as_ref();
+        // A static call leaves the impl's type arguments, inferred, to the
+        // instantiation rather than the receiver's name.
+        let receiver_args = match info {
+            Some(info) if method_info.struct_type_args.is_empty() => named(&info.impl_type_args),
+            _ => method_info.struct_type_args.clone(),
+        };
+        let receiver = method_info.fq_base_struct_name().head_only();
+        for (path, traits) in self
+            .receiver_bounds
+            .get(&method)
+            .into_iter()
+            .flat_map(|b| b.iter())
+        {
+            let arg = match path.as_deref() {
+                None => None,
+                Some([]) => Some((receiver.clone(), receiver_args.as_slice())),
+                Some(path) => type_arg_at(&receiver_args, path).map(type_arg),
+            };
+            self.bring(traits, arg, &mut brought);
+        }
+        let method_args = info
+            .map(|info| named(&info.method_type_args))
+            .unwrap_or_default();
+        for (slot, traits) in self
+            .fn_bound_traits
+            .get(&method)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            self.bring(traits, method_args.get(slot).map(type_arg), &mut brought);
+        }
+        brought
+    }
+
+    /// Adds what the type argument `arg` of a parameter bounded by `traits`
+    /// brings. An argument with no impl to read, or none at all, leaves the
+    /// effect parameter open.
+    fn bring(&self, traits: &[DefId], arg: Option<TypeArg<'_>>, brought: &mut Brought) {
+        for key in traits.iter().filter(|key| self.open_traits.contains(*key)) {
+            brought.determined = true;
+            match arg.as_ref().and_then(|(head, args)| {
+                Some((*args, self.impl_effects.get(&(head.clone(), *key))?))
+            }) {
+                Some((args, declared)) => {
+                    brought
+                        .effects
+                        .extend(self.close_over_args(declared, key, args, 1));
+                }
+                None => brought.open = true,
+            }
+        }
     }
 
     /// What an impl brings once its own effect parameter is filled from the
@@ -1547,10 +1802,10 @@ impl EffectIndex<'_> {
     }
 }
 
-/// Resolve `EffectRef::Param` effects to concrete effects by matching the
-/// callee's function-typed parameters against the actual argument types.
-/// `is_method` drops the leading `self` parameter so params line up with
-/// `args`.
+/// Resolve `EffectRef::Param` effects to concrete effects: the union of what
+/// every determiner of the parameter brings, each function-typed argument and
+/// `brought`, the bounded type arguments. `is_method` drops the leading `self`
+/// parameter so params line up with `args`.
 ///
 /// Both walks resolve before they read a callee's effects, so an `effect E`
 /// bound to a concrete effect at the call site is seen by each of them.
@@ -1561,6 +1816,7 @@ fn resolve_effect_params(
     param_types: &[TypeId],
     is_method: bool,
     args: &[Expr],
+    brought: &Brought,
 ) -> Vec<EffectRef> {
     let param_names: IndexSet<String> = callee_effects
         .iter()
@@ -1577,6 +1833,9 @@ fn resolve_effect_params(
     // answer as never having been determined.
     let mut concrete: IndexMap<String, Option<IndexSet<EffectRef>>> =
         param_names.iter().map(|n| (n.clone(), None)).collect();
+    // The parameters an argument determines that no type says the effects of,
+    // which stay requirements whatever else determines them.
+    let mut unread: IndexSet<String> = IndexSet::default();
     let type_table = &sem.types;
     let skip = usize::from(is_method && !param_types.is_empty());
     for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
@@ -1592,13 +1851,18 @@ fn resolve_effect_params(
         {
             continue;
         }
-        let Some(arg_type) = sem.expression_type(arg.id()) else {
-            continue;
-        };
-        let ResolvedType::Function {
+        let Some(ResolvedType::Function {
             effects: actual, ..
-        } = type_table.get(arg_type)
+        }) = sem
+            .expression_type(arg.id())
+            .map(|arg_type| type_table.get(arg_type))
         else {
+            unread.extend(
+                formal
+                    .iter()
+                    .filter(|e| e.is_param())
+                    .map(|e| e.name().to_string()),
+            );
             continue;
         };
         for formal_effect in formal {
@@ -1615,81 +1879,85 @@ fn resolve_effect_params(
     let mut resolved = Vec::new();
     for effect in callee_effects {
         match effect {
-            // A parameter no argument determined — a trait bound's, say —
-            // stays the requirement, so only a caller holding it satisfies it.
-            EffectRef::Param { name } => match concrete.get(name).and_then(Option::as_ref) {
-                Some(set) => resolved.extend(expand_through_closure(set, index.closure)),
-                None => resolved.push(effect.clone()),
-            },
+            EffectRef::Param { name } => {
+                let from_args = concrete.get(name).and_then(Option::as_ref);
+                // A function declares one effect parameter, `_` or `effect E`,
+                // and a bound's open trait passes its effects to it whatever it
+                // is called: the body performs them under it.
+                // A parameter nothing determined stays the requirement, so
+                // only a caller holding it satisfies it.
+                if from_args.is_none() && !brought.determined {
+                    resolved.push(effect.clone());
+                    continue;
+                }
+                let mut set = from_args.cloned().unwrap_or_default();
+                set.extend(brought.effects.iter().cloned());
+                resolved.extend(expand_through_closure(&set, index.closure));
+                if brought.open || unread.contains(name) {
+                    resolved.push(effect.clone());
+                }
+            }
             EffectRef::Concrete { .. } => resolved.push(effect.clone()),
         }
     }
     resolved
 }
 
-/// An effect parameter the callee's trait bounds leave open, resolved against
-/// the types the call instantiates them with. An unreached impl leaves it.
-fn resolve_bound_effect_params(
+/// What a free call's type arguments bring to the callee's open effect
+/// parameter: each bounded parameter of the callee, instantiated at `site`.
+fn brought_by_call(
     sem: &Semantics,
     index: &EffectIndex<'_>,
     annotations: Option<&TypeAnnotations>,
     callee: AstId,
     site: AstId,
-    effects: Vec<EffectRef>,
-) -> Vec<EffectRef> {
-    if !effects.iter().any(EffectRef::is_param) {
-        return effects;
-    }
+) -> Brought {
+    let mut brought = Brought::default();
     let Some(slots) = index.fn_bound_traits.get(&callee) else {
-        return effects;
+        return brought;
     };
-    let mut brought: IndexSet<EffectRef> = IndexSet::default();
-    let mut resolved_any = false;
-    let instantiations = annotations
+    let instantiations: Vec<_> = annotations
         .into_iter()
-        .flat_map(|ann| ann.all(|facts| &facts.generic_instantiations, site));
-    for instantiation in instantiations {
-        for (slot, traits) in slots.iter().enumerate() {
-            let Some(&type_arg) = instantiation.type_args.get(slot) else {
-                continue;
-            };
-            let head = sem.types.fq_base_type_name(type_arg).head_only();
-            for key in traits.iter().filter(|key| index.open_traits.contains(*key)) {
-                let Some(declared) = index.impl_effects.get(&(head.clone(), *key)) else {
-                    continue;
-                };
-                resolved_any = true;
-                brought.extend(declared.iter().cloned());
-            }
+        .flat_map(|ann| ann.all(|facts| &facts.generic_instantiations, site))
+        .collect();
+    for (slot, traits) in slots.iter().enumerate() {
+        if instantiations.is_empty() {
+            index.bring(traits, None, &mut brought);
+        }
+        for instantiation in &instantiations {
+            let arg = instantiation
+                .type_args
+                .get(slot)
+                .map(|&type_arg| sem.types.fq_base_type_name(type_arg));
+            index.bring(traits, arg.as_ref().map(type_arg), &mut brought);
         }
     }
-    if !resolved_any {
-        return effects;
-    }
-    substitute_effect_param(effects, &brought)
+    brought
 }
 
-/// Replace every effect parameter with what the impl behind it brings.
-fn substitute_effect_param<'a>(
-    effects: Vec<EffectRef>,
-    brought: impl IntoIterator<Item = &'a EffectRef> + Copy,
-) -> Vec<EffectRef> {
-    let mut out: IndexSet<EffectRef> = IndexSet::default();
-    for effect in effects {
-        if effect.is_param() {
-            out.extend(brought.into_iter().cloned());
-        } else {
-            out.insert(effect);
-        }
+/// A type argument as an impl lookup reads it: its head, and its own type
+/// arguments.
+type TypeArg<'a> = (FqTypeName, &'a [FqTypeName]);
+
+fn type_arg(arg: &FqTypeName) -> TypeArg<'_> {
+    (arg.head_only(), arg.args())
+}
+
+/// The type argument a non-empty `path` reaches in `args`: an index into
+/// `args`, then into that argument's own arguments. `None` where the path
+/// leads past them.
+fn type_arg_at<'a>(args: &'a [FqTypeName], path: &[usize]) -> Option<&'a FqTypeName> {
+    let (first, rest) = path
+        .split_first()
+        .expect("the empty path is the receiver itself");
+    let mut arg = args.get(*first)?;
+    for &i in rest {
+        arg = arg.args().get(i)?;
     }
-    out.into_iter().collect()
+    Some(arg)
 }
 
 impl SemEffectWalker<'_> {
-    fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
-        self.index.method_effects(func_ref)
-    }
-
     /// The effects a direct `E::op()` call requires. A bare interface-operation
     /// call resolves to a `ModuleSource::Local(E)` free-call `func_ref` that
     /// carries no declared effects, so without this it would slip through the
@@ -1763,7 +2031,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let effects = self.index.method_effects(func_ref);
+                    let effects = dispatch_effects(self.sem, self.index, func_ref, false, &[]);
                     let callee = func_ref
                         .method_info
                         .as_ref()
@@ -1786,15 +2054,11 @@ impl AstVisitor for SemEffectWalker<'_> {
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
-                    let func_ref = dispatch.function_ref.clone();
-                    let effects = self.method_effects(&func_ref);
-                    let params = self.method_param_types(&func_ref);
-                    let resolved = resolve_effect_params(
-                        self.sem,
+                    let resolved = dispatch_effects(
+                        sem,
                         self.index,
-                        &effects,
-                        &params,
-                        true,
+                        &dispatch.function_ref,
+                        false,
                         &method_call.args,
                     );
                     self.report_missing(&resolved, &method_call.method, method_call.span);
@@ -1802,17 +2066,11 @@ impl AstVisitor for SemEffectWalker<'_> {
             }
             Expr::StaticMethodCall(static_call) => {
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
-                    let effects = self.method_effects(&func_ref);
-                    let params = self.method_param_types(&func_ref);
-                    // See the `Call` arm: a trait-turbofish qualified call
-                    // carries its receiver in the argument list.
-                    let is_method = func_ref.method_info.is_some() && !self_in_args;
-                    let resolved = resolve_effect_params(
+                    let resolved = dispatch_effects(
                         self.sem,
                         self.index,
-                        &effects,
-                        &params,
-                        is_method,
+                        &func_ref,
+                        self_in_args,
                         &static_call.args,
                     );
                     self.report_missing(&resolved, &static_call.method, static_call.span);
@@ -1905,10 +2163,6 @@ impl SemEffectWalker<'_> {
         }
     }
 
-    fn method_param_types(&self, func_ref: &FunctionRef) -> Vec<TypeId> {
-        self.index.method_param_types(func_ref)
-    }
-
     /// Report the effects every callee the call at `id` resolves to performs,
     /// and the capability its path demands where it dispatches an operation.
     fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
@@ -1953,7 +2207,7 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
         return out;
     };
     let data = OwnedEffectData::build(sem, state, IndexSet::default());
-    run_purity_checks(sem, &data.index(), &mut out);
+    run_purity_checks(sem, &data.index(&sem.types), &mut out);
     out
 }
 
@@ -1975,7 +2229,7 @@ impl<'a> EffectProbe<'a> {
 
     /// Whether evaluating `expr`, written in `module`, performs an effect.
     pub(crate) fn performs_effect(&self, module: &ModuleSource, expr: &Expr) -> bool {
-        let index = self.data.index();
+        let index = self.data.index(&self.sem.types);
         let mut out = Vec::new();
         PurityWalker::new(self.sem, self.state, &index, module, &mut out).visit_expr(expr);
         !out.is_empty()
@@ -2124,14 +2378,13 @@ impl<'a> PurityWalker<'a> {
 
     fn flag_if_effectful(
         &mut self,
-        effects: &[EffectRef],
-        params: &[TypeId],
-        is_method: bool,
+        func_ref: &FunctionRef,
+        self_in_args: bool,
         args: &[Expr],
         callee: &str,
         span: Span,
     ) {
-        let effects = resolve_effect_params(self.sem, self.index, effects, params, is_method, args);
+        let effects = dispatch_effects(self.sem, self.index, func_ref, self_in_args, args);
         if self.unanswered(&effects) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
@@ -2186,12 +2439,9 @@ impl AstVisitor for PurityWalker<'_> {
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
-                    let effects = self.index.method_effects(&dispatch.function_ref);
-                    let params = self.index.method_param_types(&dispatch.function_ref);
                     self.flag_if_effectful(
-                        &effects,
-                        &params,
-                        true,
+                        &dispatch.function_ref,
+                        false,
                         &method_call.args,
                         &method_call.method,
                         method_call.span,
@@ -2204,13 +2454,9 @@ impl AstVisitor for PurityWalker<'_> {
                     self.flag_if_operation(owner, &static_call.method, static_call.span);
                 }
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
-                    let effects = self.index.method_effects(&func_ref);
-                    let params = self.index.method_param_types(&func_ref);
-                    let is_method = func_ref.method_info.is_some() && !self_in_args;
                     self.flag_if_effectful(
-                        &effects,
-                        &params,
-                        is_method,
+                        &func_ref,
+                        self_in_args,
                         &static_call.args,
                         &static_call.method,
                         static_call.span,

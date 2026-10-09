@@ -1,0 +1,109 @@
+// Regression test: one call's `with _` is everything its determiners bring,
+// each function-typed argument and each bounded type argument, and stays a
+// requirement while one of them names no impl. Each function below performs
+// Stdout through the call and declares nothing, so each call is rejected.
+
+use { println, Stdout } from "core:cli";
+
+trait Tick with _ {
+    fn tick(&mut self) -> i32;
+}
+
+struct Quiet {}
+
+impl Tick for Quiet {
+    fn tick(&mut self) -> i32 {
+        return 1;
+    }
+}
+
+struct Loud {}
+
+impl Tick for Loud {
+    fn tick(&mut self) -> i32 with Stdout {
+        println("loud");
+        return 2;
+    }
+}
+
+fn pure() {}
+
+fn each<T: Tick>(t: &mut T, f: fn() with _) -> i32 with _ {
+    f();
+    return t.tick();
+}
+
+struct Plain {}
+
+impl Plain {
+    fn each<T: Tick>(t: &mut T, f: fn() with _) -> i32 with _ {
+        f();
+        return t.tick();
+    }
+}
+
+struct Pair<A: Tick, B: Tick> {
+    a: Option<A>,
+    b: Option<B>,
+}
+
+impl<A: Tick, B: Tick> Pair<A, B> {
+    fn go(a: &mut A, b: &mut B) -> i32 with _ {
+        return a.tick() + b.tick();
+    }
+}
+
+// A pure closure does not hide the type argument's Stdout.
+fn free_loud() -> i32 {
+    let mut l = Loud {};
+    return each(&mut l, pure);
+}
+
+// A quiet type argument does not hide the closure's Stdout.
+fn method_closure(f: fn() with Stdout) -> i32 {
+    let mut q = Quiet {};
+    return Plain::each(&mut q, f);
+}
+
+// A quiet slot does not settle a slot naming the caller's own parameter.
+fn open_slot<X: Tick>(x: &mut X) -> i32 {
+    let mut q = Quiet {};
+    return Pair::go(&mut q, x);
+}
+
+// A function's one effect parameter takes a bound's effects whatever it is
+// called: `apply`'s body performs `x.tick()` under `E`.
+fn apply<X: Tick, effect E>(x: &mut X, f: fn() with E) -> i32 with E {
+    f();
+    return x.tick();
+}
+
+fn named_parameter() -> i32 {
+    let mut l = Loud {};
+    return apply(&mut l, pure);
+}
+
+// A loud receiver argument is required as it is.
+fn loud_slot() -> i32 {
+    let mut l = Loud {};
+    let mut q = Quiet {};
+    return Pair::go(&mut q, &mut l);
+}
+
+export fn run() with Stdout {
+    println(
+        `${free_loud()} ${method_closure(|| { println("x"); })} ${open_slot(&mut Loud {})} ${named_parameter()} ${loud_slot()}`,
+    );
+}
+
+__DATA__
+{
+    "compile_error": ":59:12: analysis error: missing effect 'Stdout' required by 'each'",
+    "compile_errors_contains": [
+        "missing effect 'Stdout' required by 'each'",
+        "missing effect 'Stdout' required by 'Plain::each'",
+        "missing effects required by 'Pair::go': its trait leaves them to the impl",
+        "missing effect 'Stdout' required by 'Pair::go'",
+        "missing effect 'Stdout' required by 'apply'"
+    ]
+}

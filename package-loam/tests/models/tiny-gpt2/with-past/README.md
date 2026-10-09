@@ -8,7 +8,7 @@ as `../model.onnx` is.
 
 It computes one position against a cache of `past_sequence_length` positions,
 and returns the cache grown by it. The graph carries its weights, so it runs
-from `Weights::embedded()`.
+from `Prepared::embedded`.
 
 The repository ships no expected outputs, so `test_data_set_0/` and
 `test_data_set_1/` are onnxruntime's. `oracle.mjs` writes them with

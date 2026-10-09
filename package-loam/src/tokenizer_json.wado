@@ -98,9 +98,9 @@ fn spelled_in_bytes(
 ) -> Result<(), TokenizerError> {
     let alphabet = byte_chars();
     for let c of alphabet {
-        let mut spelled = String::new();
-        spelled.push(c);
-        if !vocab.contains_key(spelled) {
+        let mut token = String::new();
+        token.push(c);
+        if !vocab.contains_key(token) {
             return refused(`model: the vocabulary has no token for the byte ${c}`);
         }
     }

@@ -124,8 +124,11 @@ fn image_of(rows: &List<String>) -> Tensor<f32, [mnist::Batch, mnist::Gray, mnis
     };
 }
 
-fn classify(image: &Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]>) -> i32 {
-    let logits = mnist::forward(&mut Cpu {}, image, &mnist::Weights::embedded());
+fn classify(
+    weights: &mnist::Prepared<Cpu>,
+    image: &Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]>,
+) -> i32 {
+    let logits = mnist::forward(&mut Cpu {}, image, weights);
     let mut best = 0;
     for let [digit, v] of logits.data.into_iter().enumerate() {
         if v > logits.data[best] {
@@ -136,16 +139,18 @@ fn classify(image: &Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::C
 }
 
 export fn run() with Stdout {
+    let weights = mnist::Prepared::embedded(&mut Cpu {});
     for let digit of [&SEVEN, &ZERO, &ONE] {
         for let row of *digit {
             println(row);
         }
-        println(`predicted: ${classify(&image_of(digit))}`);
+        println(`predicted: ${classify(&weights, &image_of(digit))}`);
     }
 }
 
 test "each drawn digit is classified as the digit it is" {
-    assert classify(&image_of(&SEVEN)) == 7;
-    assert classify(&image_of(&ZERO)) == 0;
-    assert classify(&image_of(&ONE)) == 1;
+    let weights = mnist::Prepared::embedded(&mut Cpu {});
+    assert classify(&weights, &image_of(&SEVEN)) == 7;
+    assert classify(&weights, &image_of(&ZERO)) == 0;
+    assert classify(&weights, &image_of(&ONE)) == 1;
 }

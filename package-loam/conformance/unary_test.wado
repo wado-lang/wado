@@ -45,7 +45,7 @@ test "Exp reproduces the output ONNX ships" {
     let got = exp::forward(
         &mut Cpu {},
         &Tensor::<f32, [exp::Row, exp::Col]> { data: x, extents: x_extents },
-        &exp::Weights {},
+        &exp::Weights {}.prepare(&mut Cpu {}),
     );
 
     assert got.extents == want_extents;
@@ -63,7 +63,7 @@ test "Sqrt reproduces the output ONNX ships" {
     let got = sqrt::forward(
         &mut Cpu {},
         &Tensor::<f32, [sqrt::Row, sqrt::Col]> { data: x, extents: x_extents },
-        &sqrt::Weights {},
+        &sqrt::Weights {}.prepare(&mut Cpu {}),
     );
 
     assert got.extents == want_extents;

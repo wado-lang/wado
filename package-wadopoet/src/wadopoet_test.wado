@@ -801,6 +801,26 @@ test "ImplSpec trait impl" {
     assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 
+test "a generic struct and its impl compile" {
+    let mut w = CodeWriter::new();
+    let mut s = StructSpec::new("Holder", Vis::Pub);
+    s.add_generic("T: Default").add_pub_field("value", "T");
+    s.emit(&mut w);
+    let mut i = ImplSpec::new("Holder<T>");
+    i.add_generic("T: Default");
+    i.emit_begin(&mut w);
+    let mut f = FnSpec::new("fresh", Vis::Pub);
+    f.set_return_type("Holder<T>");
+    f.emit_begin(&mut w);
+    w.line("return Holder { value: T::default() };");
+    w.end();
+    w.end();
+    let source = w.to_string();
+    assert source.starts_with("pub struct Holder<T: Default> {\n"), source;
+    assert source.contains("impl<T: Default> Holder<T> {\n"), source;
+    assert printed("print(`${Holder::<i32>::fresh().value}`);", source) == "0";
+}
+
 test "struct + impl trait composition" {
     let mut w = CodeWriter::new();
 

@@ -24,7 +24,7 @@ test "a folded scalar output comes back as a rank-0 tensor" {
             data: [1.0, 2.0],
             extents: [2],
         },
-        &Weights {},
+        &Weights {}.prepare(&mut Cpu {}),
     );
     assert got.extents == [];
     assert got.data == [0.5];

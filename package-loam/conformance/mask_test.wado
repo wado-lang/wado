@@ -33,7 +33,7 @@ test "a masked key becomes -f32::MAX and a kept one 0" {
             data: [1, 1, 0],
             extents: [1, 3],
         },
-        &Weights {},
+        &Weights {}.prepare(&mut Cpu {}),
     );
     assert got.extents == [1, 1, 1, 3];
     assert got.data == [0.0, 0.0, -f32::MAX];

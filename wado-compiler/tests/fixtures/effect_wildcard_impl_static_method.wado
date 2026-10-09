@@ -1,0 +1,86 @@
+// Regression test: `with _` on a method settles from the type arguments of
+// its impl and of the method itself, as it does on a free function. Over
+// impls whose methods perform nothing, the call requires nothing, whether the
+// arguments are inferred, spelled, or nested in the impl's target.
+// `effect_wildcard_union_rejected` shows the calls that still require one.
+
+use { println, Stdout } from "core:cli";
+
+trait Tick with _ {
+    fn tick(&mut self) -> i32;
+}
+
+struct Quiet {}
+
+impl Tick for Quiet {
+    fn tick(&mut self) -> i32 {
+        return 1;
+    }
+}
+
+struct Loud {}
+
+impl Tick for Loud {
+    fn tick(&mut self) -> i32 with Stdout {
+        println("tick");
+        return 2;
+    }
+}
+
+struct Runner<T: Tick> {
+    count: i32,
+    marker: Option<T>,
+}
+
+impl<T: Tick> Runner<T> {
+    fn once(t: &mut T) -> i32 with _ {
+        return t.tick();
+    }
+
+    fn twice(&self, t: &mut T) -> i32 with _ {
+        return t.tick() + t.tick() + self.count;
+    }
+}
+
+struct Plain {}
+
+impl Plain {
+    fn once<T: Tick>(t: &mut T) -> i32 with _ {
+        return t.tick();
+    }
+
+    fn again<T: Tick>(&self, t: &mut T) -> i32 with _ {
+        return t.tick();
+    }
+}
+
+struct Nest<T> {
+    inner: T,
+}
+
+impl<T: Tick> Nest<List<T>> {
+    fn first(&mut self) -> i32 with _ {
+        return self.inner[0].tick();
+    }
+}
+
+fn quiet() -> i32 {
+    let mut q = Quiet {};
+    let r = Runner::<Quiet> { count: 10, marker: null };
+    let p = Plain {};
+    let mut n = Nest { inner: [Quiet {}] as List<Quiet> };
+    return Runner::once(&mut q) + Runner::<Quiet>::once(&mut q) + r.twice(&mut q) + Plain::once(&mut q)
+        + p.again(&mut q) + n.first();
+}
+
+export fn run() with Stdout {
+    println(`${quiet()}`);
+    let mut l = Loud {};
+    println(`${Runner::once(&mut l)}`);
+    println(`${Plain::once(&mut l)}`);
+}
+
+__DATA__
+{
+    "stdout": "17\ntick\n2\ntick\n2\n"
+}

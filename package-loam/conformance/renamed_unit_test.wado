@@ -2,7 +2,7 @@
 //! the kernel must produce the output under the name stage 0 gave it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Weights, forward } from "./renamed_unit.onnxtext"
+use { Prepared, forward } from "./renamed_unit.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -53,7 +53,7 @@ test "a folded scalar and a Gemm bias, folded or not, each name the axis of 1 th
             data: [1.0, 0.0, 0.0, 1.0, 1.0, 1.0],
             extents: [3, 2],
         },
-        &Weights::embedded(),
+        &Prepared::embedded(&mut Cpu {}),
     );
 
     assert out.Y.data == [3.0] as List<f32>;

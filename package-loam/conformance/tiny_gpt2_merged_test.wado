@@ -147,7 +147,7 @@ type Cache = List<Tensor<f32, [merged::Batch, merged::Head, merged::Past, merged
 fn run(
     ids: List<i64>,
     cache: &Cache,
-    weights: &merged::Weights,
+    weights: &merged::Prepared<Cpu>,
 ) -> [Tensor<f32, [merged::Batch, merged::Seq, merged::Vocab]>, Cache] {
     let past = cache[0].extents[2];
     let length = past + ids.len();
@@ -200,7 +200,7 @@ fn empty_cache() -> Cache {
 }
 
 test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
-    let weights = merged::Weights::embedded();
+    let weights = merged::Prepared::embedded(&mut Cpu {});
     let data: List<[ByteList, ByteList]> = [
         [
             #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/input_0.pb"),
@@ -234,7 +234,7 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
 // together; one only as long as the step stops it.
 #[expect_trap]
 test "a mask that is not as long as the past and the step stops the step" {
-    let weights = merged::Weights::embedded();
+    let weights = merged::Prepared::embedded(&mut Cpu {});
     let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &weights);
     merged::forward(
         &mut Cpu {},
