@@ -353,9 +353,10 @@ pub fn parse_dir_arg(parser: &mut Parser) -> Result<(String, String), CliExit> {
     }
 }
 
-/// `--dir` / `--no-dir` grants for `run` and `test`: the current directory is
-/// preopened when neither flag appears, and either flag replaces that default
-/// outright. `serve` has none — a service starts with no preopens.
+/// `--dir` / `--no-dir` grants for `run` and `test`. When neither flag appears,
+/// `run` preopens the current directory and `test` each file's package root;
+/// either flag replaces that default outright. `serve` has none — a service
+/// starts with no preopens.
 #[derive(Default)]
 pub struct DirGrants {
     dirs: Vec<(String, String)>,
@@ -372,6 +373,13 @@ impl DirGrants {
 
     pub fn suppress_default(&mut self) {
         self.suppressed = true;
+    }
+
+    /// The grants `--dir` and `--no-dir` spell, or `None` where neither
+    /// appears and the subcommand's own default applies.
+    #[must_use]
+    pub fn given(self) -> Option<Vec<(String, String)>> {
+        (self.explicit || self.suppressed).then_some(self.dirs)
     }
 
     #[must_use]

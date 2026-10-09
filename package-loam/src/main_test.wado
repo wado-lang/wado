@@ -29,11 +29,6 @@ global OPTIONS: String = "{\"layout\": [
     {\"pattern\": \"B\", \"axes\": [\"Out\"]}
 ]}";
 
-// Included rather than read where they lie: `wado test` grants the directory
-// it runs in, which is the repository's root under `mise run test-wado`.
-global TOKENIZER: String = #include_str("../tests/models/tiny-gpt2/tokenizer.json");
-global BRANCH: String = #include_str("../conformance/branch.onnxtext");
-
 /// `target/loam-main-test/<case>`, emptied, holding the graph and its options.
 fn scratch(case: String) -> String with Preopens {
     let dir = `target/loam-main-test/${case}`;
@@ -139,10 +134,9 @@ test "gen prints the module the Kiln generator builds for the same graph and opt
 }
 
 test "gen prints the tokenizer the Kiln generator builds" {
-    let path = `${scratch("gen-tokenizer")}/tokenizer.json`;
-    fs::write(&path, &TOKENIZER).unwrap();
+    let path = "tests/models/tiny-gpt2/tokenizer.json";
     let printed = loam(["gen", "--type", "hf-tokenizer", path]).unwrap();
-    assert printed == kiln([path, TOKENIZER.bytes().collect(), "hf-tokenizer"], Options {});
+    assert printed == kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], Options {});
 }
 
 test "gen --output writes the module and prints nothing" {
@@ -206,8 +200,7 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
         {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
     ]}";
     fs::write(`${dir}/options.json`, &options).unwrap();
-    fs::write(`${dir}/branch.onnxtext`, &BRANCH).unwrap();
-    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, `${dir}/branch.onnxtext`]).unwrap(
+    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
     );
     assert report.contains("
     branch Y, Z = If(C)

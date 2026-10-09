@@ -369,6 +369,49 @@ fn a_directory_below_the_package_is_walked_from_below_it() {
         .success();
 }
 
+// A test reads a path against its own package's root, wherever `wado test` is
+// started and whether the package is walked or its file named; `--dir` given
+// replaces that root.
+#[test]
+fn a_test_reads_paths_from_its_package_root_unless_dir_is_given() {
+    let tmp = tempfile::tempdir().unwrap();
+    let pkg = tmp.path().join("pkg");
+    fs::create_dir_all(pkg.join("src")).unwrap();
+    fs::write(
+        tmp.path().join("wado.toml"),
+        "[package]\nname = \"outer\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        pkg.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(pkg.join("data.txt"), "inside").unwrap();
+    fs::write(
+        pkg.join("src/t_test.wado"),
+        "use fs from \"core:fs\";\n\ntest {\n    assert fs::read_to_string(\"data.txt\").unwrap() == \"inside\";\n}\n",
+    )
+    .unwrap();
+
+    for (dir, args) in [
+        (tmp.path(), &["test"][..]),
+        (tmp.path(), &["test", "pkg/src/t_test.wado"]),
+        (pkg.as_path(), &["test"]),
+        (&pkg.join("src"), &["test", "t_test.wado"]),
+    ] {
+        wado_in(dir).args(args).assert().success();
+    }
+    wado_in(tmp.path())
+        .args(["test", "--dir", ".", "pkg/src/t_test.wado"])
+        .assert()
+        .failure();
+    wado_in(tmp.path())
+        .args(["test", "--dir", "pkg::.", "pkg/src/t_test.wado"])
+        .assert()
+        .success();
+}
+
 #[test]
 fn test_help_shows_init_command() {
     let tmp = tempfile::tempdir().unwrap();

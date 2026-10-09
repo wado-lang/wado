@@ -202,26 +202,16 @@ whatever the walk returns, so naming a file directly always resolves it.
 - Sub-package recursion duplicates some bookkeeping (each package gets its
   own summary line) but keeps each package's results attributable.
 
-## Open question: package-local assets
+## Package-local files
 
-`wado test` runs every package in the same WASI sandbox: there is one
-`--dir` setup for the whole invocation. That is sufficient when test bodies
-use `#include_str` / `#include_bytes` to embed their fixtures at compile
-time (the dominant case, and what `benchmark/*` does), but it leaves no
-clean answer for a sub-package whose tests genuinely need to read files at
-runtime — the per-package `wado.toml` cannot ask the runner to preopen its
-own directory.
+Each test file's store preopens the root of its own package as `.`, unless
+`--dir` or `--no-dir` is given, which then applies to every file. The package
+root is the nearest directory holding a `wado.toml`, found from the file itself,
+so it is the same whether the walk reached the file or a path argument named it.
 
-The likely shape of a follow-up: a manifest declaration such as
-`[package].assets = "fixtures"`, combined with a compile-time parameter
-([WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md))
-that exposes the package's preopen name to source. Tests then read
-`Preopens::read_file(`{ASSETS_DIR}/queries.sql`)` without hard-coding host
-paths, and `wado test` arranges the per-package preopens during sub-package
-recursion.
-
-This is intentionally **not** part of this WEP. The 95-percent answer is
-`#include_str`; the runtime path earns its complexity only when several
-real consumers want it. The open question is recorded here so that if those
-consumers appear, the design starts from a known position rather than from
-scratch.
+One `.` for the whole invocation made a test's result depend on where
+`wado test` was started. `package-loam`'s command-line tests read
+`conformance/branch.onnxtext` and passed when run inside the package, then
+failed under `mise run test-wado`, which starts at the repository root.
+`#include_str` sidesteps that for a file known at compile time, but not for one
+a test writes and reads back, such as a scratch directory under `target/`.
