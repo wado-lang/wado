@@ -71,6 +71,18 @@ fn open_slot<X: Tick>(x: &mut X) -> i32 {
     return Pair::go(&mut q, x);
 }
 
+// A function's one effect parameter takes a bound's effects whatever it is
+// called: `apply`'s body performs `x.tick()` under `E`.
+fn apply<X: Tick, effect E>(x: &mut X, f: fn() with E) -> i32 with E {
+    f();
+    return x.tick();
+}
+
+fn named_parameter() -> i32 {
+    let mut l = Loud {};
+    return apply(&mut l, pure);
+}
+
 // A loud receiver argument is required as it is.
 fn loud_slot() -> i32 {
     let mut l = Loud {};
@@ -79,7 +91,9 @@ fn loud_slot() -> i32 {
 }
 
 export fn run() with Stdout {
-    println(`${free_loud()} ${method_closure(|| { println("x"); })} ${open_slot(&mut Loud {})} ${loud_slot()}`);
+    println(
+        `${free_loud()} ${method_closure(|| { println("x"); })} ${open_slot(&mut Loud {})} ${named_parameter()} ${loud_slot()}`,
+    );
 }
 
 __DATA__
@@ -89,6 +103,7 @@ __DATA__
         "missing effect 'Stdout' required by 'each'",
         "missing effect 'Stdout' required by 'Plain::each'",
         "missing effects required by 'Pair::go': its trait leaves them to the impl",
-        "missing effect 'Stdout' required by 'Pair::go'"
+        "missing effect 'Stdout' required by 'Pair::go'",
+        "missing effect 'Stdout' required by 'apply'"
     ]
 }

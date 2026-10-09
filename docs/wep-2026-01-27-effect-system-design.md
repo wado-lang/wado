@@ -464,7 +464,11 @@ Constraining an open trait's effect argument at the bound does not parse yet, so
 
 ### How deep an open head resolves
 
-A hole is filled from the impl the call names: a free call reads its type arguments, a method dispatch reads its receiver, and a receiver that is itself a wrapper is followed through its own type arguments to a bounded depth. Past that depth, and for a receiver naming no impl this phase indexed, the parameter survives and the caller forwards it with `with _`. That is sound, and more than the impl would have demanded.
+A hole is filled from everything that determines it at the call: each function-typed argument, and each type argument bounded by an open trait. That covers a free function's, a method's own, and the method's impl's, wherever the impl's target names the parameter among its type arguments. A receiver that is itself a wrapper is followed through its own type arguments to a bounded depth. Some determiners still name no impl this phase indexed, and the parameter survives for each one: the caller forwards it with `with _`, which is sound and more than the impl would have demanded. They are:
+
+- a bound past that depth;
+- an impl parameter the target names inside a tuple, a reference or a function type;
+- a call that a blanket impl (`impl<T: Tick> Show for T`) answers, whose own effects are indexed under `T` rather than under the receiver.
 
 ### One effect parameter per function
 
