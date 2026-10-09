@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791495752426,
+  "lastUpdate": 1791519663287,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65485,6 +65485,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/33447bcd6be350d03208385800d7168832796f8d"
         },
         "date": 1791495751603,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 338626,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e0d81a96007486d134daeeace5c702f248e3bcb5",
+          "message": "Merge pull request #2314 from wado-lang/todo/20-assign-iter\n\nfix(bind)!: check a deferred let along every path the program can take",
+          "timestamp": "2026-10-09T13:02:52+09:00",
+          "tree_id": "f8744e7a9a49d5ee7b933ab3057bd92e211bb5f0",
+          "url": "https://github.com/wado-lang/wado/commit/e0d81a96007486d134daeeace5c702f248e3bcb5"
+        },
+        "date": 1791519662564,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
