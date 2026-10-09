@@ -77,9 +77,12 @@ pub fn read(text: &String) -> Result<ByteLevelBpe, TokenizerError> {
     ] as List<[String, Value]> {
         settled(&model, "model", key, &neutral)?;
     }
-    let tokens = tokens_of(&model)?;
+    let Some(Object(vocab)) = model.get("vocab") else {
+        return refused("model: no vocab");
+    };
+    let tokens = tokens_of(&vocab)?;
     let merges = merges_of(&model)?;
-    let specials = specials_of(&root, &model)?;
+    let specials = specials_of(&root, &vocab)?;
     return Result::Ok(ByteLevelBpe { tokens, merges, specials });
 }
 
@@ -116,11 +119,8 @@ fn settled(stage: &TreeMap<String, Value>, at: String, key: String, neutral: &Va
     return refused(`${at}: ${key} ${spelled(&value)} is not supported`);
 }
 
-/// The vocabulary, its tokens in id order.
-fn tokens_of(model: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
-    let Some(Object(vocab)) = model.get("vocab") else {
-        return refused("model: no vocab");
-    };
+/// The tokens of `vocab`, in id order.
+fn tokens_of(vocab: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
     let mut tokens = List::<String>::filled(vocab.len(), "");
     let mut seen = List::<bool>::filled(vocab.len(), false);
     for let [token, id] of vocab.entries() {
@@ -175,13 +175,10 @@ fn merges_of(model: &TreeMap<String, Value>) -> Result<List<String>, TokenizerEr
     return Result::Ok(merges);
 }
 
-/// The added tokens, each the vocabulary's own and matched as it stands.
-fn specials_of(root: &TreeMap<String, Value>, model: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
+/// The added tokens, each one of `vocab`'s and matched as it stands.
+fn specials_of(root: &TreeMap<String, Value>, vocab: &TreeMap<String, Value>) -> Result<List<String>, TokenizerError> {
     let Some(List(added)) = root.get("added_tokens") else {
         return Result::Ok([]);
-    };
-    let Some(Object(vocab)) = model.get("vocab") else {
-        unreachable();
     };
     let mut specials: List<String> = [];
     for let token of added {
