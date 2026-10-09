@@ -72,9 +72,15 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
     // Route supplementary inputs by their `type`: `"tree-sitter-highlights"`
     // is a highlight query (compiled into the highlighter), and `"antlr4"` or
-    // none is a grammar half merged into the primary.
+    // none is a grammar half merged into the primary. The primary is a grammar,
+    // so `"antlr4"` is the default.
     let primary_path = req.primary.path;
     let primary_text = decode_input(&primary_path, req.primary.content)?;
+    if let Some(other) = req.primary.type && other != "antlr4" {
+        return Result::Err(Error::Unsupported(
+            `gale: '${primary_path}' is given \`type: "${other}"\`; a grammar is \`type: "antlr4"\``,
+        ));
+    }
     let mut g4_inputs: List<[String, String]> = [
         [primary_path, primary_text],
     ];

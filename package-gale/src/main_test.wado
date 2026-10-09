@@ -191,12 +191,13 @@ impl KilnRun {
     }
 }
 
-/// Run the Kiln generator on `primary`, `[path, content]`, and `supplementary`,
-/// each `[path, content, type]`.
+/// Run the Kiln generator on `primary`, `[path, content]` of `primary_type`,
+/// and `supplementary`, each `[path, content, type]`.
 fn kiln(
     primary: [String, ByteList],
     supplementary: List<[String, ByteList, Option<String>]>,
     options: Options,
+    primary_type: Option<String> = null,
 ) -> KilnRun {
     let mut inputs = Inputs {
         contents: [primary.1],
@@ -207,7 +208,7 @@ fn kiln(
         inputs.contents.push(content);
     }
     let request = Request {
-        primary: InputFile { path: primary.0, content: 0 as Stream<u8>, type: null },
+        primary: InputFile { path: primary.0, content: 0 as Stream<u8>, type: primary_type },
         inputs: files,
         module: "lib:gale",
         options,
@@ -500,6 +501,15 @@ test "a .scm input to the Kiln generator adds the highlighter" {
         ],
     ], no_options());
     assert built.source().contains("pub fn highlight<");
+}
+
+test "the primary input is a grammar, antlr4 by default" {
+    for let grammar_type of [null, Option::Some("antlr4")] as List<Option<String>> {
+        let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options(), grammar_type);
+        assert built.error() == "", built.error();
+    }
+    let other = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options(), Option::Some("onnx"));
+    assert other.error() == "unsupported: gale: 'Expr.g4' is given `type: \"onnx\"`; a grammar is `type: \"antlr4\"`";
 }
 
 test "an input's type, not its name, says it is a highlight query" {

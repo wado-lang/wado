@@ -99,6 +99,15 @@ fn holds_header(prefix: &ByteList) -> bool {
 }
 
 
+/// The `type` a use site gave a file, as a refusal names it. Loam reads no file
+/// without one, since nothing makes one kind the default.
+fn given(use_type: &Option<String>) -> String {
+    return match *use_type {
+        Some(t) => `\`type: "${t}"\``,
+        None => "no `type`",
+    };
+}
+
 /// `error`, once every stream the request carries is dropped.
 fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnError> {
     req.primary.content.drop();
@@ -123,13 +132,13 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
         return refused(req, KilnError::Unsupported(reason));
     };
     let Some(spelling) = spelling_of(&req.primary.type) else {
-        let given = match req.primary.type {
-            Some(t) => `\`type: "${t}"\``,
-            None => "no `type`",
-        };
-        let reason = `loam: '${req.primary.path}' is given ${given}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\``;
+        let reason = `loam: '${req.primary.path}' is given ${given(&req.primary.type)}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\``;
         return refused(req, KilnError::Unsupported(reason));
     };
+    if let Some(input) = req.inputs.into_iter().find(|input| !input.type matches { Some("safetensors") }) {
+        let reason = `loam: '${input.path}' is given ${given(&input.type)}; a checkpoint is \`type: "safetensors"\``;
+        return refused(req, KilnError::Unsupported(reason));
+    }
     let mut headers: List<[String, ByteList]> = [];
     for let input of req.inputs {
         headers.push([input.path, read_header(input.content)]);
