@@ -82,18 +82,27 @@ pub enum TestGrants {
     Given(Vec<(String, String)>),
     /// The root of the package a file belongs to, as `.`, so a path in a test
     /// means one place wherever `wado test` was started. A file in no package
-    /// gets the directory `wado test` was started in.
-    PackageRoot,
+    /// gets the directory `wado test` was started in. Each directory's root is
+    /// looked up once, since most files share their directory with others.
+    PackageRoot(Mutex<IndexMap<PathBuf, String>>),
 }
 
 impl TestGrants {
     fn for_file(&self, path: &str) -> Vec<(String, String)> {
         match self {
             TestGrants::Given(dirs) => dirs.clone(),
-            TestGrants::PackageRoot => {
+            TestGrants::PackageRoot(roots) => {
                 let dir = Path::new(path).parent().unwrap_or(Path::new(""));
-                let root = package_root(dir).unwrap_or_else(|| PathBuf::from("."));
-                vec![(root.display().to_string(), ".".to_string())]
+                let root = lock(roots)
+                    .entry(dir.to_path_buf())
+                    .or_insert_with(|| {
+                        package_root(dir)
+                            .unwrap_or_else(|| PathBuf::from("."))
+                            .display()
+                            .to_string()
+                    })
+                    .clone();
+                vec![(root, ".".to_string())]
             }
         }
     }
@@ -548,9 +557,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         jobs,
         knobs,
         runtime: runtime_knobs,
-        grants: dirs
-            .given()
-            .map_or(TestGrants::PackageRoot, TestGrants::Given),
+        grants: dirs.given().map_or_else(
+            || TestGrants::PackageRoot(Mutex::default()),
+            TestGrants::Given,
+        ),
         no_run,
         test_name_filters,
         format,

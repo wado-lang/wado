@@ -589,7 +589,7 @@ fn test_with_files() {
 fn test_defaults_to_preopening_each_package_root() {
     let parser = Parser::from_args(&["a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert!(matches!(opts.grants, TestGrants::PackageRoot));
+    assert!(matches!(opts.grants, TestGrants::PackageRoot(_)));
 }
 
 #[test]
