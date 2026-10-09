@@ -107,7 +107,7 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#![allow(...)]` it waives the lint for every item in the file. There is no
 `#[deny(...)]`. The lints are:
 
-- `arithmetic_overflow`: integer literals that overflow their type (see [The `arithmetic_overflow` Lint](./spec-diagnostics.md#the-arithmetic_overflow-lint)).
+- `arithmetic_overflow`: integer literals that overflow their type, or a literal shift amount outside the bit width (see [The `arithmetic_overflow` Lint](./spec-diagnostics.md#the-arithmetic_overflow-lint)).
 - `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
 - `literal_cast`: a cast that types a literal a suffix could type (see [The `literal_cast` Lint](./spec-literals.md#the-literal_cast-lint)).
 - `self_comparison`: a comparison of an expression with itself (see [The `self_comparison` Lint](./spec-expressions.md#the-self_comparison-lint)).

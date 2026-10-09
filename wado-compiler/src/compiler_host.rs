@@ -191,7 +191,8 @@ pub enum Code {
     LiteralCast,
     /// A comparison of an expression with itself, which has one answer: `x == x`.
     SelfComparison,
-    /// Integer literals alone overflow their type: `200_u8 + 100_u8`.
+    /// Integer literals alone overflow their type, `200_u8 + 100_u8`, or a
+    /// literal shift amount lies outside the bit width, `x << 9` on a `u8`.
     ArithmeticOverflow,
     /// An integer `/` or `%` that always traps: `x / 0`.
     UnconditionalTrap,
