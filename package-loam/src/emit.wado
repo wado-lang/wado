@@ -330,6 +330,13 @@ fn module_idents() -> TreeSet<String> {
 /// The type parameter `forward` takes its backend as.
 global BACKEND_PARAM: String = "Bk";
 
+/// That parameter declared with its bound.
+global BACKEND_BOUND: String = `${BACKEND_PARAM}: Backend`;
+
+/// The struct `forward` reads the weights from, and its type over the backend.
+global PREPARED: String = "Prepared";
+global PREPARED_TYPE: String = `${PREPARED}<${BACKEND_PARAM}>`;
+
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
 /// one, and a name may start with a digit.
 fn sanitize(name: &String) -> String {
@@ -356,7 +363,7 @@ fn sanitize(name: &String) -> String {
 fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
-    prepared.add_generic(`${BACKEND_PARAM}: Backend`);
+    prepared.add_generic(BACKEND_BOUND);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
@@ -368,7 +375,7 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     w.blank();
     ImplSpec::new("Weights").emit_begin(w);
     w.line("/// These weights as `backend` computes with them.");
-    FnSpec::new("prepare", Vis::Pub).add_generic(`${BACKEND_PARAM}: Backend`).set_receiver("&self").add_param(
+    FnSpec::new("prepare", Vis::Pub).add_generic(BACKEND_BOUND).set_receiver("&self").add_param(
         "backend",
         `&mut ${BACKEND_PARAM}`,
     ).set_return_type(PREPARED_TYPE).add_effect("_").emit_begin(w);
@@ -385,10 +392,6 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     prepared.emit(w);
     emit_constructor(w, graph, checked, names, held);
 }
-
-/// The struct `forward` reads the weights from, and its type over the backend.
-global PREPARED: String = "Prepared";
-global PREPARED_TYPE: String = "Prepared<Bk>";
 
 /// A weight as the backend holds it: in the primitive the kernels compute in.
 fn prepared_type(checked: &Checked, tensor: &String) -> String {
@@ -417,17 +420,11 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Prepared::load` reading the rest from a safetensors checkpoint otherwise.
 /// Each tensor is prepared as it is read, so the host copy of one weight at a
 /// time is all that lives beside the prepared ones.
-fn emit_constructor(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    checked: &Checked,
-    names: &Names,
-    held: &TreeMap<String, String>,
-) {
+fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
     let loads = loads_weights(graph);
     w.blank();
     let mut block = ImplSpec::new(PREPARED_TYPE);
-    block.add_generic(`${BACKEND_PARAM}: Backend`);
+    block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     if loads {
         w.line("/// The weights, those the graph does not carry read from a safetensors checkpoint.");
@@ -630,7 +627,7 @@ fn emit_forward(
         scalars,
     };
     let mut forward = FnSpec::new("forward", Vis::Pub);
-    forward.add_generic(`${BACKEND_PARAM}: Backend`).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    forward.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // Each input on the host, as the backend then holds it. The checks and the
     // symbols read the host's, so the upload comes after them. The weights are
     // the backend's already.

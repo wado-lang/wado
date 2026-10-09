@@ -143,7 +143,8 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
 
-    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap(
+    );
     let got = gpt2::forward(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
@@ -177,7 +178,8 @@ test "the same module reproduces them for seven" {
 test "a sequence longer than the mask stops forward" {
     let ids = List::<i64>::filled(513, 0);
     let mask = List::<i64>::filled(513, 1);
-    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap(
+    );
     gpt2::forward(
         &mut Cpu {},
         &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {

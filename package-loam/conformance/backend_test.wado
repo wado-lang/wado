@@ -95,7 +95,11 @@ global HALF: String = #include_str("../example/half.onnxtext");
 test "a half-precision model converts its weights once, not per call" {
     let graph = read(&HALF).unwrap();
     let source = generated(&graph, &Schema {
-        layout: [rule("X", ["Batch", "In"]), rule("W", ["In", "Out"]), rule("B", ["Out"])],
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("W", ["In", "Out"]),
+            rule("B", ["Out"]),
+        ],
     }).unwrap();
     let program = `${program_over(&source)}
 fn halves<A>(extents: List<i32>, step: f32) -> Tensor<f16, A> {

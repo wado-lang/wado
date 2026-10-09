@@ -325,7 +325,8 @@ fn decode(
 /// The prompt's logits, and the keys and values it leaves.
 fn prefill(input_ids: ByteList) -> [Tensor<f32, [prompt::Batch, prompt::Seq, prompt::Vocab]>, Cache] {
     let [ids, extents] = ints_of(input_ids);
-    let weights = prompt::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    let weights = prompt::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap(
+    );
     let o = prompt::forward(
         &mut Cpu {},
         &Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: ids, extents },
