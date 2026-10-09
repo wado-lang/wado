@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 
-use crate::ast::{Item, Module};
+use crate::ast::{ImportAttributes, Item, Module};
 use crate::compiler_host::{Code, Diagnostic, Severity};
 use crate::hashmap::IndexMap;
 use crate::kiln::inline::InvocationIndex;
@@ -21,7 +21,7 @@ pub struct Harvest {
 }
 
 /// Walk the local module graph from `entry_key` and `entry_ast`, parsing every
-/// `./` / `../` `.wado` import reachable from them.
+/// `./` / `../` Wado source import reachable from them.
 ///
 /// A module carries two names, seeded by `entry_key` and `entry_identity`: a
 /// clause path is spelled against the key, and the loader reads the module
@@ -91,15 +91,20 @@ where
     }
 }
 
-/// The `./` / `../` `.wado` imports of `module`. A non-`.wado` source is a Kiln
-/// schema, and a `core:` / `wasi:` / dependency specifier names no module here.
+/// The `./` / `../` imports of `module` that are Wado source: those with neither
+/// `generator` nor `type`, whatever the extension. A `core:` / `wasi:` /
+/// dependency specifier names no module here.
 fn local_wado_imports(module: &Module) -> impl Iterator<Item = &str> {
     module.items.iter().filter_map(|item| {
         let Item::Use(use_decl) = item else {
             return None;
         };
         let src = use_decl.source.as_str();
-        (is_cwd_relative(src) && src.to_ascii_lowercase().ends_with(".wado")).then_some(src)
+        let is_source = use_decl
+            .attributes
+            .as_ref()
+            .is_none_or(ImportAttributes::reads_as_source);
+        (is_cwd_relative(src) && is_source).then_some(src)
     })
 }
 
@@ -200,6 +205,30 @@ mod tests {
         assert_eq!(
             harvest.identities.get("src/deep/util.wado").unwrap(),
             "./deep/util.wado",
+        );
+    }
+
+    #[test]
+    fn walks_into_source_whatever_its_extension_and_not_into_a_schema_or_asset() {
+        let sources: &[(&str, &str)] = &[
+            ("./helpers.g4", "pub fn h() {}\n"),
+            ("./Calc.g4", "grammar Calc;\n"),
+            ("./m.wasm", "\0asm"),
+        ];
+        let harvest = block_on(harvest_module_graph(
+            "src/main.wado",
+            "src/main.wado",
+            ast_of(
+                "use { h } from \"./helpers.g4\";\n\
+                 use calc from \"./Calc.g4\" with { generator: { module: \"lib:gale\" } };\n\
+                 use { f } from \"./m.wasm\" with { type: \"wasm\" };\n",
+            ),
+            exact(sources),
+        ));
+
+        assert_eq!(
+            harvest.modules.keys().collect::<Vec<_>>(),
+            ["src/main.wado", "src/helpers.g4"],
         );
     }
 

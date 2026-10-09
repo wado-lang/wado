@@ -510,24 +510,17 @@ fn strip_kiln_scheme(uri: &str) -> Option<String> {
     Some(parsed.path().decode().to_string_lossy().into_owned())
 }
 
-/// `true` when `path` looks like a non-`.wado` schema source (i.e. has any
-/// extension other than `.wado`). Wado modules and bare paths with no
-/// extension fall through to normal resolution.
-fn is_non_wado_schema(path: &str) -> bool {
-    match path.rsplit_once('.') {
-        Some((_, ext)) if !ext.is_empty() && !ext.contains('/') => {
-            !ext.eq_ignore_ascii_case("wado")
-        }
-        _ => false,
-    }
-}
-
 /// Extract the wasm-asset kind from a use declaration's `with { ... }`
 /// attributes. Returns `Some(kind)` for `with { type: "wat" | "wasm" }`,
 /// `None` otherwise (including for unrelated `with { ... }` attributes
-/// such as `with { version: "1.0" }`).
+/// such as `with { version: "1.0" }`). A `type` beside `generator` is the
+/// generator's to read, so that import is no asset.
 pub fn wasm_asset_kind_from_attrs(attrs: Option<&ImportAttributes>) -> Option<WasmAssetKind> {
-    let type_hint = ImportAttributes::type_hint(attrs?)?;
+    let attrs = attrs?;
+    if attrs.is_generated() {
+        return None;
+    }
+    let type_hint = ImportAttributes::type_hint(attrs)?;
     match type_hint.as_str() {
         "wat" => Some(WasmAssetKind::Wat),
         "wasm" => Some(WasmAssetKind::Wasm),
@@ -1092,6 +1085,29 @@ mod tests {
         }
     }
 
+    /// The attributes of the module's one `use`.
+    fn use_attributes(source: &str) -> ImportAttributes {
+        let module = parse_test_module(source);
+        let Some(Item::Use(use_decl)) = module.items.into_iter().next() else {
+            panic!("the source is one `use`");
+        };
+        use_decl.attributes.expect("the `use` carries a `with`")
+    }
+
+    #[test]
+    fn a_type_beside_generator_reads_no_wasm_asset() {
+        let generated = use_attributes(
+            "use { f } from \"./m.wasm\" with { type: \"wasm\", generator: { module: \"lib:gen\" } };",
+        );
+        assert_eq!(wasm_asset_kind_from_attrs(Some(&generated)), None);
+
+        let asset = use_attributes("use { f } from \"./m.wasm\" with { type: \"wasm\" };");
+        assert_eq!(
+            wasm_asset_kind_from_attrs(Some(&asset)),
+            Some(WasmAssetKind::Wasm)
+        );
+    }
+
     #[test]
     fn strip_kiln_scheme_ignores_other_schemes() {
         assert_eq!(strip_kiln_scheme("core:cli"), None);
@@ -1525,21 +1541,25 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.pending_component_imports.push((resolved, kind));
                     continue;
                 }
-                if matches!(&resolved, ModuleSource::Local { path, .. } if is_non_wado_schema(path))
-                {
-                    let declares_generator = use_decl
+                let declares_generator = use_decl
+                    .attributes
+                    .as_ref()
+                    .is_some_and(ImportAttributes::is_generated);
+                if declares_generator && !matches!(resolved, ModuleSource::Redirected { .. }) {
+                    // No invocation produced this module. Reading the schema as
+                    // Wado would report the generator's absence as a parse
+                    // error in a file that was never Wado.
+                    self.emit_kiln_no_generated_module(from_module_source, use_decl);
+                    continue;
+                }
+                // A `type` no reader takes names a file that is not Wado, which
+                // analysis reports on the use site.
+                if !declares_generator
+                    && use_decl
                         .attributes
                         .as_ref()
-                        .is_some_and(ImportAttributes::is_generated);
-                    if declares_generator {
-                        // The redirect above did not fire, so no invocation
-                        // produced this module. Reading the schema as Wado would
-                        // report the generator's absence as a parse error in a
-                        // file that was never Wado.
-                        self.emit_kiln_no_generated_module(from_module_source, use_decl);
-                    } else {
-                        self.emit_kiln_missing_with(from_module_source, use_decl);
-                    }
+                        .is_some_and(|attrs| !attrs.reads_as_source())
+                {
                     continue;
                 }
                 pending.push_back((from_module_source.clone(), resolved));
@@ -1813,23 +1833,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 }
             }
         }
-    }
-
-    /// Report a `use ... from "./schema.<ext>"` that names no generator. A
-    /// non-`.wado` schema is only reachable through one.
-    fn emit_kiln_missing_with(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-        let file = decl_file_of(from_module_source);
-        self.host.emit_diagnostic(Diagnostic {
-            severity: Severity::Error,
-            code: Code::KilnMissingWith,
-            message: format!(
-                "kiln: `use ... from {:?}` requires `with {{ generator: {{ module: \"...\" }} }}` \
-                 — non-`.wado` schemas can only be loaded through an inline Kiln invocation",
-                use_decl.source,
-            ),
-            span: Some(DiagnosticSpan::from_span(&use_decl.source_span, Some(file))),
-        });
     }
 
     /// Report a `use ... from "<schema>"` that names a generator no invocation

@@ -8,10 +8,12 @@
 //!     wado run package-loam/example/mlp.wado
 
 use { println, Stdout } from "core:cli";
-use { Batch, Cpu, Hidden, In, Out, Tensor, Weights, forward } from "./mlp.onnxtext"
+use { Cpu, Tensor } from "lib:loam";
+use { Batch, Hidden, In, Out, Weights, forward } from "./mlp.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

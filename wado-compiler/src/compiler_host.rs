@@ -204,9 +204,6 @@ pub enum Code {
     /// A program for a world other than the test world reaches `core:eval`,
     /// which only `wado test` supplies.
     EvalOutsideTestWorld,
-    /// A `use ... from "<path>"` whose source is a non-`.wado` schema is missing
-    /// the required `with { generator: { ... } }` clause.
-    KilnMissingWith,
     /// A `use ... from "<path>"` names a generator, but no invocation produced a
     /// module for it, so there is nothing to import.
     KilnNoGeneratedModule,
@@ -325,7 +322,6 @@ impl std::fmt::Display for Code {
             Code::KilnStaleCache => "KILN_STALE_CACHE",
             Code::KilnGeneratorForbiddenImport => "KILN_GENERATOR_FORBIDDEN_IMPORT",
             Code::EvalOutsideTestWorld => "EVAL_OUTSIDE_TEST_WORLD",
-            Code::KilnMissingWith => "KILN_MISSING_WITH",
             Code::KilnNoGeneratedModule => "KILN_NO_GENERATED_MODULE",
             Code::KilnGeneratedModified => "KILN_GENERATED_MODIFIED",
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
@@ -620,6 +616,9 @@ pub struct GeneratorInputFile {
     /// Raw bytes of the file. A checkpoint is not text, and the generator
     /// receives these as a `stream<u8>` it reads only as far as it needs.
     pub content: Vec<u8>,
+    /// The `type` the use site gave the file, which says how the generator
+    /// reads it.
+    pub use_type: Option<String>,
 }
 
 /// Response returned by a Kiln generator.
@@ -831,6 +830,7 @@ mod tests {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
                         content: b"syntax = \"proto3\";".to_vec(),
+                        use_type: None,
                     },
                     inputs: vec![],
                     module: "ns:proto@1.0.0".to_string(),

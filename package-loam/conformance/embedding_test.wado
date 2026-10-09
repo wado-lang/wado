@@ -1,10 +1,12 @@
 //! Row gathers over an int64 input, and position ids the build folds into a
 //! literal tensor.
 
-use { Batch, Cpu, Hidden, Seq, Tensor, Weights, forward } from "./embedding.onnxtext"
+use { Cpu, Tensor } from "lib:loam";
+use { Batch, Hidden, Seq, Weights, forward } from "./embedding.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

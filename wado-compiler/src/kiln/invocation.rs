@@ -85,6 +85,14 @@ impl fmt::Display for InvocationPath {
     }
 }
 
+/// One supplementary input of an invocation: its path, and the `type` the use
+/// site gave it, which says how the generator reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvocationInput {
+    pub path: InvocationPath,
+    pub use_type: Option<String>,
+}
+
 /// Where a generator invocation was declared in the source tree.
 ///
 /// Never part of the cache key. `(module, source)` is the redirect key the
@@ -204,13 +212,16 @@ pub struct Invocation {
     /// How the use site named the generator, handed to it as `Request.module`:
     /// a specifier verbatim, or a path resolved against the project root.
     pub invoked_as: String,
+    /// The use site's `type` beside `generator`, handed to it as the primary
+    /// input's `type`.
+    pub use_type: Option<String>,
     /// Primary schema file, resolved relative to the declaring `.wado` file
     /// (project-root-relative). Drives input loading, the cache key, and the
     /// default `output_dir`.
     pub from: InvocationPath,
     /// Supplementary schema files, resolved relative to the declaring `.wado`
     /// file, preserving declaration order.
-    pub inputs: Vec<InvocationPath>,
+    pub inputs: Vec<InvocationInput>,
     /// Resolved output directory (default: `build/kiln/<synthesized-id>`).
     pub output_dir: InvocationPath,
     /// Validated, typed options for this invocation. Crosses to the generator
@@ -264,14 +275,16 @@ impl Invocation {
     ) -> (
         &GeneratorModule,
         &str,
+        Option<&str>,
         &str,
-        &[InvocationPath],
+        &[InvocationInput],
         &str,
         Vec<u8>,
     ) {
         (
             &self.module,
             &self.invoked_as,
+            self.use_type.as_deref(),
             self.from.as_str(),
             self.inputs.as_slice(),
             self.output_dir.as_str(),
@@ -352,6 +365,7 @@ mod tests {
             }],
             module: GeneratorModule::Spec("ns:x@1.0.0".into()),
             invoked_as: "ns:x@1.0.0".to_string(),
+            use_type: None,
             from: InvocationPath::normalize("s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),

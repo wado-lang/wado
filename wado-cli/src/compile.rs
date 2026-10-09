@@ -1262,6 +1262,7 @@ mod kiln_dir_module_tests {
             }],
             module: GeneratorModule::LocalPath(InvocationPath::normalize(module_path)),
             invoked_as: module_path.to_string(),
+            use_type: None,
             from: InvocationPath::normalize("grammar.g4"),
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),

@@ -1,0 +1,33 @@
+//! The tiny GPT-2's `tokenizer.json` through Loam: each text encodes to the ids
+//! Hugging Face's tokenizer gives it, recorded in `generate.json`, and decodes
+//! back.
+
+use { from_string } from "core:json";
+use { Tokenizer } from "../tests/models/tiny-gpt2/tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
+
+struct Tokenized {
+    text: String,
+    ids: List<i32>,
+}
+
+struct Oracle {
+    tokenize: List<Tokenized>,
+}
+
+test "each text encodes to the ids Hugging Face's tokenizer gives it, and back" {
+    let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
+    for let case of oracle.tokenize {
+        let ids = Tokenizer::encode(&case.text);
+        assert ids == case.ids, case.text;
+        assert Tokenizer::decode(&ids) == case.text;
+    }
+}
+
+test "an empty text is no tokens" {
+    assert Tokenizer::encode(&"").is_empty();
+    assert Tokenizer::decode(&[]) == "";
+}

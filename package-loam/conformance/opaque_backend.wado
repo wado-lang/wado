@@ -3,8 +3,11 @@
 //! reading `.data` or `.extents` past the seam does not compile. It runs the
 //! CPU's kernels, so it computes what `Cpu` does.
 //!
-//! Not a module of its own: it reads the generated module's names, so the
-//! tests discover none of it, and `program_over` in `oracle.wado` splices it.
+//! Not a module of its own: it reads the runtime names the generated module
+//! imports, so the tests discover none of it, and `program_over` in
+//! `oracle.wado` splices it.
+
+use { Cpu, Element, Expr } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {

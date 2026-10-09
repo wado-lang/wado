@@ -1,0 +1,156 @@
+use { TreeMap } from "core:collections";
+use { to_string } from "core:json";
+use { ByteLevelBpe, read } from "./tokenizer_json.wado";
+use { byte_chars } from "./runtime/tokenizer.wado";
+
+global TINY: String = #include_str("../tests/models/tiny-gpt2/tokenizer.json");
+
+/// The id of the special token in `vocab`: every byte's character comes first.
+global SPECIAL_ID: i32 = 256;
+
+/// A vocabulary of every byte's character, then `<|endoftext|>`, then
+/// `extra`, as JSON.
+fn vocab(extra: List<String>) -> String {
+    let mut tokens = TreeMap::<String, i32>::new();
+    for let c of byte_chars() {
+        let mut spelled = String::new();
+        spelled.push(c);
+        tokens[spelled] = tokens.len();
+    }
+    tokens["<|endoftext|>"] = tokens.len();
+    for let token of extra {
+        tokens[token] = tokens.len();
+    }
+    return to_string(&tokens).unwrap();
+}
+
+/// A BPE model over `vocab(["ab"])` with the merge `a b`, its other fields
+/// `fields`, each a `"key": value`.
+fn model(fields: List<String>) -> String {
+    let mut all: List<String> = [`"vocab": ${vocab(["ab"])}`, "\"merges\": [\"a b\"]"];
+    all.extend(&fields);
+    return `{${all.join(", ")}}`;
+}
+
+/// GPT-2's pipeline, with the stage `stage` replaced by `json`, a JSON value.
+fn pipeline(stage: String, json: String) -> String {
+    let stages = [
+        [
+            "added_tokens",
+            `[{"id": ${SPECIAL_ID}, "content": "<|endoftext|>", "special": true, "single_word": false, "lstrip": false, "rstrip": false, "normalized": false}]`,
+        ],
+        ["normalizer", "null"],
+        [
+            "pre_tokenizer",
+            "{\"type\": \"ByteLevel\", \"add_prefix_space\": false, \"trim_offsets\": true, \"use_regex\": true}",
+        ],
+        ["post_processor", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true, \"trim_offsets\": false}"],
+        ["decoder", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true, \"trim_offsets\": true}"],
+        [
+            "model",
+            model([
+                "\"type\": \"BPE\"", "\"dropout\": null", "\"unk_token\": null", "\"continuing_subword_prefix\": \"\"",
+                "\"end_of_word_suffix\": \"\"", "\"fuse_unk\": false",
+            ]),
+        ],
+    ] as List<[String, String]>;
+    let mut fields: List<String> = [];
+    for let [key, value] of stages {
+        fields.push(`"${key}": ${if key == stage { json } else { value }}`);
+    }
+    return `{${fields.join(", ")}}`;
+}
+
+fn refusal(stage: String, json: String) -> String {
+    return match read(&pipeline(stage, json)) {
+        Ok(_) => "",
+        Err(e) => `${e}`,
+    };
+}
+
+test "GPT-2's pipeline reads as byte-level BPE" {
+    let Ok(ByteLevelBpe { tokens, merges, specials }) = read(&pipeline("", "")) else {
+        panic("the pipeline is GPT-2's");
+    };
+    assert tokens.len() == 258;
+    assert tokens[97] == "a";
+    assert tokens[SPECIAL_ID] == "<|endoftext|>";
+    assert tokens[257] == "ab";
+    assert merges == ["a b"] as List<String>;
+    assert specials == ["<|endoftext|>"] as List<String>;
+}
+
+test "the tiny GPT-2's tokenizer.json reads whole" {
+    let Ok(bpe) = read(&TINY) else {
+        panic("the tiny GPT-2 is GPT-2's pipeline");
+    };
+    assert bpe.tokens.len() == 1024;
+    assert bpe.tokens[0] == "<|endoftext|>";
+    assert bpe.merges.len() == 767;
+    assert bpe.merges[0] == "Ġ t";
+    assert bpe.specials == ["<|endoftext|>"] as List<String>;
+}
+
+test "a model with no type is BPE, as the older files write it" {
+    assert refusal("model", model([])) == "";
+}
+
+test "a stage Loam does not generate names itself" {
+    assert refusal("normalizer", "{\"type\": \"NFKC\"}") == "normalizer: NFKC is not supported";
+    assert refusal("pre_tokenizer", "{\"type\": \"Metaspace\"}") == "pre_tokenizer: Metaspace is not supported";
+    assert refusal("decoder", "{\"type\": \"WordPiece\"}") == "decoder: WordPiece is not supported";
+    assert refusal("model", "{\"type\": \"Unigram\"}") == "model: Unigram is not supported";
+    assert refusal("post_processor", "{\"type\": \"TemplateProcessing\"}") == "post_processor: TemplateProcessing is not supported";
+}
+
+test "a setting that changes the ids Loam computes names itself" {
+    assert refusal("pre_tokenizer", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true}") == "pre_tokenizer: add_prefix_space true is not supported";
+    assert refusal("pre_tokenizer", "{\"type\": \"ByteLevel\", \"use_regex\": false}") == "pre_tokenizer: use_regex false is not supported";
+    assert refusal("model", model(["\"dropout\": 0.1"])) == "model: dropout 0.1 is not supported";
+    assert refusal("model", model(["\"ignore_merges\": true"])) == "model: ignore_merges true is not supported";
+}
+
+test "an added token that strips or matches a word names itself" {
+    let stripped = `[{"id": ${SPECIAL_ID}, "content": "<|endoftext|>", "lstrip": true}]`;
+    assert refusal("added_tokens", stripped) == "added_tokens: <|endoftext|>: lstrip true is not supported";
+}
+
+test "an added token the vocabulary gives another id is malformed" {
+    let moved = "[{\"id\": 3, \"content\": \"<|endoftext|>\"}]";
+    assert refusal("added_tokens", moved) == `added_tokens: <|endoftext|> is id 3, and the vocabulary gives it ${SPECIAL_ID}`;
+}
+
+test "merges as pairs read as the strings the older files write" {
+    let pairs = `{"vocab": ${vocab(["ab"])}, "merges": [["a", "b"]]}`;
+    let Ok(bpe) = read(&pipeline("model", pairs)) else {
+        panic("a pair is a merge");
+    };
+    assert bpe.merges == ["a b"] as List<String>;
+}
+
+test "a vocabulary that does not spell what BpeTokenizer reads is malformed" {
+    let unjoined = `{"vocab": ${vocab([])}, "merges": ["a b"]}`;
+    assert refusal("model", unjoined) == "model: merge a b names ab, which the vocabulary lacks";
+    let foreign = `{"vocab": ${vocab(["ab", "a b"])}, "merges": ["a b"]}`;
+    assert refusal("model", foreign) == "model: a b holds  , which no byte is spelled as";
+}
+
+test "a special token may hold what no byte is spelled as" {
+    let added = `[{"id": ${SPECIAL_ID}, "content": "<|endoftext|>"}, {"id": 258, "content": "<|im start|>"}]`;
+    let with_special = `{"vocab": ${vocab(["ab", "<|im start|>"])}, "merges": ["a b"]}`;
+    let json = pipeline("model", with_special).replace(
+        `[{"id": ${SPECIAL_ID}, "content": "<|endoftext|>", "special": true, "single_word": false, "lstrip": false, "rstrip": false, "normalized": false}]`,
+        &added,
+    );
+    let Ok(bpe) = read(&json) else {
+        panic("a special token is text as it stands");
+    };
+    assert bpe.specials == ["<|endoftext|>", "<|im start|>"] as List<String>;
+}
+
+test "text that is not JSON is malformed" {
+    assert (match read(&"{") {
+        Ok(_) => "",
+        Err(e) => `${e}`,
+    }).starts_with("not JSON: ");
+}

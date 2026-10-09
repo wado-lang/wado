@@ -1,9 +1,11 @@
 //! The `dims` and `outputs` options: without both, this graph stops the build.
 
-use { Batch, Merged, Col, Cpu, Row, Tensor, Weights, forward } from "./specialize.onnxtext"
+use { Cpu, Merged, Tensor } from "lib:loam";
+use { Batch, Col, Row, Weights, forward } from "./specialize.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

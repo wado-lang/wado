@@ -191,18 +191,24 @@ impl KilnRun {
     }
 }
 
-/// Run the Kiln generator on `primary` and `supplementary`, each `[path, content]`.
-fn kiln(primary: [String, ByteList], supplementary: List<[String, ByteList]>, options: Options) -> KilnRun {
+/// Run the Kiln generator on `primary`, `[path, content]` of `primary_type`,
+/// and `supplementary`, each `[path, content, type]`.
+fn kiln(
+    primary: [String, ByteList],
+    supplementary: List<[String, ByteList, Option<String>]>,
+    options: Options,
+    primary_type: Option<String> = null,
+) -> KilnRun {
     let mut inputs = Inputs {
         contents: [primary.1],
     };
     let mut files: List<InputFile> = [];
-    for let [path, content] of supplementary {
-        files.push(InputFile { path, content: inputs.contents.len() as Stream<u8> });
+    for let [path, content, type_] of supplementary {
+        files.push(InputFile { path, content: inputs.contents.len() as Stream<u8>, type: type_ });
         inputs.contents.push(content);
     }
     let request = Request {
-        primary: InputFile { path: primary.0, content: 0 as Stream<u8> },
+        primary: InputFile { path: primary.0, content: 0 as Stream<u8>, type: primary_type },
         inputs: files,
         module: "lib:gale",
         options,
@@ -252,7 +258,7 @@ test "gen with a .scm query adds the highlighter" {
     put(&dir, "Expr.g4", EXPR);
     put(&dir, "expr.scm", EXPR_QUERY);
     let plain = gale_in(&dir, ["gen", "Expr.g4"]);
-    let highlighted = gale_in(&dir, ["gen", "Expr.g4", "expr.scm"]);
+    let highlighted = gale_in(&dir, ["gen", "--highlights", "expr.scm", "Expr.g4"]);
     assert highlighted.result matches { Ok(_) }, highlighted.failure();
     assert !plain.stdout().contains("pub fn highlight<");
     assert highlighted.stdout().contains("pub fn highlight<");
@@ -273,10 +279,10 @@ test "a warning is logged by default and silenced by --log-level error" {
     let dir = scratch(SUITE, "gen-log-level");
     put(&dir, "Expr.g4", EXPR);
     put(&dir, "bad.scm", "(FLOAT) @number\n");
-    let default_level = gale_in(&dir, ["gen", "Expr.g4", "bad.scm"]);
+    let default_level = gale_in(&dir, ["gen", "--highlights", "bad.scm", "Expr.g4"]);
     assert default_level.result matches { Ok(_) }, default_level.failure();
     assert default_level.console.events == ["Warn: highlight query: unknown token 'FLOAT'"];
-    let quiet = gale_in(&dir, ["gen", "--log-level", "error", "Expr.g4", "bad.scm"]);
+    let quiet = gale_in(&dir, ["gen", "--log-level", "error", "--highlights", "bad.scm", "Expr.g4"]);
     assert quiet.console.events == [];
 }
 
@@ -364,7 +370,7 @@ test "a reference to a rule no grammar defines is reported" {
 // What a failed run reports
 // ---------------------------------------------------------------------------
 
-global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]
+global USAGE: String = "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] [--highlights <query.scm> ...] <grammar.g4> [grammar2.g4 ...]
        gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]
        <level> is trace, debug, info, warn or error (default warn)";
 
@@ -383,7 +389,7 @@ test "an argument error names the subcommand and shows the usage" {
 test "a subcommand given no grammar says so" {
     let dir = scratch(SUITE, "no-grammar");
     put(&dir, "expr.scm", EXPR_QUERY);
-    assert gale_in(&dir, ["gen", "expr.scm"]).failure() == "gale gen: no grammar files given";
+    assert gale_in(&dir, ["gen", "--highlights", "expr.scm"]).failure() == "gale gen: no grammar files given";
     assert gale_in(&dir, ["dump"]).failure() == "gale dump: no grammar files given";
 }
 
@@ -413,7 +419,7 @@ test "a highlight query that does not parse is reported with its path and positi
     let dir = scratch(SUITE, "bad-query");
     put(&dir, "Expr.g4", EXPR);
     put(&dir, "bad.scm", "(INT)\n");
-    let outcome = gale_in(&dir, ["gen", "Expr.g4", "bad.scm"]);
+    let outcome = gale_in(&dir, ["gen", "--highlights", "bad.scm", "Expr.g4"]);
     assert outcome.failure() == "gale: bad.scm: highlight query 2:1: expected '@capture'";
 }
 
@@ -488,9 +494,49 @@ test "the Kiln generator emits one entry module named after the grammar" {
 
 test "a .scm input to the Kiln generator adds the highlighter" {
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [
-        ["expr.scm", bytes_of(EXPR_QUERY)],
+        [
+            "expr.scm",
+            bytes_of(EXPR_QUERY),
+            Option::Some("tree-sitter-highlights"),
+        ],
     ], no_options());
     assert built.source().contains("pub fn highlight<");
+}
+
+test "the primary input is a grammar, antlr4 by default" {
+    for let grammar_type of [null, Option::Some("antlr4")] as List<Option<String>> {
+        let built = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options(), grammar_type);
+        assert built.error() == "", built.error();
+    }
+    let other = kiln(["Expr.g4", bytes_of(EXPR)], [], no_options(), Option::Some("onnx"));
+    assert other.error() == "unsupported: gale: 'Expr.g4' is given `type: \"onnx\"`; a grammar is `type: \"antlr4\"`";
+}
+
+test "an input's type, not its name, says it is a highlight query" {
+    let unnamed = kiln(["Expr.g4", bytes_of(EXPR)], [
+        [
+            "expr.txt",
+            bytes_of(EXPR_QUERY),
+            Option::Some("tree-sitter-highlights"),
+        ],
+    ], no_options());
+    assert unnamed.source().contains("pub fn highlight<");
+
+    for let grammar_type of [null, Option::Some("antlr4")] as List<Option<String>> {
+        let grammar = kiln(["Expr.g4", bytes_of(EXPR)], [
+            ["expr.scm", bytes_of(EXPR_QUERY), grammar_type],
+        ], no_options());
+        assert grammar.error().contains("failed to parse supplementary grammar 'expr.scm'");
+    }
+
+    let unknown = kiln(["Expr.g4", bytes_of(EXPR)], [
+        [
+            "expr.scm",
+            bytes_of(EXPR_QUERY),
+            Option::Some("query"),
+        ],
+    ], no_options());
+    assert unknown.error() == "unsupported: gale: 'expr.scm' is given `type: \"query\"`; an input is `type: \"antlr4\"` or `type: \"tree-sitter-highlights\"`";
 }
 
 test "the trace option builds a parser that can log its decisions" {
@@ -500,7 +546,11 @@ test "the trace option builds a parser that can log its decisions" {
 
 test "Gale's diagnostics reach the Kiln host at their own level" {
     let warned = kiln(["Expr.g4", bytes_of(EXPR)], [
-        ["bad.scm", bytes_of("(FLOAT) @number\n")],
+        [
+            "bad.scm",
+            bytes_of("(FLOAT) @number\n"),
+            Option::Some("tree-sitter-highlights"),
+        ],
     ], no_options());
     assert warned.diagnostics == ["Warning: gale: highlight: highlight query: unknown token 'FLOAT'"];
     let informed = kiln(["Pick.g4", bytes_of(OVERLAP)], [], no_options());
@@ -528,7 +578,7 @@ test "a Kiln parse error says which input it is in" {
     assert primary.error().starts_with("invalid schema: gale: failed to parse primary grammar 'Broken.g4': "), primary.error(
     );
     let supplementary = kiln(["Expr.g4", bytes_of(EXPR)], [
-        ["Broken.g4", broken],
+        ["Broken.g4", broken, null],
     ], no_options());
     assert supplementary.error().starts_with(
         "invalid schema: gale: failed to parse supplementary grammar 'Broken.g4': ",
@@ -542,7 +592,11 @@ test "a Kiln grammar with unresolved references names the primary input" {
 
 test "a Kiln highlight query that does not parse names the query and position" {
     let built = kiln(["Expr.g4", bytes_of(EXPR)], [
-        ["bad.scm", bytes_of("(INT)\n")],
+        [
+            "bad.scm",
+            bytes_of("(INT)\n"),
+            Option::Some("tree-sitter-highlights"),
+        ],
     ], no_options());
     assert built.error() == "invalid schema: gale: invalid highlight query 'bad.scm' at 2:1: expected '@capture'";
 }

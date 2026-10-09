@@ -1,0 +1,36 @@
+// A catch-all arm binds the whole scrutinee after an arm that destructured a
+// payload. Borrowing that binding (`&other`) must borrow a value of the
+// variant's own type, whichever case it holds.
+
+variant Shape {
+    Circle(i32),
+    Label(String),
+}
+
+fn spelled(shape: &Shape) -> String {
+    return match *shape {
+        Circle(_) => "a circle",
+        Label(s) => s,
+    };
+}
+
+fn name_of(shape: &Shape) -> String {
+    return match *shape {
+        Circle(r) => `circle ${r}`,
+        other => spelled(&other),
+    };
+}
+
+fn name_of_value(shape: Shape) -> String {
+    return match shape {
+        Circle(r) => `circle ${r}`,
+        other => spelled(&other),
+    };
+}
+
+test "a borrowed catch-all binding is the variant itself" {
+    assert name_of(&Shape::Circle(2)) == "circle 2";
+    assert name_of(&Shape::Label("x")) == "x";
+    assert name_of_value(Shape::Circle(3)) == "circle 3";
+    assert name_of_value(Shape::Label("y")) == "y";
+}

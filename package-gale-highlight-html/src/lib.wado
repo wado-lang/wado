@@ -14,7 +14,10 @@ use html from "../grammar/HTMLLexer.g4"
     with {
         generator: {
             module: "lib:gale",
-            inputs: ["../grammar/HTMLParser.g4", "../grammar/HTML.highlights.scm"],
+            inputs: [
+                "../grammar/HTMLParser.g4",
+                { path: "../grammar/HTML.highlights.scm", type: "tree-sitter-highlights" },
+            ],
         },
     };
 use { Highlight, push_shifted, render_html } from "./highlight.wado";

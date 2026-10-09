@@ -1,12 +1,21 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily.
 
-pub use { Tokenizer } from "../gpt2_tokenizer.wado";
+use { Cpu, LoadError, Tensor } from "lib:loam";
+/// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
+pub use { Tokenizer } from "./tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
 use gpt2 from "./gpt2.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../../src/generator.wado",
-            inputs: ["./gpt2-header.safetensors"],
+            module: "lib:loam",
+            inputs: [
+                { path: "./gpt2-header.safetensors", type: "safetensors" },
+            ],
             options: {
                 dims: { batch_size: 1 },
                 outputs: ["logits"],
@@ -135,11 +144,6 @@ use gpt2 from "./gpt2.onnxtext"
         },
     };
 
-/// GPT-2's byte-pair tokenizer, with `<|endoftext|>` as its one special token.
-pub fn gpt2_tokenizer() -> Tokenizer {
-    return Tokenizer::new(&#include_str("./vocab.json"), &#include_str("./merges.txt"), ["<|endoftext|>"]);
-}
-
 /// GPT-2 with its weights loaded.
 pub struct Model {
     weights: gpt2::Weights,
@@ -148,7 +152,7 @@ pub struct Model {
 impl Model {
     /// Loads the weights from a safetensors checkpoint laid out as
     /// `gpt2-header.safetensors` says.
-    pub fn load(checkpoint: &ByteList) -> Result<Model, gpt2::LoadError> {
+    pub fn load(checkpoint: &ByteList) -> Result<Model, LoadError> {
         return Ok(Model { weights: gpt2::Weights::load(checkpoint)? });
     }
 
@@ -167,9 +171,9 @@ impl Model {
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
-            &mut gpt2::Cpu {},
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
+            &mut Cpu {},
+            &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+            &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             &self.weights,
         );
         let row = (ids.len() - 1) * vocab;

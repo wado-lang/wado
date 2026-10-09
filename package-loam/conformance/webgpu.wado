@@ -20,11 +20,13 @@ use {
     GpuComputePipeline,
     GpuComputePassEncoder,
 } from "wasi:webgpu";
+use { Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "../example/webgpu/compare.wado";
-use { Cpu, Tensor, WebGpuBackend, Weights, element_count, forward } from "./webgpu.onnxtext"
+use { Weights, forward } from "./webgpu.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -88,7 +90,6 @@ use { Cpu, Tensor, WebGpuBackend, Weights, element_count, forward } from "./webg
                         axes: ["Many", "Single", "Single"],
                     },
                 ],
-                webgpu: true,
             },
         },
     };

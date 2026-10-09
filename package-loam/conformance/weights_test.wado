@@ -2,11 +2,13 @@
 //! `basic_test`, with one operand an initializer. ONNX ships one input for it
 //! and no second, since the weight travels in the model.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Col, Cpu, Row, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_params/model.onnx"
+use { Col, Row, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_params/model.onnx"
     with {
+        type: "onnx",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

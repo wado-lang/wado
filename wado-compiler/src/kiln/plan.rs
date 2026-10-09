@@ -179,8 +179,8 @@ pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
     if path_inside(&a.from, &b.output_dir) {
         return true;
     }
-    for p in &a.inputs {
-        if path_inside(p, &b.output_dir) {
+    for input in &a.inputs {
+        if path_inside(&input.path, &b.output_dir) {
             return true;
         }
     }
@@ -207,7 +207,7 @@ fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
 mod tests {
     use super::*;
     use crate::ast::{AttrEntry, AttrObject, AttrValue};
-    use crate::kiln::invocation::{DeclSite, GeneratorModule};
+    use crate::kiln::invocation::{DeclSite, GeneratorModule, InvocationInput};
     use crate::kiln::options_check::CanonicalOptions;
     use crate::token::Span;
 
@@ -220,10 +220,14 @@ mod tests {
             }],
             module: GeneratorModule::Spec(format!("ns:{name}@1.0.0").into()),
             invoked_as: format!("ns:{name}@1.0.0"),
+            use_type: None,
             from: InvocationPath::normalize(from),
             inputs: inputs
                 .iter()
-                .map(|p| InvocationPath::normalize(p))
+                .map(|p| InvocationInput {
+                    path: InvocationPath::normalize(p),
+                    use_type: None,
+                })
                 .collect(),
             output_dir: InvocationPath::normalize(out),
             options: CanonicalOptions::default(),

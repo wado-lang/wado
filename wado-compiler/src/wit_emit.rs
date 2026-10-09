@@ -22,7 +22,7 @@ use crate::component_model::{
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
-use crate::name::to_kebab;
+use crate::name::to_cm_name;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::tir::{
@@ -393,7 +393,7 @@ impl<'a> Emitter<'a> {
         let type_defs = self.drain_pending_type_defs()?;
 
         let mut package = Package::new(PackageName::new("root", "component", None));
-        let mut world = World::new(to_kebab(&world_local_name(&contract.world_fq)));
+        let mut world = World::new(to_cm_name(&world_local_name(&contract.world_fq)));
 
         for fq in &import_fqs {
             world.named_interface_import(fq.clone());
@@ -414,7 +414,7 @@ impl<'a> Emitter<'a> {
             }
         } else {
             // Group user exports and their types into the default interface.
-            let iface_name = to_kebab(&contract.default_interface);
+            let iface_name = to_cm_name(&contract.default_interface);
             let mut iface = Interface::new(iface_name.clone());
             for ty in type_defs {
                 iface.type_def(ty);
@@ -433,10 +433,10 @@ impl<'a> Emitter<'a> {
     /// Render one exported function to a WIT `StandaloneFunc`, seeding `pending`
     /// with any user types it references.
     fn render_function(&mut self, export: &ExportedFn) -> Result<StandaloneFunc, WitEmitError> {
-        let mut func = StandaloneFunc::new(to_kebab(&export.name), export.is_async);
+        let mut func = StandaloneFunc::new(to_cm_name(&export.name), export.is_async);
         let mut wit_params = Params::empty();
         for (pname, pty) in &export.params {
-            wit_params.push(to_kebab(pname), self.map_type(*pty)?);
+            wit_params.push(to_cm_name(pname), self.map_type(*pty)?);
         }
         func.set_params(wit_params);
         func.set_result(self.map_return(export.return_type)?);
@@ -620,7 +620,7 @@ impl<'a> Emitter<'a> {
         }
         for (wado_name, base) in registry.newtypes_for_interface(fq) {
             iface.type_def(TypeDef::type_(
-                to_kebab(wado_name),
+                to_cm_name(wado_name),
                 self.map_ast_type(base, fq, &mut uses)?,
             ));
         }
@@ -769,7 +769,7 @@ impl<'a> Emitter<'a> {
                     .or_else(|| reg.get_resource_cm_name_by_source(src, &named.name))
             })
             .map(str::to_string)
-            .unwrap_or_else(|| to_kebab(&named.name));
+            .unwrap_or_else(|| to_cm_name(&named.name));
         if let Some(src) = source
             && src != current_fq
         {
@@ -869,35 +869,35 @@ impl<'a> Emitter<'a> {
         name: &str,
         _type_id: TypeId,
     ) -> Result<Option<TypeDef>, WitEmitError> {
-        let kebab = to_kebab(name);
+        let cm_name = to_cm_name(name);
         if let Some(s) = self.decls.structs.get(name).copied() {
             let mut fields = Vec::new();
             for field in &s.fields {
                 fields.push(Field::new(
-                    to_kebab(&field.name),
+                    to_cm_name(&field.name),
                     self.map_type(field.type_id)?,
                 ));
             }
-            return Ok(Some(TypeDef::record(kebab, fields)));
+            return Ok(Some(TypeDef::record(cm_name, fields)));
         }
         if let Some(e) = self.decls.enums.get(name).copied() {
-            let cases = e.cases.iter().map(|c| to_kebab(&c.name));
-            return Ok(Some(TypeDef::enum_(kebab, cases)));
+            let cases = e.cases.iter().map(|c| to_cm_name(&c.name));
+            return Ok(Some(TypeDef::enum_(cm_name, cases)));
         }
         if let Some(v) = self.decls.variants.get(name).copied() {
             let mut cases = Vec::new();
             for case in &v.cases {
                 let payload = self.map_variant_payload(case.payload)?;
                 cases.push(match payload {
-                    Some(ty) => VariantCase::value(to_kebab(&case.name), ty),
-                    None => VariantCase::empty(to_kebab(&case.name)),
+                    Some(ty) => VariantCase::value(to_cm_name(&case.name), ty),
+                    None => VariantCase::empty(to_cm_name(&case.name)),
                 });
             }
-            return Ok(Some(TypeDef::variant(kebab, cases)));
+            return Ok(Some(TypeDef::variant(cm_name, cases)));
         }
         if let Some(fl) = self.decls.flags.get(name).copied() {
-            let members = fl.members.iter().map(|m| Flag::new(to_kebab(&m.name)));
-            return Ok(Some(TypeDef::flags(kebab, members)));
+            let members = fl.members.iter().map(|m| Flag::new(to_cm_name(&m.name)));
+            return Ok(Some(TypeDef::flags(cm_name, members)));
         }
         if let Some(type_id) = self
             .decls
@@ -913,7 +913,7 @@ impl<'a> Emitter<'a> {
                 _ => type_id,
             };
             let base = self.map_type(base_id)?;
-            return Ok(Some(TypeDef::type_(kebab, base)));
+            return Ok(Some(TypeDef::type_(cm_name, base)));
         }
         Err(WitEmitError::UnrepresentableType {
             description: format!("`{name}` has no emittable declaration"),
@@ -1009,14 +1009,16 @@ impl<'a> Emitter<'a> {
             ResolvedType::Resource { def } if self.types.is_unrestricted_resource(*def) => {
                 Ok(Type::F64)
             }
-            ResolvedType::Resource { def } => Ok(Type::named(to_kebab(self.types.def_name(*def)))),
+            ResolvedType::Resource { def } => {
+                Ok(Type::named(to_cm_name(self.types.def_name(*def))))
+            }
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
                 if let ResolvedType::Resource { def } = self.types.get(inner) {
                     if self.types.is_unrestricted_resource(*def) {
                         return Ok(Type::F64);
                     }
-                    Ok(Type::borrow(to_kebab(self.types.def_name(*def))))
+                    Ok(Type::borrow(to_cm_name(self.types.def_name(*def))))
                 } else {
                     self.map_type(inner)
                 }
@@ -1055,7 +1057,7 @@ impl<'a> Emitter<'a> {
         if !self.emitted.contains(name) {
             self.pending.entry(name.to_string()).or_insert(type_id);
         }
-        Type::named(to_kebab(name))
+        Type::named(to_cm_name(name))
     }
 }
 
@@ -1338,7 +1340,7 @@ pub fn world_name_from(input: WitEmitInput<'_>) -> String {
         .wit_contract
         .map(|c| c.world_fq.as_str())
         .unwrap_or("");
-    to_kebab(&world_local_name(world_fq))
+    to_cm_name(&world_local_name(world_fq))
 }
 
 /// Extract the local name of a world FQ: `wasi:cli/command` -> `command`.
@@ -1356,15 +1358,6 @@ fn world_local_name(world_fq: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn kebab_cases() {
-        assert_eq!(to_kebab("distance"), "distance");
-        assert_eq!(to_kebab("MyApi"), "my-api");
-        assert_eq!(to_kebab("set_level"), "set-level");
-        assert_eq!(to_kebab("HTTPServer"), "http-server");
-        assert_eq!(to_kebab("parse2html"), "parse2html");
-    }
 
     #[test]
     fn world_local_names() {

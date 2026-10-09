@@ -25,6 +25,7 @@ use {
     KilnHost,
     Diagnostic as KilnDiagnostic,
     DiagnosticLevel,
+    InputFile,
     read_text,
 } from "core:kiln";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
@@ -53,11 +54,58 @@ pub struct Options {
 
 impl Deserialize for Options;
 
-fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
-    return match read_text(content) {
-        Ok(text) => Result::Ok(text),
-        Err(e) => Result::Err(Error::InvalidSchema(`gale: '${path}' is not UTF-8: ${e}`)),
-    };
+/// Why a file's `type` is not one Gale reads: the primary is a grammar,
+/// `"antlr4"` by default, and an input a grammar or a highlight query.
+fn type_refusal(primary: &InputFile, inputs: &List<InputFile>) -> Option<String> {
+    if let Some(other) = primary.type && other != "antlr4" {
+        return Option::Some(`gale: '${primary.path}' is given \`type: "${other}"\`; a grammar is \`type: "antlr4"\``);
+    }
+    for let input of *inputs {
+        if let Some(other) = input.type && other != "antlr4" && other != "tree-sitter-highlights" {
+            return Option::Some(
+                `gale: '${input.path}' is given \`type: "${other}"\`; an input is \`type: "antlr4"\` or \`type: "tree-sitter-highlights"\``,
+            );
+        }
+    }
+    return null;
+}
+
+/// The grammars, the primary first, and the highlight queries the request
+/// carries, each `[path, text]`. A stream is outside drop elaboration, so every
+/// one is read or dropped before any return.
+fn read_inputs(
+    primary: InputFile,
+    inputs: List<InputFile>,
+) -> Result<[List<[String, String]>, List<[String, String]>], Error> {
+    if let Some(reason) = type_refusal(&primary, &inputs) {
+        primary.content.drop();
+        for let input of inputs {
+            input.content.drop();
+        }
+        return Result::Err(Error::Unsupported(reason));
+    }
+    let mut files: List<InputFile> = [primary];
+    files.extend(&inputs);
+    let mut grammars: List<[String, String]> = [];
+    let mut queries: List<[String, String]> = [];
+    for let mut i = 0; i < files.len(); i += 1 {
+        let file = files[i];
+        let text = match read_text(file.content) {
+            Ok(text) => text,
+            Err(e) => {
+                for let rest of files[i + 1..<files.len()].to_list() {
+                    rest.content.drop();
+                }
+                return Result::Err(Error::InvalidSchema(`gale: '${file.path}' is not UTF-8: ${e}`));
+            },
+        };
+        if file.type matches { Some("tree-sitter-highlights") } {
+            queries.push([file.path, text]);
+        } else {
+            grammars.push([file.path, text]);
+        }
+    }
+    return Result::Ok([grammars, queries]);
 }
 
 /// Kiln entry point. Called by the compiler via
@@ -69,25 +117,11 @@ fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
 /// analyze).
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
-    // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
-    // Route supplementary inputs by extension: `.scm` files are highlight
-    // queries (compiled into the highlighter), everything else is a `.g4`
-    // grammar half merged into the primary.
+    // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`. A
+    // `"tree-sitter-highlights"` input is a highlight query, compiled into the
+    // highlighter, and every other file a grammar half merged into the primary.
     let primary_path = req.primary.path;
-    let primary_text = decode_input(&primary_path, req.primary.content)?;
-    let mut g4_inputs: List<[String, String]> = [
-        [primary_path, primary_text],
-    ];
-    let mut scm_inputs: List<[String, String]> = [];
-    for let supp of req.inputs {
-        let path = supp.path;
-        let text = decode_input(&path, supp.content)?;
-        if path.ends_with(".scm") {
-            scm_inputs.push([path, text]);
-        } else {
-            g4_inputs.push([path, text]);
-        }
-    }
+    let [g4_inputs, scm_inputs] = read_inputs(req.primary, req.inputs)?;
     let mut grammar = match assemble_grammar(&g4_inputs) {
         Ok(g) => g,
         Err(Parse(pe)) => {

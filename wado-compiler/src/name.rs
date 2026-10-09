@@ -15,7 +15,7 @@ use crate::primitive::PrimitiveType;
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
-use heck::ToSnakeCase;
+use heck::{ToKebabCase, ToSnakeCase};
 use std::fmt;
 use std::hash::Hash;
 
@@ -346,14 +346,6 @@ pub fn is_variant_payload_field(field_name: &str) -> bool {
     field_name.starts_with("payload_")
 }
 
-/// Kebab-case a world export's function name for the Component Model boundary.
-///
-/// Wado function identifiers are `[a-z0-9_]`, so replacing underscores suffices.
-/// Distinct from [`to_kebab`], which also splits `PascalCase` word boundaries.
-pub fn kebab_export_name(name: &str) -> String {
-    name.replace('_', "-")
-}
-
 /// The core function of a world export `name`'s binding.
 pub fn cm_export_func_name(name: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_export__{name}")
@@ -418,43 +410,37 @@ pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> St
         .join("-")
 }
 
-/// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
-/// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
+/// The Component Model name of the Wado identifier `name`: the label a
+/// function, parameter, field, case or interface crosses the boundary under.
+///
+/// The CM spec fixes what a label is, and nothing about how a source language
+/// arrives at one (`Explainer.md` § "Import and Export Definitions"):
+///
+/// ```text
+/// label          ::= first-fragment ( '-' fragment )*
+/// first-fragment ::= [a-z] [0-9a-z]* | [A-Z] [0-9A-Z]*
+/// fragment       ::= [0-9a-z]+ | [0-9A-Z]+
+/// ```
+///
+/// Only the first fragment starts with a letter, so `a-1` and `x-2` are labels.
+/// Names in one scope must also be strongly unique: equal once hyphens are
+/// dropped and letters lowercased, as `a-b` and `ab` are, they are one name
+/// (§ "Name Uniqueness"). This maps `snake_case` / `PascalCase` / `camelCase`
+/// to that casing (`my-api`, `http-server`, `error-code`) and checks neither
+/// rule: two identifiers that become one name, such as `a_b` and `aB`, make a
+/// component the Wasm validator rejects.
 ///
 /// Public so out-of-crate boundary code (e.g. the CLI host materializing a
-/// generator's options from canonical CBOR) can map raw Wado identifiers to the
-/// CM names a component exposes, instead of re-deriving the format.
-pub fn to_kebab(name: &str) -> String {
-    let chars: Vec<char> = name.chars().collect();
-    let mut out = String::with_capacity(name.len() + 4);
-    let mut prev_lower_or_digit = false;
-    for (i, &ch) in chars.iter().enumerate() {
-        if ch == '_' {
-            if !out.ends_with('-') && !out.is_empty() {
-                out.push('-');
-            }
-            prev_lower_or_digit = false;
-            continue;
-        }
-        if ch.is_ascii_uppercase() {
-            // Break before an uppercase letter that starts a new word: either
-            // after a lowercase/digit (`myApi` -> `my-api`), or at the end of
-            // an acronym run when the next char is lowercase
-            // (`HTTPServer` -> `http-server`).
-            let acronym_boundary = chars.get(i + 1).is_some_and(char::is_ascii_lowercase)
-                && i > 0
-                && chars[i - 1].is_ascii_uppercase();
-            if (prev_lower_or_digit || acronym_boundary) && !out.is_empty() {
-                out.push('-');
-            }
-            out.push(ch.to_ascii_lowercase());
-            prev_lower_or_digit = false;
-        } else {
-            out.push(ch);
-            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
-        }
-    }
-    out
+/// generator's options from canonical CBOR) maps raw Wado identifiers to the CM
+/// names a component exposes, instead of re-deriving the format.
+pub fn to_cm_name(name: &str) -> String {
+    name.to_kebab_case()
+}
+
+/// What the Component Model compares the CM name `cm_name` by when it requires
+/// names in one scope to be strongly unique: `a-b`, `ab` and `A-B` share one.
+pub fn cm_name_key(cm_name: &str) -> String {
+    cm_name.replace('-', "").to_ascii_lowercase()
 }
 
 /// Prefix the compiler stamps onto every synthesised closure-functor
@@ -2436,6 +2422,16 @@ mod tests {
     use super::*;
     use crate::compiler_host::DependencyIndex;
     use std::assert_matches;
+
+    #[test]
+    fn cm_names() {
+        assert_eq!(to_cm_name("distance"), "distance");
+        assert_eq!(to_cm_name("MyApi"), "my-api");
+        assert_eq!(to_cm_name("set_level"), "set-level");
+        assert_eq!(to_cm_name("HTTPServer"), "http-server");
+        assert_eq!(to_cm_name("parse2html"), "parse2html");
+        assert_eq!(to_cm_name("a_1"), "a-1");
+    }
 
     #[test]
     fn a_function_type_name_spells_as_its_mangle_and_substitutes_inside() {

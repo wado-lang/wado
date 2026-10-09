@@ -4,12 +4,16 @@
 //! through the decoder taking them back, whose cache grows by the position it
 //! computes. Each step reproduces the logits onnxruntime computes for it.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
-            inputs: ["../tests/models/tiny-gpt2/model.safetensors"],
+            module: "lib:loam",
+            inputs: [
+                { path: "../tests/models/tiny-gpt2/model.safetensors", type: "safetensors" },
+            ],
             options: {
                 dims: { batch_size: 1 },
                 layout: [
@@ -136,8 +140,9 @@ use prompt from "../tests/models/tiny-gpt2/model.onnxtext"
     };
 use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
     with {
+        type: "onnx",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 dims: { batch_size: 1 },
                 layout: [
@@ -267,9 +272,9 @@ use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
 /// of its own, so the cache crosses from one to the other as its elements.
 type Cache = List<[List<f32>, List<i32>]>;
 
-fn past(cache: &Cache, i: i32) -> step::Tensor<f32, [step::Batch, step::Head, step::Past, step::Dim]> {
+fn past(cache: &Cache, i: i32) -> Tensor<f32, [step::Batch, step::Head, step::Past, step::Dim]> {
     let [data, extents] = cache[i];
-    return step::Tensor { data, extents };
+    return Tensor { data, extents };
 }
 
 /// The logits for `token` after the positions `cache` holds, and the cache
@@ -278,11 +283,11 @@ fn decode(
     token: i64,
     cache: &Cache,
     weights: &step::Weights,
-) -> [step::Tensor<f32, [step::Batch, step::Seq, step::Vocab]>, Cache] {
+) -> [Tensor<f32, [step::Batch, step::Seq, step::Vocab]>, Cache] {
     let length = cache[0].1[2] + 1;
     let o = step::forward(
-        &mut step::Cpu {},
-        &step::Tensor::<i64, [step::Batch, step::Seq]> {
+        &mut Cpu {},
+        &Tensor::<i64, [step::Batch, step::Seq]> {
             data: [token],
             extents: [1, 1],
         },
@@ -296,7 +301,7 @@ fn decode(
         &past(cache, 7),
         &past(cache, 8),
         &past(cache, 9),
-        &step::Tensor::<i64, [step::Batch, step::Total]> {
+        &Tensor::<i64, [step::Batch, step::Total]> {
             data: List::<i64>::filled(length, 1),
             extents: [1, length],
         },
@@ -318,13 +323,13 @@ fn decode(
 }
 
 /// The prompt's logits, and the keys and values it leaves.
-fn prefill(input_ids: ByteList) -> [prompt::Tensor<f32, [prompt::Batch, prompt::Seq, prompt::Vocab]>, Cache] {
+fn prefill(input_ids: ByteList) -> [Tensor<f32, [prompt::Batch, prompt::Seq, prompt::Vocab]>, Cache] {
     let [ids, extents] = ints_of(input_ids);
     let weights = prompt::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let o = prompt::forward(
-        &mut prompt::Cpu {},
-        &prompt::Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: ids, extents },
-        &prompt::Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: List::<i64>::filled(extents[1], 1), extents },
+        &mut Cpu {},
+        &Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: ids, extents },
+        &Tensor::<i64, [prompt::Batch, prompt::Seq]> { data: List::<i64>::filled(extents[1], 1), extents },
         &weights,
     );
     let cache: Cache = [
@@ -385,8 +390,8 @@ test "each step after the prompt computes one position against the cache, as onn
 test "a mask that is not one position longer than the cache stops the step" {
     let [_, cache] = prefill(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
     step::forward(
-        &mut step::Cpu {},
-        &step::Tensor::<i64, [step::Batch, step::Seq]> {
+        &mut Cpu {},
+        &Tensor::<i64, [step::Batch, step::Seq]> {
             data: [11],
             extents: [1, 1],
         },
@@ -400,7 +405,7 @@ test "a mask that is not one position longer than the cache stops the step" {
         &past(&cache, 7),
         &past(&cache, 8),
         &past(&cache, 9),
-        &step::Tensor::<i64, [step::Batch, step::Total]> {
+        &Tensor::<i64, [step::Batch, step::Total]> {
             data: [1, 1, 1, 1],
             extents: [1, 4],
         },

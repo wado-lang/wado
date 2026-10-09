@@ -152,11 +152,13 @@ mod tests {
                 path: "schemas/x.proto".to_string(),
                 hash: "sha256:aa".to_string(),
                 extent: None,
+                use_type: None,
             },
             inputs: vec![FileHash {
                 path: "schemas/y.proto".to_string(),
                 hash: "sha256:bb".to_string(),
                 extent: None,
+                use_type: None,
             }],
             options_hash: "sha256:cc".to_string(),
             outputs: vec![OutputEntry {

@@ -28,16 +28,23 @@ The literal after `from` is the primary input. It is a `./` or `../` path
 resolved against the declaring file, like a local module import. The
 `generator` object holds the rest of the invocation.
 
-| Field        | Required | Meaning                                                                                                                                                                                           |
-| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.        |
-| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                             |
-| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                            |
-| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                        |
-| `inputs`     | no       | Supplementary input paths (`./` / `../`) the generator cannot discover from the primary alone, such as a sibling lexer grammar. A schema that refers to other files lists every one of them here. |
-| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                  |
+| Field        | Required | Meaning                                                                                                                                                                                                                      |
+| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                   |
+| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                        |
+| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                       |
+| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                                                   |
+| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path, or `{ path, type }`. A schema that refers to other files lists every one of them here. |
+| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                             |
 
 Each field has one type, and any other key or type is an error at the use site.
+
+A file's `type` says how the generator reads it, since no generator looks at
+an extension. The primary input's is the `type` beside `generator`, the only
+other key the `with` clause may hold; a supplementary input's is the `type` in
+its `{ path, type }`. Each is a string the generator receives as the file's
+`InputFile.type`, and decides the meaning of. A `type` makes the invocation a
+different one, so the same file under two types is generated twice.
 
 A `[build-dependencies]` coordinate names a published generator. Here Gale, a
 generator that builds a parser from an ANTLR4 grammar
@@ -57,7 +64,7 @@ use calc from "./Calc.g4"
 ```
 
 A `lib:` alias names a generator the package lists under a nickname. This clause
-also hands the generator a supplementary input:
+also hands the generator a supplementary input, typed as a highlight query:
 
 <!-- {"source": "package-gale-highlight-wado/src/lib.wado"} -->
 
@@ -66,7 +73,9 @@ use { highlight as highlight_impl } from "../grammar/Wado.g4"
     with {
         generator: {
             module: "lib:gale",
-            inputs: ["../grammar/Wado.highlights.scm"],
+            inputs: [
+                { path: "../grammar/Wado.highlights.scm", type: "tree-sitter-highlights" },
+            ],
             options: {
                 fragment_entries: ["statement"],
             },
@@ -142,8 +151,7 @@ runs, so a typo or a type mismatch is reported on the offending key.
   at its use sites every field is required unless its type is an `Option`, a
   `List`, or a `TreeMap`.
 
-Loam's options hold a list of structs, a map, a list of strings, and an
-optional flag:
+Loam's options hold a list of structs, a map, and a list of strings:
 
 <!-- {"source": "package-loam/src/generator.wado"} -->
 
@@ -155,10 +163,6 @@ pub struct Options {
     pub dims: TreeMap<String, i32>,
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String>,
-    /// Whether to inline `WebGpuBackend`, the kernels over `wasi:webgpu`,
-    /// beside `Cpu`. An `Option`, so a use site of the prebuilt generator may
-    /// leave it out.
-    pub webgpu: Option<bool>,
 }
 ```
 
@@ -168,10 +172,11 @@ object:
 <!-- {"source": "package-loam/conformance/specialize_test.wado"} -->
 
 ```wado
-use { Batch, Merged, Col, Cpu, Row, Tensor, Weights, forward } from "./specialize.onnxtext"
+use { Batch, Col, Row, Weights, forward } from "./specialize.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -352,30 +357,35 @@ pub struct Request<T = NoOptions> {
   written, or for a relative path, that path from the project root.
 - `options` is the use site's options, with defaults filled in.
 
-An input file carries its path from the project root, normalized, and the
-content as a byte stream. So `./sub/../sub/v.txt` written in `src/main.wado`
-arrives as `src/sub/v.txt`:
+An input file carries its path from the project root, normalized, the content
+as a byte stream, and the `type` the use site gave it. So `./sub/../sub/v.txt`
+written in `src/main.wado` arrives as `src/sub/v.txt`:
 
 ```wit
 record input-file {
     path: string,
     content: stream<u8>,
+    %type: option<string>,
 }
 ```
 
 `read_all` and `read_text` read a whole file
 ([`core:kiln`](./stdlib-core-kiln.md)). Gale reads every input as text, and
-reports one that is not UTF-8 as an invalid schema:
+reports one that is not UTF-8 as an invalid schema. A stream is outside drop
+elaboration, so it drops the streams it has not read before it returns:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
-fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
-    return match read_text(content) {
-        Ok(text) => Result::Ok(text),
-        Err(e) => Result::Err(Error::InvalidSchema(`gale: '${path}' is not UTF-8: ${e}`)),
-    };
-}
+let text = match read_text(file.content) {
+    Ok(text) => text,
+    Err(e) => {
+        for let rest of files[i + 1..<files.len()].to_list() {
+            rest.content.drop();
+        }
+        return Result::Err(Error::InvalidSchema(`gale: '${file.path}' is not UTF-8: ${e}`));
+    },
+};
 ```
 
 A generator that needs only a prefix reads the stream itself and drops it early.
@@ -726,22 +736,17 @@ use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from
 ```
 
 Only the use site knows what the consumer calls the package, so the generated
-code imports it through `req.module`. Grog takes the package part of that name
-and refuses a path, which names no package:
+code imports it through `req.module`. `core:kiln`'s `package_of` takes the
+package part of that name, and is `None` for a path, which names no package.
+Grog refuses a path:
 
 <!-- {"source": "package-grog/src/generator.wado"} -->
 
 ```wado
 fn runtime_of(module: &String) -> Result<String, Error> {
-    let view = module.as_str_slice();
-    let Some(colon) = view.find(":") else {
-        return Result::Err(Error::Unsupported(
-            `grog: invoked by the path ${module}; name it by the package spec its runtime is a dependency under`,
-        ));
-    };
-    let rest = view.slice(colon + 1, view.len());
-    let end = rest.find_char(|c| c == '@' || c == '/').map(|i| colon + 1 + i).unwrap_or(view.len());
-    return Result::Ok(view.slice(0, end).to_string());
+    return package_of(module).ok_or(Error::Unsupported(
+        `grog: invoked by the path ${module}; name it by the package spec its runtime is a dependency under`,
+    ));
 }
 ```
 

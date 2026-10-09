@@ -84,6 +84,21 @@ pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> {
     return decoded;
 }
 
+/// The package spec in `module`, a `Request`'s `module`: the part before any
+/// version or file path, which is what the consumer's `[dependencies]` names
+/// the generator's package under. Generated code imports the generator's
+/// runtime library by it. `None` where the use site named the generator by a
+/// path, which names no package.
+pub fn package_of(module: &String) -> Option<String> {
+    let view = module.as_str_slice();
+    let Some(colon) = view.find(":") else {
+        return null;
+    };
+    let rest = view.slice(colon + 1, view.len());
+    let end = rest.find_char(|c| c == '@' || c == '/').map(|i| colon + 1 + i).unwrap_or(view.len());
+    return Option::Some(view.slice(0, end).to_string());
+}
+
 /// The options type of a generator that takes no configuration. It is the
 /// default type argument of `Request`, so a generator with no `Options`
 /// struct writes `fn generate(req: Request)` and never mentions options.

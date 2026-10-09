@@ -31,8 +31,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, kebab_export_name,
-    to_kebab,
+    DeclPath, cm_export_func_name, cm_name_key, cm_post_return_func_name, is_test_function,
+    to_cm_name,
 };
 use crate::package::{Package, test_selected};
 use crate::tir::{
@@ -788,7 +788,7 @@ fn validate_lib_interface_names(
                 names.join(" and "),
             ));
         }
-        let key = cm_name.to_ascii_lowercase();
+        let key = cm_name_key(cm_name);
         if let Some(previous) = claimed.get(&key) {
             return Err(format!(
                 "{} and {} both claim the name `{cm_name}` in this library's \
@@ -801,8 +801,8 @@ fn validate_lib_interface_names(
         claimed.insert(key, describe(cm_name));
     }
     for export in &world_info.exports {
-        let cm_name = kebab_export_name(&export.name);
-        let key = cm_name.to_ascii_lowercase();
+        let cm_name = to_cm_name(&export.name);
+        let key = cm_name_key(&cm_name);
         if let Some(previous) = claimed.get(&key) {
             return Err(format!(
                 "export `{}` becomes `{cm_name}` in this library's Component \
@@ -841,7 +841,7 @@ fn exported_cm_type_names(
 }
 
 /// The Wado types behind each CM name the signatures mention. A user type's CM
-/// name is `to_kebab` of its Wado name, applied by the registry when it records
+/// name is `to_cm_name` of its Wado name, applied by the registry when it records
 /// the type, so this inverts that exactly.
 fn wado_names_by_cm_name(world_info: &WorldInfo) -> IndexMap<String, IndexSet<String>> {
     let mut out = IndexMap::default();
@@ -864,7 +864,7 @@ fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &Type>
 fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) {
     match ty {
         Type::Named(named) => {
-            out.entry(to_kebab(&named.name))
+            out.entry(to_cm_name(&named.name))
                 .or_default()
                 .insert(named.name.clone());
         }

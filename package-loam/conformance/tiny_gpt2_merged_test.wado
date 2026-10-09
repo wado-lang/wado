@@ -3,11 +3,13 @@
 //! branch without a past, all its positions at once, and each step after it
 //! through the branch with one. Each reproduces the logits onnxruntime computes.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
+        type: "onnx",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 dims: { batch_size: 1 },
                 layout: [
@@ -138,7 +140,7 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
-type Cache = List<merged::Tensor<f32, [merged::Batch, merged::Head, merged::Past, merged::Dim]>>;
+type Cache = List<Tensor<f32, [merged::Batch, merged::Head, merged::Past, merged::Dim]>>;
 
 /// The logits for `ids` after the positions `cache` holds, and the cache grown
 /// by theirs. An empty cache takes the branch without a past.
@@ -146,16 +148,16 @@ fn run(
     ids: List<i64>,
     cache: &Cache,
     weights: &merged::Weights,
-) -> [merged::Tensor<f32, [merged::Batch, merged::Seq, merged::Vocab]>, Cache] {
+) -> [Tensor<f32, [merged::Batch, merged::Seq, merged::Vocab]>, Cache] {
     let past = cache[0].extents[2];
     let length = past + ids.len();
     let o = merged::forward(
-        &mut merged::Cpu {},
-        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+        &mut Cpu {},
+        &Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: ids,
             extents: [1, ids.len()],
         },
-        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+        &Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: List::<i64>::filled(length, 1),
             extents: [1, length],
         },
@@ -169,7 +171,7 @@ fn run(
         &cache[7],
         &cache[8],
         &cache[9],
-        &merged::Tensor::<bool, [merged::One]> {
+        &Tensor::<bool, [merged::One]> {
             data: [past > 0],
             extents: [1],
         },
@@ -181,7 +183,7 @@ fn run(
     ];
     let mut grown: Cache = [];
     for let p of presents {
-        grown.push(merged::Tensor { data: p.data, extents: p.extents });
+        grown.push(Tensor { data: p.data, extents: p.extents });
     }
     return [o.logits, grown];
 }
@@ -189,7 +191,7 @@ fn run(
 fn empty_cache() -> Cache {
     let mut cache: Cache = [];
     for let _ of 0..<10 {
-        cache.push(merged::Tensor {
+        cache.push(Tensor {
             data: [],
             extents: [1, 4, 0, 8],
         });
@@ -235,12 +237,12 @@ test "a mask that is not as long as the past and the step stops the step" {
     let weights = merged::Weights::embedded();
     let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &weights);
     merged::forward(
-        &mut merged::Cpu {},
-        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+        &mut Cpu {},
+        &Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: [11],
             extents: [1, 1],
         },
-        &merged::Tensor::<i64, [merged::Batch, merged::Seq]> {
+        &Tensor::<i64, [merged::Batch, merged::Seq]> {
             data: [1],
             extents: [1, 1],
         },
@@ -254,7 +256,7 @@ test "a mask that is not as long as the past and the step stops the step" {
         &cache[7],
         &cache[8],
         &cache[9],
-        &merged::Tensor::<bool, [merged::One]> {
+        &Tensor::<bool, [merged::One]> {
             data: [true],
             extents: [1],
         },

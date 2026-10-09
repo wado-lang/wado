@@ -328,7 +328,6 @@ fn is_kiln_diagnostic(code: &Code) -> bool {
         code,
         Code::KilnStaleCache
             | Code::KilnGeneratorForbiddenImport
-            | Code::KilnMissingWith
             | Code::KilnNoGeneratedModule
             | Code::KilnGeneratedModified
     )

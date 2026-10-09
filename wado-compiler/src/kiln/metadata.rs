@@ -55,6 +55,10 @@ pub struct FileHash {
     /// decide without instantiating the generator.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extent: Option<u64>,
+    /// The `type` the generator was handed for the file, which decides how it
+    /// read it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub use_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -101,6 +105,7 @@ mod tests {
                 path: "schemas/x.proto".to_string(),
                 hash: "sha256:aa".to_string(),
                 extent: Some(4096),
+                use_type: Some("onnx".to_string()),
             },
             inputs: vec![],
             options_hash: "sha256:cc".to_string(),

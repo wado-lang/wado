@@ -2,11 +2,13 @@
 //! compiled through Loam and checked against the output ONNX ships beside it.
 //! The graph is `Add`, `Mul`, `Tanh`, `Sigmoid` and `Neg` over `float[1]`.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { Cpu, N, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_basic/model.onnx"
+use { N, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_basic/model.onnx"
     with {
+        type: "onnx",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

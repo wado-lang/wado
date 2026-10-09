@@ -4,7 +4,7 @@
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { gpt2_tokenizer, Model } from "./model.wado";
+use { Model, Tokenizer } from "./model.wado";
 
 global STEPS: i32 = 8;
 
@@ -13,8 +13,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     if prompt.is_empty() {
         prompt = "Hello, my name is";
     }
-    let tokenizer = gpt2_tokenizer();
-    let mut ids = tokenizer.encode(&prompt);
+    let mut ids = Tokenizer::encode(&prompt);
     if ids.is_empty() {
         eprintln("the prompt encodes to no token");
         return;
@@ -43,5 +42,5 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     for let _ of 0..<STEPS {
         ids.push(model.next_token(&ids));
     }
-    println(tokenizer.decode(&ids));
+    println(Tokenizer::decode(&ids));
 }

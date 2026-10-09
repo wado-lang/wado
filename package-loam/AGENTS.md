@@ -1,7 +1,8 @@
 # Loam Development Guide
 
 Loam compiles an ONNX graph into Wado source through Kiln. The design lives in
-[WEP: Loam](../docs/wep-2026-09-20-loam.md).
+[WEP: Loam](../docs/wep-2026-09-20-loam.md), and the tokenizer's in
+[tokenizer.md](./tokenizer.md).
 
 ## Sources
 

@@ -19,7 +19,11 @@ use wasmtime_wasi::p3::bindings::cli::{exit, stderr, stdout};
 use wasmtime_wasi::{I32Exit, WasiCtx, WasiCtxView, WasiView};
 
 use wado_compiler::hashmap::IndexMap;
-use wado_compiler::{CompilerOptions, Diagnostic, InMemoryCompilerHost, Severity};
+use wado_compiler::{
+    CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, Severity, SourceError,
+};
+use wado_lsp::host::dependency_index_from;
+use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::write_atomic;
@@ -39,8 +43,8 @@ wasmtime::component::bindgen!({
 
 use self::core::eval::eval_host::{self, CompileFailure, Outcome, Ran, Status, TrapKind};
 
-/// The file name an evaluated program's diagnostics carry. It has no directory,
-/// so a relative `use` resolves to nothing.
+/// The file name an evaluated program's diagnostics carry, placed in the
+/// calling file's directory, where the dependency index is anchored.
 const EVAL_FILE: &str = "eval.wado";
 
 /// How long a compile may run. Only a compiler bug makes one loop, and a
@@ -135,6 +139,8 @@ pub struct EvalHost {
     /// One slot per key being evaluated, so calls sharing a key at once
     /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
+    /// Each calling file's dependencies, resolved once per run.
+    dependencies: Mutex<IndexMap<PathBuf, Arc<Dependencies>>>,
     /// The runner's CPU budget. A test gives its permit back inside `eval`,
     /// which takes one here for each piece of work it does itself, so nothing
     /// waiting inside `eval` holds one.
@@ -156,14 +162,28 @@ impl EvalHost {
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
+            dependencies: Mutex::new(IndexMap::default()),
             cpu,
             strandable: Arc::new(Semaphore::new(parallelism - 1)),
         }
     }
 
-    fn key(&self, source: &str, fuel: u64) -> [u8; 32] {
+    /// What the outcome depends on that is known before the compile. The
+    /// dependency sources it reads are not, so the entry records them.
+    fn key(&self, source: &str, fuel: u64, deps: &Dependencies) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.compiler_digest);
+        for entries in [
+            &deps.index.resolved,
+            &deps.index.components,
+            &deps.index.unresolved,
+        ] {
+            hasher.update((entries.len() as u64).to_le_bytes());
+            for (name, entry) in entries {
+                hash_field(&mut hasher, name.as_bytes());
+                hash_field(&mut hasher, entry.as_bytes());
+            }
+        }
         hash_field(
             &mut hasher,
             format!("{:?}", self.knobs.opt_level).as_bytes(),
@@ -186,11 +206,21 @@ impl EvalHost {
             .expect("the CPU semaphore is never closed")
     }
 
+    fn dependencies_of(&self, caller: &Path) -> Arc<Dependencies> {
+        let mut dependencies = lock(&self.dependencies);
+        Arc::clone(
+            dependencies
+                .entry(caller.to_path_buf())
+                .or_insert_with(|| Arc::new(Dependencies::of(caller))),
+        )
+    }
+
     async fn outcome(self: &Arc<Self>, caller: &Path, source: String, fuel: u64) -> Outcome {
-        let key = self.key(&source, fuel);
+        let deps = self.dependencies_of(caller);
+        let key = self.key(&source, fuel, &deps);
         let slot = Arc::clone(lock(&self.slots).entry(key).or_default());
         let outcome = slot
-            .get_or_init(|| self.cached_or_evaluate(key, caller, source, fuel))
+            .get_or_init(|| self.cached_or_evaluate(key, source, fuel, deps))
             .await
             .clone();
         let mut slots = lock(&self.slots);
@@ -204,47 +234,68 @@ impl EvalHost {
     async fn cached_or_evaluate(
         self: &Arc<Self>,
         key: [u8; 32],
-        caller: &Path,
         source: String,
         fuel: u64,
+        deps: Arc<Dependencies>,
     ) -> Outcome {
-        let path = cache_dir(caller).map(|dir| dir.join(format!("{}.json", hex32(&key))));
+        let path = deps
+            .cache_dir
+            .as_ref()
+            .map(|dir| dir.join(format!("{}.json", hex32(&key))));
         if !self.knobs.no_cache
             && let Some(path) = &path
-            && let Some(outcome) = std::fs::read(path)
+            && let Some(entry) = std::fs::read(path)
                 .ok()
-                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .and_then(|bytes| serde_json::from_slice::<Entry>(&bytes).ok())
+            && entry.inputs.iter().all(Input::unchanged)
         {
-            return outcome;
+            return entry.outcome;
         }
-        let outcome = self.evaluate(source, fuel).await;
-        if !matches!(outcome, Outcome::CompileTimedOut)
+        let entry = self.evaluate(source, fuel, deps).await;
+        if !matches!(entry.outcome, Outcome::CompileTimedOut)
             && let Some(path) = &path
         {
-            let bytes = serde_json::to_vec(&outcome).expect("an outcome serializes");
+            let bytes = serde_json::to_vec(&entry).expect("an entry serializes");
             // Losing the cache is never an error: the next run evaluates again.
             let _ = write_atomic(path, &bytes);
         }
-        outcome
+        entry.outcome
     }
 
-    async fn evaluate(self: &Arc<Self>, source: String, fuel: u64) -> Outcome {
-        let wasm = match self.compile(source).await {
+    async fn evaluate(
+        self: &Arc<Self>,
+        source: String,
+        fuel: u64,
+        deps: Arc<Dependencies>,
+    ) -> Entry {
+        let (compiled, inputs) = self.compile(source, deps).await;
+        let wasm = match compiled {
             Compiled::Wasm(wasm) => wasm,
-            Compiled::Failed(failure) => return Outcome::CompileFailed(failure),
-            Compiled::TimedOut => return Outcome::CompileTimedOut,
+            Compiled::Failed(failure) => {
+                return Entry {
+                    inputs,
+                    outcome: Outcome::CompileFailed(failure),
+                };
+            }
+            Compiled::TimedOut => {
+                return Entry {
+                    inputs,
+                    outcome: Outcome::CompileTimedOut,
+                };
+            }
         };
         let host = Arc::clone(self);
         let permit = self.cpu_permit().await;
         // The AOT compile takes seconds, so it runs off the async workers, on a
         // runtime of its own as the compile does.
-        tokio::task::spawn_blocking(move || {
+        let outcome = tokio::task::spawn_blocking(move || {
             let _permit = permit;
             let (engine, linker) = host.engine();
             current_thread_runtime().block_on(run(engine, linker, &wasm, fuel))
         })
         .await
-        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
+        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()));
+        Entry { inputs, outcome }
     }
 
     /// The compile's future is `!Send`, so it runs on a thread of its own. Past
@@ -256,7 +307,7 @@ impl EvalHost {
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
-    async fn compile(&self, source: String) -> Compiled {
+    async fn compile(&self, source: String, deps: Arc<Dependencies>) -> (Compiled, Vec<Input>) {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
             codegen_flags: self.knobs.codegen_flags.clone(),
@@ -265,12 +316,12 @@ impl EvalHost {
         let held = Arc::new(Mutex::new(vec![self.cpu_permit().await]));
         let report = tokio::time::timeout(
             COMPILE_TIME_LIMIT,
-            spawn_compile(source, options, Arc::clone(&held)),
+            spawn_compile(source, options, deps, Arc::clone(&held)),
         );
         report.await.map_or_else(
             |_elapsed| {
                 self.abandon(&held);
-                Compiled::TimedOut
+                (Compiled::TimedOut, Vec::new())
             },
             |report| {
                 report
@@ -306,13 +357,195 @@ enum Compiled {
     TimedOut,
 }
 
+/// The calling package's `[dependencies]`, as the evaluated program reaches
+/// them. Nothing outside their packages is read.
+struct Dependencies {
+    /// The calling file's directory, which `index` is relative to.
+    base: PathBuf,
+    index: DependencyIndex,
+    /// The root of each source dependency, absolute and normalized: the package
+    /// whose `lib` its entry is, or the entry's own directory.
+    roots: Vec<PathBuf>,
+    /// The file of each component dependency, absolute and normalized.
+    components: Vec<PathBuf>,
+    /// The calling package's root, which no dependency's files include, even
+    /// a dependency whose package holds it.
+    caller_root: Option<PathBuf>,
+    /// Where outcomes are cached: `build/eval/` under the calling package's
+    /// root, or under the caller's directory when it is in no package. `None`,
+    /// and so no cache, when the package's manifest is invalid.
+    cache_dir: Option<PathBuf>,
+}
+
+impl Dependencies {
+    /// Empty where the caller is in no package, or its manifest is invalid,
+    /// which the caller's own compile reports.
+    fn of(caller: &Path) -> Self {
+        let base = caller
+            .parent()
+            .expect("the caller is a file, so it has a parent")
+            .to_path_buf();
+        let none = |cache_dir| Self {
+            base: base.clone(),
+            index: DependencyIndex::default(),
+            roots: Vec::new(),
+            components: Vec::new(),
+            caller_root: None,
+            cache_dir,
+        };
+        let project = match load_nearest_manifest(caller) {
+            Ok(Some(project)) => project,
+            Ok(None) => return none(Some(build_dir(&base).join("eval"))),
+            Err(_) => return none(None),
+        };
+        let index = dependency_index_from(&project.manifest, &project.root, &base);
+        let absolute = |entry: &String| normalize_path(&absolutize(&base.join(entry)));
+        Self {
+            roots: index
+                .resolved
+                .values()
+                .map(|entry| dependency_root(&absolute(entry)))
+                .collect(),
+            components: index.components.values().map(absolute).collect(),
+            caller_root: Some(normalize_path(&absolutize(&project.root))),
+            cache_dir: Some(build_dir(&project.root).join("eval")),
+            base,
+            index,
+        }
+    }
+
+    /// Whether `file` is one of a dependency's own.
+    fn holds(&self, file: &Path) -> bool {
+        self.components.iter().any(|component| component == file)
+            || self.roots.iter().any(|root| {
+                file.starts_with(root)
+                    && !self
+                        .caller_root
+                        .as_ref()
+                        .is_some_and(|caller| caller.starts_with(root) && file.starts_with(caller))
+            })
+    }
+}
+
+/// The directory a dependency whose entry module is `entry` reads from: its
+/// package's root where `entry` is that package's `lib`, and otherwise the
+/// directory holding `entry`, a single-file dependency.
+fn dependency_root(entry: &Path) -> PathBuf {
+    let directory = entry
+        .parent()
+        .expect("an entry module is a file, so it has a parent")
+        .to_path_buf();
+    let Ok(Some(package)) = load_nearest_manifest(entry) else {
+        return directory;
+    };
+    let root = normalize_path(&absolutize(&package.root));
+    let is_lib = package
+        .manifest
+        .package
+        .as_ref()
+        .and_then(|p| p.lib.as_ref())
+        .is_some_and(|lib| normalize_path(&root.join(lib)) == entry);
+    if is_lib { root } else { directory }
+}
+
+/// The compiler host an evaluated program compiles on: it serves the files of
+/// the calling package's dependencies and records each one it reads.
+struct DependencyHost {
+    deps: Arc<Dependencies>,
+    diagnostics: Mutex<Vec<Diagnostic>>,
+    read: Mutex<Vec<Input>>,
+}
+
+impl DependencyHost {
+    fn new(deps: Arc<Dependencies>) -> Self {
+        Self {
+            deps,
+            diagnostics: Mutex::default(),
+            read: Mutex::default(),
+        }
+    }
+}
+
+impl CompilerHost for DependencyHost {
+    async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
+        let file = normalize_path(&absolutize(&self.deps.base.join(path)));
+        if !self.deps.holds(&file) {
+            return Err(SourceError::NotFound {
+                path: path.to_string(),
+            });
+        }
+        // An absent file is an input too: the outcome changes once it appears.
+        match std::fs::read(&file) {
+            Ok(bytes) => {
+                lock(&self.read).push(Input::of(file, Some(&bytes)));
+                Ok(bytes)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                lock(&self.read).push(Input::of(file, None));
+                Err(SourceError::NotFound {
+                    path: path.to_string(),
+                })
+            }
+            Err(e) => Err(SourceError::IoError {
+                path: path.to_string(),
+                message: e.to_string(),
+            }),
+        }
+    }
+
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        lock(&self.diagnostics).push(diagnostic);
+    }
+
+    fn dependency_index(&self) -> DependencyIndex {
+        self.deps.index.clone()
+    }
+}
+
+/// A file a compile looked up, known by its contents, or by its absence.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Input {
+    path: PathBuf,
+    /// `None` where the file was absent.
+    sha256: Option<String>,
+}
+
+impl Input {
+    fn of(path: PathBuf, bytes: Option<&[u8]>) -> Self {
+        Self {
+            path,
+            sha256: bytes.map(digest),
+        }
+    }
+
+    fn unchanged(&self) -> bool {
+        match std::fs::read(&self.path) {
+            Ok(bytes) => self.sha256.as_deref() == Some(digest(&bytes).as_str()),
+            Err(e) => e.kind() == std::io::ErrorKind::NotFound && self.sha256.is_none(),
+        }
+    }
+}
+
+fn digest(bytes: &[u8]) -> String {
+    hex32(&Sha256::digest(bytes).into())
+}
+
+/// A cached outcome, valid while every file the compile read is unchanged.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Entry {
+    inputs: Vec<Input>,
+    outcome: Outcome,
+}
+
 /// Compile `source` on a thread that holds `held` until it ends, and report
-/// the outcome, or the panic that ended it, on the returned channel.
+/// the outcome and the files it read, or the panic that ended it, on the
+/// returned channel.
 fn spawn_compile(
     source: String,
     options: CompilerOptions,
+    deps: Arc<Dependencies>,
     held: Arc<Mutex<Vec<OwnedSemaphorePermit>>>,
-) -> oneshot::Receiver<std::thread::Result<Compiled>> {
+) -> oneshot::Receiver<std::thread::Result<(Compiled, Vec<Input>)>> {
     let (report, compiled) = oneshot::channel();
     std::thread::Builder::new()
         .name("eval-compile".to_string())
@@ -320,16 +553,15 @@ fn spawn_compile(
         .spawn(move || {
             let _held = held;
             let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                // A host with no sources: the program is one module, and
-                // nothing on the host's disk is read.
-                let host = InMemoryCompilerHost::new();
+                let host = DependencyHost::new(deps);
                 let compiled = current_thread_runtime().block_on(
                     wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
                 );
-                match compiled {
+                let compiled = match compiled {
                     Ok(result) => Compiled::Wasm(result.wasm),
-                    Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
-                }
+                    Err(_) => Compiled::Failed(compile_failure(&lock(&host.diagnostics))),
+                };
+                (compiled, std::mem::take(&mut *lock(&host.read)))
             }));
             // Past the limit nobody is listening, and the outcome is dropped.
             let _ = report.send(outcome);
@@ -347,20 +579,6 @@ fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
             .map(|d| d.code.to_string())
             .collect(),
     }
-}
-
-/// Outcomes live in `build/eval/` under the calling file's package root, or
-/// under its directory when it is in no package. `None`, and so no cache, when
-/// the package's manifest is invalid: the caller's own compile reports that.
-fn cache_dir(caller: &Path) -> Option<PathBuf> {
-    let root = match load_nearest_manifest(caller).ok()? {
-        Some(project) => project.root,
-        None => caller
-            .parent()
-            .expect("the caller is a file, so it has a parent")
-            .to_path_buf(),
-    };
-    Some(build_dir(&root).join("eval"))
 }
 
 fn current_thread_runtime() -> tokio::runtime::Runtime {

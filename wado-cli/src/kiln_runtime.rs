@@ -21,6 +21,7 @@ use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamRead
 use wasmtime::{Engine, Store};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
+use wado_compiler::name::to_cm_name;
 use wado_compiler::{
     CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
     GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
@@ -161,16 +162,33 @@ fn content_stream(
         })
 }
 
-/// Build an `input-file` record `Val` (`{ path, content }`).
+/// Build an `input-file` record `Val` of the shape `record` declares. A
+/// component built before `type` existed declares only `path` and `content`.
 fn input_file_val(
     store: &mut Store<KilnHostState>,
     f: &GeneratorInputFile,
+    record: &Type,
 ) -> Result<Val, GeneratorRunnerError> {
-    let content = content_stream(store, f)?;
-    Ok(Val::Record(vec![
-        ("path".to_string(), Val::String(f.path.clone())),
-        ("content".to_string(), content),
-    ]))
+    let Type::Record(record) = record else {
+        unreachable!("`input-file` is a record in every generator world");
+    };
+    let mut fields = Vec::with_capacity(3);
+    for field in record.fields() {
+        fields.push((
+            field.name.to_string(),
+            match field.name {
+                "path" => Val::String(f.path.clone()),
+                "content" => content_stream(store, f)?,
+                "type" => Val::Option(f.use_type.clone().map(|t| Box::new(Val::String(t)))),
+                other => {
+                    return Err(GeneratorRunnerError::Host(format!(
+                        "`input-file` has an unknown field `{other}`"
+                    )));
+                }
+            },
+        ));
+    }
+    Ok(Val::Record(fields))
 }
 
 /// Lift a `response` record payload (`{ files: list<output-file> }`) into the
@@ -295,7 +313,7 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
         // Enum cases carry raw Wado names; the component enum uses CM
         // kebab-case case names, so normalize before building the Val.
         Type::Enum(_) => match v {
-            CanonicalValue::Enum(s) => Val::Enum(wado_compiler::name::to_kebab(s)),
+            CanonicalValue::Enum(s) => Val::Enum(to_cm_name(s)),
             _ => return Err(mismatch()),
         },
         Type::Option(o) => match v {
@@ -339,9 +357,7 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
             for f in r.fields() {
                 // Option values carry raw Wado field names; the component record
                 // field is CM kebab-case.
-                let matched = entries
-                    .iter()
-                    .find(|(name, _)| wado_compiler::name::to_kebab(name) == f.name);
+                let matched = entries.iter().find(|(name, _)| to_cm_name(name) == f.name);
                 let val = match matched {
                     Some((_, cv)) => canonical_to_val(cv, &f.ty)?,
                     None if matches!(f.ty, Type::Option(_)) => Val::Option(None),
@@ -429,14 +445,20 @@ pub async fn run_generator(
         let mut args: Vec<Val> = Vec::with_capacity(params.len());
         for (name, ty) in &params {
             args.push(match name.as_str() {
-                "primary" => input_file_val(&mut store, &request.primary)?,
-                "inputs" => Val::List(
-                    request
-                        .inputs
-                        .iter()
-                        .map(|f| input_file_val(&mut store, f))
-                        .collect::<Result<_, _>>()?,
-                ),
+                "primary" => input_file_val(&mut store, &request.primary, ty)?,
+                "inputs" => {
+                    let Type::List(list) = ty else {
+                        unreachable!("`inputs` is a list in every generator world");
+                    };
+                    let element = list.ty();
+                    Val::List(
+                        request
+                            .inputs
+                            .iter()
+                            .map(|f| input_file_val(&mut store, f, &element))
+                            .collect::<Result<_, _>>()?,
+                    )
+                }
                 "module" => Val::String(request.module.clone()),
                 "options" => options_to_val(&request.options, ty)
                     .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
@@ -706,6 +728,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             primary: GeneratorInputFile {
                 path: "schema.txt".to_string(),
                 content: b"hello".to_vec(),
+                use_type: None,
             },
             inputs: vec![],
             module: "../gen".to_string(),
@@ -798,6 +821,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
             primary: GeneratorInputFile {
                 path: "schema.txt".to_string(),
                 content: b"hello".to_vec(),
+                use_type: None,
             },
             inputs: vec![],
             module: "../gen".to_string(),

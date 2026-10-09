@@ -1,10 +1,12 @@
 //! An If, each branch a block of `forward` that runs only where the condition
 //! picks it.
 
-use { Cpu, Embed, One, Past, Seq, Tensor, Total, Weights, forward } from "./branch.onnxtext"
+use { Cpu, Tensor } from "lib:loam";
+use { Embed, One, Past, Seq, Total, Weights, forward } from "./branch.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {

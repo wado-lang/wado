@@ -128,6 +128,7 @@ fn build_fixture(spec: FixtureSpec<'_>) -> Fixture {
             path: "grammars/calc.g4".to_string(),
             hash: hex_sha256(SCHEMA_BODY.as_bytes()),
             extent: None,
+            use_type: None,
         },
         inputs: Vec::new(),
         // No `OptionsDescriptor` reaches the LSP, so `options_canonical`

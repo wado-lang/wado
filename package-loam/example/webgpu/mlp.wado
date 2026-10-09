@@ -22,10 +22,12 @@ use {
     GpuComputePassEncoder,
 } from "wasi:webgpu";
 use { deviation, noise } from "./compare.wado";
-use { Batch, Cpu, In, Tensor, WebGpuBackend, Weights, element_count, forward } from "./mlp.onnxtext"
+use { Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
+use { Batch, In, Weights, forward } from "./mlp.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../../src/generator.wado",
+            module: "lib:loam",
             options: {
                 layout: [
                     {
@@ -57,7 +59,6 @@ use { Batch, Cpu, In, Tensor, WebGpuBackend, Weights, element_count, forward } f
                         axes: ["Out"],
                     },
                 ],
-                webgpu: true,
             },
         },
     };

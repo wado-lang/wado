@@ -6,7 +6,7 @@
 use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
-use crate::name::{INTERNAL_PREFIX, kebab_export_name};
+use crate::name::{INTERNAL_PREFIX, to_cm_name};
 use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{
@@ -37,10 +37,10 @@ pub struct WorldExportPlan {
     /// Export function name (e.g., "run", "handle"). Used as-is for the core
     /// module alias (`{name}-core`).
     pub name: String,
-    /// Kebab-case CM extern name for the component boundary (underscores → hyphens).
-    /// Computed once here so codegen emits the plan as-is rather than owning the
-    /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
-    /// already kebab-safe, so this equals `name` for them.
+    /// The CM extern name for the component boundary, `to_cm_name(name)`.
+    /// Computed here so codegen emits the plan as-is rather than knowing a name
+    /// format. WASI names (`run`, `handle`, `generate`) are labels already, so
+    /// this equals `name` for them.
     pub cm_export_name: String,
     /// Core function name in the Wasm module (e.g., `"$cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
@@ -205,7 +205,7 @@ pub fn build_component_plan(
             // here would reference a function that no longer exists.
             .filter(|test| test_selected(test.name.as_deref(), test_name_filters))
             .map(|test| {
-                let export_name = sanitize_kebab_export_name(&test.function_name);
+                let export_name = test_export_name(&test.function_name);
                 let core_func_name = export_binding_names
                     .get(&test.function_name)
                     .cloned()
@@ -295,11 +295,17 @@ fn build_world_export_plans(
             // the CM type engine. The WASI worlds resolve to `CmExportType`
             // here via the registry-backed `resolve_cm_export_type`, whose set
             // of recognised shapes is the WASI export surface only.
+            // A parameter crosses under its CM name: a Wado parameter is
+            // snake_case, and a WASI world's is kebab already.
             let (cm_params, cm_result, param_types, result_type) = if is_lib_world {
                 (
                     Vec::new(),
                     Some(CmExportType::Unit),
-                    export.params.clone(),
+                    export
+                        .params
+                        .iter()
+                        .map(|(name, ty)| (to_cm_name(name), ty.clone()))
+                        .collect(),
                     export.return_type.clone(),
                 )
             } else {
@@ -308,7 +314,7 @@ fn build_world_export_plans(
                     .iter()
                     .map(|(name, ty)| {
                         (
-                            name.clone(),
+                            to_cm_name(name),
                             resolve_cm_export_type(
                                 ty,
                                 cm_interface_registry,
@@ -335,7 +341,7 @@ fn build_world_export_plans(
 
             WorldExportPlan {
                 from_interface_fq: export.from_interface_fq.clone(),
-                cm_export_name: kebab_export_name(&export.name),
+                cm_export_name: to_cm_name(&export.name),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,
@@ -444,34 +450,11 @@ fn resolve_cm_export_type(
     panic!("unsupported world export type shape: {ty:?}");
 }
 
-/// Convert a test function name (e.g., `$test_0_my_name`) to a valid kebab-case
-/// CM export name (e.g., `test-0-my-name`).
-///
-/// Test names may contain consecutive underscores when non-alphanumeric characters
-/// (like parentheses) in the original test string are each replaced with `_` by the
-/// elaborator. A naive `replace('_', '-')` would produce consecutive dashes which
-/// violate the kebab-case requirement of the Component Model.
-fn sanitize_kebab_export_name(function_name: &str) -> String {
-    let raw = function_name
-        .trim_start_matches(INTERNAL_PREFIX)
-        .replace('_', "-");
-    // Collapse consecutive dashes and strip trailing dashes
-    let mut prev_dash = false;
-    let collapsed: String = raw
-        .chars()
-        .filter(|&c| {
-            if c == '-' {
-                if prev_dash {
-                    return false;
-                }
-                prev_dash = true;
-            } else {
-                prev_dash = false;
-            }
-            true
-        })
-        .collect();
-    collapsed.trim_end_matches('-').to_string()
+/// The CM export name of a test function (`$test_0_my_name` as `test-0-my-name`).
+/// The elaborator spells each non-alphanumeric character of the test's string as
+/// `_`, so a name may hold `__` or end in `_`, which the CM name collapses.
+fn test_export_name(function_name: &str) -> String {
+    to_cm_name(function_name.trim_start_matches(INTERNAL_PREFIX))
 }
 
 #[cfg(test)]
@@ -480,48 +463,47 @@ mod tests {
     use crate::component_model::CmInterfaceRegistry;
     use std::assert_matches;
     #[test]
-    fn test_sanitize_kebab_export_name() {
+    fn test_export_names() {
         // Simple case
-        assert_eq!(
-            sanitize_kebab_export_name("$test_0_simple"),
-            "test-0-simple"
-        );
+        assert_eq!(test_export_name("$test_0_simple"), "test-0-simple");
         // Consecutive underscores from parentheses in test name
         assert_eq!(
-            sanitize_kebab_export_name("$test_23_compression_level_0__stored__round_trip"),
+            test_export_name("$test_23_compression_level_0__stored__round_trip"),
             "test-23-compression-level-0-stored-round-trip"
         );
         // Trailing underscores
-        assert_eq!(
-            sanitize_kebab_export_name("$test_1_trailing__"),
-            "test-1-trailing"
-        );
+        assert_eq!(test_export_name("$test_1_trailing__"), "test-1-trailing");
         // Unnamed test (no name part)
-        assert_eq!(sanitize_kebab_export_name("$test_5"), "test-5");
+        assert_eq!(test_export_name("$test_5"), "test-5");
         // expect_trap tests
         assert_eq!(
-            sanitize_kebab_export_name("$test_trap_0_panics_on_zero"),
+            test_export_name("$test_trap_0_panics_on_zero"),
             "test-trap-0-panics-on-zero"
         );
-        assert_eq!(sanitize_kebab_export_name("$test_trap_3"), "test-trap-3");
+        assert_eq!(test_export_name("$test_trap_3"), "test-trap-3");
         // TODO tests
         assert_eq!(
-            sanitize_kebab_export_name("$test_todo_0_not_yet_implemented"),
+            test_export_name("$test_todo_0_not_yet_implemented"),
             "test-todo-0-not-yet-implemented"
         );
-        assert_eq!(sanitize_kebab_export_name("$test_todo_2"), "test-todo-2");
+        assert_eq!(test_export_name("$test_todo_2"), "test-todo-2");
         // timeout_ms tests
         assert_eq!(
-            sanitize_kebab_export_name("$test_tm2000_0_slow"),
+            test_export_name("$test_tm2000_0_slow"),
             "test-tm2000-0-slow"
         );
         assert_eq!(
-            sanitize_kebab_export_name("$test_trap_tm500_0_panics"),
+            test_export_name("$test_trap_tm500_0_panics"),
             "test-trap-tm500-0-panics"
         );
         assert_eq!(
-            sanitize_kebab_export_name("$test_todo_tm3000_1"),
+            test_export_name("$test_todo_tm3000_1"),
             "test-todo-tm3000-1"
+        );
+        // A capital in the test's string is lowercased, as a label requires
+        assert_eq!(
+            test_export_name("$test_4_parses_JSON_input"),
+            "test-4-parses-json-input"
         );
     }
 

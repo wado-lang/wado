@@ -27,6 +27,14 @@ it early.
 Read an input file's content to the end as text, decoding as it goes so no
 second copy of the file exists. `Err` is a malformed input, not a bug.
 
+### `pub fn package_of(module: &String) -> Option<String>`
+
+The package spec in `module`, a `Request`'s `module`: the part before any
+version or file path, which is what the consumer's `[dependencies]` names
+the generator's package under. Generated code imports the generator's
+runtime library by it. `None` where the use site named the generator by a
+path, which names no package.
+
 ## Effects
 
 ### `pub interface KilnHost`
@@ -112,6 +120,12 @@ a stream so a generator reads only as far as it needs.
 #### `path: String`
 
 #### `content: Stream<u8>`
+
+#### `type: Option<String>`
+
+The `type` the use site gave the file, which says how the
+generator reads it: the `type` beside `generator` for the primary
+input, an input's own for the rest. `none` where it gave none.
 
 ### `pub struct OutputFile`
 

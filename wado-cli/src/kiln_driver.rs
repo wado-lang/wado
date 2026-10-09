@@ -180,10 +180,10 @@ pub async fn execute<H: CompilerHost>(
     manifest_root: &Path,
     host: &H,
 ) -> Result<InvocationRun, ExecuteError> {
-    let primary = load_input(host, &invocation.from).await?;
+    let primary = load_input(host, &invocation.from, invocation.use_type.as_ref()).await?;
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
-    for p in &invocation.inputs {
-        inputs.push(load_input(host, p).await?);
+    for input in &invocation.inputs {
+        inputs.push(load_input(host, &input.path, input.use_type.as_ref()).await?);
     }
 
     let mut request = GeneratorRequest {
@@ -207,7 +207,7 @@ pub async fn execute<H: CompilerHost>(
         .inputs
         .iter()
         .zip(&request.inputs)
-        .map(|(p, f)| file_hash(p, &f.content))
+        .map(|(input, f)| file_hash(&input.path, &f.content))
         .collect();
 
     let response = host
@@ -218,7 +218,7 @@ pub async fn execute<H: CompilerHost>(
     let output_dir_abs = manifest_root.join(invocation.output_dir.as_str());
     let by = generator_identity(&invocation.module);
     let source_paths: Vec<InvocationPath> = std::iter::once(&invocation.from)
-        .chain(&invocation.inputs)
+        .chain(invocation.inputs.iter().map(|input| &input.path))
         .cloned()
         .collect();
     let header = GeneratedHeader::emit_with_paths(&by, &source_paths);
@@ -303,12 +303,13 @@ pub fn build_metadata(
 ) -> Metadata {
     let generator = generator_identity(&invocation.module);
     let extent_at = |i: usize| run.extents.get(i).copied().flatten();
-    let primary = to_meta_file_hash(&run.primary, extent_at(0));
+    let primary = to_meta_file_hash(&run.primary, extent_at(0), invocation.use_type.as_ref());
     let inputs: Vec<MetaFileHash> = run
         .inputs
         .iter()
+        .zip(&invocation.inputs)
         .enumerate()
-        .map(|(i, f)| to_meta_file_hash(f, extent_at(i + 1)))
+        .map(|(i, (f, input))| to_meta_file_hash(f, extent_at(i + 1), input.use_type.as_ref()))
         .collect();
 
     let outputs: Vec<MetaOutputEntry> = run
@@ -334,11 +335,12 @@ pub fn build_metadata(
     }
 }
 
-fn to_meta_file_hash(f: &FileHash, extent: Option<u64>) -> MetaFileHash {
+fn to_meta_file_hash(f: &FileHash, extent: Option<u64>, use_type: Option<&String>) -> MetaFileHash {
     MetaFileHash {
         path: f.path.clone(),
         hash: hex_digest(&f.hash),
         extent,
+        use_type: use_type.cloned(),
     }
 }
 
@@ -469,7 +471,9 @@ pub async fn cache_matches<H: CompilerHost>(
     if metadata.generator_source_hash != current_generator_source_hash {
         return CacheCheck::Miss;
     }
-    if metadata.invoked_as != invocation.invoked_as {
+    if metadata.invoked_as != invocation.invoked_as
+        || metadata.primary.use_type != invocation.use_type
+    {
         return CacheCheck::Miss;
     }
 
@@ -477,10 +481,10 @@ pub async fn cache_matches<H: CompilerHost>(
         return CacheCheck::Miss;
     }
     for (declared, recorded) in invocation.inputs.iter().zip(&metadata.inputs) {
-        if declared.as_str() != recorded.path {
+        if declared.path.as_str() != recorded.path || declared.use_type != recorded.use_type {
             return CacheCheck::Miss;
         }
-        if !matches_file(host, declared, &recorded.hash, recorded.extent).await {
+        if !matches_file(host, &declared.path, &recorded.hash, recorded.extent).await {
             return CacheCheck::Miss;
         }
     }
@@ -672,6 +676,7 @@ fn walk_and_delete(
 async fn load_input<H: CompilerHost>(
     host: &H,
     path: &InvocationPath,
+    use_type: Option<&String>,
 ) -> Result<GeneratorInputFile, ExecuteError> {
     let bytes =
         host.load_source(path.as_str())
@@ -683,6 +688,7 @@ async fn load_input<H: CompilerHost>(
     Ok(GeneratorInputFile {
         path: path.as_str().to_string(),
         content: bytes,
+        use_type: use_type.cloned(),
     })
 }
 
@@ -1338,6 +1344,7 @@ fn emit_metadata_load_warning<H: CompilerHost>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wado_compiler::kiln::InvocationInput;
 
     mod execute_tests {
         use super::*;
@@ -1406,8 +1413,12 @@ mod tests {
                 }],
                 module: GeneratorModule::Spec("ns:proto@1.0.0".into()),
                 invoked_as: "ns:proto@1.0.0".to_string(),
+                use_type: None,
                 from: InvocationPath::normalize("schema.proto"),
-                inputs: vec![InvocationPath::normalize("dep.proto")],
+                inputs: vec![InvocationInput {
+                    path: InvocationPath::normalize("dep.proto"),
+                    use_type: None,
+                }],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,
@@ -1637,8 +1648,12 @@ mod tests {
                 }],
                 module: GeneratorModule::Spec("ns:proto@1.0.0".into()),
                 invoked_as: "ns:proto@1.0.0".to_string(),
+                use_type: None,
                 from: InvocationPath::normalize("schema.proto"),
-                inputs: vec![InvocationPath::normalize("dep.proto")],
+                inputs: vec![InvocationInput {
+                    path: InvocationPath::normalize("dep.proto"),
+                    use_type: None,
+                }],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
                 raw_options: None,

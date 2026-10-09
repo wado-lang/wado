@@ -3,13 +3,17 @@
 //! run from the checkpoint holding them against the logits onnxruntime
 //! computes for two sequences of different lengths.
 
+use { Cpu, Tensor } from "lib:loam";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "../src/safetensors.wado";
 use gpt2 from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
+        type: "onnxtext",
         generator: {
-            module: "../src/generator.wado",
-            inputs: ["../tests/models/tiny-gpt2/model.safetensors"],
+            module: "lib:loam",
+            inputs: [
+                { path: "../tests/models/tiny-gpt2/model.safetensors", type: "safetensors" },
+            ],
             options: {
                 dims: { batch_size: 1 },
                 outputs: ["logits"],
@@ -141,9 +145,9 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
 
     let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let got = gpt2::forward(
-        &mut gpt2::Cpu {},
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents: mask_extents },
+        &mut Cpu {},
+        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
+        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents: mask_extents },
         &weights,
     );
 
@@ -175,12 +179,12 @@ test "a sequence longer than the mask stops forward" {
     let mask = List::<i64>::filled(513, 1);
     let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     gpt2::forward(
-        &mut gpt2::Cpu {},
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &mut Cpu {},
+        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
             data: ids,
             extents: [1, 513],
         },
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+        &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
             data: mask,
             extents: [1, 513],
         },

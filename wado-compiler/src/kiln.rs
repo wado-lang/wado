@@ -24,8 +24,8 @@ pub use harvest::{Harvest, harvest_module_graph, remap_decl_files};
 pub use header::{GeneratedHeader, has_generated_marker, parse_header};
 pub use inline::{InvocationIndex, collect_inline_invocations};
 pub use invocation::{
-    DeclSite, GENERATOR_WORLD_FQ, GeneratorModule, GeneratorSpec, Invocation, InvocationPath,
-    SpecParts, parse_spec, spec_key,
+    DeclSite, GENERATOR_WORLD_FQ, GeneratorModule, GeneratorSpec, Invocation, InvocationInput,
+    InvocationPath, SpecParts, parse_spec, spec_key,
 };
 pub use options::{
     CanonicalValue, OptionsDescriptor, OptionsField, OptionsType, extract_options_descriptor,

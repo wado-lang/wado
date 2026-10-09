@@ -1,0 +1,39 @@
+use { BpeTokenizer, byte_chars } from "./runtime/tokenizer.wado";
+
+/// One entry to a line, as `BpeTokenizer::new` reads them.
+fn lines(entries: List<String>) -> ByteList {
+    return entries.join("\n").bytes().collect();
+}
+
+/// A tokenizer over every byte's character, the merge `a b`, and `specials`,
+/// which take the ids after `ab`.
+fn tokenizer(specials: List<String>) -> BpeTokenizer {
+    let mut tokens: List<String> = [];
+    for let c of byte_chars() {
+        let mut spelled = String::new();
+        spelled.push(c);
+        tokens.push(spelled);
+    }
+    tokens.push("ab");
+    tokens.extend(&specials);
+    return BpeTokenizer::new(&lines(tokens), &lines(["a b"]), specials);
+}
+
+test "a pair the merges rank merges, and the rest stay bytes" {
+    let t = tokenizer([]);
+    assert t.encode(&"abc") == [256, 99] as List<i32>;
+    assert t.decode(&[256, 99]) == "abc";
+}
+
+test "a special token decodes as its own text, whatever bytes it holds" {
+    let t = tokenizer(["<|im start|>"]);
+    let ids = t.encode(&"a<|im start|>b");
+    assert ids == [97, 257, 98] as List<i32>;
+    assert t.decode(&ids) == "a<|im start|>b";
+}
+
+test "of the special tokens starting at one place, the longest is taken" {
+    let t = tokenizer(["<|im", "<|im_start|>"]);
+    assert t.encode(&"<|im_start|>") == [258] as List<i32>;
+    assert t.encode(&"<|im end") == [257, 32, 101, 110, 100] as List<i32>;
+}
