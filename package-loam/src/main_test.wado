@@ -8,7 +8,6 @@ use { loam } from "./main.wado";
 use { generate as kiln_generate, Options } from "./generator.wado";
 use { LayoutRule } from "./schema.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
-use { TreeMap } from "core:collections";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Request, Response, Error as KilnError, InputFile, KilnHost, Diagnostic as KilnDiagnostic } from "core:kiln";
@@ -130,20 +129,14 @@ fn layout() -> List<LayoutRule> {
 test "gen prints the module the Kiln generator builds for the same graph and options" {
     let dir = scratch("gen");
     let printed = on_graph("gen", &dir, []).unwrap();
-    let options = Options {
-        layout: layout(),
-        dims: TreeMap::new(),
-        outputs: [],
-    };
     let path = `${dir}/g.onnxtext`;
-    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], options);
+    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { layout: layout() });
 }
 
 test "gen prints the tokenizer the Kiln generator builds" {
     let path = "tests/models/tiny-gpt2/tokenizer.json";
     let printed = loam(["gen", "--type", "hf-tokenizer", path]).unwrap();
-    let options = Options { layout: [], dims: TreeMap::new(), outputs: [] };
-    assert printed == kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], options);
+    assert printed == kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], Options {});
 }
 
 test "gen --output writes the module and prints nothing" {

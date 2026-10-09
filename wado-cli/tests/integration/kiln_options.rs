@@ -203,6 +203,49 @@ fn map_option_reaches_the_generator() {
         .stdout("large=3,small=1\n");
 }
 
+/// An entry module may re-export `Options` from the module that declares it,
+/// which the generator's other entry points then share.
+#[test]
+fn reexported_options_reach_the_generator() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (declaration, rest) = MAP_GENERATOR
+        .split_once("pub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
+        .unwrap();
+    let generator = format!("{declaration}pub use {{ Options }} from \"./options.wado\";\n{rest}");
+    let app = write_project(tmp.path(), &generator, "{ sizes: { small: 1, large: 3 } }");
+    fs::write(
+        tmp.path().join("gen/src/options.wado"),
+        "use { TreeMap } from \"core:collections\";\n\npub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n",
+    )
+    .unwrap();
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("large=3,small=1\n");
+}
+
+/// A list or map field may default to a literal, which a use site that leaves
+/// it out receives.
+#[test]
+fn list_and_map_defaults_reach_the_generator() {
+    let tmp = tempfile::tempdir().unwrap();
+    let generator = MAP_GENERATOR
+        .replace(
+            "pub sizes: TreeMap<String, i32>,",
+            "pub sizes: TreeMap<String, i32> = { small: 1, large: 3 },\n    pub tags: List<String> = [\"a\", \"b\"],",
+        )
+        .replace("spelled.join(\",\")", "spelled.join(\",\")};${req.options.tags.join(\",\")");
+    let app = write_project(tmp.path(), &generator, "{}");
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("large=3,small=1;a,b\n");
+}
+
 /// An `Options` field no options table can express stops the generator's own
 /// compile, so the generator is never run with the field left out.
 #[test]

@@ -117,7 +117,9 @@ primary input but disagree on any of those are an error naming both.
 
 ## Options
 
-A generator declares its options as `pub struct Options` in its entry module.
+A generator's options are the `pub struct Options` its entry module names. The
+entry module declares it or re-exports it with `pub use`, so another entry
+point of the same package, such as a command line, can read the same struct.
 Gale declares two:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
@@ -139,7 +141,8 @@ Every use site's `options` is checked against the struct before the generator
 runs, so a typo or a type mismatch is reported on the offending key.
 
 - Omitting `options` means every field takes its default. A field with a
-  default may be omitted on its own.
+  default may be omitted on its own. A default is a literal, and a list or map
+  field takes a `[…]` or `{ k: v, … }` one.
 - A field of type `Option<T>`, `List<T>`, or `TreeMap<String, V>` may always
   be omitted. It is then `None`, the empty list, or the empty map.
 - Any other field without a default must be supplied. An unknown key is an
@@ -151,20 +154,26 @@ runs, so a typo or a type mismatch is reported on the offending key.
   at its use sites every field is required unless its type is an `Option`, a
   `List`, or a `TreeMap`.
 
-Loam's options hold a list of structs, a map, and a list of strings:
+Loam's options hold a list of structs, a map, and a list of strings. Its entry
+module re-exports them from the module the `loam` command reads them through as
+well:
 
-<!-- {"source": "package-loam/src/generator.wado"} -->
+<!-- {"source": "package-loam/src/compile.wado"} -->
 
 ```wado
 pub struct Options {
     /// Patterns naming the axes of the graph's inputs and initializers.
-    pub layout: List<LayoutRule>,
+    pub layout: List<LayoutRule> = [],
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
-    pub dims: TreeMap<String, i32>,
+    pub dims: TreeMap<String, i32> = {},
     /// The graph outputs `forward` returns. Empty keeps every output.
-    pub outputs: List<String>,
+    pub outputs: List<String> = [],
 }
 ```
+
+The defaults change nothing at a use site, where these fields may be left out
+anyway. They are for the `loam` command, which reads the struct from JSON
+through `core:serde`, where a field without a default is required.
 
 Each struct in `layout` is written as a record literal, and the `dims` map as an
 object:

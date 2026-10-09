@@ -6,11 +6,13 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ast::Visibility;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
+use crate::symbol::SymbolKind;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -119,8 +121,8 @@ pub enum CanonicalValue {
     Map(Vec<(String, CanonicalValue)>),
 }
 
-/// Locate `pub struct Options` in the generator's entry module and describe it
-/// as an [`OptionsDescriptor`]. `Options` is optional — a generator with no
+/// Locate the `pub struct Options` the generator's entry module names, declared
+/// there or re-exported, and describe it as an [`OptionsDescriptor`]. `Options` is optional — a generator with no
 /// configuration gets an empty descriptor — while `generate` is required.
 ///
 /// # Errors
@@ -158,26 +160,44 @@ pub fn extract_options_descriptor(
         return Err(diagnostics);
     }
 
-    let Some(options_struct) = tir_module.find_struct("Options") else {
+    // The entry module names `Options`, by declaring it or by re-exporting the
+    // declaration, which the generator's other entry points then share.
+    let Some(symbol) = sem
+        .symbols
+        .lookup_in_module(module, "Options")
+        .filter(|symbol| matches!(symbol.kind, SymbolKind::Struct(_)))
+    else {
         return Ok(OptionsDescriptor { fields: vec![] });
     };
+    let declaring = symbol.module_source();
+    let options_struct = sem
+        .tir_modules
+        .get(declaring)
+        .and_then(|declared_in| declared_in.find_struct(&symbol.name))
+        .expect("a struct symbol has its TIR struct in the module declaring it");
 
-    if !options_struct.visibility.is_public() {
+    if !sem
+        .symbols
+        .effective_visibility_in_module(module, "Options")
+        .is_some_and(Visibility::is_public)
+    {
         diagnostics.push(Diagnostic {
             severity: Severity::Error,
             code: Code::GeneratorOptionsUnsupported,
             message: "kiln: `Options` struct must be declared `pub`".to_string(),
-            span: Some(span_of(&options_struct.span, module)),
+            span: Some(span_of(&options_struct.span, declaring)),
         });
     }
 
     let mut visiting: IndexSet<(ModuleSource, String)> = IndexSet::default();
-    visiting.insert((module.clone(), "Options".to_string()));
+    visiting.insert((declaring.clone(), symbol.name.clone()));
     let mut descriptor_fields = Vec::with_capacity(options_struct.fields.len());
     for field in &options_struct.fields {
         // Diagnostic already pushed by lower_field on `None`; continue so
         // every bad field surfaces in one pass.
-        if let Some(desc_field) = lower_field(field, sem, module, &mut visiting, &mut diagnostics) {
+        if let Some(desc_field) =
+            lower_field(field, sem, declaring, &mut visiting, &mut diagnostics)
+        {
             descriptor_fields.push(desc_field);
         }
     }
@@ -513,6 +533,23 @@ fn evaluate_literal(
             evaluate_literal(expr, inner, types, module, field_name, diagnostics)
                 .map(|v| CanonicalValue::Some(Box::new(v)))
         }
+        (_, OptionsType::List(inner)) if let Some(elements) = coerced_array(expr) => elements
+            .iter()
+            .map(|e| evaluate_literal(e, inner, types, module, field_name, diagnostics))
+            .collect::<Option<Vec<_>>>()
+            .map(CanonicalValue::List),
+        (_, OptionsType::Map(inner))
+            if let Some(pairs) = coerced_array(expr)
+                && let Some(pairs) = pairs.iter().map(literal_pair).collect::<Option<Vec<_>>>() =>
+        {
+            let mut entries = Vec::with_capacity(pairs.len());
+            for (key, value) in pairs {
+                let value = evaluate_literal(value, inner, types, module, field_name, diagnostics)?;
+                entries.push((key.to_string(), value));
+            }
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Some(CanonicalValue::Map(entries))
+        }
         _ => {
             push_unsupported(
                 diagnostics,
@@ -523,6 +560,36 @@ fn evaluate_literal(
             None
         }
     }
+}
+
+/// The elements of a `[…]` or `{ k: v, … }` literal, which literal coercion
+/// hands to the target's `From<Array<…>>` (WEP 2026-08-24).
+fn coerced_array(expr: &TirExpr) -> Option<&[TirExpr]> {
+    match &expr.kind {
+        TirExprKind::ArrayLiteral { elements } => Some(elements),
+        TirExprKind::Call { args, .. } => match args.split() {
+            (None, [arg]) => match &arg.expr.kind {
+                TirExprKind::ArrayLiteral { elements } => Some(elements),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The key and value of one `k: v` member of a key-value literal.
+fn literal_pair(pair: &TirExpr) -> Option<(&str, &TirExpr)> {
+    let TirExprKind::TupleLiteral { elements } = &pair.kind else {
+        return None;
+    };
+    let [key, value] = elements.as_slice() else {
+        return None;
+    };
+    let TirExprKind::StringLiteral(key) = &key.kind else {
+        return None;
+    };
+    Some((key, value))
 }
 
 fn span_of(span: &Span, module: &ModuleSource) -> DiagnosticSpan {

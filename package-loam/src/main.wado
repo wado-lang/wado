@@ -5,23 +5,11 @@ use { args, eprintln, exit, print, Environment, Exit, Stderr, Stdout } from "cor
 use { Deserialize } from "core:serde";
 use { parse } from "core:args";
 use { from_string } from "core:json";
-use { TreeMap } from "core:collections";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
-use { Model, Spelling, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
+use { Model, Options, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
 use { render_dump } from "./dump.wado";
-use { LayoutRule } from "./schema.wado";
-
-// The generator's `Options`, field for field. Importing that one would bring
-// the generator's `export fn generate`, whose signature this world has no
-// Component Model form for.
-struct Options {
-    layout: List<LayoutRule> = [],
-    dims: TreeMap<String, i32> = TreeMap::new(),
-    outputs: List<String> = [],
-}
-impl Deserialize for Options;
 
 // Each field is the `with` clause's word for it, so a use site reads as the
 // command line that reproduces it.
@@ -142,7 +130,7 @@ fn checked_model(
         },
         None => Options {},
     };
-    return check(path, spelling, read_file(path)?, options.layout, &options.dims, &options.outputs);
+    return check(path, spelling, read_file(path)?, &options);
 }
 
 fn read_file(path: &String) -> Result<ByteList, String> with Preopens {
