@@ -8,7 +8,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{
     AssertStmt, BinaryOp, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt,
     ForOfStmt, ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern,
-    ReturnStmt, Stmt, WhileStmt, for_each_pattern_name,
+    ReturnStmt, Stmt, UnaryOp, WhileStmt, for_each_pattern_name,
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
@@ -17,11 +17,14 @@ use crate::syntax::{is_statement_keyword, statement_keyword_name_message};
 use crate::token::Span;
 
 /// Binding information for a local variable
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct BindingInfo {
     is_mut: bool,
     /// Scope depth where the variable was defined
     scope_depth: u32,
+    /// Tells this declaration from every other the binder has seen, a
+    /// shadowed or out-of-scope one of the same name included.
+    key: LocalKey,
 }
 
 /// A scope containing local variable bindings
@@ -57,8 +60,8 @@ pub enum BindError {
     KeywordName { name: String, span: Span },
 }
 
-/// A local, as the binder tells shadowed names apart.
-type LocalKey = (u32, String);
+/// One local declaration.
+type LocalKey = u32;
 
 /// What the binder knows, at one point of a body, about the locals declared
 /// without an initializer.
@@ -433,13 +436,12 @@ pub struct Binder<'a, H: CompilerHost> {
     /// its source file.
     module_source: &'a ModuleSource,
     current_depth: u32,
-    /// The locals in scope declared without an initializer.
-    deferred: IndexSet<LocalKey>,
+    next_key: LocalKey,
+    /// The locals in scope declared without an initializer, and whether each
+    /// is `mut`.
+    deferred: IndexMap<LocalKey, bool>,
     flow: Flow,
     jump_targets: Vec<JumpTarget>,
-    /// Above zero while a loop body is bound only to learn what reaches its
-    /// next iteration; the pass that follows reports.
-    quiet: u32,
 }
 
 impl<'a, H: CompilerHost> Binder<'a, H> {
@@ -450,46 +452,45 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             logger,
             module_source,
             current_depth: 0,
-            deferred: IndexSet::default(),
+            next_key: 0,
+            deferred: IndexMap::default(),
             flow: Flow::reachable(),
             jump_targets: Vec::new(),
-            quiet: 0,
         }
     }
 
     /// Emit a bind error attributed to the module being bound.
     fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
-        if self.quiet > 0 {
-            return Ok(());
-        }
         self.logger.error_in(self.module_source, err)
     }
 
     /// The innermost binding of `name`, when it is declared without an
     /// initializer.
-    fn deferred_key(&self, name: &str) -> Option<LocalKey> {
-        let binding = self.lookup(name)?;
-        let key = (binding.scope_depth, name.to_string());
-        self.deferred.contains(&key).then_some(key)
+    fn deferred_binding(&self, name: &str) -> Option<BindingInfo> {
+        if self.deferred.is_empty() {
+            return None;
+        }
+        let binding = *self.lookup(name)?;
+        self.deferred.contains_key(&binding.key).then_some(binding)
     }
 
-    /// Whether `key` is declared outside the closure being bound.
-    fn captured(&self, key: &LocalKey) -> bool {
-        self.jump_targets.iter().rev().any(
-            |target| matches!(target, JumpTarget::Closure { scope_depth } if key.0 < *scope_depth),
-        )
+    /// Whether `binding` is declared outside the closure being bound.
+    fn captured(&self, binding: &BindingInfo) -> bool {
+        self.jump_targets.iter().rev().any(|target| {
+            matches!(target, JumpTarget::Closure { scope_depth } if binding.scope_depth < *scope_depth)
+        })
     }
 
     /// Read `name`, which a path leaving it unassigned makes an error.
     fn read(&mut self, name: &str, span: Span) -> Result<(), Bail> {
-        let Some(key) = self.deferred_key(name) else {
+        let Some(binding) = self.deferred_binding(name) else {
             return Ok(());
         };
-        if !self.flow.reachable || !self.flow.unassigned.contains(&key) {
+        if !self.flow.reachable || !self.flow.unassigned.contains(&binding.key) {
             return Ok(());
         }
         let name = name.to_string();
-        if self.captured(&key) {
+        if self.captured(&binding) {
             self.emit(BindError::CaptureBeforeInit { name, span })
         } else {
             self.emit(BindError::UseBeforeInit { name, span })
@@ -499,29 +500,29 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Assign `name` with `=`. A local declared without an initializer is
     /// assigned once if immutable, and a closure never assigns it first.
     fn assign(&mut self, name: &str, span: Span) -> Result<(), Bail> {
-        let Some(binding) = self.lookup(name) else {
+        let Some(binding) = self.lookup(name).copied() else {
             return Ok(());
         };
-        let is_mut = binding.is_mut;
-        let Some(key) = self.deferred_key(name) else {
-            if !is_mut {
+        if !self.deferred.contains_key(&binding.key) {
+            if !binding.is_mut {
                 self.emit(BindError::AssignToImmutable {
                     name: name.to_string(),
                     span,
                 })?;
             }
             return Ok(());
-        };
+        }
         if !self.flow.reachable {
             return Ok(());
         }
-        if self.captured(&key) && self.flow.unassigned.contains(&key) {
+        let key = binding.key;
+        if self.captured(&binding) && self.flow.unassigned.contains(&key) {
             return self.emit(BindError::CaptureBeforeInit {
                 name: name.to_string(),
                 span,
             });
         }
-        if !is_mut && self.flow.assigned.contains(&key) {
+        if !binding.is_mut && self.flow.assigned.contains(&key) {
             self.emit(BindError::AssignTwice {
                 name: name.to_string(),
                 span,
@@ -841,7 +842,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         catches_jumps: bool,
         mut iteration: impl FnMut(&mut Self) -> Result<Flow, Bail>,
     ) -> Result<(), Bail> {
-        if self.quiet > 0 || !self.may_assign_twice() {
+        if self.logger.is_quiet() || !self.may_assign_twice() {
             let (exits, repeats) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
             self.flow = exits;
             if self.flow.reachable && repeats.reachable {
@@ -850,9 +851,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             return Ok(());
         }
         let entry = self.flow.clone();
-        self.quiet += 1;
-        let (_, repeats) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
-        self.quiet -= 1;
+        let logger = self.logger;
+        let repeats = {
+            let _learning = logger.quiet();
+            self.bind_iteration(update, catches_jumps, &mut iteration)?.1
+        };
         self.flow = entry.join(repeats);
         let (exits, _) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
         self.flow = exits;
@@ -862,10 +865,9 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Whether some immutable local declared without an initializer may still
     /// take its first assignment.
     fn may_assign_twice(&self) -> bool {
-        self.deferred.iter().any(|key| {
-            !self.flow.assigned.contains(key)
-                && !self.scopes[key.0 as usize].bindings[&key.1].is_mut
-        })
+        self.deferred
+            .iter()
+            .any(|(key, is_mut)| !is_mut && !self.flow.assigned.contains(key))
     }
 
     /// One pass of a loop body: the paths that leave the loop, and those that
@@ -941,7 +943,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         self.bind_loop_with(for_stmt.update.as_ref(), true, |s| {
             let skipped = match &for_stmt.condition {
                 Some(condition) => s.bind_condition(condition)?,
-                None => s.flow.clone(),
+                // Without a condition, like `loop`, only a `break` leaves.
+                None => Flow::default(),
             };
             s.bind_block(&for_stmt.body)?;
             Ok(skipped)
@@ -1005,13 +1008,18 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         match expr {
             Expr::Ident(ident) => self.read(&ident.name, ident.span)?,
 
-            Expr::Assign(assign) => {
-                self.bind_expr(&assign.value)?;
-                match &assign.target {
-                    Expr::Ident(ident) => self.assign(&ident.name, assign.span)?,
-                    target => self.bind_expr(target)?,
+            // A place evaluates before the value it receives; a name only
+            // takes the value once it is computed.
+            Expr::Assign(assign) => match &assign.target {
+                Expr::Ident(ident) => {
+                    self.bind_expr(&assign.value)?;
+                    self.assign(&ident.name, assign.span)?;
                 }
-            }
+                target => {
+                    self.bind_expr(target)?;
+                    self.bind_expr(&assign.value)?;
+                }
+            },
 
             Expr::CompoundAssign(compound) => {
                 // Check mutability
@@ -1028,13 +1036,14 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_expr(&compound.value)?;
             }
 
+            Expr::Binary(binary) if matches!(binary.op, BinaryOp::And | BinaryOp::Or) => {
+                let fails = self.bind_test(expr)?;
+                self.flow = std::mem::take(&mut self.flow).join(fails);
+            }
+
             Expr::Binary(binary) => {
                 self.bind_expr(&binary.left)?;
-                if matches!(binary.op, BinaryOp::And | BinaryOp::Or) {
-                    self.bind_maybe(|s| s.bind_expr(&binary.right))?;
-                } else {
-                    self.bind_expr(&binary.right)?;
-                }
+                self.bind_expr(&binary.right)?;
             }
 
             Expr::Unary(unary) => {
@@ -1186,31 +1195,56 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind an `if` or `while` condition, answering the path on which it
-    /// fails. A let chain fails at whichever element fails first.
-    fn bind_condition(&mut self, condition: &Condition) -> Result<Flow, Bail> {
-        match condition {
-            Condition::Expr(expr) => self.bind_expr(expr)?,
-            Condition::LetChain { elements, .. } => {
-                // Let elements introduce bindings visible in subsequent
-                // elements (caller must have entered a scope).
-                let mut failed = Flow::default();
-                for elem in elements {
-                    match elem {
-                        ConditionElement::Let { pattern, expr, .. } => {
-                            self.bind_expr(expr)?;
-                            self.bind_pattern(pattern, expr.span())?;
-                        }
-                        ConditionElement::Expr(expr) => {
-                            self.bind_expr(expr)?;
-                        }
-                    }
-                    failed = failed.join(self.flow.clone());
-                }
-                return Ok(failed);
+    /// Bind a boolean expression, leaving the path on which it holds and
+    /// answering the one on which it fails. `&&`, `||` and `!` tell the two
+    /// apart; any other expression holds and fails on the same path.
+    fn bind_test(&mut self, expr: &Expr) -> Result<Flow, Bail> {
+        match expr {
+            Expr::Binary(binary) if binary.op == BinaryOp::And => {
+                let left_fails = self.bind_test(&binary.left)?;
+                let right_fails = self.bind_test(&binary.right)?;
+                Ok(left_fails.join(right_fails))
+            }
+            Expr::Binary(binary) if binary.op == BinaryOp::Or => {
+                let left_fails = self.bind_test(&binary.left)?;
+                let left_holds = std::mem::replace(&mut self.flow, left_fails);
+                let right_fails = self.bind_test(&binary.right)?;
+                self.flow = std::mem::take(&mut self.flow).join(left_holds);
+                Ok(right_fails)
+            }
+            Expr::Unary(unary) if matches!(unary.op, UnaryOp::Not) => {
+                let fails = self.bind_test(&unary.expr)?;
+                Ok(std::mem::replace(&mut self.flow, fails))
+            }
+            _ => {
+                self.bind_expr(expr)?;
+                Ok(self.flow.clone())
             }
         }
-        Ok(self.flow.clone())
+    }
+
+    /// Bind an `if`, `while` or `for` condition as `bind_test` binds an
+    /// expression. A let chain fails at whichever element fails first.
+    fn bind_condition(&mut self, condition: &Condition) -> Result<Flow, Bail> {
+        let elements = match condition {
+            Condition::Expr(expr) => return self.bind_test(expr),
+            Condition::LetChain { elements, .. } => elements,
+        };
+        // Let elements introduce bindings visible in subsequent elements
+        // (caller must have entered a scope).
+        let mut fails = Flow::default();
+        for elem in elements {
+            let element_fails = match elem {
+                ConditionElement::Let { pattern, expr, .. } => {
+                    self.bind_expr(expr)?;
+                    self.bind_pattern(pattern, expr.span())?;
+                    self.flow.clone()
+                }
+                ConditionElement::Expr(expr) => self.bind_test(expr)?,
+            };
+            fails = fails.join(element_fails);
+        }
+        Ok(fails)
     }
 
     /// Bind a match expression. A guard that fails passes the match on to
@@ -1225,8 +1259,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             self.enter_scope();
             self.bind_pattern(&arm.pattern, arm.span)?;
             if let Some(guard) = &arm.guard {
-                self.bind_expr(guard)?;
-                unmatched = unmatched.join(self.flow.clone());
+                let fails = self.bind_test(guard)?;
+                unmatched = unmatched.join(fails);
             }
             self.bind_expr(&arm.body)?;
             self.exit_scope();
@@ -1269,46 +1303,55 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Exit the current scope, forgetting its locals.
     fn exit_scope(&mut self) {
         if let Some(scope) = self.scopes.pop() {
-            for (name, binding) in scope.bindings {
-                let key = (binding.scope_depth, name);
-                self.deferred.shift_remove(&key);
-                self.flow.forget(&key);
+            for binding in scope.bindings.values() {
+                self.forget(binding.key);
             }
         }
         self.current_depth -= 1;
     }
 
-    /// Define a variable in the current scope
-    fn define(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
-        if is_statement_keyword(name) {
-            return self.emit(BindError::KeywordName {
-                name: name.to_string(),
-                span,
-            });
-        }
-        // A name the scope already holds is replaced; the resolver reports the
-        // redeclarations, since only it knows which bare names bind.
-        let key = (self.current_depth, name.to_string());
+    fn forget(&mut self, key: LocalKey) {
         self.deferred.shift_remove(&key);
         self.flow.forget(&key);
-        let scope = self.scopes.last_mut().unwrap();
-        scope.bindings.insert(
-            name.to_string(),
-            BindingInfo {
-                is_mut,
-                scope_depth: self.current_depth,
-            },
-        );
-        Ok(())
+    }
+
+    /// Define a variable in the current scope
+    fn define(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
+        self.declare(name, is_mut, span).map(|_| ())
     }
 
     /// Like `define`, for a `let x: T;`, which starts unassigned.
     fn define_uninit(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
-        self.define(name, is_mut, span)?;
-        let key = (self.current_depth, name.to_string());
-        self.deferred.insert(key.clone());
+        let key = self.declare(name, is_mut, span)?;
+        self.deferred.insert(key, is_mut);
         self.flow.unassigned.insert(key);
         Ok(())
+    }
+
+    /// Enter `name` in the current scope, answering its key. A name spelled
+    /// like a keyword is reported and still declared, so what reads it is
+    /// checked as usual.
+    fn declare(&mut self, name: &str, is_mut: bool, span: Span) -> Result<LocalKey, Bail> {
+        if is_statement_keyword(name) {
+            self.emit(BindError::KeywordName {
+                name: name.to_string(),
+                span,
+            })?;
+        }
+        let key = self.next_key;
+        self.next_key += 1;
+        let binding = BindingInfo {
+            is_mut,
+            scope_depth: self.current_depth,
+            key,
+        };
+        // A name the scope already holds is replaced; the resolver reports the
+        // redeclarations, since only it knows which bare names bind.
+        let scope = self.scopes.last_mut().unwrap();
+        if let Some(replaced) = scope.bindings.insert(name.to_string(), binding) {
+            self.forget(replaced.key);
+        }
+        Ok(key)
     }
 
     /// Look up a variable by name (searches all scopes)

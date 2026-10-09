@@ -1,5 +1,5 @@
-// Valid patterns for uninitialized variable declarations.
-// Rule (from Wasm validation): a local get is valid if a set is guaranteed before it.
+// Valid patterns for uninitialized variable declarations: a read is valid when
+// every path reaching it has assigned the variable.
 // Type annotation is required when there is no initializer.
 
 // Pattern 1: declare then assign then use in sequence
@@ -58,7 +58,7 @@ test "nested if-else all paths assign" {
 }
 
 // Pattern 6: assign *before* the loop, then use inside and after the loop.
-// (Assignment inside a loop body does NOT count as guaranteed initialization.)
+// (A `while` body may not run, so assigning there would not count.)
 test "assign before loop, use inside loop" {
     let mut x: i32;
     let mut i = 0;
@@ -189,4 +189,40 @@ test "let chain assigns before its block" {
     if let Some(v) = o && match v { _ => { x = v; true } } {
         assert x == 3;
     }
+}
+
+// Pattern 17: the block an `&&` condition guards runs only when the right
+// side ran.
+test "short-circuit assigns before its block" {
+    let x: i32;
+    let c = builtin::black_box(true);
+    if c && done: { x = 1; true } {
+        assert x == 1;
+    }
+}
+
+// Pattern 18: a guard's assignments reach the arm it guards.
+test "guard assigns before its arm" {
+    let x: i32;
+    let o = builtin::black_box(Option::Some(2));
+    let y = match o {
+        Some(n) && n > 0 && done: { x = n; true } => x,
+        _ => 0,
+    };
+    assert y == 2;
+}
+
+// Pattern 19: a `for` without a condition, like `loop`, ends only through a
+// `break`.
+test "conditionless for assigns before each break" {
+    let x: i32;
+    let mut i = 0;
+    for ;; {
+        i += 1;
+        if i == 3 {
+            x = i;
+            break;
+        }
+    }
+    assert x == 3;
 }

@@ -1,0 +1,11 @@
+// Error: an assignment evaluates its target before its value, so a target
+// reading the variable the value assigns reads it unassigned.
+
+export fn run() {
+    let x: i32;
+    let mut xs: List<i32> = [0, 0, 0, 0, 0, 0];
+    xs[x] = b: { x = 1; 5 };
+}
+
+__DATA__
+{"compile_error": ":7:8: analysis error: 'x' is used before initialization"}
