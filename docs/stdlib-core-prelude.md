@@ -5427,6 +5427,8 @@ _Fields are private._
 
 #### `pub fn filled(n: i32, element: T) -> List<T>`
 
+A list of `n` copies of `element`.
+
 #### `pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T>`
 
 `#[compiler_item("list_from_tuple")]`
