@@ -1851,20 +1851,19 @@ fn resolve_effect_params(
         {
             continue;
         }
-        let actual = match sem
+        let Some(ResolvedType::Function {
+            effects: actual, ..
+        }) = sem
             .expression_type(arg.id())
             .map(|arg_type| type_table.get(arg_type))
-        {
-            Some(ResolvedType::Function { effects, .. }) => effects,
-            _ => {
-                unread.extend(
-                    formal
-                        .iter()
-                        .filter(|e| e.is_param())
-                        .map(|e| e.name().to_string()),
-                );
-                continue;
-            }
+        else {
+            unread.extend(
+                formal
+                    .iter()
+                    .filter(|e| e.is_param())
+                    .map(|e| e.name().to_string()),
+            );
+            continue;
         };
         for formal_effect in formal {
             if let EffectRef::Param { name } = formal_effect
