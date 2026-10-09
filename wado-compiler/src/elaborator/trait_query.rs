@@ -2593,12 +2593,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // is checked against `impl Mix<String>`, not whichever the trait's
             // impls agree on, which is nothing when they differ.
             let trait_args = self.bound_args_on(bound, trait_, type_arg, self_binding);
-            let registered = self.tysys.type_table.borrow().resolve_assoc_type_of_trait_at(
-                type_arg,
-                &trait_,
-                trait_args.as_deref(),
-                &constraint.name,
-            );
+            let registered = self
+                .tysys
+                .type_table
+                .borrow()
+                .resolve_assoc_type_of_trait_at(
+                    type_arg,
+                    &trait_,
+                    trait_args.as_deref(),
+                    &constraint.name,
+                );
             let Some(actual) = registered
                 .or_else(|| self.concrete_reflect_assoc_type(type_arg, trait_, &constraint.name))
             else {
@@ -2654,7 +2658,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let written: Vec<TypeId> = self.under_self_binding(self_binding, |e| {
-            bound.type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+            bound
+                .type_args
+                .iter()
+                .map(|ty| e.resolve_type(ty))
+                .collect()
         });
         self.trait_args_at(trait_, type_arg, &written)
     }

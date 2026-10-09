@@ -297,7 +297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `t` is a bare parameter or variable that is not one of the
     /// enclosing declaration's `scope_params`.
-    fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
+    pub(super) fn is_open_slot(&self, t: TypeId, scope_params: &[TypeId]) -> bool {
         self.tysys.is_unbound_type_param(t) && !scope_params.contains(&t)
     }
 

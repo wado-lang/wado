@@ -3523,17 +3523,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
-        // A parameter of the enclosing declaration is a type the call forwards,
-        // not a slot it leaves open.
         let scope_params = self.scope_type_param_ids();
-        let open = |this: &Self, ty: TypeId| {
-            this.tysys.is_unbound_type_param(ty) && !scope_params.contains(&ty)
-        };
         loop {
             let mut progressed = false;
             for (owner_idx, param) in params.iter().enumerate() {
                 let owner_ty = args[owner_idx];
-                if open(self, owner_ty) {
+                if self.is_open_slot(owner_ty, &scope_params) {
                     continue;
                 }
                 for bound in &param.bounds {
@@ -3545,7 +3540,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else {
                             continue;
                         };
-                        if !open(self, args[target_idx]) {
+                        if !self.is_open_slot(args[target_idx], &scope_params) {
                             continue;
                         }
                         let trait_ = self.tysys.resolutions.bound_decl(bound);
@@ -3582,8 +3577,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let trait_ = trait_.filter(|_| {
                                 scope_params.contains(&owner_ty) && !params[target_idx].is_pack
                             })?;
-                            let projection =
-                                self.tysys.type_table.borrow_mut().make_assoc_type_projection(
+                            let projection = self
+                                .tysys
+                                .type_table
+                                .borrow_mut()
+                                .make_assoc_type_projection(
                                     owner_ty,
                                     trait_,
                                     trait_args,
@@ -3622,7 +3620,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(None);
         };
         let written: Vec<TypeId> = self.with_type_params_bound(names, args, |e| {
-            bound.type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+            bound
+                .type_args
+                .iter()
+                .map(|ty| e.resolve_type(ty))
+                .collect()
         });
         if written
             .iter()
