@@ -205,7 +205,7 @@ pub fn build_component_plan(
             // here would reference a function that no longer exists.
             .filter(|test| test_selected(test.name.as_deref(), test_name_filters))
             .map(|test| {
-                let export_name = sanitize_kebab_export_name(&test.function_name);
+                let export_name = test_export_name(&test.function_name);
                 let core_func_name = export_binding_names
                     .get(&test.function_name)
                     .cloned()
@@ -450,34 +450,11 @@ fn resolve_cm_export_type(
     panic!("unsupported world export type shape: {ty:?}");
 }
 
-/// Convert a test function name (e.g., `$test_0_my_name`) to a valid kebab-case
-/// CM export name (e.g., `test-0-my-name`).
-///
-/// Test names may contain consecutive underscores when non-alphanumeric characters
-/// (like parentheses) in the original test string are each replaced with `_` by the
-/// elaborator. A naive `replace('_', '-')` would produce consecutive dashes which
-/// violate the kebab-case requirement of the Component Model.
-fn sanitize_kebab_export_name(function_name: &str) -> String {
-    let raw = function_name
-        .trim_start_matches(INTERNAL_PREFIX)
-        .replace('_', "-");
-    // Collapse consecutive dashes and strip trailing dashes
-    let mut prev_dash = false;
-    let collapsed: String = raw
-        .chars()
-        .filter(|&c| {
-            if c == '-' {
-                if prev_dash {
-                    return false;
-                }
-                prev_dash = true;
-            } else {
-                prev_dash = false;
-            }
-            true
-        })
-        .collect();
-    collapsed.trim_end_matches('-').to_string()
+/// The CM export name of a test function (`$test_0_my_name` as `test-0-my-name`).
+/// The elaborator spells each non-alphanumeric character of the test's string as
+/// `_`, so a name may hold `__` or end in `_`, which the CM name collapses.
+fn test_export_name(function_name: &str) -> String {
+    to_cm_name(function_name.trim_start_matches(INTERNAL_PREFIX))
 }
 
 #[cfg(test)]
@@ -486,48 +463,53 @@ mod tests {
     use crate::component_model::CmInterfaceRegistry;
     use std::assert_matches;
     #[test]
-    fn test_sanitize_kebab_export_name() {
+    fn test_export_names() {
         // Simple case
         assert_eq!(
-            sanitize_kebab_export_name("$test_0_simple"),
+            test_export_name("$test_0_simple"),
             "test-0-simple"
         );
         // Consecutive underscores from parentheses in test name
         assert_eq!(
-            sanitize_kebab_export_name("$test_23_compression_level_0__stored__round_trip"),
+            test_export_name("$test_23_compression_level_0__stored__round_trip"),
             "test-23-compression-level-0-stored-round-trip"
         );
         // Trailing underscores
         assert_eq!(
-            sanitize_kebab_export_name("$test_1_trailing__"),
+            test_export_name("$test_1_trailing__"),
             "test-1-trailing"
         );
         // Unnamed test (no name part)
-        assert_eq!(sanitize_kebab_export_name("$test_5"), "test-5");
+        assert_eq!(test_export_name("$test_5"), "test-5");
         // expect_trap tests
         assert_eq!(
-            sanitize_kebab_export_name("$test_trap_0_panics_on_zero"),
+            test_export_name("$test_trap_0_panics_on_zero"),
             "test-trap-0-panics-on-zero"
         );
-        assert_eq!(sanitize_kebab_export_name("$test_trap_3"), "test-trap-3");
+        assert_eq!(test_export_name("$test_trap_3"), "test-trap-3");
         // TODO tests
         assert_eq!(
-            sanitize_kebab_export_name("$test_todo_0_not_yet_implemented"),
+            test_export_name("$test_todo_0_not_yet_implemented"),
             "test-todo-0-not-yet-implemented"
         );
-        assert_eq!(sanitize_kebab_export_name("$test_todo_2"), "test-todo-2");
+        assert_eq!(test_export_name("$test_todo_2"), "test-todo-2");
         // timeout_ms tests
         assert_eq!(
-            sanitize_kebab_export_name("$test_tm2000_0_slow"),
+            test_export_name("$test_tm2000_0_slow"),
             "test-tm2000-0-slow"
         );
         assert_eq!(
-            sanitize_kebab_export_name("$test_trap_tm500_0_panics"),
+            test_export_name("$test_trap_tm500_0_panics"),
             "test-trap-tm500-0-panics"
         );
         assert_eq!(
-            sanitize_kebab_export_name("$test_todo_tm3000_1"),
+            test_export_name("$test_todo_tm3000_1"),
             "test-todo-tm3000-1"
+        );
+        // A capital in the test's string is lowercased, as a label requires
+        assert_eq!(
+            test_export_name("$test_4_parses_JSON_input"),
+            "test-4-parses-json-input"
         );
     }
 
