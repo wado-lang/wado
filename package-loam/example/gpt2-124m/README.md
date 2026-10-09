@@ -24,10 +24,13 @@ under the MIT License as its model card states. The files here are all derived
 from that commit, so the build needs no download, and `wado test` compiles the
 example:
 
-- `vocab.json` and `merges.txt` are the tokenizer files, as the repository ships
-  them (SHA-256
-  `196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783` and
-  `1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5`).
+- `tokenizer.json` is the tokenizer, as the repository ships it (SHA-256
+  `8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6`). Loam
+  generates `Tokenizer` from it.
+- `tokenize.json` is the oracle for the tokenizer: the ids Hugging Face's
+  tokenizer gives each of a set of texts. `tokenize.mjs` writes it with
+  `@huggingface/tokenizers` 0.2.0, reading `tokenizer.json` and the repository's
+  `tokenizer_config.json`.
 - `gpt2.onnxtext` is `onnx/decoder_model.onnx` (SHA-256
   `e3fc9615868ff8f5e0429b892a0f6ca692784ba6c4ca31c4e9ee8218e7cce34f`) with its
   weights left out, as `tools/onnx_split.wado` writes it.

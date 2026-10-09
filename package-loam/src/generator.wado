@@ -1,5 +1,6 @@
 //! Kiln generator entry for Loam. Reads an ONNX graph, discharges its extent
-//! conditions, and emits the axis types a checked graph earns.
+//! conditions, and emits the axis types a checked graph earns; or reads a
+//! `tokenizer.json` and emits its `Tokenizer`.
 
 use {
     Request,
@@ -16,6 +17,8 @@ use {
 use { TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
 use { emit } from "./emit.wado";
+use { emit_tokenizer } from "./emit_tokenizer.wado";
+use { read as read_tokenizer } from "./tokenizer_json.wado";
 use { Graph } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
@@ -120,21 +123,59 @@ fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnErro
 /// Enough for GPT-2's header in one read, which is 14 KiB.
 global HEADER_CHUNK: i32 = 65536;
 
+// A stream is outside drop elaboration, so every one is consumed or dropped
+// before the first return that could leave it open.
 export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
-    // A stream is outside drop elaboration, so every one is consumed or dropped
-    // before the first return that could leave it open.
-    if req.inputs.len() > 1 {
-        let reason = `loam: ${req.inputs.len()} inputs, and a checkpoint is one file`;
-        return refused(req, KilnError::InvalidSchema(reason));
-    }
     let Some(runtime) = package_of(&req.module) else {
         let reason = `loam: invoked by the path ${req.module}; name it by the package spec its runtime is a dependency under`;
         return refused(req, KilnError::Unsupported(reason));
     };
+    if req.primary.type matches { Some("hf-tokenizer") } {
+        return generate_tokenizer(req, &runtime);
+    }
     let Some(spelling) = spelling_of(&req.primary.type) else {
-        let reason = `loam: '${req.primary.path}' is given ${given(&req.primary.type)}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\``;
+        let reason = `loam: '${req.primary.path}' is given ${given(&req.primary.type)}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\`, and a tokenizer \`type: "hf-tokenizer"\``;
         return refused(req, KilnError::Unsupported(reason));
     };
+    return generate_graph(req, spelling, &runtime);
+}
+
+/// A `tokenizer.json` as a `Tokenizer`. It names every file it needs, so it
+/// takes no inputs.
+fn generate_tokenizer(req: Request<Options>, runtime: &String) -> Result<Response, KilnError> {
+    if !req.inputs.is_empty() {
+        let reason = `loam: '${req.primary.path}': a tokenizer takes no inputs`;
+        return refused(req, KilnError::InvalidSchema(reason));
+    }
+    let path = req.primary.path;
+    let text = match read_text(req.primary.content) {
+        Ok(text) => text,
+        Err(e) => {
+            return Result::Err(KilnError::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
+        },
+    };
+    let bpe = read_tokenizer(&text).map_err(|e| at(&path, &e))?;
+    let files: List<OutputFile> = [
+        OutputFile {
+            path: "tokenizer.wado",
+            content: emit_tokenizer(&bpe, &path, runtime),
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}
+
+/// An ONNX graph spelled as `spelling`, checked against the checkpoints in its
+/// inputs, as the module its `forward` runs in.
+fn generate_graph(
+    req: Request<Options>,
+    spelling: Spelling,
+    runtime: &String,
+) -> Result<Response, KilnError> with KilnHost {
+    if req.inputs.len() > 1 {
+        let reason = `loam: ${req.inputs.len()} inputs, and a checkpoint is one file`;
+        return refused(req, KilnError::InvalidSchema(reason));
+    }
     if let Some(input) = req.inputs.into_iter().find(|input| !input.type matches { Some("safetensors") }) {
         let reason = `loam: '${input.path}' is given ${given(&input.type)}; a checkpoint is \`type: "safetensors"\``;
         return refused(req, KilnError::Unsupported(reason));
@@ -153,7 +194,7 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
     let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
     // Emitting first refuses an element type no kernel holds, which the check
     // below takes as given.
-    let generated = emit(&graph, &checked, &runtime).map_err(|e| at(&path, &e))?;
+    let generated = emit(&graph, &checked, runtime).map_err(|e| at(&path, &e))?;
     for let [input_path, header] of headers {
         let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
         check_checkpoint(&graph, &checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;

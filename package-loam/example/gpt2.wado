@@ -12,7 +12,11 @@
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
 use { Cpu, Tensor } from "lib:loam";
-use { tiny } from "./gpt2_tokenizer.wado";
+use { Tokenizer } from "../tests/models/tiny-gpt2/tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
 use gpt2 from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
@@ -253,15 +257,14 @@ export fn run() with (Stdout, Stderr, Environment) {
     if prompt.is_empty() {
         prompt = "Hello, my name is";
     }
-    let tokenizer = tiny();
-    let ids = tokenizer.encode(&prompt);
+    let ids = Tokenizer::encode(&prompt);
     let weights = gpt2::Weights::embedded();
     let longest = longest_prompt(STEPS, &weights);
     if !(1 <= ids.len() <= longest) {
         eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${longest}`);
         return;
     }
-    println(tokenizer.decode(&greedy(&ids, STEPS, &weights)));
+    println(Tokenizer::decode(&greedy(&ids, STEPS, &weights)));
 }
 
 struct Generated {
@@ -277,16 +280,15 @@ struct Oracle {
 
 #[timeout_ms(30000)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
-    let tokenizer = tiny();
     let weights = gpt2::Weights::embedded();
     let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
     for let case of oracle.generate {
-        assert tokenizer.encode(&case.prompt) == case.ids;
+        assert Tokenizer::encode(&case.prompt) == case.ids;
         let mut want = case.ids;
         want.extend(&case.generated);
         let got = greedy(&case.ids, case.generated.len(), &weights);
         assert got == want;
-        assert tokenizer.decode(&got) == case.text;
+        assert Tokenizer::decode(&got) == case.text;
     }
 }
 

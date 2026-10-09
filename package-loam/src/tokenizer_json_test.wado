@@ -1,0 +1,102 @@
+use { ByteLevelBpe, read } from "./tokenizer_json.wado";
+
+global TINY: String = #include_str("../tests/models/tiny-gpt2/tokenizer.json");
+
+/// GPT-2's pipeline over a vocabulary of two bytes and one merge, with the
+/// stage `stage` replaced by `json`, a JSON value.
+fn pipeline(stage: String, json: String) -> String {
+    let mut stages = [
+        [
+            "added_tokens",
+            "[{\"id\": 2, \"content\": \"<|endoftext|>\", \"special\": true, \"single_word\": false, \"lstrip\": false, \"rstrip\": false, \"normalized\": false}]",
+        ],
+        ["normalizer", "null"],
+        [
+            "pre_tokenizer",
+            "{\"type\": \"ByteLevel\", \"add_prefix_space\": false, \"trim_offsets\": true, \"use_regex\": true}",
+        ],
+        ["post_processor", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true, \"trim_offsets\": false}"],
+        ["decoder", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true, \"trim_offsets\": true}"],
+        [
+            "model",
+            "{\"type\": \"BPE\", \"dropout\": null, \"unk_token\": null, \"continuing_subword_prefix\": \"\", \"end_of_word_suffix\": \"\", \"fuse_unk\": false, \"vocab\": {\"a\": 0, \"b\": 1, \"<|endoftext|>\": 2, \"ab\": 3}, \"merges\": [\"a b\"]}",
+        ],
+    ] as List<[String, String]>;
+    let mut fields: List<String> = [];
+    for let [key, value] of stages {
+        fields.push(`"${key}": ${if key == stage { json } else { value }}`);
+    }
+    return `{${fields.join(", ")}}`;
+}
+
+fn refusal(stage: String, json: String) -> String {
+    return match read(&pipeline(stage, json)) {
+        Ok(_) => "",
+        Err(e) => `${e}`,
+    };
+}
+
+test "GPT-2's pipeline reads as byte-level BPE" {
+    let Ok(ByteLevelBpe { tokens, merges, specials }) = read(&pipeline("", "")) else {
+        panic("the pipeline is GPT-2's");
+    };
+    assert tokens == ["a", "b", "<|endoftext|>", "ab"] as List<String>;
+    assert merges == ["a b"] as List<String>;
+    assert specials == ["<|endoftext|>"] as List<String>;
+}
+
+test "the tiny GPT-2's tokenizer.json reads whole" {
+    let Ok(bpe) = read(&TINY) else {
+        panic("the tiny GPT-2 is GPT-2's pipeline");
+    };
+    assert bpe.tokens.len() == 1024;
+    assert bpe.tokens[0] == "<|endoftext|>";
+    assert bpe.merges.len() == 767;
+    assert bpe.merges[0] == "Ġ t";
+    assert bpe.specials == ["<|endoftext|>"] as List<String>;
+}
+
+test "a model with no type is BPE, as the older files write it" {
+    let model = "{\"vocab\": {\"a\": 0, \"b\": 1, \"<|endoftext|>\": 2, \"ab\": 3}, \"merges\": [\"a b\"]}";
+    assert refusal("model", model) == "";
+}
+
+test "a stage Loam does not generate names itself" {
+    assert refusal("normalizer", "{\"type\": \"NFKC\"}") == "normalizer: NFKC is not supported";
+    assert refusal("pre_tokenizer", "{\"type\": \"Metaspace\"}") == "pre_tokenizer: Metaspace is not supported";
+    assert refusal("decoder", "{\"type\": \"WordPiece\"}") == "decoder: WordPiece is not supported";
+    assert refusal("model", "{\"type\": \"Unigram\"}") == "model: Unigram is not supported";
+    assert refusal("post_processor", "{\"type\": \"TemplateProcessing\"}") == "post_processor: TemplateProcessing is not supported";
+}
+
+test "a setting that changes the ids Loam computes names itself" {
+    assert refusal("pre_tokenizer", "{\"type\": \"ByteLevel\", \"add_prefix_space\": true}") == "pre_tokenizer: add_prefix_space true is not supported";
+    assert refusal("pre_tokenizer", "{\"type\": \"ByteLevel\", \"use_regex\": false}") == "pre_tokenizer: use_regex false is not supported";
+    assert refusal("model", "{\"type\": \"BPE\", \"dropout\": 0.1, \"vocab\": {}, \"merges\": []}") == "model: dropout 0.1 is not supported";
+    assert refusal("model", "{\"type\": \"BPE\", \"ignore_merges\": true, \"vocab\": {}, \"merges\": []}") == "model: ignore_merges true is not supported";
+}
+
+test "an added token that strips or matches a word names itself" {
+    let stripped = "[{\"id\": 2, \"content\": \"<|endoftext|>\", \"lstrip\": true}]";
+    assert refusal("added_tokens", stripped) == "added_tokens: <|endoftext|>: lstrip true is not supported";
+}
+
+test "an added token the vocabulary gives another id is malformed" {
+    let moved = "[{\"id\": 3, \"content\": \"<|endoftext|>\"}]";
+    assert refusal("added_tokens", moved) == "added_tokens: <|endoftext|> is id 3, and the vocabulary gives it 2";
+}
+
+test "merges as pairs read as the strings the older files write" {
+    let model = "{\"type\": \"BPE\", \"vocab\": {\"a\": 0, \"b\": 1, \"<|endoftext|>\": 2, \"ab\": 3}, \"merges\": [[\"a\", \"b\"]]}";
+    let Ok(bpe) = read(&pipeline("model", model)) else {
+        panic("a pair is a merge");
+    };
+    assert bpe.merges == ["a b"] as List<String>;
+}
+
+test "text that is not JSON is malformed" {
+    assert (match read(&"{") {
+        Ok(_) => "",
+        Err(e) => `${e}`,
+    }).starts_with("not JSON: ");
+}

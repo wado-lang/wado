@@ -1,0 +1,23 @@
+//! GPT-2's own tokenizer through Loam: each text encodes to the ids Hugging
+//! Face's tokenizer gives it, recorded in `tokenize.json`, and decodes back.
+
+use { from_string } from "core:json";
+use { Tokenizer } from "./model.wado";
+
+struct Tokenized {
+    text: String,
+    ids: List<i32>,
+}
+
+struct Oracle {
+    tokenize: List<Tokenized>,
+}
+
+test "each text encodes to the ids Hugging Face's tokenizer gives it, and back" {
+    let oracle = from_string::<Oracle>(#include_str("./tokenize.json")).unwrap();
+    for let case of oracle.tokenize {
+        let ids = Tokenizer::encode(&case.text);
+        assert ids == case.ids, case.text;
+        assert Tokenizer::decode(&ids) == case.text;
+    }
+}

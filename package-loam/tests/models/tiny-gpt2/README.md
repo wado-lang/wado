@@ -8,10 +8,9 @@ on Hugging Face, licensed under the MIT License as its model card states.
 `cf43c29cd9a49e0dd88e5c45a921d9a70b87d5a8e6e4099880ebce8d96b887d2`), renamed to
 the layout ONNX's backend test data uses.
 
-`vocab.json` and `merges.txt` are the tokenizer files from that commit, as the
-repository ships them (SHA-256
-`2c2bb27afe24f304c7883ed6529abd4f092e53882701eaa22d444c90f0f5a784` and
-`06e116ab37805f782ce4493bf28984f565d2c9019d14a1b932d0a67f97d85147`).
+`tokenizer.json` is the tokenizer from that commit, as the repository ships it
+(SHA-256 `cb95c4e326977f750eb327eec3e4fd65639f5990fd58e6b067bd49beeabbd6e0`).
+Loam generates `Tokenizer` from it.
 
 `model.onnxtext` and `model.safetensors` are `model.onnx` split by Loam's own
 tool, the graph with its weights left out and the checkpoint holding them:
@@ -26,7 +25,7 @@ model computes from them. The first holds four tokens and the second seven, so
 one generated module is checked at two sequence lengths.
 
 `generate.json` is the oracle for text. `generate.mjs` writes it with
-onnxruntime-node 1.30.0 and `@huggingface/tokenizers` 0.2.0, reading the
-repository's `tokenizer.json` and `tokenizer_config.json`. It records the ids
+onnxruntime-node 1.30.0 and `@huggingface/tokenizers` 0.2.0, reading
+`tokenizer.json` and the repository's `tokenizer_config.json`. It records the ids
 the tokenizer gives each of a set of texts, and the tokens onnxruntime picks
 greedily after each of a set of prompts.

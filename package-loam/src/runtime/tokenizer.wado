@@ -1,11 +1,13 @@
-//! GPT-2's byte-level BPE tokenizer, built from the `vocab.json` and
-//! `merges.txt` a GPT-2 checkpoint ships (Radford et al. 2019, § 2.2).
+//! GPT-2's byte-level BPE (Radford et al. 2019, § 2.2): text split by its
+//! pattern, each piece spelled as bytes and merged pair by pair, the ids decoded
+//! back through the same byte spelling. A generated tokenizer builds one from
+//! the vocabulary and merges its `tokenizer.json` names.
 
 use { TreeMap } from "core:collections";
 use icu from "core:icu";
-use { from_string } from "core:json";
 
-pub struct Tokenizer {
+/// A byte-level BPE tokenizer.
+pub struct BpeTokenizer {
     ids: TreeMap<String, i32>,
     tokens: List<String>,
     /// Each merge, written `"left right"`, by priority: the lowest merges first.
@@ -23,24 +25,20 @@ enum Class {
     Other,
 }
 
-impl Tokenizer {
-    /// `specials` are tokens matched in the text as they stand, before it is split.
-    pub fn new(vocab: &String, merges: &String, specials: List<String>) -> Tokenizer {
-        let ids = from_string::<TreeMap<String, i32>>(vocab).expect("vocab.json maps each token to its id");
-        let mut tokens = List::<String>::filled(ids.len(), "");
-        for let [token, id] of ids.entries() {
-            assert 0 <= *id < tokens.len();
-            tokens[*id] = *token;
+impl BpeTokenizer {
+    /// `tokens` holds one token per line, its id the line's index, and `merges`
+    /// one merge per line, `"left right"` by rank. `specials` are matched in the
+    /// text as they stand, before it is split.
+    pub fn new(tokens: &ByteList, merges: &ByteList, specials: List<String>) -> BpeTokenizer {
+        let tokens = lines_of(tokens);
+        let mut ids = TreeMap::<String, i32>::new();
+        for let [id, token] of tokens.into_iter().enumerate() {
+            ids[token] = id;
         }
-
         let mut ranks = TreeMap::<String, i32>::new();
-        for let line of merges.lines() {
-            if !line.is_empty() && !line.starts_with("#version") {
-                let rank = ranks.len();
-                ranks[line.to_string()] = rank;
-            }
+        for let [rank, merge] of lines_of(merges).into_iter().enumerate() {
+            ranks[merge] = rank;
         }
-
         let byte_chars = byte_chars();
         let mut char_bytes: List<u8> = [];
         for let [b, c] of byte_chars.into_iter().enumerate() {
@@ -49,17 +47,10 @@ impl Tokenizer {
             }
             char_bytes[c as i32] = b as u8;
         }
-
-        return Tokenizer {
-            ids,
-            tokens,
-            ranks,
-            specials,
-            byte_chars,
-            char_bytes,
-        };
+        return BpeTokenizer { ids, tokens, ranks, specials, byte_chars, char_bytes };
     }
 
+    /// The ids `text` encodes to.
     pub fn encode(&self, text: &String) -> List<i32> {
         let mut out: List<i32> = [];
         let mut rest = text.as_str_slice();
@@ -74,6 +65,8 @@ impl Tokenizer {
         }
     }
 
+    /// The text `ids` decode to. A byte sequence that is not UTF-8 decodes with
+    /// U+FFFD in its place, as a token boundary can split a character.
     pub fn decode(&self, ids: &List<i32>) -> String {
         let mut bytes: List<u8> = [];
         for let id of *ids {
@@ -122,29 +115,16 @@ impl Tokenizer {
                 }
             }
         }
-        let spaced = chars[at] == ' ' && at + 1 < n && !self.class_of(chars[at + 1]) matches { Space };
+        let spaced = chars[at] == ' ' && at + 1 < n && !class_of(chars[at + 1]) matches { Space };
         let lead = if spaced { at + 1 } else { at };
-        let class = self.class_of(chars[lead]);
+        let class = class_of(chars[lead]);
         let mut end = lead + 1;
-        while end < n && self.class_of(chars[end]) == class {
+        while end < n && class_of(chars[end]) == class {
             end += 1;
         }
         // A space run before a word leaves its last space to the word.
         let leaves_one = class matches { Space } && end < n && end - at > 1;
         return if leaves_one { end - 1 } else { end };
-    }
-
-    fn class_of(&self, c: char) -> Class {
-        if c.is_whitespace() {
-            return Class::Space;
-        }
-        if icu::value_contains("gc", "L", c).unwrap() {
-            return Class::Letter;
-        }
-        if icu::value_contains("gc", "N", c).unwrap() {
-            return Class::Number;
-        }
-        return Class::Other;
     }
 
     /// Spells `piece` byte by byte, merges the adjacent pair of highest priority
@@ -191,6 +171,30 @@ impl Tokenizer {
     }
 }
 
+fn class_of(c: char) -> Class {
+    if c.is_whitespace() {
+        return Class::Space;
+    }
+    if icu::value_contains("gc", "L", c).unwrap() {
+        return Class::Letter;
+    }
+    if icu::value_contains("gc", "N", c).unwrap() {
+        return Class::Number;
+    }
+    return Class::Other;
+}
+
+/// The lines of `bytes`, UTF-8 that its writer wrote one entry to a line.
+fn lines_of(bytes: &ByteList) -> List<String> {
+    let Ok(text) = String::from_utf8(*bytes) else {
+        unreachable();
+    };
+    if text.is_empty() {
+        return [];
+    }
+    return text.split("\n").map(|line| line.to_string()).collect();
+}
+
 /// The printable character each byte is spelled as, so that a token is text:
 /// a printable byte is itself, and the rest are shifted past 255 in order.
 fn byte_chars() -> List<char> {
@@ -217,38 +221,4 @@ fn spells(chars: &List<char>, at: i32, text: &String) -> bool {
         i += 1;
     }
     return true;
-}
-
-struct Tokenized {
-    text: String,
-    ids: List<i32>,
-}
-
-struct Oracle {
-    tokenize: List<Tokenized>,
-}
-
-/// The tokenizer of the tiny GPT-2 under `tests/models/`.
-pub fn tiny() -> Tokenizer {
-    return Tokenizer::new(
-        &#include_str("../tests/models/tiny-gpt2/vocab.json"),
-        &#include_str("../tests/models/tiny-gpt2/merges.txt"),
-        ["<|endoftext|>"],
-    );
-}
-
-test "each text encodes to the ids Hugging Face's tokenizer gives it, and back" {
-    let tokenizer = tiny();
-    let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
-    for let case of oracle.tokenize {
-        let ids = tokenizer.encode(&case.text);
-        assert ids == case.ids, case.text;
-        assert tokenizer.decode(&ids) == case.text;
-    }
-}
-
-test "an empty text is no tokens" {
-    let tokenizer = tiny();
-    assert tokenizer.encode(&"").is_empty();
-    assert tokenizer.decode(&[]) == "";
 }

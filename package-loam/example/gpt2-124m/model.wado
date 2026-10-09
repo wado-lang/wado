@@ -2,7 +2,12 @@
 //! token greedily.
 
 use { Cpu, LoadError, Tensor } from "lib:loam";
-pub use { Tokenizer } from "../gpt2_tokenizer.wado";
+/// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
+pub use { Tokenizer } from "./tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        generator: { module: "lib:loam" },
+    };
 use gpt2 from "./gpt2.onnxtext"
     with {
         type: "onnxtext",
@@ -138,11 +143,6 @@ use gpt2 from "./gpt2.onnxtext"
             },
         },
     };
-
-/// GPT-2's byte-pair tokenizer, with `<|endoftext|>` as its one special token.
-pub fn gpt2_tokenizer() -> Tokenizer {
-    return Tokenizer::new(&#include_str("./vocab.json"), &#include_str("./merges.txt"), ["<|endoftext|>"]);
-}
 
 /// GPT-2 with its weights loaded.
 pub struct Model {
