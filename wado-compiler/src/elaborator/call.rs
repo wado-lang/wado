@@ -212,6 +212,15 @@ pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<De
     }
 }
 
+/// The trait arguments a bound writes, as one call reads them.
+enum BoundArgsAtCall {
+    /// One waits on a slot the call has not answered.
+    Waiting,
+    /// The arguments, defaults filled; `None` where the bound writes none or
+    /// one names no type.
+    Read(Option<Vec<TypeId>>),
+}
+
 /// What a site settled one type parameter to. A pack carries no type here:
 /// `[..T::default()]` means the elements, and no callee spells `[i32]::default`.
 #[derive(Debug, Clone)]
@@ -3556,7 +3565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     let trait_ = self.tysys.resolutions.bound_decl(bound);
-                    let Some(trait_args) =
+                    let BoundArgsAtCall::Read(trait_args) =
                         self.bound_args_at_call(bound, trait_, owner_ty, &names, args)
                     else {
                         continue;
@@ -3645,8 +3654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The arguments `bound` reaches `trait_` on `owner` at, read at the call's
-    /// `args` for the callee's `names`: `Some(None)` where it writes none, and
-    /// `None` while one waits on a slot the call has not answered.
+    /// `args` for the callee's `names`.
     fn bound_args_at_call(
         &mut self,
         bound: &ast::TraitBound,
@@ -3654,18 +3662,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: TypeId,
         names: &[String],
         args: &[TypeId],
-    ) -> Option<Option<Vec<TypeId>>> {
+    ) -> BoundArgsAtCall {
         let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
-            return Some(None);
+            return BoundArgsAtCall::Read(None);
         };
         let written = self.with_type_params_bound(names, args, |e| e.written_bound_args(bound));
         if written
             .iter()
             .any(|&ty| self.tysys.type_table.borrow().contains_undecided(ty))
         {
-            return None;
+            return BoundArgsAtCall::Waiting;
         }
-        Some(self.trait_args_at(trait_, owner, &written))
+        BoundArgsAtCall::Read(self.trait_args_at(trait_, owner, &written))
     }
 
     /// Fit flat turbofish type args to `declared`, grouping them into one
