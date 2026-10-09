@@ -1603,8 +1603,8 @@ pub fn parse_interp<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> Pars
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_interp(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[37], [128], [1]];
-global CALL_FOLLOW: List<i32> = [0, 1, 2];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[1], [128]];
+global CALL_FOLLOW: List<i32> = [0, 1, 0];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false];
 
 global TOKEN_NAMES: List<String> = ["'`'", "WORD", "'{'", "'}'", "WS", "INTERP_OPEN", "STR_END", "Eof", "Error"];
@@ -1631,6 +1631,6 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [8];
-global SYNC_1: List<i32> = [37];
+global SYNC_1: List<i32> = [32];
 global SYNC_2: List<i32> = [2];
 

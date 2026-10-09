@@ -1688,7 +1688,7 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1732,7 +1732,7 @@ fn _parse_pair(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_op__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         p.take();
@@ -1741,7 +1741,7 @@ fn _parse_op__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of op matches",
         p.peek_span(),
-        &EXPECTED_3,
+        &EXPECTED_2,
     );
     return;
 }
@@ -1824,8 +1824,8 @@ pub fn parse_item<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseR
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_item(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[36], [4], [241]];
-global CALL_FOLLOW: List<i32> = [0, 0, 1, 2, 2, 2, 2];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[36], [4], [96], [1], [224]];
+global CALL_FOLLOW: List<i32> = [0, 0, 1, 2, 3, 4, 2];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, true, false, true, true];
 
 global TOKEN_NAMES: List<String> = ["ID", "WS", "Eof", "Error", "'F'", "','", "'J'", "'T'"];
@@ -1855,13 +1855,12 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [241];
-global EXPECTED_0: List<i32> = [TK_ID, TK_LIT_COMMA, TK_LIT_F, TK_LIT_J, TK_LIT_T];
+global SYNC_0: List<i32> = [1];
+global EXPECTED_0: List<i32> = [TK_ID];
 global SYNC_1: List<i32> = [36];
 global EXPECTED_1: List<i32> = [TK_EOF, TK_LIT_COMMA];
-global EXPECTED_2: List<i32> = [TK_ID];
-global SYNC_3: List<i32> = [96];
-global EXPECTED_3: List<i32> = [TK_LIT_COMMA, TK_LIT_J];
+global SYNC_2: List<i32> = [96];
+global EXPECTED_2: List<i32> = [TK_LIT_COMMA, TK_LIT_J];
 
 global FOLLOW_SETS: List<List<i32>> = [[4], [96], [1]];
 global FOLLOW_MASK_1: i64 = 1;

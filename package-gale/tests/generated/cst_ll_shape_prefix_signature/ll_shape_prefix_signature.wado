@@ -1687,7 +1687,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
         if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_1, &EXPECTED_1); }
         if p.peek_kind() == TK_LIT_EQ {
             p.take();
-            if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_7, &EXPECTED_7); }
+            if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
             let mut opt_enter: bool = false;
             if p.peek_kind() == TK_LIT_AT {
                 opt_enter_scan: {
@@ -1703,7 +1703,7 @@ fn _parse_stmt__inner(p: &mut Parser) -> () {
                 }
             }
             if opt_enter {
-                p.expect(TK_LIT_AT, &SYNC_7, false);
+                p.expect(TK_LIT_AT, &SYNC_2, false);
             }
             p.expect(TK_LIT_AT, &SYNC_3, false);
             p.expect(TK_LIT_HASH, &SYNC_4, false);
@@ -1731,7 +1731,7 @@ fn _parse_stmt(p: &mut Parser) -> () {
 }
 
 fn _parse_m__inner(p: &mut Parser) -> () {
-    p.expect(TK_LIT_AT, &SYNC_8, false);
+    p.expect(TK_LIT_AT, &SYNC_7, false);
     p.expect(TK_LIT_BANG, &EMPTY_SYNC, true);
     return;
 }
@@ -1808,14 +1808,12 @@ global SYNC_0: List<i32> = [3600];
 global EXPECTED_0: List<i32> = [TK_LIT_let, TK_LIT_put, TK_LIT_tok, TK_LIT_var];
 global SYNC_1: List<i32> = [288];
 global EXPECTED_1: List<i32> = [TK_LIT_EQ, TK_LIT_SEMI];
-global SYNC_2: List<i32> = [3664];
-global EXPECTED_2: List<i32> = [TK_LIT_AT, TK_LIT_let, TK_LIT_put, TK_LIT_tok, TK_LIT_var];
+global SYNC_2: List<i32> = [64];
+global EXPECTED_2: List<i32> = [TK_LIT_AT];
 global SYNC_3: List<i32> = [128];
 global SYNC_4: List<i32> = [256];
-global SYNC_5: List<i32> = [3920];
-global EXPECTED_5: List<i32> = [TK_LIT_AT, TK_LIT_SEMI, TK_LIT_let, TK_LIT_put, TK_LIT_tok, TK_LIT_var];
+global SYNC_5: List<i32> = [320];
+global EXPECTED_5: List<i32> = [TK_LIT_AT, TK_LIT_SEMI];
 global SYNC_6: List<i32> = [32];
-global SYNC_7: List<i32> = [64];
-global EXPECTED_7: List<i32> = [TK_LIT_AT];
-global SYNC_8: List<i32> = [4096];
+global SYNC_7: List<i32> = [4096];
 

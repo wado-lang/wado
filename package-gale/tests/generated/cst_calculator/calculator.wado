@@ -1966,7 +1966,7 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of signedAtom matches",
         p.peek_span(),
-        &EXPECTED_1,
+        &EXPECTED_0,
     );
     return;
 }
@@ -1983,7 +1983,7 @@ fn _parse_signed_atom(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_0, &EXPECTED_0); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_SCIENTIFIC_NUMBER {
         p.site = 13;
@@ -2007,7 +2007,7 @@ fn _parse_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of atom matches",
         p.peek_span(),
-        &EXPECTED_2,
+        &EXPECTED_1,
     );
     return;
 }
@@ -2035,7 +2035,7 @@ fn _parse_scientific(p: &mut Parser) -> () {
 }
 
 fn _parse_constant__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if _kind_set_4(kind) {
         p.take();
@@ -2044,7 +2044,7 @@ fn _parse_constant__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of constant matches",
         p.peek_span(),
-        &EXPECTED_3,
+        &EXPECTED_2,
     );
     return;
 }
@@ -2077,12 +2077,12 @@ fn _parse_func___inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_LPAREN, &SYNC_0, false);
     p.site = 18;
     _parse_expression(p, follow_or(FOLLOW_MASK_8, 16, follow_then(FOLLOW_MASK_6, 8, follow)));
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
     while !p.recovering && p.peek_kind() == TK_COMMA {
         p.take();
         p.site = 19;
         _parse_expression(p, follow_then_opening(FOLLOW_MASK_8, 16, follow));
-        if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_4, &EXPECTED_4); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_3, &EXPECTED_3); }
     }
     p.expect(TK_RPAREN, &EMPTY_SYNC, true);
     return;
@@ -2100,7 +2100,7 @@ fn _parse_func_(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_funcname__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
+    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if _kind_set_2(kind) {
         p.take();
@@ -2109,7 +2109,7 @@ fn _parse_funcname__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of funcname matches",
         p.peek_span(),
-        &EXPECTED_5,
+        &EXPECTED_4,
     );
     return;
 }
@@ -2126,7 +2126,7 @@ fn _parse_funcname(p: &mut Parser) -> () {
 }
 
 fn _parse_relop__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_6, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_6, &EXPECTED_6); }
+    if !kind_set_has(&SYNC_5, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_5, &EXPECTED_5); }
     let kind = p.peek_kind();
     if _kind_set_5(kind) {
         p.take();
@@ -2135,7 +2135,7 @@ fn _parse_relop__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of relop matches",
         p.peek_span(),
-        &EXPECTED_6,
+        &EXPECTED_5,
     );
     return;
 }
@@ -2217,8 +2217,8 @@ pub fn parse_relop<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> Parse
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_relop(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[65248255], [134217728], [6144], [24576], [1048576], [], [1024], [512], [263168]];
-global CALL_FOLLOW: List<i32> = [0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 8];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[229376], [65018879], [134217728], [6144], [24576], [1048576], [], [1024], [512], [263168]];
+global CALL_FOLLOW: List<i32> = [0, 1, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 8, 9, 9];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false];
 
 global TOKEN_NAMES: List<String> = ["'cos'", "'sin'", "'tan'", "'acos'", "'asin'", "'atan'", "'ln'", "'log'", "'sqrt'", "'('", "')'", "'+'", "'-'", "'*'", "'/'", "'>'", "'<'", "'='", "','", "'.'", "'^'", "'pi'", "EULER", "'i'", "VARIABLE", "SCIENTIFIC_NUMBER", "WS", "Eof", "Error"];
@@ -2268,18 +2268,18 @@ fn _kind_set_5(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [65248255];
-global EXPECTED_0: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EQ, TK_EULER, TK_GT, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_LT, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE];
-global EXPECTED_1: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE];
-global EXPECTED_2: List<i32> = [TK_EULER, TK_I, TK_LPAREN, TK_PI, TK_SCIENTIFIC_NUMBER, TK_VARIABLE];
-global SYNC_3: List<i32> = [14680064];
-global EXPECTED_3: List<i32> = [TK_EULER, TK_I, TK_PI];
-global SYNC_4: List<i32> = [263168];
-global EXPECTED_4: List<i32> = [TK_COMMA, TK_RPAREN];
-global SYNC_5: List<i32> = [511];
-global EXPECTED_5: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG, TK_SIN, TK_SQRT, TK_TAN];
-global SYNC_6: List<i32> = [229376];
-global EXPECTED_6: List<i32> = [TK_EQ, TK_GT, TK_LT];
+global SYNC_0: List<i32> = [65018879];
+global EXPECTED_0: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_EULER, TK_I, TK_LN, TK_LOG, TK_LPAREN, TK_MINUS, TK_PI, TK_PLUS, TK_SCIENTIFIC_NUMBER, TK_SIN, TK_SQRT, TK_TAN, TK_VARIABLE];
+global SYNC_1: List<i32> = [65012224];
+global EXPECTED_1: List<i32> = [TK_EULER, TK_I, TK_LPAREN, TK_PI, TK_SCIENTIFIC_NUMBER, TK_VARIABLE];
+global SYNC_2: List<i32> = [14680064];
+global EXPECTED_2: List<i32> = [TK_EULER, TK_I, TK_PI];
+global SYNC_3: List<i32> = [263168];
+global EXPECTED_3: List<i32> = [TK_COMMA, TK_RPAREN];
+global SYNC_4: List<i32> = [511];
+global EXPECTED_4: List<i32> = [TK_ACOS, TK_ASIN, TK_ATAN, TK_COS, TK_LN, TK_LOG, TK_SIN, TK_SQRT, TK_TAN];
+global SYNC_5: List<i32> = [229376];
+global EXPECTED_5: List<i32> = [TK_EQ, TK_GT, TK_LT];
 
 global FOLLOW_SETS: List<List<i32>> = [[229376], [134217728], [6144], [65018879], [24576], [1048576], [1024], [262144]];
 global FOLLOW_MASK_0: i64 = 1;

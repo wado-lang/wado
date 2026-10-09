@@ -1756,7 +1756,7 @@ fn scan_stat__alt_1(tokens: &Array<i32>, pos: i32, memo: &mut ScanMemo<()>) -> i
 }
 
 fn _parse_stat__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if _kind_set_0(kind) {
         if kind == TK_ID {
@@ -1790,7 +1790,7 @@ fn _parse_stat__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of stat matches",
         p.peek_span(),
-        &EXPECTED_1,
+        &EXPECTED_2,
     );
     return;
 }
@@ -1807,7 +1807,7 @@ fn _parse_stat(p: &mut Parser) -> () {
 }
 
 fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
-    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
+    if !kind_set_has(&SYNC_1, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_1, &EXPECTED_1); }
     let kind = p.peek_kind();
     if kind == TK_INT {
         p.b.set_alt(2);
@@ -1828,7 +1828,7 @@ fn _parse_expr__inner_atom(p: &mut Parser, min_prec: i32 = 0) -> () {
     p.no_viable(
         "no alternative of expr matches",
         p.peek_span(),
-        &EXPECTED_2,
+        &EXPECTED_1,
     );
     return;
 }
@@ -1964,9 +1964,9 @@ fn _kind_set_4(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [1024];
-global SYNC_1: List<i32> = [2160];
-global EXPECTED_1: List<i32> = [TK_ID, TK_INT, TK_LIT_LPAREN, TK_NEWLINE];
-global SYNC_2: List<i32> = [2096];
-global EXPECTED_2: List<i32> = [TK_ID, TK_INT, TK_LIT_LPAREN];
+global SYNC_1: List<i32> = [2096];
+global EXPECTED_1: List<i32> = [TK_ID, TK_INT, TK_LIT_LPAREN];
+global SYNC_2: List<i32> = [2160];
+global EXPECTED_2: List<i32> = [TK_ID, TK_INT, TK_LIT_LPAREN, TK_NEWLINE];
 global SYNC_3: List<i32> = [15];
 

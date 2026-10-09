@@ -1625,7 +1625,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         p.take();
                         p.expect(TK_LIT_GT, &SYNC_2, false);
                     }
-                    p.expect(TK_LIT_EQ, &SYNC_3, false);
+                    p.expect(TK_LIT_EQ, &SYNC_0, false);
                     p.site = 1;
                     _parse_e(p, 3);
                     p.b.finish_node(p.last_end());
@@ -1656,7 +1656,7 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                             p.take();
                             p.expect(TK_LIT_GT, &SYNC_2, false);
                         }
-                        p.expect(TK_LIT_EQ, &SYNC_3, false);
+                        p.expect(TK_LIT_EQ, &SYNC_0, false);
                         p.site = 1;
                         _parse_e(p, 3);
                         p.b.finish_node(p.last_end());
@@ -1696,7 +1696,7 @@ fn _parse_e(p: &mut Parser, min_prec: i32 = 0) -> () {
 }
 
 fn _parse_cmp__inner(p: &mut Parser) -> () {
-    if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
+    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if _kind_set_1(kind) {
         p.take();
@@ -1705,7 +1705,7 @@ fn _parse_cmp__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of cmp matches",
         p.peek_span(),
-        &EXPECTED_4,
+        &EXPECTED_3,
     );
     return;
 }
@@ -1747,7 +1747,7 @@ pub fn parse_cmp<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseRe
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_cmp(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[], [113], [81]];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[], [112], [1]];
 global CALL_FOLLOW: List<i32> = [0, 1, 0, 2, 1];
 global CALL_FOLLOW_ENDS: List<bool> = [false, true, false, false, true];
 
@@ -1782,11 +1782,11 @@ fn _kind_set_1(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
+global SYNC_0: List<i32> = [1];
 global EXPECTED_0: List<i32> = [TK_INT];
 global SYNC_1: List<i32> = [48];
 global EXPECTED_1: List<i32> = [TK_LIT_EQ, TK_LIT_GT];
 global SYNC_2: List<i32> = [32];
-global SYNC_3: List<i32> = [81];
-global SYNC_4: List<i32> = [80];
-global EXPECTED_4: List<i32> = [TK_LIT_GT, TK_LIT_LT];
+global SYNC_3: List<i32> = [80];
+global EXPECTED_3: List<i32> = [TK_LIT_GT, TK_LIT_LT];
 

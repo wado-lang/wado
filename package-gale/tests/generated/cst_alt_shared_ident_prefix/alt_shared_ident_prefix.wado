@@ -2077,7 +2077,7 @@ fn _parse_pattern__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of pattern matches",
         p.peek_span(),
-        &EXPECTED_8,
+        &EXPECTED_4,
     );
     return;
 }
@@ -2094,11 +2094,11 @@ fn _parse_pattern(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_IDENT, &SYNC_9, true);
+    p.expect(TK_IDENT, &SYNC_8, true);
     while !p.recovering && p.peek_kind() == TK_LIT_COLONCOLON {
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
         p.take();
-        p.expect(TK_IDENT, &SYNC_9, true);
+        p.expect(TK_IDENT, &SYNC_8, true);
     }
     return;
 }
@@ -2189,20 +2189,19 @@ fn _kind_set_1(k: i32) -> bool {
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [1];
 global SYNC_1: List<i32> = [32];
-global SYNC_2: List<i32> = [3729];
-global EXPECTED_2: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_RBRACE, TK_LIT_U5f, TK_LIT_match, TK_LIT_mut];
+global SYNC_2: List<i32> = [3713];
+global EXPECTED_2: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_RBRACE, TK_LIT_U5f, TK_LIT_mut];
 global SYNC_3: List<i32> = [192];
 global EXPECTED_3: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACE];
-global SYNC_4: List<i32> = [3601];
-global EXPECTED_4: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_U5f, TK_LIT_match, TK_LIT_mut];
+global SYNC_4: List<i32> = [3585];
+global EXPECTED_4: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_U5f, TK_LIT_mut];
 global SYNC_5: List<i32> = [1025];
 global EXPECTED_5: List<i32> = [TK_IDENT, TK_LIT_mut];
-global SYNC_6: List<i32> = [7697];
-global EXPECTED_6: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_RPAREN, TK_LIT_U5f, TK_LIT_match, TK_LIT_mut];
+global SYNC_6: List<i32> = [7681];
+global EXPECTED_6: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_RPAREN, TK_LIT_U5f, TK_LIT_mut];
 global SYNC_7: List<i32> = [4160];
 global EXPECTED_7: List<i32> = [TK_LIT_COMMA, TK_LIT_RPAREN];
-global EXPECTED_8: List<i32> = [TK_IDENT, TK_LIT_LPAREN, TK_LIT_U5f, TK_LIT_mut];
-global SYNC_9: List<i32> = [8192];
+global SYNC_8: List<i32> = [8192];
 
 global FOLLOW_SETS: List<List<i32>> = [[4], [64], [3585], [256], [1], [2048], [4096]];
 global FOLLOW_MASK_0: i64 = 1;

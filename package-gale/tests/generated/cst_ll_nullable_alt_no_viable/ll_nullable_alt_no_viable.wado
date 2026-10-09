@@ -1647,7 +1647,7 @@ fn _parse_start__inner(p: &mut Parser) -> () {
         p.site = 1;
         _parse_any(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
     p.expect(TK_EOF, &EMPTY_SYNC, true);
     return;
@@ -1665,9 +1665,9 @@ fn _parse_start(p: &mut Parser) -> () {
 }
 
 fn _parse_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_ID, &SYNC_2, false);
-    p.expect(TK_LBRACE, &SYNC_3, false);
-    if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
+    p.expect(TK_ID, &SYNC_1, false);
+    p.expect(TK_LBRACE, &SYNC_2, false);
+    if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
     if p.peek_kind() == TK_ID {
         p.site = 2;
         _parse_fields(p, follow_then(FOLLOW_MASK_0, 8, follow));
@@ -1745,7 +1745,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
             }
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_COMMA, &SYNC_0, false);
+        p.expect(TK_COMMA, &SYNC_3, false);
         p.site = 4;
         _parse_field(p);
     }
@@ -1781,7 +1781,7 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
             gd_winner = 1;
         }
         if gd_winner == 0 {
-            p.expect(TK_COMMA, &SYNC_0, false);
+            p.expect(TK_COMMA, &SYNC_4, false);
             p.site = 5;
             _parse_base(p);
         } else {
@@ -1809,7 +1809,7 @@ fn _parse_fields(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_base__inner(p: &mut Parser) -> () {
-    p.expect(TK_DOTDOT, &SYNC_4, false);
+    p.expect(TK_DOTDOT, &SYNC_3, false);
     p.expect(TK_ID, &EMPTY_SYNC, true);
     return;
 }
@@ -1922,13 +1922,13 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [37];
-global EXPECTED_0: List<i32> = [TK_AT, TK_DOTDOT, TK_ID];
-global EXPECTED_1: List<i32> = [TK_AT, TK_ID];
-global SYNC_2: List<i32> = [8];
-global SYNC_3: List<i32> = [53];
-global EXPECTED_3: List<i32> = [TK_AT, TK_DOTDOT, TK_ID, TK_RBRACE];
-global SYNC_4: List<i32> = [1];
+global SYNC_0: List<i32> = [33];
+global EXPECTED_0: List<i32> = [TK_AT, TK_ID];
+global SYNC_1: List<i32> = [8];
+global SYNC_2: List<i32> = [17];
+global EXPECTED_2: List<i32> = [TK_ID, TK_RBRACE];
+global SYNC_3: List<i32> = [1];
+global SYNC_4: List<i32> = [4];
 global SYNC_5: List<i32> = [383];
 
 global FOLLOW_SETS: List<List<i32>> = [[16]];

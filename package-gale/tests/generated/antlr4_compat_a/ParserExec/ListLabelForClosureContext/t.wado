@@ -1763,49 +1763,23 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
             if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
         if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
-        loop {
-            if p.recovering { break; }
-            let mut rep_scan_pos_2: i32 = -1;
-            rep_scan_2: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_else_if_statement(tokens, pos, 0);
-                if pos < 0 { break rep_scan_2; }
-                if pos <= p.pos { break rep_scan_2; }
-                rep_scan_pos_2 = pos;
-            }
-            if rep_scan_pos_2 < 0 {
-                if p.peek_kind() == TK_LIT_else {
-                    let _rec_pos = p.pos;
-                    let _rec_cp = p.b.checkpoint();
-                    let _rec_sav = p.recovering;
-                    let _rec_spec = p.speculating;
-                    p.speculating = true;
-                    p.site = 2;
-                    _parse_else_if_statement(p, 0);
-                    p.speculating = _rec_spec;
-                    p.recovering = _rec_sav;
-                    p.pos = _rec_pos;
-                    p.b.truncate(_rec_cp);
-                }
-                break;
-            }
+        while !p.recovering && p.peek_kind() == TK_LIT_else {
             p.site = 2;
             let else_if_statement = _parse_else_if_statement(p, 0);
             if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_back(&SYNC_2, &EXPECTED_2); }
         }
-        if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_2, &EXPECTED_2); }
+        if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_3, &EXPECTED_3); }
         if p.peek_kind() == TK_LIT_a {
             p.site = 3;
             let else_statement = _parse_else_statement(p);
         }
-        let lit_end = p.expect(TK_LIT_end, &SYNC_3, false);
+        let lit_end = p.expect(TK_LIT_end, &SYNC_4, false);
         let lit_if = p.expect(TK_LIT_if, &EMPTY_SYNC, true);
     } else if grp_kind == TK_LIT_a {
         p.site = 4;
         let executable_statement = _parse_executable_statement(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_4);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
     }
     return;
 }
@@ -1822,7 +1796,7 @@ fn _parse_if_statement(p: &mut Parser) -> () {
 }
 
 fn _parse_else_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LIT_else, &SYNC_3, false);
+    p.expect(TK_LIT_else, &SYNC_4, false);
     p.expect(TK_LIT_if, &SYNC_0, false);
     p.site = 5;
     _parse_expression(p);
@@ -1956,7 +1930,7 @@ pub fn parse_else_statement<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX)
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_else_statement(p));
 }
 
-global CALL_FOLLOW_SETS: List<List<i32>> = [[108], [116], [16], [], [8], [100]];
+global CALL_FOLLOW_SETS: List<List<i32>> = [[72], [112], [16], [], [8], [64]];
 global CALL_FOLLOW: List<i32> = [0, 1, 1, 2, 3, 4, 5];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, false, true, false, true];
 
@@ -1987,13 +1961,14 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [100];
-global SYNC_1: List<i32> = [108];
-global EXPECTED_1: List<i32> = [TK_LIT_a, TK_LIT_else, TK_LIT_if, TK_LIT_then];
-global SYNC_2: List<i32> = [116];
-global EXPECTED_2: List<i32> = [TK_LIT_a, TK_LIT_else, TK_LIT_end, TK_LIT_if];
-global SYNC_3: List<i32> = [4];
-global EXPECTED_4: List<i32> = [TK_LIT_a, TK_LIT_then];
+global SYNC_0: List<i32> = [64];
+global SYNC_1: List<i32> = [72];
+global EXPECTED_1: List<i32> = [TK_LIT_a, TK_LIT_then];
+global SYNC_2: List<i32> = [112];
+global EXPECTED_2: List<i32> = [TK_LIT_a, TK_LIT_else, TK_LIT_end];
+global SYNC_3: List<i32> = [80];
+global EXPECTED_3: List<i32> = [TK_LIT_a, TK_LIT_end];
+global SYNC_4: List<i32> = [4];
 
 global FOLLOW_SETS: List<List<i32>> = [];
 
