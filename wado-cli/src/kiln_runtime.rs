@@ -21,6 +21,7 @@ use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamRead
 use wasmtime::{Engine, Store};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
+use wado_compiler::name::to_cm_name;
 use wado_compiler::{
     CompilerHost, GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError,
     GeneratorInputFile, GeneratorOutputFile, GeneratorRequest, GeneratorResponse,
@@ -312,7 +313,7 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
         // Enum cases carry raw Wado names; the component enum uses CM
         // kebab-case case names, so normalize before building the Val.
         Type::Enum(_) => match v {
-            CanonicalValue::Enum(s) => Val::Enum(wado_compiler::name::to_kebab(s)),
+            CanonicalValue::Enum(s) => Val::Enum(to_cm_name(s)),
             _ => return Err(mismatch()),
         },
         Type::Option(o) => match v {
@@ -356,9 +357,7 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
             for f in r.fields() {
                 // Option values carry raw Wado field names; the component record
                 // field is CM kebab-case.
-                let matched = entries
-                    .iter()
-                    .find(|(name, _)| wado_compiler::name::to_kebab(name) == f.name);
+                let matched = entries.iter().find(|(name, _)| to_cm_name(name) == f.name);
                 let val = match matched {
                     Some((_, cv)) => canonical_to_val(cv, &f.ty)?,
                     None if matches!(f.ty, Type::Option(_)) => Val::Option(None),

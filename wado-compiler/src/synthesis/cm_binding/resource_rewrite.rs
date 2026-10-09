@@ -15,7 +15,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
     LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_read_func_name,
-    cm_stream_read_value_func_name, cm_stream_write_func_name,
+    cm_stream_read_value_func_name, cm_stream_write_func_name, to_cm_name,
 };
 use crate::package::Package;
 use crate::tir::{
@@ -349,7 +349,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
     // declaration renders to one CM name, whichever site reaches it first.
     let cm_record_name = registry
         .get_struct_cm_name_by_source(&source, &elem_name)
-        .map_or_else(|| pascal_to_kebab(&elem_name), str::to_string);
+        .map_or_else(|| to_cm_name(&elem_name), str::to_string);
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
     synthesize_stream_read_func(
         cm_stream_read_func_name(&elem_name),
@@ -1971,7 +1971,7 @@ fn parameterize_stream_cm_name(
             let cm_elem = elem_source
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
-                .unwrap_or_else(|| pascal_to_kebab(&elem_name));
+                .unwrap_or_else(|| to_cm_name(&elem_name));
             CmStreamPayload::Record(stream_element_decl(tt, elem, &cm_elem))
         },
         CmStreamPayload::Value,
@@ -2012,16 +2012,6 @@ fn registered_cm_name(
 
 /// Mechanical `PascalCase` → kebab-case fallback for stream element types
 /// not registered with a `#[cm("…")]` name (i.e., user-authored types).
-fn pascal_to_kebab(name: &str) -> String {
-    name.chars().fold(String::new(), |mut s, c| {
-        if c.is_uppercase() && !s.is_empty() {
-            s.push('-');
-        }
-        s.push(c.to_ascii_lowercase());
-        s
-    })
-}
-
 #[cfg(test)]
 mod cm_binding_tests {
     use super::*;

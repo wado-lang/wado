@@ -6,7 +6,7 @@
 use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
-use crate::name::{INTERNAL_PREFIX, kebab_export_name, to_kebab};
+use crate::name::{INTERNAL_PREFIX, to_cm_name};
 use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{
@@ -295,8 +295,8 @@ fn build_world_export_plans(
             // the CM type engine. The WASI worlds resolve to `CmExportType`
             // here via the registry-backed `resolve_cm_export_type`, whose set
             // of recognised shapes is the WASI export surface only.
-            // A parameter crosses under its CM name, which is kebab-case: a
-            // Wado parameter is snake_case, and a WASI world's is kebab already.
+            // A parameter crosses under its CM name: a Wado parameter is
+            // snake_case, and a WASI world's is kebab already.
             let (cm_params, cm_result, param_types, result_type) = if is_lib_world {
                 (
                     Vec::new(),
@@ -304,7 +304,7 @@ fn build_world_export_plans(
                     export
                         .params
                         .iter()
-                        .map(|(name, ty)| (to_kebab(name), ty.clone()))
+                        .map(|(name, ty)| (to_cm_name(name), ty.clone()))
                         .collect(),
                     export.return_type.clone(),
                 )
@@ -314,7 +314,7 @@ fn build_world_export_plans(
                     .iter()
                     .map(|(name, ty)| {
                         (
-                            to_kebab(name),
+                            to_cm_name(name),
                             resolve_cm_export_type(
                                 ty,
                                 cm_interface_registry,
@@ -341,7 +341,7 @@ fn build_world_export_plans(
 
             WorldExportPlan {
                 from_interface_fq: export.from_interface_fq.clone(),
-                cm_export_name: kebab_export_name(&export.name),
+                cm_export_name: to_cm_name(&export.name),
                 name: export.name,
                 core_func_name,
                 is_async: export.is_async,

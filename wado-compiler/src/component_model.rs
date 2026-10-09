@@ -26,7 +26,7 @@ use crate::cm_abi::{
 };
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_kebab};
+use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_cm_name};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::stdlib;
@@ -301,7 +301,7 @@ pub fn cm_payload_type_from_type_id(
             Some(CmPayloadType::Named(CmDecl::new(
                 type_table.defs(),
                 def.decl()?,
-                &to_kebab(&type_table.struct_head_name(*def)),
+                &to_cm_name(&type_table.struct_head_name(*def)),
             )))
         }
         ResolvedType::Enum { def }
@@ -312,7 +312,7 @@ pub fn cm_payload_type_from_type_id(
             Some(CmPayloadType::Named(CmDecl::new(
                 type_table.defs(),
                 *def,
-                &to_kebab(type_table.def_name(*def)),
+                &to_cm_name(type_table.def_name(*def)),
             )))
         }
         // Unlike the records above, a WASI-owned resource is included: its
@@ -321,7 +321,7 @@ pub fn cm_payload_type_from_type_id(
         ResolvedType::Resource { def } => Some(CmPayloadType::Resource(CmDecl::new(
             type_table.defs(),
             *def,
-            &to_kebab(type_table.def_name(*def)),
+            &to_cm_name(type_table.def_name(*def)),
         ))),
         _ => None,
     }
@@ -585,7 +585,7 @@ fn wasi_error_code_decl(type_table: &TypeTable, error_type_id: TypeId) -> Option
     Some(CmDecl::new(
         type_table.defs(),
         *def,
-        &to_kebab(type_table.def_name(*def)),
+        &to_cm_name(type_table.def_name(*def)),
     ))
 }
 
@@ -1190,7 +1190,7 @@ impl CmDeclScope {
             Self::Module => {
                 panic!("missing #[cm_params] for param '{param}' in {interface}.{method}")
             }
-            Self::CmAttributed => to_kebab(param),
+            Self::CmAttributed => to_cm_name(param),
         }
     }
 }
@@ -2632,7 +2632,7 @@ impl CmInterfaceRegistry {
         let collisions: Vec<&str> = interfaces
             .iter()
             .filter_map(|effect| {
-                (is_guest_effect(effect) && to_kebab(&effect.name) == base.interface)
+                (is_guest_effect(effect) && to_cm_name(&effect.name) == base.interface)
                     .then_some(effect.name.as_str())
             })
             .collect();
@@ -2648,14 +2648,14 @@ impl CmInterfaceRegistry {
             if !is_guest_effect(effect) {
                 continue;
             }
-            let interface = to_kebab(&effect.name);
+            let interface = to_cm_name(&effect.name);
             for method in &effect.methods {
                 let cm_import = CmImport {
                     namespace: base.namespace.clone(),
                     package: base.package.clone(),
                     interface: interface.clone(),
                     version: base.version.clone(),
-                    function: Some(to_kebab(&method.name)),
+                    function: Some(to_cm_name(&method.name)),
                 };
                 let params: Vec<(String, String, Type)> = method
                     .params
@@ -2663,7 +2663,7 @@ impl CmInterfaceRegistry {
                     .map(|p| {
                         (
                             p.name.clone(),
-                            to_kebab(&p.name),
+                            to_cm_name(&p.name),
                             resolve_type(&p.ty, &self.newtypes, &self.source_interfaces),
                         )
                     })
@@ -2732,41 +2732,44 @@ impl CmInterfaceRegistry {
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (to_kebab(&f.name), f.ty.clone()))
+                    .map(|f| (to_cm_name(&f.name), f.ty.clone()))
                     .collect();
                 let wado_fields: Vec<(String, String, Type)> = struct_def
                     .fields
                     .iter()
-                    .map(|f| (f.name.clone(), to_kebab(&f.name), f.ty.clone()))
+                    .map(|f| (f.name.clone(), to_cm_name(&f.name), f.ty.clone()))
                     .collect();
                 register_unique(
                     &mut self.structs,
                     "struct",
                     iface_fq.to_string(),
                     struct_def.name.clone(),
-                    (to_kebab(&struct_def.name), fields, wado_fields),
+                    (to_cm_name(&struct_def.name), fields, wado_fields),
                 );
             }
             Item::Flags(flags_def) => {
-                let members: Vec<String> =
-                    flags_def.flags.iter().map(|m| to_kebab(&m.name)).collect();
+                let members: Vec<String> = flags_def
+                    .flags
+                    .iter()
+                    .map(|m| to_cm_name(&m.name))
+                    .collect();
                 register_unique(
                     &mut self.flags,
                     "flags",
                     iface_fq.to_string(),
                     flags_def.name.clone(),
-                    (to_kebab(&flags_def.name), members),
+                    (to_cm_name(&flags_def.name), members),
                 );
             }
             Item::Enum(enum_def) => {
                 let variants: Vec<String> =
-                    enum_def.cases.iter().map(|c| to_kebab(&c.name)).collect();
+                    enum_def.cases.iter().map(|c| to_cm_name(&c.name)).collect();
                 register_unique(
                     &mut self.enums,
                     "enum",
                     iface_fq.to_string(),
                     enum_def.name.clone(),
-                    (to_kebab(&enum_def.name), variants),
+                    (to_cm_name(&enum_def.name), variants),
                 );
             }
             Item::Variant(variant_def) => {
@@ -2774,7 +2777,7 @@ impl CmInterfaceRegistry {
                     .cases
                     .iter()
                     .map(|c| CmVariantCase {
-                        cm_name: to_kebab(&c.name),
+                        cm_name: to_cm_name(&c.name),
                         wado_name: c.name.clone(),
                         payload: c.payload.clone(),
                     })
@@ -2784,7 +2787,7 @@ impl CmInterfaceRegistry {
                     "variant",
                     iface_fq.to_string(),
                     variant_def.name.clone(),
-                    (to_kebab(&variant_def.name), cases),
+                    (to_cm_name(&variant_def.name), cases),
                 );
             }
             _ => {}
@@ -4560,7 +4563,7 @@ impl CmTypeGen {
                         }
                         ComponentValType::Type(idx) => idx,
                     };
-                    let named_idx = self.export_named(sink, &to_kebab(name), base_idx);
+                    let named_idx = self.export_named(sink, &to_cm_name(name), base_idx);
                     self.cache.insert(cache_key, named_idx);
                     return ComponentValType::Type(named_idx);
                 }
