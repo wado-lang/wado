@@ -473,6 +473,14 @@ does not say so, and this WEP is not where a reader of the language will look.
 - [ ] State it in `docs/spec-*.md`, so it is not rediscovered as a missing
   reflection feature.
 
+### A function or method name cannot be read
+
+Reflection reaches a type's fields and cases, but not the functions a module
+exports or the methods a type or trait declares. A code generator that must
+not mint a name its output already binds keeps such a list by hand. Loam's
+`RUNTIME_NAMES` copies what `lib:loam` exports, and nothing checks the copy
+against the module.
+
 ## Related WEPs
 
 - [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md) — the three planes and the traits this WEP reaches
