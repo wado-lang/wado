@@ -34,7 +34,7 @@ A program imports a tokenizer as it imports a graph, through Loam's generator:
 
 ```wado
 use { Tokenizer } from "./tokenizer.json" with {
-    type: "tokenizer",
+    type: "hf-tokenizer",
     generator: { module: "lib:loam" },
 };
 
@@ -42,8 +42,9 @@ let ids = Tokenizer::encode(&text);
 let back = Tokenizer::decode(&ids);
 ```
 
-The use site's `type` tells the generator what the file is: `"tokenizer"` here,
-`"onnx"` or `"onnxtext"` for a graph, never the extension. The tokenizer is
+The use site's `type` tells the generator what the file is, never the
+extension: `"hf-tokenizer"` here, for Hugging Face's `tokenizer.json` format,
+and `"onnx"` or `"onnxtext"` for a graph. The tokenizer is
 imported apart from the model, since an ONNX graph does not carry one.
 
 ### The pipeline is decided at build time

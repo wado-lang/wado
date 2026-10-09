@@ -383,7 +383,8 @@ wado run package-gale dump --lexer Grammar.g4  # the lexer's per-rule emit strat
 
 Multiple `.g4` files are merged (e.g. a split lexer/parser grammar). The
 `trace` option is available on the `use ... with` generator config; a
-highlight query rides in as an input of `type: "highlights"` (see below).
+highlight query rides in as an input of `type: "tree-sitter-highlights"` (see
+below).
 
 A traced parser logs through [`core:log`](../docs/stdlib-core-log.md) at
 `Trace`, under the target `gale.trace`. That is below what `core:log` admits
@@ -402,9 +403,9 @@ in a test needs `wado test -D log.level=trace` as well.
 Gale can emit a `highlight(input) -> String` function that renders source to
 HTML `<span class="…">` spans. It is enabled by supplying a **highlight query**
 — a subset of tree-sitter's `highlights.scm` — as a generator input of
-`type: "highlights"`. Gale reads an input by its `type`, never its extension,
-and an input with no `type` is a grammar. No query, no highlighter (output
-stays byte-identical).
+`type: "tree-sitter-highlights"`. Gale reads an input by its `type`, never its
+extension, and an input of `type: "antlr4"`, or of none, is a grammar. No
+query, no highlighter (output stays byte-identical).
 
 ```wado
 use hl from "./JSON.g4"
@@ -412,7 +413,7 @@ use hl from "./JSON.g4"
         generator: {
             module: "wado-lang:gale",
             // presence enables highlighting
-            inputs: [{ path: "./JSON.highlights.scm", type: "highlights" }],
+            inputs: [{ path: "./JSON.highlights.scm", type: "tree-sitter-highlights" }],
         },
     };
 

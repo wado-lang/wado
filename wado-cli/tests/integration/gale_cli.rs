@@ -37,16 +37,16 @@ fn gale_gen_calculator_emits_generated_parser() {
 
 #[test]
 fn gale_gen_highlight_emits_highlight_function() {
-    // A `.scm` positional arg is a highlight query; its presence turns the
-    // highlighter on (there is no `--highlight` flag).
+    // A query named by `--highlights` turns the highlighter on.
     wado()
         .args([
             "run",
             "-O0",
             "package-gale/src/main.wado",
             "gen",
-            "package-gale/tests/grammars/calculator.g4",
+            "--highlights",
             "package-gale/tests/grammars/calculator.highlights.scm",
+            "package-gale/tests/grammars/calculator.g4",
         ])
         .assert()
         .success()

@@ -496,7 +496,7 @@ test "a .scm input to the Kiln generator adds the highlighter" {
         [
             "expr.scm",
             bytes_of(EXPR_QUERY),
-            Option::Some("highlights"),
+            Option::Some("tree-sitter-highlights"),
         ],
     ], no_options());
     assert built.source().contains("pub fn highlight<");
@@ -507,15 +507,17 @@ test "an input's type, not its name, says it is a highlight query" {
         [
             "expr.txt",
             bytes_of(EXPR_QUERY),
-            Option::Some("highlights"),
+            Option::Some("tree-sitter-highlights"),
         ],
     ], no_options());
     assert unnamed.source().contains("pub fn highlight<");
 
-    let untyped = kiln(["Expr.g4", bytes_of(EXPR)], [
-        ["expr.scm", bytes_of(EXPR_QUERY), null],
-    ], no_options());
-    assert untyped.error().contains("failed to parse supplementary grammar 'expr.scm'");
+    for let grammar_type of [null, Option::Some("antlr4")] as List<Option<String>> {
+        let grammar = kiln(["Expr.g4", bytes_of(EXPR)], [
+            ["expr.scm", bytes_of(EXPR_QUERY), grammar_type],
+        ], no_options());
+        assert grammar.error().contains("failed to parse supplementary grammar 'expr.scm'");
+    }
 
     let unknown = kiln(["Expr.g4", bytes_of(EXPR)], [
         [
@@ -524,7 +526,7 @@ test "an input's type, not its name, says it is a highlight query" {
             Option::Some("query"),
         ],
     ], no_options());
-    assert unknown.error() == "unsupported: gale: 'expr.scm' is given `type: \"query\"`; an input is a grammar, or `type: \"highlights\"`";
+    assert unknown.error() == "unsupported: gale: 'expr.scm' is given `type: \"query\"`; an input is `type: \"antlr4\"` or `type: \"tree-sitter-highlights\"`";
 }
 
 test "the trace option builds a parser that can log its decisions" {
@@ -537,7 +539,7 @@ test "Gale's diagnostics reach the Kiln host at their own level" {
         [
             "bad.scm",
             bytes_of("(FLOAT) @number\n"),
-            Option::Some("highlights"),
+            Option::Some("tree-sitter-highlights"),
         ],
     ], no_options());
     assert warned.diagnostics == ["Warning: gale: highlight: highlight query: unknown token 'FLOAT'"];
@@ -583,7 +585,7 @@ test "a Kiln highlight query that does not parse names the query and position" {
         [
             "bad.scm",
             bytes_of("(INT)\n"),
-            Option::Some("highlights"),
+            Option::Some("tree-sitter-highlights"),
         ],
     ], no_options());
     assert built.error() == "invalid schema: gale: invalid highlight query 'bad.scm' at 2:1: expected '@capture'";

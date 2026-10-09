@@ -70,9 +70,9 @@ fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
-    // Route supplementary inputs by their `type`: `"highlights"` is a highlight
-    // query (compiled into the highlighter), and an input with none is a
-    // grammar half merged into the primary.
+    // Route supplementary inputs by their `type`: `"tree-sitter-highlights"`
+    // is a highlight query (compiled into the highlighter), and `"antlr4"` or
+    // none is a grammar half merged into the primary.
     let primary_path = req.primary.path;
     let primary_text = decode_input(&primary_path, req.primary.content)?;
     let mut g4_inputs: List<[String, String]> = [
@@ -83,12 +83,14 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         let path = supp.path;
         let text = decode_input(&path, supp.content)?;
         match supp.type {
-            None => g4_inputs.push([path, text]),
-            Some("highlights") => scm_inputs.push([path, text]),
+            None | Some("antlr4") => g4_inputs.push([path, text]),
+            Some("tree-sitter-highlights") => scm_inputs.push([path, text]),
             Some(other) => {
-                return Result::Err(Error::Unsupported(
-                    `gale: '${path}' is given \`type: "${other}"\`; an input is a grammar, or \`type: "highlights"\``,
-                ));
+                return Result::Err(
+                    Error::Unsupported(
+                        `gale: '${path}' is given \`type: "${other}"\`; an input is \`type: "antlr4"\` or \`type: "tree-sitter-highlights"\``,
+                    ),
+                );
             },
         }
     }

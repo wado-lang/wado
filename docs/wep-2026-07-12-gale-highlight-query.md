@@ -86,13 +86,17 @@ same channel as supplementary `.g4` grammars:
 use hl from "./JSON.g4" with {
     generator: {
         module: "wado-lang:gale",
-        inputs: [{ path: "./JSON.highlights.scm", type: "highlights" }],
+        inputs: [{ path: "./JSON.highlights.scm", type: "tree-sitter-highlights" }],
     },
 };
 ```
 
-The generator routes `req.inputs` by each input's `type`: `"highlights"` → a
-highlight query, none → grammar assembly, and any other `type` stops the build.
+The generator routes `req.inputs` by each input's `type`:
+`"tree-sitter-highlights"` → a highlight query, `"antlr4"` or none → grammar
+assembly, and any other `type` stops the build. A type names the format the
+file is written in and, where one format serves several roles, the role:
+tree-sitter writes `highlights`, `injections` and `locals` in one query
+language.
 No generator looks at an extension
 ([How an Import Is Read](./spec-modules.md#how-an-import-is-read)). The first
 cut routed by extension, `.g4` and `.scm`, and the input's `type` replaced it.

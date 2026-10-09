@@ -74,7 +74,7 @@ use { highlight as highlight_impl } from "../grammar/Wado.g4"
         generator: {
             module: "lib:gale",
             inputs: [
-                { path: "../grammar/Wado.highlights.scm", type: "highlights" },
+                { path: "../grammar/Wado.highlights.scm", type: "tree-sitter-highlights" },
             ],
             options: {
                 fragment_entries: ["statement"],
