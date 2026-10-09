@@ -93,6 +93,11 @@ fn find_cycle(
 test "the generator's modules import one another without a cycle" {
     let graph = import_graph(src_root());
     assert graph.len() > 50, `the walk found only ${graph.len()} modules`;
+    for let [module, targets] of graph.entries() {
+        for let target of targets {
+            assert graph.contains_key(*target), `${module} imports ${target}, which the walk did not key`;
+        }
+    }
     let mut done: List<String> = [];
     for let [module, _] of graph.entries() {
         let mut stack: List<String> = [];

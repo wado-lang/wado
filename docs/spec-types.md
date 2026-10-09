@@ -1194,6 +1194,13 @@ rather than a mismatch with the empty tuple. Any other argument is checked
 against the parameter alone, so a typed argument still decides what the hint
 only suggests.
 
+<!-- {"fixture":"infer_expected_type_hints_sequence_literal.wado"} -->
+
+```wado
+let l: List<i32> = identity([]);
+assert l.is_empty();
+```
+
 Arithmetic on literals answers as a literal does (`Box { value: 1 << 32 }`), and
 so does a literal behind a field, method or subscript of a generic call's or
 constructor's result: in `pick(Box { value: x }, wrap(1).value)` the `1` is a

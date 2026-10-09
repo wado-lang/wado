@@ -123,7 +123,8 @@ pub struct RuleFollow {
 }
 
 impl RuleFollow {
-    /// Nothing known about any rule, which every query answers conservatively.
+    /// Nothing known, for a grammar with no parser rules: each FOLLOW query
+    /// answers conservatively, and `input_end` has no rule to be asked about.
     pub fn unknown() -> RuleFollow {
         return RuleFollow {
             kinds: HashMap::with_seed(GALE_SEED),
