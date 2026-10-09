@@ -854,7 +854,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         let logger = self.logger;
         let repeats = {
             let _learning = logger.quiet();
-            self.bind_iteration(update, catches_jumps, &mut iteration)?.1
+            self.bind_iteration(update, catches_jumps, &mut iteration)?
+                .1
         };
         self.flow = entry.join(repeats);
         let (exits, _) = self.bind_iteration(update, catches_jumps, &mut iteration)?;
@@ -1152,8 +1153,11 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_expr(&matches_expr.expr)?;
                 self.enter_scope();
                 self.bind_pattern(&matches_expr.pattern, matches_expr.span)?;
+                // The guard runs only where the pattern matched.
                 if let Some(guard) = &matches_expr.guard {
-                    self.bind_maybe(|s| s.bind_expr(guard))?;
+                    let unmatched = self.flow.clone();
+                    self.bind_expr(guard)?;
+                    self.flow = std::mem::take(&mut self.flow).join(unmatched);
                 }
                 self.exit_scope();
             }
@@ -1184,14 +1188,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Parser error-recovery placeholder: nothing to bind.
             Expr::Error(_) => {}
         }
-        Ok(())
-    }
-
-    /// Bind what may not run: the path that skips it meets the one through it.
-    fn bind_maybe(&mut self, bind: impl FnOnce(&mut Self) -> Result<(), Bail>) -> Result<(), Bail> {
-        let skipped = self.flow.clone();
-        bind(self)?;
-        self.flow = std::mem::take(&mut self.flow).join(skipped);
         Ok(())
     }
 
