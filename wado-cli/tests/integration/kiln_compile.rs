@@ -582,26 +582,19 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// The host cannot tell how a file is read, and a comment in a file
+/// `#include_str` embeds is part of the text, so every edit moves the hash.
 #[test]
-fn docstring_only_edit_preserves_source_hash() {
-    // The point of switching the per-file hash from raw bytes to the
-    // canonical token stream (issue #1059): docstring and comment
-    // edits must not change the generator source hash, so they do not
-    // churn `generator_source_hash` in every consumer's kiln.json.
-    let tmp = unique_tmp("kiln-source-hash-doc-only");
+fn a_comment_edit_moves_the_source_hash() {
+    let tmp = unique_tmp("kiln-source-hash-comment");
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).unwrap();
 
-    let helper_path = tmp.join("helper.wado");
-    std::fs::write(
-        &helper_path,
-        "/// Original docstring.\npub fn answer() -> i32 { return 42; }\n",
-    )
-    .unwrap();
+    let payload_path = tmp.join("payload.wado");
+    std::fs::write(&payload_path, "// before\npub fn answer() -> i32 { return 42; }\n").unwrap();
 
     let entry_src = r#"
 use { Request, Response, Error } from "core:kiln";
-use { answer } from "./helper.wado";
 
 pub struct Options {
     pub verbose: bool,
@@ -609,12 +602,11 @@ pub struct Options {
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let _ = req.options.verbose;
-    let _ = answer();
+    let _ = #include_str("./payload.wado");
     return Result::Ok(Response { files: [] });
 }
 "#;
-    let gen_path = tmp.join("entry.wado");
-    std::fs::write(&gen_path, entry_src).unwrap();
+    std::fs::write(tmp.join("entry.wado"), entry_src).unwrap();
 
     let provider = CliGeneratorProvider::new(tmp.clone());
     let module = GeneratorModule::LocalPath(InvocationPath::normalize("./entry.wado"));
@@ -622,50 +614,13 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     let baseline = runtime()
         .block_on(async { provider.resolve(&module).await })
         .expect("baseline compile should succeed");
-
-    // Edit only the docstring. Comment-only/whitespace-only edits in
-    // `.wado` files MUST NOT change the source hash now that hashing
-    // routes through the canonical token stream.
-    std::fs::write(
-        &helper_path,
-        "//! New module-level doc.\n/// Tweaked docstring with extra detail.\n// Plus a stray line comment.\npub fn answer() -> i32 { return 42; }\n",
-    )
-    .unwrap();
-    let after_doc = runtime()
+    std::fs::write(&payload_path, "// after\npub fn answer() -> i32 { return 42; }\n").unwrap();
+    let after = runtime()
         .block_on(async { provider.resolve(&module).await })
-        .expect("post-doc-edit compile should succeed");
-    assert_eq!(
-        baseline.source_hash, after_doc.source_hash,
-        "docstring/comment-only edits must not change the source hash"
-    );
-
-    // Whitespace/formatting changes also must be invisible to the hash.
-    std::fs::write(
-        &helper_path,
-        "//! New module-level doc.\n/// Tweaked docstring with extra detail.\n// Plus a stray line comment.\npub fn answer() -> i32 {\n    return 42;\n}\n",
-    )
-    .unwrap();
-    let after_format = runtime()
-        .block_on(async { provider.resolve(&module).await })
-        .expect("post-format compile should succeed");
-    assert_eq!(
-        baseline.source_hash, after_format.source_hash,
-        "whitespace-only edits must not change the source hash"
-    );
-
-    // A real semantic edit (return value change) MUST still bump the hash.
-    std::fs::write(
-        &helper_path,
-        "/// Original docstring.\npub fn answer() -> i32 { return 99; }\n",
-    )
-    .unwrap();
-    let after_semantic = runtime()
-        .block_on(async { provider.resolve(&module).await })
-        .expect("post-semantic-edit compile should succeed");
+        .expect("post-edit compile should succeed");
     assert_ne!(
-        baseline.source_hash, after_semantic.source_hash,
-        "a real source change must still bump the hash — otherwise the cache \
-         would silently reuse stale generator output"
+        baseline.source_hash, after.source_hash,
+        "the embedded text changed, so the generator did"
     );
 
     let _ = std::fs::remove_dir_all(&tmp);

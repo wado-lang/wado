@@ -138,10 +138,8 @@ The generated parser inlines the runtime fragments in `src/runtime/*.wado` (`lex
 
 Two rules follow from every byte of these files landing in every generated parser:
 
-- **No comments.** They would be copied into hundreds of generated files, and the Kiln cache key is comment-blind (`is_wado_source` in `wado-cli/src/kiln_provider.rs` routes `.wado` through the canonical token stream), so editing one silently desynchronises the committed corpus from its generator. State intent through names, decomposition, and asserts.
+- **No comments.** They would be copied into hundreds of generated files. State intent through names, decomposition, and asserts.
 - **Nothing test-only.** String-level comparison helpers live in `tests/support/tree_compare.wado`; only a helper taking a generated type (`to_lexer_string`, over the generated `TokenStream`) has to stay.
-
-To force regeneration after editing a fragment, delete the invocation cache (`find tests/generated -name '*.kiln.json' -delete`) or pass `wado test --no-cache`. A plain `mise run test-wado` does not notice a comment-only edit.
 
 ## Failed approaches (do not repeat)
 
