@@ -228,10 +228,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|decl| self.tysys.trait_env.assoc_type_decl(&decl, assoc_name))
                 .is_some_and(|decl| !decl.type_params.is_empty())
         });
+        let traits: Vec<String> = declaring
+            .iter()
+            .map(|bound| {
+                self.tysys
+                    .bound_written(bound)
+                    .map_or_else(|| bound.name.clone(), |named| named.to_display())
+            })
+            .collect();
+        let binders = &self.annotate_ctx.trait_ctx.type_params;
+        let fresh = PIN_NAMES
+            .iter()
+            .filter(|name| !binders.contains_key(**name) && **name != param_name);
+        let pinned = traits
+            .iter()
+            .zip(fresh)
+            .map(|(spelled, fresh)| pin_assoc(spelled, assoc_name, fresh))
+            .collect();
         let _ = self.emit(TypeError::AmbiguousAssocType {
             assoc: assoc_name.to_string(),
             param: param_name.to_string(),
-            traits: declaring.iter().map(|bound| bound.name.clone()).collect(),
+            traits,
+            pinned,
             family,
             span,
         });
@@ -1372,7 +1390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `owner` reached on `base` at `written`, defaults filling the rest. A
     /// default is written in the trait, where `Self` is `base`. `None` where an
     /// argument names no type.
-    fn trait_args_at(
+    pub(super) fn trait_args_at(
         &mut self,
         owner: DefId,
         base: TypeId,
@@ -1686,6 +1704,19 @@ pub(super) struct DeclaringSpace {
     pub(super) space: ParamSpace,
     /// The parameters it does not, which a written type must not read.
     unknown: Vec<String>,
+}
+
+/// The names an ambiguity report offers for the parameters it pins each
+/// associated type to, those the site already binds skipped.
+const PIN_NAMES: [&str; 7] = ["P", "Q", "R", "S", "U", "V", "W"];
+
+/// `spelled` with `assoc` pinned to `param`: `Mix<i32>` becomes
+/// `Mix<i32, Out = P>`.
+fn pin_assoc(spelled: &str, assoc: &str, param: &str) -> String {
+    match spelled.strip_suffix('>') {
+        Some(open) => format!("{open}, {assoc} = {param}>"),
+        None => format!("{spelled}<{assoc} = {param}>"),
+    }
 }
 
 impl DeclaringSpace {

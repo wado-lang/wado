@@ -747,8 +747,9 @@ test {
 }
 ```
 
-`T::Output` under two bounds that both declare `Output` is ambiguous unless
-they bind it to the same type.
+`T::Output` under both `Add` and `Mul` is ambiguous unless both pin it to one
+type; see
+[Naming an Associated Type Under Several Bounds](./spec-traits.md#naming-an-associated-type-under-several-bounds).
 
 An operator names these traits by construction, not by spelling: a trait
 declared as `Add` elsewhere shadows the name but does not answer `+`.

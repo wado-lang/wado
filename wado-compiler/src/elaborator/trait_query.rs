@@ -2589,9 +2589,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
                 continue;
             };
-            let registered = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
+            // The bound's own arguments pick its impl: `Mix<String, Out = B>`
+            // is checked against `impl Mix<String>`, not whichever the trait's
+            // impls agree on, which is nothing when they differ.
+            let trait_args = self.bound_args_on(bound, trait_, type_arg, self_binding);
+            let registered = self.tysys.type_table.borrow().resolve_assoc_type_of_trait_at(
                 type_arg,
                 &trait_,
+                trait_args.as_deref(),
                 &constraint.name,
             );
             let Some(actual) = registered
@@ -2631,6 +2636,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
+    }
+
+    /// The arguments `bound` reaches `trait_` on `type_arg` at, resolved in
+    /// this frame, defaults filled. `None` where it writes none, where one
+    /// reads a `Self` no receiver binds, or where one names no type.
+    fn bound_args_on(
+        &mut self,
+        bound: &ast::TraitBound,
+        trait_: DefId,
+        type_arg: TypeId,
+        self_binding: Option<SelfBinding>,
+    ) -> Option<Vec<TypeId>> {
+        if bound.type_args.is_empty()
+            || (self_binding.is_none() && bound.type_args.iter().any(|ty| ty.mentions("Self")))
+        {
+            return None;
+        }
+        let written: Vec<TypeId> = self.under_self_binding(self_binding, |e| {
+            bound.type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+        });
+        self.trait_args_at(trait_, type_arg, &written)
     }
 
     /// Whether every `Self::Assoc` written anywhere in `ty` projects off

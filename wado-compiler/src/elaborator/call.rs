@@ -3522,11 +3522,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if params.len() != args.len() {
             return;
         }
+        let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
+        // A parameter of the enclosing declaration is a type the call forwards,
+        // not a slot it leaves open.
+        let scope_params = self.scope_type_param_ids();
+        let open = |this: &Self, ty: TypeId| {
+            this.tysys.is_unbound_type_param(ty) && !scope_params.contains(&ty)
+        };
         loop {
             let mut progressed = false;
             for (owner_idx, param) in params.iter().enumerate() {
                 let owner_ty = args[owner_idx];
-                if self.tysys.is_unbound_type_param(owner_ty) {
+                if open(self, owner_ty) {
                     continue;
                 }
                 for bound in &param.bounds {
@@ -3538,29 +3545,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else {
                             continue;
                         };
-                        if !self.tysys.is_unbound_type_param(args[target_idx]) {
+                        if !open(self, args[target_idx]) {
                             continue;
                         }
                         let trait_ = self.tysys.resolutions.bound_decl(bound);
+                        // The bound's own arguments pick its impl among the
+                        // trait's: `Mix<String, Out = Q>` reads
+                        // `impl Mix<String>`'s `Out`, not `impl Mix<i32>`'s.
+                        let Some(trait_args) =
+                            self.bound_args_at_call(bound, trait_, owner_ty, &names, args)
+                        else {
+                            continue;
+                        };
                         let resolved = {
                             let mut tt = self.tysys.type_table.borrow_mut();
-                            trait_
-                                .and_then(|trait_| {
-                                    tt.resolve_trait_assoc_type_of_instance(
-                                        owner_ty,
-                                        &trait_,
-                                        &assoc.name,
-                                    )
-                                })
-                                .or_else(|| {
-                                    tt.resolve_assoc_type_of_instance(owner_ty, &assoc.name)
-                                })
+                            match trait_ {
+                                Some(trait_) => tt.answer_projection(
+                                    owner_ty,
+                                    &trait_,
+                                    trait_args.as_deref(),
+                                    &assoc.name,
+                                    &[],
+                                ),
+                                None => tt.resolve_assoc_type_of_instance(owner_ty, &assoc.name),
+                            }
                         };
                         // Reflection's associated types are registered by a
                         // synthesis phase that runs after elaboration, so the
                         // registry is empty here; compute the subject's.
                         let resolved = resolved.or_else(|| {
                             self.concrete_reflect_assoc_type(owner_ty, trait_?, &assoc.name)
+                        });
+                        // An owner the caller forwards answers with its own
+                        // projection, which the caller's bounds may pin.
+                        let resolved = resolved.or_else(|| {
+                            let trait_ = trait_.filter(|_| {
+                                scope_params.contains(&owner_ty) && !params[target_idx].is_pack
+                            })?;
+                            let projection =
+                                self.tysys.type_table.borrow_mut().make_assoc_type_projection(
+                                    owner_ty,
+                                    trait_,
+                                    trait_args,
+                                    assoc.name.clone(),
+                                    Vec::new(),
+                                    Vec::new(),
+                                );
+                            Some(self.answer_frame_projections(projection))
                         });
                         if let Some(resolved) = resolved {
                             args[target_idx] = resolved;
@@ -3573,6 +3604,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 break;
             }
         }
+    }
+
+    /// The arguments `bound` reaches `trait_` on `owner` at, read at the call's
+    /// `args` for the callee's `names`, defaults filled: `Some(None)` where it
+    /// writes none, and `None` while one waits on a slot the call has not
+    /// answered.
+    fn bound_args_at_call(
+        &mut self,
+        bound: &ast::TraitBound,
+        trait_: Option<DefId>,
+        owner: TypeId,
+        names: &[String],
+        args: &[TypeId],
+    ) -> Option<Option<Vec<TypeId>>> {
+        let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
+            return Some(None);
+        };
+        let written: Vec<TypeId> = self.with_type_params_bound(names, args, |e| {
+            bound.type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+        });
+        if written
+            .iter()
+            .any(|&ty| self.tysys.type_table.borrow().contains_undecided(ty))
+        {
+            return None;
+        }
+        Some(self.trait_args_at(trait_, owner, &written))
     }
 
     /// Fit flat turbofish type args to `declared`, grouping them into one

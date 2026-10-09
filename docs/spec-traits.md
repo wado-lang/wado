@@ -791,6 +791,33 @@ bound reaches the impl that satisfied the bound.
 A bound may pin an associated type (`T: Mul<Output = T>`). The impl that answers
 it must bind that type as the pin says.
 
+### Naming an Associated Type Under Several Bounds
+
+A pin to a type parameter settles that parameter. Once the call settles `T`, the
+bound `T: Mix<i32, Out = P>` settles `P` to the `Out` of the impl the bound's
+arguments reach, `impl Mix<i32>`. The call never names `P`. Where the call does
+settle `P` through an argument, the two must agree.
+
+`T::Out` is ambiguous where two of `T`'s bounds declare `Out` and do not pin it
+to the same type. Two argument lists of one trait are two such bounds. Wado has
+no qualified form such as `<T as Mix<i32>>::Out`. A signature pins each `Out` to
+a parameter of its own and writes that parameter instead:
+
+<!-- {"fixture":"spec_traits_pin_per_argument_list.wado"} -->
+
+```wado
+fn both<T: Mix<i32, Out = P> + Mix<String, Out = Q>, P, Q>(t: &T) -> [P, Q] {
+    return [t.mix(1), t.mix("")];
+}
+
+test {
+    let [n, empty] = both(&X {}); // P = i64, Q = bool
+    assert n == 1 && empty;
+}
+```
+
+A turbofish that names `T` names `P` and `Q` too.
+
 ## Coherence and Orphan Rules
 
 Wado enforces coherence: an impl is written once. Two impls are one when they

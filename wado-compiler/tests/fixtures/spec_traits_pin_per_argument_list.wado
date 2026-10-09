@@ -1,0 +1,30 @@
+// Each argument list's associated type, pinned to a parameter of its own.
+
+trait Mix<R> with () {
+    type Out;
+
+    fn mix(&self, r: R) -> Self::Out;
+}
+
+struct X {}
+
+impl Mix<i32> for X {
+    type Out = i64;
+
+    fn mix(&self, r: i32) -> i64 { return r as i64; }
+}
+
+impl Mix<String> for X {
+    type Out = bool;
+
+    fn mix(&self, r: String) -> bool { return r.is_empty(); }
+}
+
+fn both<T: Mix<i32, Out = P> + Mix<String, Out = Q>, P, Q>(t: &T) -> [P, Q] {
+    return [t.mix(1), t.mix("")];
+}
+
+test {
+    let [n, empty] = both(&X {}); // P = i64, Q = bool
+    assert n == 1 && empty;
+}
