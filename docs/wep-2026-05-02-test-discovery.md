@@ -202,7 +202,7 @@ whatever the walk returns, so naming a file directly always resolves it.
 - Sub-package recursion duplicates some bookkeeping (each package gets its
   own summary line) but keeps each package's results attributable.
 
-## Package-local files
+## Package-Local Files
 
 Each test file's store preopens the root of its own package as `.`, unless
 `--dir` or `--no-dir` is given, which then applies to every file. The package

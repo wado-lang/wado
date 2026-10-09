@@ -126,8 +126,9 @@ pub enum CanonicalValue {
 }
 
 /// Locate the `pub struct Options` the generator's entry module names, declared
-/// there or re-exported, and describe it as an [`OptionsDescriptor`]. `Options` is optional — a generator with no
-/// configuration gets an empty descriptor — while `generate` is required.
+/// there or re-exported, and describe it as an [`OptionsDescriptor`]. `Options`
+/// is optional — a generator with no configuration gets an empty descriptor —
+/// while `generate` is required.
 ///
 /// # Errors
 /// When the module has no TIR or does not export `generate`. A shape failure
@@ -559,8 +560,8 @@ fn evaluate_literal(
             if let Some(pairs) = coerced_array(expr)
                 && let Some(pairs) = pairs.iter().map(literal_pair).collect::<Option<Vec<_>>>() =>
         {
-            // A repeated key keeps its last value, as the `TreeMap` the
-            // literal builds does.
+            // A repeated key, which only a spelled `TreeMap::from` call
+            // carries, keeps its last value as that call does.
             let mut entries = BTreeMap::new();
             for (key, value) in pairs {
                 let value = evaluate_literal(value, inner, types, module, field_name, diagnostics)?;
