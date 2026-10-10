@@ -1,0 +1,135 @@
+//! What a graph or a tokenizer becomes, apart from where it was read: the Kiln
+//! generator and the `loam` command both run it.
+
+use { TreeMap } from "core:collections";
+use { Deserialize } from "core:serde";
+use { emit } from "./emit.wado";
+use { emit_tokenizer } from "./emit_tokenizer.wado";
+use { read as read_tokenizer } from "./tokenizer_json.wado";
+use { Graph } from "./graph.wado";
+use { Checked, infer } from "./infer.wado";
+use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { check_checkpoint } from "./safetensors.wado";
+use onnx_proto from "./onnx_proto.wado";
+use onnx_text from "./onnx_text.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+use { bind_dims, keep_outputs } from "./specialize.wado";
+
+/// The `generator.options` a `use ... with` site writes. See WEP 2026-09-20
+/// § "The Axis Schema Is an Invocation Option".
+pub struct Options {
+    /// Patterns naming the axes of the graph's inputs and initializers.
+    pub layout: List<LayoutRule> = [],
+    /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
+    pub dims: TreeMap<String, i32> = {},
+    /// The graph outputs `forward` returns. Empty keeps every output.
+    pub outputs: List<String> = [],
+}
+
+impl Deserialize for Options;
+
+/// How a graph is spelled, as a `type` names it: `"onnx"`, the protobuf an
+/// exporter writes, or `"onnxtext"`, the text a fixture is written in and a
+/// diff can show.
+pub enum Spelling {
+    Proto,
+    Text,
+}
+
+/// The spelling `use_type` names, or `None` where it names no graph.
+pub fn spelling_of(use_type: &Option<String>) -> Option<Spelling> {
+    return match *use_type {
+        Some("onnx") => Option::Some(Spelling::Proto),
+        Some("onnxtext") => Option::Some(Spelling::Text),
+        _ => null,
+    };
+}
+
+/// Whatever the file is wrong about, said against its path.
+fn at<E: Display>(path: &String, e: &E) -> String {
+    return `loam: '${*path}': ${e}`;
+}
+
+/// `bytes` as UTF-8, or why the file at `path` is not.
+fn text_of(path: &String, bytes: ByteList) -> Result<String, String> {
+    return String::from_utf8(bytes).map_err(|e| `loam: '${*path}' is not UTF-8: ${e}`);
+}
+
+fn read_graph(path: &String, spelling: Spelling, bytes: ByteList) -> Result<Graph, String> {
+    if spelling matches { Proto } {
+        return onnx_proto::read(bytes).map_err(|e| at(path, &e));
+    }
+    return onnx_text::read(&text_of(path, bytes)?).map_err(|e| at(path, &e));
+}
+
+/// A graph and what checking it proved.
+pub struct Model {
+    pub graph: Graph,
+    pub checked: Checked,
+}
+
+/// The graph at `path`, specialized by `options` and checked.
+pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Options) -> Result<Model, String> {
+    let mut graph = read_graph(path, spelling, bytes)?;
+    bind_dims(&mut graph, &options.dims).map_err(|e| at(path, &e))?;
+    keep_outputs(&mut graph, &options.outputs).map_err(|e| at(path, &e))?;
+    // An extent the algebra cannot discharge stops the build here. The one
+    // tier below this is `forward`, which checks only an inequality over the
+    // input symbols.
+    let checked = infer(&graph, &Schema { layout: options.layout }).map_err(|e| at(path, &e))?;
+    return Result::Ok(Model { graph, checked });
+}
+
+/// The module `model`'s `forward` runs in, importing its runtime from the
+/// package spec `runtime`, once `model` is checked against each checkpoint
+/// header in `headers`, keyed by its path.
+pub fn generate_model(
+    model: &Model,
+    path: &String,
+    headers: List<[String, ByteList]>,
+    runtime: &String,
+) -> Result<String, String> {
+    // Emitting first refuses an element type no kernel holds, which the check
+    // below takes as given.
+    let generated = emit(&model.graph, &model.checked, runtime).map_err(|e| at(path, &e))?;
+    for let [input_path, header] of headers {
+        let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
+        check_checkpoint(&model.graph, &model.checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;
+    }
+    return Result::Ok(generated);
+}
+
+/// The `Tokenizer` the `tokenizer.json` at `path` describes.
+pub fn generate_tokenizer(path: &String, bytes: ByteList, runtime: &String) -> Result<String, String> {
+    let bpe = read_tokenizer(&text_of(path, bytes)?).map_err(|e| at(path, &e))?;
+    return Result::Ok(emit_tokenizer(&bpe, path, runtime));
+}
+
+/// A checkpoint's leading bytes, through the end of its header, of the file, or
+/// of a length no module can address. The payloads are the loader's to read.
+pub fn read_header(content: Stream<u8>) -> ByteList {
+    let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
+    loop {
+        let chunk = content.read(HEADER_CHUNK);
+        prefix.extend(&(chunk.items as ByteList));
+        if chunk.result != CopyResult::Completed || holds_header(&prefix) {
+            break;
+        }
+    }
+    content.drop();
+    return prefix;
+}
+
+/// Whether `prefix` reaches the header's end, or declares one no read can reach.
+fn holds_header(prefix: &ByteList) -> bool {
+    if prefix.len() < 8 {
+        return false;
+    }
+    return match declared_header_end(prefix) {
+        Ok(end) => prefix.len() >= end,
+        Err(_) => true,
+    };
+}
+
+/// Enough for GPT-2's header in one read, which is 14 KiB.
+global HEADER_CHUNK: i32 = 65536;

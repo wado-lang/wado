@@ -221,6 +221,17 @@ arguments name are reported as one run, whichever packages they belong to.
 - A file argument is tested as given. `[test].exclude` and `[test].include` do
   not apply to it.
 
+### The Directory a Test Reads
+
+A test reaches the filesystem through one preopened directory, `.`, which is the
+root of the package its file belongs to: the nearest directory at or above the
+file holding a `wado.toml`. A path in a test therefore means one place wherever
+`wado test` is started and however the file was named. A file in no package
+gets the directory `wado test` was started in.
+
+`--dir` replaces that default with exactly the grants it names, for every file,
+and `--no-dir` with none.
+
 ### File Naming
 
 `*_test.wado` is the recommended name for a file that contains only tests. The
