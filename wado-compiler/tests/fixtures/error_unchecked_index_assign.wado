@@ -1,0 +1,10 @@
+// `unchecked` marks a read: an index assignment takes no marker.
+export fn run() {
+    let mut xs: List<i32> = [1, 2];
+    unchecked xs[0] = 3;
+}
+
+__DATA__
+{
+  "compile_error": ":4:5: analysis error: cannot assign to an expression that is not a place"
+}

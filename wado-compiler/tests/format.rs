@@ -3878,3 +3878,40 @@ fn test_format_keeps_an_attribute_on_impl_use_and_assoc_members() {
     assert_eq!(formatted, source);
     assert_format_preserves_ast(source);
 }
+
+/// Each `contract` clause takes a line of its own under the signature, and the
+/// body's `{` then opens a line of its own.
+#[test]
+fn test_format_contract_clauses() {
+    let source = concat!(
+        "pub fn slice(s: &String, start: i32, end: i32) -> i32 contract 0 <= start <= end, ",
+        "\"range\" contract end <= s.len() { return end - start; }\n",
+    );
+    let expected = concat!(
+        "pub fn slice(s: &String, start: i32, end: i32) -> i32\n",
+        "    contract 0 <= start <= end, \"range\"\n",
+        "    contract end <= s.len()\n",
+        "{\n",
+        "    return end - start;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+/// `unchecked` is a prefix operator, so it prints as `-` does, and its operand
+/// keeps the parentheses that limit it to one call of a chain.
+#[test]
+fn test_format_unchecked_operator() {
+    let source = concat!(
+        "fn run(s: String, xs: List<i32>) {\n",
+        "    let a = unchecked s.get_byte(0);\n",
+        "    let b = (unchecked s.slice(0, 1)).len();\n",
+        "    let c = unchecked xs[0] + 1;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}

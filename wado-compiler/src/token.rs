@@ -133,6 +133,7 @@ pub enum TokenKind {
     Global,
     Const,
     Matches,
+    Unchecked,
     // Note: "test", "do", "resume" are contextual keywords handled by the parser,
     // not as TokenKinds. `do` is only treated as a keyword inside the trailing
     // position of a `with ... do { ... }` clause; `resume` is only treated as a
@@ -314,6 +315,7 @@ impl fmt::Display for TokenKind {
             | Self::Global
             | Self::Const
             | Self::Matches
+            | Self::Unchecked
             | Self::True
             | Self::False
             | Self::Null => self

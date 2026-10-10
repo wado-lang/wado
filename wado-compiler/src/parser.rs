@@ -2016,10 +2016,18 @@ impl Parser {
             type_params.push(hole);
         }
 
+        let contracts = self.parse_contract_clauses()?;
+
         // Check for bodyless function declaration (compiler built-in /
         // trait-method signature) e.g., `pub fn stream_new() -> i64;`
         let mut decl_end_span = None;
         let body = if self.check(&TokenKind::Semicolon) {
+            if let Some(contract) = contracts.first() {
+                return Err(self.error_at_span(
+                    contract.span(),
+                    "a `contract` needs a body to check it in; one on a bodyless declaration is not supported",
+                ));
+            }
             self.advance();
             // Span must cover through the terminating `;`, not just the `fn`
             // keyword line. The formatter's blank-line accounting keys off
@@ -2031,7 +2039,9 @@ impl Parser {
             decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
             None
         } else {
-            Some(self.parse_block()?)
+            let mut body = self.parse_block()?;
+            body.stmts.splice(0..0, contracts);
+            Some(body)
         };
 
         let span = match (&body, decl_end_span) {
@@ -2058,6 +2068,34 @@ impl Parser {
             body,
             span,
         })
+    }
+
+    /// The `contract condition, message` clauses after a signature, as the
+    /// asserts they open the body with. `contract` is contextual: nothing else
+    /// can follow a signature.
+    fn parse_contract_clauses(&mut self) -> ParseResult<Vec<Stmt>> {
+        let mut clauses = Vec::new();
+        while matches!(self.peek_kind(), TokenKind::Ident(name) if name == "contract") {
+            let start_span = self.peek().span;
+            let id = self.alloc_ast_id();
+            self.advance();
+            let condition = self.parse_expr_no_struct_literal()?;
+            let message = if self.check(&TokenKind::Comma) {
+                self.advance();
+                Some(self.parse_expr_no_struct_literal()?)
+            } else {
+                None
+            };
+            let end_span = message.as_ref().map_or_else(|| condition.span(), Expr::span);
+            clauses.push(Stmt::Assert(AssertStmt {
+                id,
+                condition,
+                message,
+                contract: true,
+                span: start_span.merge(&end_span),
+            }));
+        }
+        Ok(clauses)
     }
 
     /// `(World::name, ns::World::name, …)` after `export`: the world exports
@@ -2598,6 +2636,7 @@ impl Parser {
             id,
             condition,
             message,
+            contract: false,
             span: start_span.merge(&semi_span),
         }))
     }
@@ -3905,6 +3944,7 @@ impl Parser {
             TokenKind::Minus => Some(UnaryOp::Neg),
             TokenKind::Tilde => Some(UnaryOp::BitNot),
             TokenKind::Star => Some(UnaryOp::Deref),
+            TokenKind::Unchecked => Some(UnaryOp::Unchecked),
             _ => None,
         };
 

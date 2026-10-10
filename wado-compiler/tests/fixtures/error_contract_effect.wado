@@ -1,0 +1,22 @@
+// A contract clause performs no effect: whether it runs depends on the build.
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> bool with Stdout {
+    println("checked");
+    return n > 0;
+}
+
+fn positive(n: i32) -> i32 with Stdout
+    contract noisy(n)
+{
+    return n;
+}
+
+export fn run() with Stdout {
+    let _ = positive(1);
+}
+
+__DATA__
+{
+  "compile_error": ":10:14: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'"
+}

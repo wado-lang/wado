@@ -904,8 +904,27 @@ impl<'a> Unparser<'a> {
             unparse_with_row_into(f.written_effects(), &mut s.output);
         });
 
+        self.indent_level += 1;
+        for clause in f.contracts() {
+            self.output.push('\n');
+            self.write_indent();
+            self.output.push_str("contract ");
+            self.unparse_expr(&clause.condition);
+            if let Some(message) = &clause.message {
+                self.output.push_str(", ");
+                self.unparse_expr(message);
+            }
+        }
+        self.indent_level -= 1;
+
         if let Some(body) = &f.body {
-            self.output.push_str(" {\n");
+            if f.contracts().next().is_none() {
+                self.output.push(' ');
+            } else {
+                self.output.push('\n');
+                self.write_indent();
+            }
+            self.output.push_str("{\n");
             self.indent_level += 1;
             self.unparse_block(body);
             self.indent_level -= 1;
@@ -1356,6 +1375,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = block.span.line;
 
         for stmt in &block.stmts {
+            if matches!(stmt, Stmt::Assert(a) if a.contract) {
+                continue;
+            }
             let stmt_span = get_stmt_span(stmt);
             let stmt_id = stmt.id();
             // Whatever the statements before this one had no slot for. Flushing
@@ -3106,6 +3128,7 @@ fn unary_op_str(op: UnaryOp) -> &'static str {
         UnaryOp::Ref => "&",
         UnaryOp::MutRef => "&mut ",
         UnaryOp::Deref => "*",
+        UnaryOp::Unchecked => "unchecked ",
     }
 }
 

@@ -100,9 +100,6 @@ already traps out of range.
 
 ### The caller decides whether a check can be removed
 
-The sections above describe what is built. This one and the two after it are
-adopted but not built. They lower to `builtin::contract_checks()`.
-
 A checked function and its `_unchecked` twin state the same contract. They
 differ in who guarantees it. The checked function guarantees a trap on a call
 outside the contract, and its caller may rely on that trap, so no build may
@@ -238,16 +235,27 @@ was kept despite that because it continues the `_unchecked` names it replaces.
    suites found one violation, in the standard library itself:
    `StrSlice::replacen` copied a non-matching byte at a time, so the tail view
    it appended could start inside a character.
+2. `contract` clauses and the `unchecked` operator. Done. A function with a
+   contract is reified twice: itself, which always checks, and a twin named
+   with an `$unchecked` suffix that checks under `builtin::contract_checks()`.
+   A marked call reaches the twin. The parser puts each clause at the head of
+   the body as an `assert` marked as a contract, so every pass over a body
+   sees it, and the formatter prints it back as a clause.
+3. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
+   `#[unavailable]` declaration where Rust has a method of the same name.
+4. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps
 
-- The checks run inside the `_unchecked` functions, so a failed check reports
-  the position inside the function, not the call that broke the contract.
+- A failed check reports the clause's position inside the function, not the
+  call that broke the contract.
+- A function reached by both a marked and an unmarked call is emitted twice,
+  once for each.
+- A contract on a trait's method, or on a declaration with no body, is a
+  compile error.
 - A clause that costs more than the function it guards is not checked: that
   the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
   that a write keeps them UTF-8 in `set_byte_unchecked`.
-- The syntax is not built. The clauses live in each function's body, and its
-  doc comment restates them.
 - A call whose callee is not known statically, through a trait bound or a
   function value, has no call site to place the check at. How a trait
   method's contract binds an impl is not settled either, and `unchecked xs[i]`

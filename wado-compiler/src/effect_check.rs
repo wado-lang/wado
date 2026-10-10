@@ -132,6 +132,9 @@ impl From<EffectError> for Diagnostic {
 pub enum PureContext {
     DefaultValue,
     GlobalInitializer,
+    /// A build may skip it, so whether its effects happen would depend on the
+    /// build.
+    Contract,
 }
 
 impl PureContext {
@@ -139,6 +142,7 @@ impl PureContext {
         match self {
             Self::DefaultValue => "default value expression",
             Self::GlobalInitializer => "global initializer",
+            Self::Contract => "contract clause",
         }
     }
 }
@@ -2249,10 +2253,10 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
         let mut walker = PurityWalker::new(sem, state, index, src, out);
         for item in &module.items {
             match item {
-                Item::Function(func) => walker.check_defaults(&func.params),
+                Item::Function(func) => walker.check_signature(func),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        walker.check_defaults(&method.params);
+                        walker.check_signature(method);
                     }
                 }
                 Item::Trait(trait_decl) => {
@@ -2354,6 +2358,17 @@ impl<'a> PurityWalker<'a> {
         for param in params {
             if let Some(default) = &param.default {
                 self.check(PureContext::DefaultValue, default);
+            }
+        }
+    }
+
+    /// A function's defaults and its `contract` clauses.
+    fn check_signature(&mut self, func: &ast::Function) {
+        self.check_defaults(&func.params);
+        for clause in func.contracts() {
+            self.check(PureContext::Contract, &clause.condition);
+            if let Some(message) = &clause.message {
+                self.check(PureContext::Contract, message);
             }
         }
     }

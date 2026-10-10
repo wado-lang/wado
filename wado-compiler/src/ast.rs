@@ -2421,6 +2421,8 @@ pub struct Function {
     /// a `with` clause here. The formatter prints what the source wrote.
     pub effects_inherited: bool,
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
+    /// Its leading [`AssertStmt::contract`] statements are the `contract`
+    /// clauses written ahead of it.
     pub body: Option<Block>,
     pub span: Span,
 }
@@ -2440,6 +2442,17 @@ pub struct ExportTarget {
 }
 
 impl Function {
+    /// The `contract` clauses: the leading statements of the body.
+    pub fn contracts(&self) -> impl Iterator<Item = &AssertStmt> {
+        self.body
+            .iter()
+            .flat_map(|body| &body.stmts)
+            .map_while(|stmt| match stmt {
+                Stmt::Assert(a) if a.contract => Some(a),
+                _ => None,
+            })
+    }
+
     /// Whether this is an `export fn` exported under its own name: an
     /// `export(…)` names the world exports it provides instead.
     #[must_use]
@@ -2571,6 +2584,9 @@ pub struct AssertStmt {
     pub condition: Expr,
     /// Optional message expression (typically a String literal or template string)
     pub message: Option<Expr>,
+    /// Written as a `contract` clause, which the parser places at the front of
+    /// the body: a precondition the caller owes.
+    pub contract: bool,
     pub span: Span,
 }
 
@@ -3611,6 +3627,9 @@ pub enum UnaryOp {
     Ref,
     MutRef,
     Deref,
+    /// `unchecked call`: the caller vouches for the callee's contract, so only
+    /// a build under `-f contract-checks` checks it.
+    Unchecked,
 }
 
 #[derive(Debug, Clone)]

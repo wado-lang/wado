@@ -64,7 +64,9 @@ Four things force the wrapped form whatever the width allows.
 An array that does not fit packs as many elements per line as the budget
 allows, unless it holds a call, a nested container, or a comment. Every other wrapped list
 is one entry per line with a trailing comma. Declaration bodies, a `match` with
-more than one arm, and `if` / `else` chains are always multi-line.
+more than one arm, and `if` / `else` chains are always multi-line. A function's
+`contract` clauses each take a line of their own, indented under the signature,
+and its body's `{` then opens a line of its own too.
 
 Blank lines follow the source: none stays none, one stays one, and a larger gap
 collapses to two.

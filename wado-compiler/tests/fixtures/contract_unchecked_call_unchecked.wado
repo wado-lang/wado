@@ -1,0 +1,23 @@
+// A build without contract checks (a CLI program above -O0) skips the check of
+// a call marked `unchecked`, and only that one: the unmarked call still traps,
+// reporting the clause's message.
+use { println, Stdout } from "core:cli";
+
+fn half(n: i32) -> i32
+    contract n % 2 == 0, "n must be even"
+{
+    return n / 2;
+}
+
+export fn run() with Stdout {
+    println(`${unchecked half(builtin::black_box(7))}`);
+    println(`${half(builtin::black_box(7))}`);
+}
+
+__DATA__
+{
+    "only_opt": ["O1", "O2", "O3", "Os"],
+    "stdout": "3\n",
+    "stderr_contains": ["n must be even"],
+    "trapped": true
+}

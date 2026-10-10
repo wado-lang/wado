@@ -101,7 +101,11 @@ functionDecl
     ;
 
 funcSig
-    : bindingName genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
+    : bindingName genericParams? '(' paramList? ')' returnType? withClause? contractClause* (block | ';')
+    ;
+
+contractClause
+    : 'contract' exprNoStruct (',' exprNoStruct)?
     ;
 
 identifier
@@ -109,7 +113,7 @@ identifier
     | 'from' | 'of' | 'type' | 'matches' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
-    | 'test' | 'do' | 'task' | 'extends'
+    | 'test' | 'do' | 'task' | 'extends' | 'contract'
     ;
 
 // A declared or type name. The compiler lexes `resume` as a name and refuses it
@@ -330,6 +334,7 @@ memberName
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
     | 'true' | 'false' | 'null' | 'trap' | 'forward' | 'Self'
     | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
+    | 'contract' | 'unchecked'
     ;
 
 block
@@ -470,7 +475,7 @@ expression
     ;
 
 unary
-    : ('-' | '~' | ('&' | '&&') 'mut'? | '*') unary
+    : ('-' | '~' | ('&' | '&&') 'mut'? | '*' | 'unchecked') unary
     | postfix
     ;
 
@@ -575,7 +580,7 @@ exprNoStruct
     ;
 
 unaryNoStruct
-    : ('-' | '~' | ('&' | '&&') 'mut'? | '*') unaryNoStruct
+    : ('-' | '~' | ('&' | '&&') 'mut'? | '*' | 'unchecked') unaryNoStruct
     | postfixNoStruct
     ;
 

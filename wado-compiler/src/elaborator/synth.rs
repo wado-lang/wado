@@ -527,6 +527,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let operand = self.synth(&u.expr, scope);
         let open = ArgClass::Opaque(OpaqueReason::Inference);
         match u.op {
+            ast::UnaryOp::Unchecked => operand,
             ast::UnaryOp::Ref | ast::UnaryOp::MutRef => {
                 let ArgClass::Exact(t) = operand else {
                     return open;

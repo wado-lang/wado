@@ -1,0 +1,60 @@
+// A `contract` clause is checked at every call written without `unchecked`,
+// whatever the build. The test world also checks the marked ones.
+
+fn half(n: i32) -> i32
+    contract n % 2 == 0, "n must be even"
+{
+    return n / 2;
+}
+
+struct Window { start: i32, end: i32 }
+
+impl Window {
+    fn at<T>(&self, items: &List<T>, i: i32) -> T
+        contract self.start <= i < self.end
+        contract self.end <= items.len()
+    {
+        return items[i];
+    }
+}
+
+test "calls inside the contract" {
+    assert half(4) == 2;
+    assert unchecked half(6) == 3;
+}
+
+test "a generic method inside its contract" {
+    let w = Window { start: 1, end: 3 };
+    let items: List<String> = ["a", "b", "c"];
+    assert w.at(&items, 2) == "c";
+    assert unchecked w.at(&items, 1) == "b";
+}
+
+#[expect_trap]
+test "an unmarked call outside the contract" {
+    let _ = half(builtin::black_box(3));
+}
+
+#[expect_trap]
+test "a marked call outside the contract, in a build that checks" {
+    let _ = unchecked half(builtin::black_box(3));
+}
+
+#[expect_trap]
+test "a method's second clause" {
+    let w = Window { start: 0, end: 4 };
+    let items: List<i32> = [1, 2, 3];
+    let _ = w.at(&items, builtin::black_box(1));
+}
+
+#[expect_trap]
+test "a marked generic method outside the contract" {
+    let w = Window { start: 1, end: 3 };
+    let items: List<i32> = [1, 2, 3];
+    let _ = unchecked w.at(&items, builtin::black_box(0));
+}
+
+__DATA__
+{
+    "test": {}
+}

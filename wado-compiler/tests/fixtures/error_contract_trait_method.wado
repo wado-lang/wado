@@ -1,0 +1,25 @@
+// A contract on a trait's method is not supported yet: how one binds an impl
+// is undecided.
+trait Get {
+    fn get(&self, i: i32) -> i32;
+}
+
+struct Box { value: i32 }
+
+impl Get for Box {
+    fn get(&self, i: i32) -> i32
+        contract i >= 0
+    {
+        return self.value + i;
+    }
+}
+
+export fn run() {
+    let b = Box { value: 1 };
+    let _ = b.get(1);
+}
+
+__DATA__
+{
+  "compile_error": ":11:9: analysis error: a `contract` on a trait's method is not supported"
+}

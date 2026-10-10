@@ -242,7 +242,11 @@ impl TypeSystem {
         let item = match op {
             UnaryOp::Neg => CompilerItem::Neg,
             UnaryOp::BitNot => CompilerItem::BitNot,
-            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => return false,
+            UnaryOp::Not
+            | UnaryOp::Ref
+            | UnaryOp::MutRef
+            | UnaryOp::Deref
+            | UnaryOp::Unchecked => return false,
         };
         !self
             .type_table
@@ -820,6 +824,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })?;
                     Some(pointee[0])
                 }),
+            UnaryOp::Unchecked => expected_type,
             _ if unary_passes_expected_type(unary) => expected_type,
             // Either keeps the variable a pending call is still to answer,
             // dispatched again once it is.
@@ -951,7 +956,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (method_name, item, op_symbol) = match op {
             UnaryOp::Neg => ("neg", CompilerItem::Neg, "-"),
             UnaryOp::BitNot => ("bitnot", CompilerItem::BitNot, "~"),
-            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => {
+            UnaryOp::Not
+            | UnaryOp::Ref
+            | UnaryOp::MutRef
+            | UnaryOp::Deref
+            | UnaryOp::Unchecked => {
                 panic!("only `-` and `~` dispatch through a trait")
             }
         };

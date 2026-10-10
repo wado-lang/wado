@@ -100,6 +100,12 @@ pub fn cold_region_helper_name(enclosing_name: &str, ordinal: u32) -> String {
     format!("{enclosing_name}$cold{ordinal}")
 }
 
+/// The name of a function's `unchecked` twin, which an `unchecked` call
+/// reaches: the function's name with an `$unchecked` suffix.
+pub fn unchecked_twin_name(name: &str) -> String {
+    format!("{name}$unchecked")
+}
+
 /// The name of the function holding an effect operation's default
 /// implementation — the body that runs when the operation is dispatched with
 /// no handler installed. `$`-prefixed like the other synthesized helpers, so it
