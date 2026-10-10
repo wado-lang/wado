@@ -274,11 +274,12 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
             diagnostics.warn(&DiagnosticOwner::host("lexer action"), DiagnosticKind::UnsupportedAction, *msg);
         }
     }
+    let num_tokens = token_kinds.len();
     let mut lctx = lower_context(grammar, &lit_tokens, token_kinds, settings, diagnostics);
     let lowered = lower(grammar, &lit_tokens, &mut lctx);
     // Every grammar reads its recovery sets off the ATN; only the simulator's
     // grammars also embed it.
-    let atn = build_atn_with(grammar, &lowered);
+    let atn = build_atn_with(grammar, &lowered, num_tokens);
     let mut ctx = emit_context(grammar, &lowered, lctx, &atn);
     // Lexer ATN: built when a lexer rule's non-greedy body recurses into
     // itself (the nested-comment class static lexing cannot decide). The

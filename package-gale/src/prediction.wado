@@ -15,7 +15,7 @@ use { Element, RepeatElement, RepeatKind, Alternative } from "./ir.wado";
 use { GrammarAnalysis, is_nullable } from "./grammar_analysis.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
-use { all_alts_are_single_token, dedup_append_arr, sets_overlap } from "./gen_util.wado";
+use { all_alts_are_single_token, dedup_append_arr, push_unique, sets_overlap } from "./gen_util.wado";
 use { HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
@@ -627,9 +627,7 @@ fn sll_config_open(c: &SllConfig, analysis: &mut GrammarAnalysis) -> bool {
 fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
     let mut alts: List<i32> = [];
     for let c of configs {
-        if !alts.contains(&c.alt_index) {
-            alts.push(c.alt_index);
-        }
+        push_unique(&mut alts, c.alt_index);
     }
     return alts;
 }
@@ -719,14 +717,12 @@ fn build_sll_node(
                 let advanced = sll_advance(&closed[i], tk, analysis);
                 // An open position admits the token even where the walk cannot
                 // follow it there; dropping the alt would hand the token away.
-                if opens_on_tk && advanced.is_empty() && !opaque_alts.contains(&closed[i].alt_index) {
-                    opaque_alts.push(closed[i].alt_index);
+                if opens_on_tk && advanced.is_empty() {
+                    push_unique(&mut opaque_alts, closed[i].alt_index);
                 }
                 for let a of advanced {
                     if a.pos == SLL_POS_OPAQUE {
-                        if !opaque_alts.contains(&a.alt_index) {
-                            opaque_alts.push(a.alt_index);
-                        }
+                        push_unique(&mut opaque_alts, a.alt_index);
                     } else {
                         next_configs.push(a);
                     }
@@ -739,13 +735,8 @@ fn build_sll_node(
         }
 
         let deduped = sll_dedup(&next_configs);
-        let mut next_alts = sll_unique_alts(&deduped);
-        // Add opaque alts (they survive regardless of further lookahead).
-        for let oa of opaque_alts {
-            if !next_alts.contains(&oa) {
-                next_alts.push(oa);
-            }
-        }
+        // Opaque alts survive regardless of further lookahead.
+        let next_alts = expansion_alts(&deduped, &opaque_alts);
 
         let child = if next_alts.len() == 1 {
             // Resolved: this token uniquely identifies one alternative.
@@ -840,11 +831,7 @@ fn build_sll_node(
 /// orders them: the surviving non-opaque configs first, then the opaque alts.
 fn expansion_alts(configs: &List<SllConfig>, opaque_alts: &List<i32>) -> List<i32> {
     let mut alts = sll_unique_alts(configs);
-    for let oa of opaque_alts {
-        if !alts.contains(oa) {
-            alts.push(*oa);
-        }
-    }
+    dedup_append_arr(&mut alts, opaque_alts);
     return alts;
 }
 
@@ -980,9 +967,7 @@ fn try_expand_opaque(
         let mut token_alts: List<i32> = [];
         for let mut i = 0; i < all_configs.len(); i += 1 {
             if config_firsts[i].contains(&tk) {
-                if !token_alts.contains(&all_configs[i].alt_index) {
-                    token_alts.push(all_configs[i].alt_index);
-                }
+                push_unique(&mut token_alts, all_configs[i].alt_index);
             }
         }
         let child = if token_alts.len() == 1 {
@@ -1016,9 +1001,7 @@ fn try_expand_opaque(
     let mut covered_alts: List<i32> = [];
     for let b of branches {
         if let Leaf(idx) = b.child {
-            if !covered_alts.contains(&idx) {
-                covered_alts.push(idx);
-            }
+            push_unique(&mut covered_alts, idx);
         }
     }
     for let oa of opaque_alts {

@@ -25,8 +25,8 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
 use { lower, element_is_self_ref, lr_operand_prec } from "./lower.wado";
-use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
-use { TokenKinds } from "./token_kinds.wado";
+use { collect_literal_tokens } from "./lexer_gen.wado";
+use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -172,7 +172,6 @@ struct AtnBuilder {
     rule_start: List<i32>,
     rule_stop: List<i32>,
     decision_state: List<i32>,
-    kinds: TokenKinds,
     num_tokens: i32,
     call_site_returns: List<i32>,
     decision_sites: List<i32>,
@@ -232,18 +231,18 @@ impl AtnBuilder {
         self.states[from].transitions.push(t);
     }
 
-    fn kind_of<S: AsStrSlice>(&self, name: S) -> i32 {
-        return self.kinds.id_of(name);
-    }
 }
 
-/// Build the whole-grammar parser ATN, lowering the grammar on demand. This
-/// is the convenience entry for unit tests and tooling; production codegen
-/// (`gen_atn_data_global`) calls `build_atn_with` directly to reuse the
-/// `LoweredGrammar` it has already computed.
+/// Build the whole-grammar parser ATN, stamping and lowering the grammar on
+/// demand. This is the convenience entry for unit tests and tooling;
+/// production codegen (`gen_atn_data_global`) calls `build_atn_with` directly
+/// to reuse the `LoweredGrammar` it has already computed.
 pub fn build_atn(grammar: &Grammar) -> Atn {
-    let lowered = lower(grammar, &collect_literal_tokens(&grammar.parser_rules));
-    return build_atn_with(grammar, &lowered);
+    let mut stamped = *grammar;
+    let kinds = TokenKinds::build(&stamped);
+    resolve_kind_ids(&mut stamped, &kinds);
+    let lowered = lower(&stamped, &collect_literal_tokens(&stamped.parser_rules));
+    return build_atn_with(&stamped, &lowered, kinds.len());
 }
 
 /// Build the whole-grammar parser ATN. Non-left-recursive rules are built
@@ -253,16 +252,14 @@ pub fn build_atn(grammar: &Grammar) -> Atn {
 /// simulator can walk them without infinite left recursion. The rewrite
 /// reuses lowering's existing LR analysis (`LeftRecursiveRule` / `LrAlt`),
 /// passed in via `lowered`; `lowered.parser_rules` runs parallel to
-/// `grammar.parser_rules` (same source order and count).
-pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
-    let kinds = TokenKinds::build(grammar);
-    let num_tokens = kinds.len();
+/// `grammar.parser_rules` (same source order and count). Atoms are labelled
+/// with the `kind_id` `resolve_kind_ids` stamped, out of `num_tokens` kinds.
+pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar, num_tokens: i32) -> Atn {
     let mut b = AtnBuilder {
         states: [],
         rule_start: [],
         rule_stop: [],
         decision_state: [],
-        kinds,
         num_tokens,
         call_site_returns: [],
         decision_sites: [],
@@ -471,8 +468,8 @@ fn build_sequence(
 /// Build a single element, returning its `[entry, exit]` state pair.
 fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &HashMap<String, i32>) -> [i32, i32] {
     return match *elem {
-        TokenRef(t) => leaf_segment(b, b.kind_of(`TK_${t.name}`), rule, t.atn_leaf_site),
-        Literal(l) => leaf_segment(b, b.kind_of(&l.const_name), rule, l.atn_leaf_site),
+        TokenRef(t) => leaf_segment(b, t.kind_id, rule, t.atn_leaf_site),
+        Literal(l) => leaf_segment(b, l.kind_id, rule, l.atn_leaf_site),
         Wildcard(_) => {
             let from = b.new_state(ATN_BASIC, rule);
             let to = b.new_state(ATN_BASIC, rule);
@@ -527,8 +524,8 @@ fn not_segment(b: &mut AtnBuilder, inner: &Element, rule: i32) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC, rule);
     let to = b.new_state(ATN_BASIC, rule);
     let label = match *inner {
-        TokenRef(t) => b.kind_of(`TK_${t.name}`),
-        Literal(l) => b.kind_of(&l.const_name),
+        TokenRef(t) => t.kind_id,
+        Literal(l) => l.kind_id,
         _ => -1,
     };
     if label >= 0 {

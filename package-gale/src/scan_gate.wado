@@ -18,6 +18,7 @@ use { PARSER_HANDLE, VALS_LOCAL, to_snake_case } from "./ident.wado";
 use { HashMap } from "core:collections";
 use { rule_is_left_recursive } from "./action_translate.wado";
 use { ident_words, is_ident_char } from "./text.wado";
+use { dedup_append_arr, push_unique } from "./gen_util.wado";
 
 /// The scan's copy of the gate members: a scan function's `&mut` parameter, and
 /// the parser field it points at. A rendered condition names the parameter.
@@ -277,9 +278,7 @@ pub fn scan_gate_fields(grammar: &Grammar, bodies: &HashMap<i32, String>) -> Lis
                 let body = gate_body_of(bodies, a.source.action_id);
                 match gate_assignment(&body) {
                     Some(hit) => {
-                        if !simulable.contains(&hit.0) {
-                            simulable.push(hit.0);
-                        }
+                        push_unique(&mut simulable, hit.0);
                     },
                     None => {
                         refused.refuse(&a.source.text);
@@ -309,7 +308,7 @@ struct Refusals {
 
 impl Refusals {
     fn refuse<S: AsStrSlice>(&mut self, body: S) {
-        push_new(&mut self.names, mentioned_names(body));
+        dedup_append_arr(&mut self.names, &mentioned_names(body));
         // A `(` that is not a call — a grouping, a cast — costs the gate a
         // simulation it would have been sound without, which is the direction
         // this whole set errs in.
@@ -345,14 +344,6 @@ fn reject_element_writes(e: &Element, refused: &mut Refusals) {
         // an action does not silently keep its field simulable.
         RuleRef(_) | TokenRef(_) | Literal(_) | Wildcard(_) => {
         },
-    }
-}
-
-fn push_new(out: &mut List<String>, names: List<String>) {
-    for let name of names {
-        if !out.contains(&name) {
-            out.push(name);
-        }
     }
 }
 

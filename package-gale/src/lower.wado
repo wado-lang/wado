@@ -77,6 +77,11 @@ use {
     is_storable_group,
     dedup_name,
     subtract_sets,
+    dedup_append_arr,
+    push_unique,
+    strip_suffix,
+    union_kind_arrays,
+    sets_overlap,
 } from "./gen_util.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { LowerContext, LowerMarks } from "./lower_context.wado";
@@ -84,7 +89,6 @@ use { rule_has_at_end_conflict } from "./rule_overlap.wado";
 use { GrammarAnalysis, close_over_callers, is_nullable } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { FOLLOW_MASK_MAX_K } from "./table_registry.wado";
-use { dedup_append_arr, strip_suffix, union_kind_arrays, sets_overlap } from "./gen_util.wado";
 use { compute_prefix_self_ref_min_prec } from "./lr_util.wado";
 use {
     LoweredGrammar,
@@ -4236,7 +4240,7 @@ fn atn_asked_kinds(
         },
     };
     let mut asked = union_kind_arrays(exit_first, &refused);
-    dedup_append_arr(&mut asked, &[ctx.analysis.eof_kind_id()]);
+    push_unique(&mut asked, ctx.analysis.eof_kind_id());
     return asked;
 }
 

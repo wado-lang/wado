@@ -16,7 +16,7 @@ use {
     lexer_alias_text,
     NO_MODE,
 } from "./ir.wado";
-use { gen_visibility_comment, negate_cond } from "./gen_util.wado";
+use { dedup_append_arr, gen_visibility_comment, negate_cond, push_unique } from "./gen_util.wado";
 use { literal_const_name } from "./ident.wado";
 use { CodeWriter, StructSpec, ImplSpec, FnSpec, GlobalSpec, Vis, char_range_pat, wado } from "lib:wadopoet";
 use {
@@ -926,9 +926,7 @@ fn lexer_rule_subsumers(rule: &LexerRule, earlier: &List<LexerRuleRoute>, lexer_
             if !lexer_rule_outranks(name, rule.mode, earlier, lexer_rules) {
                 return [];
             }
-            if !by.contains(name) {
-                by.push(*name);
-            }
+            push_unique(&mut by, *name);
         }
         return by;
     }
@@ -1075,9 +1073,7 @@ fn collect_lexer_calls(elem: &LexerElement, all_rules: &List<LexerRule>, out: &m
                     return;
                 }
             }
-            if !out.contains(&name) {
-                out.push(name);
-            }
+            push_unique(out, name);
         },
         Group(alts) => {
             for let alt of &alts {
@@ -2559,11 +2555,7 @@ fn collect_elem_calls(plan: &LexerElemPlan, out: &mut List<LexerFragmentKey>) {
     match plan {
         Body(body) => collect_body_calls(body, out),
         Not(nested) => collect_elem_calls(&nested.inner, out),
-        Call(key) => {
-            if !out.contains(key) {
-                out.push(*key);
-            }
-        },
+        Call(key) => push_unique(out, *key),
         CharSet(_) | Leaf => {
         },
     }
@@ -4317,7 +4309,7 @@ fn keyword_alts_ends(
         for let elem of &alt.elements {
             at = keyword_elem_ends(elem, all_rules, grammar_opts, kw, reading, ci, &at, visiting);
         }
-        add_keyword_ends(&mut out, &at);
+        dedup_append_arr(&mut out, &at);
     }
     return out;
 }
@@ -4387,7 +4379,7 @@ fn keyword_elem_ends(
                     visiting,
                 );
                 let fresh: List<i32> = reached.iter_ref().filter(|p| !out.contains(p)).map(|p| *p).collect();
-                add_keyword_ends(&mut out, &fresh);
+                dedup_append_arr(&mut out, &fresh);
                 if fresh.is_empty() || rep.kind matches { Optional } {
                     return out;
                 }
@@ -4422,21 +4414,13 @@ fn keyword_elem_ends(
     }
 }
 
-fn add_keyword_ends(out: &mut List<i32>, ends: &List<i32>) {
-    for let p of ends {
-        if !out.contains(p) {
-            out.push(*p);
-        }
-    }
-}
-
 /// Where a construct the scan cannot read may end: nowhere when proving,
 /// anywhere from its start on otherwise.
 fn unread_keyword_ends(kw: &KeywordInfo, reading: KeywordReading, starts: &List<i32>) -> List<i32> {
     let mut out: List<i32> = [];
     if reading matches { Possible } {
         for let p of starts {
-            add_keyword_ends(&mut out, &(*p..=kw.text.len()).collect());
+            dedup_append_arr(&mut out, &(*p..=kw.text.len()).collect());
         }
     }
     return out;
@@ -4689,11 +4673,7 @@ struct KeywordArm {
 fn keyword_arms(group: &List<KeywordInfo>, pos: i32) -> List<KeywordArm> {
     let mut chars: List<char> = [];
     for let kw of group {
-        for let c of keyword_accepts(kw, pos) {
-            if !chars.contains(&c) {
-                chars.push(c);
-            }
-        }
+        dedup_append_arr(&mut chars, &keyword_accepts(kw, pos));
     }
     chars.sort();
     let mut arms: List<KeywordArm> = [];

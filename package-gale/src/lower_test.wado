@@ -84,7 +84,7 @@ fn alt_of(elements: List<Element>) -> Alternative {
 test "lower passes through grammar metadata" {
     let mut g = empty_grammar("JSON");
     g.source_files = ["JSON.g4"];
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     assert lowered.name == "JSON";
     assert lowered.source_files.len() == 1;
     assert lowered.source_files[0] == "JSON.g4";
@@ -162,7 +162,7 @@ test "lower simple rule with RuleRef" {
         ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(r) = &s.body.ops[0] {
             assert r.target_name == "expr";
@@ -188,7 +188,7 @@ test "lower simple rule with Wildcard" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Wildcard(w) = &s.body.ops[0] {
             assert w.field == "wildcard";
@@ -284,7 +284,7 @@ test "lower dedupes same-name fields" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.ops.len() == 2;
         if let Token(t) = &s.body.ops[0] {
@@ -365,7 +365,7 @@ test "lower multi-alt rule with labeled alts uses label as case name" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let MultiAlt(m) = &lowered.parser_rules[0] {
         // When all alts are labeled, `case_names_for_rule` uses the
         // labels directly (positional `Alt0`/`Alt1` only fires for
@@ -447,7 +447,7 @@ test "lower transparent Group dedupes against surrounding scope" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Token(t) = &s.body.ops[0] {
             assert t.field == "int";
@@ -494,7 +494,7 @@ test "lower single-alt Group with two leaves produces SingleAlt shape" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.ops.len() == 1;
         if let Group(go) = &s.body.ops[0] {
@@ -546,7 +546,7 @@ test "lower single-alt Group uses fresh name table for inner ops" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Token(t) = &s.body.ops[0] {
             assert t.field == "id";
@@ -608,7 +608,7 @@ test "lower single-alt Group field name dedupes against outer scope" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[1] {
             if let SingleAlt(sa) = &go.shape {
@@ -695,7 +695,7 @@ test "lower token-only Group accepts Literal alts" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[0] {
             if let TokenOnly(to) = &go.shape {
@@ -744,7 +744,7 @@ test "lower token-only Group field dedupes against outer scope" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[1] {
             if let TokenOnly(to) = &go.shape {
@@ -870,7 +870,7 @@ test "lower SimpleCst Group field dedupes against outer scope" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[1] {
             if let SimpleCst(scst) = &go.shape {
@@ -995,7 +995,7 @@ test "lower General Group group_index is per-rule cumulative" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.ops.len() == 2;
         if let Group(go0) = &s.body.ops[0] {
@@ -1051,7 +1051,7 @@ test "lower Repeat with nested SingleAlt Group inner" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             if let Group(go) = &rep.body {
@@ -1100,7 +1100,7 @@ test "lower SingleAlt Group containing nested Group" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(outer) = &s.body.ops[0] {
             if let SingleAlt(_) = &outer.shape {
@@ -1153,7 +1153,7 @@ test "lower Transparent Group wrapping Repeat" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[0] {
             if let Transparent = &go.shape {
@@ -1296,7 +1296,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
         ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(r) = &s.body.ops[0] {
             if let Plus = r.kind {
@@ -1509,7 +1509,7 @@ test "lower Label dedupes against surrounding alt names" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Token(t) = &s.body.ops[0] {
             assert t.field == "lhs";
@@ -1544,7 +1544,7 @@ test "lower carries every leaf op in order" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.ops.len() == 4;
         if let Token(_) = &s.body.ops[0] {
@@ -1597,7 +1597,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         assert s.body.fields.len() == 4, `expected 4 fields, got ${s.body.fields.len()}`;
         assert s.body.fields[0].name == "span";
@@ -1648,7 +1648,7 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span, int_list, int]
         assert s.body.fields.len() == 3, `expected 3 fields, got ${s.body.fields.len()}`;
@@ -1703,7 +1703,7 @@ test "lower SingleAlt Group body enumerates list-label inner as List field" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // Repeat is ops[1]; its body is the SingleAlt Group.
         if let Repeat(rep) = &s.body.ops[1] {
@@ -1766,7 +1766,7 @@ test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[0] {
             if let SingleAlt(_) = &go.shape {
@@ -1833,7 +1833,7 @@ test "lower General Group inner alts enumerate per-alt FieldDecls without span" 
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Group(go) = &s.body.ops[0] {
             if let General(_) = &go.shape {
@@ -1888,7 +1888,7 @@ test "lower Repeat field name dedupes against outer scope" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span, int_list (label), int_list_2 (Repeat dedup)]
         assert s.body.fields.len() == 3;
@@ -1949,7 +1949,7 @@ test "lower Group field decls match shape's outer field/type" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span, k_a_or_k_b: Token, stmt_or_expr: Option<StmtOrExprGroup>, a_b: ABItem]
         // Standalone SimpleCst groups surface as `Option<>` to match
@@ -1994,7 +1994,7 @@ test "lower LR rule splits atom and lr_alts and assigns precedence" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let LeftRecursive(l) = &lowered.parser_rules[0] {
         assert l.header.name == "expr";
         // Atom: only the non-LR alt (alt_index 0).
@@ -2057,7 +2057,7 @@ test "lower LR rule respects right-associative conflict_min" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let LeftRecursive(l) = &lowered.parser_rules[0] {
         assert l.lr_alts.len() == 1;
         assert l.lr_alts[0].right_associative;
@@ -2088,7 +2088,7 @@ test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let LeftRecursive(l) = &lowered.parser_rules[0] {
         assert l.lr_alts.len() == 1;
         assert l.lr_alts[0].last_self_ref_idx == -1;
@@ -2317,7 +2317,7 @@ test "lower multi-alt rule with overlapping first sets emits Tournament dispatch
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let MultiAlt(m) = &lowered.parser_rules[0] {
         if let Tournament(td) = &m.dispatch {
             assert td.alts.len() == 2;
@@ -2356,7 +2356,7 @@ test "lower warns once when overlapping alts fall back to a tournament" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     assert lowered.diagnostics.len() == 1, `expected 1 diagnostic, got ${lowered.diagnostics.len()}`;
     let d = &lowered.diagnostics[0];
     // The owner names the rule structurally, so tooling matches by equality.
@@ -2386,7 +2386,7 @@ test "lower raises no diagnostics for disjoint alts" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     assert lowered.diagnostics.is_empty(), `expected no diagnostics, got ${lowered.diagnostics.len()}`;
 }
 
@@ -2447,7 +2447,7 @@ test "lower Tournament sorts longer alt first" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let MultiAlt(m) = &lowered.parser_rules[0] {
         if let Tournament(td) = &m.dispatch {
             // alt 0 has 3 elements, alt 1 has 2; alt 0 sorts first.
@@ -2490,7 +2490,7 @@ test "lower: RuleCall before a token gets a Combined FollowArg; callee tail Repe
         ]),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     // No variant bodies are ever produced now.
     // `r`'s `a` call carries the local suffix ahead of whatever `r` was called
     // with.
@@ -2532,7 +2532,7 @@ test "lower: RuleCall at the rule tail forwards the runtime follow" {
         ]),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let RuleCall(rc) = &s.body.ops[0] {
             assert rc.follow_arg matches { Forward }, "expected Forward FollowArg at a tail call";
@@ -2642,7 +2642,7 @@ test "lower Optional Repeat with single-token inner stays Plain" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             if let Plain = &rep.strategy {
@@ -2694,7 +2694,7 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             if let OptionalScanGuard = &rep.strategy {
@@ -2828,7 +2828,7 @@ test "lower Optional Repeat with many optionals does not enumerate 2^n shapes" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             if let OptionalShapeLookahead(_) = &rep.strategy {
@@ -2880,7 +2880,7 @@ test "lower Repeat over General Group inner uses speculative group_counter id" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             // Outer field uses speculative counter id 0.
@@ -2931,7 +2931,7 @@ test "lower Repeat with list-label inner uses label name as outer field" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         if let Repeat(rep) = &s.body.ops[0] {
             // The Repeat's outer field is `names`, not `id_list`.
@@ -2961,7 +2961,7 @@ test "lower Transparent Group does not contribute a CST field" {
         ),
     ];
 
-    let [lowered, an] = lower_keeping_kinds(&g);
+    let lowered = lower(&g, &[]);
     if let Simple(s) = &lowered.parser_rules[0] {
         // [span] — the Transparent group does not surface a field.
         assert s.body.fields.len() == 1, `expected 1 field (span only), got ${s.body.fields.len()}`;

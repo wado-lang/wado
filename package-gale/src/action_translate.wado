@@ -18,6 +18,7 @@ use {
     MIN_PREC_LOCAL,
 } from "./ident.wado";
 use { is_self_ref_element } from "./lr_util.wado";
+use { push_unique } from "./gen_util.wado";
 
 /// Name of a rule's value-channel struct (`e` -> `EVals`).
 pub fn vals_struct_name(rule: &ParserRule) -> String {
@@ -225,10 +226,7 @@ pub fn rule_binding_reads(rule: &ParserRule, rules: &List<ParserRule>) -> Option
             if r.target matches { ParserSpecial } && r.name == "ctx" {
                 return null;
             }
-            let base = binding_name(&r.name);
-            if !reads.contains(&base) {
-                reads.push(base);
-            }
+            push_unique(&mut reads, binding_name(&r.name));
         }
     }
     return Option::Some(reads);

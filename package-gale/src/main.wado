@@ -182,6 +182,7 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) -> Result<(), String> w
     // no parser is built from, and lowering re-derives per query what the
     // prologue answers once.
     let token_kinds = canonicalize_for_analysis(&mut merged);
+    let num_tokens = token_kinds.len();
 
     // `render_dump` renders with the context that lowered the grammar, whose
     // actions are wired: lowering asks whether actions execute, so the report
@@ -191,7 +192,7 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) -> Result<(), String> w
 
     // `--atn` reports the ATN off that same lowering rather than the GIR.
     if atn {
-        print(render_atn_dump(&merged, &lowered));
+        print(render_atn_dump(&merged, &lowered, num_tokens));
         return Result::Ok(());
     }
     print(render_dump(&merged, &lowered, &mut ctx));

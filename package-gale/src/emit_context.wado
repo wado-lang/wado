@@ -17,7 +17,7 @@ use { AltBinding } from "./attr_resolve.wado";
 use { rule_returns_vals } from "./action_translate.wado";
 use { SCAN_GATE_HANDLE, SCAN_GATE_FIELD, SCAN_GATE_TYPE } from "./scan_gate.wado";
 use { PARSER_HANDLE } from "./ident.wado";
-use { sets_overlap } from "./gen_util.wado";
+use { push_unique, sets_overlap } from "./gen_util.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
@@ -278,9 +278,7 @@ impl EmitCursor {
 
     /// Record that the dispatch resolves predicate `id`, so its body skips it.
     pub fn mark_predicate_gated(&mut self, id: i32) {
-        if !self.predicate_gated.contains(&id) {
-            self.predicate_gated.push(id);
-        }
+        push_unique(&mut self.predicate_gated, id);
     }
 
     /// Whether the dispatch resolves predicate `id`.
