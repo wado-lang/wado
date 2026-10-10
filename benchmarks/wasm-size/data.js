@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791638421891,
+  "lastUpdate": 1791642115618,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65925,6 +65925,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d947d6f1f5b859f191bd2629792227e99efa1246"
         },
         "date": 1791638421315,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "efb6cd03666ea7d2531ddf51dfc03e0a664d5e1d",
+          "message": "Merge pull request #2324 from wado-lang/loam-fusion\n\nfeat(loam): fuse operators by kind and report every fusion decision",
+          "timestamp": "2026-10-10T23:05:22+09:00",
+          "tree_id": "f7d5693222934f073e1d2ed66f7dde2f7de4c164",
+          "url": "https://github.com/wado-lang/wado/commit/efb6cd03666ea7d2531ddf51dfc03e0a664d5e1d"
+        },
+        "date": 1791642114877,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
