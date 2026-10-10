@@ -11,6 +11,11 @@ load from a safetensors checkpoint at run time:
 and the model as a library. A browser page can build the same library into a
 component.
 
+`webgpu.wado` runs the same model on a WebGPU device, and checks that it picks
+the tokens onnxruntime picks:
+
+    wado run-webgpu webgpu.wado
+
 `hf2loam.mjs` writes the checkpoint from Hugging Face's `model.safetensors`
 without running Wado. Its `convert` function takes and returns byte arrays, so a
 browser page can run it too.
@@ -36,6 +41,9 @@ example:
   weights left out, as `tools/onnx_split.wado` writes it.
 - `gpt2-header.safetensors` is the header of the checkpoint that tool writes.
   The build checks the graph against it, and only running needs the weights.
+- `generate.json` is the oracle for the model: the tokens onnxruntime picks
+  greedily after a prompt, and its time per token on the CPU. `generate.mjs`
+  writes it, running `onnx/decoder_model.onnx` with `onnxruntime-node`.
 
 `fetch.sh` downloads the model, writes the checkpoint beside them, and rewrites
 the graph and the header from it. Git ignores the model and the checkpoint.

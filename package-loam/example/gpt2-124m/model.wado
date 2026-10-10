@@ -1,7 +1,7 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
 //! token greedily.
 
-use { Cpu, LoadError, Tensor } from "lib:loam";
+use { Backend, LoadError, Tensor } from "lib:loam";
 /// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
 pub use { Tokenizer } from "./tokenizer.json"
     with {
@@ -144,25 +144,37 @@ use gpt2 from "./gpt2.onnxtext"
         },
     };
 
-/// GPT-2 with its weights loaded.
-pub struct Model {
-    weights: gpt2::Prepared<Cpu>,
+/// GPT-2's context, the rows of `wpe`, which the graph's causal mask covers.
+/// `forward` refuses a longer sequence.
+global POSITIONS: i32 = 1024;
+
+/// GPT-2 with its weights loaded where `Bk` runs the kernels.
+pub struct Model<Bk: Backend> {
+    backend: Bk,
+    weights: gpt2::Prepared<Bk>,
 }
 
-impl Model {
-    /// Loads the weights from a safetensors checkpoint laid out as
-    /// `gpt2-header.safetensors` says.
-    pub fn load(checkpoint: &ByteList) -> Result<Model, LoadError> {
-        return Ok(Model { weights: gpt2::Prepared::load(&mut Cpu {}, checkpoint)? });
+impl<Bk: Backend> Model<Bk> {
+    /// Loads the weights onto `backend` from a safetensors checkpoint laid out
+    /// as `gpt2-header.safetensors` says.
+    pub fn load(backend: Bk, checkpoint: &ByteList) -> Result<Model<Bk>, LoadError> with _ {
+        let mut on = backend;
+        let weights = gpt2::Prepared::load(&mut on, checkpoint)?;
+        return Ok(Model { backend: on, weights });
+    }
+
+    /// The backend the model runs on.
+    pub fn backend(&self) -> &Bk {
+        return &self.backend;
     }
 
     /// How many positions the model reads: one per row of `wpe`.
     pub fn positions(&self) -> i32 {
-        return self.weights.transformer_wpe_weight.extents[0];
+        return POSITIONS;
     }
 
     /// The token the model ranks first after `ids`.
-    pub fn next_token(&self, ids: &List<i32>) -> i32 {
+    pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
         assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
         let vocab = gpt2::Vocab::EXTENT;
         for let id of ids {
@@ -171,7 +183,7 @@ impl Model {
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
-            &mut Cpu {},
+            &mut self.backend,
             &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
             &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             &self.weights,

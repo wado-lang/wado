@@ -48,12 +48,13 @@ runs.
 - `prepare` uploads a weight once, and `Prepared` holds it on the device.
 - A device tensor is a view: a buffer, an offset into it, and a stride per
   axis. A broadcast axis has stride 0.
-- A regrouping makes a view and dispatches nothing: `reshape` of a contiguous
-  view, `transpose2`, `permute`, `lift`, `slice_axis` and with it `Split`. A
-  `reshape` of a view that is not contiguous copies it first. The kernel that
-  reads a view reads through its strides, as DNNFusion folds a reorganizing or
-  shuffling operator into the index of the operator reading it (Niu et al.,
-  PLDI 2021).
+- A regrouping makes a view and dispatches nothing: `transpose2`, `permute`,
+  `lift`, `slice_axis` and with it `Split`, and a `reshape` wherever the
+  view's strides can say it, as numpy's reshape asks before it copies. The
+  kernel that reads a view reads through its strides, as DNNFusion folds a
+  reorganizing or shuffling operator into the index of the operator reading it
+  (Niu et al., PLDI 2021). Merging heads after a transpose is a `reshape` no
+  strides can say, so it copies.
 - Every kernel GPT-2 needs runs on the device: the products (`matmul_broadcast`
   included, its stretched batch a stride of 0), `gather_rows` over a device
   table with indices from the host, `select`, `concat`, `softmax`,
@@ -64,12 +65,24 @@ runs.
   when it runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
   has them.
-- The device's limits are requested at the adapter's own. GPT-2's token
-  embedding is 154 MB, past WebGPU's default binding of 128 MiB.
+- The device's limits are requested at the adapter's own, and a dispatch binds
+  only the span of a buffer its views reach. GPT-2's token embedding is 154 MB,
+  past WebGPU's default binding of 128 MiB, which is all llvmpipe offers. A
+  gather whose rows still outgrow a binding runs over halves of its indices,
+  and a copy over halves of an axis. A product runs over chunks of its inner
+  axis, whole tiles each, every chunk continuing the sums the one before left,
+  so it adds what one dispatch would, in the same order.
 
 Every dispatch of one `forward` goes into one command encoder, which is
 submitted when a tensor is read back. A dispatch's parameters are written to a
 buffer of its own, so none is overwritten before the encoder runs.
+
+A resource is move-only in Wado, so views cannot share a `GpuBuffer` by value.
+The backend owns its buffers and a view names one by its place. `keep`, which
+`Prepared` calls for every weight, writes a buffer that lives as long as the
+backend. Every other buffer belongs to the pass, and `begin`, which `forward`
+calls first, releases those of the pass before: `forward` returns only what it
+downloaded, so nothing still names them.
 
 ### Fusion is chosen for dispatches
 
@@ -88,6 +101,12 @@ kernel.
 
 Composing two `Expr`s shares a step both already compute, so a value that
 reaches a kernel by two paths is one step in it.
+
+The plan reads the nodes last to first, so a node's readers have their kernels
+when it is decided. Two kinds of reader do not count. A folded node such as
+`Shape` reads extents, which stage 0 already has. An alias, an `Identity` or a
+`Cast` to the type it has, is its operand under another name, so its readers
+are the operand's.
 
 #### A reduction along the last axis joins its row
 
@@ -112,7 +131,8 @@ the device, which WebGPU does not have.
 A node joins a row group when it is elementwise, a `ReduceMean` or `ReduceSum`
 over the last axis keeping it, or a `Softmax` along the last axis, and every
 tensor it reads or writes spans the group's rows: the whole row, or one value
-per row. A row group takes no contraction, so a product's epilogue stays
+per row. A mean's count is a constant of the `Expr`, so its row is of an extent
+stage 0 knows. A row group takes no contraction, so a product's epilogue stays
 elementwise.
 
 The CPU evaluates a row group one row at a time, each step a loop over the row.
@@ -126,23 +146,41 @@ computes what the unfused one does, bit for bit.
 over a condition operand, read as 1.0 or 0.0, it fuses into a product's
 epilogue and into a row group. GPT-2's attention mask is one.
 
+#### A linear layer is one product over the leading axes
+
+An exporter writes a linear layer as a `Reshape` flattening the leading axes,
+a `Gemm`, and a `Reshape` restoring them. Between the product and the
+operators after it stands a regrouping, which no kernel takes in. The plan
+lowers the three as one `matmul_shared` over the leading axes instead (a
+`Spread`), the two reshapes computing nothing. Each element of the product
+sums the same terms in the same order, so the CPU's result does not change.
+GPT-2's GELU and its residual adds then join the epilogue of the layer before
+them.
+
+Whether a node computes anything now depends on its neighbours, so lowering is
+the plan's answer, `Plan::lowering`, which emission and `loam dump` both read.
+
 #### What a layer costs
 
-| Dispatch            | Nodes it covers                          |
-| ------------------- | ---------------------------------------- |
-| Layer normalization | 9 nodes                                  |
-| QKV product         | `Gemm` and its bias                      |
-| Attention scores    | `MatMul`, its scale, and the mask        |
-| Softmax             | `Softmax`                                |
-| Attention values    | `MatMul`                                 |
-| Projection          | `Gemm`, its bias, and the residual `Add` |
-| Layer normalization | 9 nodes                                  |
-| Feed-forward up     | `Gemm`, its bias, and the GELU           |
-| Feed-forward down   | `Gemm`, its bias, and the residual `Add` |
+| Dispatch            | Nodes it covers                           |
+| ------------------- | ----------------------------------------- |
+| Layer normalization | 9 nodes                                   |
+| QKV product         | `Gemm` and its bias                       |
+| Attention scores    | `MatMul`                                  |
+| Softmax             | `Softmax`, its scale, and the mask        |
+| Attention values    | `MatMul`                                  |
+| Heads merged        | a copy, the `reshape` after the transpose |
+| Projection          | `Gemm`, its bias, and the residual `Add`  |
+| Layer normalization | 9 nodes                                   |
+| Feed-forward up     | `Gemm`, its bias, and the GELU            |
+| Feed-forward down   | `Gemm`, its bias, and the residual `Add`  |
 
-Nine dispatches a layer, about 111 for the model: twelve layers, the
-embeddings, the last normalization and the head. The heads' split, merge and
-transposes are views.
+Ten dispatches a layer. The scale and the mask go with the softmax rather than
+the scores' product, since a product and a fold share no kernel. The split and
+the transposes are views. Around the layers are six more: the two embeddings,
+their sum, the last normalization, the head, and the mask. The tiny GPT-2's
+five layers take 56 a pass, which `wado-run-webgpu`'s tests hold it to, and
+GPT-2 (124M)'s twelve take 126.
 
 ### Finished when GPT-2 picks onnxruntime's tokens on a device
 
@@ -156,18 +194,33 @@ measurement that shows allocation matters.
 
 ## Plan
 
-- [ ] Device residency: views, the device kernels, prepared weights on the
+- [x] Device residency: views, the device kernels, prepared weights on the
   device, one encoder per `forward`, limits at the adapter's.
-  `conformance/webgpu.wado` runs every kernel on the device against `Cpu`,
-  and counts no read back inside `forward`.
-- [ ] Fusion for dispatches: sharing in `Expr`, groups where all readers are,
+  `conformance/webgpu.wado` runs every kernel on the device against `Cpu`, and
+  again under a binding smaller than its weights. `conformance/webgpu_gpt2.wado`
+  counts one read back a pass.
+- [x] Fusion for dispatches: sharing in `Expr`, groups where all readers are,
   row groups, and `Where` as a step. `loam dump` reports GPT-2's kernels
   per layer, and `conformance/fusion_test.wado` still holds the fused module
   to the unfused one bit for bit.
-- [ ] GPT-2 (124M) under `wado run-webgpu`, with the tokens onnxruntime picks
+- [x] GPT-2 (124M) under `wado run-webgpu`, with the tokens onnxruntime picks
   and the times recorded.
 
 ## Measurements
 
-What this machine offers is llvmpipe, a software rasterizer. Its times say
-how many synchronizations and dispatches a pass makes, not how a GPU runs it.
+`example/gpt2-124m/webgpu.wado` continues "Hello, my name is" with eight
+greedy tokens on each backend, and picks the tokens onnxruntime picks on the
+device. The device is llvmpipe, a software rasterizer, which is all this
+machine offers. Its times say how many synchronizations and dispatches a pass
+makes, not how a GPU runs it. `Cpu` runs under `wado run-webgpu`'s wasmtime,
+and onnxruntime is `generate.mjs` on `onnxruntime-node`.
+
+| Backend                    | Time a token | Dispatches a token | Read backs a token |
+| -------------------------- | ------------ | ------------------ | ------------------ |
+| `WebGpuBackend` (llvmpipe) | 1593 ms      | 127                | 1                  |
+| `Cpu`                      | 3247 ms      |                    |                    |
+| onnxruntime, CPU           | 15 ms        |                    |                    |
+
+The 127 dispatches are the 126 the layer table predicts and one more: llvmpipe
+binds 128 MiB at most, so the head's product, whose weight is the 154 MB
+embedding, runs in two chunks.

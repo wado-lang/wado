@@ -4,6 +4,7 @@
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
+use { Cpu } from "lib:loam";
 use { Model, Tokenizer } from "./model.wado";
 
 global STEPS: i32 = 8;
@@ -25,7 +26,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
             return;
         },
     };
-    let model = match Model::load(&checkpoint) {
+    let mut model = match Model::load(Cpu {}, &checkpoint) {
         Ok(model) => model,
         Err(e) => {
             eprintln(`gpt2.safetensors: ${e}`);
