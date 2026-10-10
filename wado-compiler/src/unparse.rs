@@ -4465,10 +4465,10 @@ pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
 use crate::lexer::is_valid_ident;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    FloatBound, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock,
-    TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
-    TypeTable, receiver_value,
+    FloatBound, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock, TirEnum,
+    TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    receiver_value,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.

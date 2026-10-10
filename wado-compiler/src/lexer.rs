@@ -294,13 +294,22 @@ impl std::fmt::Display for LexError {
             LexErrorKind::MissingOctalDigits => write!(f, "expected octal digit after 0o"),
             LexErrorKind::MissingExponentDigits => write!(f, "expected digit after exponent"),
             LexErrorKind::NumericSuffix { digits, name } if names_numeric_type(name) => {
-                write!(f, "a numeric literal takes no suffix: write `{digits} as {name}`")
+                write!(
+                    f,
+                    "a numeric literal takes no suffix: write `{digits} as {name}`"
+                )
             }
             LexErrorKind::NumericSuffix { digits, name } => {
-                write!(f, "invalid suffix `{name}` on the numeric literal `{digits}`")
+                write!(
+                    f,
+                    "invalid suffix `{name}` on the numeric literal `{digits}`"
+                )
             }
             LexErrorKind::MisplacedSeparator(text) => {
-                write!(f, "an `_` in a numeric literal stands between two digits: `{text}`")
+                write!(
+                    f,
+                    "an `_` in a numeric literal stands between two digits: `{text}`"
+                )
             }
             LexErrorKind::InvalidRadixDigit { digit, literal } => {
                 write!(f, "invalid digit `{digit}` in {literal}")
@@ -312,8 +321,12 @@ impl std::fmt::Display for LexError {
 /// Whether `name` spells a numeric type, which `as` gives a literal.
 fn names_numeric_type(name: &str) -> bool {
     matches!(name, "i128" | "u128")
-        || PrimitiveType::from_name(name)
-            .is_some_and(|p| !matches!(p, PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128))
+        || PrimitiveType::from_name(name).is_some_and(|p| {
+            !matches!(
+                p,
+                PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128
+            )
+        })
 }
 
 /// Whether every `_` in the numeric literal `text`, written in `radix`
@@ -325,7 +338,10 @@ fn separators_stand_between_digits(text: &str, radix: Option<Radix>) -> bool {
     };
     let bytes = text.as_bytes();
     bytes.iter().enumerate().all(|(i, &ch)| {
-        ch != b'_' || (i > 0 && is_digit(bytes[i - 1]) && bytes.get(i + 1).is_some_and(|&next| is_digit(next)))
+        ch != b'_'
+            || (i > 0
+                && is_digit(bytes[i - 1])
+                && bytes.get(i + 1).is_some_and(|&next| is_digit(next)))
     })
 }
 

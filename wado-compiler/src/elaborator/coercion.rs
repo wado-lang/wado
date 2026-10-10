@@ -313,9 +313,7 @@ fn shared_literal_default(literals: &[Expr]) -> TypeId {
         .map(|expr| {
             let literal = classify_numeric_literal(expr).expect("an operand is a numeric literal");
             match literal.kind {
-                NumericLiteralKind::Number(repr) if util::defaults_to_float(repr) => {
-                    TypeTable::F64
-                }
+                NumericLiteralKind::Number(repr) if util::defaults_to_float(repr) => TypeTable::F64,
                 NumericLiteralKind::Number(_) => TypeTable::I32,
                 NumericLiteralKind::Byte(_) => TypeTable::U8,
             }

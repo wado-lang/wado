@@ -18,9 +18,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{
-    AstId, HandleClasses, NamePolicy, RangeKind, RestClause, Visibility,
-};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RangeKind, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -2647,7 +2645,6 @@ impl TypeTable {
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
         self.compiler_items.trait_module(CompilerItem::Default)
     }
-
 
     /// Make the struct type for a registered `CompilerItem` variant
     /// of kind `CompilerItemKind::Struct`. Reads both the module

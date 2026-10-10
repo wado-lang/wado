@@ -428,8 +428,10 @@ pub(super) fn bound_value(
 /// The bits `bound` names in `format`, or why it names none.
 fn float_bound_bits(bound: &FloatBound, format: FloatFormat) -> Result<u64, PatternLiteralError> {
     let bits = match &bound.kind {
-        FloatBoundKind::Literal { digits, negated } => signed_literal_bits(digits, *negated, format)
-            .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?,
+        FloatBoundKind::Literal { digits, negated } => {
+            signed_literal_bits(digits, *negated, format)
+                .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?
+        }
         FloatBoundKind::Limit { owner, name } => {
             let (owner_format, bits) = limit_bits(*owner, name);
             if owner_format != format {
@@ -608,9 +610,7 @@ pub(super) fn pattern_literal_error(
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
     if let PatternLiteral::Int {
-        owner: None,
-        shown,
-        ..
+        owner: None, shown, ..
     } = lit
         && float_format(scrutinee, type_table).is_some()
     {

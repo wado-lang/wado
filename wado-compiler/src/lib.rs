@@ -134,6 +134,7 @@ pub use effect_check::{
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
+use hex_suffix_lookalike::hex_suffix_lookalike_diagnostics;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
@@ -144,7 +145,6 @@ pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
-use hex_suffix_lookalike::hex_suffix_lookalike_diagnostics;
 use self_comparison::self_comparison_diagnostics;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
