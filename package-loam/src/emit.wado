@@ -19,7 +19,7 @@ use {
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
-use { IfBranch, branches, is_alias, lowering_of, plan, row_fold, selects_floats } from "./plan.wado";
+use { IfBranch, Spread, branches, is_alias, plan, row_fold, selects_floats } from "./plan.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use {
     BinaryOp,
@@ -749,11 +749,12 @@ fn scope_body(
         }
     }
     let decided = plan(graph, checked, fuse);
-    for let node of &graph.nodes {
-        match lowering_of(node, checked) {
-            Folded => {
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        match decided.lowering(at) {
+            Folded | Flattened => {
             },
-            Alias => {
+            // A restored product is the product, computed over its axes.
+            Alias | Restored => {
                 // An alias of a value a later kernel computes stays pending.
                 if let Some(pending) = exprs.pending.get(node.inputs[0]) {
                     exprs.pending[node.outputs[0]] = pending;
@@ -761,10 +762,11 @@ fn scope_body(
                     exprs.values[node.outputs[0]] = exprs.values.get(node.inputs[0]).unwrap();
                 }
             },
-            Branch => body.extend(&branch_block(node, checked, names, exprs, symbols, fuse)?),
+            Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols, fuse)?),
             Kernel => {
-                let Some(term) = node_term(node, checked, exprs, symbols, graph.opset)? else {
-                    body.extend(&kernel_calls(node, checked, names, exprs, symbols, graph.opset)?);
+                let spread = decided.spread_of(&node.outputs[0]);
+                let Some(term) = node_term(&node, checked, exprs, symbols, graph.opset, &spread)? else {
+                    body.extend(&kernel_calls(&node, checked, names, exprs, symbols, graph.opset)?);
                     continue;
                 };
                 let output = node.outputs[0];
@@ -772,9 +774,11 @@ fn scope_body(
                     exprs.pending[output] = term;
                     continue;
                 }
-                body.push(
-                    bound_to(&output, term.call(&checked.shapes[output], &decided.rows_of(&output)), names, exprs),
-                );
+                let space = match &spread {
+                    Some(s) => checked.shapes[s.restored],
+                    None => checked.shapes[output],
+                };
+                body.push(bound_to(&output, term.call(&space, &decided.rows_of(&output)), names, exprs));
             },
         }
     }
@@ -1194,10 +1198,14 @@ fn node_term(
     exprs: &Operands,
     symbols: &mut Symbols,
     opset: Option<i64>,
+    spread: &Option<Spread>,
 ) -> Result<Option<Term>, EmitError> {
     let shapes = &checked.shapes;
     let op = node.op;
     let out = shapes.get(node.outputs[0]).unwrap();
+    if let Some(s) = spread {
+        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs, spread_product(s, shapes, exprs))));
+    }
     if let Some(fold) = row_fold(node, checked, opset) {
         let x = lane_of(node, 0, shapes, exprs, 0);
         return Result::Ok(Option::Some(match fold {
@@ -1229,7 +1237,7 @@ fn node_term(
         return Result::Ok(Option::Some(Term::after(conv_head(node, shapes, exprs, symbols)?, out)));
     }
     if op == "Gemm" {
-        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs)));
+        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs, null)));
     }
     if is_binary_elementwise(&op) {
         return Result::Ok(Option::Some(binary_term(node, shapes, exprs)));
@@ -1763,13 +1771,36 @@ fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String)
     return `&backend.lift::<${element}, [${own}], [${theirs}]>(${operand}, ${out.rank()})`;
 }
 
+/// The first operand of a `Spread`'s product, read before its leading axes were
+/// flattened, and the axes the product computes over.
+struct SpreadOperand {
+    reference: String,
+    shape: Shape,
+    product: Shape,
+}
+
+fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Option<SpreadOperand> {
+    return Option::Some(SpreadOperand {
+        reference: exprs.reference(&s.operand),
+        shape: shapes[s.operand],
+        product: shapes[s.restored],
+    });
+}
+
 /// `Gemm`'s `alpha * A' * B' + beta * C`, as a matrix product under optional
-/// `transpose2`s followed by its scalars and its bias.
-fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Term {
+/// `transpose2`s followed by its scalars and its bias. Where `spread`, the
+/// product reads the operand its first `Reshape` flattened, batched over the
+/// leading axes, and computes over the axes the second restores.
+fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spread: Option<SpreadOperand>) -> Term {
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
-    let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
     let [b, right] = transposed(&exprs.reference(&node.inputs[1]), &shapes.get(node.inputs[1]).unwrap(), trans_b);
-    let product_axes = gemm_product(node, shapes);
+    let [a, left, product_axes] = match spread {
+        Some(s) => [s.reference, s.shape, s.product],
+        None => {
+            let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
+            [a, left, gemm_product(node, shapes)];
+        },
+    };
     let mut term = Term::after(product_head(&a, &b, &left, &right, &product_axes), product_axes);
     if alpha != 1.0 {
         term = term.binary(BinaryOp::Mul, &Term::constant(alpha));

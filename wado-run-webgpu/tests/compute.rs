@@ -89,7 +89,8 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
 }
 
 /// A whole model's pass stays on the device: each sequence length reads back
-/// once, for the logits `forward` returns.
+/// once, for the logits `forward` returns, in as many dispatches as the plan
+/// leaves kernels.
 #[test]
 fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -103,7 +104,10 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
     for line in lines {
         let words: Vec<&str> = line.split(' ').collect();
         assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
-        let deviation: f32 = words[words.len() - 4]
+        // Ten a layer over five layers, and the embeddings, the last
+        // normalization and the head: `package-loam/webgpu.md` counts them.
+        assert_eq!(words[words.len() - 5..words.len() - 3], ["dispatches", "56"], "{line}");
+        let deviation: f32 = words[words.len() - 6]
             .parse()
             .unwrap_or_else(|_| panic!("no deviation in {line:?}"));
         assert!(deviation <= LOAM_TOLERANCE, "{line}");

@@ -5,7 +5,7 @@
 
 use { TreeMap } from "core:collections";
 use { Graph, KERNEL_ELEMENT, Node, data_type, is_binary_elementwise, is_unary_operator, settled } from "./graph.wado";
-use { Checked, is_reduction, reduced_axes, softmax_lane } from "./infer.wado";
+use { Checked, gemm_options, is_reduction, reduced_axes, softmax_lane } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
 /// What `forward` does for one node.
@@ -19,6 +19,95 @@ pub enum Lowering {
     Branch,
     /// One kernel call per output, or a step of the kernel `Plan` puts it in.
     Kernel,
+    /// Nothing: a `Reshape` flattening leading axes that the product reading
+    /// it reads past, over those axes (see `Spread`).
+    Flattened,
+    /// Nothing: a `Reshape` restoring the leading axes a product's operand had
+    /// flattened, whose output is the product's (see `Spread`).
+    Restored,
+}
+
+/// A `Gemm` whose first operand a `Reshape` flattened from leading axes, and
+/// whose output another `Reshape` restores to them, as an exporter writes a
+/// linear layer. One product batched over the leading axes computes it in
+/// place of the three, so the operators after it can join it.
+pub struct Spread {
+    /// The tensor the first `Reshape` flattened, which the product reads.
+    pub operand: String,
+    /// The tensor the second `Reshape` writes, of the axes the product
+    /// computes over.
+    pub restored: String,
+}
+
+/// How `forward` lowers each of `graph`'s nodes, by position, and each
+/// `Spread` it finds, by the `Gemm`'s output.
+pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<String, Spread>] {
+    let mut lowered: List<Lowering> = graph.nodes.into_iter().map(|n| lowering_of(&n, checked)).collect();
+    let mut made = TreeMap::<String, i32>::new();
+    let mut read = TreeMap::<String, List<i32>>::new();
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        for let o of node.outputs {
+            made[o] = at;
+        }
+        if lowered[at] matches { Folded } {
+            continue;
+        }
+        for let t of node.reads() {
+            let mut by = read.get(t).unwrap_or([]);
+            by.push(at);
+            read[t] = by;
+        }
+    }
+    let only_reader = |tensor: &String| -> Option<i32> {
+        let by = read.get(*tensor).unwrap_or([]);
+        return if by.len() == 1 { Option::Some(by[0]) } else { null };
+    };
+    let mut spreads = TreeMap::<String, Spread>::new();
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        if node.op != "Gemm" || !lowered[at] matches { Kernel } || gemm_transposes_a(&node) {
+            continue;
+        }
+        let Some(first) = made.get(node.inputs[0]) else {
+            continue;
+        };
+        let flatten = &graph.nodes[first];
+        let Some(restore_at) = only_reader(&node.outputs[0]) else {
+            continue;
+        };
+        let restore = &graph.nodes[restore_at];
+        if flatten.op != "Reshape"
+            || restore.op != "Reshape"
+            || !lowered[first] matches { Kernel }
+            || !lowered[restore_at] matches { Kernel }
+            || only_reader(&flatten.outputs[0]) != Option::Some(at) {
+            continue;
+        }
+        let x = &checked.shapes[flatten.inputs[0]];
+        let y = &checked.shapes[restore.outputs[0]];
+        if x.rank() < 3 || y.rank() != x.rank() || !same_leading(x, y) {
+            continue;
+        }
+        lowered[first] = Lowering::Flattened;
+        lowered[restore_at] = Lowering::Restored;
+        spreads[node.outputs[0]] = Spread { operand: flatten.inputs[0], restored: restore.outputs[0] };
+    }
+    return [lowered, spreads];
+}
+
+/// Whether a `Gemm` reads its first operand transposed.
+fn gemm_transposes_a(node: &Node) -> bool {
+    let [_, _, trans_a, _] = settled(gemm_options(node));
+    return trans_a;
+}
+
+/// Whether `a` and `b` agree on every axis but the last.
+fn same_leading(a: &Shape, b: &Shape) -> bool {
+    for let i of 0..<a.rank() - 1 {
+        if a.axes[i].name != b.axes[i].name || !a.axes[i].extent.agrees(&b.axes[i].extent) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// How `forward` lowers `node`, in the scope `checked`.
@@ -156,9 +245,22 @@ pub struct Plan {
     /// A row kernel's whole rows, by the tensor it writes: the extents it
     /// iterates, a row being the last axis.
     rows: TreeMap<String, Shape>,
+    /// How `forward` lowers each node, by position.
+    lowered: List<Lowering>,
+    spreads: TreeMap<String, Spread>,
 }
 
 impl Plan {
+    /// How `forward` lowers the node at `at`.
+    pub fn lowering(&self, at: i32) -> Lowering {
+        return self.lowered[at];
+    }
+
+    /// The `Spread` the `Gemm` writing `tensor` is part of, if it is.
+    pub fn spread_of(&self, tensor: &String) -> Option<Spread> {
+        return self.spreads.get(*tensor);
+    }
+
     /// The decision for the kernel computing `tensor`.
     pub fn of(&self, tensor: &String) -> Decision {
         return self.decisions[*tensor];
@@ -259,14 +361,16 @@ struct Group {
 /// The nodes are read last to first, so each node's readers have their
 /// kernels already. A node joins its readers' kernel where they all share one.
 pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
+    let [lowered, spreads] = lowerings(graph, checked);
     // An alias's output is its operand under another name, so what reads the
-    // alias reads the operand. A folded node reads only extents, which stage 0
+    // alias reads the operand, and so it is for a restored product and a
+    // flattened operand. A folded node reads only extents, which stage 0
     // already has.
     let mut aliased = TreeMap::<String, String>::new();
     let mut readers = TreeMap::<String, List<i32>>::new();
     for let [at, node] of graph.nodes.into_iter().enumerate() {
-        match lowering_of(&node, checked) {
-            Alias => aliased[node.outputs[0]] = original(&aliased, &node.inputs[0]),
+        match lowered[at] {
+            Alias | Flattened | Restored => aliased[node.outputs[0]] = original(&aliased, &node.inputs[0]),
             Folded => {
             },
             _ => {
@@ -289,29 +393,25 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
     let mut decisions = TreeMap::<String, Decision>::new();
     for let mut at = graph.nodes.len() - 1; at >= 0; at -= 1 {
         let node = &graph.nodes[at];
-        if !lowering_of(node, checked) matches { Kernel } {
+        if !lowered[at] matches { Kernel } {
             continue;
         }
         let tensor = node.outputs[0];
+        let out = space_of(checked, &spreads, &tensor);
         let join = join_of(node, checked, graph.opset);
         let decision = if fuse {
-            decided(graph, checked, node, &join, &readers, &returned, &heads, &groups);
+            decided(graph, checked, &lowered, node, &out, &join, &readers, &returned, &heads, &groups);
         } else {
             Decision::Written(Reason::Unfused);
         };
         match decision {
             Fused(head) => {
                 heads[tensor] = head;
-                groups[head] = joined(&groups[head], node, &join, checked);
+                groups[head] = joined(&groups[head], node, &out, &join, checked);
             },
             Written(_) => {
                 heads[tensor] = tensor;
-                groups[tensor] = joined(
-                    &Group { out: checked.shapes[tensor], contraction: false, rows: null },
-                    node,
-                    &join,
-                    checked,
-                );
+                groups[tensor] = joined(&Group { out, contraction: false, rows: null }, node, &out, &join, checked);
             },
         }
         decisions[tensor] = decision;
@@ -322,7 +422,16 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             rows[*head] = space;
         }
     }
-    return Plan { decisions, rows };
+    return Plan { decisions, rows, lowered, spreads };
+}
+
+/// The axes `forward` computes `tensor` over: its own, or for a `Spread`'s
+/// product those it restores.
+fn space_of(checked: &Checked, spreads: &TreeMap<String, Spread>, tensor: &String) -> Shape {
+    return match spreads.get(*tensor) {
+        Some(s) => checked.shapes[s.restored],
+        None => checked.shapes[*tensor],
+    };
 }
 
 /// The tensor `tensor` names: itself, or what the alias it is the output of
@@ -334,11 +443,11 @@ fn original(aliased: &TreeMap<String, String>, tensor: &String) -> String {
 /// `group` with `node` in it. A node holding one value per row of what the
 /// group writes makes it a row kernel, since the nodes are read last to first
 /// and the fold computing that value comes after it.
-fn joined(group: &Group, node: &Node, join: &Option<Join>, checked: &Checked) -> Group {
+fn joined(group: &Group, node: &Node, out: &Shape, join: &Option<Join>, checked: &Checked) -> Group {
     return match join {
         Some(Contraction) => Group { ..*group, contraction: true },
         Some(Row) => Group { ..*group, rows: Option::Some(checked.shapes[node.inputs[0]]) },
-        Some(Elementwise) && group.rows matches { None } && per_row(&checked.shapes[node.outputs[0]], &group.out) => {
+        Some(Elementwise) && group.rows matches { None } && per_row(out, &group.out) => {
             Group { ..*group, rows: Option::Some(group.out) };
         },
         _ => *group,
@@ -350,7 +459,9 @@ fn joined(group: &Group, node: &Node, join: &Option<Join>, checked: &Checked) ->
 fn decided(
     graph: &Graph,
     checked: &Checked,
+    lowered: &List<Lowering>,
     node: &Node,
+    out: &Shape,
     join: &Option<Join>,
     readers: &TreeMap<String, List<i32>>,
     returned: &TreeMap<String, bool>,
@@ -369,7 +480,7 @@ fn decided(
     for let r of reads {
         let reader = &graph.nodes[r];
         let reader_join = join_of(reader, checked, graph.opset);
-        if !lowering_of(reader, checked) matches { Kernel } || !reader_join matches { Some(Elementwise | Row) } {
+        if !lowered[r] matches { Kernel } || !reader_join matches { Some(Elementwise | Row) } {
             return Decision::Written(Reason::Reader(kind_of(&reader.op)));
         }
         let head = heads[reader.outputs[0]];
@@ -384,7 +495,6 @@ fn decided(
     assert checked.primitives[tensor] == KERNEL_ELEMENT;
     let head = kernels[0];
     let group = &groups[head];
-    let out = &checked.shapes[tensor];
     return match *joins {
         Elementwise => {
             let space = match &group.rows {

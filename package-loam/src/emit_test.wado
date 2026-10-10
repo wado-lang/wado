@@ -823,6 +823,32 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     );
 }
 
+test "a Gemm between a flattening Reshape and its restoring one reads the operand over its leading axes" {
+    let source = `
+lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {2, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Seq", "In"]),
+        rule("W", ["In", "Out"]),
+        rule("B", ["Out"]),
+        rule("F", ["(Batch Seq)", "In"]),
+        rule("G", ["(Batch Seq)", "Out"]),
+        rule("*", ["Batch", "Seq", "Out"]),
+    ]).unwrap();
+
+    assert !out.contains("let F =") && !out.contains("let R =");
+    assert out.contains(
+        "let Y = backend.matmul_shared(&X, &W, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch, Seq], [Out]>(&B)], op: operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu) }));",
+    );
+}
+
 test "a mean alone writes one value per row" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 1] Y)

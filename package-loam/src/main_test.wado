@@ -188,7 +188,7 @@ outputs
     Y: f32 [Batch=N, Out=3]
     Z: f32 [Batch=N, Out=3]
 
-1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches
+1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches, 0 reshapes spread
 ", report;
 }
 
@@ -232,7 +232,7 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
             nodes
                 kernel E = Relu(X)
 "), report;
-    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches\n"), report;
+    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches, 0 reshapes spread\n"), report;
 }
 
 test "dump reports as JSON, every kernel with where its output goes" {

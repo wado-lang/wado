@@ -90,6 +90,53 @@ shaped (float[N, 4] X) => (int64[2] S, float[N, 4] Y)
     assert p.of(&"R") == written(Reason::ReadTimes(0));
 }
 
+global LINEAR: String = `
+lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {2, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+
+global LINEAR_LAYOUT: List<[String, List<String>]> = [
+    [
+        "X",
+        ["Batch", "Seq", "In"],
+    ],
+    [
+        "W",
+        ["In", "Out"],
+    ],
+    [
+        "B",
+        ["Out"],
+    ],
+    [
+        "F",
+        ["(Batch Seq)", "In"],
+    ],
+    [
+        "G",
+        ["(Batch Seq)", "Out"],
+    ],
+    [
+        "*",
+        ["Batch", "Seq", "Out"],
+    ],
+];
+
+test "a Gemm between a flattening Reshape and its restoring one is one product over the leading axes" {
+    let p = plan_of(LINEAR, LINEAR_LAYOUT);
+    assert p.lowering(0) matches { Flattened };
+    assert p.lowering(2) matches { Restored };
+    assert p.spread_of(&"G") matches { Some(s) && s.operand == "X" && s.restored == "R" };
+    // So the operator after it joins its kernel.
+    assert p.of(&"G") == fused("Y");
+}
+
 test "with fusion off, every kernel writes its output" {
     let p = plan_of(MLP, mlp_layout(), false);
     for let tensor of ["H", "HB", "A", "T", "Y"] {
