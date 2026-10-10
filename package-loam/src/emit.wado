@@ -150,12 +150,13 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
     return Result::Ok(w.to_string());
 }
 
-/// The length of each axis that every input and output naming it fixes to one,
-/// which the caller then writes as the axis's `EXTENT` rather than a number.
+/// The length of each axis that every input, output and weight naming it fixes
+/// to one, which the caller then writes as the axis's `EXTENT` rather than a
+/// number. A weight's extents are its checkpoint header's, read at build time.
 fn boundary_extents(graph: &Graph, shapes: &TreeMap<String, Shape>) -> TreeMap<String, i32> {
     let mut fixed = TreeMap::<String, i32>::new();
     let mut open = TreeSet::<String>::new();
-    for let declared of [&graph.inputs, &graph.outputs] {
+    for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
         for let vi of *declared {
             for let axis of shapes.get(vi.name).unwrap().axes {
                 let Static(extent) = axis.extent else {

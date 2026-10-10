@@ -156,13 +156,14 @@ test "the forward pass checks each input against the graph before any kernel" {
     assert check < body.find("matmul(").unwrap();
 }
 
-test "an axis the boundary fixes to one length carries it as a constant" {
+test "an axis the boundary and the weights fix to one length carries it as a constant" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains("impl In {\n    pub const EXTENT: i32 = 4;\n}");
     assert out.contains("impl Out {\n    pub const EXTENT: i32 = 2;\n}");
+    // Only the weights name `Hidden`.
+    assert out.contains("impl Hidden {\n    pub const EXTENT: i32 = 3;\n}");
     assert !out.contains("impl Batch {");
-    assert !out.contains("impl Hidden {");
 }
 
 test "an axis the boundary gives two lengths carries no constant" {

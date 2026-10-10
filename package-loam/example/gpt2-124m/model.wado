@@ -144,10 +144,6 @@ use gpt2 from "./gpt2.onnxtext"
         },
     };
 
-/// GPT-2's context, the rows of `wpe`, which the graph's causal mask covers.
-/// `forward` refuses a longer sequence.
-global POSITIONS: i32 = 1024;
-
 /// GPT-2 with its weights loaded where `Bk` runs the kernels.
 pub struct Model<Bk: Backend> {
     backend: Bk,
@@ -168,9 +164,10 @@ impl<Bk: Backend> Model<Bk> {
         return &self.backend;
     }
 
-    /// How many positions the model reads: one per row of `wpe`.
+    /// How many positions the model reads: one per row of `wpe`, which the
+    /// graph's causal mask covers. `forward` refuses a longer sequence.
     pub fn positions(&self) -> i32 {
-        return POSITIONS;
+        return gpt2::Pos::EXTENT;
     }
 
     /// The token the model ranks first after `ids`.
