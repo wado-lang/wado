@@ -43,9 +43,6 @@ use crate::{Span, token};
 /// The builtin that reads an `Array<T>` out of a byte literal.
 pub(crate) const ARRAY_NEW_DATA: &str = "array_new_data";
 
-/// A bound's argument waits on a type slot the call has not answered yet.
-struct AwaitsSlot;
-
 /// An expression as a byte literal.
 enum ByteLiteral {
     Not,
@@ -3568,13 +3565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     }
                     let trait_ = self.tysys.resolutions.bound_decl(bound);
-<<<<<<< HEAD
-                    let Ok(trait_args) =
-||||||| 3c77528b9a
-                    let Some(trait_args) =
-=======
                     let BoundArgsAtCall::Read(trait_args) =
->>>>>>> origin/main
                         self.bound_args_at_call(bound, trait_, owner_ty, &names, args)
                     else {
                         continue;
@@ -3663,14 +3654,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The arguments `bound` reaches `trait_` on `owner` at, read at the call's
-<<<<<<< HEAD
-    /// `args` for the callee's `names`: `Ok(None)` where it writes none.
-||||||| 3c77528b9a
-    /// `args` for the callee's `names`: `Some(None)` where it writes none, and
-    /// `None` while one waits on a slot the call has not answered.
-=======
     /// `args` for the callee's `names`.
->>>>>>> origin/main
     fn bound_args_at_call(
         &mut self,
         bound: &ast::TraitBound,
@@ -3678,42 +3662,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owner: TypeId,
         names: &[String],
         args: &[TypeId],
-<<<<<<< HEAD
-    ) -> Result<Option<Vec<TypeId>>, AwaitsSlot> {
-||||||| 3c77528b9a
-    ) -> Option<Option<Vec<TypeId>>> {
-=======
     ) -> BoundArgsAtCall {
->>>>>>> origin/main
         let Some(trait_) = trait_.filter(|_| !bound.type_args.is_empty()) else {
-<<<<<<< HEAD
-            return Ok(None);
-||||||| 3c77528b9a
-            return Some(None);
-=======
             return BoundArgsAtCall::Read(None);
->>>>>>> origin/main
         };
         let written = self.with_type_params_bound(names, args, |e| e.written_bound_args(bound));
         if written
             .iter()
             .any(|&ty| self.tysys.type_table.borrow().contains_undecided(ty))
         {
-<<<<<<< HEAD
-            return Err(AwaitsSlot);
-||||||| 3c77528b9a
-            return None;
-=======
             return BoundArgsAtCall::Waiting;
->>>>>>> origin/main
         }
-<<<<<<< HEAD
-        Ok(self.trait_args_at(trait_, owner, &written))
-||||||| 3c77528b9a
-        Some(self.trait_args_at(trait_, owner, &written))
-=======
         BoundArgsAtCall::Read(self.trait_args_at(trait_, owner, &written))
->>>>>>> origin/main
     }
 
     /// Fit flat turbofish type args to `declared`, grouping them into one
