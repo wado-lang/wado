@@ -2,6 +2,7 @@ use {
     Backend,
     BinaryOp,
     Cpu,
+    Expr,
     Merged,
     Tensor,
     UnaryOp,
@@ -43,10 +44,6 @@ use {
     transpose2,
     unmet,
     widen,
-    zip,
-    zip_at,
-    zip_suffix,
-    zip_suffix_lhs,
 } from "./runtime/tensor.wado";
 
 struct Batch {
@@ -66,33 +63,46 @@ test "an expression reads its operands and folds its constants in order" {
     // relu(x - 2) * y, and a constant on the left of a non-commuting operator.
     let shifted = operand(0).binary(BinaryOp::Sub, &constant(2.0)).unary(UnaryOp::Relu);
     let e = shifted.binary(BinaryOp::Mul, &operand(1));
-    assert e.over(2, &[5.0, 1.0], &[4.0, 4.0]) == [12.0, 0.0] as List<f32>;
-    assert constant(1.0).binary(BinaryOp::Div, &operand(0)).over(2, &[4.0, 2.0], &[0.0]) == [0.25, 0.5] as List<f32>;
+    let x: List<f32> = [5.0, 1.0];
+    let y: List<f32> = [4.0, 4.0];
+    assert e.over(2, &[&x, &y]) == [12.0, 0.0] as List<f32>;
+    let z: List<f32> = [4.0, 2.0];
+    assert constant(1.0).binary(BinaryOp::Div, &operand(0)).over(2, &[&z]) == [0.25, 0.5] as List<f32>;
     // One element stands for every element, and a constant alone fills them.
-    assert e.over(2, &[5.0, 3.0], &[2.0]) == [6.0, 2.0] as List<f32>;
-    assert constant(7.0).over(3, &[1.0, 2.0, 3.0], &[0.0]) == [7.0, 7.0, 7.0] as List<f32>;
+    let w: List<f32> = [5.0, 3.0];
+    let two: List<f32> = [2.0];
+    assert e.over(2, &[&w, &two]) == [6.0, 2.0] as List<f32>;
+    assert constant(7.0).over(3, &[]) == [7.0, 7.0, 7.0] as List<f32>;
+}
+
+test "an expression reads any number of operands" {
+    let x: List<f32> = [1.0, 2.0];
+    let y: List<f32> = [10.0, 20.0];
+    let z: List<f32> = [100.0, 200.0];
+    let e = operand(0).binary(BinaryOp::Add, &operand(1)).binary(BinaryOp::Mul, &operand(2));
+    assert e.over(2, &[&x, &y, &z]) == [1100.0, 4400.0] as List<f32>;
 }
 
 test "an expression over no elements gives none, whatever its constants" {
     let mut cpu = Cpu {};
     let empty = cpu.upload(&tensor::<[Row]>([0], []));
     let shifted = operand(0).binary(BinaryOp::Add, &constant(1.0));
-    assert cpu.download(&cpu.map(&empty, &shifted)).data.is_empty();
-    let filled = constant(2.0).binary(BinaryOp::Mul, &constant(3.0));
-    assert cpu.download(&cpu.zip(&empty, &empty, &filled)).data.is_empty();
+    assert cpu.download(&cpu.fused::<[Row]>([cpu.read(&empty)], &shifted)).data.is_empty();
+    let filled = operand(0).binary(BinaryOp::Mul, &constant(2.0).binary(BinaryOp::Mul, &constant(3.0)));
+    assert cpu.download(&cpu.fused::<[Row]>([cpu.read(&empty)], &filled)).data.is_empty();
 }
 
 test "the CPU backend runs a kernel over an expression" {
     let mut cpu = Cpu {};
     let a = cpu.upload(&tensor::<[Row]>([3], [1.0, -2.0, 3.0]));
     let b = cpu.upload(&tensor::<[Row]>([3], [10.0, 10.0, 10.0]));
-    let mapped = cpu.map(&a, &operand(0).unary(UnaryOp::Abs));
+    let mapped = cpu.fused::<[Row]>([cpu.read(&a)], &operand(0).unary(UnaryOp::Abs));
     assert cpu.download(&mapped).data == [1.0, 2.0, 3.0] as List<f32>;
-    let zipped = cpu.zip(&a, &b, &operand(0).binary(BinaryOp::Add, &operand(1)));
+    let zipped = cpu.fused::<[Row]>([
+        cpu.read(&a),
+        cpu.read(&b),
+    ], &sum());
     assert cpu.download(&zipped).data == [11.0, 8.0, 13.0] as List<f32>;
-    let grid = cpu.upload(&tensor::<[Col, Row]>([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]));
-    let less = cpu.zip_suffix::<[Col], [Row]>(&grid, &a, &operand(0).binary(BinaryOp::Sub, &operand(1)));
-    assert cpu.download(&less).data == [0.0, 4.0, 0.0, 3.0, 7.0, 3.0] as List<f32>;
 }
 
 test "a cast converts as ONNX's Cast does" {
@@ -283,76 +293,118 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
     assert dot.data == [5.0] as List<f32>;
 }
 
-test "zip pairs two tensors of one shape" {
-    let a: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
-    let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [10.0, 20.0, 30.0, 40.0]);
-
-    let c = zip(&a, &b, |x, y| x + y);
-    assert c.data == [11.0, 22.0, 33.0, 44.0] as List<f32>;
+/// The two operands' sum, or their product, as an `Expr`.
+fn sum() -> Expr {
+    return operand(0).binary(BinaryOp::Add, &operand(1));
 }
 
-test "zip_suffix repeats the shorter operand across the leading axes" {
+fn product() -> Expr {
+    return operand(0).binary(BinaryOp::Mul, &operand(1));
+}
+
+test "fused repeats an operand of the trailing axes across the leading ones" {
+    let mut cpu = Cpu {};
     let a: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
     let b: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
 
-    let c = zip_suffix::<[Row], [Col]>(&a, &b, |x, y| x + y);
+    let c = cpu.fused::<[Row, Col]>([
+        cpu.read(&a),
+        cpu.read_suffix::<[Row], [Col]>(&b),
+    ], &sum());
     assert c.extents == [2, 2] as List<i32>;
     assert c.data == [11.0, 22.0, 13.0, 24.0] as List<f32>;
 }
 
-test "zip_suffix broadcasts a trailing axis across a rank-3 operand" {
-    let a: Tensor<f32, [Batch, Row, Col]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
-    let b: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
+test "fused keeps the operand order the operator wrote" {
+    let mut cpu = Cpu {};
+    let a: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
+    let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
 
-    let c = zip_suffix::<[Batch, Row], [Col]>(&a, &b, |x, y| x * y);
-    assert c.extents == [2, 1, 2] as List<i32>;
-    assert c.data == [10.0, 40.0, 30.0, 80.0] as List<f32>;
+    let c = cpu.fused::<[Row, Col]>(
+        [
+            cpu.read_suffix::<[Row], [Col]>(&a),
+            cpu.read(&b),
+        ],
+        &operand(0).binary(BinaryOp::Sub, &operand(1)),
+    );
+    assert c.data == [9.0, 18.0, 7.0, 16.0] as List<f32>;
 }
 
-test "zip_at repeats the shorter operand along the axes after it and before it" {
+test "read_at repeats the operand along the axes after it and before it" {
+    let mut cpu = Cpu {};
     let a: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     let b: Tensor<f32, [Row]> = tensor([2], [10.0, 20.0]);
 
-    let c = zip_at::<[Batch], [Row], [Col]>(&a, &b, 1, |x, y| x + y);
+    let c = cpu.fused::<[Batch, Row, Col]>([
+        cpu.read(&a),
+        cpu.read_at::<[Batch], [Row], [Col]>(&b, 1),
+    ], &sum());
     assert c.extents == [2, 2, 2] as List<i32>;
     assert c.data == [11.0, 12.0, 23.0, 24.0, 15.0, 16.0, 27.0, 28.0] as List<f32>;
 }
 
-test "zip stretches an extent-1 axis on either side" {
+test "fused stretches an extent-1 axis on either side" {
+    let mut cpu = Cpu {};
     let a: Tensor<f32, [Row, Col]> = tensor([2, 1], [1.0, 2.0]);
     let b: Tensor<f32, [Row, Col]> = tensor([1, 3], [10.0, 20.0, 30.0]);
 
-    let c = zip(&a, &b, |x, y| x + y);
+    let c = cpu.fused::<[Row, Col]>([
+        cpu.read(&a),
+        cpu.read(&b),
+    ], &sum());
     assert c.extents == [2, 3] as List<i32>;
     assert c.data == [11.0, 21.0, 31.0, 12.0, 22.0, 32.0] as List<f32>;
 }
 
-test "zip_suffix stretches a middle extent-1 axis of the shorter operand" {
+test "fused stretches a middle extent-1 axis of the shorter operand" {
     // A per-channel bias `[C, 1, 1]` over `[N, C, H, W]`, as a convolution's is.
+    let mut cpu = Cpu {};
     let a: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
     let b: Tensor<f32, [Inner, Row, Col]> = tensor([2, 1, 1], [10.0, 100.0]);
 
-    let c = zip_suffix::<[Batch], [Inner, Row, Col]>(&a, &b, |x, y| x + y);
+    let c = cpu.fused::<[Batch, Inner, Row, Col]>(
+        [
+            cpu.read(&a),
+            cpu.read_suffix::<[Batch], [Inner, Row, Col]>(&b),
+        ],
+        &sum(),
+    );
     assert c.extents == [1, 2, 2, 2] as List<i32>;
     assert c.data == [11.0, 12.0, 13.0, 14.0, 105.0, 106.0, 107.0, 108.0] as List<f32>;
 }
 
-test "zip_suffix stretches the longer operand's extent-1 axis to the shorter's" {
+test "fused stretches the longer operand's extent-1 axis to the shorter's" {
+    let mut cpu = Cpu {};
     let a: Tensor<f32, [Batch, Col]> = tensor([2, 1], [1.0, 2.0]);
     let b: Tensor<f32, [Col]> = tensor([3], [10.0, 20.0, 30.0]);
 
-    let c = zip_suffix::<[Batch], [Col]>(&a, &b, |x, y| x * y);
+    let c = cpu.fused::<[Batch, Col]>([
+        cpu.read(&a),
+        cpu.read_suffix::<[Batch], [Col]>(&b),
+    ], &product());
     assert c.extents == [2, 3] as List<i32>;
     assert c.data == [10.0, 20.0, 30.0, 20.0, 40.0, 60.0] as List<f32>;
 }
 
-test "zip_suffix_lhs keeps the operand order the operator wrote" {
-    let a: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
-    let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
+test "fused runs past one pass, an operand repeating across the passes" {
+    // More elements than one pass of the steps covers, and a period that does
+    // not divide it.
+    let mut cpu = Cpu {};
+    let rows = 700;
+    let mut data: List<f32> = [];
+    for let i of 0..<rows * 3 {
+        data.push(i as f32);
+    }
+    let a: Tensor<f32, [Row, Col]> = tensor([rows, 3], data);
+    let b: Tensor<f32, [Col]> = tensor([3], [0.5, 1.5, 2.5]);
 
-    let c = zip_suffix_lhs::<[Row], [Col]>(&a, &b, |x, y| x - y);
-    assert c.extents == [2, 2] as List<i32>;
-    assert c.data == [9.0, 18.0, 7.0, 16.0] as List<f32>;
+    let c = cpu.fused::<[Row, Col]>([
+        cpu.read(&a),
+        cpu.read_suffix::<[Row], [Col]>(&b),
+    ], &sum());
+    for let i of 0..<rows * 3 {
+        assert c.data[i] == a.data[i] + b.data[i % 3], i;
+    }
 }
 
 test "reshape keeps the elements in order under the new extents" {

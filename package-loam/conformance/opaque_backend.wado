@@ -7,7 +7,7 @@
 //! imports, so the tests discover none of it, and `program_over` in
 //! `oracle.wado` splices it.
 
-use { Cpu, Element, Expr, Held, widen } from "lib:loam";
+use { Cpu, Element, Expr, Held, Read, widen } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {
@@ -36,6 +36,9 @@ fn handle<E, Axes>(held: Tensor<E, Axes>) -> Handle<E, Axes> {
 impl Backend for Opaque {
     type Tensor<E: Element, Axes> = Handle<E, Axes>;
 
+
+    type Operand<Axes> = Handle<f32, Axes>;
+
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<E, Axes> {
         self.uploads += 1;
         return handle(*t);
@@ -59,44 +62,37 @@ impl Backend for Opaque {
         return handle(self.cpu.range_i64(start, count, delta));
     }
 
-    fn map<Axes>(&mut self, t: &Handle<f32, Axes>, op: &Expr) -> Handle<f32, Axes> {
-        return handle(self.cpu.map(&t.held, op));
+
+    fn read<Axes>(&mut self, t: &Handle<f32, Axes>) -> Handle<f32, Axes> {
+        return *t;
+    }
+
+    fn read_suffix<..Pre, ..Suf>(&mut self, t: &Handle<f32, [..Suf]>) -> Handle<f32, [..Pre, ..Suf]> {
+        return handle(Tensor { data: t.held.data, extents: t.held.extents });
+    }
+
+    fn read_at<..Pre, ..Mid, ..Post>(
+        &mut self,
+        t: &Handle<f32, [..Mid]>,
+        trailing: i32,
+    ) -> Handle<f32, [..Pre, ..Mid, ..Post]> {
+        let mut extents = t.held.extents;
+        for let _ of 0..<trailing {
+            extents.push(1);
+        }
+        return handle(Tensor { data: t.held.data, extents });
+    }
+
+    fn fused<Axes>(&mut self, operands: List<Handle<f32, Axes>>, op: &Expr) -> Handle<f32, Axes> {
+        let mut reads: List<Read<Axes>> = [];
+        for let o of &operands {
+            reads.push(self.cpu.read(&o.held));
+        }
+        return handle(self.cpu.fused(reads, op));
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Handle<A, Axes>) -> Handle<B, Axes> {
         return handle(self.cpu.cast::<A, B, Axes>(&t.held));
-    }
-
-    fn zip<Axes>(&mut self, a: &Handle<f32, Axes>, b: &Handle<f32, Axes>, op: &Expr) -> Handle<f32, Axes> {
-        return handle(self.cpu.zip(&a.held, &b.held, op));
-    }
-
-    fn zip_suffix<..Pre, ..Suf>(
-        &mut self,
-        a: &Handle<f32, [..Pre, ..Suf]>,
-        b: &Handle<f32, [..Suf]>,
-        op: &Expr,
-    ) -> Handle<f32, [..Pre, ..Suf]> {
-        return handle(self.cpu.zip_suffix::<[..Pre], [..Suf]>(&a.held, &b.held, op));
-    }
-
-    fn zip_suffix_lhs<..Pre, ..Suf>(
-        &mut self,
-        a: &Handle<f32, [..Suf]>,
-        b: &Handle<f32, [..Pre, ..Suf]>,
-        op: &Expr,
-    ) -> Handle<f32, [..Pre, ..Suf]> {
-        return handle(self.cpu.zip_suffix_lhs::<[..Pre], [..Suf]>(&a.held, &b.held, op));
-    }
-
-    fn zip_at<..Pre, ..Mid, ..Post>(
-        &mut self,
-        a: &Handle<f32, [..Pre, ..Mid, ..Post]>,
-        b: &Handle<f32, [..Mid]>,
-        trailing: i32,
-        op: &Expr,
-    ) -> Handle<f32, [..Pre, ..Mid, ..Post]> {
-        return handle(self.cpu.zip_at::<[..Pre], [..Mid], [..Post]>(&a.held, &b.held, trailing, op));
     }
 
     fn select<E: Element, Axes>(

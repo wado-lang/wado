@@ -11,14 +11,15 @@ use {
     Graph,
     KERNEL_ELEMENT,
     Node,
+    case_named,
     data_type,
     element_of,
     is_binary_elementwise,
-    is_unary_operator,
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
 use { Expected } from "./runtime/checkpoint.wado";
+use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
 use {
     Checked,
@@ -474,7 +475,7 @@ fn checkpoint_payload(e: &Expected) -> String {
 struct Operands {
     values: TreeMap<String, String>,
     /// A folded float of one element, as the constant an `Expr` folds in.
-    scalars: TreeMap<String, String>,
+    scalars: TreeMap<String, f32>,
 }
 
 /// The lengths only the run knows, each bound in `forward` from the first input
@@ -621,7 +622,7 @@ fn emit_forward(
     checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
-    scalars: TreeMap<String, String>,
+    scalars: TreeMap<String, f32>,
     literals: &Literals,
     mut symbols: Symbols,
 ) -> Result<(), EmitError> {
@@ -875,12 +876,12 @@ fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     outputs.emit(w);
 }
 
-/// Every folded float of one element, as the literal an `Expr` folds in.
-fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
-    let mut scalars = TreeMap::<String, String>::new();
+/// Every folded float of one element, as the constant an `Expr` folds in.
+fn scalar_literals(checked: &Checked) -> TreeMap<String, f32> {
+    let mut scalars = TreeMap::<String, f32>::new();
     for let [name, k] of checked.known.entries() {
         if let Floats(v) = k.elements && v.len() == 1 {
-            scalars[*name] = float_literal(v[0]);
+            scalars[*name] = v[0];
         }
     }
     return scalars;
@@ -897,7 +898,7 @@ struct Literals {
 
 /// The folded tensors something reads as a tensor: all a kernel reads or the
 /// graph returns, save a scalar an `Expr` folds.
-fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> Literals {
+fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, f32>) -> Literals {
     let mut sources = TreeMap::<String, String>::new();
     for let node of &graph.nodes {
         if is_alias(node, checked) && checked.known.contains_key(node.outputs[0]) {
@@ -927,7 +928,7 @@ fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, S
 }
 
 /// Whether a folded scalar is returned, or read where no `Expr` folds it.
-fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>, scalar: &String) -> bool {
+fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, f32>, scalar: &String) -> bool {
     if graph.outputs.position(|vi| vi.name == *scalar) matches { Some(_) } {
         return true;
     }
@@ -1184,11 +1185,17 @@ fn node_call(
         let to = shapes.get(node.outputs[0]).unwrap();
         return Result::Ok(`backend.permute::<${element}, [${axis_list(&shape)}], [${axis_list(&to)}]>(${a}, ${perm})`);
     }
-    let Some(body) = unary_expr(&op) else {
-        // Stage 0 refuses every operator the kernels lack.
-        unreachable();
-    };
-    return Result::Ok(`backend.map(${exprs.reference(&node.inputs[0])}, &${body})`);
+    // Stage 0 refuses every operator the kernels lack.
+    let unary = case_named::<UnaryOp>(&op).unwrap();
+    let x = lane_of(node, 0, shapes, exprs, 0).unary(unary);
+    return Result::Ok(x.call(&shapes.get(node.outputs[0]).unwrap()));
+}
+
+/// The node's operand `index` read as a whole `Term`, aligned `trailing` axes
+/// before the output's end.
+fn lane_of(node: &Node, index: i32, shapes: &TreeMap<String, Shape>, exprs: &Operands, trailing: i32) -> Term {
+    let tensor = node.inputs[index];
+    return Term::of(exprs.reference(&tensor), shapes.get(tensor).unwrap(), trailing);
 }
 
 /// A `Split` as one `slice_axis` per output, each cutting the next run.
@@ -1326,9 +1333,9 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mu
 fn folded_literal(
     node: &Node,
     index: i32,
-    scalars: &TreeMap<String, String>,
+    scalars: &TreeMap<String, f32>,
     shapes: &TreeMap<String, Shape>,
-) -> Option<String> {
+) -> Option<f32> {
     let Some(literal) = scalars.get(node.inputs[index]) else {
         return null;
     };
@@ -1359,23 +1366,20 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 /// operator, so no tensor is allocated for it and the other operand is walked
 /// once.
 fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
-    let op = node.op;
+    // Stage 0 refuses every operator the kernels lack.
+    let op = case_named::<BinaryOp>(&node.op).unwrap();
+    let out = shapes.get(node.outputs[0]).unwrap();
     if let Some(literal) = folded_literal(node, 1, &exprs.scalars, shapes) {
-        let body = binary_expr(&op, &FIRST, &constant_expr(&literal));
-        return Result::Ok(`backend.map(${exprs.reference(&node.inputs[0])}, &${body})`);
+        return Result::Ok(lane_of(node, 0, shapes, exprs, 0).binary(op, &Term::constant(literal)).call(&out));
     }
     if let Some(literal) = folded_literal(node, 0, &exprs.scalars, shapes) {
-        let body = binary_expr(&op, &constant_expr(&literal), &FIRST);
-        return Result::Ok(`backend.map(${exprs.reference(&node.inputs[1])}, &${body})`);
+        return Result::Ok(Term::constant(literal).binary(op, &lane_of(node, 1, shapes, exprs, 0)).call(&out));
     }
-    let [a, b, left, right] = binary_call(node, shapes, exprs);
-    let body = binary_expr(&op, &FIRST, &SECOND);
+    let left = shapes.get(node.inputs[0]).unwrap();
+    let right = shapes.get(node.inputs[1]).unwrap();
     let trailing = settled(trailing_axes(node, left.rank(), right.rank()));
-    if trailing > 0 {
-        return Result::Ok(aligned_call(&a, &b, &left, &right, trailing, &body));
-    }
-    let out = shapes.get(node.outputs[0]).unwrap();
-    return Result::Ok(elementwise_call(&a, &b, &left, &right, &out, &body));
+    let term = lane_of(node, 0, shapes, exprs, 0).binary(op, &lane_of(node, 1, shapes, exprs, trailing));
+    return Result::Ok(term.call(&out));
 }
 
 /// A `MaxPool` or `Conv` as its kernel, over the window stage 0 read. Each
@@ -1451,34 +1455,113 @@ fn float_literal(value: f32) -> String {
     return `${value}_f32`;
 }
 
-/// The kernel that combines two operands elementwise into `out`, chosen by
-/// which is the shorter where their shared axes are one list.
-fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape, body: &String) -> String {
-    if !shared_axes_agree(left, right) {
-        let x = under_axes_of(a, left, out, &KERNEL_ELEMENT);
-        let y = under_axes_of(b, right, out, &KERNEL_ELEMENT);
-        return `backend.zip(${x}, ${y}, &${body})`;
-    }
-    if left.rank() == right.rank() {
-        return `backend.zip(${a}, ${b}, &${body})`;
-    }
-    if right.rank() < left.rank() {
-        let turbofish = `::<[${axis_run(left, 0, left.rank() - right.rank())}], [${axis_list(right)}]>`;
-        return `backend.zip_suffix${turbofish}(${a}, ${b}, &${body})`;
-    }
-    let turbofish = `::<[${axis_run(right, 0, right.rank() - left.rank())}], [${axis_list(left)}]>`;
-    return `backend.zip_suffix_lhs${turbofish}(${a}, ${b}, &${body})`;
+/// An elementwise computation `forward` spells as one `fused` call: the
+/// operands it reads, and the `Expr` over them.
+struct Term {
+    lanes: List<Lane>,
+    expr: Expr,
 }
 
-/// The kernel for arithmetic aligning B at the axis of A that `trailing` of A's
-/// axes follow. B is read under A's axes there.
-fn aligned_call(a: &String, b: &String, left: &Shape, right: &Shape, trailing: i32, body: &String) -> String {
-    let axis = left.rank() - right.rank() - trailing;
-    let met = Shape { axes: left.axes[axis..<axis + right.rank()].to_list() };
-    let b_read = under_axes_of(b, right, &met, &KERNEL_ELEMENT);
-    let after = axis_run(left, left.rank() - trailing, left.rank());
-    let turbofish = `::<[${axis_run(left, 0, axis)}], [${axis_list(&met)}], [${after}]>`;
-    return `backend.zip_at${turbofish}(${a}, ${b_read}, ${trailing}, &${body})`;
+/// One operand of a `Term`: the tensor `reference` names, of axes `shape`,
+/// met `trailing` axes before the output's end, as arithmetic before opset 7
+/// aligned one.
+struct Lane {
+    reference: String,
+    shape: Shape,
+    trailing: i32,
+}
+
+impl Term {
+    fn of(reference: String, shape: Shape, trailing: i32) -> Term {
+        return Term {
+            lanes: [
+                Lane { reference, shape, trailing },
+            ],
+            expr: operand_expr(0),
+        };
+    }
+
+    fn constant(value: f32) -> Term {
+        return Term { lanes: [], expr: constant_expr(value) };
+    }
+
+    fn unary(&self, op: UnaryOp) -> Term {
+        return Term { lanes: self.lanes, expr: self.expr.unary(op) };
+    }
+
+    /// `op` over this and `rhs`, an operand both read taken once.
+    fn binary(&self, op: BinaryOp, rhs: &Term) -> Term {
+        let mut lanes = self.lanes;
+        let mut renumbered: List<i32> = [];
+        for let lane of rhs.lanes {
+            let mut at = 0;
+            while at < lanes.len() && !(lanes[at].reference == lane.reference && lanes[at].trailing == lane.trailing) {
+                at += 1;
+            }
+            if at == lanes.len() {
+                lanes.push(lane);
+            }
+            renumbered.push(at);
+        }
+        return Term { lanes, expr: self.expr.binary(op, &operands_renumbered(&rhs.expr, &renumbered)) };
+    }
+
+    /// The `fused` call computing this over `out`'s axes.
+    fn call(&self, out: &Shape) -> String {
+        // Stage 0 folds a computation over constants alone.
+        assert !self.lanes.is_empty();
+        let reads: List<String> = self.lanes.into_iter().map(|lane| lane_read(&lane, out)).collect();
+        return `backend.fused::<[${axis_list(out)}]>([${reads.join(", ")}], &${expr_source(
+            &self.expr,
+            self.expr.steps.len() - 1,
+        )})`;
+    }
+}
+
+/// `e` with each `operand(k)` reading `to[k]` instead.
+fn operands_renumbered(e: &Expr, to: &List<i32>) -> Expr {
+    let mut steps: List<Step> = [];
+    for let step of e.steps {
+        steps.push(match step {
+            Operand(k) => Step::Operand(to[k]),
+            other => other,
+        });
+    }
+    return Expr { steps };
+}
+
+/// The source building step `i` of `e`, through the runtime's `operand`,
+/// `constant` and the `Expr` methods.
+fn expr_source(e: &Expr, i: i32) -> String {
+    return match e.steps[i] {
+        Operand(k) => `operand(${k})`,
+        Constant(c) => `constant(${float_literal(c)})`,
+        Unary([op, a]) => `${expr_source(e, a)}.unary(UnaryOp::${op})`,
+        Binary([op, a, b]) => `${expr_source(e, a)}.binary(BinaryOp::${op}, &${expr_source(e, b)})`,
+    };
+}
+
+/// The read of `lane` under `out`'s axes: as it is where its axes are
+/// `out`'s, repeated across `out`'s leading axes where its axes are `out`'s
+/// trailing ones, met at an axis where it aligns there, and otherwise lifted to
+/// `out`'s rank under `out`'s names.
+fn lane_read(lane: &Lane, out: &Shape) -> String {
+    let own = &lane.shape;
+    if lane.trailing > 0 {
+        let axis = out.rank() - own.rank() - lane.trailing;
+        let met = Shape { axes: out.axes[axis..<axis + own.rank()].to_list() };
+        let read = under_axes_of(&lane.reference, own, &met, &KERNEL_ELEMENT);
+        let after = axis_run(out, out.rank() - lane.trailing, out.rank());
+        return `backend.read_at::<[${axis_run(out, 0, axis)}], [${axis_list(&met)}], [${after}]>(${read}, ${lane.trailing})`;
+    }
+    if axis_list(own) == axis_list(out) {
+        return `backend.read(${lane.reference})`;
+    }
+    let leading = out.rank() - own.rank();
+    if leading > 0 && axis_list(own) == axis_run(out, leading, out.rank()) {
+        return `backend.read_suffix::<[${axis_run(out, 0, leading)}], [${axis_list(own)}]>(${lane.reference})`;
+    }
+    return `backend.read(${under_axes_of(&lane.reference, own, out, &KERNEL_ELEMENT)})`;
 }
 
 /// `operand` read under `out`'s axes: itself where they are its own, and
@@ -1501,26 +1584,28 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
     let [b, right] = transposed(&exprs.reference(&node.inputs[1]), &shapes.get(node.inputs[1]).unwrap(), trans_b);
     let product_axes = gemm_product(node, shapes);
-    let mut product = product_call(&a, &b, &left, &right, &product_axes);
-    if alpha != 1.0 {
-        product = `backend.map(&${product}, &${scaled_by(&float_literal(alpha))})`;
-    }
-    if !has_bias(node) {
+    let product = product_call(&a, &b, &left, &right, &product_axes);
+    if alpha == 1.0 && !has_bias(node) {
         return Result::Ok(product);
     }
-    if let Some(literal) = folded_literal(node, 2, &exprs.scalars, shapes) {
-        let scaled = if beta == 1.0 { literal } else { `${literal} * ${float_literal(beta)}` };
-        let plus = binary_expr(&"Add", &FIRST, &constant_expr(&scaled));
-        return Result::Ok(`backend.map(&${product}, &${plus})`);
+    let mut term = Term::of(`&${product}`, product_axes, 0);
+    if alpha != 1.0 {
+        term = term.binary(BinaryOp::Mul, &Term::constant(alpha));
     }
-    let mut bias = exprs.reference(&node.inputs[2]);
-    if beta != 1.0 {
-        bias = `&backend.map(${bias}, &${scaled_by(&float_literal(beta))})`;
+    if !has_bias(node) {
+        return Result::Ok(term.call(&product_axes));
     }
-    let c = shapes.get(node.inputs[2]).unwrap();
-    let produced = shapes.get(node.outputs[0]).unwrap();
-    let sum = binary_expr(&"Add", &FIRST, &SECOND);
-    return Result::Ok(elementwise_call(&`&${product}`, &bias, &product_axes, &c, &produced, &sum));
+    let bias = if let Some(literal) = folded_literal(node, 2, &exprs.scalars, shapes) {
+        Term::constant(if beta == 1.0 { literal } else { literal * beta });
+    } else {
+        let c = lane_of(node, 2, shapes, exprs, 0);
+        if beta == 1.0 {
+            c;
+        } else {
+            c.binary(BinaryOp::Mul, &Term::constant(beta));
+        }
+    };
+    return Result::Ok(term.binary(BinaryOp::Add, &bias).call(&shapes.get(node.outputs[0]).unwrap()));
 }
 
 /// The axes of `Gemm`'s matrix product, which its bias may rename where they
@@ -1581,26 +1666,6 @@ fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agreement(&right.extent) matches { Some(_) };
 }
 
-/// `same_axis` for an elementwise kernel, which stretches an extent of 1.
-fn stretchable_axis(left: &Axis, right: &Axis) -> bool {
-    return left.name == right.name
-        && (left.extent.agreement(&right.extent) matches { Some(_) }
-            || left.extent.oneness() matches { Some(_) }
-            || right.extent.oneness() matches { Some(_) });
-}
-
-/// Whether the axes the two operands share, aligned from the end as every
-/// elementwise kernel aligns them, are one list.
-fn shared_axes_agree(left: &Shape, right: &Shape) -> bool {
-    let common = i32::min(left.rank(), right.rank());
-    for let mut back = 0; back < common; back += 1 {
-        if !stretchable_axis(left.from_end(back), right.from_end(back)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 /// Whether two `MatMul` operands' batch axes are one list, which is what the
 /// kernel's single `..Bs` says.
 fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
@@ -1611,35 +1676,6 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
         }
     }
     return true;
-}
-
-/// An elementwise kernel's first operand, and its second, as an `Expr`.
-global FIRST: String = "operand(0)";
-global SECOND: String = "operand(1)";
-
-/// The `Expr` a binary operator combines `lhs` and `rhs`, each an `Expr`, through.
-fn binary_expr(op: &String, lhs: &String, rhs: &String) -> String {
-    // Stage 0 refuses every operator the kernels lack.
-    assert is_binary_elementwise(op);
-    return `${lhs}.binary(BinaryOp::${op}, &${rhs})`;
-}
-
-/// The `Expr` a unary operator maps each element of the first operand through.
-fn unary_expr(op: &String) -> Option<String> {
-    if !is_unary_operator(op) {
-        return null;
-    }
-    return Option::Some(`${FIRST}.unary(UnaryOp::${op})`);
-}
-
-/// The float literal `literal` as an `Expr`.
-fn constant_expr(literal: &String) -> String {
-    return `constant(${literal})`;
-}
-
-/// The `Expr` multiplying the first operand by the float literal `factor`.
-fn scaled_by(factor: &String) -> String {
-    return binary_expr(&"Mul", &FIRST, &constant_expr(factor));
 }
 
 /// Every axis name the checked graph uses, in first-seen order so the emitted

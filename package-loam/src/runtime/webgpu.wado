@@ -10,12 +10,16 @@ use {
     Cpu,
     Element,
     Expr,
+    Read,
     Step,
     Tensor,
     UnaryOp,
     Window,
+    broadcast_extents,
     element_count,
-    ends_with,
+    followed_by_units,
+    fused,
+    repeats_over,
 } from "./tensor.wado";
 use { TreeMap } from "core:collections";
 use {
@@ -63,6 +67,19 @@ pub variant Placed<E, Axes> {
     Device(DeviceTensor),
 }
 
+/// Where an operand of a fused kernel is held.
+variant Source {
+    Device(&DeviceTensor),
+    Host(&List<f32>),
+}
+
+/// An operand of a fused kernel whose output has the axes `Axes`: its
+/// elements, and its extents aligned with the output's from the end.
+pub struct PlacedRead<Axes> {
+    source: Source,
+    extents: List<i32>,
+}
+
 /// The kernels on a WebGPU device, and on the CPU where no shader is written.
 pub struct WebGpuBackend {
     device: GpuDevice,
@@ -80,7 +97,7 @@ struct Pipeline {
 }
 
 /// Invocations per workgroup of an elementwise shader, which
-/// `ELEMENTWISE_PRELUDE` spells in its `@workgroup_size`.
+/// `elementwise_shader` spells in its `@workgroup_size`.
 global LANES: i32 = 64;
 
 /// The most workgroups one dispatch dimension takes, as WebGPU's default limit
@@ -115,7 +132,7 @@ impl WebGpuBackend {
                 // A loop rather than `map` and `collect`, which allocate per
                 // element: under `wado run-webgpu`'s wasmtime that runs twenty
                 // times slower than under `wado run`.
-                let values = self.read(d);
+                let values = self.read_back(d);
                 let mut data = List::<E>::with_capacity(values.len());
                 for let v of values {
                     data.push(E::from_f32(v));
@@ -125,7 +142,7 @@ impl WebGpuBackend {
         };
     }
 
-    fn read(
+    fn read_back(
         &mut self,
         t: &DeviceTensor,
     ) -> List<f32> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -269,37 +286,43 @@ impl WebGpuBackend {
         return out;
     }
 
-    /// `op` over `a` and `b` on the device, into `extents`. Each operand holds
+    /// `op` over `operands` on the device, into `extents`. Each operand holds
     /// the output's trailing axes, so its element at output position `i` is
-    /// its `i % len`. With no `b`, as `map` has, `a` is bound in its place.
-    fn elementwise<A, B, Out>(
+    /// its `i % len`.
+    fn elementwise<Axes>(
         &mut self,
-        a: &Placed<f32, A>,
-        b: Option<&Placed<f32, B>>,
+        operands: &List<PlacedRead<Axes>>,
         extents: List<i32>,
         op: &Expr,
-    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let count = element_count(&extents);
-        let a_staged = self.staged(a);
-        let a_buffer = bound(a, &a_staged);
-        let a_len = placed_count(a);
-        let mut b_staged: Option<GpuBuffer> = null;
-        let [b_buffer, b_len] = match b {
-            Some(other) => {
-                b_staged = self.staged(other);
-                [
-                    bound(other, &b_staged),
-                    placed_count(other),
-                ];
-            },
-            None => [a_buffer, a_len],
-        };
+        // Every host operand is written to a buffer of its own first, so the
+        // list below lends buffers that all outlive the dispatch.
+        let mut staged: List<GpuBuffer> = [];
+        for let o of *operands {
+            if let Host(data) = o.source {
+                staged.push(self.written(float_bytes(data)));
+            }
+        }
+        let mut buffers: List<&GpuBuffer> = [];
+        let mut next = 0;
         // `dispatch` runs nothing over no elements, but `y` divides by `x`.
         let groups = covering(i32::max(count, 1), LANES);
         let x = i32::min(groups, MAX_GROUPS);
         let y = covering(groups, x);
-        let params: List<u32> = [count as u32, a_len as u32, b_len as u32, (x * LANES) as u32];
-        let buffer = self.dispatch(&elementwise_shader(op), [a_buffer, b_buffer], count, params, [x, y, 1]);
+        let mut params: List<u32> = [count as u32, (x * LANES) as u32];
+        for let o of *operands {
+            match o.source {
+                Device(d) => buffers.push(&d.buffer),
+                Host(_) => {
+                    buffers.push(&staged[next]);
+                    next += 1;
+                },
+            }
+            params.push(element_count(&o.extents) as u32);
+        }
+        let shader = elementwise_shader(op, operands.len());
+        let buffer = self.dispatch(&shader, buffers, count, params, [x, y, 1]);
         return Placed::Device(DeviceTensor { buffer, extents });
     }
 
@@ -332,6 +355,20 @@ impl WebGpuBackend {
     }
 }
 
+/// `t` as an operand, its extents followed by `trailing` extents of 1.
+fn placed_read<In, Out>(t: &Placed<f32, In>, trailing: i32) -> PlacedRead<Out> {
+    return match t {
+        Host(h) => PlacedRead {
+            source: Source::Host(&h.data),
+            extents: followed_by_units(&h.extents, trailing),
+        },
+        Device(d) => PlacedRead {
+            source: Source::Device(d),
+            extents: followed_by_units(&d.extents, trailing),
+        },
+    };
+}
+
 fn bound<Axes>(t: &Placed<f32, Axes>, staged: &Option<GpuBuffer>) -> &GpuBuffer {
     if let Device(d) = t {
         return &d.buffer;
@@ -349,9 +386,6 @@ fn placed_extents<E, Axes>(t: &Placed<E, Axes>) -> List<i32> {
     };
 }
 
-fn placed_count<E, Axes>(t: &Placed<E, Axes>) -> i32 {
-    return element_count(&placed_extents(t));
-}
 
 /// Whether one dispatch holds a product's tiles: a workgroup per tile of each
 /// batch element, the batch along the third dimension.
@@ -398,23 +432,38 @@ fn push_word(out: &mut List<u8>, bits: u32) {
     out.push((bits >> 24) as u8);
 }
 
-/// The WGSL an elementwise kernel runs: `op` over each output position.
-fn elementwise_shader(op: &Expr) -> String {
+/// The WGSL an elementwise kernel runs: `op` over each output position, reading
+/// `operands` operands. Each is read whether or not `op` names it, since a
+/// binding the shader never reads drops out of its layout.
+fn elementwise_shader(op: &Expr, operands: i32) -> String {
+    let mut bindings = "";
     let mut body = "";
+    for let k of 0..<operands {
+        bindings.push_str(`@group(0) @binding(${k}) var<storage, read> o${k}: array<f32>;\n`);
+        body.push_str(`    let x${k} = o${k}[i % p[${k + 2}]];\n`);
+    }
     for let [i, step] of op.steps.into_iter().enumerate() {
         let value = match step {
-            Operand(n) => if n == 0 { "x" } else { "y" },
+            Operand(n) => `x${n}`,
             Constant(c) => `bitcast<f32>(${c.to_bits()}u)`,
             Unary([u, a]) => unary_wgsl(u, `s${a}`),
             Binary([o, a, b]) => binary_wgsl(o, `s${a}`, `s${b}`),
         };
         body.push_str(`    let s${i} = ${value};\n`);
     }
-    return `${ELEMENTWISE_PRELUDE}
-fn f(x: f32, y: f32) -> f32 {
-${body}    return s${op.steps.len() - 1};
+    return `${bindings}@group(0) @binding(${operands}) var<storage, read_write> out: array<f32>;
+// count, invocations per row, then each operand's length
+@group(0) @binding(${operands + 1}) var<storage, read> p: array<u32>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+    let i = id.x + id.y * p[1];
+    if i >= p[0] {
+        return;
+    }
+${body}    out[i] = s${op.steps.len() - 1};
 }
-`;
+${ELEMENTWISE_OPERATORS}`;
 }
 
 fn unary_wgsl(op: UnaryOp, v: String) -> String {
@@ -441,23 +490,9 @@ fn binary_wgsl(op: BinaryOp, a: String, b: String) -> String {
     };
 }
 
-/// What every elementwise shader shares: the bindings, the entry point, and
-/// the operators WGSL does not have as ONNX defines them.
-global ELEMENTWISE_PRELUDE: String = "@group(0) @binding(0) var<storage, read> a: array<f32>;
-@group(0) @binding(1) var<storage, read> b: array<f32>;
-@group(0) @binding(2) var<storage, read_write> out: array<f32>;
-// count, a's length, b's length, invocations per row
-@group(0) @binding(3) var<storage, read> p: array<u32>;
-
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    let i = id.x + id.y * p[3];
-    if i >= p[0] {
-        return;
-    }
-    out[i] = f(a[i % p[1]], b[i % p[2]]);
-}
-
+/// The operators WGSL does not have as ONNX defines them, which every
+/// elementwise shader carries.
+global ELEMENTWISE_OPERATORS: String = "
 fn sigmoid_(v: f32) -> f32 {
     if v >= 0.0 {
         return 1.0 / (1.0 + exp(-v));
@@ -546,6 +581,9 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) l
 impl Backend for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
 
+
+    type Operand<Axes> = PlacedRead<Axes>;
+
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> {
         return Placed::Host(*t);
     }
@@ -565,12 +603,53 @@ impl Backend for WebGpuBackend {
         return Placed::Host(self.cpu.range_i64(start, count, delta));
     }
 
-    fn map<Axes>(
+
+    fn read<Axes>(&mut self, t: &Placed<f32, Axes>) -> PlacedRead<Axes> {
+        return placed_read(t, 0);
+    }
+
+    fn read_suffix<..Pre, ..Suf>(&mut self, t: &Placed<f32, [..Suf]>) -> PlacedRead<[..Pre, ..Suf]> {
+        return placed_read(t, 0);
+    }
+
+    fn read_at<..Pre, ..Mid, ..Post>(
         &mut self,
-        t: &Placed<f32, Axes>,
+        t: &Placed<f32, [..Mid]>,
+        trailing: i32,
+    ) -> PlacedRead<[..Pre, ..Mid, ..Post]> {
+        return placed_read(t, trailing);
+    }
+
+    fn fused<Axes>(
+        &mut self,
+        operands: List<PlacedRead<Axes>>,
         op: &Expr,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.elementwise::<Axes, Axes, Axes>(t, null, placed_extents(t), op);
+        let mut extents: List<i32> = [];
+        for let o of &operands {
+            extents = broadcast_extents(&extents, &o.extents).unwrap();
+        }
+        let mut repeats = true;
+        for let o of &operands {
+            repeats = repeats && repeats_over(&o.extents, &extents);
+        }
+        if repeats {
+            return self.elementwise(&operands, extents, op);
+        }
+        // An operand stretching an axis the output's trailing ones do not
+        // cover has no shader yet.
+        let mut held: List<List<f32>> = [];
+        for let o of &operands {
+            held.push(match o.source {
+                Device(d) => self.read_back(d),
+                Host(data) => *data,
+            });
+        }
+        let mut reads: List<Read<Axes>> = [];
+        for let [i, o] of operands.into_iter().enumerate() {
+            reads.push(Read { data: &held[i], extents: o.extents });
+        }
+        return Placed::Host(fused(&reads, op));
     }
 
     fn cast<A: Element, B: Element, Axes>(
@@ -578,57 +657,6 @@ impl Backend for WebGpuBackend {
         t: &Placed<A, Axes>,
     ) -> Placed<B, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return Placed::Host(self.cpu.cast::<A, B, Axes>(&self.host(t)));
-    }
-
-    fn zip<Axes>(
-        &mut self,
-        a: &Placed<f32, Axes>,
-        b: &Placed<f32, Axes>,
-        op: &Expr,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let extents = placed_extents(a);
-        if extents == placed_extents(b) {
-            return self.elementwise(a, Option::Some(b), extents, op);
-        }
-        return Placed::Host(self.cpu.zip(&self.host(a), &self.host(b), op));
-    }
-
-    fn zip_suffix<..Pre, ..Suf>(
-        &mut self,
-        a: &Placed<f32, [..Pre, ..Suf]>,
-        b: &Placed<f32, [..Suf]>,
-        op: &Expr,
-    ) -> Placed<f32, [..Pre, ..Suf]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let extents = placed_extents(a);
-        if ends_with(&extents, &placed_extents(b)) {
-            return self.elementwise(a, Option::Some(b), extents, op);
-        }
-        return Placed::Host(self.cpu.zip_suffix::<[..Pre], [..Suf]>(&self.host(a), &self.host(b), op));
-    }
-
-    fn zip_suffix_lhs<..Pre, ..Suf>(
-        &mut self,
-        a: &Placed<f32, [..Suf]>,
-        b: &Placed<f32, [..Pre, ..Suf]>,
-        op: &Expr,
-    ) -> Placed<f32, [..Pre, ..Suf]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let extents = placed_extents(b);
-        if ends_with(&extents, &placed_extents(a)) {
-            return self.elementwise(a, Option::Some(b), extents, op);
-        }
-        return Placed::Host(self.cpu.zip_suffix_lhs::<[..Pre], [..Suf]>(&self.host(a), &self.host(b), op));
-    }
-
-    fn zip_at<..Pre, ..Mid, ..Post>(
-        &mut self,
-        a: &Placed<f32, [..Pre, ..Mid, ..Post]>,
-        b: &Placed<f32, [..Mid]>,
-        trailing: i32,
-        op: &Expr,
-    ) -> Placed<f32, [..Pre, ..Mid, ..Post]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return Placed::Host(
-            self.cpu.zip_at::<[..Pre], [..Mid], [..Post]>(&self.host(a), &self.host(b), trailing, op),
-        );
     }
 
     fn select<E: Element, Axes>(
