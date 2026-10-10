@@ -33,8 +33,8 @@ use crate::tir::{
 };
 
 use super::coercion::{
-    NumericLiteralKind, is_literal_arithmetic, is_primitive_literal_target,
-    numeric_literal_pair_order, numeric_literal_shape, range_endpoint_order,
+    NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
+    is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
@@ -5693,8 +5693,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
-            && let ast::Literal::Number(repr, suffix) = &lit.value
-            && let Some(digits) = util::integer_digits(repr, *suffix)
+            && let ast::Literal::Number(repr) = &lit.value
+            && let Some(digits) = util::integer_digits(repr)
             && let Ok(idx) = digits.parse::<usize>()
             && let Ok(elem) = self.tysys.tuple_literal_index_type(elems, idx)
         {
@@ -8172,7 +8172,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // coercion is keyed on the enclosing `Unary` node. Reading the one
         // classifier is what keeps a shape from arriving here as a bare
         // `IntLiteral` typed as the `i128` struct.
-        let (literal, _) = numeric_literal_shape(expr)?;
+        let literal = classify_numeric_literal(expr)?;
         let negated = literal.neg.is_some();
         let repr = match literal.kind {
             NumericLiteralKind::Number(repr) => repr.to_string(),
@@ -8438,16 +8438,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &FunctionContext,
     ) -> TirExpr {
         let kind = match &lit.value {
-            ast::Literal::Number(repr, None) => {
+            ast::Literal::Number(repr) => {
                 return self.reify_numeric_literal(repr, recorded_type, lit.span);
-            }
-            ast::Literal::Number(repr, Some(suffix)) => {
-                let suffix_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .numeric_suffix_type(*suffix);
-                return self.reify_numeric_literal(repr, suffix_type, lit.span);
             }
             // A byte literal is an integer literal spelled as a character, so
             // it takes the same route by its decimal spelling — `let x: f64 =

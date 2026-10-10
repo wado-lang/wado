@@ -405,13 +405,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     fn synth_literal(&mut self, lit: &ast::Literal) -> ArgClass {
         match lit {
-            ast::Literal::Number(_, Some(suffix)) => ArgClass::Exact(
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .numeric_suffix_type(*suffix),
-            ),
-            ast::Literal::Number(raw, None) => {
+            ast::Literal::Number(raw) => {
                 if is_float_only_literal(raw) {
                     ArgClass::FloatLit
                 } else {

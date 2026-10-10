@@ -13,7 +13,7 @@ use crate::ast::{
     HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
     LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
-    NamespacedGenericType, Newtype, NumericSuffix, Param, PathSegment, Pattern, RangeExpr,
+    NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr,
     RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
@@ -1488,7 +1488,6 @@ impl Parser {
                                 }
                             }
                             TokenKind::NumberLit(number) => {
-                                let number = self.unsuffixed_number(number)?;
                                 self.advance();
                                 AttrArg::KeyNumber(value, number)
                             }
@@ -1499,7 +1498,6 @@ impl Parser {
                                 let TokenKind::NumberLit(number) = self.peek_kind().clone() else {
                                     unreachable!("the lookahead saw a number");
                                 };
-                                let number = self.unsuffixed_number(number)?;
                                 self.advance();
                                 AttrArg::KeyNumber(value, format!("-{number}"))
                             }
@@ -1525,7 +1523,6 @@ impl Parser {
                     }
                 }
                 (None, TokenKind::NumberLit(value)) => {
-                    let value = self.unsuffixed_number(value)?;
                     self.advance();
                     AttrArg::Number(value)
                 }
@@ -1887,7 +1884,6 @@ impl Parser {
                 Ok(AttrValue::String(s))
             }
             TokenKind::NumberLit(repr) => {
-                let repr = self.unsuffixed_number(repr)?;
                 self.advance();
                 parse_attr_number(&repr, negate, span)
             }
@@ -3313,7 +3309,7 @@ impl Parser {
         } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
             // Literal pattern: 42 or 3.14
             self.advance();
-            Ok(Pattern::Literal(number_literal(&repr, "")))
+            Ok(Pattern::Literal(Literal::Number(repr)))
         } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
@@ -3343,7 +3339,7 @@ impl Parser {
             self.advance();
             if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
                 self.advance();
-                Ok(Pattern::Literal(number_literal(&repr, "-")))
+                Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
             } else {
                 Err(ParseError {
                     message: format!(
@@ -3552,21 +3548,6 @@ impl Parser {
         }
 
         Ok(left)
-    }
-
-    /// `text`, the number token at the cursor, where it carries no suffix: an
-    /// attribute argument or a tuple field is a number with no type.
-    fn unsuffixed_number(&self, text: String) -> ParseResult<String> {
-        if let (_, Some(suffix)) = NumericSuffix::split(&text) {
-            return Err(self.error_at_span(
-                self.peek().span,
-                &format!(
-                    "a numeric suffix (`_{}`) is not allowed here",
-                    suffix.as_str()
-                ),
-            ));
-        }
-        Ok(text)
     }
 
     /// Consume the current token and produce an `Expr::Literal` with the given
@@ -4066,7 +4047,7 @@ impl Parser {
                             }
                         } else {
                             // Simple integer literal for tuple field access
-                            let field_name = self.unsuffixed_number(s.clone())?;
+                            let field_name = s.clone();
                             self.advance();
                             (field_name, None)
                         }
@@ -4501,7 +4482,7 @@ impl Parser {
 
         match self.peek_kind().clone() {
             TokenKind::NumberLit(repr) => {
-                Ok(self.consume_literal(number_literal(&repr, ""), start_span))
+                Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
             TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
             TokenKind::ByteStringLit(raw) => {
@@ -6928,12 +6909,6 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         }));
     }
     Ok(None)
-}
-
-/// The literal a number token spells, its digits after `sign`.
-fn number_literal(text: &str, sign: &str) -> Literal {
-    let (digits, suffix) = NumericSuffix::split(text);
-    Literal::Number(format!("{sign}{digits}"), suffix)
 }
 
 fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrValue> {

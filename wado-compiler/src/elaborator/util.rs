@@ -1,6 +1,6 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::{AstId, Literal, NumericSuffix, Pattern};
+use crate::ast::{AstId, Literal, Pattern};
 use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
 use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
@@ -51,8 +51,8 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
 /// names none.
 pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     match lit {
-        Literal::Number(repr, suffix) => {
-            if denotes_float(repr, *suffix) {
+        Literal::Number(repr) => {
+            if is_float_only_literal(repr) {
                 return Err("float literals cannot be used in match patterns".to_string());
             }
             let (negated, digits) = repr
@@ -61,14 +61,14 @@ pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
             Ok(PatternLiteral::Int {
                 magnitude: parse_u128_literal(digits)?,
                 negated,
-                suffix: *suffix,
+                owner: None,
                 shown: repr.clone(),
             })
         }
         Literal::Byte(raw) => Ok(PatternLiteral::Int {
             magnitude: unescape_byte(raw)?.into(),
             negated: false,
-            suffix: None,
+            owner: None,
             shown: format!("b'{raw}'"),
         }),
         Literal::Char(raw) => unescape_char(raw).map(PatternLiteral::Char),
@@ -85,7 +85,7 @@ pub(super) fn range_bound(
     resolutions: &Resolutions,
 ) -> Option<Result<RangeBound, String>> {
     match pattern {
-        Pattern::Literal(Literal::Number(repr, suffix)) if denotes_float(repr, *suffix) => {
+        Pattern::Literal(Literal::Number(repr)) if is_float_only_literal(repr) => {
             let (negated, digits) = repr
                 .strip_prefix('-')
                 .map_or((false, repr.as_str()), |digits| (true, digits));
@@ -93,7 +93,6 @@ pub(super) fn range_bound(
                 kind: FloatBoundKind::Literal {
                     digits: digits.to_string(),
                     negated,
-                    suffix: *suffix,
                 },
                 shown: repr.clone(),
             })))
@@ -114,10 +113,7 @@ pub(super) fn range_bound(
                 return Some(Ok(RangeBound::Discrete(PatternLiteral::Int {
                     magnitude: value.unsigned_abs(),
                     negated: value < 0,
-                    suffix: Some(
-                        NumericSuffix::from_name(owner.as_str())
-                            .expect("every integer type has a suffix"),
-                    ),
+                    owner: Some(owner),
                     shown,
                 })));
             }
@@ -410,7 +406,7 @@ pub(super) fn bound_value(
         (RangeBound::Discrete(lit), Some(format)) => match int_literal_float_bits(lit, format) {
             Some(bits) => bits.map(|bits| BoundValue::Float(format, bits)),
             None => Err(pattern_literal_error(lit, scrutinee, type_table)
-                .expect("a suffixed integer, a limit or a char is no float")),
+                .expect("an integer limit or a char is no float")),
         },
         (RangeBound::Discrete(lit), None) => {
             if let Some(error) = pattern_literal_error(lit, scrutinee, type_table) {
@@ -423,38 +419,17 @@ pub(super) fn bound_value(
             })
         }
         (RangeBound::Float(bound), Some(format)) => {
-            float_bound_bits(bound, format, scrutinee, type_table)
-                .map(|bits| BoundValue::Float(format, bits))
+            float_bound_bits(bound, format).map(|bits| BoundValue::Float(format, bits))
         }
-        (RangeBound::Float(bound), None) => {
-            Err(PatternLiteralError::Mismatch(bound.demands(type_table)))
-        }
+        (RangeBound::Float(bound), None) => Err(PatternLiteralError::Mismatch(bound.demands())),
     }
 }
 
-/// The bits `bound` names in `format`, read by `scrutinee`, or why it names
-/// none.
-fn float_bound_bits(
-    bound: &FloatBound,
-    format: FloatFormat,
-    scrutinee: TypeId,
-    type_table: &mut TypeTable,
-) -> Result<u64, PatternLiteralError> {
+/// The bits `bound` names in `format`, or why it names none.
+fn float_bound_bits(bound: &FloatBound, format: FloatFormat) -> Result<u64, PatternLiteralError> {
     let bits = match &bound.kind {
-        FloatBoundKind::Literal {
-            digits,
-            negated,
-            suffix,
-        } => {
-            if let Some(suffix) = suffix {
-                let suffix_type = type_table.numeric_suffix_type(*suffix);
-                if type_table.type_key(suffix_type) != type_table.type_key(scrutinee) {
-                    return Err(PatternLiteralError::Mismatch(bound.demands(type_table)));
-                }
-            }
-            signed_literal_bits(digits, *negated, format)
-                .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?
-        }
+        FloatBoundKind::Literal { digits, negated } => signed_literal_bits(digits, *negated, format)
+            .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?,
         FloatBoundKind::Limit { owner, name } => {
             let (owner_format, bits) = limit_bits(*owner, name);
             if owner_format != format {
@@ -501,9 +476,9 @@ fn float_format(scrutinee: TypeId, type_table: &TypeTable) -> Option<FloatFormat
         .and_then(FloatFormat::of)
 }
 
-/// The bits an unsuffixed integer literal names in `format`: its value, as an
-/// integer literal converts wherever a float is expected. `None` for any other
-/// literal, which keeps its own type.
+/// The bits an integer literal names in `format`: its value, as an integer
+/// literal converts wherever a float is expected. `None` for a limit, which
+/// keeps its own type.
 fn int_literal_float_bits(
     lit: &PatternLiteral,
     format: FloatFormat,
@@ -511,7 +486,7 @@ fn int_literal_float_bits(
     let PatternLiteral::Int {
         magnitude,
         negated,
-        suffix: None,
+        owner: None,
         shown,
     } = lit
     else {
@@ -550,16 +525,9 @@ fn nan_bound_error(
 
 impl FloatBound {
     /// The type the bound demands of a scrutinee it names no value of.
-    fn demands(&self, type_table: &mut TypeTable) -> String {
+    fn demands(&self) -> String {
         match &self.kind {
-            FloatBoundKind::Literal {
-                suffix: Some(suffix),
-                ..
-            } => {
-                let suffix_type = type_table.numeric_suffix_type(*suffix);
-                type_table.type_name(suffix_type)
-            }
-            FloatBoundKind::Literal { suffix: None, .. } => "a float type".to_string(),
+            FloatBoundKind::Literal { .. } => "a float type".to_string(),
             FloatBoundKind::Limit { owner, .. } => owner.as_str().to_string(),
         }
     }
@@ -640,7 +608,7 @@ pub(super) fn pattern_literal_error(
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
     if let PatternLiteral::Int {
-        suffix: None,
+        owner: None,
         shown,
         ..
     } = lit
@@ -683,12 +651,11 @@ fn pattern_literal_mismatch(
     let head = type_table.representation_head(scrutinee);
     let expected = match lit {
         PatternLiteral::Int {
-            suffix: Some(suffix),
-            ..
+            owner: Some(owner), ..
         } => {
-            let suffix_type = type_table.numeric_suffix_type(*suffix);
-            return (type_table.type_key(suffix_type) != type_table.type_key(scrutinee))
-                .then(|| type_table.type_name(suffix_type));
+            let owner_type = TypeTable::primitive_type_id(*owner);
+            return (type_table.type_key(owner_type) != type_table.type_key(scrutinee))
+                .then(|| owner.as_str().to_string());
         }
         PatternLiteral::Int { .. }
             if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
@@ -796,15 +763,9 @@ pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     i128::try_from(unsigned).map_err(|_| format!("integer literal out of range: {repr}"))
 }
 
-/// Whether a number literal denotes a float: it can only be one, or its
-/// suffix names a float type.
-pub(super) fn denotes_float(repr: &str, suffix: Option<NumericSuffix>) -> bool {
-    is_float_only_literal(repr) || suffix.is_some_and(NumericSuffix::is_float)
-}
-
-/// The digits of a number literal that denotes an integer.
-pub(super) fn integer_digits(repr: &str, suffix: Option<NumericSuffix>) -> Option<&str> {
-    (!denotes_float(repr, suffix)).then_some(repr)
+/// The digits of a number literal that can be an integer.
+pub(super) fn integer_digits(repr: &str) -> Option<&str> {
+    (!is_float_only_literal(repr)).then_some(repr)
 }
 
 /// Check if a number literal can only be a float (has decimal point or negative exponent).

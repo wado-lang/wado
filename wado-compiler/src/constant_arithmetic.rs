@@ -220,7 +220,7 @@ impl ConstantArithmetic<'_> {
     fn value(&mut self, expr: &Expr) -> Option<Value> {
         match expr {
             Expr::Literal(literal) => {
-                let Literal::Number(repr, _) = &literal.value else {
+                let Literal::Number(repr) = &literal.value else {
                     return None;
                 };
                 let ty = self.int_type(expr)?;
@@ -229,7 +229,7 @@ impl ConstantArithmetic<'_> {
             }
             Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
                 if let Expr::Literal(literal) = &unary.expr
-                    && let Literal::Number(repr, _) = &literal.value
+                    && let Literal::Number(repr) = &literal.value
                 {
                     // `-128 as i8` casts one literal, never `-(128)`.
                     let ty = self.int_type(expr)?;

@@ -4693,10 +4693,10 @@ fn lane_literal(arg: &Expr) -> Option<i128> {
     let Expr::Literal(lit) = operand else {
         return None;
     };
-    let ast::Literal::Number(repr, suffix) = &lit.value else {
+    let ast::Literal::Number(repr) = &lit.value else {
         return None;
     };
-    parse_i128_literal(&format!("{sign}{}", integer_digits(repr, *suffix)?)).ok()
+    parse_i128_literal(&format!("{sign}{}", integer_digits(repr)?)).ok()
 }
 
 /// Where a SIMD builtin keeps its lane immediates, and what they may name.

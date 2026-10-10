@@ -3397,9 +3397,9 @@ pub struct LiteralExpr {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    /// Numeric literal: raw source text without its suffix (e.g. `"42"`,
-    /// `"0xFF"`, `"3.14"`). Unsuffixed, its type comes from its context.
-    Number(String, Option<NumericSuffix>),
+    /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Its
+    /// type comes from its context.
+    Number(String),
     /// String literal: raw source text between quotes (escape sequences not interpreted).
     String(String),
     /// Byte-string literal `b"..."`: raw source text between quotes (escape
@@ -3424,117 +3424,6 @@ pub enum Literal {
     IncludeStr(String),
     /// Compile-time file include as bytes: `#include_bytes("path")`
     IncludeBytes(String),
-}
-
-/// The type suffix of a numeric literal, the `u8` of `255_u8`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NumericSuffix {
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    F16,
-    Bf16,
-    F32,
-    F64,
-}
-
-impl NumericSuffix {
-    const ALL: [Self; 14] = [
-        Self::I8,
-        Self::I16,
-        Self::I32,
-        Self::I64,
-        Self::I128,
-        Self::U8,
-        Self::U16,
-        Self::U32,
-        Self::U64,
-        Self::U128,
-        Self::F16,
-        Self::Bf16,
-        Self::F32,
-        Self::F64,
-    ];
-
-    /// The type name the suffix is spelled with.
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::I8 => "i8",
-            Self::I16 => "i16",
-            Self::I32 => "i32",
-            Self::I64 => "i64",
-            Self::I128 => "i128",
-            Self::U8 => "u8",
-            Self::U16 => "u16",
-            Self::U32 => "u32",
-            Self::U64 => "u64",
-            Self::U128 => "u128",
-            Self::F16 => "f16",
-            Self::Bf16 => "bf16",
-            Self::F32 => "f32",
-            Self::F64 => "f64",
-        }
-    }
-
-    /// The suffix spelled `name`, if one is.
-    #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|suffix| suffix.as_str() == name)
-    }
-
-    /// Whether the suffix names a float type, which only a decimal literal
-    /// takes.
-    #[must_use]
-    pub fn is_float(self) -> bool {
-        matches!(self, Self::F16 | Self::Bf16 | Self::F32 | Self::F64)
-    }
-
-    /// Whether a literal spelled `digits` takes this suffix: a float suffix
-    /// needs a decimal literal. In a hex literal `b` and `f` are digits, so
-    /// `0x1_f32` is the number `0x1F32`.
-    #[must_use]
-    pub fn suits(self, digits: &str) -> bool {
-        !self.is_float() || !is_radix_literal(digits)
-    }
-
-    /// Split a numeric literal's source text into its digits and its suffix:
-    /// `"255_u8"` is `("255", Some(U8))`. The lexer has already rejected a
-    /// suffix it does not know.
-    #[must_use]
-    pub fn split(text: &str) -> (&str, Option<Self>) {
-        let Some((digits, name)) = text.rsplit_once('_') else {
-            return (text, None);
-        };
-        match Self::from_name(name) {
-            Some(suffix) if suffix.suits(text) => (digits, Some(suffix)),
-            _ => (text, None),
-        }
-    }
-}
-
-/// A numeric literal as it is written: its digits, then `_` and its suffix.
-#[must_use]
-pub fn spell_number(repr: &str, suffix: Option<NumericSuffix>) -> String {
-    match suffix {
-        Some(suffix) => format!("{repr}_{}", suffix.as_str()),
-        None => repr.to_string(),
-    }
-}
-
-/// Whether `text` spells a hex, octal or binary literal.
-fn is_radix_literal(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    bytes.len() > 1
-        && bytes[0] == b'0'
-        && matches!(bytes[1], b'x' | b'X' | b'o' | b'O' | b'b' | b'B')
 }
 
 #[derive(Debug, Clone)]

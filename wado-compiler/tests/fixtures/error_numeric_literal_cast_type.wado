@@ -1,0 +1,21 @@
+// A cast types its literal as an annotation does: the literal is checked
+// against the type, and the context does not retype the cast.
+
+type Meters = f64;
+
+export fn run() {
+    let c = 1e40 as f32;         // compile error: literal out of range for `f32`: 1e40
+    let j: i128 = 3.5;           // compile error: cannot use float literal '3.5' as integer
+    let e: i64 = 1 as i32;       // compile error: expected 'i64', found 'i32'
+    let f: Meters = 1.0 as f64;  // compile error: expected 'Meters', found 'f64'
+}
+
+__DATA__
+{
+  "compile_error": "literal out of range for `f32`: 1e40",
+  "compile_errors_contains": [
+    "cannot use float literal '3.5' as integer",
+    "expected 'i64', found 'i32'",
+    "expected 'Meters', found 'f64'"
+  ]
+}

@@ -7,9 +7,10 @@
 // best-effort token stream via [`LexResult`]. The entry points are the free
 // functions [`lex`] and [`lex_in`].
 
-use crate::ast::{AstIdSpace, NumericSuffix};
+use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::primitive::PrimitiveType;
 use crate::token;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
@@ -265,13 +266,12 @@ pub enum LexErrorKind {
     MissingOctalDigits,
     /// Floating-point exponent (`e` / `E`) with no following digit.
     MissingExponentDigits,
-    /// A suffix written without its `_` (`255u8`), holding the literal
-    /// spelled with one.
-    MissingSuffixSeparator(String),
-    /// Letters after a numeric literal that name no suffix type.
-    UnknownNumericSuffix(String),
-    /// A float suffix on an octal or binary literal, holding the literal.
-    FloatSuffixOnRadixLiteral(String),
+    /// Letters written directly after a numeric literal (`255u8`, `255_u8`),
+    /// with the literal and the letters. A literal takes no suffix.
+    NumericSuffix { digits: String, name: String },
+    /// An `_` in a numeric literal that does not stand between two digits
+    /// (`1_`, `1__0`, `0x_FF`, `1_.5`), holding the literal.
+    MisplacedSeparator(String),
     /// A decimal digit the literal's radix lacks (`0b102`), with the kind of
     /// literal it sits in.
     InvalidRadixDigit { digit: char, literal: &'static str },
@@ -293,20 +293,40 @@ impl std::fmt::Display for LexError {
             LexErrorKind::MissingBinaryDigits => write!(f, "expected binary digit after 0b"),
             LexErrorKind::MissingOctalDigits => write!(f, "expected octal digit after 0o"),
             LexErrorKind::MissingExponentDigits => write!(f, "expected digit after exponent"),
-            LexErrorKind::MissingSuffixSeparator(spelled) => {
-                write!(f, "write `{spelled}`: a suffix follows an `_`")
+            LexErrorKind::NumericSuffix { digits, name } if names_numeric_type(name) => {
+                write!(f, "a numeric literal takes no suffix: write `{digits} as {name}`")
             }
-            LexErrorKind::UnknownNumericSuffix(name) => {
-                write!(f, "unknown numeric suffix `{name}`")
+            LexErrorKind::NumericSuffix { digits, name } => {
+                write!(f, "invalid suffix `{name}` on the numeric literal `{digits}`")
             }
-            LexErrorKind::FloatSuffixOnRadixLiteral(text) => {
-                write!(f, "a float suffix needs a decimal literal: `{text}`")
+            LexErrorKind::MisplacedSeparator(text) => {
+                write!(f, "an `_` in a numeric literal stands between two digits: `{text}`")
             }
             LexErrorKind::InvalidRadixDigit { digit, literal } => {
                 write!(f, "invalid digit `{digit}` in {literal}")
             }
         }
     }
+}
+
+/// Whether `name` spells a numeric type, which `as` gives a literal.
+fn names_numeric_type(name: &str) -> bool {
+    matches!(name, "i128" | "u128")
+        || PrimitiveType::from_name(name)
+            .is_some_and(|p| !matches!(p, PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128))
+}
+
+/// Whether every `_` in the numeric literal `text`, written in `radix`
+/// (`None` for decimal), stands between two of its digits.
+fn separators_stand_between_digits(text: &str, radix: Option<Radix>) -> bool {
+    let is_digit = |ch: u8| match radix {
+        Some(Radix::Hex) => ch.is_ascii_hexdigit(),
+        _ => ch.is_ascii_digit(),
+    };
+    let bytes = text.as_bytes();
+    bytes.iter().enumerate().all(|(i, &ch)| {
+        ch != b'_' || (i > 0 && is_digit(bytes[i - 1]) && bytes.get(i + 1).is_some_and(|&next| is_digit(next)))
+    })
 }
 
 /// The base a prefixed integer literal is written in.
@@ -980,12 +1000,16 @@ impl<'a> Lexer<'a> {
         // Consume decimal digits and underscores
         self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
 
-        // Check for float (decimal point followed by digits)
+        // A decimal point followed by a digit continues the literal, and so
+        // does one followed by `_` and a digit, for `1._5` to be reported as a
+        // misplaced separator rather than read as a field `_5`.
         if self.peek_char() == Some('.') {
             let mut chars = self.chars.clone();
             chars.next();
-            if let Some((_, ch)) = chars.peek()
-                && ch.is_ascii_digit()
+            let after_point: Vec<char> = chars.take(2).map(|(_, ch)| ch).collect();
+            if let [first, rest @ ..] = after_point.as_slice()
+                && (first.is_ascii_digit()
+                    || (*first == '_' && rest.first().is_some_and(char::is_ascii_digit)))
             {
                 self.advance(); // consume '.'
                 self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
@@ -1012,45 +1036,48 @@ impl<'a> Lexer<'a> {
             self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');
         }
 
-        self.finish_number(start, start_line, start_column)
+        self.finish_number(start, start_line, start_column, None)
     }
 
-    /// Read the suffix written directly after a numeric literal, and return the
-    /// literal's token. Letters after a literal are its suffix whatever they
-    /// spell, so `255_u9` is an unknown suffix rather than a number followed
-    /// by a name. A malformed suffix is reported and left out of the token, or
-    /// spelled right where the fix is certain.
-    fn finish_number(&mut self, start: usize, start_line: usize, start_column: usize) -> TokenKind {
+    /// Return the token of the numeric literal lexed from `start`, written in
+    /// `radix` (`None` for decimal). Letters written directly after it are an
+    /// error whatever they spell, so `255_u9` is reported rather than read as
+    /// a number followed by a name, and they are left out of the token.
+    fn finish_number(
+        &mut self,
+        start: usize,
+        start_line: usize,
+        start_column: usize,
+        radix: Option<Radix>,
+    ) -> TokenKind {
         let digits_end = self.pos;
         self.advance_while(is_ident_continue);
-        let digits = &self.input[start..digits_end];
+        let text = &self.input[start..digits_end];
         let name = &self.input[digits_end..self.pos];
-        if name.is_empty() {
-            return TokenKind::NumberLit(digits.to_string());
-        }
-        let (kind, text) = match NumericSuffix::from_name(name) {
-            None => (
-                LexErrorKind::UnknownNumericSuffix(name.to_string()),
-                digits.to_string(),
-            ),
-            Some(suffix) if !suffix.suits(digits) => (
-                LexErrorKind::FloatSuffixOnRadixLiteral(format!("{digits}{name}")),
-                digits.to_string(),
-            ),
-            Some(_) if !digits.ends_with('_') => {
-                let spelled = format!("{digits}_{name}");
-                (
-                    LexErrorKind::MissingSuffixSeparator(spelled.clone()),
-                    spelled,
-                )
-            }
-            Some(_) => return TokenKind::NumberLit(format!("{digits}{name}")),
+        let error = if !name.is_empty() {
+            // `255_u8` spells the `_` as part of its suffix.
+            let digits = text.strip_suffix('_').unwrap_or(text);
+            Some((
+                LexErrorKind::NumericSuffix {
+                    digits: digits.to_string(),
+                    name: name.to_string(),
+                },
+                digits,
+            ))
+        } else if !separators_stand_between_digits(text, radix) {
+            Some((LexErrorKind::MisplacedSeparator(text.to_string()), text))
+        } else {
+            None
         };
+        let Some((kind, digits)) = error else {
+            return TokenKind::NumberLit(text.to_string());
+        };
+        let token = TokenKind::NumberLit(digits.to_string());
         self.errors.push(LexError {
             kind,
             span: self.span_from(start, start_line, start_column),
         });
-        TokenKind::NumberLit(text)
+        token
     }
 
     /// Lex the digits of a hex, binary or octal literal after its prefix. With
@@ -1087,7 +1114,7 @@ impl<'a> Lexer<'a> {
             });
         }
 
-        self.finish_number(start, start_line, start_column)
+        self.finish_number(start, start_line, start_column, Some(radix))
     }
 
     fn lex_string(&mut self) -> TokenKind {
