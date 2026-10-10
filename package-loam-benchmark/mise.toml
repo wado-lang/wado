@@ -1,0 +1,55 @@
+# Loam benchmarks, in the format of `benchmark/`: each task prints an
+# `=== Impl ===` header per arm and a throughput line `benchmark/logs.ts`
+# reads, so `benchmark/pick.ts` and `benchmark/ab.ts` work on its logs.
+#
+# The models are not in the repository. `package-loam/example/gpt2-124m/
+# fetch.sh` writes the checkpoint and `onnx/decoder_model.onnx`, and
+# `mise run loam-oracle-deps` at the repository root installs onnxruntime.
+#
+# `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
+
+[settings]
+lockfile = true
+
+[tools]
+node = "latest"
+
+[tasks.gpt2-124m]
+description = "Run GPT-2 (124M) greedy generation (Loam Cpu and WebGPU vs onnxruntime)"
+run = """
+#!/usr/bin/env bash
+set -e
+source ../benchmark/wado.sh
+model=../package-loam/example/gpt2-124m
+if [ ! -f $model/gpt2.safetensors ] || [ ! -f $model/model.onnx ]; then
+    echo "SKIP: run $model/fetch.sh first"
+    exit 0
+fi
+
+echo "=== Compiling wado-run-webgpu ==="
+cargo build --release --manifest-path ../wado-run-webgpu/Cargo.toml --quiet
+if [ -z "${WADO_BIN:-}" ]; then
+    cargo build --release --manifest-path ../wado-cli/Cargo.toml --quiet
+fi
+wado_exe="${WADO_BIN:-$(cd .. && pwd)/target/release/wado}"
+
+echo "=== onnxruntime (CPU) ==="
+node gpt2_124m/onnxruntime.mjs
+
+echo "=== onnxruntime (CPU, 1 thread) ==="
+node gpt2_124m/onnxruntime.mjs 1
+
+echo "=== Loam (WebGPU) ==="
+WADO="$wado_exe" ../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m_webgpu.wado
+
+echo "=== Loam (Cpu) ==="
+wado run -O2 $WADO_BENCH_FLAGS --dir $model gpt2_124m/gpt2_124m.wado
+"""
+
+[tasks.all]
+description = "Run all Loam benchmarks serially"
+run = """
+#!/usr/bin/env bash
+set -e
+MISE_JOBS=1 mise run gpt2-124m
+"""

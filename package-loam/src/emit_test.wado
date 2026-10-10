@@ -1,11 +1,35 @@
-use { EmitError, NameCollision, UnmappedDtype, emit } from "./emit.wado";
+use { EmitError, NameCollision, UnmappedDtype, emit, expr_source } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
+use { BinaryOp, Expr, RowOp, UnaryOp, constant, operand } from "./runtime/tensor.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
 fn rule(pattern: String, axes: List<String>) -> LayoutRule {
     return LayoutRule { pattern, axes };
+}
+
+/// The source the generated module spells `e` with.
+fn src(e: Expr) -> String {
+    return expr_source(&e);
+}
+
+/// `src` of the commonest kernel: its first operand plus its second.
+fn sum() -> String {
+    return src(operand(0).binary(BinaryOp::Add, &operand(1)));
+}
+
+fn unary(op: UnaryOp) -> String {
+    return src(operand(0).unary(op));
+}
+
+fn select() -> String {
+    return src(operand(0).select(&operand(1), &operand(2)));
+}
+
+test "an expression is spelled as its steps, a shared step once" {
+    let x = operand(0).binary(BinaryOp::Sub, &constant(2.0));
+    assert src(x.binary(BinaryOp::Mul, &x).row(RowOp::Max)) == "Expr { steps: [Step::Operand(0), Step::Constant(2 as f32), Step::Binary([BinaryOp::Sub, 0, 1]), Step::Binary([BinaryOp::Mul, 2, 2]), Step::Fold([RowOp::Max, 3])] }";
 }
 
 /// The package spec the generated module imports the runtime from.
@@ -63,11 +87,10 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     );
     assert out.contains("let H = backend.matmul(&X, &weights.W1, null);");
     assert out.contains(
-        "let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
+        `let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &${sum(
+        )});`,
     );
-    assert out.contains(
-        "let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &operand(0).unary(UnaryOp::Relu));",
-    );
+    assert out.contains(`let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
     assert out.contains("let T = backend.matmul(&A, &weights.W2, null);");
     assert out.contains("return backend.download(&Y);");
 }
@@ -76,10 +99,13 @@ test "a product takes the elementwise operators after it as its epilogue" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains(
-        "let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu) }));",
+        `let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: ${src(
+            operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
+        )} }));`,
     );
     assert out.contains(
-        "let Y = backend.matmul(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: operand(0).binary(BinaryOp::Add, &operand(1)) }));",
+        `let Y = backend.matmul(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: ${sum(
+        )} }));`,
     );
     assert !out.contains("let H ");
     assert !out.contains("let HB ");
@@ -97,25 +123,28 @@ g (float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source, [rule("*", ["Batch", "Feat"])]).unwrap();
 
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Feat]>([backend.read(&X), backend.read(&Z)], &operand(0).binary(BinaryOp::Mul, &operand(0)).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu));",
+        `let Y = backend.fused::<[Batch, Feat]>([backend.read(&X), backend.read(&Z)], &${src(
+            operand(0).binary(BinaryOp::Mul, &operand(0)).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
+        )});`,
     );
 }
 
-test "each input is uploaded after the checks that read the host's, and no weight is" {
+test "each input is uploaded after the checks that read the host's and the pass begins, and no weight is" {
     let body = generate(MLP, mlp_layout()).unwrap();
 
     let upload = body.find("let X = backend.upload(X);").unwrap();
-    assert body.find("refuse(input_mismatch(X,").unwrap() < upload;
+    let begun = body.find("backend.begin();").unwrap();
+    assert body.find("refuse(input_mismatch(X,").unwrap() < begun < upload;
     let forward = body.find("pub fn forward").unwrap();
     assert !body.substr_bytes(forward, body.len()).contains("upload(&weights"), body;
 }
 
-test "the weights become the backend's where they are prepared" {
+test "the weights become the backend's for every pass where they are prepared" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains("    pub W1: Bk::Tensor<f32, [In, Hidden]>,\n");
     assert out.contains(
-        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.upload(&self.W1),\n",
+        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep(&self.W1),\n",
     );
 }
 
@@ -127,13 +156,14 @@ test "the forward pass checks each input against the graph before any kernel" {
     assert check < body.find("matmul(").unwrap();
 }
 
-test "an axis the boundary fixes to one length carries it as a constant" {
+test "an axis the boundary and the weights fix to one length carries it as a constant" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains("impl In {\n    pub const EXTENT: i32 = 4;\n}");
     assert out.contains("impl Out {\n    pub const EXTENT: i32 = 2;\n}");
+    // Only the weights name `Hidden`.
+    assert out.contains("impl Hidden {\n    pub const EXTENT: i32 = 3;\n}");
     assert !out.contains("impl Batch {");
-    assert !out.contains("impl Hidden {");
 }
 
 test "an axis the boundary gives two lengths carries no constant" {
@@ -265,7 +295,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     );
     // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
     assert out.contains(
-        "B: backend.upload(&Tensor::<f32, [In]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
+        "B: backend.keep(&Tensor::<f32, [In]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
     );
 }
 
@@ -278,7 +308,7 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     );
     assert out.contains("let header = read_checkpoint(checkpoint)?;");
     assert out.contains(
-        "W1: backend.upload(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
+        "W1: backend.keep(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
 }
 
@@ -335,9 +365,9 @@ g (float[N, 2] "/model/input.0") => (float[N, 2] out)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains("backend: &mut Bk, _model_input_0: &Tensor<f32, [Batch, Unit]>");
-    assert out.contains(
-        "let out = backend.fused::<[Batch, Unit]>([backend.read(&_model_input_0)], &operand(0).unary(UnaryOp::Relu));",
-    );
+    assert out.contains(`let out = backend.fused::<[Batch, Unit]>([backend.read(&_model_input_0)], &${unary(
+        UnaryOp::Relu,
+    )});`);
 }
 
 test "a graph that returns its own input downloads it" {
@@ -401,7 +431,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
 `;
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert out.contains("backend.fused::<[Batch, Unit]>([backend.read(&X)], &operand(0).unary(UnaryOp::Erf))");
+    assert out.contains(`backend.fused::<[Batch, Unit]>([backend.read(&X)], &${unary(UnaryOp::Erf)})`);
 }
 
 test "an axis of 1 named apart from the one it stretches over is read under the result's axes" {
@@ -420,7 +450,8 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(&X, 2)), backend.read(&Z)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
+        `let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(&X, 2)), backend.read(&Z)], &${sum(
+        )});`,
     );
 }
 
@@ -439,7 +470,10 @@ g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.select(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2), &X, &Z);");
+    assert out.contains(
+        `let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(&X), backend.read(&Z)], &${select(
+        )});`,
+    );
 }
 
 test "an extent-1 axis stretches under the name the other operand gives it" {
@@ -457,7 +491,8 @@ g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "backend.fused::<[Batch, Chan, Row, Col]>([backend.read(&X), backend.read_suffix::<[Batch], [Chan, Row, Col]>(&weights.B)], &operand(0).binary(BinaryOp::Add, &operand(1)))",
+        `backend.fused::<[Batch, Chan, Row, Col]>([backend.read(&X), backend.read_suffix::<[Batch], [Chan, Row, Col]>(&weights.B)], &${sum(
+        )})`,
     );
 }
 
@@ -582,7 +617,12 @@ g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.matmul(&A, &backend.transpose2(&B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&C)], op: operand(0).binary(BinaryOp::Mul, &constant(0.5 as f32)).binary(BinaryOp::Add, &operand(1).binary(BinaryOp::Mul, &constant(2 as f32))) }));",
+        `let Y = backend.matmul(&A, &backend.transpose2(&B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&C)], op: ${src(
+            operand(0).binary(BinaryOp::Mul, &constant(0.5)).binary(BinaryOp::Add, &operand(1).binary(
+                BinaryOp::Mul,
+                &constant(2.0),
+            )),
+        )} }));`,
     );
 }
 
@@ -632,7 +672,7 @@ g (float[2, 3] X) => (float[2, 3] Y)
     assert out.contains("let Y = X;");
 }
 
-test "Where lifts a lower-rank operand to the output's axes" {
+test "Where over floats is a kernel's select, a lower-rank operand repeated across the output" {
     let source = `
 g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
 <float S>
@@ -648,11 +688,12 @@ g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.select(&C, &X, &backend.lift::<f32, [], [Batch, Head, Query, Key]>(&weights.S, 4));",
+        `let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&C), backend.read(&X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &${select(
+        )});`,
     );
 }
 
-test "a folded Where operand is lifted as its literal" {
+test "a folded Where operand is read as its literal" {
     let source = `
 g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
 {
@@ -664,7 +705,10 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
     let out = generate(source, [rule("*", ["Batch", "Key"])]).unwrap();
 
     assert out.contains("let S = backend.upload(&Tensor::<f32, []> { data: [-1 as f32], extents: [] });");
-    assert out.contains("let Y = backend.select(&C, &backend.lift::<f32, [], [Batch, Key]>(&S, 2), &X);");
+    assert out.contains(
+        `let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&S), backend.read(&X)], &${select(
+        )});`,
+    );
 }
 
 test "a merged axis the layout writes is spelled with its parts' markers" {
@@ -724,7 +768,7 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     );
 }
 
-test "Softmax lowers to the kernel along its axis" {
+test "Softmax along the last axis lowers to a row kernel" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 {
@@ -733,7 +777,23 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert out.contains("let Y = backend.softmax(&X, 2);");
+    assert out.contains(
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &${src(
+            operand(0).row_softmax(),
+        )}, 1, false);`,
+    );
+}
+
+test "Softmax along another axis lowers to its kernel" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    Y = Softmax <axis = 1> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let Y = backend.softmax(&X, 1);");
 }
 
 test "Softmax before opset 13 lowers to the kernel over the axes from its own on" {
@@ -748,7 +808,8 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     };
 
     assert lowered("").contains("let Y = backend.softmax_flattened(&X, 1);");
-    assert lowered("<axis = 2>").contains("let Y = backend.softmax(&X, 2);");
+    // From the last axis on is the last axis alone, a row.
+    assert lowered("<axis = 2>").contains("let Y = backend.rows::<");
 }
 
 test "arithmetic before opset 7 aligned at an axis reads the shorter operand there" {
@@ -764,7 +825,8 @@ g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y)
     ]).unwrap();
 
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read_at::<[Batch], [Seq], [Embed]>(&B, 1)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
+        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read_at::<[Batch], [Seq], [Embed]>(&B, 1)], &${sum(
+        )});`,
     );
 }
 
@@ -781,11 +843,12 @@ g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
     ]).unwrap();
 
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read_suffix::<[Batch, Seq], [Embed]>(&B)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
+        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read_suffix::<[Batch, Seq], [Embed]>(&B)], &${sum(
+        )});`,
     );
 }
 
-test "a layer norm's mean stretches back over the axis it reduced" {
+test "a layer norm's mean is a fold its row kernel reads back over the row" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 {
@@ -795,9 +858,55 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert out.contains("let M = backend.reduce_mean(&X, [2]);");
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read(&M)], &operand(0).binary(BinaryOp::Sub, &operand(1)));",
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &${src(
+            operand(0).binary(BinaryOp::Sub, &operand(0).row_sum(Option::Some(8.0))),
+        )}, 1, false);`,
+    );
+}
+
+test "a Gemm between a flattening Reshape and its restoring one reads the operand over its leading axes" {
+    let source = `
+lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {2, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Seq", "In"]),
+        rule("W", ["In", "Out"]),
+        rule("B", ["Out"]),
+        rule("F", ["(Batch Seq)", "In"]),
+        rule("G", ["(Batch Seq)", "Out"]),
+        rule("*", ["Batch", "Seq", "Out"]),
+    ]).unwrap();
+
+    assert !out.contains("let F =") && !out.contains("let R =");
+    assert out.contains(
+        `let Y = backend.matmul_shared(&X, &W, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch, Seq], [Out]>(&B)], op: ${src(
+            operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
+        )} }));`,
+    );
+}
+
+test "a mean alone writes one value per row" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 1] Y)
+{
+    Y = ReduceMean <axes = [-1]> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    // The output keeps the axis it reduced, at extent 1.
+    assert out.contains(
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &${src(operand(0).row_sum(
+            Option::Some(8.0),
+        ))}, 1, true);`,
     );
 }
 
@@ -978,7 +1087,7 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains(
-        "backend.fused::<[Batch, Unit]>([backend.read(&X), backend.read(&Z)], &operand(0).binary(BinaryOp::Add, &operand(1)))",
+        `backend.fused::<[Batch, Unit]>([backend.read(&X), backend.read(&Z)], &${sum()})`,
     );
 }
 
@@ -1274,7 +1383,7 @@ test "a Cast to the element a tensor already has computes nothing" {
     }`;
     let out = generate(source, [rule("*", ["Feat"])]).unwrap();
     assert !out.contains("let C");
-    assert out.contains("let Y = backend.fused::<[Feat]>([backend.read(&X)], &operand(0).unary(UnaryOp::Relu));");
+    assert out.contains(`let Y = backend.fused::<[Feat]>([backend.read(&X)], &${unary(UnaryOp::Relu)});`);
 }
 
 test "a Cast that truncates is spelled apart from the constant it reads" {
@@ -1297,7 +1406,7 @@ test "Identity names its operand again and computes nothing" {
     }`;
     let out = generate(source, [rule("*", ["Feat"])]).unwrap();
     assert out.contains(
-        "let Y = backend.fused::<[Feat]>([backend.read(&X), backend.read(&weights.W)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
+        `let Y = backend.fused::<[Feat]>([backend.read(&X), backend.read(&weights.W)], &${sum()});`,
     );
     assert !out.contains("let V");
 }
@@ -1315,7 +1424,9 @@ test "a scale the graph computes from a shape folds to a literal" {
     }`;
     let out = generate(source, [rule("X", ["Batch", "Feat"])]).unwrap();
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Feat]>([backend.read(&X)], &operand(0).binary(BinaryOp::Div, &constant(2 as f32)));",
+        `let Y = backend.fused::<[Batch, Feat]>([backend.read(&X)], &${src(operand(0).binary(BinaryOp::Div, &constant(
+            2.0,
+        )))});`,
     );
     assert !out.contains("let S");
 }
@@ -1335,20 +1446,22 @@ test "a Cast of a length only the run knows converts it at run time" {
 
 test "a constant folds into the operator that reads it" {
     assert folded_add(0.5).unwrap().contains(
-        "let Y = backend.fused::<[Batch, Unit]>([backend.read(&X)], &operand(0).binary(BinaryOp::Add, &constant(0.5 as f32)));",
+        `let Y = backend.fused::<[Batch, Unit]>([backend.read(&X)], &${src(operand(0).binary(BinaryOp::Add, &constant(
+            0.5,
+        )))});`,
     );
 }
 
 test "a constant no Wado literal spells is written as the prelude's constant" {
-    assert folded_add(-f32::INFINITY).unwrap().contains("&constant(-f32::INFINITY)");
-    assert folded_add(f32::NAN).unwrap().contains("&constant(f32::NAN)");
+    assert folded_add(-f32::INFINITY).unwrap().contains("Step::Constant(-f32::INFINITY)");
+    assert folded_add(f32::NAN).unwrap().contains("Step::Constant(f32::NAN)");
 }
 
 test "a constant with no operator to fold into is a rank-0 literal" {
     let out = emit_graph(&constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5)).unwrap();
 
     assert out.contains("let C = backend.upload(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] });");
-    assert out.contains("let Y = backend.fused::<[]>([backend.read(&C)], &operand(0).unary(UnaryOp::Relu));");
+    assert out.contains(`let Y = backend.fused::<[]>([backend.read(&C)], &${unary(UnaryOp::Relu)});`);
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {
@@ -1363,7 +1476,7 @@ test "a one-element constant that raises the output's rank is a tensor, not a fo
 
     assert out.contains("let C = backend.upload(&Tensor::<f32, [One, A]> { data: [0 as f32], extents: [1, 1] });");
     assert out.contains(
-        "let Y = backend.fused::<[One, A]>([backend.read_suffix::<[One], [A]>(&X), backend.read(&C)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
+        `let Y = backend.fused::<[One, A]>([backend.read_suffix::<[One], [A]>(&X), backend.read(&C)], &${sum()});`,
     );
 }
 
@@ -1463,7 +1576,9 @@ test "a branch reads a constant around it under the axes the branch names" {
     ];
     let body = generate(source, layout).unwrap();
     assert body.contains(
-        "let Z = backend.fused::<[Hidden]>([backend.read(&H), backend.read(&backend.lift::<f32, [Embed], [Hidden]>(&K, 1))], &operand(0).binary(BinaryOp::Mul, &operand(1)));",
+        `let Z = backend.fused::<[Hidden]>([backend.read(&H), backend.read(&backend.lift::<f32, [Embed], [Hidden]>(&K, 1))], &${src(
+            operand(0).binary(BinaryOp::Mul, &operand(1)),
+        )});`,
     );
 }
 

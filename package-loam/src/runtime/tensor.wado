@@ -811,11 +811,25 @@ pub trait Element with () {
     fn from_f32(v: f32) -> Self;
     fn from_i64(v: i64) -> Self;
     fn from_bool(v: bool) -> Self;
+    /// Whether this is `f32`, the one element a GPU computes in: WGSL has
+    /// neither `i64` nor a stored `bool`.
+    fn is_f32() -> bool {
+        return false;
+    }
+    /// Whether an f32 holds every value of this exactly, so a GPU can store
+    /// it as one: `f32` itself, and `bool` as 1.0 and 0.0.
+    fn exact_in_f32() -> bool {
+        return Self::is_f32();
+    }
 }
 
 impl Element for f32 {
     fn cast_to<T: Element>(&self) -> T {
         return T::from_f32(*self);
+    }
+
+    fn is_f32() -> bool {
+        return true;
     }
 
     fn from_f32(v: f32) -> f32 {
@@ -865,6 +879,10 @@ impl Element for bool {
     fn from_bool(v: bool) -> bool {
         return v;
     }
+
+    fn exact_in_f32() -> bool {
+        return true;
+    }
 }
 
 /// A one-operand operator of an [`Expr`].
@@ -889,12 +907,25 @@ pub enum BinaryOp {
     Pow,
 }
 
+/// A fold of a step along a row of a row kernel.
+pub enum RowOp {
+    /// Added from 0.0, in the row's order.
+    Sum,
+    /// Folded from negative infinity by `ieee754_max`.
+    Max,
+}
+
 /// One step of an [`Expr`], reading the steps before it by position.
 pub variant Step {
     Operand(i32),
     Constant(f32),
     Unary([UnaryOp, i32]),
     Binary([BinaryOp, i32, i32]),
+    /// `[condition, then, else]`: the second where the first is not zero.
+    Select([i32, i32, i32]),
+    /// The step folded along its row, the same at every element of the row.
+    /// Only a row kernel (`Backend::rows`) runs one.
+    Fold([RowOp, i32]),
 }
 
 /// An elementwise operator as data: each output element over the operands'
@@ -923,24 +954,125 @@ pub fn constant(value: f32) -> Expr {
 impl Expr {
     /// `op` applied to this.
     pub fn unary(&self, op: UnaryOp) -> Expr {
-        let mut steps = self.steps;
-        steps.push(Step::Unary([op, self.steps.len() - 1]));
-        return Expr { steps };
+        let mut e = *self;
+        e.ended(Step::Unary([op, self.last()]));
+        return e;
     }
 
     /// `op` applied to this and `rhs`.
     pub fn binary(&self, op: BinaryOp, rhs: &Expr) -> Expr {
-        let mut steps = self.steps;
-        let offset = steps.len();
-        for let step of rhs.steps {
-            steps.push(match step {
-                Unary([o, a]) => Step::Unary([o, a + offset]),
-                Binary([o, a, b]) => Step::Binary([o, a + offset, b + offset]),
-                leaf => leaf,
+        let mut e = *self;
+        let b = e.merged(rhs);
+        e.ended(Step::Binary([op, self.last(), b]));
+        return e;
+    }
+
+    /// `then` where this is not zero, and `otherwise` where it is.
+    pub fn select(&self, then: &Expr, otherwise: &Expr) -> Expr {
+        let mut e = *self;
+        let a = e.merged(then);
+        let b = e.merged(otherwise);
+        e.ended(Step::Select([self.last(), a, b]));
+        return e;
+    }
+
+    /// This folded along its row by `op`, read at every element of the row.
+    pub fn row(&self, op: RowOp) -> Expr {
+        let mut e = *self;
+        e.ended(Step::Fold([op, self.last()]));
+        return e;
+    }
+
+    /// This summed along its row, divided by `count` where one is given: a
+    /// mean.
+    pub fn row_sum(&self, count: Option<f32>) -> Expr {
+        let sum = self.row(RowOp::Sum);
+        return match count {
+            Some(n) => sum.binary(BinaryOp::Div, &constant(n)),
+            None => sum,
+        };
+    }
+
+    /// ONNX's `Softmax` of this along its row: each element's exponential,
+    /// less the row's largest first so none overflows, over the row's sum of
+    /// them.
+    pub fn row_softmax(&self) -> Expr {
+        let e = self.binary(BinaryOp::Sub, &self.row(RowOp::Max)).unary(UnaryOp::Exp);
+        return e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
+    }
+
+    /// The one value a reducing row kernel writes for a row of no elements,
+    /// `operands[k]` the value per row operand `k` holds there, or `None` for
+    /// an operand along the row. A fold of nothing is its start, 0.0 for a
+    /// sum and negative infinity for a maximum.
+    pub fn over_empty_row(&self, operands: &List<Option<f32>>) -> f32 {
+        let mut values: List<Option<f32>> = [];
+        for let step of self.steps {
+            values.push(match step {
+                Operand(k) => operands[k],
+                Constant(c) => Option::Some(c),
+                Unary([op, a]) => match values[a] {
+                    Some(v) => Option::Some(unary_over(op, &whole([v]))[0]),
+                    None => null,
+                },
+                Binary([op, a, b]) => match [values[a], values[b]] {
+                    [Some(x), Some(y)] => Option::Some(binary_over(op, &whole([x]), &whole([y]))[0]),
+                    _ => null,
+                },
+                Select([c, a, b]) => match [values[c], values[a], values[b]] {
+                    [Some(k), Some(x), Some(y)] => Option::Some(if k != 0.0 { x } else { y }),
+                    _ => null,
+                },
+                Fold([op, _]) => Option::Some(folded(op, &whole([]), 0)),
             });
         }
-        steps.push(Step::Binary([op, offset - 1, steps.len() - 1]));
-        return Expr { steps };
+        let Some(value) = values[values.len() - 1] else {
+            panic("loam: a reducing row kernel's output reads an element of its row");
+        };
+        return value;
+    }
+
+    /// Whether a step folds along a row, so only a row kernel runs this.
+    pub fn folds_rows(&self) -> bool {
+        return self.steps.position(|s| s matches { Fold(_) }) matches { Some(_) };
+    }
+
+    fn last(&self) -> i32 {
+        return self.steps.len() - 1;
+    }
+
+    /// `other`'s steps added to these, each one these already compute taken
+    /// once, and where `other`'s output now is.
+    fn merged(&mut self, other: &Expr) -> i32 {
+        let mut at: List<i32> = [];
+        for let step of other.steps {
+            at.push(self.shared(match step {
+                Unary([o, a]) => Step::Unary([o, at[a]]),
+                Binary([o, a, b]) => Step::Binary([o, at[a], at[b]]),
+                Select([c, a, b]) => Step::Select([at[c], at[a], at[b]]),
+                Fold([o, a]) => Step::Fold([o, at[a]]),
+                leaf => leaf,
+            }));
+        }
+        return at[at.len() - 1];
+    }
+
+    /// Where `step` is computed: an equal step already here, or `step` added
+    /// last.
+    fn shared(&mut self, step: Step) -> i32 {
+        if let Some(at) = self.steps.position(|s| same_step(&s, &step)) {
+            return at;
+        }
+        self.steps.push(step);
+        return self.last();
+    }
+
+    /// `step` as the output, which is always the last step: one already
+    /// computed earlier is computed again there.
+    fn ended(&mut self, step: Step) {
+        if self.shared(step) != self.last() {
+            self.steps.push(step);
+        }
     }
 
     /// The output's `count` elements over whole operands, `operand(i)` reading
@@ -948,12 +1080,24 @@ impl Expr {
     /// output element `j` reads its element `j % len`: all `count` of them,
     /// one, or the output's trailing axes.
     pub fn over(&self, count: i32, operands: &List<&List<f32>>) -> List<f32> {
+        assert !self.folds_rows();
+        return self.in_passes(count, CHUNK, operands);
+    }
+
+    /// `over`, one pass per row of `row` elements, so a `Fold` step folds
+    /// exactly one row.
+    pub fn over_rows(&self, count: i32, row: i32, operands: &List<&List<f32>>) -> List<f32> {
+        assert row > 0 && count % row == 0;
+        return self.in_passes(count, row, operands);
+    }
+
+    fn in_passes(&self, count: i32, size: i32, operands: &List<&List<f32>>) -> List<f32> {
         for let o of *operands {
             assert count == 0 || o.len() > 0 && count % o.len() == 0;
         }
         let mut out = List::<f32>::filled(count, 0.0);
-        for let mut start = 0; start < count; start += CHUNK {
-            self.pass(&mut out, start, i32::min(CHUNK, count - start), operands);
+        for let mut start = 0; start < count; start += size {
+            self.pass(&mut out, start, i32::min(size, count - start), operands);
         }
         return out;
     }
@@ -968,13 +1112,60 @@ impl Expr {
                 Constant(c) => whole([c]),
                 Unary([op, a]) => whole(unary_over(op, &values[a])),
                 Binary([op, a, b]) => whole(binary_over(op, &values[a], &values[b])),
+                Select([c, a, b]) => whole(selected(&values[c], &values[a], &values[b])),
+                Fold([op, a]) => whole([folded(op, &values[a], n)]),
             });
         }
         let last = &values[values.len() - 1];
         for let j of 0..<n {
-            out[start + j] = if last.len() == 1 { last[0] } else { last[j] };
+            out[start + j] = value_at(last, j);
         }
     }
+}
+
+/// A step's value at element `j` of a pass: a step of one value holds it at
+/// every element.
+fn value_at(v: &Slice<f32>, j: i32) -> f32 {
+    return if v.len() == 1 { v[0] } else { v[j] };
+}
+
+/// `v`'s `n` elements folded by `op`.
+fn folded(op: RowOp, v: &Slice<f32>, n: i32) -> f32 {
+    return match op {
+        Sum => {
+            let mut sum: f32 = 0.0;
+            for let j of 0..<n {
+                sum += value_at(v, j);
+            }
+            sum;
+        },
+        Max => {
+            let mut max = -f32::INFINITY;
+            for let j of 0..<n {
+                max = f32::ieee754_max(max, value_at(v, j));
+            }
+            max;
+        },
+    };
+}
+
+/// `a` where `c` is not zero and `b` where it is, element by element.
+fn selected(c: &Slice<f32>, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
+    let count = i32::max(c.len(), i32::max(a.len(), b.len()));
+    let mut out = List::<f32>::with_capacity(count);
+    for let j of 0..<count {
+        out.push(if value_at(c, j) != 0.0 { value_at(a, j) } else { value_at(b, j) });
+    }
+    return out;
+}
+
+/// Whether two steps compute one value. Constants compare by their bits: `==`
+/// takes -0.0 for 0.0, which a sum tells apart.
+fn same_step(a: &Step, b: &Step) -> bool {
+    if let Constant(x) = *a && let Constant(y) = *b {
+        return x.to_bits() == y.to_bits();
+    }
+    return *a == *b;
 }
 
 fn whole(values: List<f32>) -> Slice<f32> {
@@ -1072,12 +1263,85 @@ pub struct Read<Axes> {
 
 /// `op` over `operands`, stretched to the extents they broadcast to.
 pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
+    let extents = broadcast_reads(operands);
+    return Tensor { data: op.over(element_count(&extents), &repeated_over(operands, &extents)), extents };
+}
+
+/// `op` over `operands`, a row being the last `row_axes` axes of the extents
+/// they broadcast to, so a `Fold` step folds along one. Where `reduced`, the
+/// output holds each row's first element, the row axes at extent 1.
+pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
+    let extents = broadcast_reads(operands);
+    let rank = extents.len();
+    assert 0 < row_axes <= rank;
+    let row = element_count(&extents[rank - row_axes..<rank].to_list());
+    let count = element_count(&extents);
+    if count == 0 {
+        let out = row_extents(&extents, row_axes, reduced);
+        return Tensor { data: over_no_elements(operands, op, &out), extents: out };
+    }
+    let full = op.over_rows(count, row, &repeated_over(operands, &extents));
+    if !reduced {
+        return Tensor { data: full, extents };
+    }
+    let mut data = List::<f32>::with_capacity(count / row);
+    for let mut at = 0; at < count; at += row {
+        data.push(full[at]);
+    }
+    return Tensor { data, extents: row_extents(&extents, row_axes, true) };
+}
+
+/// What a row kernel over no elements writes to an output of `out`: nothing
+/// where `out` has no elements, and otherwise, its rows reduced, each row's
+/// fold of nothing and the values per row `operands` hold there.
+fn over_no_elements<Axes>(operands: &List<Read<Axes>>, op: &Expr, out: &List<i32>) -> List<f32> {
+    let rows = element_count(out);
+    if rows == 0 {
+        return [];
+    }
+    // An operand with elements holds one per row; the rest run along it.
+    let mut per_row: List<Read<Axes>> = [];
+    let mut at: List<i32> = [];
+    for let o of *operands {
+        if element_count(&o.extents) == 0 {
+            at.push(-1);
+        } else {
+            at.push(per_row.len());
+            per_row.push(o);
+        }
+    }
+    let runs = repeated_over(&per_row, out);
+    let mut data = List::<f32>::with_capacity(rows);
+    for let r of 0..<rows {
+        let values: List<Option<f32>> = at.into_iter().map(|k| if k < 0 {
+            null;
+        } else {
+            Option::Some(runs[k][r % runs[k].len()]);
+        }).collect();
+        data.push(op.over_empty_row(&values));
+    }
+    return data;
+}
+
+/// The extents `operands` broadcast to.
+fn broadcast_reads<Axes>(operands: &List<Read<Axes>>) -> List<i32> {
     assert !operands.is_empty();
     let mut extents: List<i32> = [];
     for let o of *operands {
         extents = broadcast_extents(&extents, &o.extents).unwrap();
     }
-    return Tensor { data: op.over(element_count(&extents), &repeated_over(operands, &extents)), extents };
+    return extents;
+}
+
+/// `extents` with its last `row_axes` at 1 where `reduced`.
+pub fn row_extents(extents: &List<i32>, row_axes: i32, reduced: bool) -> List<i32> {
+    let mut out = *extents;
+    if reduced {
+        for let axis of extents.len() - row_axes..<extents.len() {
+            out[axis] = 1;
+        }
+    }
+    return out;
 }
 
 /// Each of `operands` as a run of elements an output of `extents` repeats:
@@ -1162,11 +1426,21 @@ pub trait Backend with _ {
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
     /// `t` back on the host.
     fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
+    /// `t`, a weight every pass reads, as this backend holds it for as long as
+    /// the backend lives: on a device, where its kernels run.
+    fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
+        return self.upload(t);
+    }
     /// `t`, held in half precision on the host, as this backend computes with
     /// it. How it stores the result is its own: the type says only that the
     /// kernels read it as f32.
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
-        return self.upload(&widen(t));
+        return self.keep(&widen(t));
+    }
+    /// The start of a forward pass. What the pass before computed is dead,
+    /// since `forward` returns only what it downloaded, so a backend may
+    /// release it.
+    fn begin(&mut self) {
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
@@ -1183,8 +1457,22 @@ pub trait Backend with _ {
         t: &Self::Tensor<f32, [..Mid]>,
         trailing: i32,
     ) -> Self::Operand<[..Pre, ..Mid, ..Post]>;
+    /// `t` as an operand over its own axes, 1.0 where it holds true and 0.0
+    /// where it holds false, for a `Select` step to read.
+    fn read_condition<Axes>(&mut self, t: &Self::Tensor<bool, Axes>) -> Self::Operand<Axes>;
     /// `op` over `operands`, `operand(i)` reading the `i`th.
     fn fused<Axes>(&mut self, operands: List<Self::Operand<Axes>>, op: &Expr) -> Self::Tensor<f32, Axes>;
+    /// `op` over `operands` row by row, a row being the last `row_axes` axes,
+    /// so a `Fold` step folds along one. Where `reduced`, the result holds one
+    /// element per row, its row axes at extent 1 and named as `Out` names
+    /// them; otherwise `Out` is `In`.
+    fn rows<In, Out>(
+        &mut self,
+        operands: List<Self::Operand<In>>,
+        op: &Expr,
+        row_axes: i32,
+        reduced: bool,
+    ) -> Self::Tensor<f32, Out>;
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
     fn select<E: Element, Axes>(
@@ -1325,8 +1613,20 @@ impl Backend for Cpu {
         return Read { data: &t.data, extents: followed_by_units(&t.extents, trailing) };
     }
 
+    fn read_condition<Axes>(&mut self, t: &Tensor<bool, Axes>) -> Read<Axes> {
+        let mut values = List::<f32>::with_capacity(t.data.len());
+        for let b of t.data {
+            values.push(if b { 1.0 } else { 0.0 });
+        }
+        return Read { data: &values, extents: t.extents };
+    }
+
     fn fused<Axes>(&mut self, operands: List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
         return fused(&operands, op);
+    }
+
+    fn rows<In, Out>(&mut self, operands: List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
+        return fused_rows(&operands, op, row_axes, reduced);
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Tensor<A, Axes>) -> Tensor<B, Axes> {

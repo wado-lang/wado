@@ -3,11 +3,12 @@
 # base to an odd and an even power, zero to the powers 0 and -1, a kernel left
 # to the CPU whose result a shader then uploads, a count past one dispatch row,
 # no elements at all, products over more batch elements than one dispatch
-# dimension holds, and a fused kernel reading more operands than a shader
-# binds buffers.
+# dimension holds, a fused kernel reading more operands than a shader binds
+# buffers, a gather of rows, a product with a long inner axis, a weight read
+# back transposed, a softmax over no rows, and a gather along an inner axis.
 <ir_version: 8, opset_import: [ "" : 13 ]>
-kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N, float[H, 1, 2] BX, float[H, 2, 1] BY) => (float[B, M, 29] Z, float[B, 29, M] S, float[L] R, float[B, M, 29] O, float[E] G, float[H, 1, 1] BZ, float[H, 1, 1] BS, float[29] K)
-<float[50, 29] W, float[29] C, float[2, 1] BW, float[29] W1, float[29] W2, float[29] W3, float[29] W4, float[29] W5, float[29] W6>
+kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N, float[H, 1, 2] BX, float[H, 2, 1] BY, int64[I] Ix, float[2, 300] DX, float[E, 3] NE, int64[2] Iy) => (float[B, M, 29] Z, float[B, 29, M] S, float[L] R, float[B, M, 29] O, float[E] G, float[H, 1, 1] BZ, float[H, 1, 1] BS, float[29] K, float[I, 29] E, float[2, 3] F, float[29, 50] TW, float[E, 3] NS, float[300, 2] GA)
+<float[50, 29] W, float[29] C, float[2, 1] BW, float[29] W1, float[29] W2, float[29] W3, float[29] W4, float[29] W5, float[29] W6, float[300, 3] DW, float[3] DB>
 {
     P = MatMul(X, Y)
     Q = MatMul(X, W)
@@ -58,4 +59,10 @@ kernels (float[B, M, 50] X, float[B, 50, 29] Y, float[L] V, float[E] N, float[H,
     K4 = Add(K3, W4)
     K5 = Add(K4, W5)
     K = Add(K5, W6)
+    E = Gather<axis = 0>(W, Ix)
+    DP = MatMul(DX, DW)
+    F = Add(DP, DB)
+    TW = Transpose<perm = [1, 0]>(W)
+    NS = Softmax<axis = -1>(NE)
+    GA = Gather<axis = 1>(DW, Iy)
 }

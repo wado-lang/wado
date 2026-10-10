@@ -19,10 +19,12 @@ use {
     GpuShaderModule,
     GpuComputePipeline,
     GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "../example/webgpu/compare.wado";
-use { Weights, forward } from "./webgpu.onnxtext"
+use { Pick, Picked, Weights, forward } from "./webgpu.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -97,6 +99,46 @@ use { Weights, forward } from "./webgpu.onnxtext"
                         pattern: "B?",
                         axes: ["Many", "Single", "Single"],
                     },
+                    {
+                        pattern: "Ix",
+                        axes: ["Pick"],
+                    },
+                    {
+                        pattern: "E",
+                        axes: ["Pick", "Col"],
+                    },
+                    {
+                        pattern: "DX",
+                        axes: ["Two", "Deep"],
+                    },
+                    {
+                        pattern: "DW",
+                        axes: ["Deep", "Three"],
+                    },
+                    {
+                        pattern: "DB",
+                        axes: ["Three"],
+                    },
+                    {
+                        pattern: "F",
+                        axes: ["Two", "Three"],
+                    },
+                    {
+                        pattern: "TW",
+                        axes: ["Col", "Inner"],
+                    },
+                    {
+                        pattern: "N?",
+                        axes: ["Vacant", "Three"],
+                    },
+                    {
+                        pattern: "Iy",
+                        axes: ["Picked"],
+                    },
+                    {
+                        pattern: "GA",
+                        axes: ["Deep", "Picked"],
+                    },
                 ],
             },
         },
@@ -108,15 +150,16 @@ global LONG: i32 = 4_200_000;
 /// More batch elements than one dispatch dimension holds, 65535.
 global MANY: i32 = 70_000;
 
+/// A binding smaller than `W` and `DW` but not `DX`, so the second pass splits
+/// a gather by its indices, a copy in halves, and a product along its inner
+/// axis.
+global SPLIT: i32 = 640;
+
 fn tensor<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
     return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
 }
 
-export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let Some(mut gpu) = WebGpuBackend::new() else {
-        println("no WebGPU adapter");
-        return;
-    };
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     // Extents no tile divides, so every product reaches a tile's edge.
     let x = tensor([3, 37, 50], 1);
     let y = tensor([3, 50, 29], 2);
@@ -134,15 +177,43 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         W4: tensor([29], 13),
         W5: tensor([29], 14),
         W6: tensor([29], 15),
+        DW: tensor([300, 3], 16),
+        DB: tensor([3], 17),
     };
-    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &w.prepare(&mut Cpu {}));
-    let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &w.prepare(&mut gpu));
-    println(`Z ${on_gpu.Z.extents:?} ${deviation(&on_gpu.Z.data, &on_cpu.Z.data)}`);
-    println(`S ${on_gpu.S.extents:?} ${deviation(&on_gpu.S.data, &on_cpu.S.data)}`);
-    println(`R ${on_gpu.R.extents:?} ${deviation(&on_gpu.R.data, &on_cpu.R.data)}`);
-    println(`O ${on_gpu.O.extents:?} ${deviation(&on_gpu.O.data, &on_cpu.O.data)}`);
-    println(`G ${on_gpu.G.extents:?} ${deviation(&on_gpu.G.data, &on_cpu.G.data)}`);
-    println(`BZ ${on_gpu.BZ.extents:?} ${deviation(&on_gpu.BZ.data, &on_cpu.BZ.data)}`);
-    println(`BS ${on_gpu.BS.extents:?} ${deviation(&on_gpu.BS.data, &on_cpu.BS.data)}`);
-    println(`K ${on_gpu.K.extents:?} ${deviation(&on_gpu.K.data, &on_cpu.K.data)}`);
+    let ix: Tensor<i64, [Pick]> = {
+        data: [49, 0, -1, 7, 25, 3],
+        extents: [6],
+    };
+    let dx = tensor([2, 300], 18);
+    let ne = tensor([0, 3], 19);
+    let iy: Tensor<i64, [Picked]> = {
+        data: [2, 0],
+        extents: [2],
+    };
+    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &ix, &dx, &ne, &iy, &w.prepare(&mut Cpu {}));
+    for let limit of [null, Option::Some(SPLIT)] as List<Option<i32>> {
+        let Some(mut gpu) = WebGpuBackend::new() else {
+            println("no WebGPU adapter");
+            return;
+        };
+        let mut pass = "";
+        if let Some(elements) = limit {
+            gpu.limit_binding(elements);
+            pass = "split ";
+        }
+        let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &ix, &dx, &ne, &iy, &w.prepare(&mut gpu));
+        println(`${pass}Z ${on_gpu.Z.extents:?} ${deviation(&on_gpu.Z.data, &on_cpu.Z.data)}`);
+        println(`${pass}S ${on_gpu.S.extents:?} ${deviation(&on_gpu.S.data, &on_cpu.S.data)}`);
+        println(`${pass}R ${on_gpu.R.extents:?} ${deviation(&on_gpu.R.data, &on_cpu.R.data)}`);
+        println(`${pass}O ${on_gpu.O.extents:?} ${deviation(&on_gpu.O.data, &on_cpu.O.data)}`);
+        println(`${pass}G ${on_gpu.G.extents:?} ${deviation(&on_gpu.G.data, &on_cpu.G.data)}`);
+        println(`${pass}BZ ${on_gpu.BZ.extents:?} ${deviation(&on_gpu.BZ.data, &on_cpu.BZ.data)}`);
+        println(`${pass}BS ${on_gpu.BS.extents:?} ${deviation(&on_gpu.BS.data, &on_cpu.BS.data)}`);
+        println(`${pass}K ${on_gpu.K.extents:?} ${deviation(&on_gpu.K.data, &on_cpu.K.data)}`);
+        println(`${pass}E ${on_gpu.E.extents:?} ${deviation(&on_gpu.E.data, &on_cpu.E.data)}`);
+        println(`${pass}F ${on_gpu.F.extents:?} ${deviation(&on_gpu.F.data, &on_cpu.F.data)}`);
+        println(`${pass}TW ${on_gpu.TW.extents:?} ${deviation(&on_gpu.TW.data, &on_cpu.TW.data)}`);
+        println(`${pass}NS ${on_gpu.NS.extents:?} ${deviation(&on_gpu.NS.data, &on_cpu.NS.data)}`);
+        println(`${pass}GA ${on_gpu.GA.extents:?} ${deviation(&on_gpu.GA.data, &on_cpu.GA.data)}`);
+    }
 }

@@ -1,0 +1,56 @@
+//! The tiny GPT-2 of `tiny_gpt2.wado` on a WebGPU device, against `Cpu`. For
+//! each of two sequence lengths this prints how far the device's logits sit
+//! from the CPU's, and how many times the pass read the device back: once, for
+//! the logits it returns. `wado test` cannot reach a device, so
+//! `wado-run-webgpu`'s tests run it:
+//!
+//!     wado run-webgpu package-loam/conformance/webgpu_gpt2.wado
+
+use { println, Stdout } from "core:cli";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Cpu, Tensor } from "lib:loam";
+use { WebGpuBackend } from "lib:loam";
+use { deviation } from "../example/webgpu/compare.wado";
+use gpt2 from "./tiny_gpt2.wado";
+
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    let checkpoint = #include_bytes("../tests/models/tiny-gpt2/model.safetensors");
+    let on_cpu = gpt2::Prepared::load(&mut Cpu {}, &checkpoint).unwrap();
+    let on_gpu = gpt2::Prepared::load(&mut gpu, &checkpoint).unwrap();
+    for let length of [4, 7] as List<i32> {
+        let ids: List<i64> = (0..<length).map(|i| (i * 13 + 5) as i64).collect();
+        let extents: List<i32> = [1, length];
+        let input = Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents };
+        let mask = Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(length, 1), extents };
+        let want = gpt2::forward(&mut Cpu {}, &input, &mask, &on_cpu);
+        let [read, dispatched] = [
+            gpu.read_backs(),
+            gpu.dispatches(),
+        ];
+        let got = gpt2::forward(&mut gpu, &input, &mask, &on_gpu);
+        println(
+            `logits ${got.extents:?} ${deviation(&got.data, &want.data)} dispatches ${gpu.dispatches() - dispatched} read backs ${gpu.read_backs(
+            ) - read}`,
+        );
+    }
+}

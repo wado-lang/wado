@@ -143,6 +143,7 @@ form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
 - `package-jade` - A JSON Schema 2020-12 validator in Wado.
 - `package-marl` - A CommonMark subset in Wado.
 - `package-loam` - A tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
+- `package-loam-benchmark` - Loam's backends against onnxruntime, in the format of `benchmark/`.
 - `package-wadopoet` - Builders for generated Wado source, and the reserved vocabulary (generated from `wado syntax --format json`) a minted name must avoid.
 - `package-web/` - `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
 - `package-cm-catalog/` - A catalog of Wasm Component Model modules for demo and testing purposes.

@@ -86,7 +86,161 @@ shaped (float[N, 4] X) => (int64[2] S, float[N, 4] Y)
             ],
         ],
     );
-    assert p.of(&"R") == written(Reason::Reader(Kind::Generation));
+    // A Shape reads extents alone, which stage 0 has, so nothing reads R.
+    assert p.of(&"R") == written(Reason::ReadTimes(0));
+}
+
+global LINEAR: String = `
+lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {2, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+
+global LINEAR_LAYOUT: List<[String, List<String>]> = [
+    [
+        "X",
+        ["Batch", "Seq", "In"],
+    ],
+    [
+        "W",
+        ["In", "Out"],
+    ],
+    [
+        "B",
+        ["Out"],
+    ],
+    [
+        "F",
+        ["(Batch Seq)", "In"],
+    ],
+    [
+        "G",
+        ["(Batch Seq)", "Out"],
+    ],
+    [
+        "*",
+        ["Batch", "Seq", "Out"],
+    ],
+];
+
+test "a Gemm between a flattening Reshape and its restoring one is one product over the leading axes" {
+    let p = plan_of(LINEAR, LINEAR_LAYOUT);
+    assert p.lowering(0) matches { Flattened };
+    assert p.lowering(2) matches { Restored };
+    assert p.spread_of(&"G") matches { Some(s) && s.operand == "X" && s.restored == "R" };
+    // So the operator after it joins its kernel.
+    assert p.of(&"G") == fused("Y");
+}
+
+test "a Gemm whose flattened operand or product the scope returns is no spread" {
+    for let returned of ["float[8, 8] F", "float[8, 6] G"] {
+        let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, ${returned})`);
+        let p = plan_of(source, LINEAR_LAYOUT);
+        assert p.lowering(0) matches { Kernel }, returned;
+        assert p.spread_of(&"G") matches { None }, returned;
+    }
+}
+
+test "a Gemm whose bias varies along its rows is no spread" {
+    let source = `
+lin (float[2, 4, 8] X, float[8, 6] W, float[8, 6] B) => (float[2, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {2, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+    let mut layout = LINEAR_LAYOUT;
+    layout[2] = [
+        "B",
+        ["(Batch Seq)", "Out"],
+    ];
+    assert plan_of(source, layout).spread_of(&"G") matches { None };
+}
+
+test "a Reshape merging more than the leading axes is no spread" {
+    // The restored axes lead with X's, yet the product's inner axis is
+    // `(Seq In)`, not X's last.
+    let source = `
+lin (float[2, 3, 4] X, float[12, 6] W) => (float[2, 3, 2] Y)
+<int64[2] Flat = {2, 12}, int64[3] Back = {2, 3, 2}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W)
+    Y = Reshape(G, Back)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Seq", "In"],
+        ],
+        [
+            "W",
+            ["(Seq In)", "Out"],
+        ],
+        [
+            "F",
+            ["Batch", "(Seq In)"],
+        ],
+        [
+            "G",
+            ["Batch", "Out"],
+        ],
+        [
+            "Y",
+            ["Batch", "Seq", "Part"],
+        ],
+    ]);
+    assert p.spread_of(&"G") matches { None };
+}
+
+test "with fusion off, nothing is spread" {
+    let p = plan_of(LINEAR, LINEAR_LAYOUT, false);
+    assert p.lowering(0) matches { Kernel };
+    assert p.spread_of(&"G") matches { None };
+}
+
+test "a value per row fused without a fold leaves the product before it in the kernel" {
+    let source = `
+g (float[N, 4] A, float[4, 8] B, float[N, 1] V) => (float[N, 8] Z)
+{
+    P = MatMul(A, B)
+    S = Sqrt(V)
+    Z = Mul(P, S)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "A",
+            ["Batch", "In"],
+        ],
+        [
+            "B",
+            ["In", "Feat"],
+        ],
+        [
+            "V",
+            ["Batch", "One"],
+        ],
+        [
+            "S",
+            ["Batch", "One"],
+        ],
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ]);
+    assert p.of(&"P") == fused("Z");
+    assert p.rows_of(&"Z") matches { None };
 }
 
 test "with fusion off, every kernel writes its output" {
@@ -96,7 +250,7 @@ test "with fusion off, every kernel writes its output" {
     }
 }
 
-test "a tensor read twice is written, since fusing it would compute it twice" {
+test "a tensor one kernel reads twice fuses into it, computed once" {
     let source = `
 g (float[N, 4] X) => (float[N, 4] Y)
 {
@@ -109,13 +263,102 @@ g (float[N, 4] X) => (float[N, 4] Y)
             "*",
             ["Batch", "Feat"],
         ],
+    ]).of(&"A") == fused("Y");
+}
+
+test "a tensor two kernels read is written, since fusing it would compute it twice" {
+    let source = `
+g (float[N, 4] X) => (float[N, 4] Y, float[N, 4] Z)
+{
+    A = Relu(X)
+    Y = Neg(A)
+    Z = Abs(A)
+}
+`;
+    assert plan_of(source, [
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
     ]).of(&"A") == written(Reason::ReadTimes(2));
 }
 
-test "a tensor a reduction reads is written, and so is the reduction's own" {
+global ROW_LAYOUT: List<[String, List<String>]> = [
+    [
+        "X",
+        ["Batch", "Feat"],
+    ],
+    [
+        "A",
+        ["Batch", "Feat"],
+    ],
+    [
+        "S",
+        ["Batch", "One"],
+    ],
+    [
+        "Y",
+        ["Batch", "Feat"],
+    ],
+];
+
+test "a reduction along the last axis joins one row kernel with what it reads and what reads it" {
     let source = `
 g (float[N, 4] X) => (float[N, 4] Y)
 <int64[1] Axes = {1}>
+{
+    A = Relu(X)
+    S = ReduceSum <keepdims = 1> (A, Axes)
+    Y = Add(X, S)
+}
+`;
+    let p = plan_of(source, ROW_LAYOUT);
+    assert p.of(&"A") == fused("Y");
+    assert p.of(&"S") == fused("Y");
+    assert p.rows_of(&"Y") matches { Some(_) };
+}
+
+test "a kernel over one value per row folds no row unless a reduction reaches it" {
+    let source = `
+g (float[N, 4] X) => (float[N, 1] Y)
+<int64[1] Axes = {1}>
+{
+    S = ReduceMean <keepdims = 1> (X, Axes)
+    E = Abs(S)
+    Y = Sqrt(E)
+}
+`;
+    let layout: List<[String, List<String>]> = [
+        [
+            "X",
+            ["Batch", "Feat"],
+        ],
+        [
+            "*",
+            ["Batch", "One"],
+        ],
+    ];
+    let p = plan_of(source, layout);
+    assert p.of(&"S") == fused("Y");
+    assert p.rows_of(&"Y") matches { Some(rows) && rows.axes[1].name == "Feat" };
+    let plain = plan_of(`
+g (float[N, 1] X) => (float[N, 1] Y)
+{
+    Y = Relu(X)
+}
+`, [
+        [
+            "*",
+            ["Batch", "One"],
+        ],
+    ]);
+    assert plain.rows_of(&"Y") matches { None };
+}
+
+test "a reduction along another axis is a kernel of its own" {
+    let source = `
+g (float[N, 4] X) => (float[N, 4] Y)
+<int64[1] Axes = {0}>
 {
     A = Relu(X)
     S = ReduceSum <keepdims = 1> (A, Axes)
@@ -133,7 +376,7 @@ g (float[N, 4] X) => (float[N, 4] Y)
         ],
         [
             "S",
-            ["Batch", "One"],
+            ["One", "Feat"],
         ],
         [
             "Y",
@@ -142,6 +385,95 @@ g (float[N, 4] X) => (float[N, 4] Y)
     ]);
     assert p.of(&"A") == written(Reason::Reader(Kind::Reduction));
     assert p.of(&"S") == written(Reason::Computes(Kind::Reduction));
+}
+
+test "a layer normalization is one row kernel" {
+    let source = `
+g (float[N, 4] X, float[4] G, float[4] B) => (float[N, 4] Y)
+<int64[1] Axes = {1}>
+{
+    M = ReduceMean <keepdims = 1> (X, Axes)
+    C = Sub(X, M)
+    Two = Constant <value = float {2.0}> ()
+    P = Pow(C, Two)
+    V = ReduceMean <keepdims = 1> (P, Axes)
+    Eps = Constant <value = float {0.00001}> ()
+    A = Add(V, Eps)
+    D = Sqrt(A)
+    Q = Div(C, D)
+    R = Mul(Q, G)
+    Y = Add(R, B)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Feat"],
+        ],
+        [
+            "G",
+            ["Feat"],
+        ],
+        [
+            "B",
+            ["Feat"],
+        ],
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+        [
+            "M",
+            ["Batch", "One"],
+        ],
+        [
+            "V",
+            ["Batch", "One"],
+        ],
+        [
+            "A",
+            ["Batch", "One"],
+        ],
+        [
+            "D",
+            ["Batch", "One"],
+        ],
+    ]);
+    for let tensor of ["M", "C", "P", "V", "A", "D", "Q", "R"] {
+        assert p.of(&tensor) == fused("Y"), tensor;
+    }
+    assert p.rows_of(&"Y") matches { Some(_) };
+}
+
+test "a masked softmax takes in its scale and mask, and no product before it" {
+    let source = `
+g (float[N, 4] X, float[4, 4] W, bool[N, 4] K) => (float[N, 4] Y)
+{
+    S = MatMul(X, W)
+    Half = Constant <value = float {0.5}> ()
+    T = Mul(S, Half)
+    Low = Constant <value = float {-10000.0}> ()
+    U = Where(K, T, Low)
+    Y = Softmax <axis = -1> (U)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Feat"],
+        ],
+        [
+            "W",
+            ["Feat", "Feat"],
+        ],
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ]);
+    assert p.of(&"T") == fused("Y");
+    assert p.of(&"U") == fused("Y");
+    assert p.of(&"S") == written(Reason::ContractionAndFold);
 }
 
 test "a tensor its reader stretches is written" {
@@ -192,8 +524,9 @@ g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
             ["In", "Out"],
         ],
     ]);
-    assert p.of(&"P") == fused("Y");
-    assert p.of(&"Q") == written(Reason::SecondContraction);
+    // The nodes are read last to first, so the later product is the one taken in.
+    assert p.of(&"Q") == fused("Y");
+    assert p.of(&"P") == written(Reason::SecondContraction);
 }
 
 test "a window takes in no operator after it" {
