@@ -1729,10 +1729,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// author read it with `Self` abstract, so it is walked that way first, in
     /// the frame [`Self::resolve_trait_decl`] gives the trait's signatures, and
     /// each impl's walk takes the bound its author's reading selected. That
-    /// walk decides only this: its diagnostics are each impl's walk's to
-    /// report, and every fact it records is dropped, the declarations it wrote
-    /// against the abstract `Self` included. An anonymous struct shape it mints
-    /// is the exception, being interned where nothing is dropped.
+    /// walk decides only this: [`Self::resolve_trait_bodies`] reports what the
+    /// abstract reading finds, and every fact this one records is dropped.
     fn abstract_selections(
         &mut self,
         trait_decl: DefId,

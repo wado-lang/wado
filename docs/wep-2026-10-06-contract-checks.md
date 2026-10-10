@@ -283,7 +283,10 @@ in that impl, not a contract to add.
    of the trait, `$contract$<method>`, which takes the method's parameters.
    Reify opens the method and each impl's method with a call to it, and their
    `$unchecked` twins with a call to its twin, so a marked call through a bound
-   reaches the twin of whichever impl the bound resolves to.
+   reaches the twin of whichever impl the bound resolves to. The elaborator
+   walks the holder, as it walks every default body, once in the trait's own
+   frame with `Self` abstract, so the effect and purity checks and the language
+   service answer for a trait that no impl takes.
 4. The indexing traits declare `contains_index` and require it, so
    `unchecked xs[i]` is an index read with no range check.
 5. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
