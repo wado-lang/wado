@@ -126,6 +126,7 @@ pub struct WebGpuBackend {
     /// The f32 elements one storage binding holds.
     max_binding: i32,
     read_backs: i32,
+    dispatches: i32,
     cpu: Cpu,
 }
 
@@ -179,6 +180,7 @@ impl WebGpuBackend {
             max_operands: buffers as i32 - 2,
             max_binding: if bytes > i32::MAX as u64 { i32::MAX } else { bytes as i32 },
             read_backs: 0,
+            dispatches: 0,
             cpu: Cpu {},
         });
     }
@@ -187,6 +189,12 @@ impl WebGpuBackend {
     /// synchronization, which a pass makes only for what it returns.
     pub fn read_backs(&self) -> i32 {
         return self.read_backs;
+    }
+
+    /// How many shaders have been dispatched: the cost a pass pays per kernel
+    /// at batch size 1.
+    pub fn dispatches(&self) -> i32 {
+        return self.dispatches;
     }
 
     /// The buffer at `slot`: a kept one where it is negative, one of the pass
@@ -377,6 +385,7 @@ impl WebGpuBackend {
         if x == 0 || y == 0 || z == 0 {
             return;
         }
+        self.dispatches += 1;
         let params_slot = self.written(word_bytes(&params), false);
         let found = match self.compiled.get(*shader) {
             Some(at) => at,
@@ -832,19 +841,19 @@ impl Backend for WebGpuBackend {
         return self.fused_on(&operand_views(&operands), op);
     }
 
-    fn rows<Axes>(
+    fn rows<In, Out>(
         &mut self,
-        operands: List<PlacedRead<Axes>>,
+        operands: List<PlacedRead<In>>,
         op: &Expr,
         row_axes: i32,
         reduced: bool,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let all = operand_views(&operands);
         if let Some(out) = self.row_kernel(&all, broadcast_all(&all), op, row_axes, reduced) {
             return Placed::Device(out);
         }
         let held = self.held(&all);
-        return Placed::Host(self.cpu.rows(self.cpu_reads::<Axes>(&held, &all), op, row_axes, reduced));
+        return Placed::Host(self.cpu.rows::<In, Out>(self.cpu_reads::<In>(&held, &all), op, row_axes, reduced));
     }
 
     fn cast<A: Element, B: Element, Axes>(
@@ -1003,6 +1012,9 @@ impl Backend for WebGpuBackend {
             return Placed::Host(self.cpu.reshape::<E, In, Out>(&self.host_only(t), extents));
         };
         assert element_count(&extents) == element_count(&d.extents);
+        if let Some(view) = regrouped(d, &extents) {
+            return Placed::Device(view);
+        }
         let whole = self.materialized(d);
         return Placed::Device(contiguous(whole.slot, whole.offset, extents));
     }
@@ -1240,6 +1252,53 @@ fn permuted(t: &DeviceTensor, perm: &List<i32>) -> DeviceTensor {
         strides.push(t.strides[p]);
     }
     return DeviceTensor { slot: t.slot, offset: t.offset, extents, strides };
+}
+
+/// `t`'s elements under `extents`, in row-major order, as a view of the same
+/// buffer, or `None` where its strides cannot say it so a copy must. Each run
+/// of `t`'s axes that `extents` regroups must step through memory as one axis
+/// would, as numpy's reshape asks before it copies.
+fn regrouped(t: &DeviceTensor, extents: &List<i32>) -> Option<DeviceTensor> {
+    if element_count(extents) == 0 {
+        return null;
+    }
+    // An axis of 1 steps nowhere, so it joins no run.
+    let mut old: List<i32> = [];
+    let mut old_strides: List<i32> = [];
+    for let d of 0..<t.extents.len() {
+        if t.extents[d] != 1 {
+            old.push(t.extents[d]);
+            old_strides.push(t.strides[d]);
+        }
+    }
+    let mut strides = List::<i32>::filled(extents.len(), 0);
+    let [mut oi, mut ni] = [0, 0];
+    while oi < old.len() && ni < extents.len() {
+        // The shortest runs of old and new axes holding one count.
+        let [mut oj, mut nj] = [oi + 1, ni + 1];
+        let [mut held, mut wanted] = [old[oi], extents[ni]];
+        while held != wanted {
+            if wanted < held {
+                wanted *= extents[nj];
+                nj += 1;
+            } else {
+                held *= old[oj];
+                oj += 1;
+            }
+        }
+        for let k of oi..<oj - 1 {
+            if old_strides[k] != old[k + 1] * old_strides[k + 1] {
+                return null;
+            }
+        }
+        strides[nj - 1] = old_strides[oj - 1];
+        for let mut k = nj - 1; k > ni; k -= 1 {
+            strides[k - 1] = strides[k] * extents[k];
+        }
+        oi = oj;
+        ni = nj;
+    }
+    return Option::Some(DeviceTensor { slot: t.slot, offset: t.offset, extents: *extents, strides });
 }
 
 /// The permutation undoing `perm`.

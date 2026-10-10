@@ -77,6 +77,7 @@ pub enum Written {
     Reader,
     Stretched,
     SecondContraction,
+    ContractionAndFold,
 }
 
 /// One branch of an `If`, by the attribute holding it.
@@ -229,6 +230,7 @@ fn reason_fields(reason: &Reason) -> [Written, Option<String>] {
         Reader(kind) => [Written::Reader, Option::Some(kind_word(kind))],
         Stretched => [Written::Stretched, null],
         SecondContraction => [Written::SecondContraction, null],
+        ContractionAndFold => [Written::ContractionAndFold, null],
     };
 }
 
@@ -386,10 +388,11 @@ fn reason_text(code: &Written, detail: &Option<String>) -> String {
         Unfused => "fuse is off",
         Computes => `a ${named} takes in no operator after it`,
         Returned => "the scope returns it",
-        ReadTimes => `read ${named} times`,
+        ReadTimes => `read by ${named} kernels`,
         Reader => `read by a ${named}, which takes in no operator before it`,
-        Stretched => "its reader stretches it",
-        SecondContraction => "its reader already follows a contraction",
+        Stretched => "its readers' kernel covers other elements",
+        SecondContraction => "its readers' kernel already follows a contraction",
+        ContractionAndFold => "a contraction and a fold along a row would share a kernel",
     };
 }
 

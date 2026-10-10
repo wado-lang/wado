@@ -1213,7 +1213,7 @@ pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> 
 /// `op` over `operands`, a row being the last `row_axes` axes of the extents
 /// they broadcast to, so a `Fold` step folds along one. Where `reduced`, the
 /// output holds each row's first element, the row axes at extent 1.
-pub fn fused_rows<Axes>(operands: &List<Read<Axes>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Axes> {
+pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
     assert !operands.is_empty();
     let mut extents: List<i32> = [];
     for let o of *operands {
@@ -1368,14 +1368,15 @@ pub trait Backend with _ {
     fn fused<Axes>(&mut self, operands: List<Self::Operand<Axes>>, op: &Expr) -> Self::Tensor<f32, Axes>;
     /// `op` over `operands` row by row, a row being the last `row_axes` axes,
     /// so a `Fold` step folds along one. Where `reduced`, the result holds one
-    /// element per row, its row axes at extent 1.
-    fn rows<Axes>(
+    /// element per row, its row axes at extent 1 and named as `Out` names
+    /// them; otherwise `Out` is `In`.
+    fn rows<In, Out>(
         &mut self,
-        operands: List<Self::Operand<Axes>>,
+        operands: List<Self::Operand<In>>,
         op: &Expr,
         row_axes: i32,
         reduced: bool,
-    ) -> Self::Tensor<f32, Axes>;
+    ) -> Self::Tensor<f32, Out>;
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
     fn select<E: Element, Axes>(
@@ -1528,7 +1529,7 @@ impl Backend for Cpu {
         return fused(&operands, op);
     }
 
-    fn rows<Axes>(&mut self, operands: List<Read<Axes>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Axes> {
+    fn rows<In, Out>(&mut self, operands: List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
         return fused_rows(&operands, op, row_axes, reduced);
     }
 

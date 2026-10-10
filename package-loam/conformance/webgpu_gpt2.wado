@@ -43,8 +43,14 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         let input = Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents };
         let mask = Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(length, 1), extents };
         let want = gpt2::forward(&mut Cpu {}, &input, &mask, &on_cpu);
-        let before = gpu.read_backs();
+        let [read, dispatched] = [
+            gpu.read_backs(),
+            gpu.dispatches(),
+        ];
         let got = gpt2::forward(&mut gpu, &input, &mask, &on_gpu);
-        println(`logits ${got.extents:?} ${deviation(&got.data, &want.data)} read backs ${gpu.read_backs() - before}`);
+        println(
+            `logits ${got.extents:?} ${deviation(&got.data, &want.data)} dispatches ${gpu.dispatches() - dispatched} read backs ${gpu.read_backs(
+            ) - read}`,
+        );
     }
 }

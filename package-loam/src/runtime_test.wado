@@ -109,11 +109,16 @@ test "a row kernel folds each row, as reduce_mean and softmax do, bit for bit" {
     let data: List<f32> = [0.1, 0.7, -0.3, 2.5, 1.0, -1.25, 0.5, 3.0];
     let x = cpu.upload(&tensor::<[Row, Col]>([2, 4], data));
     let mean = operand(0).row(RowOp::Sum).binary(BinaryOp::Div, &constant(4.0));
-    let reduced = cpu.rows::<[Row, Col]>([cpu.read(&x)], &mean, 1, true);
+    let reduced = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &mean, 1, true);
     assert reduced.extents == [2, 1] as List<i32>;
     assert reduced.data == reduce_mean(&x, [1]).data;
     let e = operand(0).binary(BinaryOp::Sub, &operand(0).row(RowOp::Max)).unary(UnaryOp::Exp);
-    let normalized = cpu.rows::<[Row, Col]>([cpu.read(&x)], &e.binary(BinaryOp::Div, &e.row(RowOp::Sum)), 1, false);
+    let normalized = cpu.rows::<[Row, Col], [Row, Col]>(
+        [cpu.read(&x)],
+        &e.binary(BinaryOp::Div, &e.row(RowOp::Sum)),
+        1,
+        false,
+    );
     assert normalized.data == softmax(&x, 1).data;
 }
 

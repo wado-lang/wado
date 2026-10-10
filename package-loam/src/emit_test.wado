@@ -440,7 +440,9 @@ g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.select(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2), &X, &Z);");
+    assert out.contains(
+        "let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(&X), backend.read(&Z)], &operand(0).select(&operand(1), &operand(2)));",
+    );
 }
 
 test "an extent-1 axis stretches under the name the other operand gives it" {
@@ -633,7 +635,7 @@ g (float[2, 3] X) => (float[2, 3] Y)
     assert out.contains("let Y = X;");
 }
 
-test "Where lifts a lower-rank operand to the output's axes" {
+test "Where over floats is a kernel's select, a lower-rank operand repeated across the output" {
     let source = `
 g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
 <float S>
@@ -649,11 +651,11 @@ g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.select(&C, &X, &backend.lift::<f32, [], [Batch, Head, Query, Key]>(&weights.S, 4));",
+        "let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&C), backend.read(&X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &operand(0).select(&operand(1), &operand(2)));",
     );
 }
 
-test "a folded Where operand is lifted as its literal" {
+test "a folded Where operand is read as its literal" {
     let source = `
 g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
 {
@@ -665,7 +667,9 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
     let out = generate(source, [rule("*", ["Batch", "Key"])]).unwrap();
 
     assert out.contains("let S = backend.upload(&Tensor::<f32, []> { data: [-1 as f32], extents: [] });");
-    assert out.contains("let Y = backend.select(&C, &backend.lift::<f32, [], [Batch, Key]>(&S, 2), &X);");
+    assert out.contains(
+        "let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&S), backend.read(&X)], &operand(0).select(&operand(1), &operand(2)));",
+    );
 }
 
 test "a merged axis the layout writes is spelled with its parts' markers" {
@@ -725,7 +729,10 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     );
 }
 
-test "Softmax lowers to the kernel along its axis" {
+/// What a softmax along the last axis computes, as the row kernel's `Expr`.
+global ROW_SOFTMAX: String = "&operand(0).binary(BinaryOp::Sub, &operand(0).row(RowOp::Max)).unary(UnaryOp::Exp).binary(BinaryOp::Div, &operand(0).binary(BinaryOp::Sub, &operand(0).row(RowOp::Max)).unary(UnaryOp::Exp).row(RowOp::Sum))";
+
+test "Softmax along the last axis lowers to a row kernel" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 {
@@ -734,7 +741,21 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert out.contains("let Y = backend.softmax(&X, 2);");
+    assert out.contains(
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], ${ROW_SOFTMAX}, 1, false);`,
+    );
+}
+
+test "Softmax along another axis lowers to its kernel" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    Y = Softmax <axis = 1> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let Y = backend.softmax(&X, 1);");
 }
 
 test "Softmax before opset 13 lowers to the kernel over the axes from its own on" {
@@ -749,7 +770,8 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     };
 
     assert lowered("").contains("let Y = backend.softmax_flattened(&X, 1);");
-    assert lowered("<axis = 2>").contains("let Y = backend.softmax(&X, 2);");
+    // From the last axis on is the last axis alone, a row.
+    assert lowered("<axis = 2>").contains("let Y = backend.rows::<");
 }
 
 test "arithmetic before opset 7 aligned at an axis reads the shorter operand there" {
@@ -786,7 +808,7 @@ g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
     );
 }
 
-test "a layer norm's mean stretches back over the axis it reduced" {
+test "a layer norm's mean is a fold its row kernel reads back over the row" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 {
@@ -796,9 +818,23 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert out.contains("let M = backend.reduce_mean(&X, [2]);");
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read(&M)], &operand(0).binary(BinaryOp::Sub, &operand(1)));",
+        "let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &operand(0).binary(BinaryOp::Sub, &operand(0).row(RowOp::Sum).binary(BinaryOp::Div, &constant(8 as f32))), 1, false);",
+    );
+}
+
+test "a mean alone writes one value per row" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 1] Y)
+{
+    Y = ReduceMean <axes = [-1]> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    // The output keeps the axis it reduced, at extent 1.
+    assert out.contains(
+        "let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &operand(0).row(RowOp::Sum).binary(BinaryOp::Div, &constant(8 as f32)), 1, true);",
     );
 }
 
