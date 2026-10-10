@@ -781,7 +781,8 @@ impl Backend for WebGpuBackend {
         let rank = ae.len();
         let batch = ae[0..<rank - 2].to_list();
         let [rows, inner, cols] = [ae[rank - 2], ae[rank - 1], be[rank - 1]];
-        let computed = if batch != be[0..<rank - 2].to_list() || !product_fits(element_count(&batch), rows, inner, cols, false) {
+        let computed = if batch != be[0..<rank - 2].to_list()
+            || !product_fits(element_count(&batch), rows, inner, cols, false) {
             Placed::Host(self.cpu.matmul(&self.host(a), &self.host(b), null));
         } else {
             let mut extents = batch;

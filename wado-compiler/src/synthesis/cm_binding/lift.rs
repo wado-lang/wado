@@ -22,8 +22,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    CmStdlibNames, LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
-    cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
+    CmStdlibNames, LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    cm_flags_byte_size, cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
@@ -75,9 +75,15 @@ pub(super) fn synthesize_lift_into(
     }
     let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     match ctx.cm_interface_registry.value_type(ty) {
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
-            synthesize_lift_list(&g.args[0], addr, Some(target), next_local, stmts, locals, ctx)
-        }
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => synthesize_lift_list(
+            &g.args[0],
+            addr,
+            Some(target),
+            next_local,
+            stmts,
+            locals,
+            ctx,
+        ),
         Type::Generic(g) if names.is_tree_map(&g) => synthesize_lift_map(
             &g.args[0],
             &g.args[1],
@@ -765,7 +771,7 @@ impl CmBuffer {
 /// named WASI types (records / variants / enums / flags) walk the buffer
 /// at their true canonical-ABI size and align rather than the i32-handle
 /// fallback baked into `cm_abi::cm_size` / `cm_abi::cm_align`.
-pub(super) fn synthesize_lift_list(
+fn synthesize_lift_list(
     elem_ty: &Type,
     addr: TirExpr,
     override_list_ty: Option<TypeId>,
@@ -865,7 +871,7 @@ pub(super) fn synthesize_lift_list(
 
 /// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `TreeMap`.
 /// `map[k] = v` keeps the last pair for a repeated key, as the CM requires.
-pub(super) fn synthesize_lift_map(
+fn synthesize_lift_map(
     key_ty: &Type,
     value_ty: &Type,
     addr: TirExpr,

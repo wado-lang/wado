@@ -5060,7 +5060,12 @@ const MAX_FLAT_ASYNC_PARAMS: usize = 4;
 /// [`CmInterfaceRegistry::params_in_buffer`] for params already flattened to
 /// `flat_count` core values.
 pub fn flat_params_in_buffer(flat_count: usize, is_async: bool) -> bool {
-    flat_count > if is_async { MAX_FLAT_ASYNC_PARAMS } else { MAX_FLAT_PARAMS }
+    flat_count
+        > if is_async {
+            MAX_FLAT_ASYNC_PARAMS
+        } else {
+            MAX_FLAT_PARAMS
+        }
 }
 
 /// The Wado name every CM `error-code` is declared under. The registry is keyed

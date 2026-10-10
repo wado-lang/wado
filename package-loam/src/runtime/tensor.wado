@@ -161,7 +161,11 @@ pub fn matmul_shared<..Bs, M, K, N>(
 /// left or a column on the right, whose axis the result drops, and the batch
 /// axes broadcast. The caller spells `Out`. `then` is applied to each batch
 /// element's matrix as it completes.
-pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>, then: &Option<Epilogue<Read<Out>>>) -> Tensor<f32, Out> {
+pub fn matmul_broadcast<A, B, Out>(
+    a: &Tensor<f32, A>,
+    b: &Tensor<f32, B>,
+    then: &Option<Epilogue<Read<Out>>>,
+) -> Tensor<f32, Out> {
     let a_matrix = if a.extents.len() == 1 { [1, a.extents[0]] as List<i32> } else { a.extents };
     let b_matrix = if b.extents.len() == 1 { [b.extents[0], 1] as List<i32> } else { b.extents };
     let ra = a_matrix.len();

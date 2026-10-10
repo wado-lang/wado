@@ -1365,7 +1365,11 @@ fn build_spilled_export_params(
     let base = || local_ref(0, "$params", TypeTable::I32);
     let types: Vec<Type> = world_params.iter().map(|(_, ty)| ty.clone()).collect();
     let layout = layout_tuple_with_registry(&types, lift_ctx.cm_interface_registry);
-    assert_eq!(types.len(), user_func_ref.params.len(), "an export lifts one value per parameter");
+    assert_eq!(
+        types.len(),
+        user_func_ref.params.len(),
+        "an export lifts one value per parameter"
+    );
     let mut args = Vec::with_capacity(types.len());
     for ((ty, offset), param) in types.iter().zip(&layout.offsets).zip(&user_func_ref.params) {
         let addr = if *offset == 0 {
