@@ -728,7 +728,7 @@ pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
                 .ok_or_else(|| format!("integer literal out of range: {repr}"))
         } else {
             match scale {
-                Some(scale) if mantissa % scale == 0 => Ok(mantissa / scale),
+                Some(scale) if mantissa.is_multiple_of(scale) => Ok(mantissa / scale),
                 None if mantissa == 0 => Ok(0),
                 _ => Err(format!("`{repr}` is not a whole number")),
             }
