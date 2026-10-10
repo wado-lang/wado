@@ -1,4 +1,5 @@
-// A trait's clause performs no effect, as a function's does not.
+// A trait's clause performs no effect, as a function's does not. The clause
+// is reported once, as impure, not again for the effect it would need.
 use { println, Stdout } from "core:cli";
 
 fn noisy(n: i32) -> bool with Stdout {
@@ -25,5 +26,6 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":11:18: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'"
+  "compile_error": ":12:18: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'",
+  "compile_errors_not_contains": ["missing effect"]
 }

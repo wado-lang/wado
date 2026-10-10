@@ -2025,6 +2025,13 @@ impl SemEffectWalker<'_> {
 
 impl AstVisitor for SemEffectWalker<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
+        // A clause may perform no effect at all, which the purity check
+        // reports; a missing effect there would be the same fault twice.
+        if let Stmt::Assert(assert) = stmt
+            && assert.contract
+        {
+            return;
+        }
         // `for let v of iterable { … }` desugars to synthetic `.into_iter()` /
         // `.next()` calls that have no source call id, so they record no
         // `method_dispatch` fact for `visit_expr` to consult. Check their
