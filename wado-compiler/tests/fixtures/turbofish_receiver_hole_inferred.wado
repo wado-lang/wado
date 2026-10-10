@@ -51,7 +51,7 @@ test "a `_` on the receiver is answered by the argument" {
 
 test "a `_` is answered by the expected type" {
     let w: Wrap<i64> = Wrap::<_>::make(5);
-    assert w.v == 5_i64;
+    assert w.v == 5 as i64;
     let e: Wrap<String> = Wrap::<_>::empty();
     assert e.v == "";
 }
@@ -69,7 +69,7 @@ test "a `_` is answered by the argument where the expected type is still open" {
 
 test "a `_` beside a written argument takes the other slot only" {
     let p = Pair::<i64, _>::of(7, true);
-    assert p.a == 7_i64 && p.b;
+    assert p.a == 7 as i64 && p.b;
 }
 
 test "a `_` is answered through a list literal" {

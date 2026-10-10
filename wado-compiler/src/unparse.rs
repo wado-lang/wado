@@ -3,7 +3,6 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-<<<<<<< HEAD
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AstVisitor, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block,
     BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
@@ -17,37 +16,7 @@ use crate::ast::{
     TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr,
     TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
     VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
-    spell_number, written_params,
-||||||| f3f76a82d95
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
-    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
-    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
-    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
-    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
-    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, spell_number,
     written_params,
-=======
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
-    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
-    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
-    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
-    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
-    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
->>>>>>> origin/main
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};

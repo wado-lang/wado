@@ -581,21 +581,9 @@ g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-<<<<<<< HEAD
     assert out.contains(
-        "let Y = backend.matmul(&A, &backend.transpose2(&B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&C)], op: operand(0).binary(BinaryOp::Mul, &constant(0.5_f32)).binary(BinaryOp::Add, &operand(1).binary(BinaryOp::Mul, &constant(2_f32))) }));",
+        "let Y = backend.matmul(&A, &backend.transpose2(&B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&C)], op: operand(0).binary(BinaryOp::Mul, &constant(0.5 as f32)).binary(BinaryOp::Add, &operand(1).binary(BinaryOp::Mul, &constant(2 as f32))) }));",
     );
-||||||| f3f76a82d95
-    assert out.contains("transpose2(");
-    assert out.contains("0.5_f32");
-    assert out.contains("2_f32");
-    assert out.contains("zip_suffix::<[Batch], [Out]>");
-=======
-    assert out.contains("transpose2(");
-    assert out.contains("0.5 as f32");
-    assert out.contains("2 as f32");
-    assert out.contains("zip_suffix::<[Batch], [Out]>");
->>>>>>> origin/main
 }
 
 test "Gemm whose scalars are both one and has no bias is its product alone" {
@@ -1326,15 +1314,9 @@ test "a scale the graph computes from a shape folds to a literal" {
         Y = Div(X, R)
     }`;
     let out = generate(source, [rule("X", ["Batch", "Feat"])]).unwrap();
-<<<<<<< HEAD
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Feat]>([backend.read(&X)], &operand(0).binary(BinaryOp::Div, &constant(2_f32)));",
+        "let Y = backend.fused::<[Batch, Feat]>([backend.read(&X)], &operand(0).binary(BinaryOp::Div, &constant(2 as f32)));",
     );
-||||||| f3f76a82d95
-    assert out.contains("let Y = backend.map(&X, &operand(0).binary(BinaryOp::Div, &constant(2_f32)));");
-=======
-    assert out.contains("let Y = backend.map(&X, &operand(0).binary(BinaryOp::Div, &constant(2 as f32)));");
->>>>>>> origin/main
     assert !out.contains("let S");
 }
 
@@ -1353,13 +1335,7 @@ test "a Cast of a length only the run knows converts it at run time" {
 
 test "a constant folds into the operator that reads it" {
     assert folded_add(0.5).unwrap().contains(
-<<<<<<< HEAD
-        "let Y = backend.fused::<[Batch, Unit]>([backend.read(&X)], &operand(0).binary(BinaryOp::Add, &constant(0.5_f32)));",
-||||||| f3f76a82d95
-        "let Y = backend.map(&X, &operand(0).binary(BinaryOp::Add, &constant(0.5_f32)));",
-=======
-        "let Y = backend.map(&X, &operand(0).binary(BinaryOp::Add, &constant(0.5 as f32)));",
->>>>>>> origin/main
+        "let Y = backend.fused::<[Batch, Unit]>([backend.read(&X)], &operand(0).binary(BinaryOp::Add, &constant(0.5 as f32)));",
     );
 }
 
@@ -1371,16 +1347,8 @@ test "a constant no Wado literal spells is written as the prelude's constant" {
 test "a constant with no operator to fold into is a rank-0 literal" {
     let out = emit_graph(&constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5)).unwrap();
 
-<<<<<<< HEAD
-    assert out.contains("let C = backend.upload(&Tensor::<f32, []> { data: [0.5_f32], extents: [] });");
-    assert out.contains("let Y = backend.fused::<[]>([backend.read(&C)], &operand(0).unary(UnaryOp::Relu));");
-||||||| f3f76a82d95
-    assert out.contains("let C = backend.upload(&Tensor::<f32, []> { data: [0.5_f32], extents: [] });");
-    assert out.contains("let Y = backend.map(&C, &operand(0).unary(UnaryOp::Relu));");
-=======
     assert out.contains("let C = backend.upload(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] });");
-    assert out.contains("let Y = backend.map(&C, &operand(0).unary(UnaryOp::Relu));");
->>>>>>> origin/main
+    assert out.contains("let Y = backend.fused::<[]>([backend.read(&C)], &operand(0).unary(UnaryOp::Relu));");
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {
