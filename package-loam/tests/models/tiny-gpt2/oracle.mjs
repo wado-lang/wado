@@ -3,7 +3,7 @@
 // TensorProto. The sequences differ in length, so one module compiled with the
 // length left symbolic must reproduce both.
 //
-//   npm install onnxruntime-node@1.30.0
+//   mise run loam-oracle-deps
 //   node oracle.mjs <this directory>
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

@@ -4,7 +4,7 @@
 // <case>.txt: the axes the case names each tensor's by, the inputs it fed, and
 // what onnxruntime computed from them, which operators_test.wado holds Loam to.
 //
-//   npm install onnxruntime-node@1.30.0
+//   mise run loam-oracle-deps
 //   node operators.mjs <this directory>
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

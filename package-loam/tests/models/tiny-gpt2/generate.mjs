@@ -1,7 +1,7 @@
 // Writes generate.json beside model.onnx: the ids Hugging Face's tokenizer gives
 // each text below, and the tokens onnxruntime picks greedily after each prompt.
 //
-//   npm install onnxruntime-node@1.30.0 @huggingface/tokenizers@0.2.0
+//   mise run loam-oracle-deps
 //   node generate.mjs <this directory> <a directory holding tokenizer.json>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

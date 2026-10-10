@@ -3,7 +3,7 @@
 // the branch with one against the keys and values the run before it returned.
 // Each holds the tokens fed and the logits onnxruntime computes for them.
 //
-//   npm install onnxruntime-node@1.30.0
+//   mise run loam-oracle-deps
 //   node oracle.mjs <this directory>
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';

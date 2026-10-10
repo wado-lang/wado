@@ -4,7 +4,7 @@
 // of `lengths`, a line each, which semantics_test.wado holds Loam to. `M`
 // holds 8 elements, so the second length runs past it.
 //
-//   npm install onnxruntime-node@1.30.0
+//   mise run loam-oracle-deps
 //   node semantics.mjs <this directory>
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
