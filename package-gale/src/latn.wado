@@ -5,7 +5,7 @@
 //! single-pass emitter cannot handle: a rule whose non-greedy repeat body
 //! recurses into itself (nested comments, `CMT : '/*' (CMT | .)+? '*' '/'`).
 //!
-//! Reuses the `Atn` / `AtnState` / `AtnTransition` structs and the
+//! Reuses the `Atn` / `AtnNode` / `AtnTransition` structs and the
 //! `atn_blob_bytes` blob format from `atn.wado` (the runtime decodes both
 //! the parser and lexer blobs with the same `atn_decode`). The only
 //! difference is the alphabet: lexer atoms are Unicode scalar *ranges*
@@ -27,7 +27,7 @@ use {
     RepeatKind,
     find_lexer_rule,
 } from "./ir.wado";
-use { Atn, AtnState, AtnTransition } from "./atn.wado";
+use { Atn, AtnNode, AtnTransition } from "./atn.wado";
 use {
     resolve_ci,
     fold_range_ci,
@@ -356,7 +356,7 @@ fn refs_rule_in_alts<S: AsStrSlice>(
 /// of the rule currently being built (set per rule in `build_latn`), so
 /// literals and char sets fold case to match the static lexer path.
 struct LatnBuilder {
-    states: List<AtnState>,
+    states: List<AtnNode>,
     rule_start: List<i32>,
     rule_stop: List<i32>,
     name_to_idx: HashMap<String, i32>,
@@ -366,7 +366,7 @@ struct LatnBuilder {
 impl LatnBuilder {
     fn new_state(&mut self, kind: i32) -> i32 {
         let id = self.states.len();
-        self.states.push(AtnState { kind, rule: -1, decision: -1, transitions: [] });
+        self.states.push(AtnNode { kind, rule: -1, decision: -1, transitions: [] });
         return id;
     }
 

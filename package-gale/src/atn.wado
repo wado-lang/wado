@@ -72,7 +72,7 @@ pub struct AtnTransition {
     pub prec: i32 = 0,
 }
 
-pub struct AtnState {
+pub struct AtnNode {
     pub kind: i32,
     pub rule: i32 = -1,
     pub decision: i32 = -1,
@@ -83,7 +83,7 @@ pub struct AtnState {
 /// for parser rule `r` (same order as `Grammar.parser_rules`).
 /// `decision_state[d]` is the state id of decision number `d`.
 pub struct Atn {
-    pub states: List<AtnState>,
+    pub states: List<AtnNode>,
     pub rule_start: List<i32>,
     pub rule_stop: List<i32>,
     pub decision_state: List<i32>,
@@ -171,7 +171,7 @@ fn sparse_set(list: &mut List<i32>, idx: i32, val: i32) {
 
 /// Mutable accumulator used during construction.
 struct AtnBuilder {
-    states: List<AtnState>,
+    states: List<AtnNode>,
     rule_start: List<i32>,
     rule_stop: List<i32>,
     decision_state: List<i32>,
@@ -184,7 +184,7 @@ struct AtnBuilder {
 impl AtnBuilder {
     fn new_state(&mut self, kind: i32, rule: i32) -> i32 {
         let id = self.states.len();
-        self.states.push(AtnState { kind, rule, decision: -1, transitions: [] });
+        self.states.push(AtnNode { kind, rule, decision: -1, transitions: [] });
         return id;
     }
 
