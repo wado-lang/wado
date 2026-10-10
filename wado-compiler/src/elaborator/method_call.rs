@@ -20,7 +20,7 @@ use super::callee::StaticMethodRef;
 use super::coercion::{ExpectedReturn, answers_last};
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
-use super::instantiate::{InstanceKind, Instantiation};
+use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
 use super::scope::ScopedBound;
@@ -1421,6 +1421,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    /// `param_types` read at the receiver's arguments `declaring_args` and the
+    /// method's `method_type_args`, where either list writes any.
+    fn instantiate_static_params(
+        &self,
+        sig: Option<&MethodSig>,
+        declaring_args: &[TypeId],
+        method_type_args: &[TypeId],
+        self_in_args: bool,
+        param_types: &mut [TypeId],
+    ) {
+        let Some(sig) = sig else {
+            return;
+        };
+        if (declaring_args.is_empty() && method_type_args.is_empty()) || param_types.is_empty() {
+            return;
+        }
+        // `TreeMap::<String, i32>` spells the *target's* arguments;
+        // `impl … for TreeMap<String, V>` numbers only `V`. The declaring
+        // block is what aligns the two.
+        let declaring = sig
+            .declaring_impl
+            .map(|id| self.tysys.signatures.impl_sig(id));
+        let instantiated = sig.instantiate_call_with(
+            &self.tysys.type_table,
+            declaring,
+            declaring_args,
+            method_type_args,
+        );
+        // `param_types` leads with the receiver exactly where the spelling
+        // wrote one, so the instantiated list must start at the same parameter.
+        let skip = if self_in_args {
+            0
+        } else {
+            sig.first_value_param().min(instantiated.param_types.len())
+        };
+        for (param_type, &instantiated_type) in param_types
+            .iter_mut()
+            .zip(&instantiated.param_types[skip..])
+        {
+            *param_type = instantiated_type;
+        }
+    }
+
+    /// `target` with its written arguments replaced by `args`, which fill the
+    /// `_`s its turbofish wrote.
+    fn with_written_args(&self, target: TypeId, args: &[TypeId]) -> TypeId {
+        let mut table = self.tysys.type_table.borrow_mut();
+        match table.get(target).clone() {
+            ResolvedType::GenericInstance { def, type_args } if type_args.len() == args.len() => {
+                table.make_generic_instance(def, args.to_vec())
+            }
+            // A receiver spelled with a `_` is a generic declaration's instance.
+            _ => unreachable!("a turbofish with a `_` names a generic instance"),
+        }
+    }
+
     /// Resolve a static method call: `List::<i32>::with_capacity(100)` or `Point::origin()`
     pub(super) fn resolve_static_method_call(
         &mut self,
@@ -1477,8 +1533,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
         }
 
-        // Resolve the target type first to get struct name for parameter type lookup
-        let target_type_id = self.resolve_type(&static_call.target_type);
+        // Resolve the target type first to get struct name for parameter type
+        // lookup. A `_` in its turbofish is filled once the arguments answer it.
+        let mut target_type_id = self.resolve_type(&static_call.target_type);
 
         // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
         // unreported it types `unknown` and lowering builds an invalid module.
@@ -1746,87 +1803,107 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // A `_` the receiver's turbofish writes is answered by nothing here, so
-        // the block's parameter it fills would reach the instance unknown.
-        if let Some(sig) = callee_sig.as_ref()
-            && let Some(head) = &head
-        {
-            let impl_args = self
-                .tysys
-                .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
-                .unwrap_or_default();
-            let names: Vec<String> = sig
-                .declaring_type_params()
-                .iter()
-                .filter(|(_, id)| {
-                    impl_args.get(self.declared_slot(*id) as usize) == Some(&TypeTable::UNKNOWN)
-                })
-                .map(|(name, _)| name.clone())
-                .collect();
-            if !names.is_empty() {
-                let _ = self.emit(TypeError::cannot_infer(
-                    &names,
-                    &format!("`{}::{}`", head.name, static_call.method),
-                    &format!("`{}::<...>::{}()`", head.name, static_call.method),
-                    static_call.span,
-                ));
-                return self.resolve_args_without_callee(&static_call.args, ctx);
-            }
+        // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
+        // does; the namespace is the head's question, not the list's. A `_`
+        // among them is a variable the arguments answer, as an omitted
+        // turbofish's slot is.
+        let mut declaring_args: Vec<TypeId> = written_arg_nodes(&static_call.target_type)
+            .iter()
+            .map(|t| self.resolve_type(t))
+            .collect();
+        let receiver_holes: Vec<(usize, TypeId)> = declaring_args
+            .iter()
+            .enumerate()
+            .filter(|&(_, &a)| a == TypeTable::UNKNOWN)
+            .map(|(i, _)| (i, self.mint_infer_var()))
+            .collect();
+        for &(i, var) in &receiver_holes {
+            declaring_args[i] = var;
         }
-
-        {
-            // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
-            // does; the namespace is the head's question, not the list's.
-            let declaring_args: Vec<TypeId> = written_arg_nodes(&static_call.target_type)
-                .iter()
-                .map(|t| self.resolve_type(t))
-                .collect();
-            let has_type_args = !declaring_args.is_empty() || !method_type_args.is_empty();
-            if has_type_args
-                && !param_types.is_empty()
-                && let Some(sig) = callee_sig.as_ref()
-            {
-                // `TreeMap::<String, i32>` spells the *target's* arguments;
-                // `impl … for TreeMap<String, V>` numbers only `V`. The
-                // declaring block is what aligns the two.
-                let declaring = sig
-                    .declaring_impl
-                    .map(|id| self.tysys.signatures.impl_sig(id));
-                let instantiated = sig.instantiate_call_with(
-                    &self.tysys.type_table,
-                    declaring,
-                    &declaring_args,
-                    &method_type_args,
-                );
-                // `param_types` leads with the receiver exactly where the
-                // spelling wrote one, so the instantiated list must start at
-                // the same parameter.
-                let skip = if self_in_args {
-                    0
-                } else {
-                    sig.first_value_param().min(instantiated.param_types.len())
-                };
-                for (param_type, &instantiated_type) in param_types
-                    .iter_mut()
-                    .zip(&instantiated.param_types[skip..])
-                {
-                    *param_type = instantiated_type;
-                }
-            }
-        }
+        self.instantiate_static_params(
+            callee_sig.as_ref(),
+            &declaring_args,
+            &method_type_args,
+            self_in_args,
+            &mut param_types,
+        );
 
         // Resolve arguments with expected types for coercion. `arg_sites` runs
         // parallel to `args` so a diagnostic still lands on the argument that
         // caused it rather than on the whole call.
-        let mut args: Vec<TypeId> = static_call
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, a)| {
-                let expected_type = param_types.get(i).copied();
-                self.resolve_expr(a, ctx, expected_type)
-            })
-            .collect();
+        let mut args: Vec<TypeId> = if receiver_holes.is_empty() {
+            static_call
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, a)| {
+                    let expected_type = param_types.get(i).copied();
+                    self.resolve_expr(a, ctx, expected_type)
+                })
+                .collect()
+        } else {
+            let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
+            let inst = Instantiated::of_vars(vars.clone());
+            let args = self.resolve_args_against_params(
+                &static_call.args,
+                ctx,
+                &param_types,
+                Some(&inst),
+                None,
+            );
+            let mut infer = InferCtx::new(&self.tysys.type_table, vars);
+            for (&param_type, &arg) in param_types.iter().zip(&args) {
+                infer.add(param_type, arg);
+            }
+            let (_, bindings) = infer.solve_with_bindings();
+            for &(i, var) in &receiver_holes {
+                if let Some(&answer) = bindings.get(&var) {
+                    let answer = self.apply_infer_holes(answer);
+                    self.solve_infer_var(var, answer);
+                }
+                let answer = self.apply_infer_holes(var);
+                declaring_args[i] = if self.tysys.is_usable_answer(answer) {
+                    answer
+                } else {
+                    TypeTable::UNKNOWN
+                };
+            }
+            target_type_id = self.with_written_args(target_type_id, &declaring_args);
+            // A `_` nothing answered would reach the instance unknown.
+            if let Some(sig) = callee_sig.as_ref()
+                && let Some(head) = &head
+            {
+                let impl_args = self
+                    .tysys
+                    .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
+                    .unwrap_or_default();
+                let names: Vec<String> = sig
+                    .declaring_type_params()
+                    .iter()
+                    .filter(|(_, id)| {
+                        impl_args.get(self.declared_slot(*id) as usize) == Some(&TypeTable::UNKNOWN)
+                    })
+                    .map(|(name, _)| name.clone())
+                    .collect();
+                if !names.is_empty() {
+                    let _ = self.emit(TypeError::cannot_infer(
+                        &names,
+                        &format!("`{}::{}`", head.name, static_call.method),
+                        &format!("`{}::<...>::{}()`", head.name, static_call.method),
+                        static_call.span,
+                    ));
+                    return TypeTable::ERROR;
+                }
+            }
+            self.instantiate_static_params(
+                callee_sig.as_ref(),
+                &declaring_args,
+                &method_type_args,
+                self_in_args,
+                &mut param_types,
+            );
+            args
+        };
         let mut arg_sites: Vec<ArgSite> = static_call
             .args
             .iter()

@@ -1,0 +1,41 @@
+// A `_` in a static call's receiver turbofish is inferred from the arguments,
+// as the bare spelling's omitted turbofish is, while the arguments it writes
+// stay as written.
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn make(v: T) -> Wrap<T> {
+        return Wrap { v };
+    }
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A, B> Pair<A, B> {
+    fn of(a: A, b: B) -> Pair<A, B> {
+        return Pair { a, b };
+    }
+}
+
+test "a `_` on the receiver is answered by the argument" {
+    let w = Wrap::<_>::make(5);
+    assert w.v == 5;
+    let s = Wrap::<_>::make("five");
+    assert s.v == "five";
+}
+
+test "a `_` beside a written argument takes the other slot only" {
+    let p = Pair::<i64, _>::of(7, true);
+    assert p.a == 7_i64 && p.b;
+}
+
+test "a `_` is answered through a list literal" {
+    let w = Wrap::<_>::make([1, 2, 3] as List<u8>);
+    assert w.v.len() == 3;
+}

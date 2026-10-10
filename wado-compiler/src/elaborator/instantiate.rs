@@ -80,6 +80,20 @@ pub(super) struct Instantiated {
     diags: Vec<Option<(Span, String, String)>>,
 }
 
+impl Instantiated {
+    /// Variables a use site minted for slots no declaration frame numbers,
+    /// such as the `_`s a receiver's turbofish writes. Nothing substitutes
+    /// into them, and an unsolved one reports nothing here: the site does.
+    pub(super) fn of_vars(vars: Vec<TypeId>) -> Instantiated {
+        let diags = vec![None; vars.len()];
+        Instantiated {
+            vars,
+            subst: IndexMap::default(),
+            diags,
+        }
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Instantiate `slots` — a declaration's type parameters, in order — with
     /// one fresh inference variable each.
