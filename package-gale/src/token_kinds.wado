@@ -66,7 +66,6 @@ impl TokenKinds {
         return out;
     }
 
-    /// The table numbering `grammar`'s kinds as the emitted `TK_*` globals do.
     pub fn build(grammar: &Grammar) -> TokenKinds {
         let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
         let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
@@ -102,7 +101,6 @@ impl TokenKinds {
         return self.names[id];
     }
 
-    /// How many kinds the table holds.
     pub fn len(&self) -> i32 {
         return self.names.len();
     }

@@ -112,7 +112,6 @@ fn is_one_token_rule(rule: &ParserRule) -> bool {
 }
 
 impl GrammarAnalysis {
-    /// The analysis of `parser_rules`, spelling kinds in `token_kinds`.
     pub fn new(
         parser_rules: &List<ParserRule>,
         token_kinds: TokenKinds = TokenKinds::empty(),
@@ -188,7 +187,6 @@ impl GrammarAnalysis {
         return self.snake_index[snake.to_string()];
     }
 
-    /// The parser rule named `name`, or `null`.
     pub fn find_rule<S: AsStrSlice>(&self, name: S) -> Option<&ParserRule> {
         let idx = self.rule_index.get_str(name);
         if let Some(i) = idx {
@@ -381,8 +379,6 @@ impl GrammarAnalysis {
         self.kind_by_rank = order;
     }
 
-    /// The kinds rule `name` can begin with. A rule on `visiting` contributes
-    /// none, which is what breaks left recursion.
     pub fn first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_rule_at(name, visiting, &mut min_cycle);
@@ -442,7 +438,6 @@ impl GrammarAnalysis {
         return result;
     }
 
-    /// The kinds `elem` can begin with; empty for a wildcard or a `~` set.
     pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_element_at(elem, visiting, &mut min_cycle);
@@ -472,7 +467,6 @@ impl GrammarAnalysis {
         };
     }
 
-    /// The kinds `alt` can begin with, reaching past its nullable elements.
     pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_alt_at(alt, visiting, &mut min_cycle);
@@ -495,8 +489,6 @@ impl GrammarAnalysis {
         return result;
     }
 
-    /// The kinds `elements[start..]` can begin with, reaching past its nullable
-    /// elements.
     pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
         let mut result: List<i32> = [];
         let mut seen: List<u64> = [];
@@ -892,7 +884,6 @@ impl GrammarAnalysis {
         return true;
     }
 
-    /// Whether `elem` can match no tokens, following rule references.
     pub fn element_is_nullable_deep(&mut self, elem: &Element, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.element_is_nullable_deep_at(elem, visiting, &mut min_cycle);
@@ -927,7 +918,6 @@ impl GrammarAnalysis {
         };
     }
 
-    /// Whether rule `name` can match no tokens.
     pub fn rule_is_nullable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.rule_is_nullable_at(name, visiting, &mut min_cycle);
@@ -1212,7 +1202,6 @@ impl GrammarAnalysis {
         return !self.tail_is_nullable_deep(elements, i + 1);
     }
 
-    /// Whether every match of rule `name` is exactly one token.
     pub fn rule_is_single_token<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.rule_is_single_token_at(name, visiting, &mut min_cycle);
@@ -1663,7 +1652,6 @@ fn extract_group_alts_for_scan(elem: &Element) -> Option<&List<Alternative>> {
     };
 }
 
-/// Whether `elem` is a `*` or `?` repeat, nullable without looking inside.
 pub fn is_nullable(elem: &Element) -> bool {
     if let Repeat(rep) = elem {
         if let Star | Optional = rep.kind {
