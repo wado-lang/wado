@@ -9589,7 +9589,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
 impl TypeSystem {
     /// The bits of `-value` for an integer literal of `type_id`, wrapped to its
-    /// width as the operator wraps: `-(-128_i8)` is `-128`.
+    /// width as the operator wraps: `-(-128 as i8)` is `-128`.
     fn negated_int_literal(&self, value: u64, type_id: TypeId) -> u64 {
         let negated = (value as i64).wrapping_neg().cast_unsigned();
         match self.type_table.borrow().primitive_head(type_id) {

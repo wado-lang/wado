@@ -88,7 +88,7 @@ arithmetic lints treat `lit as T` as a constant operand of type `T`, so
   (`hex_suffix_lookalike`).
 - [x] Remove `literal_cast`, and count `lit as T` as a constant operand.
 - [x] Migrate the repository's sources from suffixes to `as`.
-- [ ] The specification, the cheatsheet, the formatter tests and the syntax
+- [x] The specification, the cheatsheet, the formatter tests and the syntax
   highlighting grammars.
 
 ## Known gaps
