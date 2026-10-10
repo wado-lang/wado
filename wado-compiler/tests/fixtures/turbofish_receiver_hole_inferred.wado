@@ -23,6 +23,19 @@ impl<A, B> Pair<A, B> {
     }
 }
 
+type Boxed<T> = Wrap<T>;
+
+impl<T> Boxed<T> {
+    fn boxed(v: T) -> Boxed<T> {
+        return Wrap { v } as Boxed<T>;
+    }
+}
+
+test "a `_` on a generic newtype's receiver is answered by the argument" {
+    let b = Boxed::<_>::boxed(5);
+    assert b.v == 5;
+}
+
 test "a `_` on the receiver is answered by the argument" {
     let w = Wrap::<_>::make(5);
     assert w.v == 5;

@@ -3340,13 +3340,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             slot.is_none_or(|&t| this.slot_unanswered(t, &scope_params))
         };
 
-        // `impl_type_args` is indexed by slot, which a parameter nested in the
-        // target or pushed past a concrete argument holds out of declaration order.
-        let impl_unresolved: Vec<(usize, String)> = declaring_slots
-            .iter()
-            .map(|(name, id)| (self.declared_slot(*id) as usize, name.clone()))
-            .filter(|(slot, _)| unresolved(self, impl_type_args.get(*slot)))
-            .collect();
+        let impl_unresolved =
+            self.receiver_slots_where(&sig, impl_type_args, |this, slot| unresolved(this, slot));
         let method_unresolved: Vec<(usize, String)> = method_slots
             .iter()
             .enumerate()
@@ -3385,6 +3380,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &turbofish,
             span,
         ));
+    }
+
+    /// Each of `sig`'s declaring block's parameters whose argument in
+    /// `impl_type_args` is `unanswered`, by slot and name. The arguments are
+    /// indexed by slot, which a parameter nested in the target or pushed past a
+    /// concrete argument holds out of declaration order.
+    pub(super) fn receiver_slots_where(
+        &self,
+        sig: &MethodSig,
+        impl_type_args: &[TypeId],
+        unanswered: impl Fn(&Self, Option<&TypeId>) -> bool,
+    ) -> Vec<(usize, String)> {
+        sig.declaring_type_params()
+            .iter()
+            .map(|(name, id)| (self.declared_slot(*id) as usize, name.clone()))
+            .filter(|(slot, _)| unanswered(self, impl_type_args.get(*slot)))
+            .collect()
     }
 
     /// [`Self::report_uninferred_static_method_type_args`] for a derived method,

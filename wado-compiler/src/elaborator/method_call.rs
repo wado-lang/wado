@@ -1466,13 +1466,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `target` with its written arguments replaced by `args`, which fill the
     /// `_`s its turbofish wrote.
-    fn with_written_args(&self, target: TypeId, args: &[TypeId]) -> TypeId {
-        let mut table = self.tysys.type_table.borrow_mut();
-        match table.get(target).clone() {
-            ResolvedType::GenericInstance { def, type_args } if type_args.len() == args.len() => {
-                table.make_generic_instance(def, args.to_vec())
+    fn with_written_args(&mut self, target: TypeId, args: &[TypeId]) -> TypeId {
+        let shape = self.tysys.type_table.borrow().get(target).clone();
+        match shape {
+            ResolvedType::GenericInstance { def, .. } => self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_generic_instance(def, args.to_vec()),
+            ResolvedType::GenericResource { def, .. } => {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::GenericResource {
+                        def,
+                        type_args: args.to_vec(),
+                    })
             }
-            // A receiver spelled with a `_` is a generic declaration's instance.
+            ResolvedType::Newtype { def, .. } => self.generic_newtype_instance(def, args.to_vec()),
+            // A turbofish with a `_` applies a generic declaration: a struct,
+            // variant or resource instance, or a newtype.
             _ => unreachable!("a turbofish with a `_` names a generic instance"),
         }
     }
@@ -1877,13 +1890,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
                     .unwrap_or_default();
-                let names: Vec<String> = sig
-                    .declaring_type_params()
-                    .iter()
-                    .filter(|(_, id)| {
-                        impl_args.get(self.declared_slot(*id) as usize) == Some(&TypeTable::UNKNOWN)
+                let names: Vec<String> = self
+                    .receiver_slots_where(sig, &impl_args, |_, slot| {
+                        slot == Some(&TypeTable::UNKNOWN)
                     })
-                    .map(|(name, _)| name.clone())
+                    .into_iter()
+                    .map(|(_, name)| name)
                     .collect();
                 if !names.is_empty() {
                     let _ = self.emit(TypeError::cannot_infer(
