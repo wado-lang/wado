@@ -21,15 +21,7 @@ use {
 use { fill_of } from "./fold.wado";
 use { IfBranch, Spread, branches, is_alias, plan, row_fold, selects_floats } from "./plan.wado";
 use { Expected } from "./runtime/checkpoint.wado";
-use {
-    BinaryOp,
-    Expr,
-    RowOp,
-    Step,
-    UnaryOp,
-    constant as constant_expr,
-    operand as operand_expr,
-} from "./runtime/tensor.wado";
+use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
 use {
     Checked,
@@ -774,10 +766,7 @@ fn scope_body(
                     exprs.pending[output] = term;
                     continue;
                 }
-                let space = match &spread {
-                    Some(s) => checked.shapes[s.restored],
-                    None => checked.shapes[output],
-                };
+                let space = decided.space_of(checked, &output);
                 body.push(bound_to(&output, term.call(&space, &decided.rows_of(&output)), names, exprs));
             },
         }
@@ -1204,23 +1193,15 @@ fn node_term(
     let op = node.op;
     let out = shapes.get(node.outputs[0]).unwrap();
     if let Some(s) = spread {
-        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs, spread_product(s, shapes, exprs))));
+        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs, Option::Some(spread_product(s, shapes, exprs)))));
     }
     if let Some(fold) = row_fold(node, checked, opset) {
         let x = lane_of(node, 0, shapes, exprs, 0);
-        return Result::Ok(Option::Some(match fold {
-            Sum(count) => {
-                let sum = x.row(RowOp::Sum);
-                match count {
-                    Some(n) => sum.binary(BinaryOp::Div, &Term::constant(n)),
-                    None => sum,
-                }
-            },
-            Softmax => {
-                let e = x.binary(BinaryOp::Sub, &x.row(RowOp::Max)).unary(UnaryOp::Exp);
-                e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
-            },
-        }));
+        let expr = match fold {
+            Sum(count) => x.expr.row_sum(count),
+            Softmax => x.expr.row_softmax(),
+        };
+        return Result::Ok(Option::Some(Term { lanes: x.lanes, expr }));
     }
     if selects_floats(node, checked) {
         let cond = node.inputs[0];
@@ -1599,11 +1580,6 @@ impl Term {
         return Term { lanes: self.lanes, expr: self.expr.unary(op) };
     }
 
-    /// This folded along its row by `op`.
-    fn row(&self, op: RowOp) -> Term {
-        return Term { lanes: self.lanes, expr: self.expr.row(op) };
-    }
-
     /// `op` over this and `rhs`, an operand both read taken once.
     fn binary(&self, op: BinaryOp, rhs: &Term) -> Term {
         let mut lanes = self.lanes;
@@ -1779,12 +1755,12 @@ struct SpreadOperand {
     product: Shape,
 }
 
-fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Option<SpreadOperand> {
-    return Option::Some(SpreadOperand {
+fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> SpreadOperand {
+    return SpreadOperand {
         reference: exprs.reference(&s.operand),
         shape: shapes[s.operand],
         product: shapes[s.restored],
-    });
+    };
 }
 
 /// `Gemm`'s `alpha * A' * B' + beta * C`, as a matrix product under optional

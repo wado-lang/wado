@@ -974,6 +974,24 @@ impl Expr {
         return e;
     }
 
+    /// This summed along its row, divided by `count` where one is given: a
+    /// mean.
+    pub fn row_sum(&self, count: Option<f32>) -> Expr {
+        let sum = self.row(RowOp::Sum);
+        return match count {
+            Some(n) => sum.binary(BinaryOp::Div, &constant(n)),
+            None => sum,
+        };
+    }
+
+    /// ONNX's `Softmax` of this along its row: each element's exponential,
+    /// less the row's largest first so none overflows, over the row's sum of
+    /// them.
+    pub fn row_softmax(&self) -> Expr {
+        let e = self.binary(BinaryOp::Sub, &self.row(RowOp::Max)).unary(UnaryOp::Exp);
+        return e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
+    }
+
     /// Whether a step folds along a row, so only a row kernel runs this.
     pub fn folds_rows(&self) -> bool {
         return self.steps.position(|s| s matches { Fold(_) }) matches { Some(_) };
@@ -1060,40 +1078,43 @@ impl Expr {
         }
         let last = &values[values.len() - 1];
         for let j of 0..<n {
-            out[start + j] = if last.len() == 1 { last[0] } else { last[j] };
+            out[start + j] = value_at(last, j);
         }
     }
 }
 
-/// `v`'s `n` elements folded by `op`, `v` of one element read at each.
+/// A step's value at element `j` of a pass: a step of one value holds it at
+/// every element.
+fn value_at(v: &Slice<f32>, j: i32) -> f32 {
+    return if v.len() == 1 { v[0] } else { v[j] };
+}
+
+/// `v`'s `n` elements folded by `op`.
 fn folded(op: RowOp, v: &Slice<f32>, n: i32) -> f32 {
-    let at = |j: i32| if v.len() == 1 { v[0] } else { v[j] };
     return match op {
         Sum => {
             let mut sum: f32 = 0.0;
             for let j of 0..<n {
-                sum += at(j);
+                sum += value_at(v, j);
             }
             sum;
         },
         Max => {
             let mut max = -f32::INFINITY;
             for let j of 0..<n {
-                max = f32::ieee754_max(max, at(j));
+                max = f32::ieee754_max(max, value_at(v, j));
             }
             max;
         },
     };
 }
 
-/// `a` where `c` is not zero and `b` where it is, element by element, a
-/// one-element side read at each.
+/// `a` where `c` is not zero and `b` where it is, element by element.
 fn selected(c: &Slice<f32>, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
     let count = i32::max(c.len(), i32::max(a.len(), b.len()));
-    let at = |v: &Slice<f32>, j: i32| if v.len() == 1 { v[0] } else { v[j] };
     let mut out = List::<f32>::with_capacity(count);
     for let j of 0..<count {
-        out.push(if at(c, j) != 0.0 { at(a, j) } else { at(b, j) });
+        out.push(if value_at(c, j) != 0.0 { value_at(a, j) } else { value_at(b, j) });
     }
     return out;
 }
@@ -1202,11 +1223,7 @@ pub struct Read<Axes> {
 
 /// `op` over `operands`, stretched to the extents they broadcast to.
 pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
-    assert !operands.is_empty();
-    let mut extents: List<i32> = [];
-    for let o of *operands {
-        extents = broadcast_extents(&extents, &o.extents).unwrap();
-    }
+    let extents = broadcast_reads(operands);
     return Tensor { data: op.over(element_count(&extents), &repeated_over(operands, &extents)), extents };
 }
 
@@ -1214,11 +1231,7 @@ pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> 
 /// they broadcast to, so a `Fold` step folds along one. Where `reduced`, the
 /// output holds each row's first element, the row axes at extent 1.
 pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
-    assert !operands.is_empty();
-    let mut extents: List<i32> = [];
-    for let o of *operands {
-        extents = broadcast_extents(&extents, &o.extents).unwrap();
-    }
+    let extents = broadcast_reads(operands);
     let rank = extents.len();
     assert 0 < row_axes <= rank;
     let row = element_count(&extents[rank - row_axes..<rank].to_list());
@@ -1235,6 +1248,16 @@ pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, 
         data.push(full[at]);
     }
     return Tensor { data, extents: row_extents(&extents, row_axes, true) };
+}
+
+/// The extents `operands` broadcast to.
+fn broadcast_reads<Axes>(operands: &List<Read<Axes>>) -> List<i32> {
+    assert !operands.is_empty();
+    let mut extents: List<i32> = [];
+    for let o of *operands {
+        extents = broadcast_extents(&extents, &o.extents).unwrap();
+    }
+    return extents;
 }
 
 /// `extents` with its last `row_axes` at 1 where `reduced`.

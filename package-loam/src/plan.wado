@@ -84,7 +84,7 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
         }
         let x = &checked.shapes[flatten.inputs[0]];
         let y = &checked.shapes[restore.outputs[0]];
-        if x.rank() < 3 || y.rank() != x.rank() || !same_leading(x, y) {
+        if x.rank() < 3 || y.rank() != x.rank() || !first_axes_agree(x, y, x.rank() - 1) {
             continue;
         }
         lowered[first] = Lowering::Flattened;
@@ -98,16 +98,6 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
 fn gemm_transposes_a(node: &Node) -> bool {
     let [_, _, trans_a, _] = settled(gemm_options(node));
     return trans_a;
-}
-
-/// Whether `a` and `b` agree on every axis but the last.
-fn same_leading(a: &Shape, b: &Shape) -> bool {
-    for let i of 0..<a.rank() - 1 {
-        if a.axes[i].name != b.axes[i].name || !a.axes[i].extent.agrees(&b.axes[i].extent) {
-            return false;
-        }
-    }
-    return true;
 }
 
 /// How `forward` lowers `node`, in the scope `checked`.
@@ -259,6 +249,11 @@ impl Plan {
     /// The `Spread` the `Gemm` writing `tensor` is part of, if it is.
     pub fn spread_of(&self, tensor: &String) -> Option<Spread> {
         return self.spreads.get(*tensor);
+    }
+
+    /// The axes `forward` computes `tensor` over, in the scope `checked`.
+    pub fn space_of(&self, checked: &Checked, tensor: &String) -> Shape {
+        return space_of(checked, &self.spreads, tensor);
     }
 
     /// The decision for the kernel computing `tensor`.
@@ -539,24 +534,21 @@ fn decided(
 /// `rows`', and its last is of extent 1.
 fn per_row(a: &Shape, rows: &Shape) -> bool {
     let rank = rows.rank();
-    if a.rank() != rank || rank == 0 || !a.axes[rank - 1].extent matches { Static(1) } {
-        return false;
-    }
-    for let i of 0..<rank - 1 {
-        if a.axes[i].name != rows.axes[i].name || !a.axes[i].extent.agrees(&rows.axes[i].extent) {
-            return false;
-        }
-    }
-    return true;
+    return a.rank() == rank
+        && rank > 0
+        && a.axes[rank - 1].extent matches { Static(1) }
+        && first_axes_agree(a, rows, rank - 1);
 }
 
 /// Whether two tensors cover one iteration space under one axis list, so one
 /// computes element `i` exactly where the other reads it.
 fn same_space(a: &Shape, b: &Shape) -> bool {
-    if a.rank() != b.rank() {
-        return false;
-    }
-    for let i of 0..<a.rank() {
+    return a.rank() == b.rank() && first_axes_agree(a, b, a.rank());
+}
+
+/// Whether `a`'s first `n` axes are `b`'s, by name and extent.
+fn first_axes_agree(a: &Shape, b: &Shape, n: i32) -> bool {
+    for let i of 0..<n {
         if a.axes[i].name != b.axes[i].name || !a.axes[i].extent.agrees(&b.axes[i].extent) {
             return false;
         }

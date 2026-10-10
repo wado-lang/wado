@@ -14,13 +14,11 @@ use {
     Epilogue,
     Expr,
     Read,
-    RowOp,
     Step,
     Tensor,
     UnaryOp,
     Window,
     broadcast_extents,
-    constant,
     element_count,
     operand,
     row_extents,
@@ -478,8 +476,7 @@ impl WebGpuBackend {
         };
         let out = contiguous(self.allocated(count, false), 0, extents);
         let [x, y] = grid(count);
-        let mut params: List<u32> = [count as u32, (x * LANES) as u32];
-        push_all(&mut params, &extents);
+        let mut params = element_params(count, x, &extents);
         for let o of bound.views {
             push_view(&mut params, o.offset, &stretched(&o, &extents));
         }
@@ -582,9 +579,7 @@ impl WebGpuBackend {
             at += element_count(&o.extents);
         }
         return Option::Some(Bindings {
-            spans: [
-                Span { slot: pack, first: 0, count: i32::max(total, 1) },
-            ],
+            spans: [fresh(&contiguous(pack, 0, [total]))],
             bindings: List::<i32>::filled(operands.len(), 0),
             views,
         });
@@ -625,8 +620,7 @@ impl WebGpuBackend {
             *to,
         ] as List<DeviceTensor>)) {
             let [x, y] = grid(count);
-            let mut params: List<u32> = [count as u32, (x * LANES) as u32];
-            push_all(&mut params, &to.extents);
+            let mut params = element_params(count, x, &to.extents);
             push_view(&mut params, from.offset - source.first, &from.strides);
             push_view(&mut params, to.offset - target.first, &to.strides);
             self.dispatch(&copy_shader(to.extents.len()), [source, target], params, [x, y, 1]);
@@ -891,8 +885,7 @@ impl WebGpuBackend {
             part,
         ] as List<DeviceTensor>)) {
             let [x, y] = grid(count);
-            let mut params: List<u32> = [count as u32, (x * LANES) as u32];
-            push_all(&mut params, &part.extents);
+            let mut params = element_params(count, x, &part.extents);
             let mut across = data.strides;
             across[axis] = 0;
             push_view(&mut params, data.offset - source.first, &across);
@@ -916,18 +909,9 @@ impl WebGpuBackend {
         axes: &List<i32>,
         op: &Expr,
     ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let rank = t.extents.len();
-        let mut folded = *axes;
-        folded.sort();
-        let mut perm: List<i32> = [];
-        for let d of 0..<rank {
-            if !folded.contains(&d) {
-                perm.push(d);
-            }
-        }
-        perm.extend(&folded);
+        let perm = moved_last(t.extents.len(), axes);
         let moved = permuted(t, &perm);
-        let out = self.row_kernel(&([moved] as List<DeviceTensor>), moved.extents, op, folded.len(), true)?;
+        let out = self.row_kernel(&([moved] as List<DeviceTensor>), moved.extents, op, axes.len(), true)?;
         return Option::Some(permuted(&out, &inverse(&perm)));
     }
 }
@@ -1284,16 +1268,15 @@ impl Backend for WebGpuBackend {
         axis: i32,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let view = self.device_view(t);
-        let rank = view.extents.len();
-        let mut perm: List<i32> = [];
-        for let d of 0..<rank {
-            if d != axis {
-                perm.push(d);
-            }
-        }
-        perm.push(axis);
+        let perm = moved_last(view.extents.len(), &([axis] as List<i32>));
         let moved = permuted(&view, &perm);
-        let Some(out) = self.row_kernel(&([moved] as List<DeviceTensor>), moved.extents, &softmax_expr(), 1, false) else {
+        let Some(out) = self.row_kernel(
+            &([moved] as List<DeviceTensor>),
+            moved.extents,
+            &operand(0).row_softmax(),
+            1,
+            false,
+        ) else {
             return Placed::Host(self.cpu.softmax(&self.host(t), axis));
         };
         return Placed::Device(permuted(&out, &inverse(&perm)));
@@ -1306,7 +1289,13 @@ impl Backend for WebGpuBackend {
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let view = self.device_view(t);
         let row_axes = view.extents.len() - axis;
-        let Some(out) = self.row_kernel(&([view] as List<DeviceTensor>), view.extents, &softmax_expr(), row_axes, false) else {
+        let Some(out) = self.row_kernel(
+            &([view] as List<DeviceTensor>),
+            view.extents,
+            &operand(0).row_softmax(),
+            row_axes,
+            false,
+        ) else {
             return Placed::Host(self.cpu.softmax_flattened(&self.host(t), axis));
         };
         return Placed::Device(out);
@@ -1318,7 +1307,7 @@ impl Backend for WebGpuBackend {
         axes: List<i32>,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let view = self.device_view(t);
-        let Some(out) = self.reduced(&view, &axes, &operand(0).row(RowOp::Sum)) else {
+        let Some(out) = self.reduced(&view, &axes, &operand(0).row_sum(null)) else {
             return Placed::Host(self.cpu.reduce_sum(&self.host(t), axes));
         };
         return Placed::Device(out);
@@ -1334,20 +1323,23 @@ impl Backend for WebGpuBackend {
         for let axis of axes {
             count *= view.extents[axis] as f32;
         }
-        let mean = operand(0).row(RowOp::Sum).binary(BinaryOp::Div, &constant(count));
-        let Some(out) = self.reduced(&view, &axes, &mean) else {
+        let Some(out) = self.reduced(&view, &axes, &operand(0).row_sum(Option::Some(count))) else {
             return Placed::Host(self.cpu.reduce_mean(&self.host(t), axes));
         };
         return Placed::Device(out);
     }
 }
 
-/// ONNX's `Softmax` along a row: each element's exponential, less the row's
-/// largest first so none overflows, over the row's sum of them.
-fn softmax_expr() -> Expr {
-    let x = operand(0);
-    let e = x.binary(BinaryOp::Sub, &x.row(RowOp::Max)).unary(UnaryOp::Exp);
-    return e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
+/// The permutation moving `axes`, sorted, after the rest of `rank` axes.
+fn moved_last(rank: i32, axes: &List<i32>) -> List<i32> {
+    let mut perm: List<i32> = [];
+    for let d of 0..<rank {
+        if !axes.contains(&d) {
+            perm.push(d);
+        }
+    }
+    perm.extend(&axes.sorted());
+    return perm;
 }
 
 fn operand_views<Axes>(operands: &List<PlacedRead<Axes>>) -> List<DeviceTensor> {
@@ -1574,6 +1566,14 @@ fn grid(count: i32) -> [i32, i32] {
     let groups = covering(count, LANES);
     let x = i32::min(groups, MAX_GROUPS);
     return [x, if x == 0 { 0 } else { covering(groups, x) }];
+}
+
+/// The parameters every shader with one invocation per element starts with:
+/// the count, the invocations per row of `x` workgroups, and the extents.
+fn element_params(count: i32, x: i32, extents: &List<i32>) -> List<u32> {
+    let mut params: List<u32> = [count as u32, (x * LANES) as u32];
+    push_all(&mut params, extents);
+    return params;
 }
 
 /// How many runs of `size` cover `count`.
