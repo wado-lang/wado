@@ -103,17 +103,11 @@ test {
 
 ### `#[allow(...)]`
 
-Waives a lint on the item carrying it. As the module inner attribute
-`#![allow(...)]` it waives the lint for every item in the file. There is no
-`#[deny(...)]`. The lints are:
-
-- `arithmetic_overflow`: integer literals that overflow their type, or a literal shift amount outside the bit width (see [The `arithmetic_overflow` Lint](./spec-diagnostics.md#the-arithmetic_overflow-lint)).
-- `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
-- `literal_cast`: a cast that types a literal a suffix could type (see [The `literal_cast` Lint](./spec-literals.md#the-literal_cast-lint)).
-- `self_comparison`: a comparison of an expression with itself (see [The `self_comparison` Lint](./spec-expressions.md#the-self_comparison-lint)).
-- `shadowed_name`: a binder that takes a name already reaching a known symbol (see [The `shadowed_name` Lint](./spec-expressions.md#the-shadowed_name-lint)).
-- `unconditional_trap`: an integer division that always traps (see [The `unconditional_trap` Lint](./spec-diagnostics.md#the-unconditional_trap-lint)).
-- `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
+Waives a lint on the node carrying it and on everything that node encloses: an
+item, a method, a parameter, a type parameter, a field, a case, an associated
+type or constant, or a `let`. As the module inner attribute `#![allow(...)]` it
+waives the lint for the whole file. There is no `#[deny(...)]`.
+[Diagnostics](./spec-diagnostics.md) lists the lints.
 
 <!-- {"fixture":"spec_attributes_allow.wado"} -->
 
@@ -131,33 +125,6 @@ test {
     assert used() == 1;
 }
 ```
-
-#### The `dead_code` Lint
-
-The `dead_code` lint warns about a free function or a global that the program
-does not use. An item is used when one of these roots reaches it:
-
-- A `pub` or `export` item. An `internal` item is not a root, because nothing
-  outside the package can reach it.
-- A function whose name a world export names.
-- A method. A method is not itself reported, and a free function that only a
-  method calls counts as used.
-- A struct field default, an associated constant's value, and the default body
-  of an `interface` or `resource` operation.
-
-A trait's default body counts as reached only where a call lands on it, so a
-function that only an unreached default body calls is unused.
-
-An item the roots do not reach is reported one of two ways:
-
-- Reached from a `test` block: "only used by tests". Compiling for the test
-  world omits this warning, since there those tests are what the item is for.
-- Reached from nothing: "never used".
-
-An item in the standard library or in a `#![generated]` module is never
-reported.
-
-Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
 ### `#[param]` / `#[param(from_env = "...")]` / `#[param(name = "...")]`
 

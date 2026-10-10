@@ -2,8 +2,8 @@
 //! suffix writes. See `docs/wep-2026-10-01-numeric-literal-suffixes.md`.
 
 use crate::ast::{
-    AstVisitor, CastExpr, Expr, Function, Item, Literal, NumericSuffix, Type, UnaryOp, attrs_allow,
-    inner_attrs_allow, lint, spell_number, walk_expr, walk_function, walk_item,
+    AstVisitor, Attribute, CastExpr, Expr, Literal, NumericSuffix, Type, UnaryOp, attrs_allow,
+    inner_attrs_allow, lint, spell_number, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::liveness::is_user_authored;
@@ -48,22 +48,16 @@ struct LiteralCast {
     suffixed: String,
 }
 
-/// The casts outside the items that waive the lint.
+/// The casts outside the code that waives the lint.
 #[derive(Default)]
 struct LiteralCasts {
     found: Vec<LiteralCast>,
 }
 
 impl AstVisitor for LiteralCasts {
-    fn visit_item(&mut self, item: &Item) {
-        if !attrs_allow(item.attrs(), lint::LITERAL_CAST) {
-            walk_item(self, item);
-        }
-    }
-
-    fn visit_function(&mut self, func: &Function) {
-        if !attrs_allow(&func.attrs, lint::LITERAL_CAST) {
-            walk_function(self, func);
+    fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+        if !attrs_allow(attrs, lint::LITERAL_CAST) {
+            body(self);
         }
     }
 
