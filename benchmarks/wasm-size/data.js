@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791600388523,
+  "lastUpdate": 1791606186256,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65837,6 +65837,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f3f76a82d95588983b5439cf81c115d66fd1f5d9"
         },
         "date": 1791600387752,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8ccc675d65be1517f9f29b5818bed19df131ad28",
+          "message": "Merge pull request #2321 from wado-lang/todo/diagnostics-chapter\n\nfeat(lint): one Diagnostics chapter, and #[allow] that waives what its node encloses",
+          "timestamp": "2026-10-10T13:04:21+09:00",
+          "tree_id": "4398b18901eed63cfe9a642e8f78107701fd63c5",
+          "url": "https://github.com/wado-lang/wado/commit/8ccc675d65be1517f9f29b5818bed19df131ad28"
+        },
+        "date": 1791606185478,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
