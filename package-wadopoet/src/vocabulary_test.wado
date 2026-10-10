@@ -9,6 +9,11 @@ test "a keyword is reserved, contextual ones included" {
     assert is_reserved("Self");
 }
 
+test "the wildcard is no name" {
+    assert is_keyword("_");
+    assert !is_reserved("_x");
+}
+
 test "a keyword the parser also takes as a name is not reserved" {
     assert !is_reserved("extends");
     assert !is_reserved("type");

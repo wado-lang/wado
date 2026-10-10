@@ -72,13 +72,12 @@ fn unterminated_char_emits_charlit_with_content() {
 }
 
 #[test]
-fn multi_char_literal_recovers_as_single_charlit_too_long() {
-    // `'abc'` used to cascade: CharLit("a") + UnterminatedChar + Ident("bc")
-    // + a second UnterminatedChar on the lone closing `'`. Recovery now
-    // consumes up to the closing quote and emits exactly one diagnostic.
+fn multi_char_literal_lexes_as_one_charlit() {
+    // `'abc'` is one CharLit up to its closing quote, not CharLit("a") +
+    // Ident("bc") + a stray `'`. How many characters it holds is the
+    // unescaper's to report.
     let r = lex("let c = 'abc';");
-    assert_eq!(r.errors.len(), 1);
-    assert_matches!(r.errors[0].kind, LexErrorKind::CharLiteralTooLong);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
     let kinds: Vec<&TokenKind> = r.tokens.iter().map(|t| &t.kind).collect();
     // No stray Ident("bc") — the inner content stays inside the CharLit.
     assert!(
@@ -250,15 +249,15 @@ fn error_spans_are_correct() {
 
 #[test]
 fn byte_char_error_span_covers_the_b_prefix() {
-    // `b'ab'` is one literal, `b` included. A span that starts at the quote
+    // `b'ab` is one literal, `b` included. A span that starts at the quote
     // draws the squiggle inside the literal instead of under it.
-    let r = lex("let b = b'ab';");
+    let r = lex("let b = b'ab\n");
     assert_eq!(r.errors.len(), 1);
-    assert_matches!(r.errors[0].kind, LexErrorKind::CharLiteralTooLong);
+    assert_matches!(r.errors[0].kind, LexErrorKind::UnterminatedChar);
     assert_eq!(r.errors[0].span.start, 8);
-    assert_eq!(r.errors[0].span.end, 13);
+    assert_eq!(r.errors[0].span.end, 12);
     assert_eq!(r.errors[0].span.column, 9);
-    assert_eq!(r.errors[0].span.end_column, 14);
+    assert_eq!(r.errors[0].span.end_column, 13);
 }
 
 #[test]

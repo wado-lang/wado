@@ -11,7 +11,6 @@ use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
-use crate::escape::is_high_surrogate;
 use crate::primitive::PrimitiveType;
 use crate::token;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
@@ -262,9 +261,6 @@ pub enum LexErrorKind {
     UnterminatedTemplateString,
     /// Character literal lacking its closing `'`.
     UnterminatedChar,
-    /// Character literal with more than one character between the quotes
-    /// (e.g. `'abc'`).
-    CharLiteralTooLong,
     /// Empty character literal (`''`).
     EmptyCharLiteral,
     /// Block comment (`/* ... */`) lacking its closing `*/`.
@@ -301,9 +297,6 @@ impl std::fmt::Display for LexError {
             LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
             LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
             LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
-            LexErrorKind::CharLiteralTooLong => {
-                write!(f, "character literal must contain a single character")
-            }
             LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
             LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
             LexErrorKind::MissingHexDigits => write!(f, "expected hex digit after 0x"),
@@ -1281,16 +1274,14 @@ impl<'a> Lexer<'a> {
                         self.advance();
                     }
                 } else {
-                    let digits = self.pos;
                     self.skip_hex_digits(4);
-                    // A high surrogate and the `\u` after it are one escape:
-                    // together they denote one character.
-                    let high = u16::from_str_radix(&self.input[digits..self.pos], 16)
-                        .is_ok_and(is_high_surrogate);
-                    if high && self.input[self.pos..].starts_with("\\u") {
-                        self.advance();
-                        self.skip_escape();
-                    }
+                }
+            }
+            // A CRLF is one line break, which the unescaper reports.
+            Some('\r') => {
+                self.advance_literal_cr();
+                if self.peek_char() == Some('\n') {
+                    self.advance();
                 }
             }
             Some(_) => {
@@ -1339,7 +1330,8 @@ impl<'a> Lexer<'a> {
                     let escape_start = self.pos;
                     self.advance();
                     self.skip_escape();
-                    current_literal.push_str(&self.input[escape_start..self.pos]);
+                    current_literal
+                        .push_str(&normalize_line_breaks(&self.input[escape_start..self.pos]));
                 }
                 Some((_, '$')) => {
                     self.advance(); // consume `$`
@@ -1546,8 +1538,10 @@ impl<'a> Lexer<'a> {
 
     /// Scan a single-quoted literal (opening `'` current), returning the raw
     /// text between the quotes. Shared by char `'x'` and byte `b'x'` literals.
-    /// `open` is where the literal opens — the `b` of a byte literal, the
-    /// quote otherwise — and anchors every error span this recovers with.
+    /// How many characters the text denotes is the unescaper's to say, since
+    /// an escape may denote one character in several. `open` is where the
+    /// literal opens — the `b` of a byte literal, the quote otherwise — and
+    /// anchors every error span this recovers with.
     fn scan_char_raw(&mut self, open: Position) -> String {
         let Position {
             offset: start,
@@ -1558,66 +1552,48 @@ impl<'a> Lexer<'a> {
         self.advance(); // consume opening '
         let inner_start = self.pos;
 
-        match self.peek() {
-            None => {
-                // `'` at EOF: empty content, no closing quote.
-                self.errors.push(LexError {
-                    kind: LexErrorKind::UnterminatedChar,
-                    span: self.span_from(start, start_line, start_column),
-                });
-                return String::new();
-            }
-            Some((_, '\'')) => {
-                // `''` — empty char. Consume the closing quote so the lexer
-                // can continue past it cleanly.
-                self.advance();
-                self.errors.push(LexError {
-                    kind: LexErrorKind::EmptyCharLiteral,
-                    span: self.span_from(start, start_line, start_column),
-                });
-                return String::new();
-            }
-            Some((_, '\\')) => {
-                self.advance();
-                self.skip_escape();
-            }
-            Some((_, '\r')) => self.advance_literal_cr(),
-            Some(_) => {
-                self.advance();
-            }
-        }
-
         if self.peek_char() == Some('\'') {
-            let raw = self.input[inner_start..self.pos].to_string();
-            self.advance(); // consume closing '
-            return raw;
+            // `''` — empty char. Consume the closing quote so the lexer can
+            // continue past it cleanly.
+            self.advance();
+            self.errors.push(LexError {
+                kind: LexErrorKind::EmptyCharLiteral,
+                span: self.span_from(start, start_line, start_column),
+            });
+            return String::new();
         }
 
-        // Scan forward to the next `'`, newline, or EOF so the literal
-        // recovers as one CharLit + one diagnostic.
-        while let Some((_, ch)) = self.peek() {
-            if ch == '\'' || ch == '\n' {
-                break;
-            }
-            if ch == '\\' {
-                self.advance();
-                self.skip_escape();
-            } else {
-                self.advance();
+        // Up to the closing `'`. A line break ends an unterminated literal
+        // unless it is the literal's one character.
+        loop {
+            match self.peek() {
+                Some((_, '\'')) => {
+                    let raw = normalize_line_breaks(&self.input[inner_start..self.pos]);
+                    self.advance(); // consume closing '
+                    return raw;
+                }
+                Some((_, '\n' | '\r')) if self.pos > inner_start => break,
+                Some((_, '\\')) => {
+                    self.advance();
+                    self.skip_escape();
+                }
+                Some((_, '\r')) => {
+                    self.advance_literal_cr();
+                    if self.peek_char() == Some('\n') {
+                        self.advance();
+                    }
+                }
+                Some(_) => {
+                    self.advance();
+                }
+                None => break,
             }
         }
-        let raw = self.input[inner_start..self.pos].to_string();
-        let kind = if self.peek_char() == Some('\'') {
-            self.advance(); // consume closing '
-            LexErrorKind::CharLiteralTooLong
-        } else {
-            LexErrorKind::UnterminatedChar
-        };
         self.errors.push(LexError {
-            kind,
+            kind: LexErrorKind::UnterminatedChar,
             span: self.span_from(start, start_line, start_column),
         });
-        raw
+        normalize_line_breaks(&self.input[inner_start..self.pos])
     }
 }
 
@@ -1772,6 +1748,24 @@ mod tests {
         assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
         assert_eq!(r.comments[0].text, " doc");
         assert_eq!(r.comments[1].text, " a\nb ");
+    }
+
+    #[test]
+    fn char_literal_reads_crlf_as_lf() {
+        let tokens = tokens("'\r\n'");
+        assert_matches!(&tokens[0].kind, TokenKind::CharLit(raw) if raw == "\n");
+    }
+
+    #[test]
+    fn bare_cr_after_a_backslash_is_a_bare_cr() {
+        for source in ["\"a\\\rb\"", "`a\\\rb`", "b\"a\\\rb\""] {
+            let r = lex(source);
+            assert_matches!(
+                r.errors.as_slice(),
+                [LexError { kind: LexErrorKind::BareCarriageReturn, .. }],
+                "{source:?}"
+            );
+        }
     }
 
     #[test]

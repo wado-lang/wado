@@ -115,7 +115,9 @@ pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
     match (chars.next(), chars.next()) {
         (Some(c), None) => Ok(c),
         (None, _) => Err("empty char literal".to_string()),
-        (Some(_), Some(_)) => Err("char literal contains more than one character".to_string()),
+        (Some(_), Some(_)) => {
+            Err("character literal must contain a single character".to_string())
+        }
     }
 }
 
@@ -290,7 +292,7 @@ fn unescape_unicode<I: Iterator<Item = char>>(
     }
 }
 
-pub(crate) fn is_high_surrogate(code_unit: u16) -> bool {
+fn is_high_surrogate(code_unit: u16) -> bool {
     (0xD800..=0xDBFF).contains(&code_unit)
 }
 

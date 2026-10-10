@@ -6,6 +6,10 @@
 pub fn is_keyword<S: AsStrSlice>(name: S) -> bool {
     let name = name.as_str_slice();
     return match name.len() {
+        1 => match name {
+            "_" => true,
+            _ => false,
+        },
         2 => match name {
             "as" | "do" | "fn" | "if" | "in" => true,
             _ => false,

@@ -6346,7 +6346,7 @@ impl Parser {
 
         let mut effects = Vec::new();
         loop {
-            let (name, span) = self.consume_ident_with_span()?;
+            let (name, span) = self.consume_binder_with_span()?;
             effects.push(self.effect_name(name, span));
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;

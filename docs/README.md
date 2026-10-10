@@ -200,6 +200,7 @@
 - [Contract Checks](./wep-2026-10-06-contract-checks.md)
 - [A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)
 - [Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md)
+- [Lexical Rules Left Open](./wep-2026-10-10-lexical-rules.md)
 
 ## Standard Library
 
