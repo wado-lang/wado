@@ -333,8 +333,12 @@ fn suffix_means_cast(digits: &str, name: &str, radix: Option<Radix>) -> bool {
 
 /// Whether `name` spells a numeric type, which `as` gives a literal.
 fn names_numeric_type(name: &str) -> bool {
-    names_integer_type(name)
-        || PrimitiveType::from_name(name).is_some_and(|p| FloatFormat::of(p).is_some())
+    names_integer_type(name) || names_float_type(name)
+}
+
+/// Whether `name` spells a float type.
+pub(crate) fn names_float_type(name: &str) -> bool {
+    PrimitiveType::from_name(name).is_some_and(|p| FloatFormat::of(p).is_some())
 }
 
 /// Whether `name` spells an integer type, which a literal with a decimal point

@@ -26,7 +26,7 @@ use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
-use crate::lexer::{LexResult, lex_interpolation};
+use crate::lexer::{LexResult, defaults_to_float, lex_interpolation};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -6914,11 +6914,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
 fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrValue> {
     // Strip numeric underscores for parsing; keep them in the original repr for errors.
     let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
-    // Float if it contains '.' or 'e'/'E' (but not hex prefix).
-    let is_hex = cleaned.starts_with("0x") || cleaned.starts_with("0X");
-    let is_float =
-        !is_hex && (cleaned.contains('.') || cleaned.contains('e') || cleaned.contains('E'));
-    if is_float {
+    if defaults_to_float(repr) {
         let f: f64 = cleaned.parse().map_err(|_| ParseError {
             message: format!("invalid numeric attribute value: {repr}"),
             span,
