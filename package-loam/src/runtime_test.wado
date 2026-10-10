@@ -123,6 +123,18 @@ test "a row kernel over empty rows writes each row's fold of nothing" {
     assert sum.data == reduce(&x, [1], 0.0, |a, b| a + b).data;
     let mean = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_sum(Option::Some(0.0)), 1, true);
     assert mean.data.len() == 3 && mean.data[0].is_nan();
+    // A value per row, read after the fold, is each row's own.
+    let per_row = cpu.upload(&tensor::<[Row, Col]>([3, 1], [1.0, 2.0, 3.0]));
+    let shifted = cpu.rows::<[Row, Col], [Row, Col]>(
+        [
+            cpu.read(&x),
+            cpu.read(&per_row),
+        ],
+        &operand(0).row_sum(null).binary(BinaryOp::Add, &operand(1)),
+        1,
+        true,
+    );
+    assert shifted.data == [1.0, 2.0, 3.0] as List<f32>;
 }
 
 test "the CPU backend reads a condition as 1.0 and 0.0" {

@@ -349,7 +349,8 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
             Flattened | Restored => tally.spread += 1,
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
-        w.line(`${label(&node.lowering):<6} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
+        // As wide as `flattened`, the longest label.
+        w.line(`${label(&node.lowering):<9} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
         w.indent();
         for let t of &node.outputs {
             w.line(`${t.name}: ${tensor_text(t)}`);

@@ -1001,14 +1001,15 @@ impl Expr {
         return e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
     }
 
-    /// The one value a reducing row kernel writes for a row of no elements: a
-    /// fold of nothing is its start, 0.0 for a sum and negative infinity for
-    /// a maximum, and the steps after it read only folds and constants.
-    pub fn over_empty_row(&self) -> f32 {
+    /// The one value a reducing row kernel writes for a row of no elements,
+    /// `operands[k]` the value per row operand `k` holds there, or `None` for
+    /// an operand along the row. A fold of nothing is its start, 0.0 for a
+    /// sum and negative infinity for a maximum.
+    pub fn over_empty_row(&self, operands: &List<Option<f32>>) -> f32 {
         let mut values: List<Option<f32>> = [];
         for let step of self.steps {
             values.push(match step {
-                Operand(_) => null,
+                Operand(k) => operands[k],
                 Constant(c) => Option::Some(c),
                 Unary([op, a]) => match values[a] {
                     Some(v) => Option::Some(unary_over(op, &whole([v]))[0]),
@@ -1277,7 +1278,7 @@ pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, 
     let count = element_count(&extents);
     if count == 0 {
         let out = row_extents(&extents, row_axes, reduced);
-        return Tensor { data: over_no_elements(op, &out), extents: out };
+        return Tensor { data: over_no_elements(operands, op, &out), extents: out };
     }
     let full = op.over_rows(count, row, &repeated_over(operands, &extents));
     if !reduced {
@@ -1292,10 +1293,32 @@ pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, 
 
 /// What a row kernel over no elements writes to an output of `out`: nothing
 /// where `out` has no elements, and otherwise, its rows reduced, each row's
-/// fold of nothing.
-pub fn over_no_elements(op: &Expr, out: &List<i32>) -> List<f32> {
-    let count = element_count(out);
-    return if count == 0 { [] as List<f32> } else { List::<f32>::filled(count, op.over_empty_row()) };
+/// fold of nothing and the values per row `operands` hold there.
+fn over_no_elements<Axes>(operands: &List<Read<Axes>>, op: &Expr, out: &List<i32>) -> List<f32> {
+    let rows = element_count(out);
+    if rows == 0 {
+        return [];
+    }
+    // An operand with elements holds one per row; the rest run along it.
+    let mut per_row: List<Read<Axes>> = [];
+    let mut at: List<i32> = [];
+    for let o of *operands {
+        at.push(if element_count(&o.extents) == 0 { -1 } else { per_row.len() });
+        if element_count(&o.extents) > 0 {
+            per_row.push(o);
+        }
+    }
+    let runs = repeated_over(&per_row, out);
+    let mut data = List::<f32>::with_capacity(rows);
+    for let r of 0..<rows {
+        let values: List<Option<f32>> = at.into_iter().map(|k| if k < 0 {
+            null;
+        } else {
+            Option::Some(runs[k][r % runs[k].len()]);
+        }).collect();
+        data.push(op.over_empty_row(&values));
+    }
+    return data;
 }
 
 /// The extents `operands` broadcast to.

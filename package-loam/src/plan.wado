@@ -91,17 +91,10 @@ fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, T
             || only_reader(&flatten.outputs[0]) != Option::Some(at) {
             continue;
         }
-        let x = &checked.shapes[flatten.inputs[0]];
-        let flat = &checked.shapes[flatten.outputs[0]];
-        let y = &checked.shapes[restore.outputs[0]];
-        let rank = x.rank();
-        // The product reads `x` as it reads `flat` where `flat` keeps `x`'s
-        // last axis whole, its leading axes merged into one.
-        if rank < 3
-            || flat.rank() != 2
-            || !flat.axes[1].extent.agrees(&x.axes[rank - 1].extent)
-            || y.rank() != rank
-            || !first_axes_agree(x, y, rank - 1) {
+        let shape = |t: &String| checked.shapes[*t];
+        if !spreads_over(&shape(&flatten.inputs[0]), &shape(&flatten.outputs[0]), &shape(&node.outputs[0]), &shape(
+            &restore.outputs[0],
+        )) {
             continue;
         }
         lowered[first] = Lowering::Flattened;
@@ -109,6 +102,26 @@ fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, T
         spreads[node.outputs[0]] = Spread { operand: flatten.inputs[0], restored: restore.outputs[0] };
     }
     return [lowered, spreads];
+}
+
+/// Whether a product over `x`'s leading axes computes what a `Gemm` from
+/// `flat` to `product` restored to `y` does: `flat` is `x` with its leading
+/// axes merged into one and its last kept, and `y` is `product` with that one
+/// split back into `x`'s, every kept axis the same by name and extent.
+fn spreads_over(x: &Shape, flat: &Shape, product: &Shape, y: &Shape) -> bool {
+    let rank = x.rank();
+    return rank >= 3
+        && flat.rank() == 2
+        && product.rank() == 2
+        && y.rank() == rank
+        && same_axis(flat, 1, x, rank - 1)
+        && same_axis(y, rank - 1, product, 1)
+        && first_axes_agree(x, y, rank - 1);
+}
+
+/// Whether `a`'s axis `i` is `b`'s axis `j`, by name and extent.
+fn same_axis(a: &Shape, i: i32, b: &Shape, j: i32) -> bool {
+    return a.axes[i].name == b.axes[j].name && a.axes[i].extent.agrees(&b.axes[j].extent);
 }
 
 /// Records that the node at `at` reads `tensor`.
@@ -582,7 +595,7 @@ fn same_space(a: &Shape, b: &Shape) -> bool {
 /// Whether `a`'s first `n` axes are `b`'s, by name and extent.
 fn first_axes_agree(a: &Shape, b: &Shape, n: i32) -> bool {
     for let i of 0..<n {
-        if a.axes[i].name != b.axes[i].name || !a.axes[i].extent.agrees(&b.axes[i].extent) {
+        if !same_axis(a, i, b, i) {
             return false;
         }
     }

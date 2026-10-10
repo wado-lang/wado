@@ -21,7 +21,6 @@ use {
     broadcast_extents,
     element_count,
     operand,
-    over_no_elements,
     row_extents,
 } from "./tensor.wado";
 use { TreeMap } from "core:collections";
@@ -117,6 +116,9 @@ pub struct WebGpuBackend {
     kept: List<Slot>,
     /// The buffers of the current pass, which `begin` releases.
     pass: List<Slot>,
+    /// The slot of `pass[0]`. Each pass numbers its buffers after the last
+    /// one's, so a slot never names two buffers.
+    pass_start: i32,
     /// The commands recorded and not yet submitted: none, or one encoder.
     recording: List<Recording>,
     bound: List<Bound>,
@@ -140,6 +142,10 @@ global MAX_GROUPS: i32 = 65535;
 
 /// The bytes one write to the device copies at most.
 global WRITE_BYTES: i32 = 16_777_216;
+
+/// The slot of a buffer not allocated yet, which `binds` reads a view of
+/// before the buffer exists. No buffer is ever at it.
+global PENDING: i32 = i32::MAX;
 
 /// The side of a matrix product's tile, which `product_shader` spells as `16u`.
 global TILE: i32 = 16;
@@ -190,6 +196,7 @@ impl WebGpuBackend {
             compiled: TreeMap::new(),
             kept: [],
             pass: [],
+            pass_start: 0,
             recording: [],
             bound: [],
             max_operands: saturated(buffers as u64) - 2,
@@ -226,7 +233,8 @@ impl WebGpuBackend {
         if slot < 0 {
             return &self.kept[-slot - 1].buffer;
         }
-        return &self.pass[slot].buffer;
+        assert slot >= self.pass_start, "loam: a tensor of an earlier pass is read after `begin`";
+        return &self.pass[slot - self.pass_start].buffer;
     }
 
     /// A new buffer of `count` f32 elements, and its slot.
@@ -242,7 +250,7 @@ impl WebGpuBackend {
             return -self.kept.len();
         }
         self.pass.push(Slot { buffer });
-        return self.pass.len() - 1;
+        return self.pass_start + self.pass.len() - 1;
     }
 
     /// A new buffer of `count` 32-bit words, `word(i)` the `i`th, and its
@@ -525,17 +533,15 @@ impl WebGpuBackend {
         let rank = extents.len();
         let row = element_count(&extents[rank - row_axes..<rank].to_list());
         let rows = element_count(&extents[0..<rank - row_axes].to_list());
-        if rows * row > self.max_binding {
+        // No elements leaves nothing to dispatch: `Cpu` writes what a row of
+        // none reduces to, reading only the values per row.
+        if rows * row == 0 || rows * row > self.max_binding {
             return null;
         }
         let Some(bound) = self.bindable(operands) else {
             return null;
         };
         let out_extents = row_extents(&extents, row_axes, reduced);
-        if rows * row == 0 {
-            let empty = Tensor::<f32, ()> { data: over_no_elements(op, &out_extents), extents: out_extents };
-            return Option::Some(self.placed(&empty, false));
-        }
         let out = contiguous(self.allocated(element_count(&out_extents), false), 0, out_extents);
         let x = i32::min(rows, MAX_GROUPS);
         let y = covering(rows, x);
@@ -551,50 +557,21 @@ impl WebGpuBackend {
         return Option::Some(out);
     }
 
-    /// The spans `operands` read and the binding each reads, one binding per
-    /// buffer, or all in one pack where they are more buffers than a shader
-    /// binds. `None` where a span outgrows a binding.
+    /// The spans `operands` read and the binding each reads, or all in one
+    /// pack where they are more spans than a shader binds. `None` where even
+    /// the pack outgrows a binding.
     fn bindable(
         &mut self,
         operands: &List<DeviceTensor>,
     ) -> Option<Bindings> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let mut slots: List<i32> = [];
-        let mut bindings: List<i32> = [];
-        for let o of *operands {
-            let at = match slots.position(|s| s == o.slot) {
-                Some(at) => at,
-                None => {
-                    slots.push(o.slot);
-                    slots.len() - 1;
-                },
-            };
-            bindings.push(at);
+        if let Some(bound) = self.spans_for(operands) && bound.spans.len() <= self.max_operands {
+            return Option::Some(bound);
         }
-        if slots.len() <= self.max_operands {
-            let mut spans: List<Span> = [];
-            for let b of 0..<slots.len() {
-                let mut sharing: List<DeviceTensor> = [];
-                for let [i, o] of operands.into_iter().enumerate() {
-                    if bindings[i] == b {
-                        sharing.push(*o);
-                    }
-                }
-                spans.push(self.span_of(&sharing)?);
-            }
-            let mut views: List<DeviceTensor> = [];
-            for let [i, o] of operands.into_iter().enumerate() {
-                views.push(DeviceTensor { ..*o, offset: o.offset - spans[bindings[i]].first });
-            }
-            return Option::Some(Bindings { spans, bindings, views });
-        }
-        // Each operand is copied to its own place in one buffer, in order.
-        let mut total = 0;
-        for let o of *operands {
-            total += element_count(&o.extents);
-        }
+        let total = packed_count(operands);
         if total > self.max_binding {
             return null;
         }
+        // Each operand is copied to its own place in one buffer, in order.
         let pack = self.allocated(total, false);
         let mut views: List<DeviceTensor> = [];
         let mut at = 0;
@@ -609,6 +586,50 @@ impl WebGpuBackend {
             bindings: List::<i32>::filled(operands.len(), 0),
             views,
         });
+    }
+
+    /// Whether `bindable` binds `operands`, asked before a kernel that runs in
+    /// several dispatches records the first.
+    fn binds(&self, operands: &List<DeviceTensor>) -> bool {
+        return self.spans_for(operands) matches { Some(b) && b.spans.len() <= self.max_operands }
+            || packed_count(operands) <= self.max_binding;
+    }
+
+    /// One span for each run of `operands` in one buffer that one binding
+    /// holds, so a buffer two distant views read is bound twice, and each view
+    /// rebased to its span. `None` where one view alone outgrows a binding.
+    fn spans_for(&self, operands: &List<DeviceTensor>) -> Option<Bindings> {
+        let mut spans: List<Span> = [];
+        let mut members: List<List<DeviceTensor>> = [];
+        let mut bindings: List<i32> = [];
+        for let o of *operands {
+            let mut at = -1;
+            for let b of 0..<spans.len() {
+                if spans[b].slot != o.slot {
+                    continue;
+                }
+                let mut joined = members[b];
+                joined.push(o);
+                if let Some(wider) = self.span_of(&joined) {
+                    spans[b] = wider;
+                    members[b] = joined;
+                    at = b;
+                    break;
+                }
+            }
+            if at < 0 {
+                let alone = [o] as List<DeviceTensor>;
+                spans.push(self.span_of(&alone)?);
+                members.push(alone);
+                at = spans.len() - 1;
+            }
+            bindings.push(at);
+        }
+        let mut views: List<DeviceTensor> = [];
+        for let [i, o] of operands.into_iter().enumerate() {
+            views.push(DeviceTensor { ..*o, offset: o.offset - spans[bindings[i]].first });
+        }
+        return Option::Some(Bindings { spans, bindings, views });
     }
 
     /// The span one binding of `views`' buffer takes to reach every element
@@ -754,6 +775,30 @@ impl WebGpuBackend {
         matrices.push(rows);
         matrices.push(cols);
         let br = batch.len();
+        // What the chunk from `start` reads: the two slices, `then`'s operands
+        // where it is the last, and the sums the chunk before left.
+        let chunk_operands = |start: i32, partial: Option<DeviceTensor>| -> List<DeviceTensor> {
+            let length = i32::min(chunk, inner - start);
+            let mut operands = [
+                sliced(&lhs, ra - 1, start, length),
+                sliced(&rhs, rb - 2, start, length),
+            ] as List<DeviceTensor>;
+            if start + length >= inner {
+                operands.extend(&epilogue);
+            }
+            if let Some(p) = partial {
+                operands.push(p);
+            }
+            return operands;
+        };
+        // Every chunk binds before the first is recorded, so none is wasted.
+        // The middle chunks bind as the first does, plus the partial sums.
+        let pending = Option::Some(contiguous(PENDING, 0, matrices));
+        let last_start = (covering(inner, i32::max(chunk, 1)) - 1) * chunk;
+        if !self.binds(&chunk_operands(0, if last_start > 0 { pending } else { null }))
+            || !self.binds(&chunk_operands(last_start, if last_start > 0 { pending } else { null })) {
+            return self.product_on_cpu(a, b, then);
+        }
         // Each chunk of the inner axis continues the sums the one before left,
         // tile by tile as one dispatch would add them, and the last applies
         // `then`.
@@ -762,18 +807,8 @@ impl WebGpuBackend {
         loop {
             let length = i32::min(chunk, inner - start);
             let last = start + length >= inner;
-            let mut operands = [
-                sliced(&lhs, ra - 1, start, length),
-                sliced(&rhs, rb - 2, start, length),
-            ] as List<DeviceTensor>;
-            if last {
-                operands.extend(&epilogue);
-            }
-            if let Some(p) = partial {
-                operands.push(p);
-            }
-            let Some(bound) = self.bindable(&operands) else {
-                return self.product_on_cpu(a, b, then);
+            let Some(bound) = self.bindable(&chunk_operands(start, partial)) else {
+                unreachable();
             };
             let out = contiguous(self.allocated(count * rows * cols, false), 0, matrices);
             let mut params: List<u32> = [rows as u32, length as u32, cols as u32];
@@ -859,7 +894,7 @@ impl WebGpuBackend {
         data: &DeviceTensor,
         indices: &Tensor<i64, Ix>,
         axis: i32,
-    ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    ) -> Option<DeviceTensor> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let along = data.extents[axis];
         let mut words = List::<u32>::with_capacity(indices.data.len());
         for let i of indices.data {
@@ -867,16 +902,22 @@ impl WebGpuBackend {
             assert 0 <= at < along as i64, "loam: a gather index is past its axis";
             words.push(at as u32);
         }
+        // The output, its index axes as one, row by row of `words`.
+        let mut flat = data.extents;
+        flat[axis] = words.len();
+        // Halving the indices ends at one row, so the gather runs on the
+        // device exactly where one row of the data and of the output binds.
+        let row_binds = |view: DeviceTensor| self.span_of(&([sliced(&view, axis, 0, 1)] as List<DeviceTensor>)) matches { Some(_) };
+        if words.len() > self.max_binding || !row_binds(*data) || !row_binds(contiguous(PENDING, 0, flat)) {
+            return null;
+        }
         let index_slot = self.written(words.len(), |i| words[i], false);
+        let out = contiguous(self.allocated(element_count(&flat), false), 0, flat);
+        self.gathered_part(data, &words, index_slot, axis, &out, 0, words.len());
         let mut extents = data.extents[0..<axis].to_list();
         extents.extend(&indices.extents);
         extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
-        // The output, its index axes as one, row by row of `words`.
-        let mut flat = data.extents;
-        flat[axis] = indices.data.len();
-        let out = contiguous(self.allocated(element_count(&flat), false), 0, flat);
-        self.gathered_part(data, &words, index_slot, axis, &out, 0, indices.data.len());
-        return contiguous(out.slot, 0, extents);
+        return Option::Some(contiguous(out.slot, 0, extents));
     }
 
     /// Writes `out`'s rows `lo..<hi` along `axis`, the data's rows `words`
@@ -919,7 +960,8 @@ impl WebGpuBackend {
             self.dispatch(&gather_shader(part.extents.len(), axis), [source, indices, target], params, [x, y, 1]);
             return;
         }
-        assert hi - lo > 1, "loam: one gathered row outgrows a binding";
+        // `gathered` checked that one row binds.
+        assert hi - lo > 1;
         let mid = lo + (hi - lo) / 2;
         self.gathered_part(data, words, index_slot, axis, out, lo, mid);
         self.gathered_part(data, words, index_slot, axis, out, mid, hi);
@@ -956,6 +998,7 @@ impl Backend for WebGpuBackend {
     /// tensor of that pass is no longer one to read.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
+        self.pass_start += self.pass.len();
         while let Some(_) = self.pass.pop() {
         }
     }
@@ -1090,11 +1133,13 @@ impl Backend for WebGpuBackend {
         data: &Placed<E, [Row, ..Rest]>,
         indices: &Placed<i64, [..Ix]>,
     ) -> Placed<E, [..Ix, ..Rest]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::is_f32() {
-            return Placed::Host(self.cpu.gather_rows::<E, Row, [..Rest], [..Ix]>(&self.host(data), &self.host(indices)));
+        if E::is_f32() {
+            let view = self.device_view(data);
+            if let Some(out) = self.gathered(&view, &self.host(indices), 0) {
+                return Placed::Device(out);
+            }
         }
-        let view = self.device_view(data);
-        return Placed::Device(self.gathered(&view, &self.host(indices), 0));
+        return Placed::Host(self.cpu.gather_rows::<E, Row, [..Rest], [..Ix]>(&self.host(data), &self.host(indices)));
     }
 
     fn gather<E: Element, ..Pre, Along, ..Post, ..Ix>(
@@ -1103,13 +1148,15 @@ impl Backend for WebGpuBackend {
         indices: &Placed<i64, [..Ix]>,
         axis: i32,
     ) -> Placed<E, [..Pre, ..Ix, ..Post]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if !E::is_f32() {
-            return Placed::Host(
-                self.cpu.gather::<E, [..Pre], Along, [..Post], [..Ix]>(&self.host(data), &self.host(indices), axis),
-            );
+        if E::is_f32() {
+            let view = self.device_view(data);
+            if let Some(out) = self.gathered(&view, &self.host(indices), axis) {
+                return Placed::Device(out);
+            }
         }
-        let view = self.device_view(data);
-        return Placed::Device(self.gathered(&view, &self.host(indices), axis));
+        return Placed::Host(
+            self.cpu.gather::<E, [..Pre], Along, [..Post], [..Ix]>(&self.host(data), &self.host(indices), axis),
+        );
     }
 
     fn slice_axis<E: Element, ..Pre, In, Out, ..Post>(
@@ -1379,6 +1426,15 @@ struct Span {
     slot: i32,
     first: i32,
     count: i32,
+}
+
+/// The elements a pack of `operands` holds, each copied whole.
+fn packed_count(operands: &List<DeviceTensor>) -> i32 {
+    let mut total = 0;
+    for let o of *operands {
+        total += element_count(&o.extents);
+    }
+    return total;
 }
 
 /// The whole of `t`, a buffer just allocated for it.

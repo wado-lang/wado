@@ -24,7 +24,7 @@ use {
 } from "wasi:webgpu";
 use { Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
 use { deviation, noise } from "../example/webgpu/compare.wado";
-use { Pick, Weights, forward } from "./webgpu.onnxtext"
+use { Pick, Picked, Weights, forward } from "./webgpu.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -131,6 +131,14 @@ use { Pick, Weights, forward } from "./webgpu.onnxtext"
                         pattern: "N?",
                         axes: ["Vacant", "Three"],
                     },
+                    {
+                        pattern: "Iy",
+                        axes: ["Picked"],
+                    },
+                    {
+                        pattern: "GA",
+                        axes: ["Deep", "Picked"],
+                    },
                 ],
             },
         },
@@ -178,7 +186,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     };
     let dx = tensor([2, 300], 18);
     let ne = tensor([0, 3], 19);
-    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &ix, &dx, &ne, &w.prepare(&mut Cpu {}));
+    let iy: Tensor<i64, [Picked]> = {
+        data: [2, 0],
+        extents: [2],
+    };
+    let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &ix, &dx, &ne, &iy, &w.prepare(&mut Cpu {}));
     for let limit of [null, Option::Some(SPLIT)] as List<Option<i32>> {
         let Some(mut gpu) = WebGpuBackend::new() else {
             println("no WebGPU adapter");
@@ -189,7 +201,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
             gpu.limit_binding(elements);
             pass = "split ";
         }
-        let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &ix, &dx, &ne, &w.prepare(&mut gpu));
+        let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &ix, &dx, &ne, &iy, &w.prepare(&mut gpu));
         println(`${pass}Z ${on_gpu.Z.extents:?} ${deviation(&on_gpu.Z.data, &on_cpu.Z.data)}`);
         println(`${pass}S ${on_gpu.S.extents:?} ${deviation(&on_gpu.S.data, &on_cpu.S.data)}`);
         println(`${pass}R ${on_gpu.R.extents:?} ${deviation(&on_gpu.R.data, &on_cpu.R.data)}`);
@@ -202,5 +214,6 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`${pass}F ${on_gpu.F.extents:?} ${deviation(&on_gpu.F.data, &on_cpu.F.data)}`);
         println(`${pass}TW ${on_gpu.TW.extents:?} ${deviation(&on_gpu.TW.data, &on_cpu.TW.data)}`);
         println(`${pass}NS ${on_gpu.NS.extents:?} ${deviation(&on_gpu.NS.data, &on_cpu.NS.data)}`);
+        println(`${pass}GA ${on_gpu.GA.extents:?} ${deviation(&on_gpu.GA.data, &on_cpu.GA.data)}`);
     }
 }
