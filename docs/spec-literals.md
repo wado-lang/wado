@@ -378,9 +378,6 @@ let wide = 1_i64 << 40;      // an i64: `1 << 40` alone is an i32
 assert wide == 1_099_511_627_776;
 ```
 
-A cast of an unsuffixed literal that a suffix could write instead warns
-([`literal_cast`](./spec-diagnostics.md#the-literal_cast-lint)).
-
 ## String Literals
 
 A string literal is written in double quotes and has the type `String`:

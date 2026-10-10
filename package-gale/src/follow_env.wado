@@ -547,34 +547,34 @@ struct Strings {
 }
 
 fn strs_has(s: &Strings, n: i32) -> bool {
-    return s.lens & 1_u32 << n as u32 != 0_u32;
+    return s.lens & 1 as u32 << n as u32 != 0 as u32;
 }
 
 fn strs_none() -> Strings {
-    return Strings { lens: 0_u32, at: [] };
+    return Strings { lens: 0 as u32, at: [] };
 }
 
 /// Only the empty string.
 fn strs_empty() -> Strings {
-    return Strings { lens: 1_u32, at: [] };
+    return Strings { lens: 1 as u32, at: [] };
 }
 
 fn strs_token(ids: &List<i32>) -> Strings {
     assert !ids.is_empty(), "a token reference names a kind";
-    let mut s = Strings { lens: 2_u32, at: [] };
+    let mut s = Strings { lens: 2 as u32, at: [] };
     for let id of ids {
-        let _ = or_word(&mut s.at, *id / 64 * SLOTS + slot(1, 0), 1_u64 << (*id % 64) as u64);
+        let _ = or_word(&mut s.at, *id / 64 * SLOTS + slot(1, 0), 1 as u64 << (*id % 64) as u64);
     }
     return s;
 }
 
 /// ORs `bits` into word `k` of `at`, answering whether it grew.
 fn or_word(at: &mut List<u64>, k: i32, bits: u64) -> bool {
-    if bits == 0_u64 {
+    if bits == 0 as u64 {
         return false;
     }
     while at.len() <= k {
-        at.push(0_u64);
+        at.push(0 as u64);
     }
     let merged = at[k] | bits;
     if merged == at[k] {
@@ -610,10 +610,10 @@ fn strs_union_into(dst: &mut Strings, src: &Strings) -> bool {
 
 /// Each string of `a` followed by each of `b`, cut at `INPUT_END_MAX_LEN`.
 fn strs_concat(a: &Strings, b: &Strings) -> Strings {
-    if a.lens == 1_u32 {
+    if a.lens == 1 as u32 {
         return *b;
     }
-    if b.lens == 1_u32 {
+    if b.lens == 1 as u32 {
         return *a;
     }
     let mut s = strs_none();
@@ -622,7 +622,7 @@ fn strs_concat(a: &Strings, b: &Strings) -> Strings {
             if !strs_has(a, i) || !strs_has(b, n - i) {
                 continue;
             }
-            s.lens |= 1_u32 << n as u32;
+            s.lens |= 1 as u32 << n as u32;
             for let d of 0..<i {
                 or_slot(&mut s.at, slot(n, d), &a.at, slot(i, d));
             }

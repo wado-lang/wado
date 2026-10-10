@@ -601,8 +601,8 @@ fn inflate_table(
         let here = code_pack(here_op, here_bits, here_val);
 
         // replicate for those indices with low len bits equal to huff
-        let incr_rep = 1_u32 << (len - drop_val) as u32;
-        let mut fill = 1_u32 << curr as u32;
+        let incr_rep = 1 as u32 << (len - drop_val) as u32;
+        let mut fill = 1 as u32 << curr as u32;
         let min_save = fill as i32;
         loop {
             fill -= incr_rep;
@@ -614,7 +614,7 @@ fn inflate_table(
         }
 
         // backwards increment the len-bit code huff
-        let mut incr = 1_u32 << (len - 1) as u32;
+        let mut incr = 1 as u32 << (len - 1) as u32;
         while huff & incr != 0 {
             incr >>= 1;
         }
@@ -815,7 +815,7 @@ fn read_u32_le(input: &ByteList, pos: i32) -> u64 {
 }
 
 fn low_bits(hold: u64, n: i32) -> i32 {
-    return (hold & (1_u64 << n as u64) - 1) as i32;
+    return (hold & (1 as u64 << n as u64) - 1) as i32;
 }
 
 // The entry for the code at the bottom of `hold`, followed into its sub-table
@@ -938,7 +938,7 @@ fn inflate_fast(
     let unread = bits >> 3;
     state.next = inp - unread;
     state.bits = bits - (unread << 3);
-    state.hold = hold & (1_u64 << state.bits as u64) - 1;
+    state.hold = hold & (1 as u64 << state.bits as u64) - 1;
     return Result::Ok(block_ended);
 }
 
@@ -1268,7 +1268,7 @@ internal struct BitWriter {
 
 impl BitWriter {
     internal fn new() -> BitWriter {
-        return BitWriter { output: [], buf: 0_u64, bits: 0 };
+        return BitWriter { output: [], buf: 0 as u64, bits: 0 };
     }
 
     internal fn write_bits(&mut self, value: u32, count: i32) {
@@ -1296,7 +1296,7 @@ impl BitWriter {
         }
         if self.bits > 0 {
             self.output.push((self.buf & 0xFF) as u8);
-            self.buf = 0_u64;
+            self.buf = 0 as u64;
             self.bits = 0;
         }
     }
@@ -2291,8 +2291,8 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
         let hash_bytes = 32768 * 4;
         let head_ptr = builtin::realloc(0, 0, 4, hash_bytes);
         let prev_ptr = builtin::realloc(0, 0, 4, hash_bytes);
-        builtin::memory_fill(head_ptr, 0xFF_u8, hash_bytes);
-        builtin::memory_fill(prev_ptr, 0xFF_u8, hash_bytes);
+        builtin::memory_fill(head_ptr, 0xFF as u8, hash_bytes);
+        builtin::memory_fill(prev_ptr, 0xFF as u8, hash_bytes);
         // Mirror input into linear memory for the 16-byte SIMD match compares;
         // the 16-byte pad keeps the trailing v128.load in bounds.
         let scratch_size = input_len + 16;
@@ -2301,7 +2301,7 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
             builtin::i32_store8(scratch + i, input[i]);
         }
         for let mut i = 0; i < 16; i += 1 {
-            builtin::i32_store8(scratch + input_len + i, 0_u8);
+            builtin::i32_store8(scratch + input_len + i, 0 as u8);
         }
 
         if config.use_lazy {

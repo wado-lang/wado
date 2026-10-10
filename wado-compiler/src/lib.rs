@@ -37,7 +37,6 @@ pub mod intern;
 pub mod kiln;
 pub mod lexer;
 pub mod link;
-pub mod literal_cast;
 pub mod loader;
 pub mod logger;
 pub mod lower;
@@ -135,7 +134,6 @@ pub use effect_check::{
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
-use literal_cast::literal_cast_diagnostics;
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
@@ -547,7 +545,6 @@ pub fn lint_diagnostics(
 ) -> Vec<Diagnostic> {
     let mut lints = shadowing_diagnostics(sem);
     lints.extend(undecided_effect_diagnostics(sem));
-    lints.extend(literal_cast_diagnostics(sem));
     lints.extend(self_comparison_diagnostics(sem));
     lints.extend(constant_arithmetic_diagnostics(sem));
     if unused {

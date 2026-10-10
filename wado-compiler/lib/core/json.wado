@@ -147,11 +147,11 @@ fn json_plain_quad(quad: u32) -> bool {
 
 test "json_plain_quad agrees with json_plain_byte on every adjacent pair" {
     let filler: u32 = 0x61616161;
-    for let pair_at of 0_u32..<3 {
+    for let pair_at of 0 as u32..<3 {
         let shift = pair_at * 8;
-        for let lo of 0_u32..<256 {
-            for let hi of 0_u32..<256 {
-                let quad = filler & ~(0xFFFF_u32 << shift) | lo << shift | hi << shift + 8;
+        for let lo of 0 as u32..<256 {
+            for let hi of 0 as u32..<256 {
+                let quad = filler & ~(0xFFFF as u32 << shift) | lo << shift | hi << shift + 8;
                 let expected = json_plain_byte(lo as u8) && json_plain_byte(hi as u8);
                 assert json_plain_quad(quad) == expected;
             }
@@ -1077,7 +1077,7 @@ fn scanned_to_bits(n: &ScannedNumber, input: &ByteSlice, format: &BinaryFormat) 
 /// only caller, and the `b > b' '` it tests first is what bounds `b` here.
 fn is_json_ws(b: i32) -> bool {
     assert b < 64;
-    let ws_set = 1_u64 << b' ' | 1_u64 << b'\t' | 1_u64 << b'\n' | 1_u64 << b'\r';
+    let ws_set = 1 as u64 << b' ' | 1 as u64 << b'\t' | 1 as u64 << b'\n' | 1 as u64 << b'\r';
     return ws_set >> b as u64 & 1 != 0;
 }
 

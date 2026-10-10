@@ -179,6 +179,15 @@ fn exact(op: BinaryOp, left: Value, right: Value) -> Option<Value> {
     Some(Value::from_i128(signed))
 }
 
+/// Whether `expr` is a number literal, negated or not.
+fn is_literal(expr: &Expr) -> bool {
+    match expr {
+        Expr::Literal(literal) => matches!(literal.value, Literal::Number(..)),
+        Expr::Unary(unary) => unary.op == UnaryOp::Neg && is_literal(&unary.expr),
+        _ => false,
+    }
+}
+
 /// `left op right` wrapped to `ty`, by two's complement on the low bits.
 fn wrapping(op: BinaryOp, left: Value, right: Value, ty: IntType) -> Value {
     let (l, r) = (left.bits(), right.bits());
@@ -222,7 +231,7 @@ impl ConstantArithmetic<'_> {
                 if let Expr::Literal(literal) = &unary.expr
                     && let Literal::Number(repr, _) = &literal.value
                 {
-                    // `-128_i8` is one literal, never `-(128_i8)`.
+                    // `-128 as i8` casts one literal, never `-(128)`.
                     let ty = self.int_type(expr)?;
                     let value = Value::from_i128(parse_i128_literal(&format!("-{repr}")).ok()?);
                     return ty.holds(value).then_some(value);
@@ -237,6 +246,9 @@ impl ConstantArithmetic<'_> {
                 None
             }
             Expr::Binary(binary) => self.binary(expr, binary),
+            // `lit as T` types the literal, so it is the constant `lit` of type
+            // `T`; a cast of any other operand converts a value and is opaque.
+            Expr::Cast(cast) if is_literal(&cast.expr) => self.value(&cast.expr),
             _ => {
                 walk_expr(self, expr);
                 None

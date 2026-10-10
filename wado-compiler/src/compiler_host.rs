@@ -187,8 +187,6 @@ pub enum Code {
     ShadowedName,
     /// A trait head says nothing about the effects its impls may declare.
     UndecidedEffects,
-    /// A cast types a numeric literal that a suffix could type: `255 as u8`.
-    LiteralCast,
     /// A comparison of an expression with itself, which has one answer: `x == x`.
     SelfComparison,
     /// Integer literals alone overflow their type, `200_u8 + 100_u8`, or a
@@ -320,7 +318,6 @@ impl std::fmt::Display for Code {
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
-            Code::LiteralCast => "LITERAL_CAST",
             Code::SelfComparison => "SELF_COMPARISON",
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",

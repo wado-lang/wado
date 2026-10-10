@@ -51,9 +51,9 @@ fn is_minus_one<T>(x: T) -> i32 {
 }
 
 test "a negative literal matches each signed width" {
-    assert is_minus_one(builtin::black_box(-1_i8)) == 1;
-    assert is_minus_one(builtin::black_box(-1_i64)) == 1;
-    assert is_minus_one(builtin::black_box(1_i32)) == 0;
+    assert is_minus_one(builtin::black_box(-1 as i8)) == 1;
+    assert is_minus_one(builtin::black_box(-1 as i64)) == 1;
+    assert is_minus_one(builtin::black_box(1 as i32)) == 0;
 }
 ```
 

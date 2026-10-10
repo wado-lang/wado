@@ -1670,8 +1670,6 @@ pub mod lint {
     pub const DEAD_CODE: &str = "dead_code";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
-    /// A cast that types a literal, which a suffix writes: `255 as u8`.
-    pub const LITERAL_CAST: &str = "literal_cast";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
     /// Integer literals alone overflowing their type, `200_u8 + 100_u8`, or a

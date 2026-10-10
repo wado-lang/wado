@@ -1,39 +1,45 @@
 // `arithmetic_overflow` warns where integer literals alone overflow their type,
-// or a literal shift amount is not below the bit width. The program still
-// compiles, and the value wraps as it would at run time.
+// or a literal shift amount is not below the bit width. A literal cast with
+// `as` is such a literal. The program still compiles, and the value wraps as it
+// would at run time.
 
 test "wraps" {
-    assert 200_u8 + 100_u8 == 44;
-    assert 0_u32 - 1_u32 == 4294967295;
+    assert 200 as u8 + 100 as u8 == 44;
+    assert 0 as u32 - 1 == 4294967295;
     assert 2147483647 * 2 == -2;
-    assert -(-128_i8) == -128;
+    assert -(-128 as i8) == -128;
     assert 1 << 33 == 2;
-    let x = builtin::black_box(1_u8);
+    let x = builtin::black_box(1 as u8);
     assert x << 9 == 2;
 }
 
 test "in range stays quiet" {
-    assert 100_u8 + 100_u8 + 55_u8 == 255;
-    assert -128_i8 + 0_i8 == -128;
+    assert 100 as u8 + 100 as u8 + 55 as u8 == 255;
+    assert -128 as i8 + 0 as i8 == -128;
     assert 1 << 31 == -2147483648;
-    assert 340282366920938463463374607431768211455_u128 - 1_u128 == 340282366920938463463374607431768211454_u128;
+    assert 340282366920938463463374607431768211455 as u128 - 1 as u128 == 340282366920938463463374607431768211454 as u128;
+}
+
+test "a cast of a value is not a literal" {
+    let wide = builtin::black_box(300);
+    assert wide as u8 + 255 as u8 == 43;
 }
 
 #[allow(arithmetic_overflow)]
 test "allowed" {
-    assert 255_u8 + 1_u8 == 0;
+    assert 255 as u8 + 1 as u8 == 0;
 }
 
 __DATA__
 {
     "test": {},
     "warnings_contains": [
-        "`200_u8 + 100_u8` overflows `u8`, so it wraps to 44",
-        "`0_u32 - 1_u32` overflows `u32`, so it wraps to 4294967295",
+        "`200 as u8 + 100 as u8` overflows `u8`, so it wraps to 44",
+        "`0 as u32 - 1` overflows `u32`, so it wraps to 4294967295",
         "`2147483647 * 2` overflows `i32`, so it wraps to -2",
-        "`- -128_i8` overflows `i8`, so it wraps to -128",
+        "`-(-128 as i8)` overflows `i8`, so it wraps to -128",
         "`1 << 33` shifts by 33, which `i32` takes modulo 32 as 1",
         "`x << 9` shifts by 9, which `u8` takes modulo 8 as 1"
     ],
-    "warnings_not_contains": ["`100_u8 + 100_u8", "`-128_i8 + 0_i8`", "`1 << 31`", "_u128 - 1_u128`", "`255_u8 + 1_u8`"]
+    "warnings_not_contains": ["`100 as u8 + 100 as u8", "`-128 as i8 + 0 as i8`", "`1 << 31`", "as u128 - 1 as u128`", "`wide as u8", "`255 as u8 + 1 as u8`"]
 }
