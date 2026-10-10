@@ -724,7 +724,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // `sem.default_method_facts`.
                     let mut methods = self.reify_impl(impl_block);
                     methods.extend(self.reify_impl_default_methods(impl_block));
-                    for tir_func in bind_trait_contracts(methods, &self.current_module_source) {
+                    let bound = bind_trait_contracts(
+                        methods,
+                        &self.current_module_source,
+                        &mut self.tysys.type_table.borrow_mut(),
+                    );
+                    for tir_func in bound {
                         tir_module.add_function(tir_func);
                     }
                 }
@@ -10339,6 +10344,7 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
 fn bind_trait_contracts(
     mut methods: Vec<TirFunction>,
     module: &ModuleSource,
+    type_table: &mut TypeTable,
 ) -> Vec<TirFunction> {
     let holders: Vec<usize> = (0..methods.len())
         .filter(|&i| held_method(&methods[i]).is_some())
@@ -10356,8 +10362,8 @@ fn bind_trait_contracts(
         let held = held_method(&holder).expect("filtered above").to_string();
         if let Some(method) = methods.iter_mut().find(|m| method_name(m) == Some(&held)) {
             let mut method_twin = split_unchecked_twin(method, &[]);
-            open_with_call(method, &holder, module);
-            open_with_call(&mut method_twin, &holder_twin, module);
+            open_with_call(method, &holder, module, type_table);
+            open_with_call(&mut method_twin, &holder_twin, module, type_table);
             methods.push(method_twin);
         }
         methods.push(holder_twin);
@@ -10375,9 +10381,22 @@ fn held_method(func: &TirFunction) -> Option<&str> {
 }
 
 /// Open `func`'s body with a call to `callee`, emitted into `module`, passing
-/// it `func`'s parameters.
-fn open_with_call(func: &mut TirFunction, callee: &TirFunction, module: &ModuleSource) {
+/// it `func`'s parameters and type parameters. The parser gave `callee` the
+/// type parameters `func` declares, effect parameters dropped.
+fn open_with_call(
+    func: &mut TirFunction,
+    callee: &TirFunction,
+    module: &ModuleSource,
+    type_table: &mut TypeTable,
+) {
     let span = callee.span;
+    let type_args: Vec<TypeId> = func
+        .type_params
+        .iter()
+        .filter(|param| !param.is_effect)
+        .map(|param| type_table.make_declared_param(param.name.clone(), param.index, param.is_pack))
+        .collect();
+    assert_eq!(type_args.len(), callee.type_params.len());
     let args = func
         .params
         .iter()
@@ -10392,7 +10411,7 @@ fn open_with_call(func: &mut TirFunction, callee: &TirFunction, module: &ModuleS
     let call = TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef::from_resolved(callee, module.clone())),
-            type_args: Vec::new(),
+            type_args,
             args: CallArgs::free(args),
         },
         TypeTable::UNIT,

@@ -1,0 +1,34 @@
+// A generic trait method's clauses are checked at each instantiation, through
+// a bound as well as on the type.
+trait Store with () {
+    fn put<T: Ord>(&self, a: T, b: T) -> i32
+        contract a <= b, "a after b";
+}
+
+struct S { n: i32 }
+
+impl Store for S {
+    fn put<T: Ord>(&self, a: T, b: T) -> i32 {
+        return self.n;
+    }
+}
+
+fn through<X: Store>(x: &X) -> i32 {
+    return unchecked x.put("a", "b");
+}
+
+test "generic method" {
+    let s = S { n: 3 };
+    assert s.put(1, 2) == 3;
+    assert unchecked s.put(1_i64, 2_i64) == 3;
+    assert through(&s) == 3;
+}
+
+#[expect_trap]
+test "generic method outside" {
+    let s = S { n: 3 };
+    let _ = s.put(builtin::black_box(2), 1);
+}
+
+__DATA__
+{"test": {}}
