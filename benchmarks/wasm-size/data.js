@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791578087686,
+  "lastUpdate": 1791596620205,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65749,6 +65749,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3c77528b9ad58618f76978595c21dd9c5a9e224e"
         },
         "date": 1791578086940,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a198b0306214df92371bacfd43677a7606274435",
+          "message": "Merge pull request #2320 from wado-lang/loam-cli\n\nfeat(loam): run the generator and report its decisions from the command line",
+          "timestamp": "2026-10-10T10:28:10+09:00",
+          "tree_id": "fbae6dbf4e494c0ee6fb72c70e496194c84ceb68",
+          "url": "https://github.com/wado-lang/wado/commit/a198b0306214df92371bacfd43677a7606274435"
+        },
+        "date": 1791596619562,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
