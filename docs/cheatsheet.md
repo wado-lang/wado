@@ -890,6 +890,11 @@ fn half(n: i32) -> i32
 
 half(4);             // checked, always
 unchecked half(4);   // the caller vouches; checked only under -f contract-checks
+
+trait Pick {
+    fn pick(&self, i: i32) -> i32
+        contract i >= 0;   // binds every impl, which writes no clause of its own
+}
 ```
 
 ## Functions, Methods, and Closures

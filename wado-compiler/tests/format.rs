@@ -3900,6 +3900,34 @@ fn test_format_contract_clauses() {
     assert_format_preserves_ast(source);
 }
 
+/// A trait method's clauses print on the trait's declaration, a bodyless one
+/// ending in `;` after the last clause.
+#[test]
+fn test_format_trait_contract_clauses() {
+    let source = concat!(
+        "trait Pick with () {\n",
+        "    fn pick(&self, i: i32) -> i32 contract i >= 0, \"negative\" contract i < 9;\n",
+        "    fn first(&self) -> i32 contract true { return self.pick(0); }\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "trait Pick with () {\n",
+        "    fn pick(&self, i: i32) -> i32\n",
+        "        contract i >= 0, \"negative\"\n",
+        "        contract i < 9;\n",
+        "\n",
+        "    fn first(&self) -> i32\n",
+        "        contract true\n",
+        "    {\n",
+        "        return self.pick(0);\n",
+        "    }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
 /// `unchecked` is a prefix operator, so it prints as `-` does, and its operand
 /// keeps the parentheses that limit it to one call of a chain.
 #[test]

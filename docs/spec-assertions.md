@@ -125,3 +125,25 @@ wado run -O0 app.wado                           # checks
 wado run app.wado                               # does not (-O2)
 wado compile -O2 -f contract-checks app.wado    # checks
 ```
+
+A trait method's clauses are written on the trait's declaration, one without a
+body included, and bind every impl of the method and the trait's default body.
+An impl writes no clause; one that does is a compile error. A call through a
+bound checks the trait's clauses, and `unchecked` vouches for them.
+
+<!-- {"fixture":"contract_trait_method.wado", "assert": false} -->
+
+```wado
+trait Pick with () {
+    fn size(&self) -> i32;
+
+    fn pick(&self, i: i32) -> i32
+        contract 0 <= i < self.size(), "index out of range";
+
+    fn first(&self) -> i32
+        contract self.size() > 0
+    {
+        return self.pick(0);
+    }
+}
+```
