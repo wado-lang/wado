@@ -1048,7 +1048,7 @@ fn synthesize_lift_option_inner(
     let payload_addr = binary_add(addr, i32_const(payload_offset as i32));
     let lifted = synthesize_lift_inner(
         inner_ty,
-        payload_addr.clone(),
+        payload_addr,
         next_local,
         &mut then_stmts,
         locals,
