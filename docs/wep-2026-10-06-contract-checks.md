@@ -194,7 +194,9 @@ let x = unchecked xs[i];    // an index read with no range check
 ```
 
 `xs[i]` is a call to an indexing trait's method, so `unchecked xs[i]` is an
-index read whose range check the caller vouches for.
+index read whose range check the caller vouches for. An index assignment takes
+no marker. `unchecked xs[i] = v` would put the operator on an assignment's
+target, outside what a unary operator is, and is a compile error.
 
 `contract` is a contextual keyword: no identifier can follow a signature, so
 code that names something `contract` keeps working. `unchecked` is reserved.
@@ -229,7 +231,6 @@ was kept despite that because it continues the `_unchecked` names it replaces.
   that a write keeps them UTF-8 in `set_byte_unchecked`.
 - The syntax is not built. The clauses live in each function's body, and its
   doc comment restates them.
-- Whether `unchecked` marks the place of an index assignment, `xs[i] = v`.
 - A call whose callee is not known statically, through a trait bound or a
   function value, has no call site to place the check at. How a trait
   method's contract binds an impl is not settled either, and `unchecked xs[i]`
