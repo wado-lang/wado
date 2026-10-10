@@ -40,8 +40,8 @@ leak.
   `F: fn mut(I::Item) -> U with E`), so the adapter's type carries the
   closure's effects. Its `next` is `with _`, resolved from `I` and `F`.
 - A function that calls the closure it takes before returning (`for_each`,
-  `fold`, `sort_by`, `Option::map`, `Benchmark::run`) is generic over its
-  effects, `<effect E>`.
+  `fold`, `sort_by`, `Option::map`) is generic over its effects,
+  `<effect E>`, as `Benchmark::run` already is.
 
 ## Roadmap
 
