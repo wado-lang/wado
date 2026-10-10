@@ -36,17 +36,16 @@ pub struct ScopeReport {
 
 /// One node: how `forward` lowers it, and for a kernel, where its output goes.
 pub struct NodeReport {
-    /// `kernel`, `fused`, `folded`, `alias` or `branch`. A `fused` node is a
-    /// step of the kernel `into` names.
-    pub lowering: String,
+    /// A `fused` node is a step of the kernel `into` names.
+    pub lowering: Lowered,
     pub op: String,
     /// The node's operands, an absent optional one spelled `_`.
     pub inputs: List<String>,
     pub outputs: List<TensorReport>,
     /// The tensor whose kernel computes this node's output inside it.
     pub into: Option<String> = null,
-    /// Why a kernel writes its output, as a `Reason` case in snake case.
-    pub written: Option<String> = null,
+    /// Why a kernel writes its output.
+    pub written: Option<Written> = null,
     /// What `written` names: the operator kind, or the times read.
     pub detail: Option<String> = null,
     /// The nodes fused into this kernel, by the tensor each computes.
@@ -55,6 +54,29 @@ pub struct NodeReport {
     /// an extent polynomial over the symbols the run binds.
     pub kept_bytes: Option<String> = null,
     pub branches: List<BranchReport> = [],
+}
+
+/// How `forward` lowers a node, a kernel's step fused into a later kernel
+/// told apart.
+#[wire(name_policy = "snake_case")]
+pub enum Lowered {
+    Kernel,
+    Fused,
+    Folded,
+    Alias,
+    Branch,
+}
+
+/// A `Reason` without what it names, which `NodeReport.detail` carries.
+#[wire(name_policy = "snake_case")]
+pub enum Written {
+    Unfused,
+    Computes,
+    Returned,
+    ReadTimes,
+    Reader,
+    Stretched,
+    SecondContraction,
 }
 
 /// One branch of an `If`, by the attribute holding it.
@@ -139,12 +161,12 @@ fn node_report(
     let outputs: List<TensorReport> = node.outputs.into_iter().map(|o| tensor(checked, &o)).collect();
     let inputs: List<String> = node.inputs.into_iter().map(|i| if i == "" { "_" } else { i }).collect();
     let lowering = lowering_of(node, checked);
-    let mut r = NodeReport { lowering: label(lowering), op: node.op, inputs, outputs };
+    let mut r = NodeReport { lowering: lowered(lowering), op: node.op, inputs, outputs };
     match lowering {
         Kernel => {
             match decided.of(&node.outputs[0]) {
                 Fused(into) => {
-                    r.lowering = "fused";
+                    r.lowering = Lowered::Fused;
                     r.into = Option::Some(into);
                 },
                 Written(reason) => {
@@ -198,15 +220,15 @@ fn kept_bytes(checked: &Checked, tensors: &List<String>) -> Option<String> {
 }
 
 /// A `Reason` as a code a test reads, and what the code names.
-fn reason_fields(reason: &Reason) -> [String, Option<String>] {
+fn reason_fields(reason: &Reason) -> [Written, Option<String>] {
     return match reason {
-        Unfused => ["unfused", null],
-        Computes(kind) => ["computes", Option::Some(kind_word(kind))],
-        Returned => ["returned", null],
-        ReadTimes(n) => ["read_times", Option::Some(`${n}`)],
-        Reader(kind) => ["reader", Option::Some(kind_word(kind))],
-        Stretched => ["stretched", null],
-        SecondContraction => ["second_contraction", null],
+        Unfused => [Written::Unfused, null],
+        Computes(kind) => [Written::Computes, Option::Some(kind_word(kind))],
+        Returned => [Written::Returned, null],
+        ReadTimes(n) => [Written::ReadTimes, Option::Some(`${n}`)],
+        Reader(kind) => [Written::Reader, Option::Some(kind_word(kind))],
+        Stretched => [Written::Stretched, null],
+        SecondContraction => [Written::SecondContraction, null],
     };
 }
 
@@ -224,13 +246,23 @@ fn kind_word(kind: &Kind) -> String {
     };
 }
 
-/// A lowering as the left column reads it, each one width.
-fn label(lowering: Lowering) -> String {
+fn lowered(lowering: Lowering) -> Lowered {
     return match lowering {
+        Folded => Lowered::Folded,
+        Alias => Lowered::Alias,
+        Branch => Lowered::Branch,
+        Kernel => Lowered::Kernel,
+    };
+}
+
+/// A lowering as the left column reads it.
+fn label(lowering: &Lowered) -> String {
+    return match lowering {
+        Kernel => "kernel",
+        Fused => "fused",
         Folded => "folded",
         Alias => "alias",
         Branch => "branch",
-        Kernel => "kernel",
     };
 }
 
@@ -298,17 +330,15 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
     w.line("nodes");
     w.indent();
     for let node of &s.nodes {
-        match node.lowering.as_str_slice() {
-            "kernel" => tally.kernels += 1,
-            "fused" => tally.fused += 1,
-            "folded" => tally.folded += 1,
-            "alias" => tally.aliases += 1,
-            "branch" => tally.branches += 1,
-            // `node_report` writes one of the words above.
-            _ => unreachable(),
+        match node.lowering {
+            Kernel => tally.kernels += 1,
+            Fused => tally.fused += 1,
+            Folded => tally.folded += 1,
+            Alias => tally.aliases += 1,
+            Branch => tally.branches += 1,
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
-        w.line(`${node.lowering:<6} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
+        w.line(`${label(&node.lowering):<6} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
         w.indent();
         for let t of &node.outputs {
             w.line(`${t.name}: ${tensor_text(t)}`);
@@ -347,20 +377,19 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
 }
 
 /// Why a kernel writes its output, as a sentence ends.
-fn reason_text(code: &String, detail: &Option<String>) -> String {
+fn reason_text(code: &Written, detail: &Option<String>) -> String {
     let named = match detail {
         Some(d) => *d,
         None => "",
     };
-    return match code.as_str_slice() {
-        "unfused" => "fuse is off",
-        "computes" => `a ${named} takes in no operator after it`,
-        "returned" => "the scope returns it",
-        "read_times" => `read ${named} times`,
-        "reader" => `read by a ${named}, which takes in no operator before it`,
-        "stretched" => "its reader stretches it",
-        "second_contraction" => "its reader already follows a contraction",
-        _ => unreachable(),
+    return match code {
+        Unfused => "fuse is off",
+        Computes => `a ${named} takes in no operator after it`,
+        Returned => "the scope returns it",
+        ReadTimes => `read ${named} times`,
+        Reader => `read by a ${named}, which takes in no operator before it`,
+        Stretched => "its reader stretches it",
+        SecondContraction => "its reader already follows a contraction",
     };
 }
 

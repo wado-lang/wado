@@ -109,6 +109,10 @@ global MAX_GROUPS: i32 = 65535;
 /// storage buffers per stage, less the output and the parameters.
 global MAX_OPERAND_BUFFERS: i32 = 6;
 
+/// The f32 elements one storage binding holds: WebGPU's default limit of
+/// 128 MiB per binding.
+global MAX_BINDING_ELEMENTS: i32 = 33_554_432;
+
 /// The side of a matrix product's tile, which `MATMUL_SHADER` spells as `16u`.
 global TILE: i32 = 16;
 
@@ -451,10 +455,37 @@ fn placed_extents<E, Axes>(t: &Placed<E, Axes>) -> List<i32> {
     };
 }
 
-/// Whether one dispatch holds a product's tiles: a workgroup per tile of each
-/// batch element, the batch along the third dimension.
-fn tiles_fit(batch: i32, rows: i32, cols: i32) -> bool {
-    return batch <= MAX_GROUPS && covering(rows, TILE) <= MAX_GROUPS && covering(cols, TILE) <= MAX_GROUPS;
+/// Whether one dispatch runs a product: a workgroup per tile of each batch
+/// element, the batch along the third dimension, and every matrix bound whole.
+/// `b` is shared by the batch where `b_shared`.
+fn product_fits(batch: i32, rows: i32, inner: i32, cols: i32, b_shared: bool) -> bool {
+    let b_batch = if b_shared { 1 } else { batch };
+    return batch <= MAX_GROUPS
+        && covering(rows, TILE) <= MAX_GROUPS
+        && covering(cols, TILE) <= MAX_GROUPS
+        && binds(batch * rows * inner)
+        && binds(b_batch * inner * cols)
+        && binds(batch * rows * cols);
+}
+
+/// Whether an elementwise kernel binds `operands` and its output of `count`
+/// elements: each operand in a buffer of its own, or all in one pack past
+/// `MAX_OPERAND_BUFFERS`.
+fn elementwise_fits<Axes>(operands: &List<PlacedRead<Axes>>, count: i32) -> bool {
+    let mut total = 0;
+    let mut each = true;
+    for let o of *operands {
+        let len = element_count(&o.extents);
+        total += len;
+        each = each && binds(len);
+    }
+    let reads = if operands.len() > MAX_OPERAND_BUFFERS { binds(total) } else { each };
+    return reads && binds(count);
+}
+
+/// Whether one storage buffer of `count` elements binds whole.
+fn binds(count: i32) -> bool {
+    return count <= MAX_BINDING_ELEMENTS;
 }
 
 /// How many runs of `size` cover `count`.
@@ -703,11 +734,12 @@ impl Backend for WebGpuBackend {
         for let o of &operands {
             repeats = repeats && repeats_over(&o.extents, &extents);
         }
-        if repeats {
+        if repeats && elementwise_fits(&operands, element_count(&extents)) {
             return self.elementwise(&operands, extents, op);
         }
         // An operand stretching an axis the output's trailing ones do not
-        // cover has no shader yet.
+        // cover has no shader yet, and buffers past a binding's limit none
+        // at all.
         let mut held: List<List<f32>> = [];
         for let o of &operands {
             held.push(match o.source {
@@ -749,7 +781,7 @@ impl Backend for WebGpuBackend {
         let rank = ae.len();
         let batch = ae[0..<rank - 2].to_list();
         let [rows, inner, cols] = [ae[rank - 2], ae[rank - 1], be[rank - 1]];
-        let computed = if batch != be[0..<rank - 2].to_list() || !tiles_fit(element_count(&batch), rows, cols) {
+        let computed = if batch != be[0..<rank - 2].to_list() || !product_fits(element_count(&batch), rows, inner, cols, false) {
             Placed::Host(self.cpu.matmul(&self.host(a), &self.host(b), null));
         } else {
             let mut extents = batch;
@@ -771,7 +803,7 @@ impl Backend for WebGpuBackend {
         let rank = ae.len();
         let batch = ae[0..<rank - 2].to_list();
         let [rows, inner, cols] = [ae[rank - 2], ae[rank - 1], be[1]];
-        let computed = if !tiles_fit(element_count(&batch), rows, cols) {
+        let computed = if !product_fits(element_count(&batch), rows, inner, cols, true) {
             Placed::Host(self.cpu.matmul_shared(&self.host(a), &self.host(b), null));
         } else {
             let mut extents = batch;

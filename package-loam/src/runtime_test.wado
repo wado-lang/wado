@@ -245,7 +245,7 @@ test "matmul contracts the trailing axis" {
     let a: Tensor<f32, [Row, Inner]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     let b: Tensor<f32, [Inner, Col]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
 
-    let c: Tensor<f32, [Row, Col]> = matmul(&a, &b);
+    let c: Tensor<f32, [Row, Col]> = matmul(&a, &b, &null);
     assert c.extents == [2, 2] as List<i32>;
     assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
 }
@@ -254,7 +254,7 @@ test "matmul runs one matrix per batch element" {
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
     let b: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 2, 1], [1.0, 1.0, 2.0, 2.0]);
 
-    let c: Tensor<f32, [Batch, Row, Col]> = matmul(&a, &b);
+    let c: Tensor<f32, [Batch, Row, Col]> = matmul(&a, &b, &null);
     assert c.extents == [2, 1, 1] as List<i32>;
     assert c.data == [3.0, 14.0] as List<f32>;
 }
@@ -263,7 +263,7 @@ test "matmul_shared multiplies every batch element by one matrix" {
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
     let b: Tensor<f32, [Inner, Col]> = tensor([2, 1], [1.0, 10.0]);
 
-    let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &b);
+    let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &b, &null);
     assert c.extents == [2, 1, 1] as List<i32>;
     assert c.data == [21.0, 43.0] as List<f32>;
 }
@@ -272,7 +272,7 @@ test "matmul_broadcast stretches a batch axis of 1 on either side" {
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([1, 1, 2], [1.0, 2.0]);
     let b: Tensor<f32, [Batch, Inner, Col]> = tensor([2, 2, 1], [1.0, 10.0, 100.0, 1000.0]);
 
-    let c = matmul_broadcast::<[Batch, Row, Inner], [Batch, Inner, Col], [Batch, Row, Col]>(&a, &b);
+    let c = matmul_broadcast::<[Batch, Row, Inner], [Batch, Inner, Col], [Batch, Row, Col]>(&a, &b, &null);
     assert c.extents == [2, 1, 1] as List<i32>;
     assert c.data == [21.0, 2100.0] as List<f32>;
 }
@@ -281,14 +281,14 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
     let v: Tensor<f32, [Inner]> = tensor([2], [1.0, 2.0]);
     let m: Tensor<f32, [Inner, Col]> = tensor([2, 2], [1.0, 10.0, 100.0, 1000.0]);
 
-    let row = matmul_broadcast::<[Inner], [Inner, Col], [Col]>(&v, &m);
+    let row = matmul_broadcast::<[Inner], [Inner, Col], [Col]>(&v, &m, &null);
     assert row.extents == [2] as List<i32>;
     assert row.data == [201.0, 2010.0] as List<f32>;
     let w: Tensor<f32, [Row, Inner]> = tensor([2, 2], [1.0, 10.0, 100.0, 1000.0]);
-    let column = matmul_broadcast::<[Row, Inner], [Inner], [Row]>(&w, &v);
+    let column = matmul_broadcast::<[Row, Inner], [Inner], [Row]>(&w, &v, &null);
     assert column.extents == [2] as List<i32>;
     assert column.data == [21.0, 2100.0] as List<f32>;
-    let dot = matmul_broadcast::<[Inner], [Inner], []>(&v, &v);
+    let dot = matmul_broadcast::<[Inner], [Inner], []>(&v, &v, &null);
     assert dot.extents.is_empty();
     assert dot.data == [5.0] as List<f32>;
 }
@@ -447,7 +447,7 @@ test "conv sums each window against the weight across the input channels" {
         [1, 1],
         [0, 0, 0, 0],
         [1, 1],
-    ));
+    ), &null);
     assert y.extents == [1, 2, 1, 1] as List<i32>;
     assert y.data == [11.0, 44.0] as List<f32>;
 }
@@ -459,7 +459,7 @@ test "conv_bias adds each output channel's bias" {
 
     let y = conv_bias::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &b, &window([1, 1], [1, 1], [
         0, 0, 0, 0,
-    ], [1, 2]));
+    ], [1, 2]), &null);
     assert y.data == [1.5, 2.5, 9.5, 19.5] as List<f32>;
 }
 
@@ -472,7 +472,7 @@ test "conv_grouped reads each output channel's own group of input channels" {
         [1, 1],
         [0, 0, 0, 0],
         [1, 2],
-    ));
+    ), &null);
     assert y.data == [2.0, 4.0, 30.0, 60.0] as List<f32>;
 }
 
@@ -486,7 +486,7 @@ test "conv_grouped_bias adds each output channel's bias to its group's sum" {
         [1, 1],
         [0, 0, 0, 0],
         [1, 2],
-    ));
+    ), &null);
     assert y.data == [2.5, 4.5, 29.5, 59.5] as List<f32>;
 }
 

@@ -139,26 +139,29 @@ pub fn refuse(reason: Option<String>) {
 }
 
 /// A batched matrix product whose operands share every batch axis.
-pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    return matmul_broadcast(a, b);
+pub fn matmul<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Tensor<f32, [..Bs, K, N]>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    return matmul_broadcast(a, b, then);
 }
 
 /// `matmul` with one matrix on the right, shared by every batch element, as a
 /// language model's head multiplies each position by one weight.
-pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    return matmul_broadcast(a, b);
+pub fn matmul_shared<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Tensor<f32, [K, N]>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    return matmul_broadcast(a, b, then);
 }
 
 /// ONNX's `MatMul` in full, which is numpy's: a rank-1 operand is a row on the
 /// left or a column on the right, whose axis the result drops, and the batch
-/// axes broadcast. The caller spells `Out`.
-pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
-    return product(a, b, &null);
-}
-
-/// `matmul_broadcast`, `then` applied to each batch element's matrix as it
-/// completes.
-fn product<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>, then: &Option<Epilogue<Read<Out>>>) -> Tensor<f32, Out> {
+/// axes broadcast. The caller spells `Out`. `then` is applied to each batch
+/// element's matrix as it completes.
+pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>, then: &Option<Epilogue<Read<Out>>>) -> Tensor<f32, Out> {
     let a_matrix = if a.extents.len() == 1 { [1, a.extents[0]] as List<i32> } else { a.extents };
     let b_matrix = if b.extents.len() == 1 { [b.extents[0], 1] as List<i32> } else { b.extents };
     let ra = a_matrix.len();
@@ -503,13 +506,14 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
 }
 
 /// ONNX's `Conv` over `window`: each output channel sums every input channel
-/// under its kernel.
+/// under its kernel, and `then` is applied once every element is complete.
 pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Ci, ..K]>,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), 1, window, &null);
+    return conv_grouped::<N, Ci, Ci, Co, [..In], [..K], [..Out]>(x, w, 1, window, then);
 }
 
 /// `conv` plus each output channel's bias.
@@ -518,8 +522,9 @@ pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
     w: &Tensor<f32, [Co, Ci, ..K]>,
     b: &Tensor<f32, [Co]>,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, b.data, 1, window, &null);
+    return conv_grouped_bias::<N, Ci, Ci, Co, [..In], [..K], [..Out]>(x, w, b, 1, window, then);
 }
 
 /// `conv` in `group` groups: each reads its own run of `Cg` input channels
@@ -529,8 +534,9 @@ pub fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
     w: &Tensor<f32, [Co, Cg, ..K]>,
     group: i32,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window, &null);
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window, then);
 }
 
 /// `conv_grouped` plus each output channel's bias.
@@ -540,8 +546,9 @@ pub fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
     b: &Tensor<f32, [Co]>,
     group: i32,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, b.data, group, window, &null);
+    return convolve(x, w, b.data, group, window, then);
 }
 
 /// A convolution in `group` groups, each output channel reading the input
@@ -1337,7 +1344,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, [..Bs, K, N]>,
         then: Option<Epilogue<Read<[..Bs, M, N]>>>,
     ) -> Tensor<f32, [..Bs, M, N]> {
-        return product(a, b, &then);
+        return matmul(a, b, &then);
     }
 
     fn matmul_shared<..Bs, M, K, N>(
@@ -1346,7 +1353,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, [K, N]>,
         then: Option<Epilogue<Read<[..Bs, M, N]>>>,
     ) -> Tensor<f32, [..Bs, M, N]> {
-        return product(a, b, &then);
+        return matmul_shared(a, b, &then);
     }
 
     fn matmul_broadcast<A, B, Out>(
@@ -1355,7 +1362,7 @@ impl Backend for Cpu {
         b: &Tensor<f32, B>,
         then: Option<Epilogue<Read<Out>>>,
     ) -> Tensor<f32, Out> {
-        return product(a, b, &then);
+        return matmul_broadcast(a, b, &then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
@@ -1426,7 +1433,7 @@ impl Backend for Cpu {
         window: &Window,
         then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), 1, window, &then);
+        return conv::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, window, &then);
     }
 
     fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
@@ -1437,7 +1444,7 @@ impl Backend for Cpu {
         window: &Window,
         then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return convolve(x, w, b.data, 1, window, &then);
+        return conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, b, window, &then);
     }
 
     fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
@@ -1448,7 +1455,7 @@ impl Backend for Cpu {
         window: &Window,
         then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window, &then);
+        return conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, group, window, &then);
     }
 
     fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
@@ -1460,7 +1467,7 @@ impl Backend for Cpu {
         window: &Window,
         then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return convolve(x, w, b.data, group, window, &then);
+        return conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, b, group, window, &then);
     }
 
     fn softmax<Axes>(&mut self, t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {

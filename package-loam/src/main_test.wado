@@ -238,12 +238,13 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
 test "dump reports as JSON, every kernel with where its output goes" {
     let dir = scratch("dump-json");
     let json = on_graph("dump", &dir, ["--format", "json"]).unwrap();
+    assert json.contains("\"lowering\":\"fused\"") && json.contains("\"written\":\"returned\""), json;
     let nodes = from_string::<Report>(&json).unwrap().scope.nodes;
-    assert nodes[0].lowering == "fused" && nodes[0].into == Option::Some("Y");
-    assert nodes[1].lowering == "kernel" && nodes[1].written == Option::Some("returned");
+    assert nodes[0].lowering matches { Fused } && nodes[0].into == Option::Some("Y");
+    assert nodes[1].lowering matches { Kernel } && nodes[1].written matches { Some(Returned) };
     assert nodes[1].takes_in == ["H"] as List<String>;
     assert nodes[1].kept_bytes == Option::Some("12 * N");
-    assert nodes[2].lowering == "alias" && nodes[2].written matches { None };
+    assert nodes[2].lowering matches { Alias } && nodes[2].written matches { None };
 }
 
 test "dump's format is text or json" {
