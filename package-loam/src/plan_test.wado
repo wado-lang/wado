@@ -138,12 +138,8 @@ test "a Gemm between a flattening Reshape and its restoring one is one product o
 }
 
 test "a Gemm whose flattened operand or product the scope returns is no spread" {
-    for let returned of ["F", "G"] {
-        let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, float[8, ${if returned == "F" {
-            8;
-        } else {
-            6;
-        }}] ${returned})`);
+    for let returned of ["float[8, 8] F", "float[8, 6] G"] {
+        let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, ${returned})`);
         let p = plan_of(source, LINEAR_LAYOUT);
         assert p.lowering(0) matches { Kernel }, returned;
         assert p.spread_of(&"G") matches { None }, returned;

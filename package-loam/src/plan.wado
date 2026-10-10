@@ -53,16 +53,12 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
             continue;
         }
         for let t of node.reads() {
-            let mut by = read.get(t).unwrap_or([]);
-            by.push(at);
-            read[t] = by;
+            read_at(&mut read, &t, at);
         }
     }
     // The scope reads what it returns, at no node's position.
     for let vi of &graph.outputs {
-        let mut by = read.get(vi.name).unwrap_or([]);
-        by.push(-1);
-        read[vi.name] = by;
+        read_at(&mut read, &vi.name, -1);
     }
     let only_reader = |tensor: &String| -> Option<i32> {
         let by = read.get(*tensor).unwrap_or([]);
@@ -101,6 +97,13 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
         spreads[node.outputs[0]] = Spread { operand: flatten.inputs[0], restored: restore.outputs[0] };
     }
     return [lowered, spreads];
+}
+
+/// Records that the node at `at` reads `tensor`.
+fn read_at(readers: &mut TreeMap<String, List<i32>>, tensor: &String, at: i32) {
+    let mut by = readers.get(*tensor).unwrap_or([]);
+    by.push(at);
+    readers[*tensor] = by;
 }
 
 /// Whether a `Gemm`'s bias, if it has one, is one value per column, so it
@@ -389,10 +392,7 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
             },
             _ => {
                 for let tensor of node.reads() {
-                    let read = original(&aliased, &tensor);
-                    let mut at_reads = readers.get(read).unwrap_or([]);
-                    at_reads.push(at);
-                    readers[read] = at_reads;
+                    read_at(&mut readers, &original(&aliased, &tensor), at);
                 }
             },
         }
