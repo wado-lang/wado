@@ -10356,7 +10356,7 @@ fn bind_trait_contracts(
     for holder_at in holders {
         let holder = &mut methods[holder_at];
         // Linking stamps every function's module, but the calls below record
-        // it now, in their references to the holder and its twin.
+        // it now: a call to an instance resolves by name in that module.
         holder.module_source = module.clone();
         let clauses: Vec<Span> = holder
             .body

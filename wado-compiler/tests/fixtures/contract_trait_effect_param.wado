@@ -1,0 +1,29 @@
+// A trait method generic over an effect takes a contract like any other: the
+// clause names a parameter whose type carries the effect, and performs none.
+trait Run with _ {
+    fn apply<effect E>(&self, f: fn(i32) -> i32 with E, n: i32) -> i32 with E
+        contract n >= 0, "negative";
+}
+
+struct Twice {}
+
+impl Run for Twice {
+    fn apply<effect E>(&self, f: fn(i32) -> i32 with E, n: i32) -> i32 with E {
+        return f(f(n));
+    }
+}
+
+test "a contract on an effect-generic method" {
+    let t = Twice {};
+    assert t.apply(|x| x + 1, 1) == 3;
+    assert unchecked t.apply(|x| x * 2, 3) == 12;
+}
+
+#[expect_trap]
+test "outside the contract" {
+    let t = Twice {};
+    let _ = t.apply(|x| x, builtin::black_box(-1));
+}
+
+__DATA__
+{"test": {}}
