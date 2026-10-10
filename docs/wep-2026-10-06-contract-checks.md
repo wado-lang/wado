@@ -216,6 +216,17 @@ check, and the contract stays in force. `check` and `unchecked` would read as
 a clause and its negation, as if the marker removed the contract. `check` is
 also a verb, so it reads as a statement run at that point, like `assert`.
 
+A contract clause is not a coverage target, whether the call checks it or not.
+
+A contract on an `export fn` has no place in WIT. The generated WIT carries it
+as a comment on the function.
+
+An `_unchecked` function becomes an `unchecked` call to its checked twin. The
+old name stays, as an `#[unavailable]` declaration pointing at the new call,
+only where Rust has a method of that name, such as `get_unchecked` or
+`from_utf8_unchecked`, since that is the name a reader from Rust reaches for.
+Any other `_unchecked` name is removed.
+
 `unchecked` means that the caller does not ask for the check in a shipping
 build. A build under `-f contract-checks` still checks a marked call. The word
 was kept despite that because it continues the `_unchecked` names it replaces.
