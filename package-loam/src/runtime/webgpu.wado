@@ -793,10 +793,9 @@ impl WebGpuBackend {
         };
         // Every chunk binds before the first is recorded, so none is wasted.
         // The middle chunks bind as the first does, plus the partial sums.
-        let pending = Option::Some(contiguous(PENDING, 0, matrices));
         let last_start = (covering(inner, i32::max(chunk, 1)) - 1) * chunk;
-        if !self.binds(&chunk_operands(0, if last_start > 0 { pending } else { null }))
-            || !self.binds(&chunk_operands(last_start, if last_start > 0 { pending } else { null })) {
+        let pending = if last_start > 0 { Option::Some(contiguous(PENDING, 0, matrices)) } else { null };
+        if !self.binds(&chunk_operands(0, pending)) || !self.binds(&chunk_operands(last_start, pending)) {
             return self.product_on_cpu(a, b, then);
         }
         // Each chunk of the inner axis continues the sums the one before left,
