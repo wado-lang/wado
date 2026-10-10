@@ -279,7 +279,11 @@ in that impl, not a contract to add.
    the body as an `assert` marked as a contract, so every pass over a body
    sees it, and the formatter prints it back as a clause.
 3. A trait method's contract: written on the trait, checked in every impl and
-   default body.
+   default body. Done. The parser keeps the clauses in a hidden default method
+   of the trait, `$contract$<method>`, which takes the method's parameters.
+   Reify opens the method and each impl's method with a call to it, and their
+   `$unchecked` twins with a call to its twin, so a marked call through a bound
+   reaches the twin of whichever impl the bound resolves to.
 4. The indexing traits declare `contains_index` and require it, so
    `unchecked xs[i]` is an index read with no range check.
 5. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
@@ -292,8 +296,8 @@ in that impl, not a contract to add.
   call that broke the contract.
 - A function reached by both a marked and an unmarked call is emitted twice,
   once for each.
-- A contract on a trait's method, or on a declaration with no body, is a
-  compile error.
+- A contract on a declaration with no body, outside a trait, is a compile
+  error.
 - A clause that costs more than the function it guards is not checked: that
   the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
   that a write keeps them UTF-8 in `set_byte_unchecked`.
