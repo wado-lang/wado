@@ -48,9 +48,9 @@ if (values.session) {
   report();
 }
 
-/// Optimize and run the model once, printing the profile's path. onnxruntime
-/// writes its verbose log to the process's stderr below Node, which only a
-/// parent process can read, so `report` runs this as one.
+// Optimize and run the model once. onnxruntime writes its verbose log to the
+// process's stderr below Node, which only a parent process can read, so
+// `report` runs this as one.
 async function runSession() {
   const session = await ort.InferenceSession.create(model, {
     graphOptimizationLevel: 'all',
