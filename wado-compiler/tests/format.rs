@@ -3900,6 +3900,24 @@ fn test_format_contract_clauses() {
     assert_format_preserves_ast(source);
 }
 
+/// A comment on a `contract` clause stays with the clause, not with the body.
+#[test]
+fn test_format_contract_clause_comments() {
+    let source = concat!(
+        "fn half(n: i32) -> i32\n",
+        "    // why even\n",
+        "    contract n % 2 == 0, \"n must be even\" // trailing\n",
+        "    contract n >= 0\n",
+        "{\n",
+        "    // body\n",
+        "    return n / 2;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A trait method's clauses print on the trait's declaration, a bodyless one
 /// ending in `;` after the last clause.
 #[test]
