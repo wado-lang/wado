@@ -105,9 +105,9 @@ test {
 
 Waives a lint on the node carrying it and on everything that node encloses: an
 item, a method, a parameter, a type parameter, a field, a case, an associated
-type or constant, or a `let`. As the module inner attribute `#![allow(...)]` it waives the lint for
-the whole file. There is no `#[deny(...)]`. [Diagnostics](./spec-diagnostics.md)
-lists the lints.
+type or constant, or a `let`. As the module inner attribute `#![allow(...)]` it
+waives the lint for the whole file. There is no `#[deny(...)]`.
+[Diagnostics](./spec-diagnostics.md) lists the lints.
 
 <!-- {"fixture":"spec_attributes_allow.wado"} -->
 
