@@ -12,6 +12,12 @@ impl<T> Wrap<T> {
     }
 }
 
+impl<T: Default> Wrap<T> {
+    fn empty() -> Wrap<T> {
+        return Wrap { v: T::default() };
+    }
+}
+
 struct Pair<A, B> {
     a: A,
     b: B,
@@ -41,6 +47,13 @@ test "a `_` on the receiver is answered by the argument" {
     assert w.v == 5;
     let s = Wrap::<_>::make("five");
     assert s.v == "five";
+}
+
+test "a `_` is answered by the expected type" {
+    let w: Wrap<i64> = Wrap::<_>::make(5);
+    assert w.v == 5_i64;
+    let e: Wrap<String> = Wrap::<_>::empty();
+    assert e.v == "";
 }
 
 test "a `_` beside a written argument takes the other slot only" {

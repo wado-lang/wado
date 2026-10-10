@@ -1464,6 +1464,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether `target` is a generic declaration applied to arguments, which
+    /// [`Self::with_written_args`] can apply to others.
+    fn applies_written_args(&self, target: TypeId) -> bool {
+        matches!(
+            self.tysys.type_table.borrow().get(target),
+            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
+        ) || matches!(
+            self.tysys.type_table.borrow().get(target),
+            ResolvedType::Newtype { type_args, .. } if !type_args.is_empty()
+        )
+    }
+
     /// `target` with its written arguments replaced by `args`, which fill the
     /// `_`s its turbofish wrote.
     fn with_written_args(&mut self, target: TypeId, args: &[TypeId]) -> TypeId {
@@ -1824,12 +1836,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|t| self.resolve_type(t))
             .collect();
-        let receiver_holes: Vec<(usize, TypeId)> = declaring_args
-            .iter()
-            .enumerate()
-            .filter(|&(_, &a)| a == TypeTable::UNKNOWN)
-            .map(|(i, _)| (i, self.mint_infer_var()))
-            .collect();
+        // Only a generic declaration's instance has arguments to fill: a
+        // turbofish on anything else is reported where it was resolved.
+        let receiver_holes: Vec<(usize, TypeId)> = if self.applies_written_args(target_type_id) {
+            declaring_args
+                .iter()
+                .enumerate()
+                .filter(|&(_, &a)| a == TypeTable::UNKNOWN)
+                .map(|(i, _)| (i, self.mint_infer_var()))
+                .collect()
+        } else {
+            Vec::new()
+        };
         for &(i, var) in &receiver_holes {
             declaring_args[i] = var;
         }
@@ -1857,14 +1875,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
             let inst = Instantiated::of_vars(vars.clone());
-            let args = self.resolve_args_against_params(
-                &static_call.args,
-                ctx,
-                &param_types,
-                Some(&inst),
-                None,
-            );
+            // What the site expects of the result answers a `_` too, as it does
+            // a slot the bare spelling leaves out.
+            let ret = callee_sig.as_ref().zip(expected_type).map(|(sig, expected)| {
+                let declaring = sig.declaring_impl.map(|id| self.tysys.signatures.impl_sig(id));
+                let declared = sig
+                    .instantiate_call_with(&self.tysys.type_table, declaring, &declaring_args, &method_type_args)
+                    .return_type;
+                ExpectedReturn { declared, expected }
+            });
+            let args = self.resolve_args_against_params(&static_call.args, ctx, &param_types, Some(&inst), ret);
             let mut infer = InferCtx::new(&self.tysys.type_table, vars);
+            if let Some(ret) = ret {
+                infer.add_expected_return(ret.declared, ret.expected);
+            }
             for (&param_type, &arg) in param_types.iter().zip(&args) {
                 infer.add(param_type, arg);
             }
@@ -2197,8 +2221,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     primitive_receiver(PrimitiveType::U32)
                 }
             }
+            // Resolving the target reported why it failed.
+            _ if target_type_id == TypeTable::ERROR => return TypeTable::ERROR,
             // The target names no struct-like type: a trait, an undeclared
-            // name, a turbofish on a non-generic.
+            // name.
             _ => {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: static_call_symbol_name(static_call),
