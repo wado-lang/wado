@@ -242,11 +242,9 @@ impl TypeSystem {
         let item = match op {
             UnaryOp::Neg => CompilerItem::Neg,
             UnaryOp::BitNot => CompilerItem::BitNot,
-            UnaryOp::Not
-            | UnaryOp::Ref
-            | UnaryOp::MutRef
-            | UnaryOp::Deref
-            | UnaryOp::Unchecked => return false,
+            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref | UnaryOp::Unchecked => {
+                return false;
+            }
         };
         !self
             .type_table
@@ -956,11 +954,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (method_name, item, op_symbol) = match op {
             UnaryOp::Neg => ("neg", CompilerItem::Neg, "-"),
             UnaryOp::BitNot => ("bitnot", CompilerItem::BitNot, "~"),
-            UnaryOp::Not
-            | UnaryOp::Ref
-            | UnaryOp::MutRef
-            | UnaryOp::Deref
-            | UnaryOp::Unchecked => {
+            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref | UnaryOp::Unchecked => {
                 panic!("only `-` and `~` dispatch through a trait")
             }
         };

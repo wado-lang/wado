@@ -2420,9 +2420,9 @@ pub struct Function {
     /// Whether `effects` came from the enclosing trait's head rather than from
     /// a `with` clause here. The formatter prints what the source wrote.
     pub effects_inherited: bool,
-    /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
-    /// Its leading [`AssertStmt::contract`] statements are the `contract`
-    /// clauses written ahead of it.
+    /// Function body. None indicates a compiler built-in (bodyless declaration
+    /// like `pub fn foo();`). Its leading [`AssertStmt::contract`] statements
+    /// are the `contract` clauses written ahead of it.
     pub body: Option<Block>,
     pub span: Span,
 }

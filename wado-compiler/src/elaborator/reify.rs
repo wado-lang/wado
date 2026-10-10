@@ -23,9 +23,7 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name,
-};
+use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -1493,14 +1491,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if facts.trait_name.is_some()
             && let Some(clause) = func.contracts().next()
         {
-            let _ = self.logger.error_in(
-                &self.current_module_source,
-                Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::UnsupportedFeature,
-                    message: "a `contract` on a trait's method is not supported".to_string(),
-                    span: Some(DiagnosticSpan::from_span(&clause.span, None)),
-                },
+            self.error_at(
+                Code::UnsupportedFeature,
+                clause.span,
+                "a `contract` on a trait's method is not supported".to_string(),
             );
         }
         let mut tir_func = self.reify_callable(func, display_name);
@@ -1671,11 +1665,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Point the call `expr` reified to at its callee's `unchecked` twin, or
     /// say why it has none.
     fn retarget_to_unchecked_twin(&self, expr: &mut TirExpr) -> Result<(), &'static str> {
+        const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
         let TirExprKind::Call { func, .. } = &mut expr.kind else {
-            return Err("`unchecked` marks a call to a function with a `contract` clause");
+            return Err(NOT_A_CALL);
         };
         let Some(TemplateId::Declared { def, block }) = func.template.clone() else {
-            return Err("`unchecked` marks a call to a function with a `contract` clause");
+            return Err(NOT_A_CALL);
         };
         if !self.declares_contract(def) {
             return Err("the callee has no `contract` clause for `unchecked` to vouch for");
@@ -1711,13 +1706,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    fn unchecked_error(&self, span: Span, message: &str) {
+    /// Report an error at `span` in the module reify stands in.
+    fn error_at(&self, code: Code, span: Span, message: String) {
         let _ = self.logger.error_in(
             &self.current_module_source,
             Diagnostic {
                 severity: Severity::Error,
-                code: Code::UncheckedInvalid,
-                message: message.to_string(),
+                code,
+                message,
                 span: Some(DiagnosticSpan::from_span(&span, None)),
             },
         );
@@ -1725,15 +1721,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Report a malformed attribute at the attribute's own span.
     fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code,
-                message,
-                span: Some(DiagnosticSpan::from_span(&attr.span, None)),
-            },
-        );
+        self.error_at(code, attr.span, message);
     }
 
     /// Report `call` when it reified to `builtin::contract_checks()` anywhere
@@ -1746,16 +1734,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !func.is_builtin_named("contract_checks") || self.contract_check_call == Some(call.id) {
             return;
         }
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code: Code::UnsupportedFeature,
-                message: "`builtin::contract_checks()` stands only as the whole condition of \
-                          `if builtin::contract_checks() { … }`, with no `else`"
-                    .to_string(),
-                span: Some(DiagnosticSpan::from_span(&call.span, None)),
-            },
+        self.error_at(
+            Code::UnsupportedFeature,
+            call.span,
+            "`builtin::contract_checks()` stands only as the whole condition of \
+             `if builtin::contract_checks() { … }`, with no `else`"
+                .to_string(),
         );
     }
 
@@ -1905,18 +1889,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match builtin_facts::read(&func.attrs, &shapes, ret) {
             Ok(Some(facts)) => Some(facts),
             Ok(None) => {
-                let _ = self.logger.error_in(
-                    &self.current_module_source,
-                    Diagnostic {
-                        severity: Severity::Error,
-                        code: Code::StorageAttr,
-                        message: format!(
-                            "`{}` has no body, so it states what a call does: \
-                             declare #[storage(...)] and #[side_effect(...)]",
-                            func.name
-                        ),
-                        span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
-                    },
+                self.error_at(
+                    Code::StorageAttr,
+                    func.name_span,
+                    format!(
+                        "`{}` has no body, so it states what a call does: \
+                         declare #[storage(...)] and #[side_effect(...)]",
+                        func.name
+                    ),
                 );
                 None
             }
@@ -2569,7 +2549,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Unchecked => {
                 let mut call = self.reify_expr(&unary.expr, ctx, expected_type);
                 if let Err(message) = self.retarget_to_unchecked_twin(&mut call) {
-                    self.unchecked_error(unary.span, message);
+                    self.error_at(Code::UncheckedInvalid, unary.span, message.to_string());
                 }
                 call
             }
@@ -10307,9 +10287,7 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
     body.stmts = std::mem::take(&mut body.stmts)
         .into_iter()
         .flat_map(|stmt| match stmt.kind {
-            TirStmtKind::If { then_block, .. } if clauses.contains(&stmt.span) => {
-                then_block.stmts
-            }
+            TirStmtKind::If { then_block, .. } if clauses.contains(&stmt.span) => then_block.stmts,
             kind => vec![TirStmt { kind, ..stmt }],
         })
         .collect();

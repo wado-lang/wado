@@ -177,7 +177,13 @@ pub fn slice(&self, start: i32, end: i32) -> StrSlice
 ```
 
 A condition is parsed as an `if` condition is, with no struct literal, so the
-body's `{` cannot be read as one. Contracts state inputs only, so a clause
+body's `{` cannot be read as one.
+
+Clauses are separated by nothing but the `contract` that opens each, as `->`
+and `with` open theirs. A comma between them would also be the comma before a
+message, and brackets around each would set the clause apart from the rest of
+the signature. Run together on one line they read poorly, so the formatter
+puts each clause on a line of its own. Contracts state inputs only, so a clause
 names no result and no old value.
 
 A condition performs no effect. It may call a function that has a contract of

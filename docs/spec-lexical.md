@@ -165,18 +165,18 @@ position listed:
 | ---------- | --------------------------------------------------- |
 | `contract` | `contract cond` clause after a function signature   |
 | `flags`    | `flags` declaration                                 |
-| `type`    | `type` declaration                                  |
-| `of`      | `for let <pattern> of <expr>`                       |
-| `from`    | `use { ... } from "..."`                            |
-| `test`    | `test "name" { ... }` block                         |
-| `extends` | `resource Child extends Parent`                     |
-| `do`      | `with Effect => handler do { ... }`                 |
-| `task`    | `task return expr;`                                 |
-| `trap`    | `..trap` rest clause of an effect handler `impl`    |
-| `forward` | `..forward` rest clause of an effect handler `impl` |
-| `resume`  | `resume expr;` in an effect handler                 |
-| `self`    | a method's receiver: `&self`, `self.field`          |
-| `Self`    | the implementing or declared type: `Self::Item`     |
+| `type`     | `type` declaration                                  |
+| `of`       | `for let <pattern> of <expr>`                       |
+| `from`     | `use { ... } from "..."`                            |
+| `test`     | `test "name" { ... }` block                         |
+| `extends`  | `resource Child extends Parent`                     |
+| `do`       | `with Effect => handler do { ... }`                 |
+| `task`     | `task return expr;`                                 |
+| `trap`     | `..trap` rest clause of an effect handler `impl`    |
+| `forward`  | `..forward` rest clause of an effect handler `impl` |
+| `resume`   | `resume expr;` in an effect handler                 |
+| `self`     | a method's receiver: `&self`, `self.field`          |
+| `Self`     | the implementing or declared type: `Self::Item`     |
 
 Elsewhere each is an ordinary identifier: a variable, field, parameter, or type
 name.

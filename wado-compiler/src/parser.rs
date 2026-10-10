@@ -2086,7 +2086,9 @@ impl Parser {
             } else {
                 None
             };
-            let end_span = message.as_ref().map_or_else(|| condition.span(), Expr::span);
+            let end_span = message
+                .as_ref()
+                .map_or_else(|| condition.span(), Expr::span);
             clauses.push(Stmt::Assert(AssertStmt {
                 id,
                 condition,
