@@ -7,6 +7,8 @@
 // best-effort token stream via [`LexResult`]. The entry points are the free
 // functions [`lex`] and [`lex_in`].
 
+use std::borrow::Cow;
+
 use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -36,8 +38,17 @@ pub fn is_valid_ident(s: &str) -> bool {
 pub const WILDCARD: &str = "_";
 
 /// `text` with every CRLF read as the LF it stands for, as Rust reads source.
-pub(crate) fn normalize_line_breaks(text: &str) -> String {
-    text.replace("\r\n", "\n")
+pub(crate) fn normalize_line_breaks(text: &str) -> Cow<'_, str> {
+    if text.contains("\r\n") {
+        Cow::Owned(text.replace("\r\n", "\n"))
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
+/// Whether `text` opens with a line break: an LF or a CRLF, never a bare CR.
+fn starts_with_line_break(text: &str) -> bool {
+    text.starts_with('\n') || text.starts_with("\r\n")
 }
 
 /// Tokenise `source` as its own parse. See module docs for the recovery
@@ -382,6 +393,13 @@ pub(crate) fn defaults_to_float(repr: &str) -> bool {
 /// an integer.
 pub(crate) fn has_decimal_point(repr: &str) -> bool {
     repr.contains('.')
+}
+
+/// Whether a number literal is a plain decimal integer, digits and `_` alone:
+/// the half a decimal point would join.
+pub(crate) fn is_decimal_integer(repr: &str) -> bool {
+    repr.starts_with(|c: char| c.is_ascii_digit())
+        && repr.chars().all(|c| c.is_ascii_digit() || c == '_')
 }
 
 /// Whether a number literal has an exponent. A hex literal has none: its `e`
@@ -916,7 +934,12 @@ impl<'a> Lexer<'a> {
         self.advance_while(|ch| ch != '\n');
 
         let line = &self.input[text_start..self.pos];
-        let text = line.strip_suffix('\r').unwrap_or(line).to_string();
+        // Only the CR of a CRLF ends the line; a bare one is the comment's text.
+        let text = match self.peek_char() {
+            Some('\n') => line.strip_suffix('\r').unwrap_or(line),
+            _ => line,
+        }
+        .to_string();
 
         Comment {
             text,
@@ -945,7 +968,7 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedBlockComment,
                         span,
                     });
-                    let text = normalize_line_breaks(&self.input[text_start..self.pos]);
+                    let text = normalize_line_breaks(&self.input[text_start..self.pos]).into_owned();
                     return Comment {
                         text,
                         kind: CommentKind::Block,
@@ -957,7 +980,7 @@ impl<'a> Lexer<'a> {
                     if self.peek_char() == Some('/') {
                         let text_end = self.pos - 1; // before the *
                         self.advance(); // consume /
-                        let text = normalize_line_breaks(&self.input[text_start..text_end]);
+                        let text = normalize_line_breaks(&self.input[text_start..text_end]).into_owned();
                         return Comment {
                             text,
                             kind: CommentKind::Block,
@@ -984,14 +1007,9 @@ impl<'a> Lexer<'a> {
             return false;
         }
 
-        // Check that __DATA__ is followed by end of input or newline (must be on its own line)
         let after_marker = &remaining[DATA_MARKER.len()..];
-        if !after_marker.is_empty() {
-            let next_char = after_marker.chars().next().unwrap();
-            // Only allow newline (\n or \r) or EOF after __DATA__
-            if next_char != '\n' && next_char != '\r' {
-                return false;
-            }
+        if !after_marker.is_empty() && !starts_with_line_break(after_marker) {
+            return false;
         }
 
         // Found __DATA__ marker - consume it
@@ -1010,7 +1028,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        self.data_section = Some(normalize_line_breaks(&self.input[self.pos..]));
+        self.data_section = Some(normalize_line_breaks(&self.input[self.pos..]).into_owned());
 
         // Move position to end of input
         while self.advance().is_some() {}
@@ -1211,12 +1229,12 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedString,
                         span: self.span_from(start, start_line, start_column),
                     });
-                    return normalize_line_breaks(&self.input[content_start..self.pos]);
+                    return normalize_line_breaks(&self.input[content_start..self.pos]).into_owned();
                 }
                 Some((_, '"')) => {
                     let content_end = self.pos;
                     self.advance();
-                    return normalize_line_breaks(&self.input[content_start..content_end]);
+                    return normalize_line_breaks(&self.input[content_start..content_end]).into_owned();
                 }
                 Some((_, '\\')) => {
                     self.advance();
@@ -1574,7 +1592,7 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 Some((_, '\'')) => {
-                    let raw = normalize_line_breaks(&self.input[inner_start..self.pos]);
+                    let raw = normalize_line_breaks(&self.input[inner_start..self.pos]).into_owned();
                     self.advance(); // consume closing '
                     return raw;
                 }
@@ -1596,7 +1614,7 @@ impl<'a> Lexer<'a> {
             kind: LexErrorKind::UnterminatedChar,
             span: self.span_from(start, start_line, start_column),
         });
-        normalize_line_breaks(&self.input[inner_start..self.pos])
+        normalize_line_breaks(&self.input[inner_start..self.pos]).into_owned()
     }
 }
 
@@ -1903,6 +1921,26 @@ __DATA__
                 .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "__DATA__"))
         );
         assert_eq!(r.data_section.as_deref(), None);
+    }
+
+    #[test]
+    fn test_data_section_after_bare_cr_is_not_a_marker() {
+        let r = lex("fn main() { }\n__DATA__\rjunk\n{}");
+        assert_eq!(r.data_section.as_deref(), None);
+    }
+
+    #[test]
+    fn test_data_section_after_crlf() {
+        let r = lex("fn main() { }\r\n__DATA__\r\na\r\nb");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        assert_eq!(r.data_section.as_deref(), Some("a\nb"));
+    }
+
+    #[test]
+    fn test_line_comment_keeps_a_bare_cr() {
+        let r = lex("// a\r\n// b\r");
+        assert_eq!(r.comments[0].text, " a");
+        assert_eq!(r.comments[1].text, " b\r");
     }
 
     #[test]

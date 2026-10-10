@@ -203,6 +203,20 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// `_` is a token of its own, and a CRLF inside a literal reads as LF.
+#[test]
+fn test_format_keeps_wildcard_binders_and_crlf_literals() {
+    let source = concat!(
+        "fn f(_: i32, g: fn(i32) -> i32) -> String with _ {\r\n",
+        "    let h = |_: i32| 1;\r\n",
+        "    return \"a\r\nb\" + `c\r\n${g(h(0))}`;\r\n",
+        "}\r\n",
+    );
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(!formatted.contains('\r'), "got:\n{formatted:?}");
+}
+
 #[test]
 fn test_format_idempotent_simple() {
     let source = r"

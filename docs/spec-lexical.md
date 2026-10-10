@@ -21,7 +21,8 @@ holds no CR. `#line` counts a CRLF as one line break.
 
 A CR that no LF follows is not a line break. Between tokens it is whitespace.
 Inside a string, template, byte string or character literal it is an error,
-since most editors do not show it; write `\r` instead.
+since most editors do not show it; write `\r` instead. In a comment it is part
+of the text, and it does not end the line of a `__DATA__` marker.
 
 ## Comments
 

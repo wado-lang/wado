@@ -126,6 +126,22 @@ fn f() {
     assert_ne!(c.modifiers & token_modifier::READONLY, 0);
 }
 
+/// `_` binds nothing, so it takes no class a name would.
+#[test]
+fn the_wildcard_is_uncoloured() {
+    let src = "\
+fn first(x: i32, _: i32) -> i32 {
+    let [a, _] = [x, x];
+    return a;
+}
+";
+    let tokens = tokens_for(src);
+
+    assert!(tokens.iter().all(|t| !(t.line == 0 && t.start == 17)), "{tokens:?}");
+    assert!(tokens.iter().all(|t| !(t.line == 1 && t.start == 12)), "{tokens:?}");
+    assert_eq!(at(&tokens, 0, 9).token_type, token_type::PARAMETER);
+}
+
 /// A snapshot resolves a shorthand field to the binding it reads, and the
 /// field name wins anyway. The unit tests run without one and cannot say that.
 #[test]
