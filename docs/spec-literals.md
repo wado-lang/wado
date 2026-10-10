@@ -342,8 +342,8 @@ method receiver: `(2 as u8) < x`, `(1 as u64).to_string()`. The rationale is
 [WEP: Numeric Literal Suffixes — Withdrawn](./wep-2026-10-01-numeric-literal-suffixes.md).
 
 Letters written directly after a literal's digits are an error, with or
-without an `_` before them. Where they name a numeric type, the error says to
-cast instead:
+without an `_` before them. Where they name a numeric type the literal can be,
+the error says to cast instead:
 
 <!-- {"fixture":"error_numeric_literal_suffix.wado"} -->
 
@@ -394,6 +394,20 @@ let a = 1_;                  // compile error: an `_` in a numeric literal stand
 
 ```wado
 let a = 0x_FF;               // compile error: an `_` in a numeric literal stands between two digits: `0x_FF`
+```
+
+A decimal point continues a literal only before a digit, as in Rust, so `t.0._1`
+reads the field `_1` of `t.0`:
+
+<!-- {"fixture":"tuple_index_then_underscore_field.wado"} -->
+
+```wado
+struct S { _1: i32 }
+
+test {
+    let t = [S { _1: 3 }, 4];
+    assert t.0._1 == 3;
+}
 ```
 
 ## String Literals

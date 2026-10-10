@@ -20,6 +20,7 @@ use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
 use crate::escape::{unescape_byte, unescape_bytes};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::tir::{InferVarId, ResolvedType, TypeId, TypeTable};
@@ -38,7 +39,7 @@ fn is_literal_expr(expr: &Expr) -> bool {
 
 /// A numeric literal's spelling: what [`Elaborator::try_coerce_numeric_literal`]
 /// needs to re-read it against a target type.
-pub(super) enum NumericLiteralKind<'a> {
+pub(crate) enum NumericLiteralKind<'a> {
     /// `42`, `0x2a`, `3.14`.
     Number(&'a str),
     /// `b'0'`, a `u8`-valued integer literal.
@@ -47,11 +48,11 @@ pub(super) enum NumericLiteralKind<'a> {
 
 /// One of the numeric-literal shapes implicit conversion retargets (WEP
 /// 2026-08-24), with the nodes whose spans its diagnostics point at.
-pub(super) struct NumericLiteral<'a> {
-    pub(super) kind: NumericLiteralKind<'a>,
-    pub(super) lit: &'a ast::LiteralExpr,
+pub(crate) struct NumericLiteral<'a> {
+    pub(crate) kind: NumericLiteralKind<'a>,
+    pub(crate) lit: &'a ast::LiteralExpr,
     /// The `-` wrapper of a negated literal.
-    pub(super) neg: Option<&'a ast::UnaryExpr>,
+    pub(crate) neg: Option<&'a ast::UnaryExpr>,
 }
 
 /// Classify `expr` as a numeric literal, or `None` when it is not one.
@@ -64,7 +65,7 @@ pub(super) struct NumericLiteral<'a> {
 ///
 /// The non-numeric arms are enumerated rather than caught by `_`, so a new
 /// [`Expr`] variant forces a decision here.
-pub(super) fn classify_numeric_literal(expr: &Expr) -> Option<NumericLiteral<'_>> {
+pub(crate) fn classify_numeric_literal(expr: &Expr) -> Option<NumericLiteral<'_>> {
     match expr {
         Expr::Literal(lit) => match &lit.value {
             Literal::Number(repr) => Some(NumericLiteral {
@@ -122,7 +123,7 @@ pub(super) fn classify_numeric_literal(expr: &Expr) -> Option<NumericLiteral<'_>
 }
 
 /// Whether `expr` is one of the shapes [`classify_numeric_literal`] names.
-pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
+pub(crate) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
@@ -313,7 +314,7 @@ fn shared_literal_default(literals: &[Expr]) -> TypeId {
         .map(|expr| {
             let literal = classify_numeric_literal(expr).expect("an operand is a numeric literal");
             match literal.kind {
-                NumericLiteralKind::Number(repr) if util::defaults_to_float(repr) => TypeTable::F64,
+                NumericLiteralKind::Number(repr) if defaults_to_float(repr) => TypeTable::F64,
                 NumericLiteralKind::Number(_) => TypeTable::I32,
                 NumericLiteralKind::Byte(_) => TypeTable::U8,
             }
@@ -322,17 +323,22 @@ fn shared_literal_default(literals: &[Expr]) -> TypeId {
         .expect("a variable is pending only with a literal")
 }
 
-/// Whether `expr` is a byte literal. Among numeric literals it is the one that
-/// arrives with a type of its own, so it settles a pair that has no other
-/// anchor.
-fn is_byte_literal_expr(expr: &Expr) -> bool {
-    matches!(
-        classify_numeric_literal(expr),
-        Some(NumericLiteral {
-            kind: NumericLiteralKind::Byte(_),
-            ..
+/// Whether `expr` is built from numeric literals ([`is_literal_arithmetic`]),
+/// one of them a byte literal. Among numeric literals that is the one that
+/// arrives with a type of its own, and every operator over them takes one type
+/// for both operands, so it settles a pair that has no other anchor.
+fn holds_byte_literal(expr: &Expr) -> bool {
+    literal_operands(expr).is_some_and(|operands| {
+        operands.into_iter().any(|operand| {
+            matches!(
+                classify_numeric_literal(operand),
+                Some(NumericLiteral {
+                    kind: NumericLiteralKind::Byte(_),
+                    ..
+                })
+            )
         })
-    )
+    })
 }
 
 /// Whether a numeric literal can be `target`, i.e. whether handing it down as
@@ -401,12 +407,13 @@ impl LiteralPairOrder {
     }
 }
 
-/// Order two numeric literals — the one pair where neither operand can take its
-/// type from the other by default.
+/// Order two operands built from numeric literals — the one pair where neither
+/// operand can take its type from the other by default.
 ///
 /// A type from outside the operation wins when a literal can be it. Failing
 /// that, a byte literal anchors the pair: `b'A'` is `u8`-valued where a decimal
-/// literal carries no type of its own, so `b'\n' == 10` compares two `u8`s.
+/// literal carries no type of its own, so `b'\n' == 10` and `b'A' + 1 == 66`
+/// compare two `u8`s.
 pub(super) fn numeric_literal_pair_order(
     tt: &TypeTable,
     left: &Expr,
@@ -417,7 +424,7 @@ pub(super) fn numeric_literal_pair_order(
     if hint.is_some() {
         return LiteralPairOrder::Together(hint);
     }
-    match (is_byte_literal_expr(left), is_byte_literal_expr(right)) {
+    match (holds_byte_literal(left), holds_byte_literal(right)) {
         (true, false) => LiteralPairOrder::LeftAnchors,
         (false, true) => LiteralPairOrder::RightAnchors,
         _ => LiteralPairOrder::Together(None),
@@ -436,9 +443,9 @@ pub(super) fn range_endpoint_order(
         return LiteralPairOrder::Together(element);
     }
     let (start, end) = (&range.start, &range.end);
-    match (is_numeric_literal_expr(start), is_numeric_literal_expr(end)) {
+    match (is_literal_arithmetic(start), is_literal_arithmetic(end)) {
         (true, true) => {
-            let has_byte = is_byte_literal_expr(start) || is_byte_literal_expr(end);
+            let has_byte = holds_byte_literal(start) || holds_byte_literal(end);
             LiteralPairOrder::Together(has_byte.then_some(TypeTable::U8))
         }
         (true, false) => LiteralPairOrder::RightAnchors,
@@ -518,7 +525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `i128` / `u128` are structs, so `is_integer` does not answer for them.
         let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
         let is_integer = self.tysys.type_table.borrow().is_integer(target_type);
-        if (is_integer || wide.is_some()) && util::has_decimal_point(repr) {
+        if (is_integer || wide.is_some()) && has_decimal_point(repr) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
                     "cannot use float literal '{sign}{repr}' as integer (has a decimal point)"

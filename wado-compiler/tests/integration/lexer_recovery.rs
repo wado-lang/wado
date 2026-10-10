@@ -179,6 +179,22 @@ fn missing_exponent_digits_recovers() {
     );
 }
 
+/// A numeric literal reports its first error only, so a fix for one is not
+/// followed by a second about the same text.
+#[test]
+fn numeric_literal_reports_one_error() {
+    for (source, first) in [
+        ("let v = 1e_5;", "an `_` in a numeric literal"),
+        ("let v = 1e_u8;", "expected digit after exponent"),
+        ("let v = 0b12_u8;", "invalid digit `2` in a binary literal"),
+    ] {
+        let r = lex(source);
+        assert_eq!(r.errors.len(), 1, "{source}: {:?}", r.errors);
+        let message = r.errors[0].to_string();
+        assert!(message.starts_with(first), "{source}: {message}");
+    }
+}
+
 #[test]
 fn unterminated_block_comment_does_not_lose_preceding_tokens() {
     // Block comment swallowing the rest of the file is unavoidable, but the

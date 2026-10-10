@@ -33,8 +33,10 @@ any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by
 [`AsStrSlice`](./spec-standard-traits.md#asstrslice) matches as well.
 
-A float literal is not a pattern. A float matches a
-[range pattern](#range-patterns) instead.
+A literal with a decimal point is not a pattern. A float matches a
+[range pattern](#range-patterns) instead. A literal with an exponent and no
+decimal point is the integer of its value, as it is where an integer is
+expected, so `1e3` matches `1000`.
 
 A literal or range pattern on a value whose type is a type parameter means, in
 each instance, what it means on that instance's type. An instance whose type

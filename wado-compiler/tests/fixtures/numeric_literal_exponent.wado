@@ -36,6 +36,17 @@ test "an exponent literal is an integer where one is expected" {
     assert low == -1_000_000_000_000_000_000;
 }
 
+test "a zero mantissa is zero whatever the exponent" {
+    let zero: i64 = 0e40;
+    assert zero == 0;
+}
+
+test "an exponent literal is an integer pattern on an integer scrutinee" {
+    let n = builtin::black_box(1000);
+    assert match n { 1e3 => true, _ => false };
+    assert match n { 0..<1e3 => false, _ => true };
+}
+
 test "an exponent literal keeps Rust's value under a cast" {
     assert 1e3 as i64 == 1000;
     assert 1e-1 as i32 == 0;

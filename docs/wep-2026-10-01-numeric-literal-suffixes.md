@@ -63,7 +63,8 @@ warn about one that Rust accepts.
 ### The `_` separator
 
 An `_` stands between two digits, one at a time. `1_000` and `0xFF_FF` are
-literals. `1_`, `1__0`, `0x_FF`, `1_.5` and `1._5` are errors.
+literals. `1_`, `1__0`, `0x_FF` and `1_.5` are errors. A `.` continues a
+literal only before a digit, as in Rust, so `1._5` is the field `_5` of `1`.
 
 ### Exponent literals
 

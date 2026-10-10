@@ -95,9 +95,9 @@ Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 Two lints read integer arithmetic whose result its literals already decide.
 
-A _constant operand_ is an integer literal, a negated one, either one cast with
-`as` such as `-128 as i8`, or a `+`, `-`, `*` or unary `-` whose operands are
-themselves constant operands. Each has the type the expression has, so
+A _constant operand_ is an integer or byte literal, a negated integer literal,
+any of these cast with `as` such as `-128 as i8`, or a `+`, `-`, `*` or unary
+`-` whose operands are themselves constant operands. Each has the type the expression has, so
 `200 as u8 + 100` is computed in `u8`. A cast of any other operand converts a
 value, so it is not a constant operand.
 
@@ -124,6 +124,7 @@ test "wraps" {
     assert 0 as u32 - 1 == 4294967295;
     assert 2147483647 * 2 == -2;
     assert -(-128 as i8) == -128;
+    assert b'\xC8' + 100 == 44;
     assert 1 << 33 == 2;
     let x = builtin::black_box(1 as u8);
     assert x << 9 == 2;

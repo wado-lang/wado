@@ -6,13 +6,12 @@ use crate::ast::{
     AstVisitor, Attribute, Expr, Literal, attrs_allow, inner_attrs_allow, lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::liveness::is_user_authored;
-use crate::elaborator::util::is_hex_literal;
+use crate::lexer::is_hex_literal;
+use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::token::Span;
-
-/// The float type names whose spelling is also hex digits.
-const LOOKALIKES: [&str; 4] = ["f16", "bf16", "f32", "f64"];
 
 /// Source-level `HexSuffixLookalike` warnings: every hex literal expression
 /// whose last `_`-separated group spells a float type.
@@ -69,8 +68,9 @@ impl AstVisitor for Lookalikes {
 fn is_lookalike(repr: &str) -> bool {
     is_hex_literal(repr)
         && repr.rsplit_once('_').is_some_and(|(_, last)| {
-            LOOKALIKES
+            PrimitiveType::ALL
                 .iter()
-                .any(|name| last.eq_ignore_ascii_case(name))
+                .filter(|&&p| FloatFormat::of(p).is_some())
+                .any(|p| last.eq_ignore_ascii_case(p.as_str()))
         })
 }

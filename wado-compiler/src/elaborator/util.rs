@@ -6,6 +6,7 @@ use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
+use crate::lexer::{defaults_to_float, has_decimal_point};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::tir::{
@@ -52,7 +53,7 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
 pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     match lit {
         Literal::Number(repr) => {
-            if defaults_to_float(repr) {
+            if has_decimal_point(repr) {
                 return Err("float literals cannot be used in match patterns".to_string());
             }
             let (negated, digits) = repr
@@ -85,19 +86,25 @@ pub(super) fn range_bound(
     resolutions: &Resolutions,
 ) -> Option<Result<RangeBound, String>> {
     match pattern {
-        Pattern::Literal(Literal::Number(repr)) if defaults_to_float(repr) => {
-            let (negated, digits) = repr
-                .strip_prefix('-')
-                .map_or((false, repr.as_str()), |digits| (true, digits));
-            Some(Ok(RangeBound::Float(FloatBound {
-                kind: FloatBoundKind::Literal {
-                    digits: digits.to_string(),
-                    negated,
-                },
-                shown: repr.clone(),
-            })))
-        }
-        Pattern::Literal(lit @ (Literal::Number(..) | Literal::Byte(_) | Literal::Char(_))) => {
+        // An exponent literal names an integer where its value is one, as it
+        // does where an integer is expected, and a float otherwise.
+        Pattern::Literal(lit @ Literal::Number(repr)) => match pattern_literal(lit) {
+            Ok(value) => Some(Ok(RangeBound::Discrete(value))),
+            Err(_) if defaults_to_float(repr) => {
+                let (negated, digits) = repr
+                    .strip_prefix('-')
+                    .map_or((false, repr.as_str()), |digits| (true, digits));
+                Some(Ok(RangeBound::Float(FloatBound {
+                    kind: FloatBoundKind::Literal {
+                        digits: digits.to_string(),
+                        negated,
+                    },
+                    shown: repr.clone(),
+                })))
+            }
+            Err(error) => Some(Err(error)),
+        },
+        Pattern::Literal(lit @ (Literal::Byte(_) | Literal::Char(_))) => {
             Some(pattern_literal(lit).map(RangeBound::Discrete))
         }
         Pattern::Variant {
@@ -721,17 +728,19 @@ pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
         let invalid = || format!("invalid integer literal: {repr}");
         let mantissa: u128 = mantissa.parse().map_err(|_| invalid())?;
         let exponent: i32 = exponent.parse().map_err(|_| invalid())?;
+        if mantissa == 0 {
+            return Ok(0);
+        }
         let scale = 10_u128.checked_pow(exponent.unsigned_abs());
         if exponent >= 0 {
             scale
                 .and_then(|scale| mantissa.checked_mul(scale))
                 .ok_or_else(|| format!("integer literal out of range: {repr}"))
         } else {
-            match scale {
-                Some(scale) if mantissa % scale == 0 => Ok(mantissa / scale),
-                None if mantissa == 0 => Ok(0),
-                _ => Err(format!("`{repr}` is not a whole number")),
-            }
+            scale
+                .filter(|scale| mantissa % scale == 0)
+                .map(|scale| mantissa / scale)
+                .ok_or_else(|| format!("`{repr}` is not a whole number"))
         }
     } else {
         clean
@@ -755,30 +764,6 @@ pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
 /// The digits of a number literal that defaults to an integer.
 pub(super) fn integer_digits(repr: &str) -> Option<&str> {
     (!defaults_to_float(repr)).then_some(repr)
-}
-
-/// Whether a number literal is an `f64` where nothing expects a type: it has a
-/// decimal point or an exponent, as in Rust.
-pub(crate) fn defaults_to_float(repr: &str) -> bool {
-    has_decimal_point(repr) || has_exponent(repr)
-}
-
-/// Whether a number literal has a decimal point, which keeps it from ever being
-/// an integer.
-pub(crate) fn has_decimal_point(repr: &str) -> bool {
-    repr.contains('.')
-}
-
-/// Whether a number literal has an exponent. A hex literal has none: its `e`
-/// is a digit.
-fn has_exponent(repr: &str) -> bool {
-    !is_hex_literal(repr) && repr.contains(['e', 'E'])
-}
-
-/// Whether a number literal, negated or not, is written in hex.
-pub(crate) fn is_hex_literal(repr: &str) -> bool {
-    let unsigned = repr.strip_prefix('-').unwrap_or(repr);
-    unsigned.starts_with("0x") || unsigned.starts_with("0X")
 }
 
 /// The name a type carries its trait bounds under, where it carries any.

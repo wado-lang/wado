@@ -75,6 +75,7 @@ use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
+use crate::lexer::defaults_to_float;
 use crate::name::{
     LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
@@ -8603,7 +8604,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // via `is_float_target`.
         let is_float_target = base_target == TypeTable::F32
             || base_target == TypeTable::F64
-            || (recorded_type == TypeTable::UNKNOWN && util::defaults_to_float(repr));
+            || (recorded_type == TypeTable::UNKNOWN && defaults_to_float(repr));
         if is_float_target {
             // Rounded once, into the target format, so the later narrowing
             // of an `f32` is exact.
