@@ -1588,7 +1588,7 @@ fn dispatch_effects(
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
     let has_receiver = match &func_ref.template {
-        Some(TemplateId::Declared { def, .. }) => index
+        Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) => index
             .receiver_methods
             .contains(&index.resolutions.defs().ast_id(*def)),
         Some(TemplateId::Synthesized { .. }) | None => func_ref.method_info.is_some(),
@@ -1677,7 +1677,9 @@ impl EffectIndex<'_> {
                 None => brought.open = true,
             }
         }
-        let Some(TemplateId::Declared { def, .. }) = &func_ref.template else {
+        let Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) =
+            &func_ref.template
+        else {
             return brought;
         };
         let method = self.resolutions.defs().ast_id(*def);
@@ -1804,7 +1806,7 @@ impl EffectIndex<'_> {
         by_name: &IndexMap<(ModuleSource, String), V>,
     ) -> V {
         let entry = match &func_ref.template {
-            Some(TemplateId::Declared { def, .. }) => {
+            Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) => {
                 by_decl.get(&self.resolutions.defs().ast_id(*def))
             }
             Some(TemplateId::Synthesized { .. }) | None => {

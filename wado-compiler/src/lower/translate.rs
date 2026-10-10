@@ -2705,7 +2705,9 @@ fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
 
 fn convert_function_kind(kind: &tir::FunctionKind) -> nir::FunctionKind {
     match kind {
-        tir::FunctionKind::Regular => nir::FunctionKind::Regular,
+        tir::FunctionKind::Regular | tir::FunctionKind::UncheckedTwin { .. } => {
+            nir::FunctionKind::Regular
+        }
         tir::FunctionKind::ValueCopy { type_id } => {
             nir::FunctionKind::ValueCopy { type_id: *type_id }
         }

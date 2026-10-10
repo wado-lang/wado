@@ -1672,12 +1672,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let TirExprKind::Call { func, .. } = &mut expr.kind else {
             return Err(NOT_A_CALL);
         };
-        let declared = match func.template.clone() {
-            Some(TemplateId::Declared { def, block }) => Some((def, block)),
-            Some(TemplateId::Synthesized { .. }) => return Err(NOT_A_CALL),
+        let declared = match func.template {
+            Some(TemplateId::Declared { def, .. }) => Some(def),
+            Some(TemplateId::Unchecked { .. } | TemplateId::Synthesized { .. }) => {
+                return Err(NOT_A_CALL);
+            }
             None => None,
         };
-        let Some(def) = declared.map(|(def, _)| def).or(dispatched) else {
+        let Some(def) = declared.or(dispatched) else {
             return Err(NOT_A_CALL);
         };
         if !self.declares_contract(def) {
@@ -1687,22 +1689,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(info) = &mut func.method_info {
             info.method_name = unchecked_twin_name(&info.method_name);
         }
-        // A call naming an instance (`Wrap<String>::get`) also names the
-        // template it instantiates, and the twin's template is that one's twin.
         if let Some(mono) = &mut func.monomorph_info {
             mono.generic_name = unchecked_twin_name(&mono.generic_name);
         }
-        if let Some((def, block)) = declared {
-            let defs = self.tysys.resolutions.defs();
-            let name = func
-                .monomorph_info
-                .as_ref()
-                .map_or_else(|| func.name.clone(), |mono| mono.generic_name.clone());
-            func.template = Some(TemplateId::Synthesized {
-                module: TemplateId::Declared { def, block }.home(defs),
-                name,
-            });
-        }
+        func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
         Ok(())
     }
 
@@ -10328,6 +10318,9 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
     let mut twin = func.clone();
     twin.name = unchecked_twin_name(&func.name);
     twin.def_id = None;
+    twin.kind = FunctionKind::UncheckedTwin {
+        of: func.def_id.expect("a function with a `contract` clause is declared"),
+    };
     twin.is_export = false;
     twin.export_name = None;
     twin.compiler_item = None;
@@ -10363,7 +10356,7 @@ fn bind_trait_contracts(
     for holder_at in holders {
         let holder = &mut methods[holder_at];
         // Linking stamps every function's module, but the calls below record
-        // it now, in the holder's template key and its twin's.
+        // it now, in their references to the holder and its twin.
         holder.module_source = module.clone();
         let clauses: Vec<Span> = holder
             .body

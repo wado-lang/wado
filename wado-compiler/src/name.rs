@@ -103,7 +103,15 @@ pub fn cold_region_helper_name(enclosing_name: &str, ordinal: u32) -> String {
 /// The name of a function's `unchecked` twin, which an `unchecked` call
 /// reaches: the function's name with an `$unchecked` suffix.
 pub fn unchecked_twin_name(name: &str) -> String {
-    format!("{name}$unchecked")
+    format!("{name}{UNCHECKED_TWIN_SUFFIX}")
+}
+
+const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
+
+/// The function whose `unchecked` twin `name` names, if it names one. See
+/// [`unchecked_twin_name`].
+pub fn unchecked_twin_of(name: &str) -> Option<&str> {
+    name.strip_suffix(UNCHECKED_TWIN_SUFFIX)
 }
 
 const CONTRACT_HOLDER_PREFIX: &str = "$contract$";
