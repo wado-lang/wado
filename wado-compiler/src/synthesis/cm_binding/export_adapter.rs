@@ -35,6 +35,7 @@ use super::cm_free::{
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
 use super::lift::synthesize_lift_map;
+use super::lift::{materialize_if_needed, synthesize_lift};
 use super::lower::buffer_bytes;
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
@@ -45,6 +46,7 @@ use super::types::{
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 use crate::ast::Visibility;
+use crate::cm_abi::layout_tuple_with_registry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
@@ -1378,6 +1380,62 @@ fn lift_variant_from_flat_params(
     )
 }
 
+/// The most flat values a synchronous lift passes as Wasm parameters. Past it,
+/// the caller writes the parameters to memory, laid out as a tuple of their
+/// types, and passes one pointer (Canonical ABI `flatten_functype`).
+const MAX_FLAT_PARAMS: usize = 16;
+
+/// The adapter parameters and call arguments of an export whose parameters
+/// arrive in memory: one `$params` pointer, each parameter lifted from its
+/// offset in the tuple layout, and the buffer released once all are lifted.
+/// The caller allocated it through this component's `realloc`.
+fn build_spilled_export_params(
+    world_params: &[(String, Type)],
+    lift_ctx: LiftContext<'_>,
+    body_stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
+    let params = vec![TirParam {
+        name: "$params".to_string(),
+        type_id: TypeTable::I32,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span: synth_span(),
+    }];
+    locals.push(param_local("$params", TypeTable::I32, false));
+    let mut next_local = 1;
+    let base = || local_ref(0, "$params", TypeTable::I32);
+    let types: Vec<Type> = world_params.iter().map(|(_, ty)| ty.clone()).collect();
+    let layout = layout_tuple_with_registry(&types, lift_ctx.cm_interface_registry);
+    let mut args = Vec::with_capacity(types.len());
+    for (ty, offset) in types.iter().zip(&layout.offsets) {
+        let addr = if *offset == 0 {
+            base()
+        } else {
+            binary_add(base(), i32_const(*offset as i32))
+        };
+        let lifted = synthesize_lift(ty, addr, &mut next_local, body_stmts, locals, &lift_ctx);
+        args.push(materialize_if_needed(
+            lifted,
+            &mut next_local,
+            body_stmts,
+            locals,
+        ));
+    }
+    body_stmts.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            base(),
+            i32_const(layout.size as i32),
+            i32_const(layout.align as i32),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
+    (params, args, next_local)
+}
+
 /// Build an export binding's adapter parameters and call arguments — the shared
 /// prelude of [`synthesize_export_binding`], run whichever
 /// [`ExportReturnStrategy`] follows. Lifts the flat CM params back to Wado-typed
@@ -1391,6 +1449,13 @@ fn build_export_adapter_params(
     body_stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
 ) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
+    let flat_count: usize = world_params
+        .iter()
+        .map(|(_, ty)| lift_ctx.cm_interface_registry.cm_flatten(ty).len())
+        .sum();
+    if flat_count > MAX_FLAT_PARAMS {
+        return build_spilled_export_params(world_params, lift_ctx, body_stmts, locals);
+    }
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, lift_ctx.type_table);
     if needs_lifting {
         let flat_param_types: Vec<cm_abi::CmValType> = world_params

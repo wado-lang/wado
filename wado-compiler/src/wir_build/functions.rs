@@ -159,6 +159,11 @@ fn cm_import_core_func_type(
         return (params, vec![WirType::I32]);
     }
 
+    // Past MAX_FLAT_PARAMS a sync lowering takes its params through one buffer.
+    const MAX_FLAT_PARAMS: usize = 16;
+    if param_vts.len() > MAX_FLAT_PARAMS {
+        param_vts = vec![wasm_encoder::ValType::I32];
+    }
     let mut results: Vec<WirType> = Vec::new();
     if let Some(ret_ty) = &func.return_type {
         let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);

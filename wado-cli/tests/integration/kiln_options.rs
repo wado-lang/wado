@@ -346,3 +346,31 @@ fn map_value_mismatch_points_at_its_key() {
             "main.wado:5:29: error: kiln: `options.sizes.small` expected i32, got bool",
         ));
 }
+
+/// Options wide enough that `generate`'s parameters flatten past the sixteen
+/// values a call passes directly, so the host writes them to memory and passes
+/// one pointer. Every field still reaches the generator.
+#[test]
+fn options_past_the_flat_parameter_limit_reach_the_generator() {
+    let tmp = tempfile::tempdir().unwrap();
+    let generator = MAP_GENERATOR
+        .replace(
+            "pub sizes: TreeMap<String, i32>,",
+            "pub sizes: TreeMap<String, i32>,\n    pub a: List<String> = [],\n    pub b: List<String> = [],\n    pub c: List<String> = [],\n    pub on: bool = true,",
+        )
+        .replace(
+            "spelled.join(\",\")",
+            "spelled.join(\",\")};${req.options.a.join(\",\")};${req.options.c.join(\",\")};${req.options.on",
+        );
+    let app = write_project(
+        tmp.path(),
+        &generator,
+        "{ sizes: { small: 1 }, a: [\"x\"], c: [\"y\", \"z\"], on: false }",
+    );
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("small=1;x;y,z;false\n");
+}
