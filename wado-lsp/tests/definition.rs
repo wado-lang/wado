@@ -1112,7 +1112,9 @@ fn trait_contract_clause_definition() {
         );
         let param = def_at(source, 3, 23).await.expect("i in a trait clause");
         assert_range(&param, 2, 18, 19);
-        let callee = def_at(source, 3, 18).await.expect("small in a trait clause");
+        let callee = def_at(source, 3, 18)
+            .await
+            .expect("small in a trait clause");
         assert_range(&callee, 0, 3, 8);
     });
 }

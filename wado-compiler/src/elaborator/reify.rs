@@ -10319,7 +10319,9 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
     twin.name = unchecked_twin_name(&func.name);
     twin.def_id = None;
     twin.kind = FunctionKind::UncheckedTwin {
-        of: func.def_id.expect("a function with a `contract` clause is declared"),
+        of: func
+            .def_id
+            .expect("a function with a `contract` clause is declared"),
     };
     twin.is_export = false;
     twin.export_name = None;

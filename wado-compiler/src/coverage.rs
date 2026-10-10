@@ -775,7 +775,7 @@ impl Planner<'_> {
         }
         let mut leaves = false;
         for (index, stmt) in block.stmts.iter().enumerate() {
-            if matches!(stmt, Stmt::Assert(clause) if clause.contract) {
+            if stmt.as_contract().is_some() {
                 continue;
             }
             if leaves && self.reaches_only_unreachable(&block.stmts[index..], after) {

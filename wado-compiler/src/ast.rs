@@ -2447,10 +2447,7 @@ impl Function {
         self.body
             .iter()
             .flat_map(|body| &body.stmts)
-            .map_while(|stmt| match stmt {
-                Stmt::Assert(a) if a.contract => Some(a),
-                _ => None,
-            })
+            .map_while(Stmt::as_contract)
     }
 
     /// Whether this is the default method a trait declares, hidden, to hold
@@ -2784,6 +2781,14 @@ pub struct ContinueStmt {
 }
 
 impl Stmt {
+    /// The `contract` clause this statement is, if it is one.
+    pub fn as_contract(&self) -> Option<&AssertStmt> {
+        match self {
+            Stmt::Assert(clause) if clause.contract => Some(clause),
+            _ => None,
+        }
+    }
+
     /// Returns the [`AstId`] for this statement.
     pub fn id(&self) -> AstId {
         match self {

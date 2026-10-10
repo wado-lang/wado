@@ -1824,7 +1824,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let walked_decls = std::mem::replace(&mut self.sem.decls, decls);
         self.sem.decls.anon_struct_fields = walked_decls.anon_struct_fields;
         self.sem.decls.pending_anonymous_structs = walked_decls.pending_anonymous_structs;
-        self.sem.types.fn_param_types.insert(func.id, sig.param_types);
+        self.sem
+            .types
+            .fn_param_types
+            .insert(func.id, sig.param_types);
     }
 
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose

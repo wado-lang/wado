@@ -1393,7 +1393,7 @@ impl<'a> Unparser<'a> {
         self.last_source_line = block.span.line;
 
         for stmt in &block.stmts {
-            if matches!(stmt, Stmt::Assert(a) if a.contract) {
+            if stmt.as_contract().is_some() {
                 continue;
             }
             let stmt_span = get_stmt_span(stmt);

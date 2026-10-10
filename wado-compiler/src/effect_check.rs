@@ -2028,9 +2028,7 @@ impl AstVisitor for SemEffectWalker<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         // A clause may perform no effect at all, which the purity check
         // reports; a missing effect there would be the same fault twice.
-        if let Stmt::Assert(assert) = stmt
-            && assert.contract
-        {
+        if stmt.as_contract().is_some() {
             return;
         }
         // `for let v of iterable { … }` desugars to synthetic `.into_iter()` /
@@ -2232,6 +2230,7 @@ pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
 /// only an expression that does not.
 pub(crate) struct EffectProbe<'a> {
     sem: &'a Semantics,
+    state: &'a AnnotateState,
     data: OwnedEffectData,
 }
 
@@ -2240,14 +2239,14 @@ impl<'a> EffectProbe<'a> {
     pub(crate) fn new(sem: &'a Semantics) -> Option<Self> {
         let state = sem.state.as_ref()?;
         let data = OwnedEffectData::build(sem, state, IndexSet::default());
-        Some(Self { sem, data })
+        Some(Self { sem, state, data })
     }
 
     /// Whether evaluating `expr`, written in `module`, performs an effect.
     pub(crate) fn performs_effect(&self, module: &ModuleSource, expr: &Expr) -> bool {
         let index = self.data.index(&self.sem.types);
         let mut out = Vec::new();
-        PurityWalker::new(self.sem, &index, module, &mut out).visit_expr(expr);
+        PurityWalker::new(self.sem, self.state, &index, module, &mut out).visit_expr(expr);
         !out.is_empty()
     }
 }
@@ -2255,14 +2254,14 @@ impl<'a> EffectProbe<'a> {
 /// Walk every expression that must be pure, appending violations.
 /// Shared by [`check_purity_semantic`] and [`check_semantics`].
 fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityError>) {
-    if sem.state.is_none() {
+    let Some(state) = sem.state.as_ref() else {
         return;
-    }
+    };
     for (src, module) in &sem.modules {
         if !is_effect_checked(src) {
             continue;
         }
-        let mut walker = PurityWalker::new(sem, index, src, out);
+        let mut walker = PurityWalker::new(sem, state, index, src, out);
         for item in &module.items {
             match item {
                 Item::Function(func) => walker.check_signature(func),
@@ -2272,9 +2271,6 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    // The trait method signature path does not yet resolve param
-                    // defaults, so their calls leave no `references` edge to flag
-                    // until that annotation lands.
                     for method in &trait_decl.methods {
                         walker.check_signature(method);
                     }
@@ -2344,17 +2340,14 @@ impl<'a> PurityWalker<'a> {
     /// A walker over `module_source`, outside any `with … do`.
     fn new(
         sem: &'a Semantics,
+        state: &'a AnnotateState,
         index: &'a EffectIndex<'a>,
         module_source: &'a ModuleSource,
         out: &'a mut Vec<PurityError>,
     ) -> Self {
         Self {
             sem,
-            annotations: sem
-                .state
-                .as_ref()
-                .and_then(|state| state.module_semantics.get(module_source))
-                .map(|module_sem| &module_sem.types),
+            annotations: state.module_semantics.get(module_source).map(|m| &m.types),
             index,
             module_source,
             context: PureContext::DefaultValue,
