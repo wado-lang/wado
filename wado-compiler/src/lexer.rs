@@ -1026,12 +1026,12 @@ impl<'a> Lexer<'a> {
 
         let text = &self.input[start..self.pos];
 
-        // The keyword set is generated from `crate::syntax::KEYWORDS`.
-        // Contextual keywords ("test", "do", "resume") are intentionally absent
-        // — the parser recognises them positionally, so they lex as identifiers.
         if text == WILDCARD {
             return TokenKind::Underscore;
         }
+        // The keyword set is generated from `crate::syntax::KEYWORDS`.
+        // Contextual keywords ("test", "do", "resume") are intentionally absent
+        // — the parser recognises them positionally, so they lex as identifiers.
         TokenKind::from_keyword(text).unwrap_or_else(|| TokenKind::Ident(text.to_string()))
     }
 
@@ -1222,7 +1222,9 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     self.skip_escape();
                 }
-                Some((_, '\r')) => self.advance_literal_cr(),
+                Some((_, '\r')) => {
+                    self.advance_literal_cr();
+                }
                 Some(_) => {
                     self.advance();
                 }
@@ -1230,21 +1232,25 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Advance past a CR inside a literal, which reads as the line break of a
-    /// CRLF and is an error anywhere else, as in Rust.
-    fn advance_literal_cr(&mut self) {
+    /// Advance past a CR inside a literal and the LF after it, answering
+    /// whether there was one. A CR reads as the line break of a CRLF and is an
+    /// error anywhere else, as in Rust.
+    fn advance_literal_cr(&mut self) -> bool {
         let Position {
             offset,
             line,
             column,
         } = self.position();
         self.advance();
-        if self.peek_char() != Some('\n') {
-            self.errors.push(LexError {
-                kind: LexErrorKind::BareCarriageReturn,
-                span: self.span_from(offset, line, column),
-            });
+        if self.peek_char() == Some('\n') {
+            self.advance();
+            return true;
         }
+        self.errors.push(LexError {
+            kind: LexErrorKind::BareCarriageReturn,
+            span: self.span_from(offset, line, column),
+        });
+        false
     }
 
     /// Peek the character after the current one without consuming.
@@ -1280,9 +1286,6 @@ impl<'a> Lexer<'a> {
             // A CRLF is one line break, which the unescaper reports.
             Some('\r') => {
                 self.advance_literal_cr();
-                if self.peek_char() == Some('\n') {
-                    self.advance();
-                }
             }
             Some(_) => {
                 self.advance();
@@ -1372,8 +1375,11 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     break;
                 }
-                // Dropped: the LF of a CRLF follows, or the error is reported.
-                Some((_, '\r')) => self.advance_literal_cr(),
+                Some((_, '\r')) => {
+                    if self.advance_literal_cr() {
+                        current_literal.push('\n');
+                    }
+                }
                 Some((_, ch)) => {
                     self.advance();
                     current_literal.push(ch);
@@ -1579,9 +1585,6 @@ impl<'a> Lexer<'a> {
                 }
                 Some((_, '\r')) => {
                     self.advance_literal_cr();
-                    if self.peek_char() == Some('\n') {
-                        self.advance();
-                    }
                 }
                 Some(_) => {
                     self.advance();
@@ -1762,7 +1765,10 @@ mod tests {
             let r = lex(source);
             assert_matches!(
                 r.errors.as_slice(),
-                [LexError { kind: LexErrorKind::BareCarriageReturn, .. }],
+                [LexError {
+                    kind: LexErrorKind::BareCarriageReturn,
+                    ..
+                }],
                 "{source:?}"
             );
         }
