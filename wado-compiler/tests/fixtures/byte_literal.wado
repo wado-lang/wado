@@ -102,6 +102,11 @@ export fn run() {
     assert f == 65.0;
 
     assert b'A' + 1 == b'B';
+    // An operation over literals holding a byte literal is a `u8` too, so it
+    // types a bare literal on the other side.
+    assert b'\x01' + b'\x02' == 3;
+    assert 3 == 1 + b'\x02';
+    assert b'\xC8' + 100 == 44;
 
     assert classify(b'5') == 1;
     assert classify(b'q') == 2;
@@ -136,6 +141,7 @@ export fn run() {
     let lo: u8 = 0;
     assert (0..=b'z').contains(&lo);
     assert (b'a'..=122).contains(&b'q');
+    assert (0..=b'y' + 1).contains(&b'z');
 }
 
 __DATA__

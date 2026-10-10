@@ -477,9 +477,9 @@ is a compile error. Wasm has no float remainder.
 
 ```wado
 test "u8 and i8 shift modulo 8" {
-    assert builtin::black_box(1_u8) << builtin::black_box(9_u8) == 2;
-    assert builtin::black_box(-128_i8) >> builtin::black_box(15_i8) == -1;
-    assert builtin::black_box(0x80_u8) >> builtin::black_box(15_u8) == 1;
+    assert builtin::black_box(1 as u8) << builtin::black_box(9 as u8) == 2;
+    assert builtin::black_box(-128 as i8) >> builtin::black_box(15 as i8) == -1;
+    assert builtin::black_box(0x80 as u8) >> builtin::black_box(15 as u8) == 1;
     let one: u8 = 1;
     assert one << 9 == 2;
 }

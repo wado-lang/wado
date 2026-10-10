@@ -11,34 +11,15 @@ only in the user's own modules, never in the standard library.
 
 The lints are:
 
-| Lint                                                   | Reports                                                                         |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| [`literal_cast`](#the-literal_cast-lint)               | a cast that types a literal a suffix could type                                 |
-| [`shadowed_name`](#the-shadowed_name-lint)             | a binder that takes a name already reaching a known symbol                      |
-| [`self_comparison`](#the-self_comparison-lint)         | a comparison of an expression with itself                                       |
-| [`arithmetic_overflow`](#the-arithmetic_overflow-lint) | constant integer arithmetic that wraps, or a constant shift amount out of range |
-| [`unconditional_trap`](#the-unconditional_trap-lint)   | an integer division or remainder that always traps                              |
-| [`undecided_effects`](#the-undecided_effects-lint)     | a trait head that writes no `with` clause                                       |
-| [`dead_code`](#the-dead_code-lint)                     | an unused or test-only free function or global                                  |
-
-## The `literal_cast` Lint
-
-A cast whose operand is an unsuffixed literal, bare or negated, warns where the
-suffix of its target types the literal as the cast does, and the warning gives
-the suffixed spelling. A float literal cast to an integer type converts, so it
-does not warn, and neither does a cast that no suffix can write.
-
-<!-- {"fixture":"literal_cast_lint.wado", "assert": false} -->
-
-```wado
-let a = 255 as u8;           // warns: write `255_u8` for `255 as u8`
-let b = -128 as i8;          // warns: write `-128_i8` for `-128 as i8`
-let c = 1.5 as f32;          // warns: write `1.5_f32` for `1.5 as f32`
-let d = 0xFF as u64;         // warns: write `0xFF_u64` for `0xFF as u64`
-let e = 0x10 as f64;         // no warning: a hex literal takes no float suffix
-let f = 1.5 as i32;          // no warning: this cast converts, to 1
-let g = 4 as Meters;         // no warning: a newtype has no suffix
-```
+| Lint                                                     | Reports                                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [`shadowed_name`](#the-shadowed_name-lint)               | a binder that takes a name already reaching a known symbol                      |
+| [`self_comparison`](#the-self_comparison-lint)           | a comparison of an expression with itself                                       |
+| [`arithmetic_overflow`](#the-arithmetic_overflow-lint)   | constant integer arithmetic that wraps, or a constant shift amount out of range |
+| [`unconditional_trap`](#the-unconditional_trap-lint)     | an integer division or remainder that always traps                              |
+| [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint) | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
+| [`undecided_effects`](#the-undecided_effects-lint)       | a trait head that writes no `with` clause                                       |
+| [`dead_code`](#the-dead_code-lint)                       | an unused or test-only free function or global                                  |
 
 ## The `shadowed_name` Lint
 
@@ -114,9 +95,11 @@ Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 Two lints read integer arithmetic whose result its literals already decide.
 
-A _constant operand_ is an integer literal, a negated one such as `-128_i8`, or
-a `+`, `-`, `*` or unary `-` whose operands are themselves constant operands.
-Each has the type the expression has, so `200_u8 + 100_u8` is computed in `u8`.
+A _constant operand_ is an integer or byte literal, a negated integer literal,
+any of these cast with `as` such as `-128 as i8`, or a `+`, `-`, `*` or unary
+`-` whose operands are themselves constant operands. Each has the type the expression has, so
+`200 as u8 + 100` is computed in `u8`. A cast of any other operand converts a
+value, so it is not a constant operand.
 
 ### The `arithmetic_overflow` Lint
 
@@ -137,12 +120,13 @@ are not, since the wrapped value is no longer a constant operand.
 
 ```wado
 test "wraps" {
-    assert 200_u8 + 100_u8 == 44;
-    assert 0_u32 - 1_u32 == 4294967295;
+    assert 200 as u8 + 100 as u8 == 44;
+    assert 0 as u32 - 1 == 4294967295;
     assert 2147483647 * 2 == -2;
-    assert -(-128_i8) == -128;
+    assert -(-128 as i8) == -128;
+    assert b'\xC8' + 100 == 44;
     assert 1 << 33 == 2;
-    let x = builtin::black_box(1_u8);
+    let x = builtin::black_box(1 as u8);
     assert x << 9 == 2;
 }
 ```
@@ -165,6 +149,24 @@ A float `/` or `%` never traps, so neither is reported.
 test "divides by zero" {
     let x = builtin::black_box(10);
     let _ = x / 0;
+}
+```
+
+## The `hex_suffix_lookalike` Lint
+
+The `hex_suffix_lookalike` lint warns about a hex literal whose last
+`_`-separated group is `f16`, `bf16`, `f32` or `f64` in any case. Those are hex
+digits, so the literal is an integer, as it is in Rust, but it reads as a float
+type. A float is written as a cast, `0xFF as f16`, and the integer without the
+`_`, `0xFFF16`.
+
+<!-- {"fixture":"lint_hex_suffix_lookalike.wado"} -->
+
+```wado
+test "a hex literal ending in a float type name warns" {
+    assert 0xff_f16 == 0xFFF16;
+    assert 0x1_F32 == 0x1F32;
+    assert 0x2_bf16 == 0x2BF16;
 }
 ```
 

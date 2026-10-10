@@ -33,11 +33,11 @@ pub mod flat_package;
 pub mod format_spec;
 pub(crate) mod graph;
 pub mod hashmap;
+pub mod hex_suffix_lookalike;
 pub mod intern;
 pub mod kiln;
 pub mod lexer;
 pub mod link;
-pub mod literal_cast;
 pub mod loader;
 pub mod logger;
 pub mod lower;
@@ -134,8 +134,8 @@ pub use effect_check::{
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
+use hex_suffix_lookalike::hex_suffix_lookalike_diagnostics;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
-use literal_cast::literal_cast_diagnostics;
 pub use loader::{LoadError, LoadResult, ModuleLoader};
 pub use lower::lower;
 pub use module_source::ModuleSource;
@@ -547,9 +547,9 @@ pub fn lint_diagnostics(
 ) -> Vec<Diagnostic> {
     let mut lints = shadowing_diagnostics(sem);
     lints.extend(undecided_effect_diagnostics(sem));
-    lints.extend(literal_cast_diagnostics(sem));
     lints.extend(self_comparison_diagnostics(sem));
     lints.extend(constant_arithmetic_diagnostics(sem));
+    lints.extend(hex_suffix_lookalike_diagnostics(sem));
     if unused {
         lints.extend(unused_diagnostics(sem, is_test_world));
     }

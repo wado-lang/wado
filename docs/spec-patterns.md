@@ -33,8 +33,10 @@ any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by
 [`AsStrSlice`](./spec-standard-traits.md#asstrslice) matches as well.
 
-A float literal is not a pattern. A float matches a
-[range pattern](#range-patterns) instead.
+A literal with a decimal point is not a pattern. A float matches a
+[range pattern](#range-patterns) instead. A literal with an exponent and no
+decimal point is the integer of its value, as it is where an integer is
+expected, so `1e3` matches `1000`.
 
 A literal or range pattern on a value whose type is a type parameter means, in
 each instance, what it means on that instance's type. An instance whose type
@@ -51,9 +53,9 @@ fn is_minus_one<T>(x: T) -> i32 {
 }
 
 test "a negative literal matches each signed width" {
-    assert is_minus_one(builtin::black_box(-1_i8)) == 1;
-    assert is_minus_one(builtin::black_box(-1_i64)) == 1;
-    assert is_minus_one(builtin::black_box(1_i32)) == 0;
+    assert is_minus_one(builtin::black_box(-1 as i8)) == 1;
+    assert is_minus_one(builtin::black_box(-1 as i64)) == 1;
+    assert is_minus_one(builtin::black_box(1 as i32)) == 0;
 }
 ```
 
@@ -277,7 +279,7 @@ assert grade == "P" && lower;
   namespace, or an associated constant.
 - A literal bound takes the scrutinee's type as a literal does where that type
   is expected, so on a float an integer or byte literal is the float of its
-  value (`0..<1.5`). A suffixed literal and a constant keep their own type.
+  value (`0..<1.5`). A constant keeps its own type.
 
 The compiler knows the value of a literal and of a primitive type's limit, such
 as `i32::MAX` or `f64::INFINITY`. A range bounded by those alone is checked

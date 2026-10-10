@@ -39,7 +39,7 @@ fn to_lowercase_simd(input: String) -> String {
     while i < len {
         let b = input.get_byte_unchecked(i);
         if b >= b'A' && b <= b'Z' {
-            result.push(char::from_u32_unchecked((b + 0x20_u8) as u32));
+            result.push(char::from_u32_unchecked((b + 0x20 as u8) as u32));
         } else {
             result.push(char::from_u32_unchecked(b as u32));
         }
@@ -103,7 +103,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
 
     while i < len {
         let b = input.get_byte_unchecked(i);
-        if b < 0x20_u8 || b > 0x7E_u8 {
+        if b < 0x20 as u8 || b > 0x7E as u8 {
             return false;
         }
         i += 1;

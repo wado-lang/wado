@@ -1,12 +1,12 @@
-// Letters written directly after a literal are its suffix, so one naming no
-// type is an error rather than a number followed by a name.
+// Letters written directly after a literal are an error whatever they spell,
+// rather than a number followed by a name.
 
 export fn run() {
-    let a = 255_u9;              // compile error: unknown numeric suffix `u9`
+    let a = 255_u9;              // compile error: invalid suffix `u9` on the numeric literal `255`
 }
 
 __DATA__
 {
-  "compile_error": ":5:13: lexer error: unknown numeric suffix `u9`",
+  "compile_error": ":5:13: lexer error: invalid suffix `u9` on the numeric literal `255`",
   "compile_error_codes": ["INVALID_SYNTAX"]
 }

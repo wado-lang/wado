@@ -623,7 +623,7 @@ impl Poly {
     /// symbols, each term bounded apart. An input symbol is an extent, within
     /// `[0, i32::MAX]`, and a derived one lies within what its operation leaves.
     fn bounds(&self) -> [i128, i128] {
-        let [mut low, mut high] = [0_i128, 0_i128];
+        let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
             let [l, h] = t.range();
             low = lower_sum(low, l);
@@ -638,7 +638,7 @@ impl Poly {
     /// it grows; this is what a value the run computes in `i64` needs. A
     /// partial sum lies between the negative terms' sum and the positive terms'.
     pub fn fits_i64(&self) -> bool {
-        let [mut low, mut high] = [0_i128, 0_i128];
+        let [mut low, mut high] = [0 as i128, 0 as i128];
         for let t of &self.terms {
             let [l, h] = t.range();
             low += i128::min(l, 0);

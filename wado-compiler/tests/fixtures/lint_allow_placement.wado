@@ -6,15 +6,15 @@
 use { println, eprintln, print, eprint } from "core:cli";
 
 struct Config {
-    #[allow(literal_cast)]
-    waived: u8 = 10 as u8,
-    kept: u8 = 11 as u8,
+    #[allow(arithmetic_overflow)]
+    waived: u8 = 250 as u8 + 16 as u8,
+    kept: u8 = 250 as u8 + 17 as u8,
 }
 
 impl Config {
     #[allow(arithmetic_overflow)]
-    const WAIVED: u8 = 250_u8 + 7_u8;
-    const KEPT: u8 = 250_u8 + 8_u8;
+    const WAIVED: u8 = 250 as u8 + 7 as u8;
+    const KEPT: u8 = 250 as u8 + 8 as u8;
 
     #[allow(unconditional_trap)]
     fn waived_method(y: i32) -> i32 {
@@ -49,7 +49,7 @@ fn divides(x: i32) -> i32 {
     return waived + x / 0 + Config::waived_method(x);
 }
 
-fn scale(#[allow(literal_cast)] a: u8 = 12 as u8, b: u8 = 13 as u8) -> u8 {
+fn scale(#[allow(arithmetic_overflow)] a: u8 = 250 as u8 + 18 as u8, b: u8 = 250 as u8 + 19 as u8) -> u8 {
     return a + b;
 }
 
@@ -67,20 +67,17 @@ fn kept_body() -> i32 {
 }
 
 test {
-    #[allow(literal_cast)]
-    let a = 14 as u8;
-    let b = 15 as u8;
     #[allow(arithmetic_overflow)]
-    let c = 240_u8 + 20_u8;
-    let d = 240_u8 + 21_u8;
+    let c = 240 as u8 + 20 as u8;
+    let d = 240 as u8 + 21 as u8;
     let x = builtin::black_box(1);
     #[allow(self_comparison)]
     let e = x == x;
     let f = x <= x;
     let config = Config {};
-    assert a + b == 29_u8 && c == 4_u8 && d == 5_u8 && e && f;
-    assert config.waived + config.kept == 21_u8 && scale() == 25_u8;
-    assert Config::WAIVED == 1_u8 && Config::KEPT == 2_u8;
+    assert c == 4 && d == 5 && e && f;
+    assert config.waived + config.kept == 21 && scale() == 25;
+    assert Config::WAIVED == 1 && Config::KEPT == 2;
     assert waived_body() == 1 && kept_body() == 2;
     assert Holder { value: 3 }.get() == 3;
 }
@@ -89,21 +86,19 @@ __DATA__
 {
   "test": {},
   "warnings_contains": [
-    "write `11_u8` for `11 as u8`",
-    "`250_u8 + 8_u8`",
-    "write `13_u8` for `13 as u8`",
-    "write `15_u8` for `15 as u8`",
-    "`240_u8 + 21_u8`",
+    "`250 as u8 + 17 as u8`",
+    "`250 as u8 + 8 as u8`",
+    "`250 as u8 + 19 as u8`",
+    "`240 as u8 + 21 as u8`",
     "`x <= x`",
     "`print` shadows",
     "`x / 0`"
   ],
   "warnings_not_contains": [
-    "10 as u8",
-    "250_u8 + 7_u8",
-    "12 as u8",
-    "14 as u8",
-    "240_u8 + 20_u8",
+    "250 as u8 + 16 as u8",
+    "250 as u8 + 7 as u8",
+    "250 as u8 + 18 as u8",
+    "240 as u8 + 20 as u8",
     "`x == x`",
     "`println` shadows",
     "`eprintln` shadows",
