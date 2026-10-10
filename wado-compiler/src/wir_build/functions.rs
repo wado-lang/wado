@@ -19,7 +19,8 @@ use super::context::{PendingFunctionBody, WirContext};
 use super::translate::resolve_param_names;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
-    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
+    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flat_params_in_buffer,
+    flatten_cm_param_type,
 };
 use crate::name::wir_func_type_key;
 use crate::nir::FuncId;
@@ -134,8 +135,7 @@ fn cm_import_core_func_type(
         let resolved_ty = cm_interface_registry.resolve_type(ty);
         flatten_cm_param_type(&resolved_ty, &mut param_vts, cm_interface_registry);
     }
-    let in_buffer = cm_interface_registry
-        .params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), func.is_async);
+    let in_buffer = flat_params_in_buffer(param_vts.len(), func.is_async);
 
     // Per CM spec `flatten_functype('lower')`, past its limit a lowering takes
     // its params through one buffer, and an async one appends the outptr only

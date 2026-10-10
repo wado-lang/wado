@@ -157,6 +157,31 @@ fn run_param(opt_level: OptLevel, source: &str, args: impl Fn(&str) -> Vec<Val>)
     });
 }
 
+/// A list among spilled params, lifted into the export's own `List<String>`.
+const SPILLED_LIST_PARAM_SOURCE: &str = r#"
+export fn measure(
+    a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8,
+    i: u8, j: u8, k: u8, l: u8, m: u8, n: u8, o: u8, xs: List<String>,
+) -> u32 {
+    let mut total = 0;
+    for let x of xs {
+        total += x.len();
+    }
+    return total as u32 + a as u32 - 1;
+}
+"#;
+
+fn spilled_list(arg: &str) -> Vec<Val> {
+    let mut args: Vec<Val> = (0..15).map(|_| Val::U8(1)).collect();
+    args.push(Val::List(vec![Val::String(arg.to_string())]));
+    args
+}
+
+#[test]
+fn lib_sync_lift_spilled_list_param_is_reclaimed() {
+    run_param(OptLevel::O2, SPILLED_LIST_PARAM_SOURCE, spilled_list);
+}
+
 fn one_string(arg: &str) -> Vec<Val> {
     vec![Val::String(arg.to_string())]
 }
