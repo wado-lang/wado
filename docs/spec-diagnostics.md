@@ -17,7 +17,7 @@ The lints are:
 | [`shadowed_name`](#the-shadowed_name-lint)             | a binder that takes a name already reaching a known symbol                      |
 | [`self_comparison`](#the-self_comparison-lint)         | a comparison of an expression with itself                                       |
 | [`arithmetic_overflow`](#the-arithmetic_overflow-lint) | constant integer arithmetic that wraps, or a constant shift amount out of range |
-| [`unconditional_trap`](#the-unconditional_trap-lint)   | an integer division that always traps                                           |
+| [`unconditional_trap`](#the-unconditional_trap-lint)   | an integer division or remainder that always traps                              |
 | [`undecided_effects`](#the-undecided_effects-lint)     | a trait head that writes no `with` clause                                       |
 | [`dead_code`](#the-dead_code-lint)                     | an unused or test-only free function or global                                  |
 
