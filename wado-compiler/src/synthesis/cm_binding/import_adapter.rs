@@ -5,7 +5,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
+use crate::component_model::{
+    CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, MAX_FLAT_ASYNC_PARAMS,
+    MAX_FLAT_PARAMS,
+};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
@@ -641,13 +644,6 @@ fn classify_param<'t>(
         other => panic!("unsupported param type shape for CM import lowering: {other:?}"),
     }
 }
-
-/// The flat params an async call passes directly; more go through one buffer.
-const MAX_FLAT_ASYNC_PARAMS: usize = 4;
-/// The most flat parameters a sync `canon lower` passes directly; past it
-/// they go through one params buffer, as past `MAX_FLAT_ASYNC_PARAMS` for an
-/// async one.
-const MAX_FLAT_PARAMS: usize = 16;
 
 /// A realloc'd result buffer: the local holding its address plus the
 /// allocation's size/align (needed again to free it or to embed it in an

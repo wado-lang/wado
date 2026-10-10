@@ -1139,32 +1139,24 @@ fn stretched_to(data: &List<f32>, from: &List<i32>, to: &List<i32>) -> List<f32>
 /// against the function.
 pub trait Backend with _ {
     type Tensor<E: Element, Axes>;
+    /// An operand of an elementwise kernel whose output has the axes `Axes`.
+    /// Each `read` checks a tensor against the output's axes, so `fused`
+    /// takes its operands as one list.
+    type Operand<Axes>;
 
     /// `t`, held on the host, as this backend holds it.
-
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
     /// `t` back on the host.
-
+    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
     /// `t`, held in half precision on the host, as this backend computes with
     /// it. How it stores the result is its own: the type says only that the
     /// kernels read it as f32.
-
-
-    /// An operand of an elementwise kernel whose output has the axes `Axes`.
-    /// Each read below checks a tensor against the output's axes, so the
-    /// kernel takes its operands as one list.
-    type Operand<Axes>;
-    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
-
-    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
-
-
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
         return self.upload(&widen(t));
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Self::Tensor<i64, [A]>;
-
 
     /// `t` as an operand over its own axes.
     fn read<Axes>(&mut self, t: &Self::Tensor<f32, Axes>) -> Self::Operand<Axes>;
@@ -1289,8 +1281,6 @@ pub struct Cpu {
 
 impl Backend for Cpu {
     type Tensor<E: Element, Axes> = Tensor<E, Axes>;
-
-
     type Operand<Axes> = Read<Axes>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
@@ -1308,7 +1298,6 @@ impl Backend for Cpu {
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Tensor<i64, [A]> {
         return range_i64(start, count, delta);
     }
-
 
     fn read<Axes>(&mut self, t: &Tensor<f32, Axes>) -> Read<Axes> {
         return Read { data: &t.data, extents: t.extents };

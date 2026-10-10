@@ -1578,20 +1578,14 @@ impl Term {
                 reads.push(lane_read(&lane, out));
             }
         }
-        let op = operands_renumbered(&self.expr, &renumbered);
-        return `${call}, Option::Some(Epilogue { operands: [${reads.join(", ")}], op: ${expr_source(
-            &op,
-            op.steps.len() - 1,
-        )} }))`;
+        let op = expr_source(&operands_renumbered(&self.expr, &renumbered));
+        return `${call}, Option::Some(Epilogue { operands: [${reads.join(", ")}], op: ${op} }))`;
     }
 
     /// The `fused` call computing this over `out`'s axes, every lane a tensor.
     fn fused_call(&self, out: &Shape) -> String {
         let reads: List<String> = self.lanes.into_iter().map(|lane| lane_read(&lane, out)).collect();
-        return `backend.fused::<[${axis_list(out)}]>([${reads.join(", ")}], &${expr_source(
-            &self.expr,
-            self.expr.steps.len() - 1,
-        )})`;
+        return `backend.fused::<[${axis_list(out)}]>([${reads.join(", ")}], &${expr_source(&self.expr)})`;
     }
 }
 
@@ -1607,14 +1601,19 @@ fn operands_renumbered(e: &Expr, to: &List<i32>) -> Expr {
     return Expr { steps };
 }
 
-/// The source building step `i` of `e`, through the runtime's `operand`,
-/// `constant` and the `Expr` methods.
-fn expr_source(e: &Expr, i: i32) -> String {
+/// The source building `e` through the runtime's `operand`, `constant` and
+/// the `Expr` methods.
+fn expr_source(e: &Expr) -> String {
+    return step_source(e, e.steps.len() - 1);
+}
+
+/// [`expr_source`] of step `i` alone.
+fn step_source(e: &Expr, i: i32) -> String {
     return match e.steps[i] {
         Operand(k) => `operand(${k})`,
         Constant(c) => `constant(${float_literal(c)})`,
-        Unary([op, a]) => `${expr_source(e, a)}.unary(UnaryOp::${op})`,
-        Binary([op, a, b]) => `${expr_source(e, a)}.binary(BinaryOp::${op}, &${expr_source(e, b)})`,
+        Unary([op, a]) => `${step_source(e, a)}.unary(UnaryOp::${op})`,
+        Binary([op, a, b]) => `${step_source(e, a)}.binary(BinaryOp::${op}, &${step_source(e, b)})`,
     };
 }
 

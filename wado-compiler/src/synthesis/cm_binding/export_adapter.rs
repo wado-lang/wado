@@ -11,7 +11,7 @@ use crate::ast::Type;
 use crate::call_args::CallArgs;
 use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
-use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
+use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, MAX_FLAT_PARAMS};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_export_func_name, cm_post_return_func_name};
@@ -1379,11 +1379,6 @@ fn lift_variant_from_flat_params(
         total_flat,
     )
 }
-
-/// The most flat values a synchronous lift passes as Wasm parameters. Past it,
-/// the caller writes the parameters to memory, laid out as a tuple of their
-/// types, and passes one pointer (Canonical ABI `flatten_functype`).
-const MAX_FLAT_PARAMS: usize = 16;
 
 /// The adapter parameters and call arguments of an export whose parameters
 /// arrive in memory: one `$params` pointer, each parameter lifted from its

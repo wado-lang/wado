@@ -5037,6 +5037,15 @@ fn is_return_type_supported_with_types(
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
 
+/// Canonical ABI maximum flat params a sync call passes as Wasm params. Past
+/// it, the caller writes them to one buffer, laid out as a tuple of their
+/// types, and passes its address (`flatten_functype`).
+pub const MAX_FLAT_PARAMS: usize = 16;
+
+/// [`MAX_FLAT_PARAMS`] for an async lowering, which takes a params buffer
+/// sooner.
+pub const MAX_FLAT_ASYNC_PARAMS: usize = 4;
+
 /// The Wado name every CM `error-code` is declared under. The registry is keyed
 /// by it, so it is what reaches the declaration.
 pub const ERROR_CODE_WADO_NAME: &str = "ErrorCode";

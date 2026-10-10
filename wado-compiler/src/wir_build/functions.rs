@@ -19,7 +19,8 @@ use super::context::{PendingFunctionBody, WirContext};
 use super::translate::resolve_param_names;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
-    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
+    CmFunctionInfo, CmInterfaceRegistry, MAX_FLAT_ASYNC_PARAMS, MAX_FLAT_PARAMS,
+    cm_return_needs_outptr, flatten_cm_param_type,
 };
 use crate::name::wir_func_type_key;
 use crate::nir::FuncId;
@@ -129,20 +130,16 @@ fn cm_import_core_func_type(
     func: &CmFunctionInfo,
     cm_interface_registry: &CmInterfaceRegistry,
 ) -> (Vec<WirType>, Vec<WirType>) {
-    // WASI P3 async functions with > MAX_FLAT_ASYNC_PARAMS (4) flat params use
-    // indirect calling: all params are passed via a single params_ptr (i32) plus
-    // a results_ptr (i32). This matches what `canon lower async` produces.
-    const MAX_FLAT_ASYNC_PARAMS: usize = 4;
-
     let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
     for (_, _, ty) in &func.params {
         let resolved_ty = cm_interface_registry.resolve_type(ty);
         flatten_cm_param_type(&resolved_ty, &mut param_vts, cm_interface_registry);
     }
 
-    // Per CM spec `flatten_functype('lower')`, an async lowering appends the
-    // outptr only when there are flat results; an async void function
-    // (`wait_for`, `wait_until`) has neither results nor outptr.
+    // Per CM spec `flatten_functype('lower')`, past its limit a lowering takes
+    // its params through one buffer, and an async one appends the outptr only
+    // when there are flat results; an async void function (`wait_for`,
+    // `wait_until`) has neither results nor outptr.
     if func.is_async {
         let has_results = func.return_type.is_some();
         if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
@@ -159,8 +156,6 @@ fn cm_import_core_func_type(
         return (params, vec![WirType::I32]);
     }
 
-    // Past MAX_FLAT_PARAMS a sync lowering takes its params through one buffer.
-    const MAX_FLAT_PARAMS: usize = 16;
     if param_vts.len() > MAX_FLAT_PARAMS {
         param_vts = vec![wasm_encoder::ValType::I32];
     }

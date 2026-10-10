@@ -401,7 +401,6 @@ fn placed_extents<E, Axes>(t: &Placed<E, Axes>) -> List<i32> {
     };
 }
 
-
 /// Whether one dispatch holds a product's tiles: a workgroup per tile of each
 /// batch element, the batch along the third dimension.
 fn tiles_fit(batch: i32, rows: i32, cols: i32) -> bool {
@@ -595,8 +594,6 @@ fn main(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_id) l
 
 impl Backend for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
-
-
     type Operand<Axes> = PlacedRead<Axes>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> {
@@ -617,7 +614,6 @@ impl Backend for WebGpuBackend {
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Placed<i64, [A]> {
         return Placed::Host(self.cpu.range_i64(start, count, delta));
     }
-
 
     fn read<Axes>(&mut self, t: &Placed<f32, Axes>) -> PlacedRead<Axes> {
         return placed_read(t, 0);

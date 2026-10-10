@@ -293,7 +293,9 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
             "fused" => tally.fused += 1,
             "folded" => tally.folded += 1,
             "alias" => tally.aliases += 1,
-            _ => tally.branches += 1,
+            "branch" => tally.branches += 1,
+            // `node_report` writes one of the words above.
+            _ => unreachable(),
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
         w.line(`${node.lowering:<6} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
