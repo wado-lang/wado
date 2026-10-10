@@ -842,7 +842,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Literal::Number(repr) = &lit.value else {
             return None;
         };
-        let integer = !util::is_float_only_literal(repr);
+        let integer = !util::defaults_to_float(repr);
         let tt = self.tysys.type_table.borrow();
         let head = tt.representation_head(target);
         if head == TypeTable::CHAR {
@@ -876,9 +876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // only the type while preserving the validation side effects.
         match &lit.value {
             Literal::Number(repr) => {
-                // Default type: i32 if integer-compatible, f64 if float-only
-                if util::is_float_only_literal(repr) {
-                    // Must be float (has decimal point or negative exponent)
+                if util::defaults_to_float(repr) {
                     if let Err(error) = float_literal_bits(repr, FloatFormat::F64) {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message: error.message(repr),
@@ -5466,7 +5464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_literal_ord_value(&self, expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(s) if util::is_float_only_literal(s) => {
+                Literal::Number(s) if util::defaults_to_float(s) => {
                     float_literal_bits(s, FloatFormat::F64)
                         .ok()
                         .map(|bits| LiteralOrdValue::Float(f64::from_bits(bits)))

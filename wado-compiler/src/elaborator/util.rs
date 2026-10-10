@@ -52,7 +52,7 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
 pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
     match lit {
         Literal::Number(repr) => {
-            if is_float_only_literal(repr) {
+            if defaults_to_float(repr) {
                 return Err("float literals cannot be used in match patterns".to_string());
             }
             let (negated, digits) = repr
@@ -85,7 +85,7 @@ pub(super) fn range_bound(
     resolutions: &Resolutions,
 ) -> Option<Result<RangeBound, String>> {
     match pattern {
-        Pattern::Literal(Literal::Number(repr)) if is_float_only_literal(repr) => {
+        Pattern::Literal(Literal::Number(repr)) if defaults_to_float(repr) => {
             let (negated, digits) = repr
                 .strip_prefix('-')
                 .map_or((false, repr.as_str()), |digits| (true, digits));
@@ -717,18 +717,22 @@ pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
         u128::from_str_radix(bin, 2).map_err(|_| format!("invalid binary literal: {repr}"))
     } else if let Some(oct) = clean.strip_prefix("0o") {
         u128::from_str_radix(oct, 8).map_err(|_| format!("invalid octal literal: {repr}"))
-    } else if clean.contains('e') {
-        // Scientific notation: parse as f64 first, then convert
-        let value: f64 = clean
-            .parse()
-            .map_err(|_| format!("invalid integer literal: {repr}"))?;
-        if value.fract() != 0.0 {
-            return Err(format!("integer literal has fractional part: {repr}"));
+    } else if let Some((mantissa, exponent)) = clean.split_once('e') {
+        let invalid = || format!("invalid integer literal: {repr}");
+        let mantissa: u128 = mantissa.parse().map_err(|_| invalid())?;
+        let exponent: i32 = exponent.parse().map_err(|_| invalid())?;
+        let scale = 10_u128.checked_pow(exponent.unsigned_abs());
+        if exponent >= 0 {
+            scale
+                .and_then(|scale| mantissa.checked_mul(scale))
+                .ok_or_else(|| format!("integer literal out of range: {repr}"))
+        } else {
+            match scale {
+                Some(scale) if mantissa % scale == 0 => Ok(mantissa / scale),
+                None if mantissa == 0 => Ok(0),
+                _ => Err(format!("`{repr}` is not a whole number")),
+            }
         }
-        if value < 0.0 || value > u128::MAX as f64 {
-            return Err(format!("integer literal out of range: {repr}"));
-        }
-        Ok(value as u128)
     } else {
         clean
             .parse()
@@ -738,52 +742,41 @@ pub(crate) fn parse_u128_literal(repr: &str) -> Result<u128, String> {
 
 /// Parse a signed integer literal into an i128 value.
 /// Supports decimal, hex, binary, octal, and scientific notation.
-/// For non-negative values, delegates to `parse_u128_literal` with an i128 range check.
 pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
-    let clean = normalize_numeric_literal(repr);
-
-    if clean.starts_with('-') {
-        // Scientific notation in negative numbers
-        if clean.contains('e') {
-            let value: f64 = clean
-                .parse()
-                .map_err(|_| format!("invalid integer literal: {repr}"))?;
-            if value.fract() != 0.0 {
-                return Err(format!("integer literal has fractional part: {repr}"));
-            }
-            return Ok(value as i128);
-        }
-        return clean
-            .parse()
-            .map_err(|_| format!("invalid integer literal: {repr}"));
+    let out_of_range = || format!("integer literal out of range: {repr}");
+    match repr.strip_prefix('-') {
+        Some(magnitude) => 0_i128
+            .checked_sub_unsigned(parse_u128_literal(magnitude)?)
+            .ok_or_else(out_of_range),
+        None => i128::try_from(parse_u128_literal(repr)?).map_err(|_| out_of_range()),
     }
-
-    // Non-negative: delegate to unsigned parser, then check i128 range
-    let unsigned = parse_u128_literal(repr)?;
-    i128::try_from(unsigned).map_err(|_| format!("integer literal out of range: {repr}"))
 }
 
-/// The digits of a number literal that can be an integer.
+/// The digits of a number literal that defaults to an integer.
 pub(super) fn integer_digits(repr: &str) -> Option<&str> {
-    (!is_float_only_literal(repr)).then_some(repr)
+    (!defaults_to_float(repr)).then_some(repr)
 }
 
-/// Check if a number literal can only be a float (has decimal point or negative exponent).
-pub(crate) fn is_float_only_literal(repr: &str) -> bool {
-    if repr.contains('.') {
-        return true;
-    }
+/// Whether a number literal is an `f64` where nothing expects a type: it has a
+/// decimal point or an exponent, as in Rust.
+pub(crate) fn defaults_to_float(repr: &str) -> bool {
+    has_decimal_point(repr) || has_exponent(repr)
+}
 
-    // Check for negative exponent (e.g., "1e-5")
-    let lower = normalize_numeric_literal(repr);
-    if let Some(e_pos) = lower.find('e') {
-        let after_e = &lower[e_pos + 1..];
-        if after_e.starts_with('-') {
-            return true;
-        }
-    }
+/// Whether a number literal has a decimal point, which keeps it from ever being
+/// an integer.
+pub(crate) fn has_decimal_point(repr: &str) -> bool {
+    repr.contains('.')
+}
 
-    false
+/// Whether a number literal has an exponent. A hex literal has none: its `e`
+/// is a digit.
+fn has_exponent(repr: &str) -> bool {
+    let unsigned = repr.strip_prefix('-').unwrap_or(repr);
+    let radix = ["0x", "0X", "0b", "0B", "0o", "0O"]
+        .iter()
+        .any(|prefix| unsigned.starts_with(prefix));
+    !radix && unsigned.contains(['e', 'E'])
 }
 
 /// The name a type carries its trait bounds under, where it carries any.

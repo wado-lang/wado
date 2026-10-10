@@ -37,12 +37,14 @@ Three ways to give a literal a type were compared:
 | Names a newtype (`Meters`)            | no                          | only with a further rule           | yes: `4 as Meters`             |
 | Range-checked as an annotation        | yes                         | yes                                | yes                            |
 | Left operand of `<<`                  | `1_i64 << 40`               | `1@i64 << 40`                      | `1 as i64 << 40`               |
+| Left operand of `<`                   | `2_u8 < x`                  | `2@u8 < x`                         | `(2 as u8) < x`                |
 | Method receiver                       | `1_u64.to_string()`         | `1@u64.to_string()`                | `(1 as u64).to_string()`       |
 | Pattern                               | `1_i32 =>`                  | `1@i32 =>`                         | `1 =>`: typed by the scrutinee |
 | Lint steering one spelling to another | `literal_cast`              | `literal_cast`                     | none                           |
 
 `as` binds tighter than every binary operator, so a cast operand needs
-parentheses only as a method receiver. That pair of parentheses is the whole
+parentheses in two places only: as a method receiver, and left of `<`, where
+the `<` would open the type's generic arguments. Those parentheses are the whole
 loss. Wado chooses the smaller language: one way to type a literal, no new
 token, and no lexical rule that depends on the base.
 
@@ -78,17 +80,21 @@ arithmetic lints treat `lit as T` as a constant operand of type `T`, so
 
 ## Roadmap
 
-- [ ] Remove the suffix from the lexer and the parser. Letters after a
+- [x] Remove the suffix from the lexer and the parser. Letters after a
   literal's digits are an error that suggests `as`.
-- [ ] Hold `_` to one between two digits.
-- [ ] Type an exponent literal as above.
-- [ ] Warn about a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`.
-- [ ] Remove `literal_cast`, and count `lit as T` as a constant operand.
-- [ ] Migrate the repository's sources from suffixes to `as`.
+- [x] Hold `_` to one between two digits.
+- [x] Type an exponent literal as above.
+- [x] Warn about a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`
+  (`hex_suffix_lookalike`).
+- [x] Remove `literal_cast`, and count `lit as T` as a constant operand.
+- [x] Migrate the repository's sources from suffixes to `as`.
 - [ ] The specification, the cheatsheet, the formatter tests and the syntax
   highlighting grammars.
 
 ## Known gaps
+
+- `hex_suffix_lookalike` reads literal expressions only. A literal pattern
+  carries no span of its own, so `0x1_f32 =>` is not reported.
 
 - Whether a literal with both a `.` and an exponent, such as `1.5e1`, can be an
   integer where one is expected.

@@ -33,6 +33,7 @@ pub mod flat_package;
 pub mod format_spec;
 pub(crate) mod graph;
 pub mod hashmap;
+pub mod hex_suffix_lookalike;
 pub mod intern;
 pub mod kiln;
 pub mod lexer;
@@ -143,6 +144,7 @@ pub use optimize::{OptLevel, optimize};
 pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
+use hex_suffix_lookalike::hex_suffix_lookalike_diagnostics;
 use self_comparison::self_comparison_diagnostics;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
@@ -547,6 +549,7 @@ pub fn lint_diagnostics(
     lints.extend(undecided_effect_diagnostics(sem));
     lints.extend(self_comparison_diagnostics(sem));
     lints.extend(constant_arithmetic_diagnostics(sem));
+    lints.extend(hex_suffix_lookalike_diagnostics(sem));
     if unused {
         lints.extend(unused_diagnostics(sem, is_test_world));
     }

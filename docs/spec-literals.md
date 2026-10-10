@@ -251,6 +251,33 @@ assert with_separator == 1000000.5 && explicit_positive == 25000000000.0;
 assert scientific == 602200000000000000000000.0 && negative_exp < 1e-18;
 ```
 
+A literal with a decimal point or an exponent falls back to `f64`. Where an
+integer type is expected, a literal with an exponent and no decimal point is
+that integer if its value is a whole number in the type's range:
+
+<!-- {"fixture":"numeric_literal_exponent.wado"} -->
+
+```wado
+let big: i64 = 1e10;
+assert big == 10_000_000_000;
+```
+
+<!-- {"fixture":"error_numeric_literal_exponent_fraction.wado"} -->
+
+```wado
+let n: i32 = 1e-1;           // compile error: `1e-1` is not a whole number
+```
+
+A cast does not change that fallback, so `1e3 as i64` converts the `f64`
+`1000.0`, as in Rust:
+
+<!-- {"fixture":"numeric_literal_exponent.wado"} -->
+
+```wado
+assert 1e3 as i64 == 1000;
+assert 1e-1 as i32 == 0;
+```
+
 #### Type coercion
 
 Floating-point literals coerce to `f32`, `f64`, `f16` or `bf16` when the target type is known:

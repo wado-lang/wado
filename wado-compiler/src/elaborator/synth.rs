@@ -19,7 +19,7 @@ use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
 use super::tysys::TypeSystem;
-use super::util::is_float_only_literal;
+use super::util::defaults_to_float;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::name::{DeclName, RefKind};
 use crate::tir::StructDef;
@@ -406,7 +406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn synth_literal(&mut self, lit: &ast::Literal) -> ArgClass {
         match lit {
             ast::Literal::Number(raw) => {
-                if is_float_only_literal(raw) {
+                if defaults_to_float(raw) {
                     ArgClass::FloatLit
                 } else {
                     ArgClass::IntLit

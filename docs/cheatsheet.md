@@ -96,20 +96,20 @@ Wado uses Wasm GC for memory management. There is no borrow checker or lifetime 
 // Numbers
 42              // integer literal (defaults to i32 without type context)
 3.14            // float literal (defaults to f64 without type context)
-1_000_000       // underscores for readability
+1_000_000       // one `_` between two digits, for readability
 0xFF            // hex
 0b1010          // binary
 0o755           // octal
+1e10            // f64; where an integer is expected, a whole number in range
 
-// Type suffix, after an `_`: the literal's type, range-checked
-255_u8          // u8
--128_i8         // i8
-1.5_f32         // f32
-1_f64           // f64: an integer literal with a float suffix
-0xFF_u64        // a hex literal takes an integer suffix only
-// let b = 255u8;      // Error: write `255_u8`
-// let c = 300_u8;     // Error: out of range for `u8`
-// let d: i64 = 1_i32; // Error: a suffixed literal is not retyped
+// `as` types a literal, range-checked as an annotation is; there is no suffix
+255 as u8       // u8
+-128 as i8      // i8
+1.5 as f32      // f32
+1 as i64 << 40  // `as` binds tighter than every binary operator
+// let b = 255u8;       // Error: write `255 as u8`
+// let c = 300 as u8;   // Error: out of range for `u8`
+// let h = 0x1_f32;     // warns: the hex integer 0x1F32, not a float
 
 // Numeric literal coercion
 let x: i64 = 42;               // integer literal → i64
@@ -637,9 +637,9 @@ See the spec on [precedence](./spec-expressions.md#precedence) and [overloading]
 = += -= *= /= %= &= |= ^= <<= >>=
 
 // Type cast: numeric casts follow Rust's `as`
-42_i32 as f64
+x as f64                // a value converts; a literal is typed (see Literals)
 300.7 as u8             // 255: float -> int truncates and saturates, NaN -> 0
-0xFF_u8 as i8           // -1; `0xFF as i8` is a compile error, as in Rust
+0xFF as u8 as i8        // -1; `0xFF as i8` is a compile error
 true as i32             // bool -> int: 1; nothing casts to bool
 'A' as i32              // char -> i32: 65
 97 as char              // 'a': only a u8 casts to char; else char::from_u32()
@@ -1025,7 +1025,7 @@ impl Container {
 
 // Turbofish syntax (explicit type arguments)
 let x = identity::<i32>(42);
-let y = container.transform::<i32, i64>(10, 20_i64);
+let y = container.transform::<i32, i64>(10, 20);
 let arr = List::<i32>::with_capacity(10);  // turbofish for generic statics
 
 // Variadic type packs: operate on tuples of any arity

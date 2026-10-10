@@ -1,0 +1,45 @@
+// A literal with an exponent is an `f64` where nothing expects a type, and an
+// integer where one is expected if its value is a whole number in range.
+
+trait Named with () {
+    fn name() -> String;
+}
+
+impl Named for i32 {
+    fn name() -> String { return "i32"; }
+}
+impl Named for f64 {
+    fn name() -> String { return "f64"; }
+}
+
+fn name_of<T: Named>(x: T) -> String {
+    return T::name();
+}
+
+test "an exponent literal defaults to f64" {
+    assert name_of(1e10) == "f64";
+    assert name_of(1e3) == "f64";
+    let x = 2e0;
+    assert x / 4 == 0.5;
+}
+
+test "an exponent literal is an integer where one is expected" {
+    let big: i64 = 1e10;
+    assert big == 10_000_000_000;
+    let tens: i32 = 25e1 / 25;
+    assert tens == 10;
+    let whole: u8 = 120e-1;
+    assert whole == 12;
+    let max: u128 = 34e37;
+    assert max == 340_000_000_000_000_000_000_000_000_000_000_000_000;
+    let low: i64 = -1e18;
+    assert low == -1_000_000_000_000_000_000;
+}
+
+test "an exponent literal keeps Rust's value under a cast" {
+    assert 1e3 as i64 == 1000;
+    assert 1e-1 as i32 == 0;
+}
+
+__DATA__
+{"test": {}}

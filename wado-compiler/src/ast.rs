@@ -1672,11 +1672,13 @@ pub mod lint {
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
-    /// Integer literals alone overflowing their type, `200_u8 + 100_u8`, or a
+    /// Integer literals alone overflowing their type, `200 as u8 + 100`, or a
     /// literal shift amount outside the bit width, `x << 9` on a `u8`.
     pub const ARITHMETIC_OVERFLOW: &str = "arithmetic_overflow";
     /// An integer `/` or `%` that always traps: `x / 0`.
     pub const UNCONDITIONAL_TRAP: &str = "unconditional_trap";
+    /// A hex literal ending in digits that read as a float type: `0x1_f32`.
+    pub const HEX_SUFFIX_LOOKALIKE: &str = "hex_suffix_lookalike";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow

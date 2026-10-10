@@ -8580,7 +8580,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// the value back out of it — `i128` / `u128` lowering is one.
     fn reify_numeric_literal(&mut self, repr: &str, recorded_type: TypeId, span: Span) -> TirExpr {
         // The *recorded type* decides Int vs Float TIR literal; the literal's
-        // *syntactic form* (`is_float_only_literal`) decides how to read its
+        // *syntactic form* (`defaults_to_float`) decides how to read its
         // value, so `let x: f64 = 0xFF` reads as an integer then converts. Peel
         // newtypes first, or a float literal bound to a float-newtype target
         // takes the integer path.
@@ -8603,7 +8603,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // via `is_float_target`.
         let is_float_target = base_target == TypeTable::F32
             || base_target == TypeTable::F64
-            || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
+            || (recorded_type == TypeTable::UNKNOWN && util::defaults_to_float(repr));
         if is_float_target {
             // Rounded once, into the target format, so the later narrowing
             // of an `f32` is exact.

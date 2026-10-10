@@ -17,6 +17,7 @@ The lints are:
 | [`self_comparison`](#the-self_comparison-lint)         | a comparison of an expression with itself                                       |
 | [`arithmetic_overflow`](#the-arithmetic_overflow-lint) | constant integer arithmetic that wraps, or a constant shift amount out of range |
 | [`unconditional_trap`](#the-unconditional_trap-lint)   | an integer division or remainder that always traps                              |
+| [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint) | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                     |
 | [`undecided_effects`](#the-undecided_effects-lint)     | a trait head that writes no `with` clause                                       |
 | [`dead_code`](#the-dead_code-lint)                     | an unused or test-only free function or global                                  |
 
@@ -147,6 +148,24 @@ A float `/` or `%` never traps, so neither is reported.
 test "divides by zero" {
     let x = builtin::black_box(10);
     let _ = x / 0;
+}
+```
+
+## The `hex_suffix_lookalike` Lint
+
+The `hex_suffix_lookalike` lint warns about a hex literal whose last
+`_`-separated group is `f16`, `bf16`, `f32` or `f64` in any case. Those are hex
+digits, so the literal is an integer, as it is in Rust, but it reads as a float
+type. A float is written as a cast, `0xFF as f16`, and the integer without the
+`_`, `0xFFF16`.
+
+<!-- {"fixture":"lint_hex_suffix_lookalike.wado"} -->
+
+```wado
+test "a hex literal ending in a float type name warns" {
+    assert 0xff_f16 == 0xFFF16;
+    assert 0x1_F32 == 0x1F32;
+    assert 0x2_bf16 == 0x2BF16;
 }
 ```
 

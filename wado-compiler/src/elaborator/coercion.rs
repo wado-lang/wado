@@ -313,7 +313,7 @@ fn shared_literal_default(literals: &[Expr]) -> TypeId {
         .map(|expr| {
             let literal = classify_numeric_literal(expr).expect("an operand is a numeric literal");
             match literal.kind {
-                NumericLiteralKind::Number(repr) if util::is_float_only_literal(repr) => {
+                NumericLiteralKind::Number(repr) if util::defaults_to_float(repr) => {
                     TypeTable::F64
                 }
                 NumericLiteralKind::Number(_) => TypeTable::I32,
@@ -520,10 +520,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `i128` / `u128` are structs, so `is_integer` does not answer for them.
         let wide = self.tysys.type_table.borrow().wide_int_item(target_type);
         let is_integer = self.tysys.type_table.borrow().is_integer(target_type);
-        if (is_integer || wide.is_some()) && util::is_float_only_literal(repr) {
+        if (is_integer || wide.is_some()) && util::has_decimal_point(repr) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
-                    "cannot use float literal '{sign}{repr}' as integer (has decimal point or negative exponent)"
+                    "cannot use float literal '{sign}{repr}' as integer (has a decimal point)"
                 ),
                 span: whole_span,
             });
