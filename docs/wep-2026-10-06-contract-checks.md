@@ -184,8 +184,8 @@ in a proposal of its own.
 - A call whose callee is not known statically, through a trait bound or a
   function value, has no call site to place the check at. How a trait
   method's contract binds an impl is not settled either.
-- An input contract cannot say that a method taking `&mut self` keeps the
-  type's invariant, as `set_byte_unchecked` must keep a `String` UTF-8.
+- An input contract cannot say that a method taking `&mut self` keeps its
+  type's invariant. It can only require inputs that imply it.
 - Only the standard library declares a contract. The reason
   `builtin::contract_checks()` is `internal` does not hold for a contract whose
   removal takes a marker at the call, but opening contracts to every program
