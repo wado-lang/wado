@@ -71,8 +71,10 @@ wado compile -O2 -f bare-asserts app.wado     # silent at -O2 too
 
 ## Contract Checks
 
-A build may check the contracts of the standard library's `_unchecked`
-functions (see [Behavior Classes](./spec-overview.md#behavior-classes)). A
+A build may check contracts (see
+[Behavior Classes](./spec-overview.md#behavior-classes)). A function states a
+check with `builtin::contract_checks()`, as the whole condition of an `if`
+statement with no `else`. A
 checking build traps on a call outside the contract, as a failed assertion
 does, message included. A build that does not check evaluates nothing, and the
 compiler does not assume the contract holds: the violation keeps the class the

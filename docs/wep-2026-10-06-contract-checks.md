@@ -67,11 +67,12 @@ constant. Where the build keeps the check, its body is part of the enclosing
 region. Where the build deletes it, under `-f no-contract-checks`, it holds no
 line.
 
-It is `internal` to `core:builtin`, so only the standard library calls it.
-Open to every program, it would be a removable `assert`. Every language that
+It is `pub`, since contracts are open to every program and this is what they
+lower to. Written by hand, it is a removable `assert`. Every language that
 offers one reports it used for checks that must hold in production, and
 removed with them (`assert` under Python's `-O`, Rust's `debug_assert!` in
-RUSTSEC-2025-0137).
+RUSTSEC-2025-0137). The `contract` syntax below is the form that keeps a check
+unless the call is marked.
 
 ### A skipped check is not an assumption
 
@@ -186,9 +187,6 @@ A condition performs no effect. It may call a function that has a contract of
 its own; that call is an ordinary call, checked unless it is marked.
 
 Every program may declare a contract, not only the standard library.
-`builtin::contract_checks()` stays `internal` because, open to every program,
-it would be a removable `assert`. A contract is not one: removing its check
-takes a marker at the call.
 
 A caller marks a call with `unchecked`, a prefix unary operator. Postfix
 operators bind tighter than prefix ones, so `unchecked a.f().g()` marks `g`,
