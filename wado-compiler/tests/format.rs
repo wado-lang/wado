@@ -3906,7 +3906,7 @@ fn test_format_contract_clause_comments() {
     let source = concat!(
         "fn half(n: i32) -> i32\n",
         "    // why even\n",
-        "    contract n % 2 == 0, \"n must be even\" // trailing\n",
+        "    contract n % 2 == 0, \"n must be even\"  // trailing\n",
         "    contract n >= 0\n",
         "{\n",
         "    // body\n",

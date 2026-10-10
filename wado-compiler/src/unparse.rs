@@ -914,6 +914,11 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
         for clause in contracts {
             self.output.push('\n');
+            self.flush_comments_before(
+                self.leading_start(clause.id, clause.span.start),
+                Spacing::Tight,
+            );
+            self.emit_leading_for(clause.id);
             self.write_indent();
             self.output.push_str("contract ");
             self.unparse_expr(&clause.condition);
@@ -921,6 +926,7 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(", ");
                 self.unparse_expr(message);
             }
+            self.emit_trailing_for(clause.id);
         }
         self.indent_level -= 1;
 
