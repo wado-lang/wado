@@ -1,0 +1,21 @@
+//! GPT-2 (124M) on Loam's `Cpu` backend. Run with the model's directory as
+//! the one grant, as `mise run gpt2-124m` does:
+//!
+//!     wado run --dir ../package-loam/example/gpt2-124m gpt2_124m/gpt2_124m.wado
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use { Cpu } from "lib:loam";
+use { Model } from "../../package-loam/example/gpt2-124m/model.wado";
+use { timed } from "./generate.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock) {
+    let Ok(checkpoint) = fs::read("gpt2.safetensors") else {
+        eprintln("gpt2.safetensors is missing; run package-loam/example/gpt2-124m/fetch.sh");
+        return;
+    };
+    let mut model = Model::load(Cpu {}, &checkpoint).unwrap();
+    timed("generate", &mut model);
+}

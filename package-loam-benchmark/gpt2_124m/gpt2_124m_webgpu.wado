@@ -1,0 +1,42 @@
+//! GPT-2 (124M) on Loam's `WebGpuBackend`, under `wado run-webgpu` with the
+//! model's directory as the one grant, as `mise run gpt2-124m` does:
+//!
+//!     wado run-webgpu --dir ../package-loam/example/gpt2-124m gpt2_124m/gpt2_124m_webgpu.wado
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { WebGpuBackend } from "lib:loam";
+use { Model } from "../../package-loam/example/gpt2-124m/model.wado";
+use { timed } from "./generate.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Ok(checkpoint) = fs::read("gpt2.safetensors") else {
+        eprintln("gpt2.safetensors is missing; run package-loam/example/gpt2-124m/fetch.sh");
+        return;
+    };
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let mut model = Model::load(gpu, &checkpoint).unwrap();
+    timed("generate", &mut model);
+}

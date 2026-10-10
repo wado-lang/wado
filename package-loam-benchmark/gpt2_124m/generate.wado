@@ -1,0 +1,49 @@
+//! Greedy generation with GPT-2 (124M), timed the way every arm of this
+//! benchmark times it: one warmup, then `ITERATIONS` timed runs, each
+//! continuing `PROMPT` by `STEPS` tokens. `onnxruntime.mjs` is the same
+//! program over onnxruntime.
+
+use { println, Stdout } from "core:cli";
+use { format_rate } from "core:benchmark";
+use { MonotonicClock } from "wasi:clocks";
+use { Backend } from "lib:loam";
+use { Model, Tokenizer } from "../../package-loam/example/gpt2-124m/model.wado";
+
+pub global PROMPT: String = "Hello, my name is";
+
+/// The tokens each run generates, which the throughput counts.
+pub global STEPS: i32 = 8;
+
+global WARMUP: i32 = 1;
+
+global ITERATIONS: i32 = 3;
+
+/// Continues `PROMPT` on `model`, prints the throughput line `logs.ts` reads
+/// and what was generated, so a divergence between arms shows.
+pub fn timed<Bk: Backend>(label: String, model: &mut Model<Bk>) with (Stdout, MonotonicClock, _) {
+    let ids = Tokenizer::encode(&PROMPT);
+    let mut generated: List<i32> = [];
+    for let _ of 0..<WARMUP {
+        generated = continued(model, &ids);
+    }
+    let started = MonotonicClock::now();
+    for let _ of 0..<ITERATIONS {
+        generated = continued(model, &ids);
+    }
+    let elapsed = (MonotonicClock::now() - started) as u64;
+    let per_iter = elapsed as f64 / 1_000_000.0 / ITERATIONS as f64;
+    let rate = format_rate((STEPS * ITERATIONS) as f64, elapsed, "tokens");
+    println(`${label}: ${rate}   (${per_iter:.3} ms/iter, ${ITERATIONS} iter)`);
+    let mut all = ids;
+    all.extend(&generated);
+    println(`generated = ${generated:?} ${Tokenizer::decode(&all):?}`);
+}
+
+/// The `STEPS` tokens `model` picks greedily after `ids`.
+fn continued<Bk: Backend>(model: &mut Model<Bk>, ids: &List<i32>) -> List<i32> with _ {
+    let mut all = *ids;
+    for let _ of 0..<STEPS {
+        all.push(model.next_token(&all));
+    }
+    return all[ids.len()..<all.len()].to_list();
+}
