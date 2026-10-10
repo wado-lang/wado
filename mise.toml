@@ -584,6 +584,20 @@ run = "scripts/sync-vendor.sh"
 description = "Copy onnx.proto and the ONNX test data Loam's tests name out of the vendor/onnx submodule"
 run = "scripts/sync-onnx-data.sh"
 
+[tasks.loam-oracle-deps]
+description = "Install the pinned Node runtimes Loam runs as oracles (package-loam/package.json)"
+run = "cd package-loam && npm ci"
+
+[tasks.loam-ort-inspect]
+description = "Report what onnxruntime makes of a model: the transformers that changed it, placements, the optimized graph, and a profiled run"
+depends = ["loam-oracle-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+: "${1:?Usage: mise run loam-ort-inspect <model.onnx> [--dim name=extent]... [--out dir]}"
+node package-loam/tools/ort_inspect.mjs "$@"
+"""
+
 [tasks.sync-proto-corpus]
 description = "Copy the .proto files Grog's tests name out of the vendor/protobuf and vendor/onnx submodules"
 run = "scripts/sync-proto-corpus.sh"

@@ -3,7 +3,7 @@
 // decoder without a past, ../model.onnx, and each step takes the keys and values
 // the run before it returned, so the cache grows by one position per step.
 //
-//   npm install onnxruntime-node@1.30.0
+//   mise run loam-oracle-deps
 //   node oracle.mjs <this directory>
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
