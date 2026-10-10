@@ -58,6 +58,12 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
             read[t] = by;
         }
     }
+    // The scope reads what it returns, at no node's position.
+    for let vi of &graph.outputs {
+        let mut by = read.get(vi.name).unwrap_or([]);
+        by.push(-1);
+        read[vi.name] = by;
+    }
     let only_reader = |tensor: &String| -> Option<i32> {
         let by = read.get(*tensor).unwrap_or([]);
         return if by.len() == 1 { Option::Some(by[0]) } else { null };
@@ -74,6 +80,9 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
         let Some(restore_at) = only_reader(&node.outputs[0]) else {
             continue;
         };
+        if restore_at < 0 || !bias_per_column(&node, checked) {
+            continue;
+        }
         let restore = &graph.nodes[restore_at];
         if flatten.op != "Reshape"
             || restore.op != "Reshape"
@@ -92,6 +101,16 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
         spreads[node.outputs[0]] = Spread { operand: flatten.inputs[0], restored: restore.outputs[0] };
     }
     return [lowered, spreads];
+}
+
+/// Whether a `Gemm`'s bias, if it has one, is one value per column, so it
+/// reads the same under the leading axes as under the flattened rows.
+fn bias_per_column(node: &Node, checked: &Checked) -> bool {
+    if node.inputs.len() < 3 || node.inputs[2] == "" {
+        return true;
+    }
+    let c = &checked.shapes[node.inputs[2]];
+    return c.rank() <= 1 || c.rank() == 2 && c.axes[0].extent matches { Static(1) };
 }
 
 /// Whether a `Gemm` reads its first operand transposed.
@@ -531,12 +550,14 @@ fn decided(
 }
 
 /// Whether `a` holds one element per row of `rows`: its axes but the last are
-/// `rows`', and its last is of extent 1.
+/// `rows`', and its last is of extent 1 where `rows`' is not. A row of one
+/// element folds to itself, so it makes no row kernel.
 fn per_row(a: &Shape, rows: &Shape) -> bool {
     let rank = rows.rank();
     return a.rank() == rank
         && rank > 0
         && a.axes[rank - 1].extent matches { Static(1) }
+        && !rows.axes[rank - 1].extent matches { Static(1) }
         && first_axes_agree(a, rows, rank - 1);
 }
 

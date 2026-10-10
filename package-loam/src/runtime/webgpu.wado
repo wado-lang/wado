@@ -191,8 +191,8 @@ impl WebGpuBackend {
             pass: [],
             recording: [],
             bound: [],
-            max_operands: buffers as i32 - 2,
-            max_binding: if bytes > i32::MAX as u64 { i32::MAX } else { bytes as i32 },
+            max_operands: saturated(buffers as u64) - 2,
+            max_binding: saturated(bytes),
             alignment,
             read_backs: 0,
             dispatches: 0,
@@ -244,16 +244,31 @@ impl WebGpuBackend {
         return self.pass.len() - 1;
     }
 
-    /// A new buffer holding `bytes`, whole 4-byte words, and its slot.
-    fn written(&mut self, bytes: List<u8>, kept: bool) -> i32 with (GpuDevice, GpuQueue, GpuBuffer) {
-        assert bytes.len() % 4 == 0;
-        let slot = self.allocated(bytes.len() / 4, kept);
+    /// A new buffer of `count` 32-bit words, `word(i)` the `i`th, and its
+    /// slot. The words are encoded one write at a time, so a tensor never has
+    /// a second copy whole on the host.
+    fn written(&mut self, count: i32, word: fn(i32) -> u32, kept: bool) -> i32 with (GpuDevice, GpuQueue, GpuBuffer) {
+        let slot = self.allocated(count, kept);
         // A host bounds what one call copies, and a model's embedding is past
         // what wasmtime lets through at once.
-        for let mut at = 0; at < bytes.len(); at += WRITE_BYTES {
-            let end = i32::min(at + WRITE_BYTES, bytes.len());
-            let part = if at == 0 && end == bytes.len() { bytes } else { bytes[at..<end].to_list() };
-            let Ok(_) = self.queue.write_buffer_with_copy(self.buffer(slot), at as u64 as GpuSize64, part, null, null) else {
+        let per_write = WRITE_BYTES / 4;
+        for let mut at = 0; at < count; at += per_write {
+            let end = i32::min(at + per_write, count);
+            let mut bytes = List::<u8>::with_capacity((end - at) * 4);
+            for let i of at..<end {
+                let bits = word(i);
+                bytes.push(bits as u8);
+                bytes.push((bits >> 8) as u8);
+                bytes.push((bits >> 16) as u8);
+                bytes.push((bits >> 24) as u8);
+            }
+            let Ok(_) = self.queue.write_buffer_with_copy(
+                self.buffer(slot),
+                (at * 4) as u64 as GpuSize64,
+                bytes,
+                null,
+                null,
+            ) else {
                 panic("loam: a host tensor did not write to the device");
             };
         }
@@ -266,11 +281,7 @@ impl WebGpuBackend {
         t: &Tensor<E, Axes>,
         kept: bool,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
-        let mut values = List::<f32>::with_capacity(t.data.len());
-        for let v of t.data {
-            values.push(v.cast_to::<f32>());
-        }
-        let slot = self.written(float_bytes(&values), kept);
+        let slot = self.written(t.data.len(), |i| t.data[i].cast_to::<f32>().to_bits(), kept);
         return contiguous(slot, 0, t.extents);
     }
 
@@ -414,7 +425,7 @@ impl WebGpuBackend {
             return;
         }
         self.dispatches += 1;
-        let params_slot = self.written(word_bytes(&params), false);
+        let params_slot = self.written(params.len(), |i| params[i], false);
         let found = match self.compiled.get(*shader) {
             Some(at) => at,
             None => self.compile(shader),
@@ -508,7 +519,7 @@ impl WebGpuBackend {
         };
         let out_extents = row_extents(&extents, row_axes, reduced);
         let out = contiguous(self.allocated(element_count(&out_extents), false), 0, out_extents);
-        if row == 0 {
+        if rows == 0 || row == 0 {
             return Option::Some(out);
         }
         let x = i32::min(rows, MAX_GROUPS);
@@ -835,16 +846,13 @@ impl WebGpuBackend {
         axis: i32,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let along = data.extents[axis];
-        let mut words = List::<u32>::with_capacity(i32::max(indices.data.len(), 1));
+        let mut words = List::<u32>::with_capacity(indices.data.len());
         for let i of indices.data {
             let at = if i < 0 { i + along as i64 } else { i };
             assert 0 <= at < along as i64, "loam: a gather index is past its axis";
             words.push(at as u32);
         }
-        if words.is_empty() {
-            words.push(0);
-        }
-        let index_slot = self.written(word_bytes(&words), false);
+        let index_slot = self.written(words.len(), |i| words[i], false);
         let mut extents = data.extents[0..<axis].to_list();
         extents.extend(&indices.extents);
         extents.extend(&data.extents[axis + 1..<data.extents.len()].to_list());
@@ -1576,6 +1584,12 @@ fn element_params(count: i32, x: i32, extents: &List<i32>) -> List<u32> {
     return params;
 }
 
+/// A device's limit as a count the backend computes with: a limit past
+/// `i32::MAX`, which a driver may report as unbounded, is `i32::MAX`.
+fn saturated(limit: u64) -> i32 {
+    return if limit > i32::MAX as u64 { i32::MAX } else { limit as i32 };
+}
+
 /// How many runs of `size` cover `count`.
 fn covering(count: i32, size: i32) -> i32 {
     return (count + size - 1) / size;
@@ -1603,34 +1617,6 @@ fn push_view(params: &mut List<u32>, offset: i32, strides: &List<i32>) {
     for let s of *strides {
         push_signed(params, s);
     }
-}
-
-/// `values` as a buffer holds them, little-endian, padded to one element.
-fn float_bytes(values: &List<f32>) -> List<u8> {
-    let mut out = List::<u8>::with_capacity(i32::max(values.len(), 1) * 4);
-    for let v of *values {
-        push_word(&mut out, v.to_bits());
-    }
-    while out.len() < 4 {
-        out.push(0);
-    }
-    return out;
-}
-
-/// `words` as a buffer holds them, little-endian.
-fn word_bytes(words: &List<u32>) -> List<u8> {
-    let mut out = List::<u8>::with_capacity(words.len() * 4);
-    for let w of *words {
-        push_word(&mut out, w);
-    }
-    return out;
-}
-
-fn push_word(out: &mut List<u8>, bits: u32) {
-    out.push(bits as u8);
-    out.push((bits >> 8) as u8);
-    out.push((bits >> 16) as u8);
-    out.push((bits >> 24) as u8);
 }
 
 /// The WGSL declaring `bindings` read-only buffers `o0`, `o1`, …, the output

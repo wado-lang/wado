@@ -215,11 +215,11 @@ machine offers. Its times say how many synchronizations and dispatches a pass
 makes, not how a GPU runs it. `Cpu` runs under `wado run-webgpu`'s wasmtime,
 and onnxruntime is `generate.mjs` on `onnxruntime-node`.
 
-| Backend                    | Time a token | Dispatches a token | Read backs a token |
-| -------------------------- | ------------ | ------------------ | ------------------ |
-| `WebGpuBackend` (llvmpipe) | 1593 ms      | 127                | 1                  |
-| `Cpu`                      | 3247 ms      |                    |                    |
-| onnxruntime, CPU           | 15 ms        |                    |                    |
+| Backend                    | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
+| -------------------------- | -------------------------------- | ------------------ | ------------------ |
+| `WebGpuBackend` (llvmpipe) | 106                              | 127                | 1                  |
+| `Cpu`                      | 217                              |                    |                    |
+| onnxruntime, CPU           | 1                                |                    |                    |
 
 The 127 dispatches are the 126 the layer table predicts and one more: llvmpipe
 binds 128 MiB at most, so the head's product, whose weight is the 154 MB

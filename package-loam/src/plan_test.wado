@@ -137,6 +137,38 @@ test "a Gemm between a flattening Reshape and its restoring one is one product o
     assert p.of(&"G") == fused("Y");
 }
 
+test "a Gemm whose flattened operand or product the scope returns is no spread" {
+    for let returned of ["F", "G"] {
+        let source = LINEAR.replace("=> (float[2, 4, 6] Y)", `=> (float[2, 4, 6] Y, float[8, ${if returned == "F" {
+            8;
+        } else {
+            6;
+        }}] ${returned})`);
+        let p = plan_of(source, LINEAR_LAYOUT);
+        assert p.lowering(0) matches { Kernel }, returned;
+        assert p.spread_of(&"G") matches { None }, returned;
+    }
+}
+
+test "a Gemm whose bias varies along its rows is no spread" {
+    let source = `
+lin (float[2, 4, 8] X, float[8, 6] W, float[8, 6] B) => (float[2, 4, 6] Y)
+<int64[2] Flat = {-1, 8}, int64[3] Back = {2, 4, 6}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W, B)
+    R = Reshape(G, Back)
+    Y = Relu(R)
+}
+`;
+    let mut layout = LINEAR_LAYOUT;
+    layout[2] = [
+        "B",
+        ["(Batch Seq)", "Out"],
+    ];
+    assert plan_of(source, layout).spread_of(&"G") matches { None };
+}
+
 test "with fusion off, every kernel writes its output" {
     let p = plan_of(MLP, mlp_layout(), false);
     for let tensor of ["H", "HB", "A", "T", "Y"] {
@@ -210,6 +242,43 @@ g (float[N, 4] X) => (float[N, 4] Y)
     assert p.of(&"A") == fused("Y");
     assert p.of(&"S") == fused("Y");
     assert p.rows_of(&"Y") matches { Some(_) };
+}
+
+test "a kernel over one value per row folds no row unless a reduction reaches it" {
+    let source = `
+g (float[N, 4] X) => (float[N, 1] Y)
+<int64[1] Axes = {1}>
+{
+    S = ReduceMean <keepdims = 1> (X, Axes)
+    E = Abs(S)
+    Y = Sqrt(E)
+}
+`;
+    let layout: List<[String, List<String>]> = [
+        [
+            "X",
+            ["Batch", "Feat"],
+        ],
+        [
+            "*",
+            ["Batch", "One"],
+        ],
+    ];
+    let p = plan_of(source, layout);
+    assert p.of(&"S") == fused("Y");
+    assert p.rows_of(&"Y") matches { Some(rows) && rows.axes[1].name == "Feat" };
+    let plain = plan_of(`
+g (float[N, 1] X) => (float[N, 1] Y)
+{
+    Y = Relu(X)
+}
+`, [
+        [
+            "*",
+            ["Batch", "One"],
+        ],
+    ]);
+    assert plain.rows_of(&"Y") matches { None };
 }
 
 test "a reduction along another axis is a kernel of its own" {
