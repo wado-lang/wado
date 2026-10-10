@@ -1872,52 +1872,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect()
         } else {
             let vars: Vec<TypeId> = receiver_holes.iter().map(|&(_, var)| var).collect();
-            let inst = Instantiated::of_vars(vars.clone());
-            // What the site expects of the result answers a `_` too, as it does
-            // a slot the bare spelling leaves out.
-            let ret = callee_sig
-                .as_ref()
-                .zip(expected_type)
-                .map(|(sig, expected)| {
-                    let declaring = sig
-                        .declaring_impl
-                        .map(|id| self.tysys.signatures.impl_sig(id));
-                    let declared = sig
-                        .instantiate_call_with(
-                            &self.tysys.type_table,
-                            declaring,
-                            &declaring_args,
-                            &method_type_args,
-                        )
-                        .return_type;
-                    ExpectedReturn { declared, expected }
-                });
+            let inst = Instantiated::of_vars(vars);
             let args = self.resolve_args_against_params(
                 &static_call.args,
                 ctx,
                 &param_types,
                 Some(&inst),
-                ret,
+                None,
             );
-            let mut infer = InferCtx::new(&self.tysys.type_table, vars);
-            if let Some(ret) = ret {
-                infer.add_expected_return(ret.declared, ret.expected);
-            }
-            for (&param_type, &arg) in param_types.iter().zip(&args) {
-                infer.add(param_type, arg);
-            }
-            let (_, bindings) = infer.solve_with_bindings();
+            // A `_` is answered as the bare spelling answers the slot it
+            // leaves out, by the one inference both spellings share.
+            let inferred = struct_name_for_lookup.clone().map(|name| {
+                self.infer_static_method_type_args(
+                    &name,
+                    &static_call.method,
+                    &static_call.args,
+                    &args,
+                    expected_type,
+                    static_call.span,
+                    struct_key_for_lookup.as_ref(),
+                )
+                .0
+            });
+            // The one block declaring the callee fixes a slot its target
+            // writes concretely: `impl Wrap<i32>` answers `Wrap::<_>` itself.
+            let block_target: Vec<TypeId> = callee_sig
+                .as_ref()
+                .and_then(|sig| sig.declaring_impl)
+                .map(|id| self.tysys.type_table.borrow().impl_target_args(id).to_vec())
+                .unwrap_or_default();
+            let scope_params = self.scope_type_param_ids();
             for &(i, var) in &receiver_holes {
-                if let Some(&answer) = bindings.get(&var) {
-                    let answer = self.apply_infer_holes(answer);
+                let answer = inferred
+                    .as_ref()
+                    .and_then(|impl_args| impl_args.get(i).copied())
+                    .or_else(|| block_target.get(i).copied())
+                    .filter(|&answer| {
+                        self.tysys.is_usable_answer(answer)
+                            && !self.slot_unanswered(answer, &scope_params)
+                    });
+                if let Some(answer) = answer {
                     self.solve_infer_var(var, answer);
                 }
-                let answer = self.apply_infer_holes(var);
-                declaring_args[i] = if self.tysys.is_usable_answer(answer) {
-                    answer
-                } else {
-                    TypeTable::UNKNOWN
-                };
+                declaring_args[i] = answer.unwrap_or(TypeTable::UNKNOWN);
             }
             target_type_id = self.with_written_args(target_type_id, &declaring_args);
             // A `_` nothing answered would reach the instance unknown.
@@ -1952,6 +1949,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_in_args,
                 &mut param_types,
             );
+            let mut args = args;
+            self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
             args
         };
         let mut arg_sites: Vec<ArgSite> = static_call
@@ -3445,16 +3444,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `impl … for Cell<i32>` emits `Cell<i32>::wrap`, so a call spelling
         // the receiver `Cell` names that. A generic block's instance is
         // monomorphized under the receiver's own name, and keeps it.
-        let receiver_fq = self
-            .tysys
-            .concrete_impl_head_of(Some(&method_ref))
-            .unwrap_or(actual_struct_fq);
-        // Use trait-qualified mangled name if this is a trait method
-        let final_mangled_name = if let Some(ref trait_name) = method_ref.trait_name {
-            MethodName::format_local(&receiver_fq, Some(trait_name), method_name)
+        let concrete_head = self.tysys.concrete_impl_head_of(Some(&method_ref));
+        let final_mangled_name = if concrete_head.is_some() || method_ref.trait_name.is_some() {
+            let receiver = concrete_head.as_ref().unwrap_or(&actual_struct_fq);
+            MethodName::format_local(receiver, method_ref.trait_name.as_ref(), method_name)
         } else {
             actual_mangled_name
         };
+        let receiver_fq = concrete_head.unwrap_or(actual_struct_fq);
 
         let return_type =
             self.fill_static_method_slots(declaration, method_type_args, resolution.return_type);

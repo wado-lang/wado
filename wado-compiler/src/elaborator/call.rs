@@ -4080,7 +4080,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `(declaring_args, method_args)` — the first from `impl Container<T>`, the
     /// second from `fn make<U>()` — either possibly empty. Reads the signature's
     /// canonical types directly, solving *for* an instantiation's arguments.
-    fn infer_static_method_type_args(
+    pub(super) fn infer_static_method_type_args(
         &mut self,
         struct_name: &str,
         method_name: &str,

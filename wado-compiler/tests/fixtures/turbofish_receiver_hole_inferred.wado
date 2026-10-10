@@ -56,6 +56,17 @@ test "a `_` is answered by the expected type" {
     assert e.v == "";
 }
 
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+test "a `_` is answered by the argument where the expected type is still open" {
+    let w = id(Wrap::<_>::make(5));
+    assert w.v == 5;
+    let n = Wrap::<_>::make(Wrap::<_>::make(5));
+    assert n.v.v == 5;
+}
+
 test "a `_` beside a written argument takes the other slot only" {
     let p = Pair::<i64, _>::of(7, true);
     assert p.a == 7_i64 && p.b;
