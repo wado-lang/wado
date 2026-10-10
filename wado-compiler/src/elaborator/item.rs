@@ -1741,22 +1741,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let Some(found) = self.abstract_selection_cache.borrow().get(&func.id) {
             return Rc::clone(found);
         }
-        let header = self
-            .tysys
-            .trait_env
-            .decl_header_of(&trait_decl)
-            .expect("a trait supplying a default body is declared");
-        let (name, span, type_params) =
-            (header.name.clone(), header.span, header.type_params.clone());
-        let sig = self
-            .tysys
-            .trait_sig_of(&trait_decl)
-            .and_then(|s| s.method(&func.name))
-            .expect("a default body is one of its trait's recorded methods")
-            .sig
-            .decl
-            .clone();
-        let trait_id = self.tysys.resolutions.defs().ast_id(trait_decl);
         let walk = Scope {
             resolving_home: Some(self.home_module(func.id)),
             suppress_reference_recording: true,
@@ -1765,7 +1749,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         let logger = self.logger;
         let _quiet = logger.quiet();
-        let decls = self.sem.decls.clone();
         let ((((), walked), _), _) = self.with_lent_semantics(|this| {
             util::replaced(
                 this,
@@ -1776,28 +1759,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         this,
                         |e| &mut e.annotate_ctx,
                         walk,
-                        |this| {
-                            let (mut scope, _, next_slot) =
-                                this.enter_trait_frame(trait_id, &name, span, &type_params);
-                            scope.register_generic_params(&func.type_params, next_slot);
-                            scope.sem.decls.clear_fn_local_items();
-                            let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
-                            let mut ctx = FunctionContext::new(return_type, func.name.clone());
-                            assert_eq!(sig.param_types.len(), func.params.len());
-                            for (param, &ty) in func.params.iter().zip(&sig.param_types) {
-                                scope.bind_fn_param(param, ty, &func.type_params, &mut ctx);
-                            }
-                            scope.walk_fn_body(func, return_type, &mut ctx);
-                        },
+                        |this| this.walk_trait_body(trait_decl, func),
                     )
                 },
             )
         });
-        // A shape the walk minted is interned in the shared type table, so its
-        // fields stay: the next sighting finds the type and mints nothing.
-        let walked_decls = std::mem::replace(&mut self.sem.decls, decls);
-        self.sem.decls.anon_struct_fields = walked_decls.anon_struct_fields;
-        self.sem.decls.pending_anonymous_structs = walked_decls.pending_anonymous_structs;
         let selections = Rc::new(
             walked
                 .abstract_selections
@@ -1807,6 +1773,60 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .borrow_mut()
             .insert(func.id, Rc::clone(&selections));
         selections
+    }
+
+    /// Walk every body `trait_decl` declares, a default method or a contract
+    /// holder, once with `Self` abstract. The trait answers for its bodies
+    /// whether or not an impl inherits them: this walk is what the effect and
+    /// purity checks and the language service read.
+    pub(super) fn resolve_trait_bodies(&mut self, trait_decl: &ast::TraitDecl) {
+        let def = self.tysys.def_at(trait_decl.id);
+        for func in trait_decl.methods.iter().filter(|m| m.body.is_some()) {
+            self.walk_trait_body(def, func);
+        }
+    }
+
+    /// Walk `func`, a body `trait_decl` declares, in the frame
+    /// [`Self::resolve_trait_decl`] gives the trait's signatures. Every
+    /// declaration it writes is against the abstract `Self`, so none outlives
+    /// the walk. An anonymous struct shape is the exception: it is interned in
+    /// the shared type table, so the next sighting finds the type and mints
+    /// nothing.
+    fn walk_trait_body(&mut self, trait_decl: DefId, func: &Function) {
+        let header = self
+            .tysys
+            .trait_env
+            .decl_header_of(&trait_decl)
+            .expect("a trait supplying a body is declared");
+        let (name, span, type_params) =
+            (header.name.clone(), header.span, header.type_params.clone());
+        let sig = self
+            .tysys
+            .trait_sig_of(&trait_decl)
+            .and_then(|s| s.method(&func.name))
+            .expect("a body is one of its trait's recorded methods")
+            .sig
+            .decl
+            .clone();
+        let trait_id = self.tysys.resolutions.defs().ast_id(trait_decl);
+        let decls = self.sem.decls.clone();
+        {
+            let (mut scope, _, next_slot) =
+                self.enter_trait_frame(trait_id, &name, span, &type_params);
+            scope.register_generic_params(&func.type_params, next_slot);
+            scope.sem.decls.clear_fn_local_items();
+            let return_type = sig.return_type.unwrap_or(TypeTable::UNIT);
+            let mut ctx = FunctionContext::new(return_type, func.name.clone());
+            assert_eq!(sig.param_types.len(), func.params.len());
+            for (param, &ty) in func.params.iter().zip(&sig.param_types) {
+                scope.bind_fn_param(param, ty, &func.type_params, &mut ctx);
+            }
+            scope.walk_fn_body(func, return_type, &mut ctx);
+        }
+        let walked_decls = std::mem::replace(&mut self.sem.decls, decls);
+        self.sem.decls.anon_struct_fields = walked_decls.anon_struct_fields;
+        self.sem.decls.pending_anonymous_structs = walked_decls.pending_anonymous_structs;
+        self.sem.types.fn_param_types.insert(func.id, sig.param_types);
     }
 
     /// [`Self::resolve_operation_param_defaults`] for a `trait`'s methods, whose

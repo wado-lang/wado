@@ -3,7 +3,6 @@
 //! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
 //! source function and run on the LSP path. Violations are returned.
 
-use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::attribute::{AMBIENT, BENIGN};
@@ -23,10 +22,7 @@ use crate::compiler_host::Diagnostic;
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::orchestration::AnnotateState;
-use crate::elaborator::sem::types::{
-    ForOfIteratorInfo, ImplFacts, MethodDispatch, TypeAnnotations,
-};
-use crate::elaborator::sem::{DefaultMethodFacts, ModuleSemantics};
+use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -414,27 +410,22 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
             continue;
         }
         for item in &module.items {
-            let view = BodyView::new(sem);
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(view, src, func, index, &[], out);
+                    check_function_effects_sem(sem, src, func, index, &[], out);
                 }
                 Item::Impl(impl_block) => {
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(view, src, method, index, &[], out);
+                        check_function_effects_sem(sem, src, method, index, &[], out);
                     }
                 }
-                // A default body is walked once per impl inheriting it, and
-                // what it calls is that walk's answer. What it holds is what
-                // the trait declares, resolved in the trait's module.
+                // A default body holds what the trait declares for it.
                 Item::Trait(trait_decl) => {
                     let def = index.resolutions.defs().def_at(trait_decl.id);
                     for method in &trait_decl.methods {
                         let declared = &index.trait_method_effects[&(def, method.name.clone())];
-                        for walk in view.default_walks(method.id) {
-                            check_function_effects_sem(walk, src, method, index, declared, out);
-                        }
+                        check_function_effects_sem(sem, src, method, index, declared, out);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
@@ -445,7 +436,7 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
                         let held = own.map_or(&[][..], std::slice::from_ref);
-                        check_function_effects_sem(view, src, method, index, held, out);
+                        check_function_effects_sem(sem, src, method, index, held, out);
                     }
                 }
                 // What the initializer performs is the purity check's; only an
@@ -1095,7 +1086,7 @@ fn check_impl_effect_conformance(
 }
 
 fn check_function_effects_sem(
-    sem: BodyView,
+    sem: &Semantics,
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
@@ -1117,7 +1108,11 @@ fn check_function_effects_sem(
     // Per-module annotations carry the dispatch facts and signature types that
     // have no flattened `Semantics` mirror (static-method dispatch,
     // param / return type ids).
-    let annotations = sem.annotations(module);
+    let annotations = sem
+        .state
+        .as_ref()
+        .and_then(|state| state.module_semantics.get(module))
+        .map(|module_sem| &module_sem.types);
 
     // Declared effects, plus resources that appear in the signature so a
     // `fn f(s: Stream<u8>)` need not repeat `with Stream`.
@@ -1472,7 +1467,7 @@ pub const INDIRECT_CALLEE: &str = "(indirect call)";
 /// parameter types: a function-typed parameter callee leaves no `references`
 /// edge or recorded expression type at the call, so nothing else names it.
 fn indirect_callee_type(
-    sem: &BodyView,
+    sem: &Semantics,
     param_types: &IndexMap<String, TypeId>,
     callee: &Expr,
 ) -> Option<TypeId> {
@@ -1513,7 +1508,7 @@ struct CalleeEffects {
 /// a spelling both answer for. A tag call is a call: annotate records its callee
 /// under the template's own id, so the same lookup answers for it.
 fn call_site_effects(
-    sem: &BodyView,
+    sem: &Semantics,
     index: &EffectIndex<'_>,
     annotations: Option<&TypeAnnotations>,
     param_types: &IndexMap<String, TypeId>,
@@ -1579,7 +1574,7 @@ fn call_site_effects(
 /// qualified (UFCS) call spells the receiver as its first argument, so the
 /// arguments align with the callee's full parameter list.
 fn dispatch_effects(
-    sem: &BodyView,
+    sem: &Semantics,
     index: &EffectIndex<'_>,
     func_ref: &FunctionRef,
     self_in_args: bool,
@@ -1612,7 +1607,7 @@ fn dispatch_effects(
 
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
-    sem: BodyView<'a>,
+    sem: &'a Semantics,
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
@@ -1825,7 +1820,7 @@ impl EffectIndex<'_> {
 /// Both walks resolve before they read a callee's effects, so an `effect E`
 /// bound to a concrete effect at the call site is seen by each of them.
 fn resolve_effect_params(
-    sem: &BodyView,
+    sem: &Semantics,
     index: &EffectIndex<'_>,
     callee_effects: &[EffectRef],
     param_types: &[TypeId],
@@ -2053,7 +2048,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let effects = dispatch_effects(&self.sem, self.index, func_ref, false, &[]);
+                    let effects = dispatch_effects(self.sem, self.index, func_ref, false, &[]);
                     let callee = func_ref
                         .method_info
                         .as_ref()
@@ -2077,7 +2072,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let resolved = dispatch_effects(
-                        &sem,
+                        sem,
                         self.index,
                         &dispatch.function_ref,
                         false,
@@ -2089,7 +2084,7 @@ impl AstVisitor for SemEffectWalker<'_> {
             Expr::StaticMethodCall(static_call) => {
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let resolved = dispatch_effects(
-                        &self.sem,
+                        self.sem,
                         self.index,
                         &func_ref,
                         self_in_args,
@@ -2189,7 +2184,7 @@ impl SemEffectWalker<'_> {
     /// and the capability its path demands where it dispatches an operation.
     fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
         let sites = call_site_effects(
-            &self.sem,
+            self.sem,
             self.index,
             self.annotations,
             &self.param_types,
@@ -2206,7 +2201,7 @@ impl SemEffectWalker<'_> {
 
 /// Type of `expr`, preferring the type of the binding an identifier names —
 /// where a parameter or a function-typed local has one and the use site does not.
-fn expr_type_of(expr: &Expr, sem: &BodyView) -> Option<TypeId> {
+fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
     if let Expr::Ident(ident) = expr
         && let Some(def) = sem.referenced_symbol(ident.id)
         && let Some(ty) = sem.local_type(def)
@@ -2214,96 +2209,6 @@ fn expr_type_of(expr: &Expr, sem: &BodyView) -> Option<TypeId> {
         return Some(ty);
     }
     sem.expression_type(expr.id())
-}
-
-/// The facts a check of one body reads: the program's, or for a trait's
-/// default body, what one impl's walk of it recorded, since the body is walked
-/// once per impl that inherits it.
-#[derive(Clone, Copy)]
-struct BodyView<'a> {
-    sem: &'a Semantics,
-    walk: Option<&'a DefaultMethodFacts>,
-}
-
-impl<'a> BodyView<'a> {
-    fn new(sem: &'a Semantics) -> Self {
-        Self { sem, walk: None }
-    }
-
-    /// A view per impl's walk of the trait default body `method`.
-    fn default_walks(self, method: AstId) -> impl Iterator<Item = BodyView<'a>> {
-        self.sem
-            .state
-            .iter()
-            .flat_map(|state| state.module_semantics.values())
-            .flat_map(|module| &module.default_method_facts)
-            .filter(move |((_, walked), _)| *walked == method)
-            .map(move |(_, walk)| BodyView {
-                sem: self.sem,
-                walk: Some(walk),
-            })
-    }
-
-    fn referenced_symbol(&self, id: AstId) -> Option<AstId> {
-        match self.walk {
-            Some(walk) => ModuleSemantics::REFERENCES
-                .all_in_default(walk, id)
-                .next()
-                .copied(),
-            None => self.sem.referenced_symbol(id),
-        }
-    }
-
-    fn local_type(&self, id: AstId) -> Option<TypeId> {
-        match self.walk {
-            Some(walk) => ModuleSemantics::LOCAL_TYPES
-                .all_in_default(walk, id)
-                .next()
-                .copied(),
-            None => self.sem.local_type(id),
-        }
-    }
-
-    fn expression_type(&self, id: AstId) -> Option<TypeId> {
-        match self.walk {
-            Some(walk) => ModuleSemantics::EXPRESSION_TYPES
-                .all_in_default(walk, id)
-                .next()
-                .copied(),
-            None => self.sem.expression_type(id),
-        }
-    }
-
-    fn method_dispatches_at(&self, id: AstId) -> Vec<&'a MethodDispatch> {
-        match self.walk {
-            Some(walk) => ModuleSemantics::METHOD_DISPATCH
-                .all_in_default(walk, id)
-                .collect(),
-            None => self.sem.method_dispatches_at(id).collect(),
-        }
-    }
-
-    /// The body facts of `module`'s walk, or of this default body's.
-    fn annotations(&self, module: &ModuleSource) -> Option<&'a TypeAnnotations> {
-        match self.walk {
-            Some(walk) => Some(&walk.types),
-            None => self
-                .sem
-                .state
-                .as_ref()?
-                .module_semantics
-                .get(module)
-                .map(|m| &m.types),
-        }
-    }
-}
-
-impl Deref for BodyView<'_> {
-    type Target = Semantics;
-
-    fn deref(&self) -> &Semantics {
-        self.sem
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2342,7 +2247,7 @@ impl<'a> EffectProbe<'a> {
     pub(crate) fn performs_effect(&self, module: &ModuleSource, expr: &Expr) -> bool {
         let index = self.data.index(&self.sem.types);
         let mut out = Vec::new();
-        PurityWalker::new(BodyView::new(self.sem), &index, module, &mut out).visit_expr(expr);
+        PurityWalker::new(self.sem, &index, module, &mut out).visit_expr(expr);
         !out.is_empty()
     }
 }
@@ -2357,7 +2262,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
         if !is_effect_checked(src) {
             continue;
         }
-        let mut walker = PurityWalker::new(BodyView::new(sem), index, src, out);
+        let mut walker = PurityWalker::new(sem, index, src, out);
         for item in &module.items {
             match item {
                 Item::Function(func) => walker.check_signature(func),
@@ -2371,7 +2276,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                     // defaults, so their calls leave no `references` edge to flag
                     // until that annotation lands.
                     for method in &trait_decl.methods {
-                        walker.check_trait_method(method);
+                        walker.check_signature(method);
                     }
                 }
                 Item::Interface(interface_decl) => {
@@ -2419,7 +2324,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
 /// Walks an expression that must be pure, flagging every effect it performs
 /// that no enclosing `with … do` answers.
 struct PurityWalker<'a> {
-    sem: BodyView<'a>,
+    sem: &'a Semantics,
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     module_source: &'a ModuleSource,
@@ -2438,14 +2343,18 @@ struct PurityWalker<'a> {
 impl<'a> PurityWalker<'a> {
     /// A walker over `module_source`, outside any `with … do`.
     fn new(
-        sem: BodyView<'a>,
+        sem: &'a Semantics,
         index: &'a EffectIndex<'a>,
         module_source: &'a ModuleSource,
         out: &'a mut Vec<PurityError>,
     ) -> Self {
         Self {
             sem,
-            annotations: sem.annotations(module_source),
+            annotations: sem
+                .state
+                .as_ref()
+                .and_then(|state| state.module_semantics.get(module_source))
+                .map(|module_sem| &module_sem.types),
             index,
             module_source,
             context: PureContext::DefaultValue,
@@ -2472,20 +2381,6 @@ impl<'a> PurityWalker<'a> {
     fn check_signature(&mut self, func: &ast::Function) {
         self.check_defaults(&func.params);
         self.check_contracts(func);
-    }
-
-    /// A trait method's defaults, and the `contract` clauses of a holder in
-    /// each impl's walk of it.
-    fn check_trait_method(&mut self, func: &ast::Function) {
-        self.check_defaults(&func.params);
-        let module_view = self.sem;
-        for walk in module_view.default_walks(func.id) {
-            self.sem = walk;
-            self.annotations = walk.annotations(self.module_source);
-            self.check_contracts(func);
-        }
-        self.sem = module_view;
-        self.annotations = module_view.annotations(self.module_source);
     }
 
     fn check_contracts(&mut self, func: &ast::Function) {
@@ -2523,7 +2418,7 @@ impl<'a> PurityWalker<'a> {
         callee: &str,
         span: Span,
     ) {
-        let effects = dispatch_effects(&self.sem, self.index, func_ref, self_in_args, args);
+        let effects = dispatch_effects(self.sem, self.index, func_ref, self_in_args, args);
         if self.unanswered(&effects) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
@@ -2534,7 +2429,7 @@ impl<'a> PurityWalker<'a> {
     fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
-        let required = operation_requirements(&self.sem, self.index, owner);
+        let required = operation_requirements(self.sem, self.index, owner);
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }
@@ -2544,7 +2439,7 @@ impl<'a> PurityWalker<'a> {
     /// position does not hold.
     fn flag_call(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
         let sites = call_site_effects(
-            &self.sem,
+            self.sem,
             self.index,
             self.annotations,
             &self.param_types,

@@ -1867,6 +1867,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 Item::Trait(trait_decl) => {
                     self.resolve_trait_param_defaults(trait_decl);
+                    self.resolve_trait_bodies(trait_decl);
                 }
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);
