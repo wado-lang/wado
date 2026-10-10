@@ -7,6 +7,7 @@ use crate::ast::{
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::liveness::is_user_authored;
+use crate::elaborator::util::is_hex_literal;
 use crate::semantics::Semantics;
 use crate::token::Span;
 
@@ -66,8 +67,7 @@ impl AstVisitor for Lookalikes {
 }
 
 fn is_lookalike(repr: &str) -> bool {
-    let is_hex = repr.starts_with("0x") || repr.starts_with("0X");
-    is_hex
+    is_hex_literal(repr)
         && repr.rsplit_once('_').is_some_and(|(_, last)| {
             LOOKALIKES
                 .iter()

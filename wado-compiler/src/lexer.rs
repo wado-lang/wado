@@ -1006,10 +1006,10 @@ impl<'a> Lexer<'a> {
         if self.peek_char() == Some('.') {
             let mut chars = self.chars.clone();
             chars.next();
-            let after_point: Vec<char> = chars.take(2).map(|(_, ch)| ch).collect();
-            if let [first, rest @ ..] = after_point.as_slice()
-                && (first.is_ascii_digit()
-                    || (*first == '_' && rest.first().is_some_and(char::is_ascii_digit)))
+            let first = chars.next().map(|(_, ch)| ch);
+            let second = chars.next().map(|(_, ch)| ch);
+            if first.is_some_and(|ch| ch.is_ascii_digit())
+                || (first == Some('_') && second.is_some_and(|ch| ch.is_ascii_digit()))
             {
                 self.advance(); // consume '.'
                 self.advance_while(|ch| ch.is_ascii_digit() || ch == '_');

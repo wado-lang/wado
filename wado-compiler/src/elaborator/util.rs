@@ -772,11 +772,13 @@ pub(crate) fn has_decimal_point(repr: &str) -> bool {
 /// Whether a number literal has an exponent. A hex literal has none: its `e`
 /// is a digit.
 fn has_exponent(repr: &str) -> bool {
+    !is_hex_literal(repr) && repr.contains(['e', 'E'])
+}
+
+/// Whether a number literal, negated or not, is written in hex.
+pub(crate) fn is_hex_literal(repr: &str) -> bool {
     let unsigned = repr.strip_prefix('-').unwrap_or(repr);
-    let radix = ["0x", "0X", "0b", "0B", "0o", "0O"]
-        .iter()
-        .any(|prefix| unsigned.starts_with(prefix));
-    !radix && unsigned.contains(['e', 'E'])
+    unsigned.starts_with("0x") || unsigned.starts_with("0X")
 }
 
 /// The name a type carries its trait bounds under, where it carries any.

@@ -277,7 +277,7 @@ assert grade == "P" && lower;
   namespace, or an associated constant.
 - A literal bound takes the scrutinee's type as a literal does where that type
   is expected, so on a float an integer or byte literal is the float of its
-  value (`0..<1.5`). A suffixed literal and a constant keep their own type.
+  value (`0..<1.5`). A constant keeps its own type.
 
 The compiler knows the value of a literal and of a primitive type's limit, such
 as `i32::MAX` or `f64::INFINITY`. A range bounded by those alone is checked
