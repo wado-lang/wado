@@ -1,0 +1,43 @@
+// A default body two impls inherit is one body, so its violation is reported
+// once, not once per impl.
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> bool with Stdout {
+    println("checked");
+    return n > 0;
+}
+
+trait Get with () {
+    fn twice(&self, i: i32) -> bool {
+        return noisy(i);
+    }
+
+    fn get(&self, i: i32) -> i32
+        contract noisy(i);
+}
+
+struct A { value: i32 }
+struct B { value: i32 }
+
+impl Get for A {
+    fn get(&self, i: i32) -> i32 { return self.value + i; }
+}
+
+impl Get for B {
+    fn get(&self, i: i32) -> i32 { return self.value - i; }
+}
+
+export fn run() {
+    let _ = A { value: 1 }.twice(1);
+    let _ = B { value: 1 }.get(1);
+}
+
+__DATA__
+{
+  "compile_errors_contains": [
+    ":12:16: analysis error: missing effect 'Stdout' required by 'noisy'",
+    ":16:18: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'"
+  ],
+  "compile_error": "required by 'noisy'",
+  "compile_error_count": 1
+}

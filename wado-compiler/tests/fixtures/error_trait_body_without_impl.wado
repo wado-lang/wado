@@ -1,0 +1,27 @@
+// A trait is checked on its own, so its default bodies and its clauses answer
+// with no impl to inherit them.
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> bool with Stdout {
+    println("checked");
+    return n > 0;
+}
+
+trait Get with () {
+    fn twice(&self, i: i32) -> bool {
+        return noisy(i);
+    }
+
+    fn get(&self, i: i32) -> i32
+        contract noisy(i);
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_errors_contains": [
+    ":12:16: analysis error: missing effect 'Stdout' required by 'noisy'",
+    ":16:18: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'"
+  ]
+}

@@ -1099,3 +1099,20 @@ fn self_definition() {
         }
     });
 }
+
+#[test]
+fn trait_contract_clause_definition() {
+    futures::executor::block_on(async {
+        let source = concat!(
+            "fn small(n: i32) -> bool { return n < 10; }\n",
+            "trait Get with () {\n",
+            "    fn get(&self, i: i32) -> i32\n",
+            "        contract small(i);\n",
+            "}\n",
+        );
+        let param = def_at(source, 3, 23).await.expect("i in a trait clause");
+        assert_range(&param, 2, 18, 19);
+        let callee = def_at(source, 3, 18).await.expect("small in a trait clause");
+        assert_range(&callee, 0, 3, 8);
+    });
+}
