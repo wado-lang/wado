@@ -74,11 +74,10 @@ wado compile -O2 -f bare-asserts app.wado     # silent at -O2 too
 A build may check contracts (see
 [Behavior Classes](./spec-overview.md#behavior-classes)). A function states a
 check with `builtin::contract_checks()`, as the whole condition of an `if`
-statement with no `else`. A
-checking build traps on a call outside the contract, as a failed assertion
-does, message included. A build that does not check evaluates nothing, and the
-compiler does not assume the contract holds: the violation keeps the class the
-function's documentation gives it.
+statement with no `else`. A checking build traps on a call outside the
+contract, as a failed assertion does, message included. A build that does not
+check evaluates nothing, and the compiler does not assume the contract holds:
+the violation keeps the class the function's documentation gives it.
 
 `-f contract-checks` and `-f no-contract-checks` choose. Without either, the
 test world checks at every optimization level, and any other world checks at
