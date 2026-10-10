@@ -40,9 +40,13 @@ pub struct Spread {
 }
 
 /// How `forward` lowers each of `graph`'s nodes, by position, and each
-/// `Spread` it finds, by the `Gemm`'s output.
-pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<String, Spread>] {
+/// `Spread` it finds, by the `Gemm`'s output. With `fuse` false it finds none,
+/// since a spread is there for what follows the product to join it.
+fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, TreeMap<String, Spread>] {
     let mut lowered: List<Lowering> = graph.nodes.into_iter().map(|n| lowering_of(&n, checked)).collect();
+    if !fuse {
+        return [lowered, TreeMap::new()];
+    }
     let mut made = TreeMap::<String, i32>::new();
     let mut read = TreeMap::<String, List<i32>>::new();
     for let [at, node] of graph.nodes.into_iter().enumerate() {
@@ -88,8 +92,16 @@ pub fn lowerings(graph: &Graph, checked: &Checked) -> [List<Lowering>, TreeMap<S
             continue;
         }
         let x = &checked.shapes[flatten.inputs[0]];
+        let flat = &checked.shapes[flatten.outputs[0]];
         let y = &checked.shapes[restore.outputs[0]];
-        if x.rank() < 3 || y.rank() != x.rank() || !first_axes_agree(x, y, x.rank() - 1) {
+        let rank = x.rank();
+        // The product reads `x` as it reads `flat` where `flat` keeps `x`'s
+        // last axis whole, its leading axes merged into one.
+        if rank < 3
+            || flat.rank() != 2
+            || !flat.axes[1].extent.agrees(&x.axes[rank - 1].extent)
+            || y.rank() != rank
+            || !first_axes_agree(x, y, rank - 1) {
             continue;
         }
         lowered[first] = Lowering::Flattened;
@@ -235,8 +247,8 @@ pub variant Reason {
     Computes(Kind),
     /// The scope returns it.
     Returned,
-    /// It is read by this many kernels, a branch among them where one reads
-    /// it. Fusing would compute it once per kernel.
+    /// It is read by this many kernels. Fusing would compute it once per
+    /// kernel.
     ReadTimes(i32),
     /// A node reading it is of this kind, which takes no operator before it.
     Reader(Kind),
@@ -378,7 +390,7 @@ struct Group {
 /// The nodes are read last to first, so each node's readers have their
 /// kernels already. A node joins its readers' kernel where they all share one.
 pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
-    let [lowered, spreads] = lowerings(graph, checked);
+    let [lowered, spreads] = lowerings(graph, checked, fuse);
     // An alias's output is its operand under another name, so what reads the
     // alias reads the operand, and so it is for a restored product and a
     // flattened operand. A folded node reads only extents, which stage 0
@@ -421,11 +433,11 @@ pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
         match decision {
             Fused(head) => {
                 heads[tensor] = head;
-                groups[head] = joined(&groups[head], node, &out, &join, checked);
+                groups[head] = joined(&groups[head], node, &join, checked);
             },
             Written(_) => {
                 heads[tensor] = tensor;
-                groups[tensor] = joined(&Group { out, contraction: false, rows: null }, node, &out, &join, checked);
+                groups[tensor] = joined(&Group { out, contraction: false, rows: null }, node, &join, checked);
             },
         }
         decisions[tensor] = decision;
@@ -454,16 +466,12 @@ fn original(aliased: &TreeMap<String, String>, tensor: &String) -> String {
     return aliased.get(*tensor).unwrap_or(*tensor);
 }
 
-/// `group` with `node` in it. A node holding one value per row of what the
-/// group writes makes it a row kernel, since the nodes are read last to first
-/// and the fold computing that value comes after it.
-fn joined(group: &Group, node: &Node, out: &Shape, join: &Option<Join>, checked: &Checked) -> Group {
+/// `group` with `node` in it. Only a fold makes it a row kernel: a value per
+/// row without one is read at each element of its row, as a broadcast is.
+fn joined(group: &Group, node: &Node, join: &Option<Join>, checked: &Checked) -> Group {
     return match join {
         Some(Contraction) => Group { ..*group, contraction: true },
         Some(Row) => Group { ..*group, rows: Option::Some(checked.shapes[node.inputs[0]]) },
-        Some(Elementwise) && group.rows matches { None } && per_row(out, &group.out) => {
-            Group { ..*group, rows: Option::Some(group.out) };
-        },
         _ => *group,
     };
 }
@@ -515,7 +523,7 @@ fn decided(
                 Some(space) => *space,
                 None => group.out,
             };
-            if same_space(out, &space) || per_row(out, &space) && !group.contraction {
+            if same_space(out, &space) || per_row(out, &space) {
                 Decision::Fused(head);
             } else {
                 Decision::Written(Reason::Stretched);
@@ -554,11 +562,14 @@ fn decided(
 /// element folds to itself, so it makes no row kernel.
 fn per_row(a: &Shape, rows: &Shape) -> bool {
     let rank = rows.rank();
-    return a.rank() == rank
-        && rank > 0
-        && a.axes[rank - 1].extent matches { Static(1) }
-        && !rows.axes[rank - 1].extent matches { Static(1) }
-        && first_axes_agree(a, rows, rank - 1);
+    return a.rank() == rank && rank > 0 && reduces_rows(a, rows) && first_axes_agree(a, rows, rank - 1);
+}
+
+/// Whether `a`, of `rows`' rank, holds one element where a row of `rows`
+/// holds more: its last axis is of extent 1 and `rows`' is not.
+pub fn reduces_rows(a: &Shape, rows: &Shape) -> bool {
+    let last = rows.rank() - 1;
+    return a.axes[last].extent matches { Static(1) } && !rows.axes[last].extent matches { Static(1) };
 }
 
 /// Whether two tensors cover one iteration space under one axis list, so one

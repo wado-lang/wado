@@ -19,7 +19,7 @@ use {
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
-use { IfBranch, Spread, branches, is_alias, plan, row_fold, selects_floats } from "./plan.wado";
+use { IfBranch, Spread, branches, is_alias, plan, reduces_rows, row_fold, selects_floats } from "./plan.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
@@ -304,9 +304,9 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Backend", "BinaryOp", "Epilogue", "Expected", "LoadError", "Merged", "RowOp", "Tensor", "UnaryOp", "Window",
-    "axis_mismatch", "ceil_div", "constant", "extent_mismatch", "floor_div", "from_end", "input_mismatch", "narrow",
-    "operand", "read_checkpoint", "refuse", "to_extent", "unmet",
+    "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor", "UnaryOp",
+    "Window", "axis_mismatch", "ceil_div", "extent_mismatch", "floor_div", "from_end", "input_mismatch", "narrow",
+    "read_checkpoint", "refuse", "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -1605,11 +1605,9 @@ impl Term {
             let reads: List<String> = self.lanes.into_iter().map(|lane| lane_read(&lane, space)).collect();
             // A row's one value is written once where the output holds one
             // per row; a row of one element is written whole either way.
-            let last = out.rank() - 1;
-            let reduced = !out.axes[last].extent.agrees(&space.axes[last].extent);
             return `backend.rows::<[${axis_list(space)}], [${axis_list(out)}]>([${reads.join(", ")}], &${expr_source(
                 &self.expr,
-            )}, 1, ${reduced})`;
+            )}, 1, ${reduces_rows(out, space)})`;
         }
         let mut head: Option<[i32, String]> = null;
         for let [i, lane] of self.lanes.into_iter().enumerate() {
@@ -1684,21 +1682,20 @@ fn operands_renumbered(e: &Expr, to: &List<i32>) -> Expr {
     return Expr { steps };
 }
 
-/// The source building `e` through the runtime's `operand`, `constant` and
-/// the `Expr` methods.
-fn expr_source(e: &Expr) -> String {
-    return step_source(e, e.steps.len() - 1);
+/// The source of `e` as its steps, so a step several read is spelled once.
+internal fn expr_source(e: &Expr) -> String {
+    let steps: List<String> = e.steps.into_iter().map(|s| step_source(&s)).collect();
+    return `Expr { steps: [${steps.join(", ")}] }`;
 }
 
-/// [`expr_source`] of step `i` alone.
-fn step_source(e: &Expr, i: i32) -> String {
-    return match e.steps[i] {
-        Operand(k) => `operand(${k})`,
-        Constant(c) => `constant(${float_literal(c)})`,
-        Unary([op, a]) => `${step_source(e, a)}.unary(UnaryOp::${op})`,
-        Binary([op, a, b]) => `${step_source(e, a)}.binary(BinaryOp::${op}, &${step_source(e, b)})`,
-        Select([c, a, b]) => `${step_source(e, c)}.select(&${step_source(e, a)}, &${step_source(e, b)})`,
-        Fold([op, a]) => `${step_source(e, a)}.row(RowOp::${op})`,
+fn step_source(step: &Step) -> String {
+    return match *step {
+        Operand(k) => `Step::Operand(${k})`,
+        Constant(c) => `Step::Constant(${float_literal(c)})`,
+        Unary([op, a]) => `Step::Unary([UnaryOp::${op}, ${a}])`,
+        Binary([op, a, b]) => `Step::Binary([BinaryOp::${op}, ${a}, ${b}])`,
+        Select([c, a, b]) => `Step::Select([${c}, ${a}, ${b}])`,
+        Fold([op, a]) => `Step::Fold([RowOp::${op}, ${a}])`,
     };
 }
 

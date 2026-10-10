@@ -60,9 +60,10 @@ runs.
   table with indices from the host, `select`, `concat`, `softmax`,
   `reduce_sum` and `reduce_mean`. An elementwise operand that stretches any
   axis reads through a stride of 0, so every `fused` call runs on the device.
-- `i64` and `bool` tensors stay on the host, since WGSL stores neither. Indices
-  and conditions are small, and a kernel that reads one uploads it as `u32`
-  when it runs.
+- A `bool` tensor lives on the device as 1.0 and 0.0, so GPT-2's causal mask
+  is written once by `keep` and sliced as a view. An `i64` tensor stays on the
+  host, since WGSL stores none. Indices are small, and a gather uploads them as
+  `u32` when it runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
   has them.
 - The device's limits are requested at the adapter's own, and a dispatch binds

@@ -811,10 +811,15 @@ pub trait Element with () {
     fn from_f32(v: f32) -> Self;
     fn from_i64(v: i64) -> Self;
     fn from_bool(v: bool) -> Self;
-    /// Whether this is `f32`, the one element a GPU stores: WGSL has neither
-    /// `i64` nor a stored `bool`.
+    /// Whether this is `f32`, the one element a GPU computes in: WGSL has
+    /// neither `i64` nor a stored `bool`.
     fn is_f32() -> bool {
         return false;
+    }
+    /// Whether an f32 holds every value of this exactly, so a GPU can store
+    /// it as one: `f32` itself, and `bool` as 1.0 and 0.0.
+    fn exact_in_f32() -> bool {
+        return Self::is_f32();
     }
 }
 
@@ -873,6 +878,10 @@ impl Element for bool {
 
     fn from_bool(v: bool) -> bool {
         return v;
+    }
+
+    fn exact_in_f32() -> bool {
+        return true;
     }
 }
 
@@ -990,6 +999,36 @@ impl Expr {
     pub fn row_softmax(&self) -> Expr {
         let e = self.binary(BinaryOp::Sub, &self.row(RowOp::Max)).unary(UnaryOp::Exp);
         return e.binary(BinaryOp::Div, &e.row(RowOp::Sum));
+    }
+
+    /// The one value a reducing row kernel writes for a row of no elements: a
+    /// fold of nothing is its start, 0.0 for a sum and negative infinity for
+    /// a maximum, and the steps after it read only folds and constants.
+    pub fn over_empty_row(&self) -> f32 {
+        let mut values: List<Option<f32>> = [];
+        for let step of self.steps {
+            values.push(match step {
+                Operand(_) => null,
+                Constant(c) => Option::Some(c),
+                Unary([op, a]) => match values[a] {
+                    Some(v) => Option::Some(unary_over(op, &whole([v]))[0]),
+                    None => null,
+                },
+                Binary([op, a, b]) => match [values[a], values[b]] {
+                    [Some(x), Some(y)] => Option::Some(binary_over(op, &whole([x]), &whole([y]))[0]),
+                    _ => null,
+                },
+                Select([c, a, b]) => match [values[c], values[a], values[b]] {
+                    [Some(k), Some(x), Some(y)] => Option::Some(if k != 0.0 { x } else { y }),
+                    _ => null,
+                },
+                Fold([op, _]) => Option::Some(folded(op, &whole([]), 0)),
+            });
+        }
+        let Some(value) = values[values.len() - 1] else {
+            panic("loam: a reducing row kernel's output reads an element of its row");
+        };
+        return value;
     }
 
     /// Whether a step folds along a row, so only a row kernel runs this.
@@ -1237,7 +1276,8 @@ pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, 
     let row = element_count(&extents[rank - row_axes..<rank].to_list());
     let count = element_count(&extents);
     if count == 0 {
-        return Tensor { data: [], extents: row_extents(&extents, row_axes, reduced) };
+        let out = row_extents(&extents, row_axes, reduced);
+        return Tensor { data: over_no_elements(op, &out), extents: out };
     }
     let full = op.over_rows(count, row, &repeated_over(operands, &extents));
     if !reduced {
@@ -1248,6 +1288,14 @@ pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, 
         data.push(full[at]);
     }
     return Tensor { data, extents: row_extents(&extents, row_axes, true) };
+}
+
+/// What a row kernel over no elements writes to an output of `out`: nothing
+/// where `out` has no elements, and otherwise, its rows reduced, each row's
+/// fold of nothing.
+pub fn over_no_elements(op: &Expr, out: &List<i32>) -> List<f32> {
+    let count = element_count(out);
+    return if count == 0 { [] as List<f32> } else { List::<f32>::filled(count, op.over_empty_row()) };
 }
 
 /// The extents `operands` broadcast to.

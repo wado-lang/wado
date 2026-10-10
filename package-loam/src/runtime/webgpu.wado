@@ -1,10 +1,10 @@
 //! The WebGPU backend: the kernels over `wasi:webgpu`, beside `Cpu`.
 //!
 //! An f32 tensor lives on the device from the kernel, `upload` or `keep` that
-//! writes it there until `forward` downloads it. An `i64` or `bool` tensor stays
-//! on the host, since WGSL stores neither, and a kernel that reads one writes
-//! it to the device as `u32` when it runs. The convolutions and `max_pool` run
-//! on the CPU. See `package-loam/webgpu.md`.
+//! writes it there until `forward` downloads it, and so does a `bool` one, as
+//! 1.0 and 0.0. An `i64` tensor stays on the host, since WGSL stores none, and
+//! a gather writes its indices to the device as `u32` when it runs. The
+//! convolutions and `max_pool` run on the CPU. See `package-loam/webgpu.md`.
 
 use {
     Backend,
@@ -21,6 +21,7 @@ use {
     broadcast_extents,
     element_count,
     operand,
+    over_no_elements,
     row_extents,
 } from "./tensor.wado";
 use { TreeMap } from "core:collections";
@@ -285,6 +286,19 @@ impl WebGpuBackend {
         return contiguous(slot, 0, t.extents);
     }
 
+    /// `t` on the device where an f32 holds its values, and on the host
+    /// otherwise.
+    fn stored<E: Element, Axes>(
+        &mut self,
+        t: &Tensor<E, Axes>,
+        kept: bool,
+    ) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
+        if E::exact_in_f32() {
+            return Placed::Device(self.placed(t, kept));
+        }
+        return Placed::Host(*t);
+    }
+
     /// `t`, which a caller found on the host.
     fn host_only<E, Axes>(&self, t: &Placed<E, Axes>) -> Tensor<E, Axes> {
         let Host(h) = t else {
@@ -518,10 +532,11 @@ impl WebGpuBackend {
             return null;
         };
         let out_extents = row_extents(&extents, row_axes, reduced);
-        let out = contiguous(self.allocated(element_count(&out_extents), false), 0, out_extents);
-        if rows == 0 || row == 0 {
-            return Option::Some(out);
+        if rows * row == 0 {
+            let empty = Tensor::<f32, ()> { data: over_no_elements(op, &out_extents), extents: out_extents };
+            return Option::Some(self.placed(&empty, false));
         }
+        let out = contiguous(self.allocated(element_count(&out_extents), false), 0, out_extents);
         let x = i32::min(rows, MAX_GROUPS);
         let y = covering(rows, x);
         let mut params: List<u32> = [rows as u32, x as u32, row as u32];
@@ -929,17 +944,12 @@ impl Backend for WebGpuBackend {
     type Operand<Axes> = PlacedRead<Axes>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
-        if E::is_f32() {
-            return Placed::Device(self.placed(t, false));
-        }
-        return Placed::Host(*t);
+        return self.stored(t, false);
     }
 
+    /// A kept mask is written once, and each pass reads it where it is.
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
-        if E::is_f32() {
-            return Placed::Device(self.placed(t, true));
-        }
-        return Placed::Host(*t);
+        return self.stored(t, true);
     }
 
     /// Submits what the pass before recorded and releases its buffers, so a
@@ -1020,7 +1030,8 @@ impl Backend for WebGpuBackend {
         &mut self,
         t: &Placed<A, Axes>,
     ) -> Placed<B, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if A::is_f32() && B::is_f32() && let Device(d) = t {
+        // A device holds a bool as the f32 it casts to.
+        if A::exact_in_f32() && B::is_f32() && let Device(d) = t {
             return Placed::Device(*d);
         }
         return Placed::Host(self.cpu.cast::<A, B, Axes>(&self.host(t)));

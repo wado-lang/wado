@@ -165,6 +165,84 @@ lin (float[2, 4, 8] X, float[8, 6] W, float[8, 6] B) => (float[2, 4, 6] Y)
     assert plan_of(source, layout).spread_of(&"G") matches { None };
 }
 
+test "a Reshape merging more than the leading axes is no spread" {
+    // The restored axes lead with X's, yet the product's inner axis is
+    // `(Seq In)`, not X's last.
+    let source = `
+lin (float[2, 3, 4] X, float[12, 6] W) => (float[2, 3, 2] Y)
+<int64[2] Flat = {2, 12}, int64[3] Back = {2, 3, 2}>
+{
+    F = Reshape(X, Flat)
+    G = Gemm(F, W)
+    Y = Reshape(G, Back)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Seq", "In"],
+        ],
+        [
+            "W",
+            ["(Seq In)", "Out"],
+        ],
+        [
+            "F",
+            ["Batch", "(Seq In)"],
+        ],
+        [
+            "G",
+            ["Batch", "Out"],
+        ],
+        [
+            "Y",
+            ["Batch", "Seq", "Part"],
+        ],
+    ]);
+    assert p.spread_of(&"G") matches { None };
+}
+
+test "with fusion off, nothing is spread" {
+    let p = plan_of(LINEAR, LINEAR_LAYOUT, false);
+    assert p.lowering(0) matches { Kernel };
+    assert p.spread_of(&"G") matches { None };
+}
+
+test "a value per row fused without a fold leaves the product before it in the kernel" {
+    let source = `
+g (float[N, 4] A, float[4, 8] B, float[N, 1] V) => (float[N, 8] Z)
+{
+    P = MatMul(A, B)
+    S = Sqrt(V)
+    Z = Mul(P, S)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "A",
+            ["Batch", "In"],
+        ],
+        [
+            "B",
+            ["In", "Feat"],
+        ],
+        [
+            "V",
+            ["Batch", "One"],
+        ],
+        [
+            "S",
+            ["Batch", "One"],
+        ],
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ]);
+    assert p.of(&"P") == fused("Z");
+    assert p.rows_of(&"Z") matches { None };
+}
+
 test "with fusion off, every kernel writes its output" {
     let p = plan_of(MLP, mlp_layout(), false);
     for let tensor of ["H", "HB", "A", "T", "Y"] {
