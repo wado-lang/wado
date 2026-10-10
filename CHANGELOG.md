@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.0.37](https://github.com/wado-lang/wado/compare/v0.0.36...v0.0.37) - 2026-10-10
+
+- perf(json): fewer allocations per container and quoted number by @gfx in https://github.com/wado-lang/wado/pull/2302
+- perf(ci): a stdlib coverage run doubles as the stdlib test run at O0 and O3 by @gfx in https://github.com/wado-lang/wado/pull/2304
+- feat(async): trap AsyncCall reuse and a second task return, reject ? in export async fn by @gfx in https://github.com/wado-lang/wado/pull/2305
+- perf(optimize): stop re-deriving every body's facts on every round by @gfx in https://github.com/wado-lang/wado/pull/2306
+- chore(stdlib): cover every stdlib region outside the prelude that a test can reach by @gfx in https://github.com/wado-lang/wado/pull/2307
+- chore(deps): wasmtime 49.0.2 for wado and wado-run-webgpu, latest Cargo dependencies by @gfx in https://github.com/wado-lang/wado/pull/2308
+- perf(optimize): visit functions on several threads, with the same output on any count by @gfx in https://github.com/wado-lang/wado/pull/2309
+- fix(marl): stop the formatter from rewriting paragraphs into other blocks by @gfx in https://github.com/wado-lang/wado/pull/2310
+- feat(effects)!: a handler method resumes its caller on every path by @gfx in https://github.com/wado-lang/wado/pull/2311
+- perf(coverage): compile stdlib coverage at 1.4× a plain run, not 3.7× by @gfx in https://github.com/wado-lang/wado/pull/2312
+- perf(optimize): run dae, drve, sroa_param, container_sroa and value_copy_demote on the optimizer's threads by @gfx in https://github.com/wado-lang/wado/pull/2313
+- fix(bind)!: check a deferred let along every path the program can take by @gfx in https://github.com/wado-lang/wado/pull/2314
+- fix(prelude): copy the elements a List or Array takes in, not share them by @gfx in https://github.com/wado-lang/wado/pull/2315
+- feat(loam): a tokenizer.json becomes a Tokenizer, and a use site names each file's type by @gfx in https://github.com/wado-lang/wado/pull/2316
+- feat: shift by the operand's own type, and warn where literals already decide a wrap or trap by @gfx in https://github.com/wado-lang/wado/pull/2317
+- fix: name each associated type of a trait bounded at two argument lists by @gfx in https://github.com/wado-lang/wado/pull/2319
+- feat(loam): forward reads weights prepared once by the backend by @gfx in https://github.com/wado-lang/wado/pull/2318
+- feat(loam): run the generator and report its decisions from the command line by @gfx in https://github.com/wado-lang/wado/pull/2320
+- chore(loam): inspect onnxruntime's optimizations from one pinned install by @gfx in https://github.com/wado-lang/wado/pull/2322
+- feat(lint): one Diagnostics chapter, and #[allow] that waives what its node encloses by @gfx in https://github.com/wado-lang/wado/pull/2321
+- feat!: type numeric literals with `as` only; remove suffixes by @gfx in https://github.com/wado-lang/wado/pull/2323
+- feat(loam): fuse operators by kind and report every fusion decision by @gfx in https://github.com/wado-lang/wado/pull/2324
+
 ## [v0.0.36](https://github.com/wado-lang/wado/compare/v0.0.35...v0.0.36) - 2026-10-07
 
 - feat(cm)!: a library imports by the same names from a component as from source by @gfx in https://github.com/wado-lang/wado/pull/2299
