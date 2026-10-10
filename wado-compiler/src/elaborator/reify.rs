@@ -10391,7 +10391,7 @@ fn held_method(func: &TirFunction) -> Option<&str> {
 
 /// Open `func`'s body with a call to `callee`, passing it `func`'s parameters
 /// and type parameters. The parser gave `callee` the type parameters `func`
-/// declares, effect parameters dropped.
+/// declares. A call passes no effect argument.
 fn open_with_call(func: &mut TirFunction, callee: &TirFunction, type_table: &mut TypeTable) {
     let span = callee.span;
     let type_args: Vec<TypeId> = func
@@ -10400,7 +10400,7 @@ fn open_with_call(func: &mut TirFunction, callee: &TirFunction, type_table: &mut
         .filter(|param| !param.is_effect)
         .map(|param| type_table.make_declared_param(param.name.clone(), param.index, param.is_pack))
         .collect();
-    assert_eq!(type_args.len(), callee.type_params.len());
+    assert_eq!(func.type_params.len(), callee.type_params.len());
     let args = func
         .params
         .iter()

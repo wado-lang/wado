@@ -2103,8 +2103,7 @@ impl Parser {
         self.pos = fn_pos;
         self.expect(&TokenKind::Fn)?;
         self.consume_ident()?;
-        let mut type_params = self.parse_generic_params()?;
-        type_params.retain(|param| !param.is_effect);
+        let type_params = self.parse_generic_params()?;
         let lparen_span = self.expect(&TokenKind::LParen)?.span;
         let params = self.parse_param_list()?;
         let rparen_span = self.expect(&TokenKind::RParen)?.span;
