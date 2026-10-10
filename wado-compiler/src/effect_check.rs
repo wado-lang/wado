@@ -417,20 +417,23 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
             let view = BodyView::new(sem);
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(view, src, func, index, None, out);
+                    check_function_effects_sem(view, src, func, index, &[], out);
                 }
                 Item::Impl(impl_block) => {
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(view, src, method, index, None, out);
+                        check_function_effects_sem(view, src, method, index, &[], out);
                     }
                 }
                 // A default body is walked once per impl inheriting it, and
-                // what it calls is that walk's answer.
+                // what it calls is that walk's answer. What it holds is what
+                // the trait declares, resolved in the trait's module.
                 Item::Trait(trait_decl) => {
+                    let def = index.resolutions.defs().def_at(trait_decl.id);
                     for method in &trait_decl.methods {
+                        let declared = &index.trait_method_effects[&(def, method.name.clone())];
                         for walk in view.default_walks(method.id) {
-                            check_function_effects_sem(walk, src, method, index, None, out);
+                            check_function_effects_sem(walk, src, method, index, declared, out);
                         }
                     }
                 }
@@ -441,7 +444,8 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                     let def = index.resolutions.defs().def_at(interface_decl.id);
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
-                        check_function_effects_sem(view, src, method, index, own, out);
+                        let held = own.map_or(&[][..], std::slice::from_ref);
+                        check_function_effects_sem(view, src, method, index, held, out);
                     }
                 }
                 // What the initializer performs is the purity check's; only an
@@ -1095,7 +1099,7 @@ fn check_function_effects_sem(
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
-    held: Option<&EffectRef>,
+    held: &[EffectRef],
     out: &mut Vec<EffectError>,
 ) {
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
@@ -1133,7 +1137,7 @@ fn check_function_effects_sem(
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
     current.extend(benign);
-    current.extend(held.cloned());
+    current.extend(held.iter().cloned());
     if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
         current.extend(index.waiting.iter().cloned());
     }
