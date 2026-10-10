@@ -113,13 +113,31 @@ impl<V> Fact<V> {
     /// Every value recorded for `id`: at most one for a binding, and for a body
     /// fact the module's own walk's first, then one per tuple `for-of` element.
     pub(crate) fn all(self, sem: &ModuleSemantics, id: AstId) -> impl Iterator<Item = &V> {
+        self.all_in(&sem.bindings, &sem.types, id)
+    }
+
+    /// [`Self::all`] over one trait default body's walk for one impl.
+    pub(crate) fn all_in_default(
+        self,
+        facts: &DefaultMethodFacts,
+        id: AstId,
+    ) -> impl Iterator<Item = &V> {
+        self.all_in(&facts.bindings, &facts.types, id)
+    }
+
+    fn all_in<'a>(
+        self,
+        bindings: &'a ModuleBindings,
+        types: &'a TypeAnnotations,
+        id: AstId,
+    ) -> impl Iterator<Item = &'a V> {
         let binding = match self.map {
-            FactMap::Bindings(map) => map(&sem.bindings).get(&id),
+            FactMap::Bindings(map) => map(bindings).get(&id),
             FactMap::Body(_) => None,
         };
         let body = match self.map {
             FactMap::Bindings(_) => None,
-            FactMap::Body(map) => Some(sem.types.all(map, id)),
+            FactMap::Body(map) => Some(types.all(map, id)),
         };
         binding.into_iter().chain(body.into_iter().flatten())
     }

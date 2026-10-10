@@ -1,0 +1,28 @@
+// A trait's default body is checked for the effects it performs, as any body
+// is: it is walked once per impl inheriting it, and each walk answers.
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> bool with Stdout {
+    println("checked");
+    return n > 0;
+}
+
+trait Get with () {
+    fn twice(&self, i: i32) -> bool {
+        return noisy(i);
+    }
+}
+
+struct Box { value: i32 }
+
+impl Get for Box {}
+
+export fn run() {
+    let b = Box { value: 1 };
+    let _ = b.twice(1);
+}
+
+__DATA__
+{
+  "compile_error": ":12:16: analysis error: missing effect 'Stdout' required by 'noisy'"
+}
