@@ -1,0 +1,26 @@
+// A contract clause is no coverage target, whether the call checks it or not:
+// an uncalled function leaves its body unrun, not its clause.
+fn half(n: i32) -> i32
+    contract n >= 0
+{
+    return n / 2;
+}
+
+fn never(n: i32) -> i32
+    contract n >= 0
+{
+    return n;
+}
+
+test "the called one" {
+    assert half(4) == 2;
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "uncovered_lines": [12],
+    "uncovered_functions": ["never"]
+  }
+}
