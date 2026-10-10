@@ -241,7 +241,8 @@ test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
     let fs_a = env.rule_follow(&a);
     let fs_w = env.rule_follow(&wrapper);
     let fs_b = env.rule_follow(&b);
-    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got ${fs_a.kinds.len()} entries`;
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got ${fs_a.kinds.len(
+    )} entries`;
     assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
     assert ctx.token_names_of(&fs_w.kinds).contains_str("TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
     assert ctx.token_names_of(&fs_w.kinds).contains_str("TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";

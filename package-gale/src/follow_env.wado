@@ -4,8 +4,7 @@
 //!
 //! The `rule_follow` fixed point represents each rule's FOLLOW set as a u64
 //! bitset over token-kind ids (`Element::kind_id`): union is a word-wise OR
-//! and equality a word compare, so the worklist loop never touches a
-//! `HashSet<String>`. Every FIRST-derived contribution is fixed-point
+//! and equality a word compare. Every FIRST-derived contribution is fixed-point
 //! invariant, so each `RuleRef` site is flattened once into a
 //! [`Contribution`] — static bits plus an inherits-caller-FOLLOW flag — and
 //! the loop itself is pure bitset propagation. The public `FollowSet` exposes
@@ -825,4 +824,3 @@ fn end_after_element(
         tail: strs_concat(&s, &after.tail),
     };
 }
-

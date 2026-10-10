@@ -1703,12 +1703,7 @@ fn scan_element_can_fail(se: &ScanElement, known: &List<List<i32>>, ctx: &EmitCo
     };
 }
 
-fn scan_elements_can_fail(
-    elements: &List<ScanElement>,
-    from: i32,
-    known: &List<List<i32>>,
-    ctx: &EmitContext,
-) -> bool {
+fn scan_elements_can_fail(elements: &List<ScanElement>, from: i32, known: &List<List<i32>>, ctx: &EmitContext) -> bool {
     let mut k = *known;
     for let i of from..<elements.len() {
         if scan_element_can_fail(&elements[i], &k, ctx) {
@@ -1854,14 +1849,11 @@ fn gen_scan_rule_call(w: &mut CodeWriter, rc: &ScanRuleCallElement, ctx: &mut Em
 
 /// `tokens[pos] == K || …` over the kinds a `~X` scan refuses.
 fn excluded_token_check(kinds: &List<i32>, ctx: &EmitContext) -> String {
-    let mut check = String::with_capacity(64);
-    for let mut i = 0; i < kinds.len(); i += 1 {
-        if i > 0 {
-            check.push_str(" || ");
-        }
-        check.push_str(`tokens[pos] == ${ctx.analysis.token_name(kinds[i])}`);
+    let mut parts: List<String> = [];
+    for let k of kinds {
+        parts.push(`tokens[pos] == ${ctx.analysis.token_name(*k)}`);
     }
-    return check;
+    return parts.join(" || ");
 }
 
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
@@ -2544,12 +2536,7 @@ fn gen_scan_token_set<S: AsStrSlice>(
 }
 
 /// `gen_scan_token_set` where a miss sets `pos = -1`.
-fn gen_scan_token_set_assign(
-    w: &mut CodeWriter,
-    kinds: &List<i32>,
-    ctx: &mut EmitContext,
-    known: &List<List<i32>>,
-) {
+fn gen_scan_token_set_assign(w: &mut CodeWriter, kinds: &List<i32>, ctx: &mut EmitContext, known: &List<List<i32>>) {
     if known_within(known, kinds, ctx) {
         w.line("pos += 1;");
         return;
@@ -3039,13 +3026,7 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     gen_rule_entry_sync(w, ctx, rule);
     w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
-    let mut firsts: List<i32> = [];
-    for let alt of &rule.alternatives {
-        let t = ctx.analysis.terminal_kind(&alt.elements[0]);
-        if !firsts.contains(&t) {
-            firsts.push(t);
-        }
-    }
+    let firsts = ctx.analysis.single_token_kinds(&rule.alternatives);
     if rule_alts_labeled(&rule.alternatives) {
         // Labeled rule: emit a per-alt cascade so the matched alternative's
         // index is stamped on the node (consumers dispatch via `<rule>_alt`).
@@ -5791,22 +5772,12 @@ fn gen_consume_token_group_op(
 ) {
     let base = token_group_field_name(alts);
     let _ = dedup_name(&base, name_counts);
-    let kinds = collect_token_only_kinds(alts, ctx);
+    let kinds = ctx.analysis.single_token_kinds(alts);
     if proves(proven, &kinds) {
         w.line(`${leaf_binding(ctx, &base, &to.field)}p.take();`);
         return;
     }
     w.line(`${leaf_binding(ctx, &base, &to.field)}${expect_set_call(ctx, &kinds)};`);
-}
-
-fn collect_token_only_kinds(alts: &List<Alternative>, ctx: &mut EmitContext) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let alt of alts {
-        let elem = &alt.elements[0];
-        assert elem matches { TokenRef(_) | Literal(_) }, "collect_token_only_kinds: token-only group alt is not TokenRef or Literal";
-        out.push(ctx.analysis.terminal_kind(elem));
-    }
-    return out;
 }
 
 /// Single-alt group emit `(e1 e2 …)`: parse each inner element (each appends
@@ -8169,11 +8140,7 @@ fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative
 
 /// The discriminator an overlap group's sub-dispatch branches on, measured on
 /// the carrier (invariant 11). Empty means "none", never "anything".
-fn compute_lr_second_token(
-    shared_token: i32,
-    elements: &List<Element>,
-    ctx: &mut EmitContext,
-) -> List<i32> {
+fn compute_lr_second_token(shared_token: i32, elements: &List<Element>, ctx: &mut EmitContext) -> List<i32> {
     for let mut i = 1; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let mut visiting: List<String> = [];
@@ -8652,11 +8619,7 @@ fn dispatch_claims_every_first_token(
     }
     let mut claimed: List<i32> = [];
     for let branch of &d.branches {
-        for let tk of &branch.tokens {
-            if !claimed.contains(tk) {
-                claimed.push(*tk);
-            }
-        }
+        dedup_append_arr(&mut claimed, &branch.tokens);
     }
     for let idx of indices {
         if ctx.analysis.tail_is_nullable_deep(&alts[*idx].elements, skip)

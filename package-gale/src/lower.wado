@@ -750,7 +750,12 @@ fn lr_rule_is_atn_class(
     // one does, so no static pick between them is right.
     for let a of lr_alts {
         for let b of lr_alts {
-            if lr_suffix_is_proper_prefix(rule, &rule.alternatives[a.alt_index], &rule.alternatives[b.alt_index], analysis) {
+            if lr_suffix_is_proper_prefix(
+                rule,
+                &rule.alternatives[a.alt_index],
+                &rule.alternatives[b.alt_index],
+                analysis,
+            ) {
                 return true;
             }
         }
@@ -1087,11 +1092,7 @@ fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&Rule
 
 /// Whether a self-reference nested in a subrule of the LR suffix `ops` can be
 /// followed, before the suffix ends, by a token in `operators`.
-fn nested_operand_meets_operator_in_suffix<S: AsStrSlice>(
-    ops: &List<Op>,
-    rule_name: S,
-    operators: &List<i32>,
-) -> bool {
+fn nested_operand_meets_operator_in_suffix<S: AsStrSlice>(ops: &List<Op>, rule_name: S, operators: &List<i32>) -> bool {
     for let mut k = 0; k < ops.len(); k += 1 {
         if find_self_ref_rule_call(&ops[k], rule_name) matches { Some(_) } {
             continue;
@@ -1106,12 +1107,7 @@ fn nested_operand_meets_operator_in_suffix<S: AsStrSlice>(
 
 /// Whether a self-reference inside `op` can be followed by a token in
 /// `operators`; `follow_has` says whether what follows `op` can start with one.
-fn nested_operand_meets_operator<S: AsStrSlice>(
-    op: &Op,
-    rule_name: S,
-    operators: &List<i32>,
-    follow_has: bool,
-) -> bool {
+fn nested_operand_meets_operator<S: AsStrSlice>(op: &Op, rule_name: S, operators: &List<i32>, follow_has: bool) -> bool {
     return match *op {
         RuleCall(rc) => follow_has && rc.target_name == rule_name.as_str_slice(),
         ListLabel(ll) => nested_operand_meets_operator(&ll.inner, rule_name, operators, follow_has),
@@ -1235,12 +1231,7 @@ fn collect_lr_suffix_first_tokens_from_lowered(lr_alts: &List<LrAlt>) -> List<i3
 /// case the ref must keep `conflict_min` so it cannot steal that operator
 /// (BETWEEN…AND). This is why `'(' expr ')'` parses its inner `expr` as a
 /// full expression: the `)` that follows is not an LR operator.
-fn compute_self_ref_prec_from_ops(
-    ops: &List<Op>,
-    k: i32,
-    conflict_min: i32,
-    lr_suffix_first_tokens: &List<i32>,
-) -> i32 {
+fn compute_self_ref_prec_from_ops(ops: &List<Op>, k: i32, conflict_min: i32, lr_suffix_first_tokens: &List<i32>) -> i32 {
     let mut prec = conflict_min;
     if k + 1 < ops.len() {
         let next_op = &ops[k + 1];
@@ -4245,10 +4236,7 @@ fn atn_asked_kinds(
         },
     };
     let mut asked = union_kind_arrays(exit_first, &refused);
-    let eof = ctx.analysis.eof_kind_id();
-    if !asked.contains(&eof) {
-        asked.push(eof);
-    }
+    dedup_append_arr(&mut asked, &[ctx.analysis.eof_kind_id()]);
     return asked;
 }
 

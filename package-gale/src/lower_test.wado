@@ -336,11 +336,11 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
         if let Direct(d) = &m.dispatch {
             assert d.branches.len() == 3;
             assert d.branches[0].alt_index == 0;
-            assert first_names(&an,&d.branches[0].alt_class)[0] == "TK_INT";
+            assert first_names(&an, &d.branches[0].alt_class)[0] == "TK_INT";
             assert d.branches[1].alt_index == 1;
-            assert first_names(&an,&d.branches[1].alt_class)[0] == "TK_STRING";
+            assert first_names(&an, &d.branches[1].alt_class)[0] == "TK_STRING";
             assert d.branches[2].alt_index == 2;
-            assert first_names(&an,&d.branches[2].alt_class)[0] == "TK_ID";
+            assert first_names(&an, &d.branches[2].alt_class)[0] == "TK_ID";
         } else {
             panic("expected MultiAltDispatch::Direct");
         }
@@ -659,10 +659,10 @@ test "lower token-only Group produces TokenOnly shape with single field" {
             // Direct dispatch on each alt's single token kind.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert first_names(&an,&dd.branches[0].alt_class).len() == 1;
-                assert first_names(&an,&dd.branches[0].alt_class)[0] == "TK_K_INSERT";
+                assert first_names(&an, &dd.branches[0].alt_class).len() == 1;
+                assert first_names(&an, &dd.branches[0].alt_class)[0] == "TK_K_INSERT";
                 assert dd.branches[0].alt_index == 0;
-                assert first_names(&an,&dd.branches[1].alt_class)[0] == "TK_K_REPLACE";
+                assert first_names(&an, &dd.branches[1].alt_class)[0] == "TK_K_REPLACE";
                 assert dd.branches[1].alt_index == 1;
             } else {
                 panic("expected MultiAltDispatch::Direct");
@@ -819,8 +819,8 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
             // Direct dispatch on each rule's first set.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert first_names(&an,&dd.branches[0].alt_class)[0] == "TK_ID";
-                assert first_names(&an,&dd.branches[1].alt_class)[0] == "TK_INT";
+                assert first_names(&an, &dd.branches[0].alt_class)[0] == "TK_ID";
+                assert first_names(&an, &dd.branches[1].alt_class)[0] == "TK_INT";
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }
@@ -939,8 +939,8 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
             // Direct dispatch on each alt's first set.
             if let Direct(dd) = &go.dispatch {
                 assert dd.branches.len() == 2;
-                assert first_names(&an,&dd.branches[0].alt_class)[0] == "TK_ID";
-                assert first_names(&an,&dd.branches[1].alt_class)[0] == "TK_INT";
+                assert first_names(&an, &dd.branches[0].alt_class)[0] == "TK_ID";
+                assert first_names(&an, &dd.branches[1].alt_class)[0] == "TK_INT";
             } else {
                 panic("expected MultiAltDispatch::Direct");
             }

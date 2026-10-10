@@ -159,11 +159,7 @@ pub fn build_prediction(
 /// specificity (FIRST-set size). Both the prediction tree
 /// (`build_group_prediction_tree`) and any rendering of the group must
 /// use this order so they agree on which alt sits where.
-pub fn group_prediction_order(
-    group: &List<i32>,
-    first_sets: &List<List<i32>>,
-    non_lr_indices: &List<i32>,
-) -> List<i32> {
+pub fn group_prediction_order(group: &List<i32>, first_sets: &List<List<i32>>, non_lr_indices: &List<i32>) -> List<i32> {
     let mut sorted_group = group.sorted();
     sort_group_by_specificity(&mut sorted_group, first_sets);
     return sorted_group.iter_ref().map(|gi: &i32| non_lr_indices[*gi]).collect();
@@ -266,11 +262,7 @@ fn collect_at_end_branch_tokens(node: &PredictionNode) -> List<i32> {
     prediction_at_end_conflicts(node, &mut sites);
     let mut tokens: List<i32> = [];
     for let site of &sites {
-        for let t of site {
-            if !tokens.contains(t) {
-                tokens.push(*t);
-            }
-        }
+        dedup_append_arr(&mut tokens, site);
     }
     return tokens;
 }
@@ -813,11 +805,7 @@ fn build_sll_node(
     if at_end_alts.len() >= 1 && branches.len() >= 1 {
         let mut branch_tokens: List<i32> = [];
         for let b of &branches {
-            for let t of &b.tokens {
-                if !branch_tokens.contains(t) {
-                    branch_tokens.push(*t);
-                }
-            }
+            dedup_append_arr(&mut branch_tokens, &b.tokens);
         }
         // No token a branch takes can follow the rule, so an at-end alternative
         // is viable exactly on what follows it: a token decides.

@@ -143,19 +143,20 @@ impl GrammarAnalysis {
             predicate_fn_owners: predicate_fn_owners(parser_rules),
         };
         for let rule of parser_rules {
-            if !is_one_token_rule(rule) {
-                continue;
+            if is_one_token_rule(rule) {
+                analysis.one_token_rules[rule.snake_name] = analysis.single_token_kinds(&rule.alternatives);
             }
-            let mut kinds: List<i32> = [];
-            for let alt of &rule.alternatives {
-                let k = analysis.terminal_kind(&alt.elements[0]);
-                if !kinds.contains(&k) {
-                    kinds.push(k);
-                }
-            }
-            analysis.one_token_rules[rule.snake_name] = kinds;
         }
         return analysis;
+    }
+
+    /// The distinct kinds of `alts`, each one terminal, in first-seen order.
+    pub fn single_token_kinds(&mut self, alts: &List<Alternative>) -> List<i32> {
+        let mut kinds: List<i32> = [];
+        for let alt of alts {
+            dedup_append_arr(&mut kinds, &[self.terminal_kind(&alt.elements[0])]);
+        }
+        return kinds;
     }
 
     /// The parser-rule table (for action attribute resolution, which validates
@@ -275,12 +276,11 @@ impl GrammarAnalysis {
         let eof = self.eof_kind_id();
         let mut ids: List<i32> = [];
         let mut names: List<String> = [];
-        for let k of kinds {
-            let id = *k;
-            if id == eof {
+        for let id of kinds {
+            if *id == eof {
                 names = ["<EOF>"];
-            } else if id < self.vocab_names.len() && !ids.contains(&id) {
-                ids.push(id);
+            } else if *id < self.vocab_names.len() && !ids.contains(id) {
+                ids.push(*id);
             }
         }
         for let id of &ids.sorted() {
@@ -586,7 +586,10 @@ impl GrammarAnalysis {
                 return none;
             }
         }
-        return [bits_ids(&firsts), bits_ids(&seconds)];
+        return [
+            bits_ids(&firsts),
+            bits_ids(&seconds),
+        ];
     }
 
     /// Every way `elements[start..]` begins, at most two tokens deep. `null`
@@ -817,12 +820,7 @@ impl GrammarAnalysis {
     /// multi-token element — preserving the input-offset alignment that
     /// makes the result a sound lookahead predictor. See
     /// [`alt_position_first_sets`] for the invariant details.
-    pub fn position_first_sets_from(
-        &mut self,
-        elements: &List<Element>,
-        start: i32,
-        max_depth: i32,
-    ) -> List<List<i32>> {
+    pub fn position_first_sets_from(&mut self, elements: &List<Element>, start: i32, max_depth: i32) -> List<List<i32>> {
         let mut result: List<List<i32>> = [];
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {

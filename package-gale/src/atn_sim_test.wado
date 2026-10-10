@@ -187,7 +187,11 @@ test "a disabled alternative covering the others does not settle the decision" {
     let d = rule_block_decision(&atn, 1);
     let stack: List<i32> = [-1, atn.call_site_returns[0]];
     let x_only = ([tk.id_of("TK_X"), eof] as List<i32>).to_array();
-    let x_y = ([tk.id_of("TK_X"), tk.id_of("TK_Y"), eof] as List<i32>).to_array();
+    let x_y = ([
+        tk.id_of("TK_X"),
+        tk.id_of("TK_Y"),
+        eof,
+    ] as List<i32>).to_array();
     let pick = |kinds: &Array<i32>, disabled: List<i32>| atn_predict_with_stack(
         &sim,
         d,
