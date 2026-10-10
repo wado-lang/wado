@@ -234,6 +234,37 @@ Any other `_unchecked` name is removed.
 build. A build under `-f contract-checks` still checks a marked call. The word
 was kept despite that because it continues the `_unchecked` names it replaces.
 
+### A trait method's contract belongs to the trait
+
+A trait method's clauses are written on the trait's declaration, a signature
+without a body included, and bind every impl, as its default arguments do. An
+impl writes none: it neither restates them nor adds one. Trait dispatch is
+static, so a call through a bound reaches a known impl, and each impl checks the
+trait's clauses at its head.
+
+An impl that added a clause would make `unchecked` remove a check its caller
+never saw: generic code marks a call vouching for the trait's clauses, not for
+those of whichever impl it reaches. Removing a check takes a marker at the
+call, and that marker means only what the call site can read.
+
+Where what an impl accepts differs between impls, the trait declares a
+predicate method and its clause calls it. The indexing traits are the case:
+a list takes an index in range, a range index takes ends in range, and a map
+takes a key it holds, so `len` would not do. Each declares `contains_index`,
+and `index_value` and its siblings require it:
+
+```text
+trait IndexValue<I> {
+    type Output;
+    fn contains_index(&self, index: &I) -> bool;
+    fn index_value(&self, index: I) -> Self::Output
+        contract self.contains_index(&index), "index out of range";
+}
+```
+
+An impl whose type cannot take every input its trait admits is a design error
+in that impl, not a contract to add.
+
 ## Roadmap
 
 1. `-f contract-checks`, `builtin::contract_checks()`, and the checks in
@@ -247,9 +278,13 @@ was kept despite that because it continues the `_unchecked` names it replaces.
    A marked call reaches the twin. The parser puts each clause at the head of
    the body as an `assert` marked as a contract, so every pass over a body
    sees it, and the formatter prints it back as a clause.
-3. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
+3. A trait method's contract: written on the trait, checked in every impl and
+   default body.
+4. The indexing traits declare `contains_index` and require it, so
+   `unchecked xs[i]` is an index read with no range check.
+5. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
    `#[unavailable]` declaration where Rust has a method of the same name.
-4. The generated WIT carries an `export fn`'s contract as a comment.
+6. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps
 
@@ -262,9 +297,7 @@ was kept despite that because it continues the `_unchecked` names it replaces.
 - A clause that costs more than the function it guards is not checked: that
   the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
   that a write keeps them UTF-8 in `set_byte_unchecked`.
-- A call whose callee is not known statically, through a trait bound or a
-  function value, has no call site to place the check at. How a trait
-  method's contract binds an impl is not settled either, and `unchecked xs[i]`
-  reaches an indexing trait's method.
+- A call through a function value has no callee known statically, so it has no
+  contract to check or to remove.
 - An input contract cannot say that a method taking `&mut self` keeps its
   type's invariant. It can only require inputs that imply it.
