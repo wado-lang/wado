@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791596620205,
+  "lastUpdate": 1791600388523,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65793,6 +65793,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a198b0306214df92371bacfd43677a7606274435"
         },
         "date": 1791596619562,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f3f76a82d95588983b5439cf81c115d66fd1f5d9",
+          "message": "Merge pull request #2322 from wado-lang/loam-ort-tools\n\nchore(loam): inspect onnxruntime's optimizations from one pinned install",
+          "timestamp": "2026-10-10T11:32:17+09:00",
+          "tree_id": "f3bb88f801c1d9623ede75102a878703ac9b37d0",
+          "url": "https://github.com/wado-lang/wado/commit/f3f76a82d95588983b5439cf81c115d66fd1f5d9"
+        },
+        "date": 1791600387752,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
