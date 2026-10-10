@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791606186256,
+  "lastUpdate": 1791638421891,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65881,6 +65881,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8ccc675d65be1517f9f29b5818bed19df131ad28"
         },
         "date": 1791606185478,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d947d6f1f5b859f191bd2629792227e99efa1246",
+          "message": "Merge pull request #2323 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat!: type numeric literals with `as` only; remove suffixes",
+          "timestamp": "2026-10-10T22:03:57+09:00",
+          "tree_id": "d971407a96bbf4c6b04759ba94cc009a670122ae",
+          "url": "https://github.com/wado-lang/wado/commit/d947d6f1f5b859f191bd2629792227e99efa1246"
+        },
+        "date": 1791638421315,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
