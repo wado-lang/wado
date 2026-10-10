@@ -145,6 +145,25 @@ pub(super) fn turbofish_leaves_slot(type_args: &[TypeId], slot_count: usize) -> 
     type_args.len() < slot_count || type_args.contains(&TypeTable::UNKNOWN)
 }
 
+/// Group flat turbofish args written for `slots` slots, one of them the pack
+/// at `pack_pos`, so that pack holds one tuple: it absorbs every arg past the
+/// other slots. `ids::<i32, bool>()` fills `..T` with `[i32, bool]`. Args no
+/// more than the slots are already one per slot.
+fn absorb_into_pack(
+    type_args: &mut Vec<TypeId>,
+    slots: usize,
+    pack_pos: usize,
+    table: &mut TypeTable,
+) {
+    if type_args.len() <= slots {
+        return;
+    }
+    let pack_count = type_args.len() - (slots - 1);
+    let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
+    let tuple = table.make_tuple(pack_args);
+    type_args.insert(pack_pos, tuple);
+}
+
 /// Fill the `_` and unwritten slots of `explicit` from `inferred`, in place.
 /// Every other slot keeps what the source wrote, so an explicit type wins.
 pub(super) fn merge_turbofish_type_args(explicit: &mut Vec<TypeId>, inferred: &[TypeId]) {
@@ -520,11 +539,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let hints = self.expected_return_hints(own_vars, ret);
         self.chain_expected_return(own_vars, ret);
         let collection = PendingLiterals::of_call(own_vars);
+        let packs = self.own_packs(own_vars);
         let (mut resolved, pending) = self.collecting_pending_literals(collection, |this| {
             let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
             let mut deferred: Vec<usize> = Vec::new();
             for (i, arg) in args.iter().enumerate() {
-                let param = param_types.get(i).copied();
+                let param = this.with_packs_answered(&packs, param_types, &resolved, i);
                 if matches!(arg, ast::Expr::Closure(_)) && this.param_still_open(param) {
                     deferred.push(i);
                     continue;
@@ -533,7 +553,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(this.resolve_arg_against_param(arg, ctx, param, own_vars, &hints));
             }
             for i in deferred {
-                let param = param_types.get(i).copied();
+                let param = this.with_packs_answered(&packs, param_types, &resolved, i);
                 resolved[i] =
                     Some(this.resolve_arg_against_param(&args[i], ctx, param, own_vars, &hints));
             }
@@ -555,6 +575,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         resolved
+    }
+
+    /// The callee's own packs among `own_vars`, each slot with its index. An
+    /// instantiation leaves a pack rigid (see [`Self::instantiate`]).
+    fn own_packs(&self, own_vars: &[TypeId]) -> Vec<(TypeId, u32)> {
+        let table = self.tysys.type_table.borrow();
+        own_vars
+            .iter()
+            .filter_map(|&slot| match table.get(slot) {
+                ResolvedType::TypePack {
+                    index,
+                    mapped_elem: None,
+                    ..
+                } => Some((slot, *index)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Parameter `i`'s type, each of `packs` the arguments resolved so far
+    /// answer replaced by its answer. A pack is no variable the module-end
+    /// sweep substitutes, so an argument resolved against it would keep the
+    /// callee's slot in its own type, as a list literal's element type does.
+    fn with_packs_answered(
+        &mut self,
+        packs: &[(TypeId, u32)],
+        param_types: &[TypeId],
+        resolved: &[Option<TypeId>],
+        i: usize,
+    ) -> Option<TypeId> {
+        let param = param_types.get(i).copied()?;
+        let mentions_pack = {
+            let table = self.tysys.type_table.borrow();
+            packs
+                .iter()
+                .any(|&(_, index)| table.contains_type_param_index(param, index))
+        };
+        if !mentions_pack {
+            return Some(param);
+        }
+        let mut bindings = IndexMap::default();
+        for (&declared, actual) in param_types.iter().zip(resolved) {
+            if let Some(actual) = *actual {
+                unify(&self.tysys.type_table, declared, actual, &mut bindings);
+            }
+        }
+        let answers: IndexMap<u32, TypeId> = packs
+            .iter()
+            .filter_map(|&(slot, index)| bindings.get(&slot).map(|&tuple| (index, tuple)))
+            .collect();
+        if answers.is_empty() {
+            return Some(param);
+        }
+        Some(
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .substitute_type_params(param, &answers),
+        )
     }
 
     /// Whether a parameter type still holds an unanswered variable.
@@ -3705,16 +3784,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             [pack_pos] => *pack_pos,
             _ => return self.reject_unspelled_pack_args(callee_name, &real, type_args, span),
         };
-        if type_args.len() <= real.len() {
-            return false;
-        }
-        // One pack: it absorbs every arg past the non-pack params.
-        let non_pack = real.len() - 1;
-        let pack_count = type_args.len() - non_pack;
-        let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
-        let tuple = self.tysys.type_table.borrow_mut().make_tuple(pack_args);
-        type_args.insert(pack_pos, tuple);
+        absorb_into_pack(
+            type_args,
+            real.len(),
+            pack_pos,
+            &mut self.tysys.type_table.borrow_mut(),
+        );
         false
+    }
+
+    /// Fit flat turbofish type args to a declaration's `slots`, as
+    /// [`Self::group_variadic_type_args_of`] fits them, reporting nothing: a
+    /// slot past what the turbofish names is absent, and where more than one
+    /// pack leaves the grouping open, the args stay where they were written.
+    pub(super) fn turbofish_per_slot(
+        &mut self,
+        slots: &[TypeId],
+        type_args: &[TypeId],
+    ) -> Vec<TypeId> {
+        let mut fitted = type_args.to_vec();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let packs: Vec<usize> = slots
+            .iter()
+            .enumerate()
+            .filter(|&(_, &slot)| matches!(table.get(slot), ResolvedType::TypePack { .. }))
+            .map(|(i, _)| i)
+            .collect();
+        if let [pack_pos] = packs.as_slice() {
+            absorb_into_pack(&mut fitted, slots.len(), *pack_pos, &mut table);
+        }
+        fitted
     }
 
     /// Report type arguments that cannot be matched to more than one pack,

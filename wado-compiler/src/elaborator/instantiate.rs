@@ -91,31 +91,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// never bind. Instantiating a pack needs a pack-shaped variable, which
     /// does not exist yet.
     ///
-    /// A slot [`Instantiation::type_args`] names is solved as it is minted.
+    /// A slot [`Instantiation::type_args`] names is solved as it is minted. A
+    /// pack the turbofish names is substituted outright: what it stands for is
+    /// written, so a parameter type mentioning it is concrete before any
+    /// argument meets it, and nothing is left for the unifier to splice.
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
         let mut subst = IndexMap::default();
+        let named_args = self.turbofish_per_slot(slots, of.type_args);
         for (i, &slot) in slots.iter().enumerate() {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
-                    ResolvedType::TypeParam { index, name } => Some((*index, name.clone())),
+                    ResolvedType::TypeParam { index, name } => Some((*index, name.clone(), false)),
+                    ResolvedType::TypePack { index, name, .. } => {
+                        Some((*index, name.clone(), true))
+                    }
                     _ => None,
                 }
             };
-            let Some((index, name)) = named_slot else {
+            let named = named_args
+                .get(i)
+                .copied()
+                .filter(|&t| t != TypeTable::UNKNOWN);
+            let Some((index, name, is_pack)) = named_slot else {
                 vars.push(slot);
                 diags.push(None);
                 continue;
             };
+            if is_pack {
+                if let Some(pack) = named {
+                    subst.insert(index, pack);
+                }
+                vars.push(slot);
+                diags.push(None);
+                continue;
+            }
             let var = self.mint_infer_var_named(&name);
             subst.insert(index, var);
             vars.push(var);
             // Answered here, so an argument meets what the source wrote.
-            if let Some(&named) = of.type_args.get(i)
-                && named != TypeTable::UNKNOWN
-            {
+            if let Some(named) = named {
                 self.solve_infer_var(var, named);
                 diags.push(None);
                 continue;

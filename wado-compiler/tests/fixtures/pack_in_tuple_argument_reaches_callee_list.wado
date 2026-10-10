@@ -1,0 +1,46 @@
+// A generic function passes a tuple holding its pack, `[N, ..Rest]`, on as
+// another's type argument. Each instance spells the pack out, down to the
+// list type the callee declares over that argument.
+
+struct Tag<T> {
+    v: i32,
+}
+
+fn inner<T>(xs: &List<Tag<T>>) -> i32 {
+    let mut copied: List<Tag<T>> = [];
+    for let x of *xs {
+        copied.push(x);
+    }
+    return copied.len();
+}
+
+fn outer<N, ..Rest>(xs: List<Tag<[N, ..Rest]>>) -> i32 {
+    return inner(&xs);
+}
+
+// No turbofish: the first argument answers the pack, and the list literal
+// after it is read under that answer.
+fn counted<N, ..Rest>(first: Tag<[N, ..Rest]>, more: List<Tag<[N, ..Rest]>>) -> i32 {
+    return first.v + more.len();
+}
+
+struct A {
+}
+struct B {
+}
+struct C {
+}
+
+test "a pack inside a tuple type argument reaches the callee's own list type" {
+    let ab = Tag::<[A, B]> { v: 1 };
+    assert outer::<A, B>([ab, ab]) == 2;
+    let abc = Tag::<[A, B, C]> { v: 2 };
+    assert outer::<A, B, C>([abc]) == 1;
+}
+
+test "a pack an earlier argument answers reaches a list literal after it" {
+    let ab = Tag::<[A, B]> { v: 1 };
+    assert counted(ab, [ab, ab]) == 3;
+    // An element the literal builds itself takes the pack's answer too.
+    assert counted(ab, [Tag { v: 5 }]) == 2;
+}
