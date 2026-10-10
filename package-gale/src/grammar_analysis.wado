@@ -286,8 +286,8 @@ impl GrammarAnalysis {
         for let id of kinds {
             if *id == eof {
                 names = ["<EOF>"];
-            } else if *id < self.vocab_names.len() && !ids.contains(id) {
-                ids.push(*id);
+            } else if *id < self.vocab_names.len() {
+                push_unique(&mut ids, *id);
             }
         }
         for let id of &ids.sorted() {

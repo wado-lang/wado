@@ -859,8 +859,8 @@ fn statically_called_rules(
                 continue;
             }
             called.push(*name);
-            if !atn_class.contains_key_str(name) && !emitted.contains(name) {
-                emitted.push(*name);
+            if !atn_class.contains_key_str(name) {
+                push_unique(&mut emitted, *name);
             }
         }
     }
@@ -4526,8 +4526,8 @@ fn keyword_carrier_kinds(
             |kw| keyword_first_char_covered(kw, &first_chars, is_wildcard)
                 && lexer_rule_matches_keyword(rule, lexer_rules, grammar_opts, kw, KeywordReading::Possible),
         );
-        if carries && !kinds.contains(&kind) {
-            kinds.push(kind);
+        if carries {
+            push_unique(&mut kinds, kind);
         }
     }
     return kinds;

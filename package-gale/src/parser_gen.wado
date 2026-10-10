@@ -2503,7 +2503,7 @@ fn known_within(known: &List<List<i32>>, kinds: &List<i32>, ctx: &EmitContext) -
 /// tie, and the jar takes the first. Where none follows (a start rule),
 /// matching EOF is what the competitor cannot do, and it counts.
 fn scan_advance(kinds: &List<i32>, ctx: &mut EmitContext) -> String {
-    if !kinds.contains(&ctx.analysis.eof_kind_id()) ||!ctx.current_rule_precedes_eof_token() {
+    if !kinds.contains(&ctx.analysis.eof_kind_id()) || !ctx.current_rule_precedes_eof_token() {
         return "pos += 1;";
     }
     if kinds.len() == 1 {

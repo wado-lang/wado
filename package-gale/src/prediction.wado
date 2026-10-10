@@ -788,8 +788,8 @@ fn build_sll_node(
     //  * Multiple at-end alts → true ambiguity → Ambiguous.
     let mut at_end_alts: List<i32> = [];
     for let c of &closed {
-        if config_is_at_end(c, analysis) && !at_end_alts.contains(&c.alt_index) {
-            at_end_alts.push(c.alt_index);
+        if config_is_at_end(c, analysis) {
+            push_unique(&mut at_end_alts, c.alt_index);
         }
     }
 

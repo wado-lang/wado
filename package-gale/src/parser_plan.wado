@@ -7,6 +7,7 @@ use { Grammar } from "./ir.wado";
 use { LoweredGrammar, Op, Rule } from "./gir.wado";
 use { GrammarAnalysis, close_over_callers } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
+use { push_unique } from "./gen_util.wado";
 use { LowerMarks } from "./lower_context.wado";
 use { Atn, lr_loop_entry_decision, rule_body_decision } from "./atn.wado";
 use { RecoverySets, empty_recovery_sets, recovery_sets } from "./recovery_sets.wado";
@@ -307,11 +308,11 @@ fn rule_captures_of(grammar: &Grammar, lowered: &LoweredGrammar) -> HashMap<Stri
         }
         let mut c = RuleCaptures {};
         for let call of &rule_call_bindings(&lowered.parser_rules[i]) {
-            if body_reads_any(&bodies, &call.0, false) && !c.spans.contains(&call.1) {
-                c.spans.push(call.1);
+            if body_reads_any(&bodies, &call.0, false) {
+                push_unique(&mut c.spans, call.1);
             }
-            if body_reads_any(&bodies, &call.0, true) && !c.nodes.contains(&call.1) {
-                c.nodes.push(call.1);
+            if body_reads_any(&bodies, &call.0, true) {
+                push_unique(&mut c.nodes, call.1);
             }
         }
         if !c.is_empty() {

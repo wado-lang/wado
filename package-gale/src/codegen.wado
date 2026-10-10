@@ -57,6 +57,7 @@ use { gen_highlight } from "./highlight_gen.wado";
 use { HighlightRule } from "./highlight_query.wado";
 use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
+use { push_unique } from "./gen_util.wado";
 use { LowerContext } from "./lower_context.wado";
 use { plan_parser } from "./parser_plan.wado";
 use { EmitContext } from "./emit_context.wado";
@@ -717,8 +718,8 @@ fn gen_runtime_fragment<S: AsStrSlice>(rt: &mut InlinedRuntime, src: S) {
         block.push_str(&line);
         block.push('\n');
         if line.contains(";") {
-            if !block.contains("from \"./") && !rt.imports.contains(&block) {
-                rt.imports.push(block);
+            if !block.contains("from \"./") {
+                push_unique(&mut rt.imports, block);
             }
             block = String::new();
             in_use = false;

@@ -233,13 +233,11 @@ impl AtnBuilder {
     fn add_trans(&mut self, from: i32, t: AtnTransition) {
         self.states[from].transitions.push(t);
     }
-
 }
 
 /// Build the whole-grammar parser ATN, stamping and lowering the grammar on
-/// demand. This is the convenience entry for unit tests and tooling;
-/// production codegen (`gen_atn_data_global`) calls `build_atn_with` directly
-/// to reuse the `LoweredGrammar` it has already computed.
+/// demand, for unit tests. Codegen calls `build_atn_with` to reuse the
+/// `LoweredGrammar` it has already computed.
 pub fn build_atn(grammar: &Grammar) -> Atn {
     let mut stamped = *grammar;
     let kinds = TokenKinds::build(&stamped);
