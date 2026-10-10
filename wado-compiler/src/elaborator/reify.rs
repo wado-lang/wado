@@ -10351,6 +10351,9 @@ fn bind_trait_contracts(
         .collect();
     for holder_at in holders {
         let holder = &mut methods[holder_at];
+        // Linking stamps every function's module, but the twin's template key
+        // that the call below records reads it now.
+        holder.module_source = module.clone();
         let clauses: Vec<Span> = holder
             .body
             .iter()
