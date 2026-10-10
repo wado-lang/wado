@@ -1687,11 +1687,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(info) = &mut func.method_info {
             info.method_name = unchecked_twin_name(&info.method_name);
         }
+        // A call naming an instance (`Wrap<String>::get`) also names the
+        // template it instantiates, and the twin's template is that one's twin.
+        if let Some(mono) = &mut func.monomorph_info {
+            mono.generic_name = unchecked_twin_name(&mono.generic_name);
+        }
         if let Some((def, block)) = declared {
             let defs = self.tysys.resolutions.defs();
+            let name = func
+                .monomorph_info
+                .as_ref()
+                .map_or_else(|| func.name.clone(), |mono| mono.generic_name.clone());
             func.template = Some(TemplateId::Synthesized {
                 module: TemplateId::Declared { def, block }.home(defs),
-                name: func.name.clone(),
+                name,
             });
         }
         Ok(())
