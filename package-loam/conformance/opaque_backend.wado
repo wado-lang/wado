@@ -7,7 +7,7 @@
 //! imports, so the tests discover none of it, and `program_over` in
 //! `oracle.wado` splices it.
 
-use { Cpu, Element, Expr, Held, Read, widen } from "lib:loam";
+use { Cpu, Element, Epilogue, Expr, Held, Read, widen } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {
@@ -33,10 +33,20 @@ fn handle<E, Axes>(held: Tensor<E, Axes>) -> Handle<E, Axes> {
     return Handle { held };
 }
 
+/// `then`'s operands opened, as the CPU's kernels read them.
+fn opened<Axes>(cpu: &mut Cpu, then: &Option<Epilogue<Handle<f32, Axes>>>) -> Option<Epilogue<Read<Axes>>> {
+    let Some(e) = then else {
+        return null;
+    };
+    let mut operands: List<Read<Axes>> = [];
+    for let o of &e.operands {
+        operands.push(cpu.read(&o.held));
+    }
+    return Option::Some(Epilogue { operands, op: e.op });
+}
+
 impl Backend for Opaque {
     type Tensor<E: Element, Axes> = Handle<E, Axes>;
-
-
     type Operand<Axes> = Handle<f32, Axes>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<E, Axes> {
@@ -108,20 +118,30 @@ impl Backend for Opaque {
         &mut self,
         a: &Handle<f32, [..Bs, M, K]>,
         b: &Handle<f32, [..Bs, K, N]>,
+        then: Option<Epilogue<Handle<f32, [..Bs, M, N]>>>,
     ) -> Handle<f32, [..Bs, M, N]> {
-        return handle(self.cpu.matmul(&a.held, &b.held));
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul(&a.held, &b.held, read));
     }
 
     fn matmul_shared<..Bs, M, K, N>(
         &mut self,
         a: &Handle<f32, [..Bs, M, K]>,
         b: &Handle<f32, [K, N]>,
+        then: Option<Epilogue<Handle<f32, [..Bs, M, N]>>>,
     ) -> Handle<f32, [..Bs, M, N]> {
-        return handle(self.cpu.matmul_shared(&a.held, &b.held));
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul_shared(&a.held, &b.held, read));
     }
 
-    fn matmul_broadcast<A, B, Out>(&mut self, a: &Handle<f32, A>, b: &Handle<f32, B>) -> Handle<f32, Out> {
-        return handle(self.cpu.matmul_broadcast::<A, B, Out>(&a.held, &b.held));
+    fn matmul_broadcast<A, B, Out>(
+        &mut self,
+        a: &Handle<f32, A>,
+        b: &Handle<f32, B>,
+        then: Option<Epilogue<Handle<f32, Out>>>,
+    ) -> Handle<f32, Out> {
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul_broadcast::<A, B, Out>(&a.held, &b.held, read));
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
@@ -190,8 +210,10 @@ impl Backend for Opaque {
         x: &Handle<f32, [N, Ci, ..In]>,
         w: &Handle<f32, [Co, Ci, ..K]>,
         window: &Window,
+        then: Option<Epilogue<Handle<f32, [N, Co, ..Out]>>>,
     ) -> Handle<f32, [N, Co, ..Out]> {
-        return handle(self.cpu.conv::<N, Ci, Co, [..In], [..K], [..Out]>(&x.held, &w.held, window));
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.conv::<N, Ci, Co, [..In], [..K], [..Out]>(&x.held, &w.held, window, read));
     }
 
     fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
@@ -200,8 +222,12 @@ impl Backend for Opaque {
         w: &Handle<f32, [Co, Ci, ..K]>,
         b: &Handle<f32, [Co]>,
         window: &Window,
+        then: Option<Epilogue<Handle<f32, [N, Co, ..Out]>>>,
     ) -> Handle<f32, [N, Co, ..Out]> {
-        return handle(self.cpu.conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(&x.held, &w.held, &b.held, window));
+        let read = opened(&mut self.cpu, &then);
+        return handle(
+            self.cpu.conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(&x.held, &w.held, &b.held, window, read),
+        );
     }
 
     fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
@@ -210,9 +236,11 @@ impl Backend for Opaque {
         w: &Handle<f32, [Co, Cg, ..K]>,
         group: i32,
         window: &Window,
+        then: Option<Epilogue<Handle<f32, [N, Co, ..Out]>>>,
     ) -> Handle<f32, [N, Co, ..Out]> {
+        let read = opened(&mut self.cpu, &then);
         return handle(
-            self.cpu.conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(&x.held, &w.held, group, window),
+            self.cpu.conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(&x.held, &w.held, group, window, read),
         );
     }
 
@@ -223,7 +251,9 @@ impl Backend for Opaque {
         b: &Handle<f32, [Co]>,
         group: i32,
         window: &Window,
+        then: Option<Epilogue<Handle<f32, [N, Co, ..Out]>>>,
     ) -> Handle<f32, [N, Co, ..Out]> {
+        let read = opened(&mut self.cpu, &then);
         return handle(
             self.cpu.conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(
                 &x.held,
@@ -231,6 +261,7 @@ impl Backend for Opaque {
                 &b.held,
                 group,
                 window,
+                read,
             ),
         );
     }

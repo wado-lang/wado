@@ -22,11 +22,11 @@ use { println, Stdout } from "core:cli";
 `;
 }
 
-/// The module the generator writes for `graph` under `schema`, or why the
-/// build refuses it.
-pub fn generated(graph: &Graph, schema: &Schema) -> Result<String, String> {
+/// The module the generator writes for `graph` under `schema`, its kernels
+/// fused where `fuse` lets them, or why the build refuses it.
+pub fn generated(graph: &Graph, schema: &Schema, fuse: bool = true) -> Result<String, String> {
     let checked = infer(graph, schema).map_err(|e| `${e}`)?;
-    return emit(graph, &checked, &"lib:loam").map_err(|e| `${e}`);
+    return emit(graph, &checked, &"lib:loam", fuse).map_err(|e| `${e}`);
 }
 
 /// What `program` prints under `eval`, followed, where it does not exit

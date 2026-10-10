@@ -11,9 +11,9 @@ fn rule(pattern: String, axes: List<String>) -> LayoutRule {
 /// The package spec the generated module imports the runtime from.
 global RUNTIME: String = "lib:loam";
 
-fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitError> {
+fn generate(source: String, layout: List<LayoutRule>, fuse: bool = true) -> Result<String, EmitError> {
     let graph = read(&source).unwrap();
-    return emit(&graph, &infer(&graph, &Schema { layout }).unwrap(), &RUNTIME);
+    return emit(&graph, &infer(&graph, &Schema { layout }).unwrap(), &RUNTIME, fuse);
 }
 
 /// The same two-layer graph at any boundary element type, which is the one
@@ -55,21 +55,50 @@ test "the generated module imports the runtime from the spec it is given" {
     assert out.contains("pub fn forward<");
 }
 
-test "the forward pass is one kernel call per operator, each on the backend" {
-    let out = generate(MLP, mlp_layout()).unwrap();
+test "unfused, the forward pass is one kernel call per operator, each on the backend" {
+    let out = generate(MLP, mlp_layout(), false).unwrap();
 
     assert out.contains(
         "pub fn forward<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f32, [Batch, Out]> with _ {",
     );
-    assert out.contains("let H = backend.matmul(&X, &weights.W1);");
+    assert out.contains("let H = backend.matmul(&X, &weights.W1, null);");
     assert out.contains(
         "let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &operand(0).binary(BinaryOp::Add, &operand(1)));",
     );
     assert out.contains(
         "let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &operand(0).unary(UnaryOp::Relu));",
     );
-    assert out.contains("let T = backend.matmul(&A, &weights.W2);");
+    assert out.contains("let T = backend.matmul(&A, &weights.W2, null);");
     assert out.contains("return backend.download(&Y);");
+}
+
+test "a product takes the elementwise operators after it as its epilogue" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains(
+        "let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu) }));",
+    );
+    assert out.contains(
+        "let Y = backend.matmul(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: operand(0).binary(BinaryOp::Add, &operand(1)) }));",
+    );
+    assert !out.contains("let H ");
+    assert !out.contains("let HB ");
+}
+
+test "an elementwise chain fuses into one kernel, an operand read twice read once" {
+    let source = `
+g (float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
+{
+    A = Mul(X, X)
+    B = Add(A, Z)
+    Y = Relu(B)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Feat"])]).unwrap();
+
+    assert out.contains(
+        "let Y = backend.fused::<[Batch, Feat]>([backend.read(&X), backend.read(&Z)], &operand(0).binary(BinaryOp::Mul, &operand(0)).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu));",
+    );
 }
 
 test "each input is uploaded after the checks that read the host's, and no weight is" {
@@ -529,7 +558,7 @@ g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let C = backend.conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [Row, Col]>(&X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] });",
+        "let C = backend.conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [Row, Col]>(&X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] }, null);",
     );
     assert out.contains(
         "let Y = backend.max_pool::<Batch, Out, [Row, Col], [PRow, PCol]>(&C, &Window { kernel: [2, 2], strides: [2, 2], dilations: [1, 1], pads: [0, 0, 0, 0], output: [14, 14] });",
@@ -553,7 +582,7 @@ g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.fused::<[Batch, Out]>([backend.read(&backend.matmul(&A, &backend.transpose2(&B))), backend.read_suffix::<[Batch], [Out]>(&C)], &operand(0).binary(BinaryOp::Mul, &constant(0.5_f32)).binary(BinaryOp::Add, &operand(1).binary(BinaryOp::Mul, &constant(2_f32))));",
+        "let Y = backend.matmul(&A, &backend.transpose2(&B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&C)], op: operand(0).binary(BinaryOp::Mul, &constant(0.5_f32)).binary(BinaryOp::Add, &operand(1).binary(BinaryOp::Mul, &constant(2_f32))) }));",
     );
 }
 
@@ -572,7 +601,7 @@ g (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.matmul(&A, &B);");
+    assert out.contains("let Y = backend.matmul(&A, &B, null);");
 }
 
 test "a rank-2 Transpose lowers to the kernel" {
@@ -654,7 +683,7 @@ g (float[4, 2, 8] X) => (float[4, 6] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains("pub W: Tensor<f32, [Merged<[Head, Dim]>, Out]>,");
-    assert out.contains("let Y = backend.matmul(&R, &weights.W);");
+    assert out.contains("let Y = backend.matmul(&R, &weights.W, null);");
 }
 
 test "Split cuts one run along the axis for each output" {
@@ -967,7 +996,7 @@ g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.matmul_shared(&X, &weights.W);");
+    assert out.contains("let Y = backend.matmul_shared(&X, &weights.W, null);");
 }
 
 test "a MatMul batch axis that stretches lowers to matmul_broadcast, the result spelled" {
@@ -984,7 +1013,7 @@ g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.matmul_broadcast::<[Batch, Row, K], [Batch, K, Col], [Batch, Row, Col]>(&X, &Z);",
+        "let Y = backend.matmul_broadcast::<[Batch, Row, K], [Batch, K, Col], [Batch, Row, Col]>(&X, &Z, null);",
     );
 }
 
@@ -1000,7 +1029,7 @@ g (float[3] X, float[3, 5] Z) => (float[5] Y)
         rule("Z", ["K", "Col"]),
     ]).unwrap();
 
-    assert out.contains("let Y = backend.matmul_broadcast::<[K], [K, Col], [Col]>(&X, &Z);");
+    assert out.contains("let Y = backend.matmul_broadcast::<[K], [K, Col], [Col]>(&X, &Z, null);");
 }
 
 fn refused_dtype(dtype: String) -> String {
@@ -1035,7 +1064,7 @@ test "a half precision boundary is prepared into the f32 the kernels compute in"
     assert out.contains("    pub W1: Bk::Tensor<f32, [In, Hidden]>,\n");
     assert out.contains("W1: backend.prepare(&self.W1),");
     assert out.contains("let X = backend.prepare(X);");
-    assert out.contains("let H = backend.matmul(&X, &weights.W1);");
+    assert out.contains("let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue {");
     assert out.contains("return narrow(&backend.download(&Y));");
 }
 

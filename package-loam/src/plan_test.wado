@@ -1,0 +1,213 @@
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { Decision, Kind, Plan, Reason, plan } from "./plan.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+
+/// The plan for `source`, every tensor's axes named by `layout`.
+fn plan_of(source: String, layout: List<[String, List<String>]>, fuse: bool = true) -> Plan {
+    let graph = read(&source).unwrap();
+    let rules: List<LayoutRule> = layout.into_iter().map(|r| LayoutRule { pattern: r.0, axes: r.1 }).collect();
+    let checked = infer(&graph, &Schema { layout: rules }).unwrap();
+    return plan(&graph, &checked, fuse);
+}
+
+fn fused(into: String) -> Decision {
+    return Decision::Fused(into);
+}
+
+fn written(reason: Reason) -> Decision {
+    return Decision::Written(reason);
+}
+
+global MLP: String = `
+mlp (float[N, 4] X) => (float[N, 2] Y)
+<float[4, 3] W1, float[3] B1, float[3, 2] W2, float[2] B2>
+{
+    H = MatMul(X, W1)
+    HB = Add(H, B1)
+    A = Relu(HB)
+    T = MatMul(A, W2)
+    Y = Add(T, B2)
+}
+`;
+
+fn mlp_layout() -> List<[String, List<String>]> {
+    return [
+        [
+            "X",
+            ["Batch", "In"],
+        ],
+        [
+            "W1",
+            ["In", "Hidden"],
+        ],
+        [
+            "B1",
+            ["Hidden"],
+        ],
+        [
+            "W2",
+            ["Hidden", "Out"],
+        ],
+        [
+            "B2",
+            ["Out"],
+        ],
+    ];
+}
+
+test "a contraction and the elementwise chain after it fuse into the last kernel of the chain" {
+    let p = plan_of(MLP, mlp_layout());
+    assert p.of(&"H") == fused("A");
+    assert p.of(&"HB") == fused("A");
+    assert p.of(&"A") == written(Reason::Reader(Kind::Contraction));
+    assert p.of(&"T") == fused("Y");
+    assert p.of(&"Y") == written(Reason::Returned);
+}
+
+test "with fusion off, every kernel writes its output" {
+    let p = plan_of(MLP, mlp_layout(), false);
+    for let tensor of ["H", "HB", "A", "T", "Y"] {
+        assert p.of(&tensor) == written(Reason::Unfused), tensor;
+    }
+}
+
+test "a tensor read twice is written, since fusing it would compute it twice" {
+    let source = `
+g (float[N, 4] X) => (float[N, 4] Y)
+{
+    A = Relu(X)
+    Y = Mul(A, A)
+}
+`;
+    assert plan_of(source, [
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ]).of(&"A") == written(Reason::ReadTimes(2));
+}
+
+test "a tensor a reduction reads is written, and so is the reduction's own" {
+    let source = `
+g (float[N, 4] X) => (float[N, 4] Y)
+<int64[1] Axes = {1}>
+{
+    A = Relu(X)
+    S = ReduceSum <keepdims = 1> (A, Axes)
+    Y = Add(X, S)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Feat"],
+        ],
+        [
+            "A",
+            ["Batch", "Feat"],
+        ],
+        [
+            "S",
+            ["Batch", "One"],
+        ],
+        [
+            "Y",
+            ["Batch", "Feat"],
+        ],
+    ]);
+    assert p.of(&"A") == written(Reason::Reader(Kind::Reduction));
+    assert p.of(&"S") == written(Reason::Computes(Kind::Reduction));
+}
+
+test "a tensor its reader stretches is written" {
+    let source = `
+g (float[N, 4] X, float[4] B) => (float[N, 4] Y)
+{
+    R = Relu(B)
+    Y = Add(X, R)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Feat"],
+        ],
+        [
+            "B",
+            ["Feat"],
+        ],
+        [
+            "R",
+            ["Feat"],
+        ],
+    ]);
+    assert p.of(&"R") == written(Reason::Stretched);
+}
+
+test "a kernel takes in one contraction, and the second is written" {
+    let source = `
+g (float[N, 4] X, float[4, 3] W, float[4, 3] V) => (float[N, 3] Y)
+{
+    P = MatMul(X, W)
+    Q = MatMul(X, V)
+    Y = Add(P, Q)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "In"],
+        ],
+        [
+            "W",
+            ["In", "Out"],
+        ],
+        [
+            "V",
+            ["In", "Out"],
+        ],
+    ]);
+    assert p.of(&"P") == fused("Y");
+    assert p.of(&"Q") == written(Reason::SecondContraction);
+}
+
+test "a window takes in no operator after it" {
+    let source = `
+g (float[1, 1, 4, 4] X) => (float[1, 1, 2, 2] Y)
+{
+    P = MaxPool <kernel_shape = [2, 2], strides = [2, 2]> (X)
+    Y = Relu(P)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "X",
+            ["Batch", "Chan", "Row", "Col"],
+        ],
+        [
+            "*",
+            ["Batch", "Chan", "Row2", "Col2"],
+        ],
+    ]);
+    assert p.of(&"P") == written(Reason::Computes(Kind::Window));
+}
+
+test "a fused chain names the kernel that finally writes it" {
+    let source = `
+g (float[N, 4] X) => (float[N, 4] Y)
+{
+    A = Relu(X)
+    B = Neg(A)
+    Y = Abs(B)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "*",
+            ["Batch", "Feat"],
+        ],
+    ]);
+    assert p.of(&"A") == fused("Y");
+    assert p.of(&"B") == fused("Y");
+}

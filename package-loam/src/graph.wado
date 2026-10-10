@@ -526,6 +526,14 @@ fn upgraded_subgraphs(attrs: List<Attr>, opset: Option<i64>) -> Result<List<Attr
     return Result::Ok(out);
 }
 
+/// What stage 0 read already: a failure stopped the build there.
+pub fn settled<T, E>(read: Result<T, E>) -> T {
+    let Ok(value) = read else {
+        unreachable();
+    };
+    return value;
+}
+
 /// The operators that broadcast two operands against each other: each a case of
 /// the runtime's `BinaryOp`, by name.
 pub fn is_binary_elementwise(op: &String) -> bool {
