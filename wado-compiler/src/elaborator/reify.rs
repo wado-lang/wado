@@ -33,8 +33,8 @@ use crate::tir::{
 };
 
 use super::coercion::{
-    NumericLiteralKind, is_literal_arithmetic, is_primitive_literal_target,
-    numeric_literal_pair_order, numeric_literal_shape, range_endpoint_order,
+    NumericLiteralKind, classify_numeric_literal, is_literal_arithmetic,
+    is_primitive_literal_target, numeric_literal_pair_order, range_endpoint_order,
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
@@ -75,6 +75,7 @@ use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
+use crate::lexer::defaults_to_float;
 use crate::name::{
     LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
@@ -5693,8 +5694,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
-            && let ast::Literal::Number(repr, suffix) = &lit.value
-            && let Some(digits) = util::integer_digits(repr, *suffix)
+            && let ast::Literal::Number(repr) = &lit.value
+            && let Some(digits) = util::integer_digits(repr)
             && let Ok(idx) = digits.parse::<usize>()
             && let Ok(elem) = self.tysys.tuple_literal_index_type(elems, idx)
         {
@@ -8172,7 +8173,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // coercion is keyed on the enclosing `Unary` node. Reading the one
         // classifier is what keeps a shape from arriving here as a bare
         // `IntLiteral` typed as the `i128` struct.
-        let (literal, _) = numeric_literal_shape(expr)?;
+        let literal = classify_numeric_literal(expr)?;
         let negated = literal.neg.is_some();
         let repr = match literal.kind {
             NumericLiteralKind::Number(repr) => repr.to_string(),
@@ -8438,16 +8439,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &FunctionContext,
     ) -> TirExpr {
         let kind = match &lit.value {
-            ast::Literal::Number(repr, None) => {
+            ast::Literal::Number(repr) => {
                 return self.reify_numeric_literal(repr, recorded_type, lit.span);
-            }
-            ast::Literal::Number(repr, Some(suffix)) => {
-                let suffix_type = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .numeric_suffix_type(*suffix);
-                return self.reify_numeric_literal(repr, suffix_type, lit.span);
             }
             // A byte literal is an integer literal spelled as a character, so
             // it takes the same route by its decimal spelling — `let x: f64 =
@@ -8588,7 +8581,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// the value back out of it — `i128` / `u128` lowering is one.
     fn reify_numeric_literal(&mut self, repr: &str, recorded_type: TypeId, span: Span) -> TirExpr {
         // The *recorded type* decides Int vs Float TIR literal; the literal's
-        // *syntactic form* (`is_float_only_literal`) decides how to read its
+        // *syntactic form* (`defaults_to_float`) decides how to read its
         // value, so `let x: f64 = 0xFF` reads as an integer then converts. Peel
         // newtypes first, or a float literal bound to a float-newtype target
         // takes the integer path.
@@ -8611,7 +8604,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // via `is_float_target`.
         let is_float_target = base_target == TypeTable::F32
             || base_target == TypeTable::F64
-            || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
+            || (recorded_type == TypeTable::UNKNOWN && defaults_to_float(repr));
         if is_float_target {
             // Rounded once, into the target format, so the later narrowing
             // of an `f32` is exact.
@@ -9597,7 +9590,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
 impl TypeSystem {
     /// The bits of `-value` for an integer literal of `type_id`, wrapped to its
-    /// width as the operator wraps: `-(-128_i8)` is `-128`.
+    /// width as the operator wraps: `-(-128 as i8)` is `-128`.
     fn negated_int_literal(&self, value: u64, type_id: TypeId) -> u64 {
         let negated = (value as i64).wrapping_neg().cast_unsigned();
         match self.type_table.borrow().primitive_head(type_id) {

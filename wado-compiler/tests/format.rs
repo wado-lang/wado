@@ -2262,29 +2262,24 @@ fn test_format_underscore_literal_preserved() {
 }
 
 #[test]
-fn test_format_numeric_suffix_preserved() {
-    let source = r"fn run() {
-    let a = 1_000_u32;
-    let b = -128_i8;
-    let c = 1.5e3_f32;
-    let d = 0xFF_u8;
-    let e = match a {
-        7_u32 => 1,
-        _ => 0,
-    };
+fn test_format_literal_cast_keeps_needed_parens() {
+    let source = r"fn run(x: u8) {
+    let a = -128 as i8;
+    let b = 1 as i64 << 40;
+    let c = (2 as u8) < x;
+    let d = (1 as u64).to_string();
 }
 ";
     let formatted = wado_compiler::format(source).expect("format failed");
     for kept in [
-        "let a = 1_000_u32;",
-        "let b = -128_i8;",
-        "let c = 1.5e3_f32;",
-        "let d = 0xFF_u8;",
-        "7_u32 => 1,",
+        "let a = -128 as i8;",
+        "let b = 1 as i64 << 40;",
+        "let c = (2 as u8) < x;",
+        "let d = (1 as u64).to_string();",
     ] {
         assert!(
             formatted.contains(kept),
-            "suffix should be preserved in `{kept}`: {formatted}"
+            "`{kept}` should be preserved: {formatted}"
         );
     }
 }

@@ -1,0 +1,30 @@
+// A hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64` keeps the value Rust
+// gives it, an integer, but reads as a float type, so it warns.
+
+test "a hex literal ending in a float type name warns" {
+    assert 0xff_f16 == 0xFFF16;
+    assert 0x1_F32 == 0x1F32;
+    assert 0x2_bf16 == 0x2BF16;
+}
+
+test "other hex literals do not warn" {
+    assert 0xFF_FF == 65535;
+    assert 0x1f32 == 7986;
+    assert 0x1_f3 == 0x1F3;
+}
+
+#[allow(hex_suffix_lookalike)]
+test "allowed" {
+    assert 0x3_f64 == 0x3F64;
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": [
+        "`0xff_f16` is the hex integer `0xfff16`, not a float",
+        "`0x1_F32` is the hex integer `0x1F32`, not a float",
+        "`0x2_bf16` is the hex integer `0x2bf16`, not a float"
+    ],
+    "warnings_not_contains": ["0xFF_FF", "`0x1f32`", "0x1_f3`", "0x3_f64"]
+}

@@ -251,6 +251,33 @@ assert with_separator == 1000000.5 && explicit_positive == 25000000000.0;
 assert scientific == 602200000000000000000000.0 && negative_exp < 1e-18;
 ```
 
+A literal with a decimal point or an exponent falls back to `f64`. Where an
+integer type is expected, a literal with an exponent and no decimal point is
+that integer if its value is a whole number in the type's range:
+
+<!-- {"fixture":"numeric_literal_exponent.wado"} -->
+
+```wado
+let big: i64 = 1e10;
+assert big == 10_000_000_000;
+```
+
+<!-- {"fixture":"error_numeric_literal_exponent_fraction.wado"} -->
+
+```wado
+let n: i32 = 1e-1;           // compile error: `1e-1` is not a whole number
+```
+
+A cast does not change that fallback, so `1e3 as i64` converts the `f64`
+`1000.0`, as in Rust:
+
+<!-- {"fixture":"numeric_literal_exponent.wado"} -->
+
+```wado
+assert 1e3 as i64 == 1000;
+assert 1e-1 as i32 == 0;
+```
+
 #### Type coercion
 
 Floating-point literals coerce to `f32`, `f64`, `f16` or `bf16` when the target type is known:
@@ -286,57 +313,52 @@ let x: f16 = 65520.0;             // compile error: literal out of range for `f1
 let y: f32 = 1e39;                // compile error: literal out of range for `f32`: 1e39
 ```
 
-### Numeric Suffixes
+### Typing a Literal with `as`
 
-A numeric literal may end with a type suffix, written after an `_`: one of
-`i8`, `i16`, `i32`, `i64`, `i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `f16`,
-`bf16`, `f32` and `f64`. The literal has the type its suffix names. An integer
-literal with a float suffix is a float.
+A numeric literal has no suffix. `lit as T` gives it the type `T`, checked as
+`let x: T = lit` checks it, with a leading `-` read as part of the literal. The
+context does not retype the cast, and an operand beside it takes its type, as
+it would beside any typed value:
 
-<!-- {"fixture":"numeric_literal_suffix.wado"} -->
+<!-- {"fixture":"numeric_literal_cast.wado"} -->
 
 ```wado
-let byte = 255_u8;
-assert byte as i32 == 255;
-let low = -128_i8;
-assert low as i32 == -128;
-let half = 1.5_f32;
-assert half as f64 == 1.5;
-assert 1_f64 == 1.0;
+let wide = 1 as i64 << 40;   // an i64: `1 << 40` alone is an i32
+assert wide == 1_099_511_627_776;
 ```
 
-The `_` is required. Letters written directly after a literal are its suffix,
-so a suffix without the `_` or one that names no type is an error:
-
-<!-- {"fixture":"error_numeric_literal_suffix_spelling.wado"} -->
+<!-- {"fixture":"error_numeric_literal_cast_type.wado"} -->
 
 ```wado
-let a = 255u8;               // compile error: write `255_u8`: a suffix follows an `_`
+let c = 1e40 as f32;         // compile error: literal out of range for `f32`: 1e40
+let j: i128 = 3.5;           // compile error: cannot use float literal '3.5' as integer
+let e: i64 = 1 as i32;       // compile error: expected 'i64', found 'i32'
+let f: Meters = 1.0 as f64;  // compile error: expected 'Meters', found 'f64'
+```
+
+`as` binds tighter than every binary operator, so a cast literal needs
+parentheses only where `<` would read as the start of type arguments, and as a
+method receiver: `(2 as u8) < x`, `(1 as u64).to_string()`. The rationale is
+[WEP: Numeric Literal Suffixes — Withdrawn](./wep-2026-10-01-numeric-literal-suffixes.md).
+
+Letters written directly after a literal's digits are an error, with or
+without an `_` before them. Where they name a numeric type the literal can be,
+the error says to cast instead:
+
+<!-- {"fixture":"error_numeric_literal_suffix.wado"} -->
+
+```wado
+let a = 255u8;               // compile error: a numeric literal takes no suffix: write `255 as u8`
 ```
 
 <!-- {"fixture":"error_numeric_literal_suffix_unknown.wado"} -->
 
 ```wado
-let a = 255_u9;              // compile error: unknown numeric suffix `u9`
+let a = 255_u9;              // compile error: invalid suffix `u9` on the numeric literal `255`
 ```
 
-A hex, octal or binary literal takes an integer suffix only. In a hex literal
-`b` and `f` are digits, so a float suffix there is read as more digits:
-
-<!-- {"fixture":"numeric_literal_suffix.wado"} -->
-
-```wado
-assert 0x1_f32 == 0x1F32;
-```
-
-<!-- {"fixture":"error_numeric_literal_suffix_float_radix.wado"} -->
-
-```wado
-let a = 0b1_f32;             // compile error: a float suffix needs a decimal literal
-```
-
-A suffix starts with a letter, so a decimal digit an octal or binary literal
-lacks is an invalid digit rather than the start of one:
+A decimal digit an octal or binary literal lacks is an invalid digit rather
+than the start of letters:
 
 <!-- {"fixture":"error_numeric_literal_radix_digit.wado"} -->
 
@@ -344,59 +366,48 @@ lacks is an invalid digit rather than the start of one:
 let a = 0b102;               // compile error: invalid digit `2` in a binary literal
 ```
 
-A suffix is a type annotation. The literal is checked against its type as
-`let x: T = literal` checks it, with a leading `-` read as part of the literal.
-The context does not retype a suffixed literal, and a literal pattern with a
-suffix must have the type of the scrutinee:
+### Digit Separators
 
-<!-- {"fixture":"error_numeric_literal_suffix_type.wado"} -->
+An `_` in a numeric literal stands between two digits, one at a time, and
+changes no value. In a hex literal `b` and `f` are digits, so `0x1_f32` is the
+number `0x1F32`:
+
+<!-- {"fixture":"numeric_literal_separator.wado"} -->
 
 ```wado
-let a = 300_u8;              // compile error: literal out of range for `u8`: 300
-let b = -1_u8;               // compile error: literal out of range for `u8`: -1
-let c = 1e40_f32;            // compile error: literal out of range for `f32`: 1e40
-let d = 1.5_i32;             // compile error: cannot use float literal '1.5' as integer
-let h = 2.5_i128;            // compile error: cannot use float literal '2.5' as integer
-let i = 1e-5_u128;           // compile error: cannot use float literal '1e-5' as integer
-let j: i128 = 3.5;           // compile error: cannot use float literal '3.5' as integer
-let e: i64 = 1_i32;          // compile error: expected 'i64', found 'i32'
-let f: Meters = 1.0_f64;     // compile error: expected 'Meters', found 'f64'
-let x: u8 = 0;
-let g = match x {
-    1_i32 => 1,              // compile error: pattern mismatch: expected 'i32', found 'u8'
-    _ => 0,
-};
+assert 1_000 == 1000;
+assert 0xFF_FF == 65535;
+assert 1_0.2_5 == 10.25;
+assert 0x1_f32 == 0x1F32;
 ```
 
-An operand beside a suffixed literal takes the literal's type, as it would
-beside any typed value:
+An `_` beside anything that is not a digit is an error: at either end, beside
+another `_`, beside a radix prefix, a decimal point or an exponent:
 
-<!-- {"fixture":"numeric_literal_suffix.wado"} -->
+<!-- {"fixture":"error_numeric_literal_separator.wado"} -->
 
 ```wado
-let wide = 1_i64 << 40;      // an i64: `1 << 40` alone is an i32
-assert wide == 1_099_511_627_776;
+let a = 1_;                  // compile error: an `_` in a numeric literal stands between two digits: `1_`
 ```
 
-#### The `literal_cast` Lint
-
-A cast whose operand is an unsuffixed literal, bare or negated, warns where the
-suffix of its target types the literal as the cast does, and the warning gives
-the suffixed spelling. A float literal cast to an integer type converts, so it
-does not warn, and neither does a cast that no suffix can write.
-`#[allow(literal_cast)]` waives the lint (see
-[`#[allow(...)]`](./spec-attributes.md#allow)).
-
-<!-- {"fixture":"literal_cast_lint.wado", "assert": false} -->
+<!-- {"fixture":"error_numeric_literal_separator_prefix.wado"} -->
 
 ```wado
-let a = 255 as u8;           // warns: write `255_u8` for `255 as u8`
-let b = -128 as i8;          // warns: write `-128_i8` for `-128 as i8`
-let c = 1.5 as f32;          // warns: write `1.5_f32` for `1.5 as f32`
-let d = 0xFF as u64;         // warns: write `0xFF_u64` for `0xFF as u64`
-let e = 0x10 as f64;         // no warning: a hex literal takes no float suffix
-let f = 1.5 as i32;          // no warning: this cast converts, to 1
-let g = 4 as Meters;         // no warning: a newtype has no suffix
+let a = 0x_FF;               // compile error: an `_` in a numeric literal stands between two digits: `0x_FF`
+```
+
+A decimal point continues a literal only before a digit, as in Rust, so `t.0._1`
+reads the field `_1` of `t.0`:
+
+<!-- {"fixture":"tuple_index_then_underscore_field.wado"} -->
+
+```wado
+struct S { _1: i32 }
+
+test {
+    let t = [S { _1: 3 }, 4];
+    assert t.0._1 == 3;
+}
 ```
 
 ## String Literals

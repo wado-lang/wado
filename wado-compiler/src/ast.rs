@@ -413,6 +413,13 @@ pub trait AstVisitor: Sized {
         self.visit_id(effect.id, effect.span);
     }
 
+    /// `body`, the walk of a node carrying `attrs`: an item, a method, a `let`,
+    /// a parameter, a field, a case, an associated type or constant. Overridable
+    /// because an attribute such as `#[allow]` scopes to what the node encloses.
+    fn visit_attributed(&mut self, _attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+        body(self);
+    }
+
     fn visit_item(&mut self, item: &Item) {
         walk_item(self, item);
     }
@@ -576,7 +583,14 @@ pub fn for_each_function<'a>(
     }
 }
 
+/// Every attribute-carrying node is reached through
+/// [`AstVisitor::visit_attributed`], once, by the walk of what contains it.
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
+    v.visit_attributed(item.attrs(), |v| walk_item_contents(v, item));
+}
+
+/// What [`walk_item`] visits under the item's attributes.
+pub fn walk_item_contents<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
         Item::Use(u) => {
             v.visit_id(u.id, u.span);
@@ -602,44 +616,46 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
         Item::Function(func) => v.visit_function(func),
         Item::Interface(e) => {
             v.visit_id(e.id, e.span);
-            for m in &e.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &e.methods);
         }
         Item::Struct(s) => {
             v.visit_id(s.id, s.span);
             v.visit_generic_params(&s.type_params);
             for field in &s.fields {
-                v.visit_id(field.id, field.span);
-                v.visit_type(&field.ty);
-                // A field default is an expression written here; see
-                // `walk_function`'s parameter defaults.
-                if let Some(default) = &field.default {
-                    v.visit_expr(default);
-                }
+                v.visit_attributed(&field.attrs, |v| {
+                    v.visit_id(field.id, field.span);
+                    v.visit_type(&field.ty);
+                    // A field default is an expression written here; see
+                    // `walk_params`'s parameter defaults.
+                    if let Some(default) = &field.default {
+                        v.visit_expr(default);
+                    }
+                });
             }
         }
         Item::Enum(e) => {
             v.visit_id(e.id, e.span);
             v.visit_generic_params(&e.type_params);
             for case in &e.cases {
-                v.visit_id(case.id, case.span);
+                v.visit_attributed(&case.attrs, |v| v.visit_id(case.id, case.span));
             }
         }
         Item::Variant(vr) => {
             v.visit_id(vr.id, vr.span);
             v.visit_generic_params(&vr.type_params);
             for case in &vr.cases {
-                v.visit_id(case.id, case.span);
-                if let Some(payload) = &case.payload {
-                    v.visit_type(payload);
-                }
+                v.visit_attributed(&case.attrs, |v| {
+                    v.visit_id(case.id, case.span);
+                    if let Some(payload) = &case.payload {
+                        v.visit_type(payload);
+                    }
+                });
             }
         }
         Item::Flags(fl) => {
             v.visit_id(fl.id, fl.span);
             for va in &fl.flags {
-                v.visit_id(va.id, va.span);
+                v.visit_attributed(&va.attrs, |v| v.visit_id(va.id, va.span));
             }
         }
         Item::Newtype(n) => {
@@ -663,17 +679,21 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             }
             v.visit_type(&i.ty);
             for binding in &i.associated_types {
-                v.visit_id(binding.id, binding.span);
-                v.visit_assoc_type_params(&binding.type_params, |v| v.visit_type(&binding.ty));
+                v.visit_attributed(&binding.attrs, |v| {
+                    v.visit_id(binding.id, binding.span);
+                    v.visit_assoc_type_params(&binding.type_params, |v| {
+                        v.visit_type(&binding.ty);
+                    });
+                });
             }
             for c in &i.constants {
-                v.visit_id(c.id, c.span);
-                v.visit_type(&c.ty);
-                v.visit_expr(&c.value);
+                v.visit_attributed(&c.attrs, |v| {
+                    v.visit_id(c.id, c.span);
+                    v.visit_type(&c.ty);
+                    v.visit_expr(&c.value);
+                });
             }
-            for m in &i.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &i.methods);
         }
         Item::Trait(t) => {
             v.visit_id(t.id, t.span);
@@ -688,9 +708,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
                     v.visit_trait_bounds(&assoc.bounds);
                 });
             }
-            for m in &t.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &t.methods);
         }
         Item::Resource(r) => {
             v.visit_id(r.id, r.span);
@@ -698,9 +716,7 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             if let Some(parent) = &r.parent {
                 v.visit_type(parent);
             }
-            for m in &r.methods {
-                v.visit_function(m);
-            }
+            walk_methods(v, &r.methods);
         }
         Item::World(w) => {
             v.visit_id(w.id, w.span);
@@ -727,17 +743,26 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     }
 }
 
+/// The methods of an `impl`, a trait, an interface or a resource.
+fn walk_methods<V: AstVisitor>(v: &mut V, methods: &[Function]) {
+    for method in methods {
+        v.visit_attributed(&method.attrs, |v| v.visit_function(method));
+    }
+}
+
 /// A parameter list wherever one is declared: a function's, a world export's.
 fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
     for param in params {
-        v.visit_id(param.id, param.span);
-        v.visit_type(&param.ty);
-        // A default argument is an expression written in the declaring
-        // module, so its names are reference sites like any other and the
-        // walk answers for them from that vantage (WEP 2026-08-12 §3).
-        if let Some(default) = &param.default {
-            v.visit_expr(default);
-        }
+        v.visit_attributed(&param.attrs, |v| {
+            v.visit_id(param.id, param.span);
+            v.visit_type(&param.ty);
+            // A default argument is an expression written in the declaring
+            // module, so its names are reference sites like any other and the
+            // walk answers for them from that vantage (WEP 2026-08-12 §3).
+            if let Some(default) = &param.default {
+                v.visit_expr(default);
+            }
+        });
     }
 }
 
@@ -772,7 +797,7 @@ pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
 pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
     v.visit_id(stmt.id(), stmt.span());
     match stmt {
-        Stmt::Let(s) => {
+        Stmt::Let(s) => v.visit_attributed(&s.attrs, |v| {
             if let Some(ty) = &s.ty {
                 v.visit_type(ty);
             }
@@ -785,7 +810,7 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
                 v.visit_block(eb);
             }
             v.visit_pattern(&s.pattern);
-        }
+        }),
         Stmt::Expr(s) => v.visit_expr(&s.expr),
         Stmt::Return(s) => {
             if let Some(val) = &s.value {
@@ -963,10 +988,12 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         }
         Expr::Closure(c) => {
             for p in &c.params {
-                v.visit_id(p.id, p.name_span);
-                if let Some(ty) = &p.ty {
-                    v.visit_type(ty);
-                }
+                v.visit_attributed(&p.attrs, |v| {
+                    v.visit_id(p.id, p.name_span);
+                    if let Some(ty) = &p.ty {
+                        v.visit_type(ty);
+                    }
+                });
             }
             if let Some(ty) = &c.return_type {
                 v.visit_type(ty);
@@ -1124,11 +1151,13 @@ pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
 /// id-collecting walk (WEP 2026-08-12).
 pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
     for p in params {
-        v.visit_id(p.id, p.span);
-        v.visit_trait_bounds(&p.bounds);
-        if let Some(default) = &p.default {
-            v.visit_type(default);
-        }
+        v.visit_attributed(&p.attrs, |v| {
+            v.visit_id(p.id, p.span);
+            v.visit_trait_bounds(&p.bounds);
+            if let Some(default) = &p.default {
+                v.visit_type(default);
+            }
+        });
     }
 }
 
@@ -1641,15 +1670,15 @@ pub mod lint {
     pub const DEAD_CODE: &str = "dead_code";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
-    /// A cast that types a literal, which a suffix writes: `255 as u8`.
-    pub const LITERAL_CAST: &str = "literal_cast";
     /// A comparison of an expression with itself: `x == x`.
     pub const SELF_COMPARISON: &str = "self_comparison";
-    /// Integer literals alone overflowing their type, `200_u8 + 100_u8`, or a
+    /// Integer literals alone overflowing their type, `200 as u8 + 100`, or a
     /// literal shift amount outside the bit width, `x << 9` on a `u8`.
     pub const ARITHMETIC_OVERFLOW: &str = "arithmetic_overflow";
     /// An integer `/` or `%` that always traps: `x / 0`.
     pub const UNCONDITIONAL_TRAP: &str = "unconditional_trap";
+    /// A hex literal ending in digits that read as a float type: `0x1_f32`.
+    pub const HEX_SUFFIX_LOOKALIKE: &str = "hex_suffix_lookalike";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow
@@ -3370,9 +3399,9 @@ pub struct LiteralExpr {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    /// Numeric literal: raw source text without its suffix (e.g. `"42"`,
-    /// `"0xFF"`, `"3.14"`). Unsuffixed, its type comes from its context.
-    Number(String, Option<NumericSuffix>),
+    /// Numeric literal: raw source text (e.g. `"42"`, `"0xFF"`, `"3.14"`). Its
+    /// type comes from its context.
+    Number(String),
     /// String literal: raw source text between quotes (escape sequences not interpreted).
     String(String),
     /// Byte-string literal `b"..."`: raw source text between quotes (escape
@@ -3397,117 +3426,6 @@ pub enum Literal {
     IncludeStr(String),
     /// Compile-time file include as bytes: `#include_bytes("path")`
     IncludeBytes(String),
-}
-
-/// The type suffix of a numeric literal, the `u8` of `255_u8`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NumericSuffix {
-    I8,
-    I16,
-    I32,
-    I64,
-    I128,
-    U8,
-    U16,
-    U32,
-    U64,
-    U128,
-    F16,
-    Bf16,
-    F32,
-    F64,
-}
-
-impl NumericSuffix {
-    const ALL: [Self; 14] = [
-        Self::I8,
-        Self::I16,
-        Self::I32,
-        Self::I64,
-        Self::I128,
-        Self::U8,
-        Self::U16,
-        Self::U32,
-        Self::U64,
-        Self::U128,
-        Self::F16,
-        Self::Bf16,
-        Self::F32,
-        Self::F64,
-    ];
-
-    /// The type name the suffix is spelled with.
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::I8 => "i8",
-            Self::I16 => "i16",
-            Self::I32 => "i32",
-            Self::I64 => "i64",
-            Self::I128 => "i128",
-            Self::U8 => "u8",
-            Self::U16 => "u16",
-            Self::U32 => "u32",
-            Self::U64 => "u64",
-            Self::U128 => "u128",
-            Self::F16 => "f16",
-            Self::Bf16 => "bf16",
-            Self::F32 => "f32",
-            Self::F64 => "f64",
-        }
-    }
-
-    /// The suffix spelled `name`, if one is.
-    #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|suffix| suffix.as_str() == name)
-    }
-
-    /// Whether the suffix names a float type, which only a decimal literal
-    /// takes.
-    #[must_use]
-    pub fn is_float(self) -> bool {
-        matches!(self, Self::F16 | Self::Bf16 | Self::F32 | Self::F64)
-    }
-
-    /// Whether a literal spelled `digits` takes this suffix: a float suffix
-    /// needs a decimal literal. In a hex literal `b` and `f` are digits, so
-    /// `0x1_f32` is the number `0x1F32`.
-    #[must_use]
-    pub fn suits(self, digits: &str) -> bool {
-        !self.is_float() || !is_radix_literal(digits)
-    }
-
-    /// Split a numeric literal's source text into its digits and its suffix:
-    /// `"255_u8"` is `("255", Some(U8))`. The lexer has already rejected a
-    /// suffix it does not know.
-    #[must_use]
-    pub fn split(text: &str) -> (&str, Option<Self>) {
-        let Some((digits, name)) = text.rsplit_once('_') else {
-            return (text, None);
-        };
-        match Self::from_name(name) {
-            Some(suffix) if suffix.suits(text) => (digits, Some(suffix)),
-            _ => (text, None),
-        }
-    }
-}
-
-/// A numeric literal as it is written: its digits, then `_` and its suffix.
-#[must_use]
-pub fn spell_number(repr: &str, suffix: Option<NumericSuffix>) -> String {
-    match suffix {
-        Some(suffix) => format!("{repr}_{}", suffix.as_str()),
-        None => repr.to_string(),
-    }
-}
-
-/// Whether `text` spells a hex, octal or binary literal.
-fn is_radix_literal(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    bytes.len() > 1
-        && bytes[0] == b'0'
-        && matches!(bytes[1], b'x' | b'X' | b'o' | b'O' | b'b' | b'B')
 }
 
 #[derive(Debug, Clone)]

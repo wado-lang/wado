@@ -1,0 +1,12 @@
+// `1.5 as i32` would convert the float, not type the literal, so the error for
+// `1.5_i32` suggests no cast.
+
+export fn run() {
+    let a = 1.5_i32;             // compile error: invalid suffix `i32` on the numeric literal `1.5`
+}
+
+__DATA__
+{
+  "compile_error": ":5:13: lexer error: invalid suffix `i32` on the numeric literal `1.5`",
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

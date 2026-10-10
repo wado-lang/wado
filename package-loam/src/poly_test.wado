@@ -24,7 +24,7 @@ fn times(a: Poly, b: Poly) -> Poly {
 test "a length taken from itself is zero, as a causal mask's offset is" {
     let seq = s("sequence_length");
     assert minus(seq, seq) == c(0);
-    assert minus(seq, seq).as_constant() == Option::Some(0_i64);
+    assert minus(seq, seq).as_constant() == Option::Some(0 as i64);
 }
 
 test "a polynomial linear in a symbol splits into its coefficient and the rest" {
@@ -32,8 +32,8 @@ test "a polynomial linear in a symbol splits into its coefficient and the rest" 
         s("n"),
         s("m"),
     ];
-    assert plus(times(c(2), n), minus(m, c(1))).linear_in(&"n") == Option::Some([2_i64, minus(m, c(1))]);
-    assert n.linear_in(&"n") == Option::Some([1_i64, c(0)]);
+    assert plus(times(c(2), n), minus(m, c(1))).linear_in(&"n") == Option::Some([2 as i64, minus(m, c(1))]);
+    assert n.linear_in(&"n") == Option::Some([1 as i64, c(0)]);
     assert times(n, n).linear_in(&"n") matches { None };
     assert times(n, m).linear_in(&"n") matches { None };
     assert m.linear_in(&"n") matches { None };

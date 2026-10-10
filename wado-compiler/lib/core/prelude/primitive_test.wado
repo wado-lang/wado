@@ -248,7 +248,7 @@ test "f32 ieee754 comparisons answer as f64's do" {
     assert !one.ieee754_lt(nan) && !nan.ieee754_ge(one);
     assert one.ieee754_lt(two) && two.ieee754_gt(one) && one.ieee754_le(one);
     assert two.ieee754_ge(one) && one.ieee754_ge(one) && !one.ieee754_eq(two);
-    assert builtin::black_box(-0.0_f32).ieee754_eq(0.0);
+    assert builtin::black_box(-0.0 as f32).ieee754_eq(0.0);
 }
 
 test "f16 and bf16 ieee754 comparisons answer widened to f32" {
@@ -328,10 +328,10 @@ test "f64.is_nan and f64.is_finite" {
 
 test "f32.is_nan and f32.is_finite" {
     assert f32::NAN.is_nan();
-    assert !0.0_f32.is_nan();
+    assert !(0.0 as f32).is_nan();
     assert !f32::INFINITY.is_nan();
 
-    assert 1.0_f32.is_finite();
+    assert (1.0 as f32).is_finite();
     assert !f32::INFINITY.is_finite();
     assert !f32::NAN.is_finite();
 }
@@ -408,14 +408,14 @@ test "f64::to_bits and f64::from_bits" {
 }
 
 test "f32::to_bits and f32::from_bits" {
-    let pi32 = 3.14159265_f32;
+    let pi32 = 3.14159265 as f32;
     let pi32_bits = pi32.to_bits();
     assert pi32_bits == 1078530011;
 
     let back_to_pi32 = f32::from_bits(pi32_bits);
     assert back_to_pi32 == pi32;
 
-    let zero32_bits = 0.0_f32.to_bits();
+    let zero32_bits = (0.0 as f32).to_bits();
     assert zero32_bits == 0;
 }
 
@@ -513,14 +513,14 @@ test "i64 decimal formatting at every digit-count boundary" {
         p *= 10;
         digits += 1;
     }
-    assert `${0_i64}` == "0";
-    assert `${9_i64}` == "9";
-    assert `${10_i64}` == "10";
-    assert `${99_i64}` == "99";
-    assert `${100_i64}` == "100";
-    assert `${999999999_i64}` == "999999999";
-    assert `${1000000000_i64}` == "1000000000";
-    assert `${1728000000000_i64}` == "1728000000000";
+    assert `${0 as i64}` == "0";
+    assert `${9 as i64}` == "9";
+    assert `${10 as i64}` == "10";
+    assert `${99 as i64}` == "99";
+    assert `${100 as i64}` == "100";
+    assert `${999999999 as i64}` == "999999999";
+    assert `${1000000000 as i64}` == "1000000000";
+    assert `${1728000000000 as i64}` == "1728000000000";
 }
 
 test "i64 decimal formatting at the type's extremes" {
@@ -533,11 +533,11 @@ test "i64 decimal formatting at the type's extremes" {
 }
 
 test "i64 negative decimal formatting keeps the sign out of the digit count" {
-    assert `${-1_i64}` == "-1";
-    assert `${-9_i64}` == "-9";
-    assert `${-10_i64}` == "-10";
-    assert `${-100_i64}` == "-100";
-    assert `${-1000000000000_i64}` == "-1000000000000";
+    assert `${-1 as i64}` == "-1";
+    assert `${-9 as i64}` == "-9";
+    assert `${-10 as i64}` == "-10";
+    assert `${-100 as i64}` == "-100";
+    assert `${-1000000000000 as i64}` == "-1000000000000";
 }
 
 test "i32 and u32 decimal formatting at their extremes" {
@@ -545,9 +545,9 @@ test "i32 and u32 decimal formatting at their extremes" {
     assert `${2147483647}` == "2147483647";
     let min: i32 = -2147483648;
     assert `${min}` == "-2147483648";
-    assert `${0_u32}` == "0";
-    assert `${4294967295_u32}` == "4294967295";
-    assert `${1000000_u32}` == "1000000";
+    assert `${0 as u32}` == "0";
+    assert `${4294967295 as u32}` == "4294967295";
+    assert `${1000000 as u32}` == "1000000";
 }
 
 test "integer clamp confines a value to the range" {
@@ -710,10 +710,10 @@ test "an f32 inspects as the same value in f64 does" {
 }
 
 test "wrapping_neg negates an unsigned value modulo its width" {
-    assert builtin::black_box(1_u8).wrapping_neg() == u8::MAX;
-    assert builtin::black_box(0_u8).wrapping_neg() == 0;
-    assert builtin::black_box(2_u16).wrapping_neg() == u16::MAX - 1;
-    assert builtin::black_box(1_u32).wrapping_neg() == u32::MAX;
-    assert builtin::black_box(0x8000_0000_u32).wrapping_neg() == 0x8000_0000;
-    assert builtin::black_box(1_u64).wrapping_neg() == u64::MAX;
+    assert builtin::black_box(1 as u8).wrapping_neg() == u8::MAX;
+    assert builtin::black_box(0 as u8).wrapping_neg() == 0;
+    assert builtin::black_box(2 as u16).wrapping_neg() == u16::MAX - 1;
+    assert builtin::black_box(1 as u32).wrapping_neg() == u32::MAX;
+    assert builtin::black_box(0x8000_0000 as u32).wrapping_neg() == 0x8000_0000;
+    assert builtin::black_box(1 as u64).wrapping_neg() == u64::MAX;
 }

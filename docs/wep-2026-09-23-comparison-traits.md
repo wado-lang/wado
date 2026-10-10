@@ -271,7 +271,7 @@ primitive's limits.
 Reflexivity gives every comparison of an expression with itself one answer, on
 every type. Such a comparison is either a mistake or a NaN test carried over
 from another language, where it is now always false. The
-[`self_comparison` lint](./spec-expressions.md#the-self_comparison-lint) warns
+[`self_comparison` lint](./spec-diagnostics.md#the-self_comparison-lint) warns
 about all six operators, and on a float names `is_nan()`. It reports only an
 expression that performs no effect, since one that does may answer differently
 the second time. For the same reason it skips one that writes: an assignment, a

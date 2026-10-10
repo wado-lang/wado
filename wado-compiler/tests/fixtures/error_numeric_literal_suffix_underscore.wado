@@ -1,0 +1,11 @@
+// A suffix after an `_` is no more a suffix than one without it.
+
+export fn run() {
+    let a = 1.5_f32;             // compile error: a numeric literal takes no suffix: write `1.5 as f32`
+}
+
+__DATA__
+{
+  "compile_error": ":4:13: lexer error: a numeric literal takes no suffix: write `1.5 as f32`",
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

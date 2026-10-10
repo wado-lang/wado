@@ -379,7 +379,7 @@ test "router: deserialize params into struct" {
 
     let m = r.match_path(Method::Get, &"/users/42").unwrap();
     let p = m.params.deserialize::<GetUserParams>().unwrap();
-    assert p.id == 42_u64;
+    assert p.id == 42 as u64;
 }
 
 test "router: deserialize multiple snake_case params" {
@@ -391,7 +391,7 @@ test "router: deserialize multiple snake_case params" {
     let m = r.match_path(Method::Get, &"/users/7/posts/99").unwrap();
     let p = m.params.deserialize::<PostParams>().unwrap();
     assert p.user_id == 7;
-    assert p.post_id == 99_u32;
+    assert p.post_id == 99 as u32;
 }
 
 test "router: deserialize string param" {

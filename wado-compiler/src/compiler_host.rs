@@ -187,15 +187,15 @@ pub enum Code {
     ShadowedName,
     /// A trait head says nothing about the effects its impls may declare.
     UndecidedEffects,
-    /// A cast types a numeric literal that a suffix could type: `255 as u8`.
-    LiteralCast,
     /// A comparison of an expression with itself, which has one answer: `x == x`.
     SelfComparison,
-    /// Integer literals alone overflow their type, `200_u8 + 100_u8`, or a
+    /// Integer literals alone overflow their type, `200 as u8 + 100`, or a
     /// literal shift amount lies outside the bit width, `x << 9` on a `u8`.
     ArithmeticOverflow,
     /// An integer `/` or `%` that always traps: `x / 0`.
     UnconditionalTrap,
+    /// A hex literal ending in digits that read as a float type: `0x1_f32`.
+    HexSuffixLookalike,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -320,10 +320,10 @@ impl std::fmt::Display for Code {
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
-            Code::LiteralCast => "LITERAL_CAST",
             Code::SelfComparison => "SELF_COMPARISON",
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",
+            Code::HexSuffixLookalike => "HEX_SUFFIX_LOOKALIKE",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

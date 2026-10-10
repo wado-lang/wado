@@ -3,6 +3,7 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
+<<<<<<< HEAD
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
     AstVisitor, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block,
     BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
@@ -17,6 +18,36 @@ use crate::ast::{
     TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
     VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
     spell_number, written_params,
+||||||| f3f76a82d95
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
+    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
+    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
+    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
+    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, spell_number,
+    written_params,
+=======
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
+    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
+    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
+    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
+    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
+    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
+>>>>>>> origin/main
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -1984,7 +2015,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
-            Literal::Number(repr, suffix) => self.output.push_str(&spell_number(repr, *suffix)),
+            Literal::Number(repr) => self.output.push_str(repr),
             Literal::String(raw) => {
                 self.output.push('"');
                 self.output.push_str(raw);
@@ -4071,7 +4102,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
 
 fn unparse_literal_into(lit: &Literal, output: &mut String) {
     match lit {
-        Literal::Number(repr, suffix) => output.push_str(&spell_number(repr, *suffix)),
+        Literal::Number(repr) => output.push_str(repr),
         Literal::String(raw) => {
             output.push('"');
             output.push_str(raw);
@@ -4536,10 +4567,10 @@ pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
 use crate::lexer::is_valid_ident;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock,
-    TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
-    TypeTable, receiver_value,
+    FloatBound, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock, TirEnum,
+    TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    receiver_value,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -5507,13 +5538,7 @@ fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
 
 fn emit_pattern_literal(value: &PatternLiteral, output: &mut String) {
     match value {
-        PatternLiteral::Int { shown, suffix, .. } => {
-            output.push_str(shown);
-            if let Some(suffix) = suffix {
-                output.push('_');
-                output.push_str(suffix.as_str());
-            }
-        }
+        PatternLiteral::Int { shown, .. } => output.push_str(shown),
         PatternLiteral::Char(c) => output.push_str(&quoted_char(*c)),
         PatternLiteral::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
     }
@@ -5545,17 +5570,7 @@ fn emit_instance_pattern(pattern: &InstancePattern, output: &mut String) {
 fn emit_range_bound(bound: &RangeBound, output: &mut String) {
     match bound {
         RangeBound::Discrete(value) => emit_pattern_literal(value, output),
-        RangeBound::Float(FloatBound { kind, shown }) => {
-            output.push_str(shown);
-            if let FloatBoundKind::Literal {
-                suffix: Some(suffix),
-                ..
-            } = kind
-            {
-                output.push('_');
-                output.push_str(suffix.as_str());
-            }
-        }
+        RangeBound::Float(FloatBound { shown, .. }) => output.push_str(shown),
     }
 }
 

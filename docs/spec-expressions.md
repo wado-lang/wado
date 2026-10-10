@@ -206,54 +206,9 @@ name twice is a redeclaration too. Only a name that binds counts: a bare name
 that a case or a constant pattern answers binds nothing, so writing
 `let None = a else { … };` twice in one scope redeclares nothing.
 
-### The `shadowed_name` Lint
-
-A binder that takes a name already reaching a known symbol is legal and warns.
-Every binder counts: a `let`, a parameter, a closure parameter, a type
-parameter, a pattern binding, a local item. So does every kind of symbol, in
-any namespace: a function, a global, a type, a trait, a case, an outer binding.
-The exemption is the derivation above, since the language already sanctions it.
-
-<!-- {"fixture":"spec_lexical_shadowed_name.wado"} -->
-
-```wado
-fn draw(Point: i32) { }        // warns: `Point` shadows the struct of the same name
-fn keep<i32>(v: i32) { }       // warns: `i32` shadows the builtin type of the same name
-
-test {
-    let println = 1;           // warns: `println` shadows the function of the same name
-    assert println == 1;
-}
-```
-
-Mark the binder `#[allow(shadowed_name)]` where the shadowing is deliberate, or
-the module `#![allow(shadowed_name)]`:
-
-<!-- {"fixture":"spec_lexical_shadowed_name_allow.wado"} -->
-
-```wado
-fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
-
-test {
-    assert twice(21) == 42;
-}
-```
-
-As for redeclaration, only a name that binds counts.
-[Patterns](./spec-patterns.md#patterns-that-cannot-fail) says which reading a
-bare name takes. In a `let` or `for` binding a name reaching a `global` binds,
-so the lint reports it.
-
-The derivation is read off the binder's own source, not off the `let` keyword,
-and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
-`while let Some(x) = x` are all exempt; `if let Some(x) = y` warns. A match arm
-is not exempt. Its scrutinee stays in scope across every arm, so
-`match x { Some(x) => … }` gives one name two meanings side by side.
-
-A binder shadows only what is in scope where it is written. A name binds after
-the expression it binds from, and reaches only what the construct carries it to.
-So an `if let` binding is not in scope in the `else`, and the alternatives of an
-or-pattern bind one set of names rather than shadowing each other.
+A binder that takes a name already reaching a symbol, without deriving its value
+from that name as above, is legal, and the
+[`shadowed_name`](./spec-diagnostics.md#the-shadowed_name-lint) lint warns.
 
 ## Local Item Definitions
 
@@ -522,9 +477,9 @@ is a compile error. Wasm has no float remainder.
 
 ```wado
 test "u8 and i8 shift modulo 8" {
-    assert builtin::black_box(1_u8) << builtin::black_box(9_u8) == 2;
-    assert builtin::black_box(-128_i8) >> builtin::black_box(15_i8) == -1;
-    assert builtin::black_box(0x80_u8) >> builtin::black_box(15_u8) == 1;
+    assert builtin::black_box(1 as u8) << builtin::black_box(9 as u8) == 2;
+    assert builtin::black_box(-128 as i8) >> builtin::black_box(15 as i8) == -1;
+    assert builtin::black_box(0x80 as u8) >> builtin::black_box(15 as u8) == 1;
     let one: u8 = 1;
     assert one << 9 == 2;
 }
@@ -815,29 +770,6 @@ comparison already decided the answer. Write `&&` where an operand must not run
 on that path.
 
 Rationale: [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md).
-
-### The `self_comparison` Lint
-
-The `self_comparison` lint warns about a comparison whose two operands are the
-same expression, where evaluating that expression twice cannot answer
-differently. It performs no effect and writes nothing: it assigns nothing, takes
-no `&mut`, and calls only declared functions, and methods that do not take
-`&mut self`. No call in it is handed a value reaching a `&mut`: one the value is
-or holds at any depth, or one a function, resource or signal it holds may
-capture. Such a comparison has one answer on every type, because the laws of
-[`Eq`](./spec-standard-traits.md#eq---equality) and
-[`Ord`](./spec-standard-traits.md#ord---ordering) make both reflexive:
-`x == x`, `x <= x` and `x >= x` are true, and `x != x`, `x < x` and `x > x` are
-false. In a chain, each adjacent pair is one comparison. A `#line` is the line
-it is written on, so two on different lines are not the same expression.
-
-On a float the warning adds that a NaN is tested with `is_nan()`, since `x != x`
-is the NaN test other languages teach.
-
-Mark the item `#[allow(self_comparison)]`, or the module
-`#![allow(self_comparison)]`, where the comparison is deliberate.
-
-Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 ## Ranges
 

@@ -162,13 +162,13 @@ fn disabling_unused_diagnostics_keeps_the_other_lints() {
     futures::executor::block_on(async {
         let source = "trait Tick {\n    fn tick(&self) -> i32;\n}\n\n\
                       export fn run() {\n    let x = 1;\n    if let Some(x) = Some(2) {}\n    \
-                      let b = 255 as u8;\n}\n";
+                      let b = 0x1_f32;\n}\n";
         let host = in_memory_host(&[]);
         let mut engine = Engine::new();
         engine.set_unused_diagnostics(false);
         engine.open_document("file:///work/lints.wado", source.to_string());
         let diags = engine.diagnostics("file:///work/lints.wado", &host).await;
-        for lint in ["shadows", "255_u8", "`Tick`"] {
+        for lint in ["shadows", "0x1_f32", "`Tick`"] {
             assert!(
                 diags.iter().any(|d| d.message.contains(lint)),
                 "`{lint}` lint must survive disabling the unused lints, got {diags:#?}"
