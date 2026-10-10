@@ -182,6 +182,14 @@ A condition is parsed as an `if` condition is, with no struct literal, so the
 body's `{` cannot be read as one. Contracts state inputs only, so a clause
 names no result and no old value.
 
+A condition performs no effect. It may call a function that has a contract of
+its own; that call is an ordinary call, checked unless it is marked.
+
+Every program may declare a contract, not only the standard library.
+`builtin::contract_checks()` stays `internal` because, open to every program,
+it would be a removable `assert`. A contract is not one: removing its check
+takes a marker at the call.
+
 A caller marks a call with `unchecked`, a prefix unary operator. Postfix
 operators bind tighter than prefix ones, so `unchecked a.f().g()` marks `g`,
 as `-a.f().g()` negates the whole chain. The operand must be a call to a
@@ -237,7 +245,3 @@ was kept despite that because it continues the `_unchecked` names it replaces.
   reaches an indexing trait's method.
 - An input contract cannot say that a method taking `&mut self` keeps its
   type's invariant. It can only require inputs that imply it.
-- Only the standard library declares a contract. The reason
-  `builtin::contract_checks()` is `internal` does not hold for a contract whose
-  removal takes a marker at the call, but opening contracts to every program
-  is not decided.
