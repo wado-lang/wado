@@ -1746,6 +1746,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // A `_` the receiver's turbofish writes is answered by nothing here, so
+        // the block's parameter it fills would reach the instance unknown.
+        if let Some(sig) = callee_sig.as_ref()
+            && let Some(head) = &head
+        {
+            let impl_args = self
+                .tysys
+                .receiver_args_at_impl(Some(target_type_id), &[], sig.declaring_impl)
+                .unwrap_or_default();
+            let names: Vec<String> = sig
+                .declaring_type_params()
+                .iter()
+                .filter(|(_, id)| {
+                    impl_args.get(self.declared_slot(*id) as usize) == Some(&TypeTable::UNKNOWN)
+                })
+                .map(|(name, _)| name.clone())
+                .collect();
+            if !names.is_empty() {
+                let _ = self.emit(TypeError::cannot_infer(
+                    &names,
+                    &format!("`{}::{}`", head.name, static_call.method),
+                    &format!("`{}::<...>::{}()`", head.name, static_call.method),
+                    static_call.span,
+                ));
+                return self.resolve_args_without_callee(&static_call.args, ctx);
+            }
+        }
+
         {
             // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
             // does; the namespace is the head's question, not the list's.
