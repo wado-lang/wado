@@ -41,6 +41,7 @@ const dims = Object.fromEntries(
   }),
 );
 const optimized = join(values.out, 'optimized.onnx');
+const PROFILE = 'profile';
 
 if (values.session) {
   await runSession();
@@ -59,7 +60,7 @@ async function runSession() {
     logSeverityLevel: 0,
     logVerbosityLevel: 0,
     enableProfiling: true,
-    profileFilePrefix: join(values.out, 'profile'),
+    profileFilePrefix: join(values.out, PROFILE),
   });
   // Every numeric type onnxruntime-node holds, by the array it reads.
   const elements = {
@@ -98,9 +99,10 @@ async function runSession() {
   session.endProfiling();
 }
 
-// The profile onnxruntime writes under the `profileFilePrefix` it is given.
+// A profile onnxruntime wrote under the `profileFilePrefix` it was given,
+// which it suffixes with the time.
 function isProfile(name) {
-  return name.startsWith('profile_') && name.endsWith('.json');
+  return name.startsWith(`${PROFILE}_`) && name.endsWith('.json');
 }
 
 function report() {
@@ -108,7 +110,8 @@ function report() {
   // one profile left after the run is this run's.
   mkdirSync(values.out, { recursive: true });
   for (const f of readdirSync(values.out)) {
-    if (isProfile(f) || f === 'optimized.onnx') rmSync(join(values.out, f));
+    const path = join(values.out, f);
+    if (isProfile(f) || path === optimized) rmSync(path);
   }
   const child = spawnSync(
     process.execPath,
