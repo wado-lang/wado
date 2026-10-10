@@ -21,7 +21,6 @@ use {
     single_alt_group_type_name,
     dedup_append_arr,
     all_alts_are_single_token,
-    single_token_first,
 } from "./gen_util.wado";
 use {
     TokenKinds,
@@ -72,7 +71,7 @@ pub struct GrammarAnalysis {
     nullable_cache: List<Option<bool>>,
     scannable_cache: List<Option<bool>>,
     open_end_cache: List<Option<bool>>,
-    tail_greedy_cache: List<Option<List<String>>>,
+    tail_greedy_cache: List<Option<List<i32>>>,
     /// By rule name, the ways a rule begins that `first2_of_element` found
     /// without meeting a cycle.
     first2_cache: HashMap<String, Heads>,
@@ -80,7 +79,7 @@ pub struct GrammarAnalysis {
     /// Used to resolve general group type names inside shared single-alt groups.
     single_alt_owner: HashMap<String, String>,
     /// By snake name, the kinds of each rule whose scan is one token test.
-    one_token_rules: HashMap<String, List<String>>,
+    one_token_rules: HashMap<String, List<i32>>,
     predicate_fn_owners: HashMap<i32, i32>,
 }
 
@@ -106,18 +105,8 @@ fn predicate_fn_owners(parser_rules: &List<ParserRule>) -> HashMap<i32, i32> {
     return owners;
 }
 
-fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
-    if !all_alts_are_single_token(&rule.alternatives) || rule.alternatives.iter_ref().any(|a| !a.actions.is_empty()) {
-        return null;
-    }
-    let mut kinds: List<String> = [];
-    for let alt of &rule.alternatives {
-        let k = single_token_first(&alt.elements[0]);
-        if !kinds.contains(&k) {
-            kinds.push(k);
-        }
-    }
-    return Option::Some(kinds);
+fn is_one_token_rule(rule: &ParserRule) -> bool {
+    return all_alts_are_single_token(&rule.alternatives) && rule.alternatives.iter_ref().all(|a| a.actions.is_empty());
 }
 
 impl GrammarAnalysis {
@@ -127,17 +116,13 @@ impl GrammarAnalysis {
         vocab_names: List<String> = [],
     ) -> GrammarAnalysis {
         let mut rule_index = HashMap::<String, i32>::with_seed(GALE_SEED);
-        let mut one_token_rules = HashMap::<String, List<String>>::with_seed(GALE_SEED);
         let mut snake_index = HashMap::<String, i32>::with_seed(GALE_SEED);
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
             snake_index[parser_rules[i].snake_name] = i;
-            if let Some(kinds) = one_token_rule_kinds(&parser_rules[i]) {
-                one_token_rules[parser_rules[i].snake_name] = kinds;
-            }
         }
         let rule_count = parser_rules.len();
-        return GrammarAnalysis {
+        let mut analysis = GrammarAnalysis {
             parser_rules: *parser_rules,
             scan_cyclic: compute_scan_cyclic(parser_rules),
             rule_index,
@@ -154,9 +139,23 @@ impl GrammarAnalysis {
             tail_greedy_cache: none_cache(rule_count),
             first2_cache: HashMap::with_seed(GALE_SEED),
             single_alt_owner: build_single_alt_owner_map(parser_rules),
-            one_token_rules,
+            one_token_rules: HashMap::with_seed(GALE_SEED),
             predicate_fn_owners: predicate_fn_owners(parser_rules),
         };
+        for let rule of parser_rules {
+            if !is_one_token_rule(rule) {
+                continue;
+            }
+            let mut kinds: List<i32> = [];
+            for let alt of &rule.alternatives {
+                let k = analysis.terminal_kind(&alt.elements[0]);
+                if !kinds.contains(&k) {
+                    kinds.push(k);
+                }
+            }
+            analysis.one_token_rules[rule.snake_name] = kinds;
+        }
+        return analysis;
     }
 
     /// The parser-rule table (for action attribute resolution, which validates
@@ -195,7 +194,7 @@ impl GrammarAnalysis {
     }
 
     /// The kinds a rule matches when its scan is one token test, or `null`.
-    pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
+    pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<i32>> {
         return self.one_token_rules.get_str(snake);
     }
 
@@ -268,7 +267,7 @@ impl GrammarAnalysis {
 
     /// ANTLR4's `getExpectedTokens().toString(getVocabulary())` for `kinds`: the
     /// display names in kind order, braced unless the set holds one.
-    pub fn render_expected(&mut self, kinds: &List<String>) -> String {
+    pub fn render_expected(&mut self, kinds: &List<i32>) -> String {
         if self.vocab_names.is_empty() {
             return String::new();
         }
@@ -277,7 +276,7 @@ impl GrammarAnalysis {
         let mut ids: List<i32> = [];
         let mut names: List<String> = [];
         for let k of kinds {
-            let id = self.token_kinds.intern(k);
+            let id = *k;
             if id == eof {
                 names = ["<EOF>"];
             } else if id < self.vocab_names.len() && !ids.contains(&id) {
@@ -305,50 +304,45 @@ impl GrammarAnalysis {
         return self.token_kinds.intern("TK_EOF");
     }
 
-    /// Kind id for a terminal element, using the resolved `kind_id` when
-    /// present (the fast path — no string, no lookup) and falling back to a
-    /// lazy intern for unresolved IR (unit tests).
-    pub fn token_ref_id<S: AsStrSlice>(&mut self, name: S, kind_id: i32) -> i32 {
-        if kind_id >= 0 {
-            return kind_id;
-        }
-        return self.token_kinds.intern(`TK_${name}`);
+    /// Whether `kinds` holds EOF, for a reader that cannot intern it.
+    pub fn holds_eof(&self, kinds: &List<i32>) -> bool {
+        let eof = self.token_kinds.id_of("TK_EOF");
+        return eof >= 0 && kinds.contains(&eof);
     }
 
-    pub fn literal_id(&mut self, lit: &LiteralElement) -> i32 {
-        if lit.kind_id >= 0 {
-            return lit.kind_id;
-        }
-        return self.token_kinds.intern(&lit.const_name);
+    /// The kind a `TokenRef` or `Literal` matches: its resolved `kind_id`, or,
+    /// for IR that was never resolved (unit tests), one interned for its name.
+    pub fn terminal_kind(&mut self, elem: &Element) -> i32 {
+        return match elem {
+            TokenRef(t) => if t.kind_id >= 0 { t.kind_id } else { self.token_kinds.intern(`TK_${t.name}`) },
+            Literal(l) => if l.kind_id >= 0 { l.kind_id } else { self.token_kinds.intern(&l.const_name) },
+            _ => panic("terminal_kind: not a TokenRef or Literal"),
+        };
     }
 
-    /// Recover terminal names for interned ids (the emit / String-boundary).
-    pub fn token_names_of(&self, ids: &List<i32>) -> List<String> {
-        return self.token_kinds.names_of(ids);
-    }
-
-    /// Recover a single terminal name for an interned id.
-    pub fn token_name(&self, id: i32) -> String {
-        return self.token_kinds.name_of(id);
-    }
-
-    /// Map `TK_*` names to their kind ids, in the given order.
-    pub fn names_to_ids(&mut self, names: &List<String>) -> List<i32> {
+    /// The ids of `TK_*` names, in order, interning a name the table lacks.
+    pub fn token_ids_of(&mut self, names: &List<String>) -> List<i32> {
         let mut out: List<i32> = [];
-        for let n of names {
-            out.push(self.token_kinds.intern(n));
+        for let name of names {
+            out.push(self.token_kinds.intern(name));
         }
         return out;
     }
 
-    /// Canonical form of a kind set as ids: sorted by token name (rank order)
-    /// and deduplicated. Two `matches { ... }` checks over equal sets
-    /// (regardless of order or repeated elements) collapse to the same
-    /// canonical form and therefore the same interned table.
-    pub fn canonical_kind_ids(&mut self, tokens: &List<String>) -> List<i32> {
-        return self.canonical_ids(self.names_to_ids(tokens));
+    /// The `TK_*` names of `ids`, in order: what generated code and reports spell.
+    pub fn token_names_of(&self, ids: &List<i32>) -> List<String> {
+        return self.token_kinds.names_of(ids);
     }
 
+    /// The `TK_*` name of kind `id`.
+    pub fn token_name(&self, id: i32) -> String {
+        return self.token_kinds.name_of(id);
+    }
+
+    /// Canonical form of a kind set: sorted by token name (rank order) and
+    /// deduplicated. Two `matches { ... }` checks over equal sets (regardless
+    /// of order or repeated elements) collapse to the same canonical form and
+    /// therefore the same interned table.
     pub fn canonical_ids(&mut self, ids: List<i32>) -> List<i32> {
         self.ensure_kind_rank();
         let mut ranks: List<u64> = [];
@@ -386,14 +380,7 @@ impl GrammarAnalysis {
         self.kind_by_rank = order;
     }
 
-    pub fn first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<String> {
-        let ids = self.first_ids_of_rule(name, visiting);
-        return self.token_kinds.names_of(&ids);
-    }
-
-    /// FIRST set as interned kind ids (the internal representation). Public
-    /// callers that want names go through `first_of_rule`.
-    pub fn first_ids_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<i32> {
+    pub fn first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_rule_at(name, visiting, &mut min_cycle);
     }
@@ -452,20 +439,14 @@ impl GrammarAnalysis {
         return result;
     }
 
-    pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<String> {
-        let ids = self.first_ids_of_element(elem, visiting);
-        return self.token_kinds.names_of(&ids);
-    }
-
-    pub fn first_ids_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<i32> {
+    pub fn first_of_element(&mut self, elem: &Element, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_element_at(elem, visiting, &mut min_cycle);
     }
 
     fn first_of_element_at(&mut self, elem: &Element, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
         return match elem {
-            TokenRef(t) => [self.token_ref_id(&t.name, t.kind_id)],
-            Literal(l) => [self.literal_id(l)],
+            TokenRef(_) | Literal(_) => [self.terminal_kind(elem)],
             RuleRef(r) => self.first_of_rule_at(&r.name, visiting, min_cycle),
             Group(g) => {
                 let mut result: List<i32> = [];
@@ -487,12 +468,7 @@ impl GrammarAnalysis {
         };
     }
 
-    pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<String> {
-        let ids = self.first_ids_of_alt(alt, visiting);
-        return self.token_kinds.names_of(&ids);
-    }
-
-    pub fn first_ids_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<i32> {
+    pub fn first_of_alt(&mut self, alt: &Alternative, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_alt_at(alt, visiting, &mut min_cycle);
     }
@@ -514,18 +490,13 @@ impl GrammarAnalysis {
         return result;
     }
 
-    pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
-        let ids = self.first_ids_of_elements_from(elements, start);
-        return self.token_kinds.names_of(&ids);
-    }
-
-    pub fn first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
+    pub fn first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
         let mut result: List<i32> = [];
         let mut seen: List<u64> = [];
 
         for let mut i = start; i < elements.len(); i += 1 {
             let mut visiting: List<String> = [];
-            let elem_first = self.first_ids_of_element(&elements[i], &mut visiting);
+            let elem_first = self.first_of_element(&elements[i], &mut visiting);
             append_ids(&mut result, &mut seen, &elem_first);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(&elements[i], &mut nv) {
@@ -549,7 +520,7 @@ impl GrammarAnalysis {
     /// Thin wrapper around [`position_first_sets_from`] with `start = 0` —
     /// the generic form supports computing FIRST sets at an arbitrary
     /// suffix offset (the multi-token follow-mask path).
-    pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> List<List<String>> {
+    pub fn alt_position_first_sets(&mut self, alt: &Alternative, max_depth: i32) -> List<List<i32>> {
         return self.position_first_sets_from(&alt.elements, 0, max_depth);
     }
 
@@ -578,8 +549,8 @@ impl GrammarAnalysis {
         start: i32,
         max_depth: i32,
         visiting: &mut List<String>,
-    ) -> [List<List<String>>, i32] {
-        let mut result: List<List<String>> = [];
+    ) -> [List<List<i32>>, i32] {
+        let mut result: List<List<i32>> = [];
         let final_cursor = self.deep_position_walk(elements, start, max_depth, &mut result, visiting);
         return [result, final_cursor - start];
     }
@@ -589,8 +560,8 @@ impl GrammarAnalysis {
     /// second one begins some sequence. Unlike `deep_position_first_sets_from`,
     /// this sees through alternatives and nullable tails, since exactness is
     /// checked on the pairs rather than assumed of the walk. Empty otherwise.
-    pub fn exact_two_position_first_sets(&mut self, elements: &List<Element>) -> List<List<String>> {
-        let none: List<List<String>> = [];
+    pub fn exact_two_position_first_sets(&mut self, elements: &List<Element>) -> List<List<i32>> {
+        let none: List<List<i32>> = [];
         let mut visiting: List<String> = [];
         let Some(heads) = self.first2_of_elements(elements, 0, &mut visiting) else {
             return none;
@@ -615,10 +586,7 @@ impl GrammarAnalysis {
                 return none;
             }
         }
-        return [
-            self.token_kinds.names_of(&bits_ids(&firsts)),
-            self.token_kinds.names_of(&bits_ids(&seconds)),
-        ];
+        return [bits_ids(&firsts), bits_ids(&seconds)];
     }
 
     /// Every way `elements[start..]` begins, at most two tokens deep. `null`
@@ -658,7 +626,7 @@ impl GrammarAnalysis {
         return match elem {
             TokenRef(_) | Literal(_) => {
                 let mut out = Heads::new();
-                out.singles = bits_of(&self.first_ids_of_element(elem, visiting));
+                out.singles = bits_of(&self.first_of_element(elem, visiting));
                 Option::Some(out);
             },
             Label(lab) => self.first2_of_element(&lab.element, visiting),
@@ -704,7 +672,7 @@ impl GrammarAnalysis {
 
     /// Each of `firsts` followed by a token `elements[start..]` begins with.
     fn pairs_before(&mut self, firsts: &List<u64>, elements: &List<Element>, start: i32) -> Pairs {
-        return Pairs { firsts: *firsts, seconds: bits_of(&self.first_ids_of_elements_from(elements, start)) };
+        return Pairs { firsts: *firsts, seconds: bits_of(&self.first_of_elements_from(elements, start)) };
     }
 
     fn first2_of_repeat(&mut self, rep: &RepeatElement, visiting: &mut List<String>) -> Option<Heads> {
@@ -737,7 +705,7 @@ impl GrammarAnalysis {
         elements: &List<Element>,
         start: i32,
         max_depth: i32,
-        result: &mut List<List<String>>,
+        result: &mut List<List<i32>>,
         visiting: &mut List<String>,
     ) -> i32 {
         let mut cursor = start;
@@ -854,8 +822,8 @@ impl GrammarAnalysis {
         elements: &List<Element>,
         start: i32,
         max_depth: i32,
-    ) -> List<List<String>> {
-        let mut result: List<List<String>> = [];
+    ) -> List<List<i32>> {
+        let mut result: List<List<i32>> = [];
         let mut cursor = start;
         while result.len() < max_depth && cursor < elements.len() {
             // If the tail from `cursor` onwards is entirely nullable, the
@@ -887,17 +855,12 @@ impl GrammarAnalysis {
 
     /// Like `first_of_elements_from` but uses deep nullability so it correctly
     /// flows through `RuleRef`s whose underlying rule matches zero tokens.
-    pub fn deep_first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<String> {
-        let ids = self.deep_first_ids_of_elements_from(elements, start);
-        return self.token_kinds.names_of(&ids);
-    }
-
-    pub fn deep_first_ids_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
+    pub fn deep_first_of_elements_from(&mut self, elements: &List<Element>, start: i32) -> List<i32> {
         let mut result: List<i32> = [];
         let mut seen: List<u64> = [];
         for let mut i = start; i < elements.len(); i += 1 {
             let mut fv: List<String> = [];
-            let elem_first = self.first_ids_of_element(&elements[i], &mut fv);
+            let elem_first = self.first_of_element(&elements[i], &mut fv);
             append_ids(&mut result, &mut seen, &elem_first);
             let mut nv: List<String> = [];
             if !self.element_is_nullable_deep(&elements[i], &mut nv) {
@@ -1223,7 +1186,7 @@ impl GrammarAnalysis {
     ///
     /// Only the first case is the whole answer; ask
     /// `call_site_follow_is_exact` which one this is.
-    pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32) -> List<String> {
+    pub fn compute_call_site_follow(&mut self, elements: &List<Element>, i: i32) -> List<i32> {
         let first = self.first_of_elements_from(elements, i + 1);
         if !self.tail_is_nullable_deep(elements, i + 1) {
             return first;
@@ -1231,7 +1194,7 @@ impl GrammarAnalysis {
         if self.deep_suffix_is_first_exact(elements, i + 1) {
             return first;
         }
-        return [] as List<String>;
+        return [] as List<i32>;
     }
 
     /// Whether `compute_call_site_follow` at `i` is the whole answer: a
@@ -1505,7 +1468,7 @@ impl GrammarAnalysis {
     /// site's caller-local `FOLLOW` does not intersect this set, the
     /// callee's tail-greedy elements cannot collide with the caller's
     /// expectations and no FOLLOW argument is needed.
-    pub fn tail_greedy_first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<String> {
+    pub fn tail_greedy_first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.tail_greedy_first_of_rule_at(name, visiting, &mut min_cycle);
     }
@@ -1517,7 +1480,7 @@ impl GrammarAnalysis {
         name: S,
         visiting: &mut List<String>,
         min_cycle: &mut i32,
-    ) -> List<String> {
+    ) -> List<i32> {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.tail_greedy_cache[rid];
@@ -1538,7 +1501,7 @@ impl GrammarAnalysis {
         visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
-        let mut result: List<String> = [];
+        let mut result: List<i32> = [];
         if rid >= 0 {
             let rule = &self.parser_rules[rid];
             for let alt of &rule.alternatives {
@@ -1570,8 +1533,8 @@ impl GrammarAnalysis {
         elements: &List<Element>,
         visiting: &mut List<String>,
         min_cycle: &mut i32,
-    ) -> List<String> {
-        let mut result: List<String> = [];
+    ) -> List<i32> {
+        let mut result: List<i32> = [];
         let mut i = elements.len() - 1;
         while i >= 0 {
             let elem = &elements[i];
@@ -1591,7 +1554,7 @@ impl GrammarAnalysis {
         elem: &Element,
         visiting: &mut List<String>,
         min_cycle: &mut i32,
-    ) -> List<String> {
+    ) -> List<i32> {
         return match elem {
             Repeat(rep) => {
                 // Only count Repeats whose inner consumes EXACTLY one
@@ -1608,7 +1571,7 @@ impl GrammarAnalysis {
                 // working without breaking those grammars.
                 let mut stv: List<String> = [];
                 let single = self.element_is_single_token(&rep.element, &mut stv);
-                let result: List<String> = if !single {
+                let result: List<i32> = if !single {
                     [];
                 } else {
                     let mut fv: List<String> = [];
@@ -1617,7 +1580,7 @@ impl GrammarAnalysis {
                 result;
             },
             Group(g) => {
-                let mut acc: List<String> = [];
+                let mut acc: List<i32> = [];
                 for let alt of &g.alternatives {
                     let inner = self.tail_greedy_first_of_elements(&alt.elements, visiting, min_cycle);
                     dedup_append_arr(&mut acc, &inner);

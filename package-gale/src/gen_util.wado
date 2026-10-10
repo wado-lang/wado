@@ -362,17 +362,6 @@ pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
     return true;
 }
 
-/// Return the matched token-kind constant for a single TokenRef/Literal
-/// element. Caller is expected to have screened the element via
-/// `all_alts_are_single_token`.
-pub fn single_token_first(elem: &Element) -> String {
-    return match elem {
-        TokenRef(t) => `TK_${t.name}`,
-        Literal(l) => l.const_name,
-        _ => panic("single_token_first: unexpected element"),
-    };
-}
-
 /// Build unique case names for labeled alternatives.
 /// When labels are unique, use them directly. When duplicated, append an index.
 fn build_case_names(alts: &List<Alternative>, all_labeled: bool) -> List<String> {
@@ -443,22 +432,18 @@ pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
     return build_case_names(alts, all_labeled);
 }
 
-/// Return `true` when `first` contains `token`.
-pub fn first_contains<S: AsStrSlice>(first: &List<String>, token: S) -> bool {
-    return first.contains_str(token);
-}
-
-/// Append every token in `source` to `arr`, skipping duplicates already in `arr`.
-pub fn dedup_append_arr(arr: &mut List<String>, source: &List<String>) {
-    for let tk of source {
-        if !first_contains(arr, tk) {
-            arr.push(*tk);
+/// Append every item in `source` to `arr`, skipping duplicates already in `arr`.
+pub fn dedup_append_arr<T: Eq>(arr: &mut List<T>, source: &List<T>) {
+    for let item of source {
+        if !arr.contains(item) {
+            arr.push(*item);
         }
     }
 }
 
-pub fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
-    return a.iter_value().filter(|x: String| !first_contains(b, &x)).collect();
+/// `a` without the kinds `b` holds, in `a`'s order.
+pub fn subtract_sets(a: &List<i32>, b: &List<i32>) -> List<i32> {
+    return a.iter_value().filter(|x: i32| !b.contains(&x)).collect();
 }
 
 // Parser codegen names every consumed element so the surrounding struct
@@ -767,12 +752,12 @@ pub fn elements_match(consumed: &Element, expected: &Element) -> bool {
 }
 
 /// Whether two token-kind sets share a kind.
-pub fn sets_overlap(a: &List<String>, b: &List<String>) -> bool {
+pub fn sets_overlap(a: &List<i32>, b: &List<i32>) -> bool {
     return a.iter_ref().any(|x| b.contains(x));
 }
 
 /// The union of two token-kind arrays: `a` in order, then what `b` adds.
-pub fn union_kind_arrays(a: &List<String>, b: &List<String>) -> List<String> {
+pub fn union_kind_arrays(a: &List<i32>, b: &List<i32>) -> List<i32> {
     let mut result = *a;
     dedup_append_arr(&mut result, b);
     return result;

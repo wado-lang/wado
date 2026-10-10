@@ -47,7 +47,7 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -
         let snake = grammar.parser_rules[found].snake_name;
         let emits_vals = entry_emits_vals(ctx, &rule_name);
         let mut visiting: List<String> = [];
-        let first_ids = ctx.analysis.first_ids_of_rule(&rule_name, &mut visiting);
+        let first_ids = ctx.analysis.first_of_rule(&rule_name, &mut visiting);
         let call = if emits_vals { `let _ = _parse_${snake}(p);` } else { `_parse_${snake}(p);` };
         result.push(RecoverFragmentEntry { call, first_ids });
     }

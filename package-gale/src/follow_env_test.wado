@@ -79,7 +79,7 @@ test "build: rule with tail-greedy Y? has TK_Y in tail_greedy" {
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
     let name = "a";
-    let tg = env.tail_greedy(&name);
+    let tg = ctx.token_names_of(&env.tail_greedy(&name));
     assert tg.len() == 1;
     assert tg[0] == "TK_Y";
 }
@@ -117,8 +117,7 @@ test "build: tail-greedy unions across alts" {
     let start = no_start();
     let env = build(&rules, &mut ctx, &start);
     let name = "c";
-    let tg = env.tail_greedy(&name);
-    let mut sorted = tg;
+    let mut sorted = ctx.token_names_of(&env.tail_greedy(&name));
     sorted.sort();
     assert sorted.len() == 2 && sorted[0] == "TK_W" && sorted[1] == "TK_Y";
 }
@@ -138,8 +137,8 @@ test "build: transitive tail-greedy through RuleRef" {
     let env = build(&rules, &mut ctx, &start);
     let d = "d";
     let a = "a";
-    assert env.tail_greedy(&a).len() == 1 && env.tail_greedy(&a)[0] == "TK_Y";
-    assert env.tail_greedy(&d).len() == 1 && env.tail_greedy(&d)[0] == "TK_Y";
+    assert ctx.token_names_of(&env.tail_greedy(&a)) == ["TK_Y"];
+    assert ctx.token_names_of(&env.tail_greedy(&d)) == ["TK_Y"];
 }
 
 test "build: left-recursive rule does not infinitely recurse" {
@@ -168,7 +167,7 @@ test "rule_follow: start rule seeded with EOF when named" {
     let r = "r";
     let fs = env.rule_follow(&r);
     assert fs.closed, "start rule's FOLLOW must be closed";
-    assert fs.kinds.contains("TK_EOF"), "start rule's FOLLOW must contain TK_EOF";
+    assert ctx.token_names_of(&fs.kinds).contains_str("TK_EOF"), "start rule's FOLLOW must contain TK_EOF";
 }
 
 test "rule_follow: callee gets first(suffix) of caller alt" {
@@ -187,7 +186,7 @@ test "rule_follow: callee gets first(suffix) of caller alt" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert fs_a.kinds.contains("TK_B"), `expected TK_B in FOLLOW(a), got ${fs_a.kinds.len()} entries`;
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_B"), `expected TK_B in FOLLOW(a), got ${fs_a.kinds.len()} entries`;
 }
 
 test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
@@ -203,7 +202,7 @@ test "rule_follow: callee at deep-nullable suffix inherits caller's FOLLOW" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert fs_a.kinds.contains("TK_EOF"), "FOLLOW(a) must include TK_EOF transitively from FOLLOW(r)";
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_EOF"), "FOLLOW(a) must include TK_EOF transitively from FOLLOW(r)";
 }
 
 test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
@@ -242,11 +241,11 @@ test "rule_follow: ll_ctx_follow grammar yields FOLLOW(a) = {TK_Y, TK_EOF}" {
     let fs_a = env.rule_follow(&a);
     let fs_w = env.rule_follow(&wrapper);
     let fs_b = env.rule_follow(&b);
-    assert fs_a.kinds.contains("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got ${fs_a.kinds.len()} entries`;
-    assert fs_a.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
-    assert fs_w.kinds.contains("TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
-    assert fs_w.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";
-    assert fs_b.kinds.contains("TK_EOF"), "expected TK_EOF in FOLLOW(b) (via outer EOF after group in r)";
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_Y"), `expected TK_Y in FOLLOW(a) (via wrapper b), got ${fs_a.kinds.len()} entries`;
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_EOF"), "expected TK_EOF in FOLLOW(a) (via wrapper alone in alt 1)";
+    assert ctx.token_names_of(&fs_w.kinds).contains_str("TK_Y"), "expected TK_Y in FOLLOW(wrapper) (via wrapper b in r alt 0)";
+    assert ctx.token_names_of(&fs_w.kinds).contains_str("TK_EOF"), "expected TK_EOF in FOLLOW(wrapper) (via wrapper alone in r alt 1)";
+    assert ctx.token_names_of(&fs_b.kinds).contains_str("TK_EOF"), "expected TK_EOF in FOLLOW(b) (via outer EOF after group in r)";
 }
 
 test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
@@ -275,8 +274,8 @@ test "rule_follow: nullable suffix propagates FOLLOW through Optional" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert fs_a.kinds.contains("TK_Y"), "FOLLOW(a) must include TK_Y from b?";
-    assert fs_a.kinds.contains("TK_EOF"), "FOLLOW(a) must include TK_EOF since b? is nullable";
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_Y"), "FOLLOW(a) must include TK_Y from b?";
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_EOF"), "FOLLOW(a) must include TK_EOF since b? is nullable";
 }
 
 test "rule_follow: terminates on left recursion" {
@@ -297,8 +296,8 @@ test "rule_follow: terminates on left recursion" {
     let e = "e";
     let fs_e = env.rule_follow(&e);
     // FOLLOW(e) at least includes EOF (start) and TK_PLUS (recursive caller's suffix).
-    assert fs_e.kinds.contains("TK_EOF");
-    assert fs_e.kinds.contains("TK_PLUS");
+    assert ctx.token_names_of(&fs_e.kinds).contains_str("TK_EOF");
+    assert ctx.token_names_of(&fs_e.kinds).contains_str("TK_PLUS");
 }
 
 fn star(elem: Element) -> Element {
@@ -327,8 +326,8 @@ test "rule_follow: an optional's callee does not receive the inner's own FIRST" 
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert fs_a.kinds.contains("TK_B"), "FOLLOW(a) must include the token after the optional";
-    assert !fs_a.kinds.contains("TK_X"), "an optional cannot iterate, so FIRST(a) must not leak into FOLLOW(a)";
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_B"), "FOLLOW(a) must include the token after the optional";
+    assert !ctx.token_names_of(&fs_a.kinds).contains_str("TK_X"), "an optional cannot iterate, so FIRST(a) must not leak into FOLLOW(a)";
 }
 
 test "rule_follow: a star's callee does receive the inner's own FIRST" {
@@ -349,6 +348,6 @@ test "rule_follow: a star's callee does receive the inner's own FIRST" {
     let env = build(&rules, &mut ctx, &start);
     let a = "a";
     let fs_a = env.rule_follow(&a);
-    assert fs_a.kinds.contains("TK_B");
-    assert fs_a.kinds.contains("TK_X"), "a star iteration follows itself";
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_B");
+    assert ctx.token_names_of(&fs_a.kinds).contains_str("TK_X"), "a star iteration follows itself";
 }

@@ -49,6 +49,35 @@ fn mk_ctx_with(rules: List<ParserRule>) -> GrammarAnalysis {
     return GrammarAnalysis::new(&rules);
 }
 
+fn depth_names(ctx: &GrammarAnalysis, sets: &List<List<i32>>) -> List<List<String>> {
+    let mut out: List<List<String>> = [];
+    for let set of sets {
+        out.push(ctx.token_names_of(set));
+    }
+    return out;
+}
+
+fn tail_greedy_names<S: AsStrSlice>(ctx: &mut GrammarAnalysis, rule: S, visiting: &mut List<String>) -> List<String> {
+    let ids = ctx.tail_greedy_first_of_rule(rule, visiting);
+    return ctx.token_names_of(&ids);
+}
+
+fn position_names(ctx: &mut GrammarAnalysis, elements: &List<Element>, start: i32, max_k: i32) -> List<List<String>> {
+    let sets = ctx.position_first_sets_from(elements, start, max_k);
+    return depth_names(ctx, &sets);
+}
+
+fn deep_position_names(
+    ctx: &mut GrammarAnalysis,
+    elements: &List<Element>,
+    start: i32,
+    max_k: i32,
+    visiting: &mut List<String>,
+) -> [List<List<String>>, i32] {
+    let [sets, consumed] = ctx.deep_position_first_sets_from(elements, start, max_k, visiting);
+    return [depth_names(ctx, &sets), consumed];
+}
+
 
 test "tail_greedy_first: rule with tail-position Optional token" {
     // a : X Y? ;
@@ -60,7 +89,7 @@ test "tail_greedy_first: rule with tail-position Optional token" {
     ]);
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
-    let r = ctx.tail_greedy_first_of_rule("a", &mut visiting);
+    let r = tail_greedy_names(&mut ctx,"a", &mut visiting);
     assert r.len() == 1, `expected 1 token, got ${r.len()}`;
     assert r[0] == "TK_Y", `expected TK_Y, got ${r[0]}`;
 }
@@ -76,7 +105,7 @@ test "tail_greedy_first: rule with non-tail Optional returns empty" {
     ]);
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
-    let r = ctx.tail_greedy_first_of_rule("a", &mut visiting);
+    let r = tail_greedy_names(&mut ctx,"a", &mut visiting);
     assert r.len() == 0, `expected empty, got ${r.len()}`;
 }
 
@@ -91,7 +120,7 @@ test "tail_greedy_first: multiple tail-position Optionals stack" {
     ]);
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
-    let r = ctx.tail_greedy_first_of_rule("a", &mut visiting);
+    let r = tail_greedy_names(&mut ctx,"a", &mut visiting);
     assert r.len() == 2, `expected 2 tokens, got ${r.len()}`;
     let mut sorted = r;
     sorted.sort();
@@ -109,7 +138,7 @@ test "tail_greedy_first: rule with no Repeat returns empty" {
     ]);
     let mut ctx = mk_ctx_with([a]);
     let mut visiting: List<String> = [];
-    let r = ctx.tail_greedy_first_of_rule("a", &mut visiting);
+    let r = tail_greedy_names(&mut ctx,"a", &mut visiting);
     assert r.len() == 0, `expected empty, got ${r.len()}`;
 }
 
@@ -125,7 +154,7 @@ test "tail_greedy_first: transitive via tail RuleRef" {
     ]);
     let mut ctx = mk_ctx_with([s, r]);
     let mut visiting: List<String> = [];
-    let tg = ctx.tail_greedy_first_of_rule("s", &mut visiting);
+    let tg = tail_greedy_names(&mut ctx,"s", &mut visiting);
     assert tg.len() == 1, `expected 1 token, got ${tg.len()}`;
     assert tg[0] == "TK_Y", `expected TK_Y, got ${tg[0]}`;
 }
@@ -151,7 +180,7 @@ test "tail_greedy_first: tail Optional with multi-token inner is excluded" {
     ]);
     let mut ctx = mk_ctx_with([r]);
     let mut visiting: List<String> = [];
-    let tg = ctx.tail_greedy_first_of_rule("r", &mut visiting);
+    let tg = tail_greedy_names(&mut ctx,"r", &mut visiting);
     assert tg.is_empty(), `expected empty (multi-token inner suppressed), got ${tg.len()} tokens`;
 }
 
@@ -175,7 +204,7 @@ test "tail_greedy_first: tail Optional with single-token-alt Group inner is also
     ]);
     let mut ctx = mk_ctx_with([r]);
     let mut visiting: List<String> = [];
-    let tg = ctx.tail_greedy_first_of_rule("r", &mut visiting);
+    let tg = tail_greedy_names(&mut ctx,"r", &mut visiting);
     assert tg.is_empty(), `expected empty (Group inner blanket-excluded), got ${tg.len()} tokens`;
 }
 
@@ -194,7 +223,7 @@ test "position_first_sets_from: full single-token sequence X Y Z, K=3" {
         tk("Y"),
         tk("Z"),
     ];
-    let r = ctx.position_first_sets_from(&elements, 0, 3);
+    let r = position_names(&mut ctx,&elements, 0, 3);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
@@ -212,7 +241,7 @@ test "position_first_sets_from: start offset skips leading elements" {
         tk("Y"),
         tk("Z"),
     ];
-    let r = ctx.position_first_sets_from(&elements, 1, 3);
+    let r = position_names(&mut ctx,&elements, 1, 3);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
@@ -230,7 +259,7 @@ test "position_first_sets_from: max_k truncates the result" {
         tk("Z"),
         tk("W"),
     ];
-    let r = ctx.position_first_sets_from(&elements, 0, 2);
+    let r = position_names(&mut ctx,&elements, 0, 2);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     assert r.len() == 2, `expected K=2 (truncated), got ${r.len()}`;
@@ -244,7 +273,7 @@ test "position_first_sets_from: stops at end of sequence shorter than max_k" {
         tk("X"),
         tk("Y"),
     ];
-    let r = ctx.position_first_sets_from(&elements, 0, 5);
+    let r = position_names(&mut ctx,&elements, 0, 5);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     assert r.len() == 2, `expected K=2 (capped by sequence length), got ${r.len()}`;
@@ -263,7 +292,7 @@ test "position_first_sets_from: nullable element halts past-advance but keeps th
         opt(tk("Y")),
         tk("Z"),
     ];
-    let r = ctx.position_first_sets_from(&elements, 0, 3);
+    let r = position_names(&mut ctx,&elements, 0, 3);
     let expected_x: List<String> = ["TK_X"];
     let expected_yz: List<String> = ["TK_Y", "TK_Z"];
     assert r.len() == 2, `expected K=2 (halted at Y?), got ${r.len()}`;
@@ -279,7 +308,7 @@ test "position_first_sets_from: start at end returns empty" {
         tk("X"),
         tk("Y"),
     ];
-    let r = ctx.position_first_sets_from(&elements, 2, 3);
+    let r = position_names(&mut ctx,&elements, 2, 3);
     assert r.is_empty(), `expected empty (start past end), got ${r.len()}`;
 }
 
@@ -313,7 +342,7 @@ test "deep_position_first_sets_from: recurses into single-alt RuleRef" {
         rr("c"),
     ];
     let mut visiting: List<String> = [];
-    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [r, consumed] = deep_position_names(&mut ctx,&elements, 1, 3, &mut visiting);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
@@ -350,7 +379,7 @@ test "deep_position_first_sets_from: a multi-alt RuleRef contributes its head an
         rr("c"),
     ];
     let mut visiting: List<String> = [];
-    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [r, consumed] = deep_position_names(&mut ctx,&elements, 1, 3, &mut visiting);
     let expected_c: List<String> = ["TK_X", "TK_Y"];
     assert r.len() == 1, `expected the head position alone, got ${r.len()}`;
     assert r[0] == expected_c, `expected first(c), got ${r[0]:?}`;
@@ -380,7 +409,7 @@ test "deep_position_first_sets_from: a nullable multi-alt RuleRef contributes no
         tk("Z"),
     ];
     let mut visiting: List<String> = [];
-    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [r, consumed] = deep_position_names(&mut ctx,&elements, 1, 3, &mut visiting);
     assert r.is_empty(), `expected empty (nullable multi-alt), got ${r.len()}`;
     assert consumed == 0, `nullable multi-alt halt must not advance the cursor, got ${consumed}`;
 }
@@ -399,7 +428,7 @@ test "deep_position_first_sets_from: cycles bail to keep the analysis terminatin
         rr("r"),
     ];
     let mut visiting: List<String> = ["r"];  // simulate being inside r's expansion
-    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 1, 3, &mut visiting);
+    let [prefixes, consumed] = deep_position_names(&mut ctx,&elements, 1, 3, &mut visiting);
     assert prefixes.is_empty(), `expected empty (cycle), got ${prefixes.len()}`;
     assert consumed == 0, `cycle halt must not advance the cursor, got ${consumed}`;
 }
@@ -418,7 +447,7 @@ test "deep_position_first_sets_from: tokens before RuleRef accumulate normally" 
         rr("c"),
     ];
     let mut visiting: List<String> = [];
-    let [r, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
+    let [r, consumed] = deep_position_names(&mut ctx,&elements, 0, 3, &mut visiting);
     let expected_x: List<String> = ["TK_X"];
     let expected_y: List<String> = ["TK_Y"];
     let expected_z: List<String> = ["TK_Z"];
@@ -438,8 +467,8 @@ test "deep_position_first_sets_from: matches shallow walk for single-token-only 
         tk("Z"),
     ];
     let mut visiting: List<String> = [];
-    let [deep, _] = ctx.deep_position_first_sets_from(&elements, 0, 3, &mut visiting);
-    let shallow = ctx.position_first_sets_from(&elements, 0, 3);
+    let [deep, _] = deep_position_names(&mut ctx,&elements, 0, 3, &mut visiting);
+    let shallow = position_names(&mut ctx,&elements, 0, 3);
     assert deep.len() == shallow.len(), `length mismatch: deep=${deep.len()}, shallow=${shallow.len()}`;
     for let mut d = 0; d < deep.len(); d += 1 {
         let mut a_set = deep[d];
@@ -479,7 +508,7 @@ test "deep_position_first_sets_from: halt inside expanded RuleRef stops outer wa
         tk("Z"),
     ];
     let mut visiting: List<String> = [];
-    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
+    let [prefixes, consumed] = deep_position_names(&mut ctx,&elements, 0, 4, &mut visiting);
     let expected_x: List<String> = ["TK_X"];
     let expected_group: List<String> = ["TK_A", "TK_B"];
     assert prefixes.len() == 2, `expected K=2 (X then the group's head), got ${prefixes.len()}: ${prefixes}`;
@@ -507,7 +536,7 @@ test "deep_position_first_sets_from: halt inside Label stops outer walk" {
     });
     let elements: List<Element> = [labelled, tk("Z")];
     let mut visiting: List<String> = [];
-    let [prefixes, consumed] = ctx.deep_position_first_sets_from(&elements, 0, 4, &mut visiting);
+    let [prefixes, consumed] = deep_position_names(&mut ctx,&elements, 0, 4, &mut visiting);
     // The Label arm halts because its inner element is a Group; we
     // accept either "no depths pushed" or "Group's first pushed" but
     // the {Z} at depth 1 must not appear because the outer walk
@@ -532,8 +561,9 @@ test "position_first_sets_from: matches alt_position_first_sets at start=0" {
         opt(tk("Y")),
         tk("Z"),
     ]);
-    let direct = ctx.position_first_sets_from(&a.elements, 0, 4);
-    let via_alt = ctx.alt_position_first_sets(&a, 4);
+    let direct = position_names(&mut ctx,&a.elements, 0, 4);
+    let via_alt_ids = ctx.alt_position_first_sets(&a, 4);
+    let via_alt = depth_names(&ctx, &via_alt_ids);
     assert direct.len() == via_alt.len(), `length mismatch: direct=${direct.len()}, via_alt=${via_alt.len()}`;
     for let mut d = 0; d < direct.len(); d += 1 {
         let mut a_set = direct[d];

@@ -14,11 +14,11 @@ use { dedup_append_arr } from "./gen_util.wado";
 /// detection, the multi-alt emit and the dump all read, so none can drift.
 pub struct RuleOverlap {
     pub non_lr_indices: List<i32>,
-    pub first_sets: List<List<String>>,
+    pub first_sets: List<List<i32>>,
     pub groups: List<List<i32>>,
     /// The rule's exact FOLLOW, or empty where it is unknown, where an ended
     /// atom runs on into an LR suffix, or where a gate selects instead.
-    pub end_follow: List<String>,
+    pub end_follow: List<i32>,
 }
 
 /// The indices of the alternatives a rule predicts among: all of them, less an
@@ -55,14 +55,14 @@ pub fn rule_overlap_groups(
     has_gate: fn(&Alternative) -> bool,
 ) -> RuleOverlap {
     let non_lr_indices = non_lr_alt_indices(lowered_rule);
-    let mut first_sets: List<List<String>> = [];
+    let mut first_sets: List<List<i32>> = [];
     for let idx of non_lr_indices {
         let mut visiting: List<String> = [];
         first_sets.push(analysis.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
     let mut classes = alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, analysis);
     let gated = non_lr_indices.iter_ref().any(|i: &i32| has_gate(&rule.alternatives[*i]));
-    let end_follow: List<String> = if lowered_rule matches { MultiAlt(_) } && !gated {
+    let end_follow: List<i32> = if lowered_rule matches { MultiAlt(_) } && !gated {
         follow.for_probe(&rule.name);
     } else {
         [];
@@ -76,8 +76,8 @@ pub fn rule_overlap_groups(
 /// FOLLOW meets a sibling's first set shares its group: `r : A? | B ;` on `b`.
 fn admit_rule_follow_into_nullable(
     classes: &mut List<AltClass>,
-    first_sets: &mut List<List<String>>,
-    follow: &List<String>,
+    first_sets: &mut List<List<i32>>,
+    follow: &List<i32>,
 ) {
     if follow.is_empty() {
         return;
@@ -110,7 +110,7 @@ pub fn rule_has_at_end_conflict(
                 analysis,
                 &g.end_follow,
             );
-            let mut conflicts: List<List<String>> = [];
+            let mut conflicts: List<List<i32>> = [];
             prediction_at_end_conflicts(&tree, &mut conflicts);
             for let tokens of &conflicts {
                 if follow.at_end_conflict_routes(&rule.name, tokens) {

@@ -25,7 +25,8 @@
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
 use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
 use { lower, element_is_self_ref, lr_operand_prec } from "./lower.wado";
-use { collect_literal_tokens, token_slot_order, LitToken } from "./lexer_gen.wado";
+use { collect_literal_tokens, LitToken } from "./lexer_gen.wado";
+use { TokenKinds } from "./token_kinds.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -171,7 +172,7 @@ struct AtnBuilder {
     rule_start: List<i32>,
     rule_stop: List<i32>,
     decision_state: List<i32>,
-    kinds: HashMap<String, i32>,
+    kinds: TokenKinds,
     num_tokens: i32,
     call_site_returns: List<i32>,
     decision_sites: List<i32>,
@@ -232,34 +233,8 @@ impl AtnBuilder {
     }
 
     fn kind_of<S: AsStrSlice>(&self, name: S) -> i32 {
-        if let Some(k) = self.kinds.get_str(name) {
-            return k;
-        }
-        return -1;
+        return self.kinds.id_of(name);
     }
-}
-
-
-/// Build the name -> token-kind-id map, driven by the same
-/// `lexer_gen::token_slot_order` that numbers the generated `TK_*`
-/// constants, so ATN atom labels match them by construction. Returns the
-/// map and the total token count. Numeric `type(N)` overrides are not
-/// modelled yet (no fixture needs them in the ATN path).
-pub fn build_token_kinds(grammar: &Grammar) -> [HashMap<String, i32>, i32] {
-    let mut map = HashMap::<String, i32>::with_seed(GALE_SEED);
-    let lit_tokens = collect_literal_tokens(&grammar.parser_rules);
-    let slots = token_slot_order(&grammar.lexer_rules, &lit_tokens);
-    let mut idx = 0;
-    for let slot of &slots {
-        match *slot {
-            Rule(ri) => map[`TK_${grammar.lexer_rules[ri].name}`] = idx,
-            Eof => map["TK_EOF"] = idx,
-            Error => map["TK_ERROR"] = idx,
-            Lit(li) => map[lit_tokens[li].const_name] = idx,
-        }
-        idx += 1;
-    }
-    return [map, idx];
 }
 
 /// Build the whole-grammar parser ATN, lowering the grammar on demand. This
@@ -280,14 +255,15 @@ pub fn build_atn(grammar: &Grammar) -> Atn {
 /// passed in via `lowered`; `lowered.parser_rules` runs parallel to
 /// `grammar.parser_rules` (same source order and count).
 pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
-    let tk = build_token_kinds(grammar);
+    let kinds = TokenKinds::build(grammar);
+    let num_tokens = kinds.len();
     let mut b = AtnBuilder {
         states: [],
         rule_start: [],
         rule_stop: [],
         decision_state: [],
-        kinds: tk.0,
-        num_tokens: tk.1,
+        kinds,
+        num_tokens,
         call_site_returns: [],
         decision_sites: [],
     };

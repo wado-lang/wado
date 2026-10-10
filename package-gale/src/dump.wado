@@ -33,6 +33,7 @@ use {
 } from "./gir.wado";
 use { Grammar, Element, RepeatKind } from "./ir.wado";
 use { LowerContext } from "./lower_context.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
 use {
     PredictionNode,
     AmbiguityReason,
@@ -92,8 +93,8 @@ fn render_rule(out: &mut String, rule: &Rule, grammar: &Grammar, lowered: &Lower
 
     match rule {
         Simple(s) => render_simple(out, s),
-        MultiAlt(m) => render_multi_alt(out, m),
-        LeftRecursive(l) => render_left_recursive(out, l),
+        MultiAlt(m) => render_multi_alt(out, m, &ctx.analysis),
+        LeftRecursive(l) => render_left_recursive(out, l, &ctx.analysis),
     }
 
     render_prediction(out, rule, grammar, ctx);
@@ -119,7 +120,7 @@ fn render_simple(out: &mut String, s: &SimpleRule) {
     out.push_str("  single alternative\n");
 }
 
-fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
+fn render_multi_alt(out: &mut String, m: &MultiAltRule, analysis: &GrammarAnalysis) {
     match m.dispatch {
         Direct(d) => {
             out.push_str("  dispatch: Direct (token-led)\n");
@@ -127,7 +128,7 @@ fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
                 out.push_str("  alt ");
                 out.push_str(`${branch.alt_index}`);
                 out.push_str(" first=");
-                push_token_set(out, &alt_class_first_set(&branch.alt_class));
+                push_token_set(out, &alt_class_first_set(&branch.alt_class), analysis);
                 out.push('\n');
             }
         },
@@ -144,7 +145,7 @@ fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
     }
 }
 
-fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
+fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule, analysis: &GrammarAnalysis) {
     // Atom alts: the non-LR alternatives, lowered as a multi-alt body.
     out.push_str("  atom alts:\n");
     match l.atom.dispatch {
@@ -153,7 +154,7 @@ fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
                 out.push_str("    alt ");
                 out.push_str(`${branch.alt_index}`);
                 out.push_str(" first=");
-                push_token_set(out, &alt_class_first_set(&branch.alt_class));
+                push_token_set(out, &alt_class_first_set(&branch.alt_class), analysis);
                 out.push('\n');
             }
         },
@@ -186,11 +187,11 @@ fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
             out.push_str("left-assoc");
         }
         out.push_str(" suffix-first=");
-        push_token_set(out, &lr.suffix_first);
+        push_token_set(out, &lr.suffix_first, analysis);
         out.push('\n');
     }
 
-    render_lr_loop_entry(out, l);
+    render_lr_loop_entry(out, l, analysis);
 }
 
 /// Render the LR precedence loop's entry decision: for each token the
@@ -202,7 +203,7 @@ fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
 /// ATN-class when precedence alone cannot separate the alts
 /// (`DropLoopEntryBranchInLRRule_4`). Mirrors `LrDispatchData` exactly,
 /// so a wrong precedence chain cross-references straight back here.
-fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
+fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule, analysis: &GrammarAnalysis) {
     let d = &l.lr_dispatch;
     if d.valid_lr_alts.is_empty() {
         return;
@@ -217,7 +218,7 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
             // group entries index into valid_lr_alts, which indexes lr_alts.
             let lr = &l.lr_alts[d.valid_lr_alts[group[i]]];
             out.push_str(`alt ${lr.alt_index} `);
-            push_token_set(out, &lr.suffix_first);
+            push_token_set(out, &lr.suffix_first, analysis);
         }
         out.push(']');
         if group.len() >= 2 {
@@ -278,11 +279,11 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
             out.push_str(`alt ${real_indices[i]}`);
         }
         out.push_str("]:\n");
-        render_prediction_node(out, &tree, 6);
+        render_prediction_node(out, &tree, 6, &ctx.analysis);
     }
 }
 
-fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32) {
+fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32, analysis: &GrammarAnalysis) {
     push_spaces(out, indent);
     match node {
         Leaf(idx) => {
@@ -304,15 +305,15 @@ fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32) 
             out.push_str("Consume(");
             out.push_str(&prediction_element_label(&c.element));
             out.push_str(")\n");
-            render_prediction_node(out, &c.child, indent + 2);
+            render_prediction_node(out, &c.child, indent + 2, analysis);
         },
         Dispatch(d) => {
             out.push_str(`Dispatch[d=${d.depth}]\n`);
             for let branch of &d.branches {
                 push_spaces(out, indent + 2);
-                push_token_set(out, &branch.tokens);
+                push_token_set(out, &branch.tokens, analysis);
                 out.push_str(" →\n");
-                render_prediction_node(out, &branch.child, indent + 4);
+                render_prediction_node(out, &branch.child, indent + 4, analysis);
             }
         },
     }
@@ -497,13 +498,13 @@ fn render_summary(out: &mut String, lowered: &LoweredGrammar) {
 // ==========================================================================
 
 /// Render a token-kind set as `[A, B, C]`.
-fn push_token_set(out: &mut String, tokens: &List<String>) {
+fn push_token_set(out: &mut String, tokens: &List<i32>, analysis: &GrammarAnalysis) {
     out.push('[');
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
             out.push_str(", ");
         }
-        out.push_str(&tokens[i]);
+        out.push_str(&analysis.token_name(tokens[i]));
     }
     out.push(']');
 }

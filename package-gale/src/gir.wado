@@ -402,7 +402,7 @@ pub struct LrAlt {
     /// First set of the LR suffix (i.e. the tokens that begin
     /// `elements[1..]`). Drives the precedence-aware dispatch
     /// in the LR loop.
-    pub suffix_first: List<String>,
+    pub suffix_first: List<i32>,
     /// True for `<assoc=right>` alts; see `lr_trailing_prec`.
     pub right_associative: bool,
     /// FieldDecl for the leading self-reference that the LR rewrite
@@ -475,12 +475,12 @@ pub variant MultiAltDispatch {
 pub variant Admits {
     /// Admits every token. The payload is the subset a static first-set walk
     /// enumerated, read through `admits_enumerated`, never a guard's own test.
-    Everything(List<String>),
+    Everything(List<i32>),
     /// No lookahead decides it; it belongs after every testable arm.
     Untestable,
     /// Never empty — build it through `admits_kinds_of` or one of the two
     /// readings of an empty set, which assert it.
-    Kinds(List<String>),
+    Kinds(List<i32>),
 }
 
 /// Admits every token, with no statically enumerated kinds to point at.
@@ -494,11 +494,11 @@ pub fn admits_is_everything(admits: &Admits) -> bool {
 
 /// The kinds a static walk enumerated, whole or not — for a caller that needs
 /// a set to gate on and can accept a subset.
-pub fn admits_enumerated(admits: &Admits) -> List<String> {
+pub fn admits_enumerated(admits: &Admits) -> List<i32> {
     return match admits {
         Everything(kinds) => *kinds,
         Kinds(kinds) => *kinds,
-        Untestable => [] as List<String>,
+        Untestable => [] as List<i32>,
     };
 }
 
@@ -518,10 +518,10 @@ pub fn admits_tests_nothing(admits: &Admits) -> bool {
 /// **Never render from this** — the emptiness is exactly the overload this
 /// type replaces. Renderers take the `Admits` (`admits_check_str`,
 /// `repeat_guard_cond`); this is for readers that do not render.
-pub fn admits_kinds(admits: &Admits) -> List<String> {
+pub fn admits_kinds(admits: &Admits) -> List<i32> {
     return match admits {
         Kinds(kinds) => *kinds,
-        _ => [] as List<String>,
+        _ => [] as List<i32>,
     };
 }
 
@@ -529,14 +529,14 @@ pub fn admits_kinds(admits: &Admits) -> List<String> {
 /// readings of an empty set are `admits_or_everything` and
 /// `admits_or_untestable`; construct through one of the three, never the
 /// variant, so the invariant is checked where it can still be attributed.
-pub fn admits_kinds_of(kinds: &List<String>) -> Admits {
+pub fn admits_kinds_of(kinds: &List<i32>) -> Admits {
     assert !kinds.is_empty(), "an empty set is `Everything` or `Untestable`, and which one is not a property of the set";
     return Admits::Kinds(*kinds);
 }
 
 /// A set that narrows the lookahead, where having none means nothing is
 /// excluded — a wildcard-led alternative, a guard with no first set to test.
-pub fn admits_or_everything(kinds: &List<String>) -> Admits {
+pub fn admits_or_everything(kinds: &List<i32>) -> Admits {
     if kinds.is_empty() {
         return admits_everything();
     }
@@ -545,7 +545,7 @@ pub fn admits_or_everything(kinds: &List<String>) -> Admits {
 
 /// A set that selects, where having none to select by means the lookahead
 /// cannot decide this arm at all.
-pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
+pub fn admits_or_untestable(kinds: &List<i32>) -> Admits {
     if kinds.is_empty() {
         return Admits::Untestable;
     }
@@ -557,13 +557,13 @@ pub fn admits_or_untestable(kinds: &List<String>) -> Admits {
 pub variant AltClass {
     /// Matches at least one token, of any kind. The payload is the subset the
     /// first-set walk enumerated — `A? .` is open-ended *and* starts with `a`.
-    OpenEnded(List<String>),
+    OpenEnded(List<i32>),
     /// Selected by exactly these tokens and nothing else. Never empty.
-    Selects(List<String>),
+    Selects(List<i32>),
     /// Can also match nothing, so what follows the decision selects it as well
     /// as these tokens, of which it may have none (`( A | | B )`).
     /// `apply_empty_alt_admits` resolves it to `Selects(tokens ∪ follow)`.
-    Nullable(List<String>),
+    Nullable(List<i32>),
 }
 
 pub fn alt_class_is_open_ended(c: &AltClass) -> bool {
@@ -586,7 +586,7 @@ pub fn alt_class_tests_nothing(c: &AltClass) -> bool {
 /// The tokens the alternative's own first-set walk enumerated. For `OpenEnded`
 /// that is a subset of what it matches, so what an arm tests comes from
 /// `group_branch_admits`, never from the emptiness of this.
-pub fn alt_class_first_set(c: &AltClass) -> List<String> {
+pub fn alt_class_first_set(c: &AltClass) -> List<i32> {
     return match c {
         Selects(tokens) => *tokens,
         Nullable(tokens) => *tokens,
@@ -700,8 +700,8 @@ pub variant Op {
 }
 
 pub struct TokenOp {
-    /// Global `TK_<name>` token kind constant.
-    pub kind: String,
+    /// Kind id of the global `TK_<name>` token kind constant.
+    pub kind: i32,
     /// Dedupped field name in the enclosing alt's CST struct.
     /// Already includes the `_2` / `_3` suffix where needed.
     pub field: String,
@@ -722,8 +722,8 @@ pub struct TokenOp {
 }
 
 pub struct LiteralOp {
-    /// `LIT_<id>` constant assigned during literal collection.
-    pub kind: String,
+    /// Kind id of the `TK_LIT_*` constant assigned during literal collection.
+    pub kind: i32,
     /// Dedupped field name. `lower` derives the base name from
     /// `literal_field_name` and applies dedup.
     pub field: String,
@@ -839,7 +839,7 @@ pub struct WildcardOp {
 
 pub struct ExcludedOp {
     /// Exclusion set, the kind set emit passes to `p.expect_not(...)`.
-    pub kinds: List<String>,
+    pub kinds: List<i32>,
     pub field: String,
     /// Pre-dedup base name (`not_element_field_name(&ne.element)`).
     /// See `TokenOp.dedup_base` for the role.
@@ -887,7 +887,7 @@ pub struct IterationDuties {
     /// FIRST of what follows the Repeat in its own alternative. With the body's
     /// own first set and the caller's FOLLOW it answers "can anything continue
     /// from where this iteration would end".
-    pub decline_cont_first: List<String> = [],
+    pub decline_cont_first: List<i32> = [],
     /// Scan mirror of that continuation, run from the iteration's *start* to
     /// ask the other half: is exiting here viable at all? A loop declines only
     /// when the answer is yes, so an iteration whose alternative has no other
@@ -895,7 +895,7 @@ pub struct IterationDuties {
     pub decline_scan: List<ScanElement> = [],
     /// The enclosing rule's FOLLOW, conjoined into the exit-viability verdict
     /// exactly as `probe_viable` is into the non-greedy probe's.
-    pub decline_viable: List<String> = [],
+    pub decline_viable: List<i32> = [],
 }
 
 impl IterationDuties {
@@ -947,7 +947,7 @@ pub struct RepeatOp {
     /// (subtract from inner first to gate the optional fire) and
     /// non-greedy (continue/exit disambiguation). Empty when the
     /// Repeat is at the alt's tail.
-    pub caller_follow_first: List<String>,
+    pub caller_follow_first: List<i32>,
     /// True iff the inner element is fully scannable (has a complete
     /// `scan_<rule>` / inline scan equivalent). Drives emit's choice
     /// between `loop` + scan-guard and `while` + first-check loop
@@ -984,7 +984,7 @@ pub struct RepeatOp {
     /// second sub-position when the next element is itself a Repeat
     /// over a single-alt Group of ≥ 2 elements. Empty when 1-token
     /// follow suffices. Consumed by `gen_repeat_non_greedy`.
-    pub caller_follow_second: List<String>,
+    pub caller_follow_second: List<i32>,
     /// Inner second-position first set for non-greedy 2-token
     /// disambiguation. When the inner element is a single-alt `Group`
     /// of ≥ 2 elements (the `(',' x)*?` body shape), this is
@@ -992,7 +992,7 @@ pub struct RepeatOp {
     /// Empty otherwise. Consumed by `gen_repeat_non_greedy`'s
     /// `peek_at(1)` disambiguation arm so emit doesn't re-walk the
     /// surface inner.
-    pub body_second_position_first: List<String>,
+    pub body_second_position_first: List<i32>,
     /// Scan mirror of what follows this Repeat, run as emit's viability
     /// oracle where no lookahead separates the two readings. Empty for a
     /// tail Repeat — the caller's FOLLOW answers alone.
@@ -1015,12 +1015,12 @@ pub struct RepeatOp {
     pub static_exit_undecided: bool = false,
     /// For a loop the simulator decides, the only tokens it needs asking
     /// about; any other enters. Empty where every token asks.
-    pub atn_asked_kinds: List<String> = [],
+    pub atn_asked_kinds: List<i32> = [],
     /// The enclosing rule's classical FOLLOW, conjoined into the probe's
     /// verdict: its continuation scan ends at the rule's tail, and a token
     /// outside this set cannot continue any caller from there. Empty leaves
     /// the verdict as it was.
-    pub probe_viable: List<String> = [],
+    pub probe_viable: List<i32> = [],
     /// Emit a runtime caller-FOLLOW yield gate
     /// (`if follow_yields(&p.kinds, p.pos, follow, TK_EOF) { break }`)
     /// at this iteration's entry. Set by lower when the Repeat sits at a
@@ -1040,7 +1040,7 @@ pub struct RepeatOp {
 pub struct EmptyAltAdmits {
     pub alt_index: i32,
     /// Never empty — nothing to write is `null`, not an empty set.
-    pub admits: List<String>,
+    pub admits: List<i32>,
 }
 
 pub struct GroupOp {
@@ -1127,17 +1127,17 @@ pub variant RepeatStrategy {
 pub struct NonGreedyStrategy {
     /// Tokens that may follow the loop. Drives the exit condition
     /// `peek_kind() ∉ exit_first ∨ further-lookahead`.
-    pub exit_first: List<String>,
+    pub exit_first: List<i32>,
     /// Second-token disambiguation when `exit_first` overlaps with
     /// the inner's first. Empty when not needed.
-    pub exit_second: List<String>,
+    pub exit_second: List<i32>,
 }
 
 pub struct OptionalLookaheadStrategy {
     /// Per-position kind sets that the inner's fixed-token prefix
     /// guarantees. `sig.len()` is the lookahead depth; `sig[i]` is
     /// the allowed kind set at `peek_at(i)`.
-    pub sig: List<List<String>>,
+    pub sig: List<List<i32>>,
 }
 
 pub struct OptionalShapeLookaheadStrategy {
@@ -1161,7 +1161,7 @@ pub struct OptionalLookaheadShape {
     /// Per-virtual-position kind sets — feeds the lookahead guard.
     /// `sig[d]` is the kind set required at `peek_at(d)` for this
     /// shape.
-    pub sig: List<List<String>>,
+    pub sig: List<List<i32>>,
     /// Scan of exactly this shape's body, used in place of `sig` when
     /// the strategy is `scan_guarded`.
     pub scan_body: ScanBody = ScanBody { elements: [] },
@@ -1271,7 +1271,7 @@ pub struct ScanGate {
 }
 
 pub struct ScanTokenElement {
-    pub kind: String,
+    pub kind: i32,
 }
 
 pub struct ScanRuleCallElement {
@@ -1291,7 +1291,7 @@ pub struct ScanRuleCallElement {
 }
 
 pub struct ScanExcludedElement {
-    pub kinds: List<String>,
+    pub kinds: List<i32>,
 }
 
 pub struct ScanRepeatElement {
@@ -1308,7 +1308,7 @@ pub struct ScanRepeatElement {
     /// when the outer next-token is a caller-side follow token (the
     /// pre-Phase-2-F `gen_scan_repeat_optional_with_follow` contract).
     /// Empty when the Repeat is at the alt's tail.
-    pub caller_follow_first: List<String>,
+    pub caller_follow_first: List<i32>,
     /// Scan-side mirror of `RepeatOp.gate_caller_follow`: emit
     /// `if follow_yields(tokens, pos, follow, TK_EOF) { ... }` at iter
     /// entry so the longest-match tournament yields to the caller in
@@ -1325,8 +1325,8 @@ pub struct ScanRepeatElement {
     pub probe_contested: bool = false,
     pub static_exit_undecided: bool = false,
     /// Mirrors `RepeatOp.atn_asked_kinds`.
-    pub atn_asked_kinds: List<String> = [],
-    pub probe_viable: List<String> = [],
+    pub atn_asked_kinds: List<i32> = [],
+    pub probe_viable: List<i32> = [],
     /// Mirrors `RepeatOp.body_scannable`. The probe entry gate reads it on
     /// both sides, so an unscannable body cannot probe on the scan alone.
     pub body_scannable: bool = false,
@@ -1354,7 +1354,7 @@ pub struct ScanOptionalLookaheadElement {
     /// Per-shape lookahead signature: `sigs[s][position]` is the
     /// kind set for position `position` of shape `s`. emit emits
     /// `if peek_match(sigs[0]) { /* shape 0 body */ } else if ...`.
-    pub sigs: List<List<List<String>>>,
+    pub sigs: List<List<List<i32>>>,
     /// Per-shape scan body: `bodies[s]` is the sequence of
     /// `ScanElement`s emit scans when shape `s`'s sig matches. Each
     /// shape selects a subset of the surface alt's elements (the

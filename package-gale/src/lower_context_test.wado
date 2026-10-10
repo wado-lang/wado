@@ -6,13 +6,13 @@ use { GenSettings } from "./gen_settings.wado";
 test "intern_follow_mask: same mask returns same id, empty returns null" {
     let rules: List<ParserRule> = [];
     let mut ctx = LowerContext::new(GrammarAnalysis::new(&rules), GenSettings {});
-    let m1: List<List<String>> = [
-        ["TK_X"],
-        ["TK_Y"],
+    let m1: List<List<i32>> = [
+        [1],
+        [2],
     ];
-    let m2: List<List<String>> = [
-        ["TK_X"],
-        ["TK_Z"],
+    let m2: List<List<i32>> = [
+        [1],
+        [3],
     ];
     let id1 = ctx.intern_follow_mask(&m1);
     let id2 = ctx.intern_follow_mask(&m2);
@@ -21,7 +21,7 @@ test "intern_follow_mask: same mask returns same id, empty returns null" {
     assert id2 matches { Some(1) }, "distinct mask gets id 1";
     assert id1_again == id1, "same mask reuses its id";
     // A mask whose every depth-set is empty never gates → no global.
-    let empty_depths: List<List<String>> = [[], []];
+    let empty_depths: List<List<i32>> = [[], []];
     let id_empty = ctx.intern_follow_mask(&empty_depths);
     assert id_empty matches { None }, "all-empty mask interns to null";
     assert ctx.tables.follow_masks().len() == 2, "only the two real masks are registered";

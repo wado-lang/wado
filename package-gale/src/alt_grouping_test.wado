@@ -10,27 +10,27 @@ use { AltClass, admits_kinds } from "./gir.wado";
 fn describe(branches: &List<AltBranch>) -> String {
     let mut parts: List<String> = [];
     for let b of branches {
-        parts.push(`${admits_kinds(&b.admits).join(",")}=>${b.alts:?}`);
+        parts.push(`${admits_kinds(&b.admits):?}=>${b.alts:?}`);
     }
     return parts.join(" ");
 }
 
 test "decision_partition: a token only one alternative starts decides it alone" {
-    // `( A B | B C | D )`: B is contested, A, C and D each select one alternative,
-    // so only B's branch has anything for a scan to decide.
+    // `( 1 2 | 2 3 | 4 )`: 2 is contested, 1, 3 and 4 each select one alternative,
+    // so only 2's branch has anything for a scan to decide.
     let classes: List<AltClass> = [
-        AltClass::Selects(["A", "B"]),
-        AltClass::Selects(["B", "C"]),
-        AltClass::Selects(["D"]),
+        AltClass::Selects([1, 2]),
+        AltClass::Selects([2, 3]),
+        AltClass::Selects([4]),
     ];
     let got = describe(&decision_partition(&classes));
-    assert got == "A=>[0] B=>[0, 1] C=>[1] D=>[2]", got;
+    assert got == "[1]=>[0] [2]=>[0, 1] [3]=>[1] [4]=>[2]", got;
 }
 
 test "decision_partition: an open-ended alternative keeps the group whole" {
     let classes: List<AltClass> = [
-        AltClass::Selects(["A"]),
-        AltClass::OpenEnded(["B"]),
+        AltClass::Selects([1]),
+        AltClass::OpenEnded([2]),
     ];
     let branches = decision_partition(&classes);
     assert branches.len() == 1 && branches[0].alts == [0, 1], describe(&branches);
@@ -38,8 +38,8 @@ test "decision_partition: an open-ended alternative keeps the group whole" {
 
 test "decision_partition: an empty alternative no follow resolved keeps the group whole" {
     let classes: List<AltClass> = [
-        AltClass::Selects(["A", "B"]),
-        AltClass::Nullable(["A"]),
+        AltClass::Selects([1, 2]),
+        AltClass::Nullable([1]),
     ];
     let branches = decision_partition(&classes);
     assert branches.len() == 1 && branches[0].alts == [0, 1], describe(&branches);
@@ -49,10 +49,10 @@ test "sort_group_by_specificity: ties keep source order" {
     // First-set sizes [2, 2, 1]. Ascending by size puts alt 2 (size 1)
     // first; alts 0 and 1 tie on size 2 and must stay in source order.
     // The buggy swap-immediately sort yields [2, 1, 0] (0 and 1 reversed).
-    let first_sets: List<List<String>> = [
-        ["A", "B"],
-        ["C", "D"],
-        ["E"],
+    let first_sets: List<List<i32>> = [
+        [1, 2],
+        [3, 4],
+        [5],
     ];
     let mut group: List<i32> = [0, 1, 2];
     sort_group_by_specificity(&mut group, &first_sets);
@@ -62,10 +62,10 @@ test "sort_group_by_specificity: ties keep source order" {
 }
 
 test "sort_group_by_specificity: already-ascending stays put" {
-    let first_sets: List<List<String>> = [
-        ["A"],
-        ["B", "C"],
-        ["D", "E", "F"],
+    let first_sets: List<List<i32>> = [
+        [1],
+        [2, 3],
+        [4, 5, 6],
     ];
     let mut group: List<i32> = [0, 1, 2];
     sort_group_by_specificity(&mut group, &first_sets);

@@ -17,27 +17,27 @@ use { CodeWriter, FnSpec } from "lib:wadopoet";
 /// `EmitContext::kind_check_str` so they collapse to a `_kind_set_<id>(...)`
 /// helper call; otherwise a 120-keyword set inlined at every dispatch
 /// site bloats the generated wasm by hundreds of KB.
-pub fn gen_scan_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<String>>) -> String {
+pub fn gen_scan_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<i32>>) -> String {
     return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Scan);
 }
 
 /// No token kinds: the default for a parameter naming the kinds already proven
 /// or wanted.
-pub global NO_KINDS: List<String> = [];
+pub global NO_KINDS: List<i32> = [];
 
 /// A token set as the by-reference argument a membership test reads.
-pub fn sync_set_ref(ctx: &mut EmitContext, sync: &List<String>) -> String {
-    return `&${ctx.sync_bits_ref(ctx.sync_name_set(sync))}`;
+pub fn sync_set_ref(ctx: &mut EmitContext, sync: &List<i32>) -> String {
+    return `&${ctx.sync_bits_ref(ctx.sync_set(*sync))}`;
 }
 
 /// A token set as the by-reference kind list a diagnostic names.
-pub fn expected_set_ref(ctx: &mut EmitContext, expected: &List<String>) -> String {
-    return `&${ctx.sync_list_ref(ctx.sync_name_set(expected))}`;
+pub fn expected_set_ref(ctx: &mut EmitContext, expected: &List<i32>) -> String {
+    return `&${ctx.sync_list_ref(ctx.sync_set(*expected))}`;
 }
 
 /// `p.expect_set(...)` consuming one token of `kinds`.
-pub fn expect_set_call(ctx: &mut EmitContext, kinds: &List<String>) -> String {
-    let set = ctx.sync_name_set(kinds);
+pub fn expect_set_call(ctx: &mut EmitContext, kinds: &List<i32>) -> String {
+    let set = ctx.sync_set(*kinds);
     return `p.expect_set(&${ctx.sync_bits_ref(set)}, &${ctx.sync_list_ref(set)})`;
 }
 
@@ -50,7 +50,7 @@ enum LookaheadAccess {
 
 fn join_lookahead_condition(
     ctx: &mut EmitContext,
-    sig: &List<List<String>>,
+    sig: &List<List<i32>>,
     depth: i32,
     access: LookaheadAccess,
 ) -> String {
@@ -80,7 +80,7 @@ fn join_lookahead_condition(
     return result;
 }
 
-pub fn gen_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<String>>) -> String {
+pub fn gen_lookahead_condition(ctx: &mut EmitContext, sig: &List<List<i32>>) -> String {
     return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Parse);
 }
 
@@ -205,16 +205,16 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
     w.blank();
 }
 
-pub fn build_lookahead_condition(ctx: &mut EmitContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+pub fn build_lookahead_condition(ctx: &mut EmitContext, pos_sets: &List<List<i32>>, depth: i32) -> String {
     return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ParseKind);
 }
 
 /// `build_lookahead_condition` inside a scan, which reads `kind` as the parse does.
-pub fn build_scan_lookahead_condition(ctx: &mut EmitContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+pub fn build_scan_lookahead_condition(ctx: &mut EmitContext, pos_sets: &List<List<i32>>, depth: i32) -> String {
     return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ScanKind);
 }
 
-pub fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {
+pub fn find_needed_depth(all_position_sets: &List<List<List<i32>>>) -> i32 {
     let max_k = MAX_LOOKAHEAD_DEPTH;
     for let mut depth = 1; depth <= max_k; depth += 1 {
         let mut all_ok = true;

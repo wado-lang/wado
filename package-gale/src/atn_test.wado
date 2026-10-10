@@ -7,7 +7,8 @@
 //!   3. non-greedy repeats put the EXIT edge first at the decision state
 //!      (the invariant that makes `(else stmt)??` bind to the outer rule).
 
-use { build_atn, build_token_kinds, atn_blob_bytes, lr_loop_entry_decision, Atn, AtnState } from "./atn.wado";
+use { build_atn, atn_blob_bytes, lr_loop_entry_decision, Atn, AtnState } from "./atn.wado";
+use { TokenKinds } from "./token_kinds.wado";
 use {
     atn_decode,
     AtnSim,
@@ -163,19 +164,17 @@ test "ATN has one start/stop per parser rule" {
 
 test "token kinds mirror gen_token_constants numbering" {
     let g = parse(NON_GREEDY_G4).unwrap();
-    let tk = build_token_kinds(&g);
-    let map = tk.0;
+    let tk = TokenKinds::build(&g);
     // Non-deferred lexer rules first, in declaration order: ID=0, WS=1.
-    assert map["TK_ID"] == 0;
-    assert map["TK_WS"] == 1;
+    assert tk.id_of("TK_ID") == 0;
+    assert tk.id_of("TK_WS") == 1;
     // Then TK_EOF, then TK_ERROR (no ERROR rule here).
-    assert map["TK_EOF"] == 2;
-    assert map["TK_ERROR"] == 3;
+    assert tk.id_of("TK_EOF") == 2;
+    assert tk.id_of("TK_ERROR") == 3;
     // Literal tokens follow, in first-seen order across rules:
     // 'x', 'if', 'y', 'else'.
-    assert map.get("TK_LIT_x") matches { Some(_) };
-    // num_tokens accounts for every assigned id.
-    assert tk.1 >= 8;
+    assert tk.id_of("TK_LIT_x") == 4;
+    assert tk.len() == 8;
 }
 
 test "non-greedy optional puts the exit edge first" {

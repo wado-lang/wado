@@ -51,8 +51,10 @@ fn self_ref_call(min_prec_arg: Option<i32>) -> ScanElement {
 test "alt-scan passes a self-ref's stamped min_prec verbatim" {
     let mut ctx = lr_ctx();
     let mut w = CodeWriter::new();
+    let names: List<String> = ["TK_X"];
+    let x = ctx.analysis.token_ids_of(&names)[0];
     let elements: List<ScanElement> = [
-        ScanElement::Token(ScanTokenElement { kind: "TK_X" }),
+        ScanElement::Token(ScanTokenElement { kind: x }),
         self_ref_call(null),
         self_ref_call(Option::Some(15)),
     ];

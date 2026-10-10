@@ -7,7 +7,8 @@
 //! rule-stack) cases that bind the dangling-`else` per caller context (the
 //! closing tests).
 
-use { build_atn, build_token_kinds, atn_blob_bytes, Atn } from "./atn.wado";
+use { build_atn, atn_blob_bytes, Atn } from "./atn.wado";
+use { TokenKinds } from "./token_kinds.wado";
 use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY, ATN_TR_RULE } from "./runtime/atn.wado";
 use { AtnState, atn_invocation_prec, atn_predict_once, atn_predict_with_stack } from "./runtime/atn_predict.wado";
 use { atn_lr_loop_decision, atn_with_lr_tables } from "./runtime/atn_lr.wado";
@@ -180,13 +181,13 @@ test "a disabled alternative covering the others does not settle the decision" {
     let mut g = parse(COVER_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
-    let tk = build_token_kinds(&g);
-    let eof = tk.0["TK_EOF"];
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
     let sim = decode(&atn);
     let d = rule_block_decision(&atn, 1);
     let stack: List<i32> = [-1, atn.call_site_returns[0]];
-    let x_only = ([tk.0["TK_X"], eof] as List<i32>).to_array();
-    let x_y = ([tk.0["TK_X"], tk.0["TK_Y"], eof] as List<i32>).to_array();
+    let x_only = ([tk.id_of("TK_X"), eof] as List<i32>).to_array();
+    let x_y = ([tk.id_of("TK_X"), tk.id_of("TK_Y"), eof] as List<i32>).to_array();
     let pick = |kinds: &Array<i32>, disabled: List<i32>| atn_predict_with_stack(
         &sim,
         d,
@@ -206,8 +207,8 @@ test "a disabled alternative covering the others does not settle the decision" {
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
     let g = parse(NG_G4).unwrap();
     let atn = build_atn(&g);
-    let tk = build_token_kinds(&g);
-    let eof = tk.0["TK_EOF"];
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     assert d >= 0, "the `??` must produce an optional decision";
@@ -224,8 +225,8 @@ test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
 test "greedy ? picks the enter alt on the same conflict" {
     let g = parse(GR_G4).unwrap();
     let atn = build_atn(&g);
-    let tk = build_token_kinds(&g);
-    let eof = tk.0["TK_EOF"];
+    let tk = TokenKinds::build(&g);
+    let eof = tk.id_of("TK_EOF");
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     assert d >= 0, "the `?` must produce an optional decision";
@@ -253,7 +254,7 @@ test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
     let mut g = parse(NG_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
@@ -272,7 +273,7 @@ test "full-context: outer ifStatement ?? consumes the else" {
     let mut g = parse(NG_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
@@ -292,7 +293,7 @@ test "a recorded verdict is keyed by the caller stack" {
     let mut g = parse(NG_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
@@ -317,7 +318,7 @@ test "a prediction that needs a hidden caller reads the whole stack and says so"
     let mut g = parse(NG_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = optional_decision(&atn);
     let csr = &atn.call_site_returns;
@@ -340,14 +341,14 @@ test "a prediction settled inside the visible frames reads no hidden caller" {
     let mut g = parse(NG_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
-    let tk = build_token_kinds(&g);
+    let tk = TokenKinds::build(&g);
     let sim = decode(&atn);
     let d = rule_block_decision(&atn, 1);
     let mut state = AtnState::new();
     state.stack = [-1, atn.call_site_returns[0]];
     let hidden = state.hide_callers();
     let x = to_kinds(&[mk(4)]);
-    assert atn_predict_once(&sim, d, &mut state, &x, 0, tk.0["TK_EOF"]) == 0;
+    assert atn_predict_once(&sim, d, &mut state, &x, 0, tk.id_of("TK_EOF")) == 0;
     assert !state.reveal_callers(hidden);
 }
 
@@ -360,7 +361,7 @@ test "a prediction settled inside the visible frames reads no hidden caller" {
 test "LR loop-entry prediction terminates (no naive left recursion)" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = loop_entry_decision(&atn, 0);
     assert d >= 0, "expr must have an LR loop-entry decision";
@@ -384,7 +385,7 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
 test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = loop_entry_decision(&atn, 0);
     // Tokens after the first atom: `'+' INT` (INT=0, '*'=4, '+'=5).
@@ -425,7 +426,7 @@ test "a decoded ATN restores each rule call's precedence" {
 test "LR loop decision: precedence gates enter/exit" {
     let g = parse(LR_G4).unwrap();
     let atn = build_atn(&g);
-    let eof = build_token_kinds(&g).0["TK_EOF"];
+    let eof = TokenKinds::build(&g).id_of("TK_EOF");
     let sim = decode(&atn);
     let d = loop_entry_decision(&atn, 0);
     let mut empty = AtnState::new();

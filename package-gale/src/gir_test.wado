@@ -164,18 +164,18 @@ test "Rule::Simple round-trip" {
 }
 
 test "Op::Token round-trip" {
-    let token = Op::Token(TokenOp { kind: "TK_ID", field: "id", dedup_base: "id" });
+    let token = Op::Token(TokenOp { kind: 3, field: "id", dedup_base: "id" });
     if let Token(t) = &token {
-        assert t.kind == "TK_ID";
+        assert t.kind == 3;
     } else {
         panic("Token");
     }
 }
 
 test "Op::Literal round-trip" {
-    let lit = Op::Literal(LiteralOp { kind: "LIT_PLUS", field: "plus", dedup_base: "plus" });
+    let lit = Op::Literal(LiteralOp { kind: 4, field: "plus", dedup_base: "plus" });
     if let Literal(l) = &lit {
-        assert l.kind == "LIT_PLUS";
+        assert l.kind == 4;
     } else {
         panic("Literal");
     }
@@ -202,7 +202,7 @@ test "Op::RuleCall preserves follow_arg and min_prec" {
 test "Op::Wildcard / Excluded round-trip" {
     let any = Op::Wildcard(WildcardOp { field: "wildcard", dedup_base: "wildcard" });
     let excl = Op::Excluded(ExcludedOp {
-        kinds: ["TK_FOO", "TK_BAR"],
+        kinds: [5, 6],
         field: "not_foo",
         dedup_base: "not_foo",
     });
@@ -220,8 +220,8 @@ test "Op::Wildcard / Excluded round-trip" {
 }
 
 test "Op::Repeat carries inner element and strategy" {
-    let inner = Op::Token(TokenOp { kind: "TK_X", field: "x", dedup_base: "x" });
-    let scan_inner = ScanElement::Token(ScanTokenElement { kind: "TK_X" });
+    let inner = Op::Token(TokenOp { kind: 1, field: "x", dedup_base: "x" });
+    let scan_inner = ScanElement::Token(ScanTokenElement { kind: 1 });
     let rep = Op::Repeat(RepeatOp {
         kind: RepeatKind::Star,
         body: inner,
@@ -232,7 +232,7 @@ test "Op::Repeat carries inner element and strategy" {
         caller_follow_second: [],
         body_scannable: true,
         body_has_field: true,
-        body_admits: Admits::Kinds(["TK_X"]),
+        body_admits: Admits::Kinds([1]),
         body_is_single_alt_group: false,
         body_second_position_first: [],
         body_shape: RepeatBodyShape::LeafOther,
@@ -252,13 +252,13 @@ test "Op::Repeat carries inner element and strategy" {
 test "RepeatStrategy variants round-trip" {
     let plain = RepeatStrategy::Plain;
     let non_greedy = RepeatStrategy::NonGreedy(NonGreedyStrategy {
-        exit_first: ["TK_END"],
+        exit_first: [7],
         exit_second: [],
     });
     let lookahead_strategy = OptionalLookaheadStrategy {
         sig: [
-            ["TK_X"],
-            ["TK_Y"],
+            [1],
+            [2],
         ],
     };
     let lookahead = RepeatStrategy::OptionalLookahead(lookahead_strategy);
@@ -267,14 +267,14 @@ test "RepeatStrategy variants round-trip" {
             OptionalLookaheadShape {
                 positions: [0, 1],
                 sig: [
-                    ["TK_X"],
-                    ["TK_Y"],
+                    [1],
+                    [2],
                 ],
             },
             OptionalLookaheadShape {
                 positions: [0],
                 sig: [
-                    ["TK_X"],
+                    [1],
                 ],
             },
         ],
@@ -288,13 +288,13 @@ test "RepeatStrategy variants round-trip" {
         panic("Plain");
     }
     if let NonGreedy(s) = &non_greedy {
-        assert s.exit_first[0] == "TK_END";
+        assert s.exit_first[0] == 7;
     } else {
         panic("NonGreedy");
     }
     if let OptionalLookahead(s) = &lookahead {
-        assert s.sig[0][0] == "TK_X";
-        assert s.sig[1][0] == "TK_Y";
+        assert s.sig[0][0] == 1;
+        assert s.sig[1][0] == 2;
     } else {
         panic("OptionalLookahead");
     }
@@ -302,7 +302,7 @@ test "RepeatStrategy variants round-trip" {
         assert s.shapes.len() == 2;
         assert s.shapes[0].positions[0] == 0;
         assert s.shapes[0].positions[1] == 1;
-        assert s.shapes[0].sig[0][0] == "TK_X";
+        assert s.shapes[0].sig[0][0] == 1;
     } else {
         panic("OptionalShapeLookahead");
     }
@@ -402,7 +402,7 @@ test "MultiAltDispatch variant set is exactly { Direct, Tournament }" {
 }
 
 test "ScanElement variants round-trip" {
-    let token = ScanElement::Token(ScanTokenElement { kind: "TK_X" });
+    let token = ScanElement::Token(ScanTokenElement { kind: 1 });
     let call = ScanElement::RuleCall(ScanRuleCallElement {
         target_snake: "expr",
         follow_arg: FollowArg::NoFollow,
@@ -410,20 +410,20 @@ test "ScanElement variants round-trip" {
     });
     let any = ScanElement::Wildcard;
     let excl = ScanElement::Excluded(ScanExcludedElement {
-        kinds: ["TK_A"],
+        kinds: [8],
     });
-    let inner_scan = ScanElement::Token(ScanTokenElement { kind: "TK_X" });
+    let inner_scan = ScanElement::Token(ScanTokenElement { kind: 1 });
     let rep = ScanElement::Repeat(ScanRepeatElement {
         kind: RepeatKind::Plus,
         body: inner_scan,
-        inner_admits: Admits::Kinds(["TK_X"]),
+        inner_admits: Admits::Kinds([1]),
         caller_follow_first: [],
         gate_caller_follow: false,
         non_greedy: false,
     });
 
     if let Token(t) = &token {
-        assert t.kind == "TK_X";
+        assert t.kind == 1;
     } else {
         panic("Token");
     }
@@ -438,7 +438,7 @@ test "ScanElement variants round-trip" {
         panic("Wildcard");
     }
     if let Excluded(e) = &excl {
-        assert e.kinds[0] == "TK_A";
+        assert e.kinds[0] == 8;
     } else {
         panic("Excluded");
     }
