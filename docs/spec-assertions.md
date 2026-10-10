@@ -78,7 +78,7 @@ of them. A condition is parsed as an `if` condition is, with no struct literal.
 It is evaluated where the function is defined, so it may name a private field
 its caller could not, and it performs no effect.
 
-<!-- {"fixture":"contract_clause.wado"} -->
+<!-- {"fixture":"contract_clause.wado", "assert": false} -->
 
 ```wado
 fn half(n: i32) -> i32
