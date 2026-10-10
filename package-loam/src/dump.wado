@@ -111,9 +111,10 @@ pub fn render_dump_json(graph: &Graph, checked: &Checked, fuse: bool) -> String 
 
 fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
     let decided = plan(graph, checked, fuse);
+    let taken = taken_in(graph, &decided);
     let mut nodes: List<NodeReport> = [];
     for let node of &graph.nodes {
-        nodes.push(node_report(node, graph, checked, &decided, fuse));
+        nodes.push(node_report(node, checked, &decided, &taken, fuse));
     }
     let mut owed: List<[String, String]> = [];
     for let c of &checked.owed {
@@ -128,7 +129,13 @@ fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
     };
 }
 
-fn node_report(node: &Node, graph: &Graph, checked: &Checked, decided: &Plan, fuse: bool) -> NodeReport {
+fn node_report(
+    node: &Node,
+    checked: &Checked,
+    decided: &Plan,
+    taken: &TreeMap<String, List<String>>,
+    fuse: bool,
+) -> NodeReport {
     let outputs: List<TensorReport> = node.outputs.into_iter().map(|o| tensor(checked, &o)).collect();
     let inputs: List<String> = node.inputs.into_iter().map(|i| if i == "" { "_" } else { i }).collect();
     let lowering = lowering_of(node, checked);
@@ -144,9 +151,9 @@ fn node_report(node: &Node, graph: &Graph, checked: &Checked, decided: &Plan, fu
                     let [code, detail] = reason_fields(&reason);
                     r.written = Option::Some(code);
                     r.detail = detail;
-                    r.takes_in = taken_in(graph, decided, &node.outputs[0]);
-                    if !r.takes_in.is_empty() {
-                        r.kept_bytes = kept_bytes(checked, &r.takes_in);
+                    if let Some(takes_in) = taken.get(node.outputs[0]) {
+                        r.kept_bytes = kept_bytes(checked, &takes_in);
+                        r.takes_in = takes_in;
                     }
                 },
             }
@@ -162,12 +169,15 @@ fn node_report(node: &Node, graph: &Graph, checked: &Checked, decided: &Plan, fu
     return r;
 }
 
-/// The tensors `plan` fuses into the kernel writing `written`, in graph order.
-fn taken_in(graph: &Graph, decided: &Plan, written: &String) -> List<String> {
-    let mut taken: List<String> = [];
+/// The tensors `decided` fuses into each kernel that writes, by the tensor it
+/// writes, in graph order.
+fn taken_in(graph: &Graph, decided: &Plan) -> TreeMap<String, List<String>> {
+    let mut taken = TreeMap::<String, List<String>>::new();
     for let node of &graph.nodes {
-        if decided.decisions.get(node.outputs[0]) matches { Some(Fused(into)) && into == *written } {
-            taken.push(node.outputs[0]);
+        if let Some(Fused(into)) = decided.decisions.get(node.outputs[0]) {
+            let mut list = taken.get(into).unwrap_or([]);
+            list.push(node.outputs[0]);
+            taken[into] = list;
         }
     }
     return taken;

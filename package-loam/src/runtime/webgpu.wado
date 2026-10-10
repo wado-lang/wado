@@ -105,6 +105,10 @@ global LANES: i32 = 64;
 /// sets it.
 global MAX_GROUPS: i32 = 65535;
 
+/// The operands a shader binds a buffer each: WebGPU's default limit of 8
+/// storage buffers per stage, less the output and the parameters.
+global MAX_OPERAND_BUFFERS: i32 = 6;
+
 /// The side of a matrix product's tile, which `MATMUL_SHADER` spells as `16u`.
 global TILE: i32 = 16;
 
@@ -297,6 +301,25 @@ impl WebGpuBackend {
         op: &Expr,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let count = element_count(&extents);
+        // `dispatch` runs nothing over no elements, but `y` divides by `x`.
+        let groups = covering(i32::max(count, 1), LANES);
+        let x = i32::min(groups, MAX_GROUPS);
+        let y = covering(groups, x);
+        let mut params: List<u32> = [count as u32, (x * LANES) as u32];
+        let mut offset = 0;
+        for let o of *operands {
+            let len = element_count(&o.extents);
+            params.push(len as u32);
+            params.push(offset as u32);
+            offset += len;
+        }
+        let packed = operands.len() > MAX_OPERAND_BUFFERS;
+        let shader = elementwise_shader(op, operands.len(), packed);
+        if packed {
+            let pack = self.packed(operands, offset);
+            let buffer = self.dispatch(&shader, [&pack], count, params, [x, y, 1]);
+            return Placed::Device(DeviceTensor { buffer, extents });
+        }
         // Every host operand is written to a buffer of its own first, so the
         // list below lends buffers that all outlive the dispatch.
         let mut staged: List<GpuBuffer> = [];
@@ -307,11 +330,6 @@ impl WebGpuBackend {
         }
         let mut buffers: List<&GpuBuffer> = [];
         let mut next = 0;
-        // `dispatch` runs nothing over no elements, but `y` divides by `x`.
-        let groups = covering(i32::max(count, 1), LANES);
-        let x = i32::min(groups, MAX_GROUPS);
-        let y = covering(groups, x);
-        let mut params: List<u32> = [count as u32, (x * LANES) as u32];
         for let o of *operands {
             match o.source {
                 Device(d) => buffers.push(&d.buffer),
@@ -320,11 +338,41 @@ impl WebGpuBackend {
                     next += 1;
                 },
             }
-            params.push(element_count(&o.extents) as u32);
         }
-        let shader = elementwise_shader(op, operands.len());
         let buffer = self.dispatch(&shader, buffers, count, params, [x, y, 1]);
         return Placed::Device(DeviceTensor { buffer, extents });
+    }
+
+    /// One buffer of `total` elements holding `operands` end to end, for a
+    /// shader reading more of them than it binds buffers.
+    fn packed<Axes>(
+        &mut self,
+        operands: &List<PlacedRead<Axes>>,
+        total: i32,
+    ) -> GpuBuffer with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let pack = self.storage(total);
+        let encoder = self.device.create_command_encoder(Option::Some(GpuCommandEncoderDescriptor { label: null }));
+        let mut offset = 0;
+        for let o of *operands {
+            let len = element_count(&o.extents);
+            // A buffer holds one element more than an empty tensor has, which
+            // the next operand's place does not leave room for.
+            if len > 0 {
+                let at = (offset * 4) as u64 as GpuSize64;
+                match o.source {
+                    Device(d) => encoder.copy_buffer_to_buffer(&d.buffer, null, &pack, Option::Some(at), Option::Some(byte_size(len))),
+                    Host(data) => {
+                        let Ok(_) = self.queue.write_buffer_with_copy(&pack, at, float_bytes(data), null, null) else {
+                            panic("loam: a host tensor did not write to the device");
+                        };
+                    },
+                }
+            }
+            offset += len;
+        }
+        let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
+        self.queue.submit([&commands]);
+        return pack;
     }
 
     /// `computed` with `then` applied, as one more elementwise kernel.
@@ -447,15 +495,24 @@ fn push_word(out: &mut List<u8>, bits: u32) {
 }
 
 /// The WGSL an elementwise kernel runs: `op` over each output position, reading
-/// `operands` operands. Each is read whether or not `op` names it, since a
-/// binding the shader never reads drops out of its layout.
-fn elementwise_shader(op: &Expr, operands: i32) -> String {
+/// `operands` operands, each from a buffer of its own or, where `packed`, all
+/// from one. Each is read whether or not `op` names it, since a binding the
+/// shader never reads drops out of its layout.
+fn elementwise_shader(op: &Expr, operands: i32, packed: bool) -> String {
     let mut bindings = "";
     let mut body = "";
-    for let k of 0..<operands {
-        bindings.push_str(`@group(0) @binding(${k}) var<storage, read> o${k}: array<f32>;\n`);
-        body.push_str(`    let x${k} = o${k}[i % p[${k + 2}]];\n`);
+    if packed {
+        bindings.push_str("@group(0) @binding(0) var<storage, read> o: array<f32>;\n");
     }
+    for let k of 0..<operands {
+        if packed {
+            body.push_str(`    let x${k} = o[p[${2 * k + 3}] + i % p[${2 * k + 2}]];\n`);
+        } else {
+            bindings.push_str(`@group(0) @binding(${k}) var<storage, read> o${k}: array<f32>;\n`);
+            body.push_str(`    let x${k} = o${k}[i % p[${2 * k + 2}]];\n`);
+        }
+    }
+    let out = if packed { 1 } else { operands };
     for let [i, step] of op.steps.into_iter().enumerate() {
         let value = match step {
             Operand(n) => `x${n}`,
@@ -465,9 +522,9 @@ fn elementwise_shader(op: &Expr, operands: i32) -> String {
         };
         body.push_str(`    let s${i} = ${value};\n`);
     }
-    return `${bindings}@group(0) @binding(${operands}) var<storage, read_write> out: array<f32>;
-// count, invocations per row, then each operand's length
-@group(0) @binding(${operands + 1}) var<storage, read> p: array<u32>;
+    return `${bindings}@group(0) @binding(${out}) var<storage, read_write> out: array<f32>;
+// count, invocations per row, then each operand's length and place in a pack
+@group(0) @binding(${out + 1}) var<storage, read> p: array<u32>;
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {

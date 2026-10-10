@@ -46,6 +46,14 @@ use { Weights, forward } from "./webgpu.onnxtext"
                         axes: ["Col"],
                     },
                     {
+                        pattern: "W?",
+                        axes: ["Col"],
+                    },
+                    {
+                        pattern: "K",
+                        axes: ["Col"],
+                    },
+                    {
                         pattern: "V",
                         axes: ["Long"],
                     },
@@ -120,6 +128,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         W: tensor([50, 29], 4),
         C: tensor([29], 5),
         BW: tensor([2, 1], 9),
+        W1: tensor([29], 10),
+        W2: tensor([29], 11),
+        W3: tensor([29], 12),
+        W4: tensor([29], 13),
+        W5: tensor([29], 14),
+        W6: tensor([29], 15),
     };
     let on_cpu = forward(&mut Cpu {}, &x, &y, &v, &n, &bx, &by, &w.prepare(&mut Cpu {}));
     let on_gpu = forward(&mut gpu, &x, &y, &v, &n, &bx, &by, &w.prepare(&mut gpu));
@@ -130,4 +144,5 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     println(`G ${on_gpu.G.extents:?} ${deviation(&on_gpu.G.data, &on_cpu.G.data)}`);
     println(`BZ ${on_gpu.BZ.extents:?} ${deviation(&on_gpu.BZ.data, &on_cpu.BZ.data)}`);
     println(`BS ${on_gpu.BS.extents:?} ${deviation(&on_gpu.BS.data, &on_cpu.BS.data)}`);
+    println(`K ${on_gpu.K.extents:?} ${deviation(&on_gpu.K.data, &on_cpu.K.data)}`);
 }

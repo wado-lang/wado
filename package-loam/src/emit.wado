@@ -750,9 +750,7 @@ fn scope_body(
                     exprs.pending[output] = term;
                     continue;
                 }
-                let ident = names.get(&output);
-                body.push(`let ${ident} = ${term.call(&checked.shapes[output])};`);
-                exprs.values[output] = ident;
+                body.push(bound_to(&output, term.call(&checked.shapes[output]), names, exprs));
             },
         }
     }
@@ -775,12 +773,17 @@ fn kernel_calls(
     };
     let mut lines: List<String> = [];
     for let [i, call] of calls.into_iter().enumerate() {
-        let output = node.outputs[i];
-        let ident = names.get(&output);
-        lines.push(`let ${ident} = ${call};`);
-        exprs.values[output] = ident;
+        lines.push(bound_to(&node.outputs[i], call, names, exprs));
     }
     return Result::Ok(lines);
+}
+
+/// The statement binding `call` to `output`'s name, which later reads of
+/// `output` then take.
+fn bound_to(output: &String, call: String, names: &Names, exprs: &mut Operands) -> String {
+    let ident = names.get(output);
+    exprs.values[*output] = ident;
+    return `let ${ident} = ${call};`;
 }
 
 /// An `If` as one `if` over its condition's element, each branch a block
