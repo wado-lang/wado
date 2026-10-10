@@ -11,7 +11,16 @@ trait Get with () {
         contract noisy(i);
 }
 
+struct Box { value: i32 }
+
+impl Get for Box {
+    fn get(&self, i: i32) -> i32 {
+        return self.value + i;
+    }
+}
+
 export fn run() {
+    let _ = Box { value: 1 }.get(1);
 }
 
 __DATA__

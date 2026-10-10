@@ -3915,7 +3915,6 @@ fn test_format_trait_contract_clauses() {
         "    fn pick(&self, i: i32) -> i32\n",
         "        contract i >= 0, \"negative\"\n",
         "        contract i < 9;\n",
-        "\n",
         "    fn first(&self) -> i32\n",
         "        contract true\n",
         "    {\n",
