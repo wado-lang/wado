@@ -950,51 +950,24 @@ impl Expr {
     /// The `n` output elements from `start`, every step run over them before
     /// the next pass, written to `out` there.
     fn pass(&self, out: &mut List<f32>, start: i32, n: i32, operands: &List<&List<f32>>) {
-        let mut runs: List<Run> = [];
+        let mut values: List<Slice<f32>> = [];
         for let step of self.steps {
-            runs.push(match step {
-                Operand(k) => run_of(operands, k, start, n),
-                Constant(c) => Run::Owned([c]),
-                Unary([op, a]) => Run::Owned(unary_over(op, &runs[a].view(operands))),
-                Binary([op, a, b]) => Run::Owned(binary_over(op, &runs[a].view(operands), &runs[b].view(operands))),
+            values.push(match step {
+                Operand(k) => run_of(operands[k], start, n),
+                Constant(c) => whole([c]),
+                Unary([op, a]) => whole(unary_over(op, &values[a])),
+                Binary([op, a, b]) => whole(binary_over(op, &values[a], &values[b])),
             });
         }
-        let last = runs[runs.len() - 1].view(operands);
+        let last = &values[values.len() - 1];
         for let j of 0..<n {
-            out[start + j] = last.at(j);
+            out[start + j] = if last.len() == 1 { last[0] } else { last[j] };
         }
     }
 }
 
-/// One step's values over a pass: computed, or a stretch of an operand read in
-/// place.
-variant Run {
-    Owned(List<f32>),
-    /// `[operand, from, len]`: `len` elements of `operands[operand]` from `from`.
-    Within([i32, i32, i32]),
-}
-
-impl Run {
-    fn view(&self, operands: &List<&List<f32>>) -> RunView {
-        return match self {
-            Owned(v) => RunView { data: v, from: 0, len: v.len() },
-            Within([k, from, len]) => RunView { data: operands[*k], from: *from, len: *len },
-        };
-    }
-}
-
-/// `len` elements of `data` from `from`, as a `Run` reads.
-struct RunView {
-    data: &List<f32>,
-    from: i32,
-    len: i32,
-}
-
-impl RunView {
-    /// Element `j`, or the one element where the run holds one.
-    fn at(&self, j: i32) -> f32 {
-        return if self.len == 1 { self.data[self.from] } else { self.data[self.from + j] };
-    }
+fn whole(values: List<f32>) -> Slice<f32> {
+    return values[0..<values.len()];
 }
 
 /// The output elements an `Expr` computes per pass. A step's values never
@@ -1004,27 +977,26 @@ impl RunView {
 /// times slower.
 global CHUNK: i32 = 1024;
 
-/// The `n` output elements from `start` read from `operands[k]`, which the
-/// output repeats: in place where they lie in one stretch, its one value where
-/// it holds one, and gathered where the pass wraps around it.
-fn run_of(operands: &List<&List<f32>>, k: i32, start: i32, n: i32) -> Run {
-    let values = operands[k];
+/// The `n` output elements from `start` read from `values`, which the output
+/// repeats: a slice where they lie in one stretch, its one value where it
+/// holds one, and gathered where the pass wraps around it.
+fn run_of(values: &List<f32>, start: i32, n: i32) -> Slice<f32> {
     let len = values.len();
     if len == 1 {
-        return Run::Within([k, 0, 1]);
+        return values[0..<1];
     }
     let at = start % len;
     if at + n <= len {
-        return Run::Within([k, at, n]);
+        return values[at..<at + n];
     }
     let mut out = List::<f32>::with_capacity(n);
     for let j of 0..<n {
         out.push(values[(start + j) % len]);
     }
-    return Run::Owned(out);
+    return whole(out);
 }
 
-fn unary_over(op: UnaryOp, v: &RunView) -> List<f32> {
+fn unary_over(op: UnaryOp, v: &Slice<f32>) -> List<f32> {
     return match op {
         Relu => each(v, |e| f32::ieee754_max(e, 0.0)),
         Sigmoid => each(v, |e| sigmoid_f32(e)),
@@ -1038,7 +1010,7 @@ fn unary_over(op: UnaryOp, v: &RunView) -> List<f32> {
     };
 }
 
-fn binary_over(op: BinaryOp, a: &RunView, b: &RunView) -> List<f32> {
+fn binary_over(op: BinaryOp, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
     return match op {
         Add => pairwise(a, b, |x, y| x + y),
         Sub => pairwise(a, b, |x, y| x - y),
@@ -1048,32 +1020,32 @@ fn binary_over(op: BinaryOp, a: &RunView, b: &RunView) -> List<f32> {
     };
 }
 
-fn each(v: &RunView, f: fn(f32) -> f32) -> List<f32> {
-    let mut out = List::<f32>::with_capacity(v.len);
-    for let i of v.from..<v.from + v.len {
-        out.push(f(v.data[i]));
+fn each(v: &Slice<f32>, f: fn(f32) -> f32) -> List<f32> {
+    let mut out = List::<f32>::with_capacity(v.len());
+    for let e of *v {
+        out.push(f(e));
     }
     return out;
 }
 
 /// `f` over `a` and `b` element by element, a one-element side read at each.
-fn pairwise(a: &RunView, b: &RunView, f: fn(f32, f32) -> f32) -> List<f32> {
-    let count = i32::max(a.len, b.len);
-    assert (a.len == count || a.len == 1) && (b.len == count || b.len == 1);
+fn pairwise(a: &Slice<f32>, b: &Slice<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
+    let count = i32::max(a.len(), b.len());
+    assert (a.len() == count || a.len() == 1) && (b.len() == count || b.len() == 1);
     let mut out = List::<f32>::with_capacity(count);
-    if a.len == b.len {
+    if a.len() == b.len() {
         for let i of 0..<count {
-            out.push(f(a.data[a.from + i], b.data[b.from + i]));
+            out.push(f(a[i], b[i]));
         }
-    } else if a.len == 1 {
-        let x = a.data[a.from];
-        for let i of b.from..<b.from + count {
-            out.push(f(x, b.data[i]));
+    } else if a.len() == 1 {
+        let x = a[0];
+        for let y of *b {
+            out.push(f(x, y));
         }
     } else {
-        let y = b.data[b.from];
-        for let i of a.from..<a.from + count {
-            out.push(f(a.data[i], y));
+        let y = b[0];
+        for let x of *a {
+            out.push(f(x, y));
         }
     }
     return out;
