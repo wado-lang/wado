@@ -110,16 +110,13 @@ pub(crate) fn unescape_byte(raw: &str) -> Result<u8, String> {
 
 /// The `char` the raw content of a char literal denotes, or why it denotes none.
 pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
-    let mut chars = raw.chars().peekable();
-    let result = match chars.next() {
-        Some('\\') => unescape_one(&mut chars)?.char()?,
-        Some(c) => c,
-        None => return Err("empty char literal".to_string()),
-    };
-    if chars.next().is_some() {
-        return Err("char literal contains more than one character".to_string());
+    let text = unescape_string(raw)?;
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => Ok(c),
+        (None, _) => Err("empty char literal".to_string()),
+        (Some(_), Some(_)) => Err("char literal contains more than one character".to_string()),
     }
-    Ok(result)
 }
 
 /// [`unescape_template_string`] past the body walk, which is the phase that
@@ -220,7 +217,7 @@ impl SurrogatePairer {
 
     fn finish(&self) -> Result<(), String> {
         match self.pending_high {
-            Some(_) => Err("invalid surrogate pair: high surrogate at end of string".to_string()),
+            Some(_) => Err(UNPAIRED_HIGH.to_string()),
             None => Ok(()),
         }
     }
@@ -242,6 +239,10 @@ fn unescape_one<I: Iterator<Item = char>>(
         Some('f') => Ok(Decoded::Char('\x0C')),
         Some('0') => Ok(Decoded::Char('\0')),
         Some('u') => unescape_unicode(chars),
+        Some('\n' | '\r') => Err(
+            "a backslash before a line break is not an escape: Wado has no line continuation"
+                .to_string(),
+        ),
         Some(c) => Err(format!("invalid escape sequence: \\{c}")),
         None => Err("unterminated escape sequence".to_string()),
     }
@@ -289,7 +290,7 @@ fn unescape_unicode<I: Iterator<Item = char>>(
     }
 }
 
-fn is_high_surrogate(code_unit: u16) -> bool {
+pub(crate) fn is_high_surrogate(code_unit: u16) -> bool {
     (0xD800..=0xDBFF).contains(&code_unit)
 }
 
@@ -343,6 +344,7 @@ mod tests {
         assert!(unescape_string("\\uDE00").is_err());
         assert!(unescape_string("\\uD83Dx").is_err());
         assert!(unescape_char("\\uD83D").is_err());
+        assert_eq!(unescape_char("\\uD83D\\uDE00").unwrap(), '\u{1F600}');
     }
 
     #[test]

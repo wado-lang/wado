@@ -11,6 +11,7 @@ use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::float_literal::FloatFormat;
+use crate::escape::is_high_surrogate;
 use crate::primitive::PrimitiveType;
 use crate::token;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
@@ -25,10 +26,19 @@ pub fn is_ident_continue(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
 
-/// Whether `s` is a Wado identifier: `[a-zA-Z_][a-zA-Z0-9_]*`.
+/// Whether `s` is a Wado identifier: `[a-zA-Z_][a-zA-Z0-9_]*`, except `_`
+/// alone, which is the wildcard.
 pub fn is_valid_ident(s: &str) -> bool {
     let mut chars = s.chars();
-    chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
+    s != WILDCARD && chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
+}
+
+/// The wildcard's spelling.
+pub const WILDCARD: &str = "_";
+
+/// `text` with every CRLF read as the LF it stands for, as Rust reads source.
+pub(crate) fn normalize_line_breaks(text: &str) -> String {
+    text.replace("\r\n", "\n")
 }
 
 /// Tokenise `source` as its own parse. See module docs for the recovery
@@ -280,6 +290,8 @@ pub enum LexErrorKind {
     /// A decimal digit the literal's radix lacks (`0b102`), with the kind of
     /// literal it sits in.
     InvalidRadixDigit { digit: char, literal: &'static str },
+    /// A CR inside a literal that no LF follows.
+    BareCarriageReturn,
 }
 
 impl std::fmt::Display for LexError {
@@ -318,6 +330,9 @@ impl std::fmt::Display for LexError {
             }
             LexErrorKind::InvalidRadixDigit { digit, literal } => {
                 write!(f, "invalid digit `{digit}` in {literal}")
+            }
+            LexErrorKind::BareCarriageReturn => {
+                write!(f, "a bare CR in a literal is not a line break; write `\\r`")
             }
         }
     }
@@ -907,7 +922,8 @@ impl<'a> Lexer<'a> {
         let text_start = self.pos;
         self.advance_while(|ch| ch != '\n');
 
-        let text = self.input[text_start..self.pos].to_string();
+        let line = &self.input[text_start..self.pos];
+        let text = line.strip_suffix('\r').unwrap_or(line).to_string();
 
         Comment {
             text,
@@ -936,7 +952,7 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedBlockComment,
                         span,
                     });
-                    let text = self.input[text_start..self.pos].to_string();
+                    let text = normalize_line_breaks(&self.input[text_start..self.pos]);
                     return Comment {
                         text,
                         kind: CommentKind::Block,
@@ -948,7 +964,7 @@ impl<'a> Lexer<'a> {
                     if self.peek_char() == Some('/') {
                         let text_end = self.pos - 1; // before the *
                         self.advance(); // consume /
-                        let text = self.input[text_start..text_end].to_string();
+                        let text = normalize_line_breaks(&self.input[text_start..text_end]);
                         return Comment {
                             text,
                             kind: CommentKind::Block,
@@ -1001,13 +1017,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        // Capture everything after __DATA__ as the data section
-        let data_content = &self.input[self.pos..];
-        self.data_section = if data_content.is_empty() {
-            Some(String::new())
-        } else {
-            Some(data_content.to_string())
-        };
+        self.data_section = Some(normalize_line_breaks(&self.input[self.pos..]));
 
         // Move position to end of input
         while self.advance().is_some() {}
@@ -1026,6 +1036,9 @@ impl<'a> Lexer<'a> {
         // The keyword set is generated from `crate::syntax::KEYWORDS`.
         // Contextual keywords ("test", "do", "resume") are intentionally absent
         // — the parser recognises them positionally, so they lex as identifiers.
+        if text == WILDCARD {
+            return TokenKind::Underscore;
+        }
         TokenKind::from_keyword(text).unwrap_or_else(|| TokenKind::Ident(text.to_string()))
     }
 
@@ -1205,21 +1218,39 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedString,
                         span: self.span_from(start, start_line, start_column),
                     });
-                    return self.input[content_start..self.pos].to_string();
+                    return normalize_line_breaks(&self.input[content_start..self.pos]);
                 }
                 Some((_, '"')) => {
                     let content_end = self.pos;
                     self.advance();
-                    return self.input[content_start..content_end].to_string();
+                    return normalize_line_breaks(&self.input[content_start..content_end]);
                 }
                 Some((_, '\\')) => {
                     self.advance();
                     self.skip_escape();
                 }
+                Some((_, '\r')) => self.advance_literal_cr(),
                 Some(_) => {
                     self.advance();
                 }
             }
+        }
+    }
+
+    /// Advance past a CR inside a literal, which reads as the line break of a
+    /// CRLF and is an error anywhere else, as in Rust.
+    fn advance_literal_cr(&mut self) {
+        let Position {
+            offset,
+            line,
+            column,
+        } = self.position();
+        self.advance();
+        if self.peek_char() != Some('\n') {
+            self.errors.push(LexError {
+                kind: LexErrorKind::BareCarriageReturn,
+                span: self.span_from(offset, line, column),
+            });
         }
     }
 
@@ -1250,7 +1281,16 @@ impl<'a> Lexer<'a> {
                         self.advance();
                     }
                 } else {
+                    let digits = self.pos;
                     self.skip_hex_digits(4);
+                    // A high surrogate and the `\u` after it are one escape:
+                    // together they denote one character.
+                    let high = u16::from_str_radix(&self.input[digits..self.pos], 16)
+                        .is_ok_and(is_high_surrogate);
+                    if high && self.input[self.pos..].starts_with("\\u") {
+                        self.advance();
+                        self.skip_escape();
+                    }
                 }
             }
             Some(_) => {
@@ -1340,6 +1380,8 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     break;
                 }
+                // Dropped: the LF of a CRLF follows, or the error is reported.
+                Some((_, '\r')) => self.advance_literal_cr(),
                 Some((_, ch)) => {
                     self.advance();
                     current_literal.push(ch);
@@ -1539,6 +1581,7 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 self.skip_escape();
             }
+            Some((_, '\r')) => self.advance_literal_cr(),
             Some(_) => {
                 self.advance();
             }
@@ -1599,11 +1642,11 @@ mod tests {
         assert!(is_valid_ident("_foo"));
         assert!(is_valid_ident("foo_bar"));
         assert!(is_valid_ident("foo123"));
-        assert!(is_valid_ident("_"));
         assert!(is_valid_ident("_123"));
 
         // Invalid identifiers
         assert!(!is_valid_ident("")); // empty
+        assert!(!is_valid_ident("_")); // the wildcard
         assert!(!is_valid_ident("123foo")); // starts with digit
         assert!(!is_valid_ident("foo::bar")); // contains ::
         assert!(!is_valid_ident("Foo^Bar::baz")); // contains ^ and ::
@@ -1721,6 +1764,14 @@ mod tests {
         assert!(comments[0].text.contains("multi-line"));
         assert!(comments[0].text.contains("comment"));
         assert_eq!(comments[0].kind, CommentKind::Block);
+    }
+
+    #[test]
+    fn comment_text_reads_crlf_as_lf() {
+        let r = lex("/// doc\r\n/* a\r\nb */\r\nfn");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        assert_eq!(r.comments[0].text, " doc");
+        assert_eq!(r.comments[1].text, " a\nb ");
     }
 
     #[test]

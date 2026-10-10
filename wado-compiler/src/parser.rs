@@ -26,7 +26,7 @@ use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
-use crate::lexer::{LexResult, defaults_to_float, lex_interpolation};
+use crate::lexer::{LexResult, WILDCARD, defaults_to_float, lex_interpolation};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -1128,10 +1128,34 @@ impl Parser {
             self.advance();
             Ok((name, span))
         } else {
-            Err(ParseError {
-                message: format!("expected identifier, found {}", self.peek_kind()),
-                span: self.peek().span,
-            })
+            Err(self.expected_name_error("identifier"))
+        }
+    }
+
+    /// [`Self::consume_ident_with_span`], or `_` for a binder left unbound.
+    fn consume_binder_with_span(&mut self) -> ParseResult<(String, Span)> {
+        if self.check(&TokenKind::Underscore) {
+            let span = self.advance().span;
+            return Ok((WILDCARD.to_string(), span));
+        }
+        self.consume_ident_with_span()
+    }
+
+    /// "expected <what>" where a name goes, or why `_` is not one.
+    fn expected_name_error(&self, what: &str) -> ParseError {
+        if self.check(&TokenKind::Underscore) {
+            return self.wildcard_name_error();
+        }
+        ParseError {
+            message: format!("expected {what}, found {}", self.peek_kind()),
+            span: self.peek().span,
+        }
+    }
+
+    fn wildcard_name_error(&self) -> ParseError {
+        ParseError {
+            message: "`_` is the wildcard, not a name".to_string(),
+            span: self.peek().span,
         }
     }
 
@@ -1151,10 +1175,7 @@ impl Parser {
             return Ok(keyword.to_string());
         }
 
-        Err(ParseError {
-            message: format!("expected field name, found {}", self.peek_kind()),
-            span: self.peek().span,
-        })
+        Err(self.expected_name_error("field name"))
     }
 
     // Parsing
@@ -1653,7 +1674,7 @@ impl Parser {
         // Check for wildcard import: `use _ from "..."`
         let mut items_span = None;
         let modifier = visibility.keyword().trim_end();
-        let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
+        let items = if self.check(&TokenKind::Underscore) {
             let span = self.advance().span;
             if visibility.reaches_beyond_file() {
                 self.errors.push(ParseError {
@@ -2213,7 +2234,7 @@ impl Parser {
             false
         };
 
-        let (name, name_span) = self.consume_ident_with_span()?;
+        let (name, name_span) = self.consume_binder_with_span()?;
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
 
@@ -2280,7 +2301,7 @@ impl Parser {
 
     /// Take one effect name of a `with` row, noting it if it is the hole.
     fn consume_effect_name(&mut self) -> ParseResult<EffectName> {
-        let (name, span) = self.consume_ident_with_span()?;
+        let (name, span) = self.consume_binder_with_span()?;
         if name == EFFECT_HOLE {
             self.note_effect_hole(span)?;
         }
@@ -3278,6 +3299,9 @@ impl Parser {
         } else if self.check(&TokenKind::LBrace) {
             // Unnamed struct pattern: { x, y }
             self.parse_struct_pattern_fields(None)
+        } else if self.check(&TokenKind::Underscore) {
+            self.advance();
+            Ok(Pattern::Wildcard)
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names.
             // Case does NOT affect parsing: disambiguation between variant cases and
@@ -3286,9 +3310,7 @@ impl Parser {
             let start_span = self.peek().span;
             self.mark_keyword_name();
             self.advance();
-            if name == "_" {
-                Ok(Pattern::Wildcard)
-            } else if self.check(&TokenKind::Lt) || self.check(&TokenKind::ColonColon) {
+            if self.check(&TokenKind::Lt) || self.check(&TokenKind::ColonColon) {
                 self.parse_pattern_qualified_case_from_first_segment(name, start_span)
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
@@ -3400,21 +3422,13 @@ impl Parser {
                         self.advance();
                         name
                     } else {
-                        return Err(ParseError {
-                            message: format!(
-                                "expected field name in struct pattern, found {}",
-                                self.peek_kind()
-                            ),
-                            span: self.peek().span,
-                        });
+                        return Err(self.expected_name_error("field name in struct pattern"));
                     };
 
                     // Check for `: pattern` (rename/nested)
                     let pattern = if self.check(&TokenKind::Colon) {
                         self.advance();
                         self.parse_pattern()?
-                    } else if field_name == "_" {
-                        Pattern::Wildcard
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
                         Pattern::Ident {
@@ -4528,6 +4542,7 @@ impl Parser {
                         .to_owned(),
                 span: start_span,
             }),
+            TokenKind::Underscore => Err(self.wildcard_name_error()),
             _ => Err(ParseError {
                 message: format!("expected expression, found {}", self.peek_kind()),
                 span: start_span,
@@ -5186,7 +5201,7 @@ impl Parser {
         } else {
             false
         };
-        let (name, name_span) = self.consume_ident_with_span()?;
+        let (name, name_span) = self.consume_binder_with_span()?;
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.parse_type()?)
@@ -5292,12 +5307,9 @@ impl Parser {
             return Ok(Type::Tuple(types));
         }
 
-        // Inference placeholder `_`. Bare `_` (not `_::x` / `_<T>`, which are
-        // never valid type heads) is a wildcard: inferred inside a turbofish,
-        // resolved to the unknown type elsewhere.
-        if matches!(self.peek_kind(), TokenKind::Ident(n) if n == "_")
-            && !matches!(self.peek_nth(1).kind, TokenKind::ColonColon | TokenKind::Lt)
-        {
+        // Inference placeholder `_`: inferred inside a turbofish, resolved to
+        // the unknown type elsewhere.
+        if self.check(&TokenKind::Underscore) {
             self.advance();
             return Ok(Type::Infer(start_span));
         }
@@ -5449,7 +5461,11 @@ impl Parser {
                 ));
             }
 
-            let (name, name_span) = self.consume_ident_with_span()?;
+            let (name, name_span) = if is_effect {
+                self.consume_binder_with_span()?
+            } else {
+                self.consume_ident_with_span()?
+            };
 
             if is_effect && name == EFFECT_HOLE {
                 return Err(self.error_at_span(

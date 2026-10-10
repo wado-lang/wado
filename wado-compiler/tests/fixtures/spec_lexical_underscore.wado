@@ -1,0 +1,13 @@
+// `_` alone is the wildcard, not an identifier: it leaves a value unbound.
+
+fn first(x: i32, _: i32) -> i32 {
+    return x;
+}
+
+test {
+    let _ = first(1, 2);
+    let [a, _] = [3, 4];
+    let pick = |_: i32| a;
+    assert pick(5) == 3;
+    assert match a { _ => true };
+}

@@ -12,6 +12,17 @@ tab, LF, form feed (U+000C) and CR. Any other character outside a string,
 character literal or comment is an error, the no-break space (U+00A0) and the
 ideographic space (U+3000) among them.
 
+## Line Breaks
+
+A line ends at LF or at CRLF, as in Rust, so a file means the same with either
+line ending. Inside a literal, a comment or the data section, a CRLF reads as
+one LF: a string spanning two lines holds `"\n"` between them, and `#data`
+holds no CR. `#line` counts a CRLF as one line break.
+
+A CR that no LF follows is not a line break. Between tokens it is whitespace.
+Inside a string, template, byte string or character literal it is an error,
+since most editors do not show it; write `\r` instead.
+
 ## Comments
 
 <!-- {"fixture":"spec_lexical_comments.wado"} -->
@@ -108,7 +119,7 @@ SUBMODULE_DATA_MARKER
 
 ## Identifiers
 
-An identifier is ASCII: `[a-zA-Z_][a-zA-Z0-9_]*`.
+An identifier is ASCII: `[a-zA-Z_][a-zA-Z0-9_]*`, except `_` alone.
 
 <!-- {"fixture":"spec_lexical_identifiers.wado"} -->
 
@@ -138,6 +149,40 @@ let café = 1;    // Error: `é` is not an ASCII letter, digit or `_`
 ```
 
 Identifiers are case-sensitive.
+
+## The Wildcard `_`
+
+`_` alone is the wildcard, not an identifier. It leaves a value unbound: in a
+pattern, as a parameter, and as a closure parameter. In a type it asks for
+inference, `use _ from "…"` is a wildcard import, and `with _` is an effect
+parameter. Since it binds nothing, there is nothing to read back:
+
+<!-- {"fixture":"spec_lexical_underscore.wado"} -->
+
+```wado
+fn first(x: i32, _: i32) -> i32 {
+    return x;
+}
+
+test {
+    let _ = first(1, 2);
+    let [a, _] = [3, 4];
+    let pick = |_: i32| a;
+    assert pick(5) == 3;
+    assert match a { _ => true };
+}
+```
+
+It cannot name anything: an item, a field, a variable to read, or a type:
+
+<!-- {"fixture":"spec_lexical_underscore_not_a_name.wado"} -->
+
+```wado
+fn _() {}    // Error: `_` is not a name
+```
+
+A name that starts with `_` and goes on, such as `_private`, is an ordinary
+identifier.
 
 ## Keywords
 
