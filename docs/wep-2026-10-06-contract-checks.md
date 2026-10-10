@@ -97,6 +97,72 @@ is a Unicode scalar, a byte below `0x80`. A function that forwards to another
 `Sequence::get_unchecked` on an `Array` checks nothing: the array access
 already traps out of range.
 
+### The caller decides whether a check can be removed
+
+The sections above describe what is built. This one and the next are adopted
+but not built, since they wait on a syntax. They lower to
+`builtin::contract_checks()`.
+
+A checked function and its `_unchecked` twin state the same contract. They
+differ in who guarantees it. The checked function guarantees a trap on a call
+outside the contract, and its caller may rely on that trap, so no build may
+remove it. The `_unchecked` twin leaves the guarantee to its caller, so its
+check only diagnoses the caller's bug, and a build may remove it.
+
+Whether a check can be removed is therefore a property of the call, not of the
+function. A contract is declared once, on the function. A call without a
+marker always checks it. A call with a marker states that the caller
+guarantees the contract, and that call is checked only where
+`-f contract-checks` is on. An `_unchecked` twin that is its checked function
+minus the check becomes a marked call to the checked function.
+
+The author of a function never chooses whether its check can be removed, so
+the misuse of a removable `assert` cannot arise: removing a check takes a
+marker that is visible at the call. A call from another component carries no
+marker, so a contract on an `export fn` is always checked at the boundary.
+
+The check runs at the call. It reports the caller's position and blames the
+caller. Its predicate is evaluated in the context where the function is
+defined, as a default argument's expression is. A predicate may therefore
+name a private field, though the caller could not write it.
+
+A marked call outside the contract, in a build that does not check, is never
+undefined behavior. It has the class the function states. An unconstrained
+violation is still a bug that must not reach production, but the four
+guarantees of [Behavior Classes](./spec-overview.md#behavior-classes) still
+hold.
+
+We know of no language with this design. The nearest is Rust, whose caller
+writes `unsafe { … }` and whose standard library checks `unsafe` preconditions
+according to the caller's `debug_assertions`. Rust's precondition is prose,
+though, and breaking it is undefined behavior.
+
+### A contract states inputs only
+
+A contract states preconditions and nothing else. A postcondition is the
+callee's own obligation, so a caller's marker cannot vouch for it, and the
+mechanism above could never remove its check. An `assert` in the body already
+states it, checked in every build.
+
+The code shows little demand for more. In `core:*`, Gale and Loam, the
+`assert`s placed just before a `return` are either preconditions on the
+arguments or invariants of a value the body computed, such as the normalized
+mantissa in `int128.wado` or the loop entry `plus_body_entry` finds in Gale.
+Neither states what the result means to the caller.
+
+What a function guarantees about its result is better stated as a type: a type
+whose invariant holds. Constructing such a type has the invariant as its
+precondition, so its contract is again an input contract, and the same
+mechanism checks it. `String` is the example: its UTF-8 invariant is the
+precondition of `from_utf8_unchecked`. A broken type invariant is also what
+makes a violation unconstrained, since other code relies on the invariant.
+
+Today such a type is a `struct` with a private field and a checked
+constructor. A newtype that carries an invariant would state the same at no
+cost, but it redesigns newtypes: `as` would convert only toward the base type,
+and a conversion toward the newtype would go through `TryFrom`. That belongs
+in a proposal of its own.
+
 ## Roadmap
 
 1. `-f contract-checks`, `builtin::contract_checks()`, and the checks in
@@ -107,10 +173,20 @@ already traps out of range.
 
 ## Known gaps
 
-- A failed check reports the position inside the `_unchecked` function, not
-  the call that broke the contract.
+- The checks run inside the `_unchecked` functions, so a failed check reports
+  the position inside the function, not the call that broke the contract.
 - A clause that costs more than the function it guards is not checked: that
   the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
   that a write keeps them UTF-8 in `set_byte_unchecked`.
-- Contracts have no syntax. The clauses live in each function's body, and its
-  doc comment restates them.
+- Neither the contract nor the call's marker has a syntax. The clauses live in
+  each function's body, and its doc comment restates them. A clause on the
+  signature has to sit beside `with`, which already follows the return type.
+- A call whose callee is not known statically, through a trait bound or a
+  function value, has no call site to place the check at. How a trait
+  method's contract binds an impl is not settled either.
+- An input contract cannot say that a method taking `&mut self` keeps the
+  type's invariant, as `set_byte_unchecked` must keep a `String` UTF-8.
+- Only the standard library declares a contract. The reason
+  `builtin::contract_checks()` is `internal` does not hold for a contract whose
+  removal takes a marker at the call, but opening contracts to every program
+  is not decided.
