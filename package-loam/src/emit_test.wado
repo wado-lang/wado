@@ -101,21 +101,22 @@ g (float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     );
 }
 
-test "each input is uploaded after the checks that read the host's, and no weight is" {
+test "each input is uploaded after the checks that read the host's and the pass begins, and no weight is" {
     let body = generate(MLP, mlp_layout()).unwrap();
 
     let upload = body.find("let X = backend.upload(X);").unwrap();
-    assert body.find("refuse(input_mismatch(X,").unwrap() < upload;
+    let begun = body.find("backend.begin();").unwrap();
+    assert body.find("refuse(input_mismatch(X,").unwrap() < begun < upload;
     let forward = body.find("pub fn forward").unwrap();
     assert !body.substr_bytes(forward, body.len()).contains("upload(&weights"), body;
 }
 
-test "the weights become the backend's where they are prepared" {
+test "the weights become the backend's for every pass where they are prepared" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains("    pub W1: Bk::Tensor<f32, [In, Hidden]>,\n");
     assert out.contains(
-        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.upload(&self.W1),\n",
+        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep(&self.W1),\n",
     );
 }
 
@@ -265,7 +266,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     );
     // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
     assert out.contains(
-        "B: backend.upload(&Tensor::<f32, [In]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
+        "B: backend.keep(&Tensor::<f32, [In]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
     );
 }
 
@@ -278,7 +279,7 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     );
     assert out.contains("let header = read_checkpoint(checkpoint)?;");
     assert out.contains(
-        "W1: backend.upload(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
+        "W1: backend.keep(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
 }
 

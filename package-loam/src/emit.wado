@@ -389,7 +389,7 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     w.begin(`return ${PREPARED}`);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
-        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`)},`);
+        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, true)},`);
     }
     w.end_with(";");
     w.end();
@@ -408,8 +408,15 @@ fn prepared_type(checked: &Checked, tensor: &String) -> String {
 
 /// The call making the host tensor `host`, a reference, the backend's: a
 /// half-precision one is converted once here, so `forward` converts none.
-fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String) -> String {
-    let verb = if converted(checked, held, tensor) { "prepare" } else { "upload" };
+/// Where `kept`, the backend holds it for every pass rather than this one.
+fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String, kept: bool) -> String {
+    let verb = if converted(checked, held, tensor) {
+        "prepare";
+    } else if kept {
+        "keep";
+    } else {
+        "upload";
+    };
     return `backend.${verb}(${host})`;
 }
 
@@ -457,7 +464,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names:
             None => checkpoint_payload(&e),
         };
         let host = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
-        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host)},`);
+        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, true)},`);
     }
     w.end_with(if loads { ");" } else { ";" });
     w.end();
@@ -647,7 +654,7 @@ fn emit_forward(
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
-        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident)};`);
+        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, false)};`);
         exprs.values[vi.name] = ident;
     }
     for let vi of &graph.initializers {
@@ -674,7 +681,9 @@ fn emit_forward(
         );
     }
     owed.extend(&owed_checks(checked, &mut symbols)?);
-    for let lines of [symbols.bindings(), owed, uploads, body] as List<List<String>> {
+    // What the pass before computed is dead once this one begins.
+    let begun = ["backend.begin();"] as List<String>;
+    for let lines of [symbols.bindings(), owed, begun, uploads, body] as List<List<String>> {
         for let line of lines {
             w.line(&line);
         }
@@ -1617,6 +1626,8 @@ fn step_source(e: &Expr, i: i32) -> String {
         Constant(c) => `constant(${float_literal(c)})`,
         Unary([op, a]) => `${step_source(e, a)}.unary(UnaryOp::${op})`,
         Binary([op, a, b]) => `${step_source(e, a)}.binary(BinaryOp::${op}, &${step_source(e, b)})`,
+        Select([c, a, b]) => `${step_source(e, c)}.select(&${step_source(e, a)}, &${step_source(e, b)})`,
+        Fold([op, a]) => `${step_source(e, a)}.row(RowOp::${op})`,
     };
 }
 

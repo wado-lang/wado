@@ -88,6 +88,28 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     }
 }
 
+/// A whole model's pass stays on the device: each sequence length reads back
+/// once, for the logits `forward` returns.
+#[test]
+fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
+    let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../package-loam/conformance/webgpu_gpt2.wado");
+    let output = run(&[program.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 2, "stdout: {stdout}");
+    for line in lines {
+        let words: Vec<&str> = line.split(' ').collect();
+        assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
+        let deviation: f32 = words[words.len() - 4]
+            .parse()
+            .unwrap_or_else(|_| panic!("no deviation in {line:?}"));
+        assert!(deviation <= LOAM_TOLERANCE, "{line}");
+    }
+}
+
 #[test]
 fn an_unknown_option_is_refused_before_anything_is_compiled() {
     let output = run(&["--frobnicate", "x.wado"]);

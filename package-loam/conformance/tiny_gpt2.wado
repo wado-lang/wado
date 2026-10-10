@@ -1,0 +1,133 @@
+//! The tiny GPT-2 decoder, compiled through Loam at a fixed batch with its
+//! sequence length left to the run, from its graph split off its weights. Its
+//! tests and the WebGPU conformance share this one import.
+
+pub use { Batch, Prepared, Seq, forward } from "../tests/models/tiny-gpt2/model.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: {
+            module: "lib:loam",
+            inputs: [
+                { path: "../tests/models/tiny-gpt2/model.safetensors", type: "safetensors" },
+            ],
+            options: {
+                dims: { batch_size: 1 },
+                outputs: ["logits"],
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1588",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    // The position ids, a range over the sequence, and the
+                    // attention mask widened.
+                    {
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    // Each Conv1D flattens [Batch, Seq] around its Gemm and restores it.
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    // The causal mask, sliced from the bias buffer to the
+                    // sequence the run gives.
+                    {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
