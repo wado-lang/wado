@@ -44,18 +44,21 @@ impl std::error::Error for DiscoveryError {}
 ///
 /// Returns an error if `wado.toml` is found but cannot be read or parsed.
 pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryError> {
+    let Some(root) = package_root(start_dir) else {
+        return Ok(None);
+    };
+    let manifest = manifest_in(&root)?.expect("`package_root` found a `wado.toml` there");
+    Ok(Some(ProjectManifest { manifest, root }))
+}
+
+/// The nearest directory at or above `start_dir` holding a `wado.toml`.
+pub(crate) fn package_root(start_dir: &Path) -> Option<PathBuf> {
     let mut dir = start_dir.to_path_buf();
     loop {
-        if let Some(manifest) = manifest_in(&dir)? {
-            return Ok(Some(ProjectManifest {
-                manifest,
-                root: openable_dir(&dir).to_path_buf(),
-            }));
+        if dir.join(MANIFEST_FILENAME).is_file() {
+            return Some(openable_dir(&dir).to_path_buf());
         }
-        match parent_dir(&dir) {
-            Some(parent) => dir = parent,
-            None => return Ok(None),
-        }
+        dir = parent_dir(&dir)?;
     }
 }
 

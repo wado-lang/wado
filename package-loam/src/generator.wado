@@ -12,95 +12,10 @@ use {
     DiagnosticLevel,
     package_of,
     read_all,
-    read_text,
 } from "core:kiln";
-use { TreeMap } from "core:collections";
-use { Deserialize } from "core:serde";
-use { emit } from "./emit.wado";
-use { emit_tokenizer } from "./emit_tokenizer.wado";
-use { read as read_tokenizer } from "./tokenizer_json.wado";
-use { Graph } from "./graph.wado";
-use { infer } from "./infer.wado";
-use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
-use { check_checkpoint } from "./safetensors.wado";
-use onnx_proto from "./onnx_proto.wado";
-use onnx_text from "./onnx_text.wado";
-use { LayoutRule, Schema } from "./schema.wado";
-use { bind_dims, keep_outputs } from "./specialize.wado";
+use { Spelling, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
 
-/// The `generator.options` a `use ... with` site writes. See WEP 2026-09-20
-/// § "The Axis Schema Is an Invocation Option".
-pub struct Options {
-    /// Patterns naming the axes of the graph's inputs and initializers.
-    pub layout: List<LayoutRule>,
-    /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
-    pub dims: TreeMap<String, i32>,
-    /// The graph outputs `forward` returns. Empty keeps every output.
-    pub outputs: List<String>,
-}
-
-impl Deserialize for Options;
-
-/// Whatever the graph is wrong about, said against the file it was read from.
-fn at<E: Error>(path: &String, e: &E) -> KilnError {
-    return KilnError::InvalidSchema(`loam: '${path}': ${e}`);
-}
-
-/// How a graph is spelled, as the use site's `type` names it: `"onnx"`, the
-/// protobuf an exporter writes, or `"onnxtext"`, the text a fixture is written
-/// in and a diff can show.
-enum Spelling {
-    Proto,
-    Text,
-}
-
-fn spelling_of(use_type: &Option<String>) -> Option<Spelling> {
-    return match *use_type {
-        Some("onnx") => Option::Some(Spelling::Proto),
-        Some("onnxtext") => Option::Some(Spelling::Text),
-        _ => null,
-    };
-}
-
-fn read_graph(path: &String, spelling: Spelling, content: Stream<u8>) -> Result<Graph, KilnError> {
-    if spelling matches { Proto } {
-        return onnx_proto::read(read_all(content)).map_err(|e| at(path, &e));
-    }
-    let source = match read_text(content) {
-        Ok(text) => text,
-        Err(e) => {
-            return Result::Err(KilnError::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
-        },
-    };
-    return onnx_text::read(&source).map_err(|e| at(path, &e));
-}
-
-/// A checkpoint's leading bytes, through the end of its header, of the file, or
-/// of a length no module can address. The payloads are the loader's to read.
-fn read_header(content: Stream<u8>) -> ByteList {
-    let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
-    loop {
-        let chunk = content.read(HEADER_CHUNK);
-        prefix.extend(&(chunk.items as ByteList));
-        if chunk.result != CopyResult::Completed || holds_header(&prefix) {
-            break;
-        }
-    }
-    content.drop();
-    return prefix;
-}
-
-/// Whether `prefix` reaches the header's end, or declares one no read can reach.
-fn holds_header(prefix: &ByteList) -> bool {
-    if prefix.len() < 8 {
-        return false;
-    }
-    return match declared_header_end(prefix) {
-        Ok(end) => prefix.len() >= end,
-        Err(_) => true,
-    };
-}
-
+pub use { Options } from "./compile.wado";
 
 /// The `type` a use site gave a file, as a refusal names it. Loam reads no file
 /// without one, since nothing makes one kind the default.
@@ -120,8 +35,14 @@ fn refused(req: Request<Options>, error: KilnError) -> Result<Response, KilnErro
     return Result::Err(error);
 }
 
-/// Enough for GPT-2's header in one read, which is 14 KiB.
-global HEADER_CHUNK: i32 = 65536;
+/// The one file a generation writes.
+fn entry(path: String, content: String) -> Response {
+    return Response {
+        files: [
+            OutputFile { path, content, is_entry: true },
+        ],
+    };
+}
 
 // A stream is outside drop elaboration, so every one is consumed or dropped
 // before the first return that could leave it open.
@@ -131,38 +52,21 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
         return refused(req, KilnError::Unsupported(reason));
     };
     if req.primary.type matches { Some("hf-tokenizer") } {
-        return generate_tokenizer(req, &runtime);
+        if !req.inputs.is_empty() {
+            let reason = `loam: '${req.primary.path}': a tokenizer takes no inputs`;
+            return refused(req, KilnError::InvalidSchema(reason));
+        }
+        let path = req.primary.path;
+        let source = generate_tokenizer(&path, read_all(req.primary.content), &runtime).map_err(
+            |e| KilnError::InvalidSchema(e),
+        )?;
+        return Result::Ok(entry("tokenizer.wado", source));
     }
     let Some(spelling) = spelling_of(&req.primary.type) else {
         let reason = `loam: '${req.primary.path}' is given ${given(&req.primary.type)}; a graph is \`type: "onnx"\` or \`type: "onnxtext"\`, and a tokenizer \`type: "hf-tokenizer"\``;
         return refused(req, KilnError::Unsupported(reason));
     };
     return generate_graph(req, spelling, &runtime);
-}
-
-/// A `tokenizer.json` as a `Tokenizer`. It names every file it needs, so it
-/// takes no inputs.
-fn generate_tokenizer(req: Request<Options>, runtime: &String) -> Result<Response, KilnError> {
-    if !req.inputs.is_empty() {
-        let reason = `loam: '${req.primary.path}': a tokenizer takes no inputs`;
-        return refused(req, KilnError::InvalidSchema(reason));
-    }
-    let path = req.primary.path;
-    let text = match read_text(req.primary.content) {
-        Ok(text) => text,
-        Err(e) => {
-            return Result::Err(KilnError::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
-        },
-    };
-    let bpe = read_tokenizer(&text).map_err(|e| at(&path, &e))?;
-    let files: List<OutputFile> = [
-        OutputFile {
-            path: "tokenizer.wado",
-            content: emit_tokenizer(&bpe, &path, runtime),
-            is_entry: true,
-        },
-    ];
-    return Result::Ok(Response { files });
 }
 
 /// An ONNX graph spelled as `spelling`, checked against the checkpoints in its
@@ -185,31 +89,14 @@ fn generate_graph(
         headers.push([input.path, read_header(input.content)]);
     }
     let path = req.primary.path;
-    let mut graph = read_graph(&path, spelling, req.primary.content)?;
-    bind_dims(&mut graph, &req.options.dims).map_err(|e| at(&path, &e))?;
-    keep_outputs(&mut graph, &req.options.outputs).map_err(|e| at(&path, &e))?;
-    // An extent the algebra cannot discharge stops the build here. The one
-    // tier below this is `forward`, which checks only an inequality over the
-    // input symbols.
-    let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
-    // Emitting first refuses an element type no kernel holds, which the check
-    // below takes as given.
-    let generated = emit(&graph, &checked, runtime).map_err(|e| at(&path, &e))?;
-    for let [input_path, header] of headers {
-        let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
-        check_checkpoint(&graph, &checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;
-    }
+    let model = check(&path, spelling, read_all(req.primary.content), &req.options).map_err(
+        |e| KilnError::InvalidSchema(e),
+    )?;
+    let source = generate_model(&model, &path, headers, runtime).map_err(|e| KilnError::InvalidSchema(e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,
-        message: `loam: ${graph.name}: ${graph.nodes.len()} operators checked`,
+        message: `loam: ${model.graph.name}: ${model.graph.nodes.len()} operators checked`,
     });
-    let files: List<OutputFile> = [
-        OutputFile {
-            path: "model.wado",
-            content: generated,
-            is_entry: true,
-        },
-    ];
-    return Result::Ok(Response { files });
+    return Result::Ok(entry("model.wado", source));
 }

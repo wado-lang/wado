@@ -26,6 +26,7 @@ use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
+use crate::manifest::package_root;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, ProfileMode, WasiState};
@@ -58,7 +59,7 @@ pub struct TestOptions {
     /// allocator for the `test` world; `--allocator` overrides.
     pub knobs: CompileKnobs,
     pub runtime: RuntimeKnobs,
-    pub preopened_dirs: Vec<(String, String)>,
+    pub grants: TestGrants,
     /// `--no-run`: compile every file (which still refreshes
     /// `<primary>.kiln.json` as a side-effect) but skip wasmtime execution.
     pub no_run: bool,
@@ -73,6 +74,38 @@ pub struct TestOptions {
     pub profile: ProfileMode,
     /// `--coverage`: instrument the package and report what the tests ran.
     pub coverage: Option<CoverageOptions>,
+}
+
+/// What a test's store preopens.
+pub enum TestGrants {
+    /// What `--dir` and `--no-dir` spell, for every file.
+    Given(Vec<(String, String)>),
+    /// The root of the package a file belongs to, as `.`, so a path in a test
+    /// means one place wherever `wado test` was started. A file in no package
+    /// gets the directory `wado test` was started in. Each directory's root is
+    /// looked up once, since most files share their directory with others.
+    PackageRoot(Mutex<IndexMap<PathBuf, String>>),
+}
+
+impl TestGrants {
+    fn for_file(&self, path: &str) -> Vec<(String, String)> {
+        match self {
+            TestGrants::Given(dirs) => dirs.clone(),
+            TestGrants::PackageRoot(roots) => {
+                let dir = Path::new(path).parent().unwrap_or(Path::new(""));
+                let root = lock(roots)
+                    .entry(dir.to_path_buf())
+                    .or_insert_with(|| {
+                        package_root(dir)
+                            .unwrap_or_else(|| PathBuf::from("."))
+                            .display()
+                            .to_string()
+                    })
+                    .clone();
+                vec![(root, ".".to_string())]
+            }
+        }
+    }
 }
 
 /// `--format` selects how a run's progress is rendered.
@@ -524,7 +557,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         jobs,
         knobs,
         runtime: runtime_knobs,
-        preopened_dirs: dirs.finish(),
+        grants: dirs.given().map_or_else(
+            || TestGrants::PackageRoot(Mutex::default()),
+            TestGrants::Given,
+        ),
         no_run,
         test_name_filters,
         format,
@@ -655,6 +691,8 @@ fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
 
 struct TestJob {
     module: Arc<LoadedModule>,
+    /// What the test's store preopens, resolved once for its module.
+    grants: Arc<Vec<(String, String)>>,
     eval_host: Arc<EvalHost>,
     test_name: String,
     display_name: String,
@@ -1341,7 +1379,7 @@ async fn run_execute_stage(
     loaded_rx: mpsc::Receiver<Arc<LoadedModule>>,
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
-    preopened_dirs: Arc<Vec<(String, String)>>,
+    grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
     observer: Arc<StageObserver>,
     result_tx: mpsc::Sender<TestResult>,
@@ -1352,11 +1390,13 @@ async fn run_execute_stage(
     // next module can start loading without waiting for the first
     // module's tests to finish executing.
     let jobs_stream = receiver_stream(loaded_rx).flat_map(|module| {
+        let module_grants = Arc::new(grants.for_file(&module.path));
         let jobs: Vec<TestJob> = module
             .tests
             .iter()
             .map(|t| TestJob {
                 module: module.clone(),
+                grants: Arc::clone(&module_grants),
                 eval_host: Arc::clone(&eval_host),
                 test_name: t.export_name.clone(),
                 display_name: t.display_name(),
@@ -1375,7 +1415,6 @@ async fn run_execute_stage(
     let mut stream = jobs_stream
         .map(|job| {
             observer.record_input();
-            let preopened_dirs = preopened_dirs.clone();
             let cpu_budget = Arc::clone(&cpu_budget);
             // Spawn each test as an independent task. Dropping the
             // outer stream does NOT cancel a running guest wasm
@@ -1404,7 +1443,7 @@ async fn run_execute_stage(
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                run_single_test_safe(job, cpu_permit, &preopened_dirs).await
+                run_single_test_safe(job, cpu_permit).await
             })
         })
         .buffer_unordered(parallelism.max(1));
@@ -1550,7 +1589,7 @@ async fn run_pipeline(
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
-    preopened_dirs: Arc<Vec<(String, String)>>,
+    grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
     no_run: bool,
     profile: ProfileMode,
@@ -1642,7 +1681,7 @@ async fn run_pipeline(
             loaded_rx,
             execute_jobs,
             budget.cpu.clone(),
-            preopened_dirs,
+            grants,
             eval_host,
             execute_observer.clone(),
             result_tx,
@@ -1723,13 +1762,9 @@ fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) 
 /// `run_single_test` wrapped in `catch_unwind` so a panic anywhere
 /// inside (host-side bug, wasmtime debug assertion, allocator OOM)
 /// becomes a per-test `Fail` rather than aborting the whole pipeline.
-async fn run_single_test_safe(
-    job: TestJob,
-    cpu_permit: OwnedSemaphorePermit,
-    preopened_dirs: &[(String, String)],
-) -> TestResult {
+async fn run_single_test_safe(job: TestJob, cpu_permit: OwnedSemaphorePermit) -> TestResult {
     let start = Instant::now();
-    let panic_or_result = AssertUnwindSafe(run_single_test(&job, cpu_permit, preopened_dirs))
+    let panic_or_result = AssertUnwindSafe(run_single_test(&job, cpu_permit))
         .catch_unwind()
         .await;
     panic_or_result.unwrap_or_else(|payload| {
@@ -1739,17 +1774,13 @@ async fn run_single_test_safe(
 }
 
 /// Run a single test in its own Store
-async fn run_single_test(
-    job: &TestJob,
-    cpu_permit: OwnedSemaphorePermit,
-    preopened_dirs: &[(String, String)],
-) -> TestResult {
+async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> TestResult {
     let start = Instant::now();
     let module = job.module.as_ref();
 
     let (mut store, stdout_pipe, stderr_pipe) = match runtime::create_test_store(
         &module.engine,
-        preopened_dirs,
+        &job.grants,
         &module.path,
         EvalSession::new(Arc::clone(&job.eval_host), &module.path, cpu_permit),
     ) {
@@ -2228,7 +2259,7 @@ async fn run_one_package(
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
-    preopened_dirs: Arc<Vec<(String, String)>>,
+    grants: Arc<TestGrants>,
     eval_host: Arc<EvalHost>,
     show_banner: bool,
     no_run: bool,
@@ -2248,7 +2279,7 @@ async fn run_one_package(
         compile_jobs,
         load_jobs,
         execute_jobs,
-        preopened_dirs,
+        grants,
         eval_host,
         no_run,
         profile,
@@ -2421,7 +2452,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let profile = opts.profile;
     let runtime_knobs = opts.runtime;
     let package_runs = opts.package_runs;
-    let preopened_dirs = Arc::new(opts.preopened_dirs);
+    let grants = Arc::new(opts.grants);
     let coverage_run = opts
         .coverage
         .map(CoverageRun::new)
@@ -2472,7 +2503,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             compile_jobs,
             load_jobs,
             execute_jobs,
-            preopened_dirs.clone(),
+            Arc::clone(&grants),
             Arc::clone(&eval_host),
             multi_pkg,
             no_run,

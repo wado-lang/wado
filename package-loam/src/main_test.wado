@@ -1,0 +1,263 @@
+//! The `loam` command line, against the Kiln generator it shares its work with.
+//!
+//! Each test writes its files under `target/`, which `wado test` grants, and
+//! runs `loam` on them. The Kiln generator runs under `Inputs`, which serves the
+//! input files' streams, and `Host`, which takes its diagnostics.
+
+use { loam } from "./main.wado";
+use { generate as kiln_generate, Options } from "./generator.wado";
+use { LayoutRule } from "./schema.wado";
+use { StoredTensor, write_safetensors } from "./safetensors.wado";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Request, Response, Error as KilnError, InputFile, KilnHost, Diagnostic as KilnDiagnostic } from "core:kiln";
+
+global GRAPH: String = "<ir_version: 8, opset_import: [ \"\" : 13 ]>
+g (float[N, 2] X) => (float[N, 3] Y, float[N, 3] Z)
+<float[2, 3] W, float[3] B = {0.0, 0.0, 0.0}>
+{
+    H = MatMul(X, W)
+    Y = Add(H, B)
+    Z = Identity(Y)
+    S = Shape(X)
+}
+";
+
+global OPTIONS: String = "{\"layout\": [
+    {\"pattern\": \"X\", \"axes\": [\"Batch\", \"In\"]},
+    {\"pattern\": \"W\", \"axes\": [\"In\", \"Out\"]},
+    {\"pattern\": \"B\", \"axes\": [\"Out\"]}
+]}";
+
+/// `target/loam-main-test/<case>`, emptied, holding the graph and its options.
+fn scratch(case: String) -> String with Preopens {
+    let dir = `target/loam-main-test/${case}`;
+    fs::remove_dir_all(&dir).unwrap();
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(`${dir}/g.onnxtext`, &GRAPH).unwrap();
+    fs::write(`${dir}/options.json`, &OPTIONS).unwrap();
+    return dir;
+}
+
+/// `loam gen` or `loam dump` on the case's graph under its options, then `rest`.
+fn on_graph(command: String, dir: &String, rest: List<String>) -> Result<String, String> with Preopens {
+    let mut argv: List<String> = [command, "--type", "onnxtext", "--options", `${*dir}/options.json`];
+    argv.extend(&rest);
+    argv.push(`${*dir}/g.onnxtext`);
+    return loam(argv);
+}
+
+/// A checkpoint holding `W` as `shape`.
+fn checkpoint(shape: List<i64>) -> ByteList {
+    let mut count = 1;
+    for let e of shape {
+        count *= e as i32;
+    }
+    return write_safetensors(&[
+        StoredTensor { name: "W", dtype: "F32", shape, data: ByteList::filled(count * 4, 0) },
+    ]);
+}
+
+/// Serves each input file's content from its stream handle, an index into
+/// `contents`.
+struct Inputs {
+    contents: List<ByteList>,
+}
+
+impl Stream<u8> for Inputs {
+    fn read(&mut self, this: &Stream<u8>, max: i32) -> StreamChunk<u8> {
+        let _ = max;
+        resume StreamChunk { items: self.contents[*this as i32] as List<u8>, result: CopyResult::Dropped };
+    }
+
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        resume ();
+    }
+
+    ..trap
+}
+
+struct Host {
+}
+
+impl KilnHost for Host {
+    fn emit_diagnostic(&mut self, diagnostic: KilnDiagnostic) {
+        let _ = diagnostic;
+        resume ();
+    }
+}
+
+/// The entry module the Kiln generator builds from `primary`, `[path, content,
+/// type]`, under `options`.
+fn kiln(primary: [String, ByteList, String], options: Options) -> String {
+    let [path, content, type] = primary;
+    let mut inputs = Inputs {
+        contents: [content],
+    };
+    let request = Request {
+        primary: InputFile { path, content: 0 as Stream<u8>, type: Option::Some(type) },
+        inputs: [],
+        module: "lib:loam",
+        options,
+    };
+    let result: Result<Response, KilnError> = with &mut inputs, &mut Host {} do {
+        kiln_generate(request);
+    };
+    let response = result.unwrap();
+    assert response.files.len() == 1;
+    return response.files[0].content;
+}
+
+fn layout() -> List<LayoutRule> {
+    return [
+        LayoutRule {
+            pattern: "X",
+            axes: ["Batch", "In"],
+        },
+        LayoutRule {
+            pattern: "W",
+            axes: ["In", "Out"],
+        },
+        LayoutRule {
+            pattern: "B",
+            axes: ["Out"],
+        },
+    ];
+}
+
+test "gen prints the module the Kiln generator builds for the same graph and options" {
+    let dir = scratch("gen");
+    let printed = on_graph("gen", &dir, []).unwrap();
+    let path = `${dir}/g.onnxtext`;
+    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { layout: layout() });
+}
+
+test "gen prints the tokenizer the Kiln generator builds" {
+    let path = "tests/models/tiny-gpt2/tokenizer.json";
+    let printed = loam(["gen", "--type", "hf-tokenizer", path]).unwrap();
+    assert printed == kiln([path, fs::read(path).unwrap(), "hf-tokenizer"], Options {});
+}
+
+test "gen --output writes the module and prints nothing" {
+    let dir = scratch("gen-output");
+    let printed = on_graph("gen", &dir, []).unwrap();
+    assert on_graph("gen", &dir, ["--output", `${dir}/model.wado`]).unwrap() == "";
+    assert fs::read_to_string(`${dir}/model.wado`).unwrap() == printed;
+}
+
+test "gen --runtime names the package the module imports" {
+    let dir = scratch("gen-runtime");
+    let printed = on_graph("gen", &dir, ["--runtime", "lib:elsewhere"]).unwrap();
+    assert printed.contains("} from \"lib:elsewhere\";");
+}
+
+test "gen --checkpoint checks the graph against the checkpoint's header" {
+    let dir = scratch("gen-checkpoint");
+    fs::write(`${dir}/good.safetensors`, &checkpoint([2, 3])).unwrap();
+    fs::write(`${dir}/bad.safetensors`, &checkpoint([2, 4])).unwrap();
+    assert on_graph("gen", &dir, ["--checkpoint", `${dir}/good.safetensors`]) matches { Ok(_) };
+    let refused = on_graph("gen", &dir, ["--checkpoint", `${dir}/bad.safetensors`]).unwrap_err();
+    assert refused == `loam: '${dir}/bad.safetensors': W: axis Out is 4 in the checkpoint and 3 in the graph`;
+}
+
+test "dump reports each node's lowering and each tensor's shape" {
+    let dir = scratch("dump");
+    let report = on_graph("dump", &dir, []).unwrap();
+    assert report == "graph g (opset 13)
+inputs
+    X: f32 [Batch=N, In=2]
+weights
+    W: f32 [In=2, Out=3]
+    B: f32 [Out=3]
+nodes
+    kernel H = MatMul(X, W)
+        H: f32 [Batch=N, Out=3]
+    kernel Y = Add(H, B)
+        Y: f32 [Batch=N, Out=3]
+    alias  Z = Identity(Y)
+        Z: f32 [Batch=N, Out=3]
+    folded S = Shape(X)
+        S: i64 [2] = [N, 2]
+outputs
+    Y: f32 [Batch=N, Out=3]
+    Z: f32 [Batch=N, Out=3]
+
+2 kernels, 1 folded, 1 aliases, 0 branches
+", report;
+}
+
+test "dump reports each branch of an If as a scope of its own, with what it owes" {
+    let dir = scratch("dump-branch");
+    let options = "{\"layout\": [
+        {\"pattern\": \"C\", \"axes\": [\"One\"]},
+        {\"pattern\": \"X\", \"axes\": [\"Seq\", \"Embed\"]},
+        {\"pattern\": \"V\", \"axes\": [\"Seq\", \"Embed\"]},
+        {\"pattern\": \"P\", \"axes\": [\"Past\", \"Embed\"]},
+        {\"pattern\": \"K\", \"axes\": [\"Embed\"]},
+        {\"pattern\": \"W\", \"axes\": [\"Embed\"]},
+        {\"pattern\": \"T\", \"axes\": [\"Total\", \"Embed\"], \"graph\": \"with_past\"},
+        {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
+    ]}";
+    fs::write(`${dir}/options.json`, &options).unwrap();
+    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
+    );
+    assert report.contains("
+    branch Y, Z = If(C)
+        Y: f32 [Total=\"Y[0]\", Embed=2]
+        Z: f32 [Seq=N, Embed=2]
+        then_branch
+            nodes
+                kernel T = Concat(P, X)
+                    T: f32 [Total=M + N, Embed=2]
+"), report;
+    assert report.contains("
+            owed
+                Add: axis Seq is N on the left and L on the right, and the two must be one length (where -L + N >= 0)
+"), report;
+    assert report.contains("
+        else_branch
+            nodes
+                kernel E = Relu(X)
+"), report;
+    assert report.ends_with("\n6 kernels, 1 folded, 0 aliases, 1 branches\n"), report;
+}
+
+test "a graph's type is required, and names the types there are" {
+    let refused = loam(["dump", "g.onnxtext"]).unwrap_err();
+    assert refused.starts_with("loam dump: --type is onnx or onnxtext for a graph\nUsage: "), refused;
+}
+
+test "one file is named" {
+    let refused = loam(["gen", "--type", "onnx", "a.onnx", "b.onnx"]).unwrap_err();
+    assert refused.starts_with("loam gen: name one file, and 2 are given\n"), refused;
+}
+
+test "a tokenizer takes no options" {
+    let refused = loam(["gen", "--type", "hf-tokenizer", "--options", "o.json", "tokenizer.json"]).unwrap_err();
+    assert refused == "loam gen: a tokenizer takes no --checkpoint and no --options";
+}
+
+test "an argument error names the subcommand and shows the usage" {
+    let refused = loam(["dump", "--frobnicate"]).unwrap_err();
+    assert refused.starts_with("loam dump: "), refused;
+    assert refused.contains("\nUsage: loam gen "), refused;
+}
+
+test "an options file that is not the options' JSON names the file" {
+    let dir = scratch("bad-options");
+    fs::write(`${dir}/options.json`, &"{\"layout\": 3}").unwrap();
+    let refused = on_graph("dump", &dir, []).unwrap_err();
+    assert refused.starts_with(`loam: '${dir}/options.json': `), refused;
+}
+
+test "a missing checkpoint is reported with its path and why" {
+    let dir = scratch("absent-checkpoint");
+    let refused = on_graph("gen", &dir, ["--checkpoint", `${dir}/absent.safetensors`]).unwrap_err();
+    assert refused == `loam: ${dir}/absent.safetensors: no such file or directory`;
+}
+
+test "a missing file is reported with its path" {
+    let refused = loam(["dump", "--type", "onnx", "target/loam-main-test/absent.onnx"]).unwrap_err();
+    assert refused.contains("target/loam-main-test/absent.onnx"), refused;
+}

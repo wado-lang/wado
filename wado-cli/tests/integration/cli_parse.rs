@@ -12,6 +12,7 @@ use wado_cli::check;
 use wado_cli::compile::{self, OutputFormat};
 use wado_cli::knobs::OptLevel;
 use wado_cli::lsp;
+use wado_cli::test::TestGrants;
 
 /// Assert that a `Result<T, CliExit>` is an error with exit code 1
 /// and the message contains the given substring.
@@ -585,30 +586,27 @@ fn test_with_files() {
 }
 
 #[test]
-fn test_defaults_to_preopening_cwd() {
+fn test_defaults_to_preopening_each_package_root() {
     let parser = Parser::from_args(&["a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(
-        opts.preopened_dirs,
-        vec![(".".to_string(), ".".to_string())]
-    );
+    assert!(matches!(opts.grants, TestGrants::PackageRoot(_)));
 }
 
 #[test]
 fn test_with_dir_replaces_default() {
     let parser = Parser::from_args(&["--dir", "/tmp::/guest", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(
-        opts.preopened_dirs,
-        vec![("/tmp".to_string(), "/guest".to_string())]
-    );
+    let TestGrants::Given(dirs) = opts.grants else {
+        panic!("--dir is given");
+    };
+    assert_eq!(dirs, vec![("/tmp".to_string(), "/guest".to_string())]);
 }
 
 #[test]
 fn test_no_dir() {
     let parser = Parser::from_args(&["--no-dir", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert!(opts.preopened_dirs.is_empty());
+    assert!(matches!(opts.grants, TestGrants::Given(dirs) if dirs.is_empty()));
 }
 
 #[test]
