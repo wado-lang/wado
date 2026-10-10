@@ -374,3 +374,33 @@ fn options_past_the_flat_parameter_limit_reach_the_generator() {
         .success()
         .stdout("small=1;x;y,z;false\n");
 }
+
+/// The same wide options, declared in a submodule the entry module re-exports
+/// from and holding a record another submodule declares: lifting them from
+/// memory finds each declaration where it is written.
+#[test]
+fn wide_options_from_a_submodule_reach_the_generator() {
+    let tmp = tempfile::tempdir().unwrap();
+    let rule = "pub struct Rule {\n    pub pattern: String,\n    pub axes: List<String>,\n}\n";
+    let options = "use { TreeMap } from \"core:collections\";\nuse { Rule } from \"./rule.wado\";\n\npub struct Options {\n    pub sizes: TreeMap<String, i32>,\n    pub rules: List<Rule> = [],\n    pub a: List<String> = [],\n    pub b: List<String> = [],\n    pub on: bool = true,\n}\n";
+    let (declaration, rest) = MAP_GENERATOR
+        .split_once("pub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
+        .unwrap();
+    let generator = format!("{declaration}pub use {{ Options }} from \"./options.wado\";\n{rest}").replace(
+        "spelled.join(\",\")",
+        "spelled.join(\",\")};${req.options.rules[0].pattern}=${req.options.rules[0].axes.join(\",\")};${req.options.on",
+    );
+    let app = write_project(
+        tmp.path(),
+        &generator,
+        "{ sizes: { small: 1 }, rules: [{ pattern: \"x\", axes: [\"A\", \"B\"] }], on: false }",
+    );
+    fs::write(tmp.path().join("gen/src/options.wado"), options).unwrap();
+    fs::write(tmp.path().join("gen/src/rule.wado"), rule).unwrap();
+
+    wado_in(&app)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("small=1;x=A,B;false\n");
+}
