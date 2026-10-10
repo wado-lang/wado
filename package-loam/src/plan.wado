@@ -568,6 +568,7 @@ fn per_row(a: &Shape, rows: &Shape) -> bool {
 /// Whether `a`, of `rows`' rank, holds one element where a row of `rows`
 /// holds more: its last axis is of extent 1 and `rows`' is not.
 pub fn reduces_rows(a: &Shape, rows: &Shape) -> bool {
+    assert a.rank() == rows.rank() && rows.rank() > 0;
     let last = rows.rank() - 1;
     return a.axes[last].extent matches { Static(1) } && !rows.axes[last].extent matches { Static(1) };
 }
