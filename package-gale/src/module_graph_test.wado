@@ -8,15 +8,6 @@ use { Preopens } from "core:fs";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
-/// `src/` as the working directory reaches it: the repository root under
-/// `mise run test-wado`, the package under `wado test` run inside it.
-fn src_root() -> String with Preopens {
-    if fs::exists("package-gale/src/module_graph_test.wado") {
-        return "package-gale/src";
-    }
-    assert fs::exists("src/module_graph_test.wado"), "run from the repository root or `package-gale`";
-    return "src";
-}
 
 /// The relative `.wado` paths a module's `use` items name, as written.
 fn imported_paths(source: &String) -> List<String> {
@@ -91,7 +82,7 @@ fn find_cycle(
 }
 
 test "the generator's modules import one another without a cycle" {
-    let graph = import_graph(src_root());
+    let graph = import_graph("src");
     assert graph.len() > 50, `the walk found only ${graph.len()} modules`;
     for let [module, targets] of graph.entries() {
         for let target of targets {
