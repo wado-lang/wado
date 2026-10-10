@@ -21,10 +21,10 @@ use { push_unique, sets_overlap } from "./gen_util.wado";
 use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
-/// The parser's ATN state (`AtnState`): its field, and the name a scan
+/// The parser's ATN predictor (`AtnPredictor`): its field, and the name a scan
 /// function's `&mut` parameter borrows it under.
-pub global ATN_STATE_HANDLE: String = "atn";
-pub global ATN_STATE_TYPE: String = "AtnState";
+pub global ATN_HANDLE: String = "atn";
+pub global ATN_PREDICTOR_TYPE: String = "AtnPredictor";
 
 /// The parser's scan memo (`ScanMemo`): its field, and the name a scan
 /// function's `&mut` parameter borrows it under.
@@ -547,12 +547,12 @@ impl EmitContext {
 
     /// The ATN state as a place.
     pub fn atn_state_path(&self) -> String {
-        return self.state_path(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
+        return self.state_path(ATN_HANDLE, ATN_HANDLE);
     }
 
     /// The ATN state as an argument.
     pub fn atn_state_arg(&self) -> String {
-        return self.state_arg(ATN_STATE_HANDLE, ATN_STATE_HANDLE);
+        return self.state_arg(ATN_HANDLE, ATN_HANDLE);
     }
 
     /// Parser state a scan borrows, as a place: the scan's parameter `handle`,

@@ -52,7 +52,7 @@ use { bits_set, bits_test } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
-use { ATN_STATE_HANDLE, ATN_STATE_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
+use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_name } from "./emit_context.wado";
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
@@ -457,7 +457,7 @@ fn add_scan_params(f: &mut FnSpec, ctx: &EmitContext, walker: bool = false) {
         f.add_param(&SCAN_GATE_HANDLE, `&mut ${SCAN_GATE_TYPE}`);
     }
     if ctx.plan.needs_atn {
-        f.add_param(&ATN_STATE_HANDLE, `&mut ${ATN_STATE_TYPE}`);
+        f.add_param(&ATN_HANDLE, `&mut ${ATN_PREDICTOR_TYPE}`);
     }
     if ctx.plan.scan_memo {
         f.add_param(&SCAN_MEMO_HANDLE, `&mut ${ctx.scan_memo_type()}`);

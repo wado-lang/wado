@@ -10,7 +10,7 @@ use {
     ATN_TR_RULE,
     ATN_TR_PRECEDENCE,
 } from "./atn.wado";
-use { AtnState, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
+use { AtnPredictor, atn_invocation_prec, atn_predict_once } from "./atn_predict.wado";
 
 internal fn atn_with_lr_tables(sim: AtnSim) -> AtnSim {
     let mut out = sim;
@@ -231,7 +231,7 @@ fn atn_state_cont_open_ended(sim: &AtnSim, state: i32) -> bool {
 
 internal fn atn_lr_loop_decision(
     sim: &AtnSim,
-    atn: &mut AtnState,
+    atn: &mut AtnPredictor,
     decision: i32,
     tokens: &Array<i32>,
     pos: i32,
@@ -271,7 +271,7 @@ internal fn atn_lr_loop_decision(
     return alt;
 }
 
-fn atn_record_callers_exit(sim: &AtnSim, atn: &mut AtnState, decision: i32, pos: i32, min_prec: i32, t: i32, eof: i32) {
+fn atn_record_callers_exit(sim: &AtnSim, atn: &mut AtnPredictor, decision: i32, pos: i32, min_prec: i32, t: i32, eof: i32) {
     let dstate = sim.decision_state[decision];
     let exit_alt = sim.state_tr_count[dstate] - 1;
     let mut mp = min_prec;

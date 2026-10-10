@@ -6,7 +6,7 @@
 
 use { Grammar } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
-use { EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
+use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
 use { join_kinds } from "./gen_util.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
@@ -514,7 +514,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
     // call pushes -1 = unknown caller, handled as SLL).
     if needs_atn {
-        s.add_field("atn", "AtnState");
+        s.add_field(&ATN_HANDLE, &ATN_PREDICTOR_TYPE);
         s.add_field("atn_ret_pending", "i32");
     }
     // the parser drives a `TreeBuilder` (`b`) — the matched
@@ -567,7 +567,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         init.push_str(", trace_depth: 0");
     }
     if needs_atn {
-        init.push_str(", atn: AtnState::new(), atn_ret_pending: -1");
+        init.push_str(`, ${ATN_HANDLE}: ${ATN_PREDICTOR_TYPE}::new(), atn_ret_pending: -1`);
     }
     init.push_str(", b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: []");
     if emit_actions {
