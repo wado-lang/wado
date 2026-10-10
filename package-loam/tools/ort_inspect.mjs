@@ -61,11 +61,19 @@ async function runSession() {
     enableProfiling: true,
     profileFilePrefix: join(values.out, 'profile'),
   });
+  // Every numeric type onnxruntime-node holds, by the array it reads.
   const elements = {
+    float64: Float64Array,
     float32: Float32Array,
     float16: Uint16Array,
     int64: BigInt64Array,
+    uint64: BigUint64Array,
     int32: Int32Array,
+    uint32: Uint32Array,
+    int16: Int16Array,
+    uint16: Uint16Array,
+    int8: Int8Array,
+    uint8: Uint8Array,
     bool: Uint8Array,
   };
   const feeds = {};
@@ -90,10 +98,18 @@ async function runSession() {
   session.endProfiling();
 }
 
+// The profile onnxruntime writes under the `profileFilePrefix` it is given.
+function isProfile(name) {
+  return name.startsWith('profile_') && name.endsWith('.json');
+}
+
 function report() {
-  // Emptied first, so the one profile left after the run is this run's.
-  rmSync(values.out, { recursive: true, force: true });
+  // What an earlier run wrote is removed, and nothing else in `--out`, so the
+  // one profile left after the run is this run's.
   mkdirSync(values.out, { recursive: true });
+  for (const f of readdirSync(values.out)) {
+    if (isProfile(f) || f === 'optimized.onnx') rmSync(join(values.out, f));
+  }
   const child = spawnSync(
     process.execPath,
     [fileURLToPath(import.meta.url), '--session', ...process.argv.slice(2)],
@@ -104,7 +120,7 @@ function report() {
     console.error(child.stderr.split('\n').slice(-20).join('\n'));
     process.exit(child.status ?? 1);
   }
-  const [profileName] = readdirSync(values.out).filter((f) => f.startsWith('profile') && f.endsWith('.json'));
+  const [profileName] = readdirSync(values.out).filter(isProfile);
   const profile = join(values.out, profileName);
   const log = child.stderr.split('\n');
 
