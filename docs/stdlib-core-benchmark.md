@@ -105,7 +105,7 @@ Unit label for the throughput figure when `work_per_iter` is set
 (e.g. `"conversions"`, `"px"`, `"numbers"`). Ignored when throughput
 falls back to a byte rate or to `ops/s`.
 
-#### `pub fn run<T>(&mut self, label: String, mut f: fn mut() -> T) -> T with (Stdout, MonotonicClock)`
+#### `pub fn run<T, effect E>(&mut self, label: String, mut f: fn mut() -> T with E) -> T with (Stdout, MonotonicClock, E)`
 
 Run a single phase and report its throughput.
 
@@ -116,7 +116,8 @@ default auto-derives to 1 when `iterations >= 2`, otherwise 0) then
 exactly `iterations` timed runs. Prints the header on first call.
 Returns the final timed iteration's value.
 
-`label` may be empty for an unlabeled single-phase benchmark.
+`label` may be empty for an unlabeled single-phase benchmark. `f` may
+perform any effect, which the call then requires.
 
 #### `pub fn println(&mut self, msg: String) with Stdout`
 
