@@ -197,7 +197,10 @@ let x = unchecked xs[i];    // an index read with no range check
 index read whose range check the caller vouches for.
 
 `contract` is a contextual keyword: no identifier can follow a signature, so
-code that names something `contract` keeps working.
+code that names something `contract` keeps working. `unchecked` is reserved.
+As a contextual keyword it would be ambiguous: `unchecked(x)` and
+`unchecked[i]` already mean a call and an index on something named
+`unchecked`.
 
 The two words are asymmetric by design. `contract` names what the function
 declares, an obligation. `unchecked` names what the caller gives up, the
@@ -227,9 +230,6 @@ was kept despite that because it continues the `_unchecked` names it replaces.
 - The syntax is not built. The clauses live in each function's body, and its
   doc comment restates them.
 - Whether `unchecked` marks the place of an index assignment, `xs[i] = v`.
-- Whether `unchecked` is reserved or contextual. As a contextual keyword,
-  `unchecked(x)` and `unchecked[i]` already mean a call and an index on
-  something named `unchecked`.
 - A call whose callee is not known statically, through a trait bound or a
   function value, has no call site to place the check at. How a trait
   method's contract binds an impl is not settled either, and `unchecked xs[i]`
