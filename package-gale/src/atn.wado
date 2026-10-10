@@ -27,6 +27,9 @@ use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
 use { lower, element_is_self_ref, lr_operand_prec } from "./lower.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { TokenKinds, resolve_kind_ids } from "./token_kinds.wado";
+use { LowerContext } from "./lower_context.wado";
+use { GrammarAnalysis } from "./grammar_analysis.wado";
+use { GenSettings } from "./gen_settings.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -241,8 +244,10 @@ pub fn build_atn(grammar: &Grammar) -> Atn {
     let mut stamped = *grammar;
     let kinds = TokenKinds::build(&stamped);
     resolve_kind_ids(&mut stamped, &kinds);
-    let lowered = lower(&stamped, &collect_literal_tokens(&stamped.parser_rules));
-    return build_atn_with(&stamped, &lowered, kinds.len());
+    let num_tokens = kinds.len();
+    let mut ctx = LowerContext::new(GrammarAnalysis::new(&stamped.parser_rules, kinds), GenSettings {});
+    let lowered = lower(&stamped, &collect_literal_tokens(&stamped.parser_rules), &mut ctx);
+    return build_atn_with(&stamped, &lowered, num_tokens);
 }
 
 /// Build the whole-grammar parser ATN. Non-left-recursive rules are built
