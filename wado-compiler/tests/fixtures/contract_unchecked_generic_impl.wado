@@ -1,0 +1,56 @@
+// A method of a generic type takes `unchecked` as any other does, whether its
+// impl is inherent or a trait's, and whether the call names the type or goes
+// through a bound.
+trait Pick with () {
+    fn size(&self) -> i32;
+
+    fn pick(&self, i: i32) -> i32
+        contract 0 <= i < self.size(), "index out of range";
+}
+
+struct Wrap<T> { v: T, n: i32 }
+
+impl<T> Wrap<T> {
+    fn get(&self, i: i32) -> i32
+        contract i >= 0, "negative"
+    {
+        return i + self.n;
+    }
+}
+
+impl<T> Pick for Wrap<T> {
+    fn size(&self) -> i32 {
+        return self.n;
+    }
+
+    fn pick(&self, i: i32) -> i32 {
+        return i;
+    }
+}
+
+fn pick_through<P: Pick>(p: &P, i: i32) -> i32 {
+    return unchecked p.pick(i);
+}
+
+test "unchecked calls on a generic type" {
+    let w = Wrap::<String> { v: "x", n: 3 };
+    assert unchecked w.get(2) == 5;
+    assert unchecked w.pick(2) == 2;
+    assert pick_through(&w, 1) == 1;
+    assert w.pick(0) == 0;
+}
+
+#[expect_trap]
+test "the test world checks an unchecked call" {
+    let w = Wrap::<i32> { v: 1, n: 3 };
+    let _ = unchecked w.pick(builtin::black_box(3));
+}
+
+#[expect_trap]
+test "the inherent method checks an unchecked call" {
+    let w = Wrap::<i32> { v: 1, n: 3 };
+    let _ = unchecked w.get(builtin::black_box(-1));
+}
+
+__DATA__
+{"test": {}}
