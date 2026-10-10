@@ -1971,8 +1971,8 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
-        let (mut func, contracts) =
-            self.parse_function_and_contracts(id, visibility, is_export, is_async, attrs, is_method)?;
+        let (mut func, contracts) = self
+            .parse_function_and_contracts(id, visibility, is_export, is_async, attrs, is_method)?;
         if let Some(contract) = contracts.first() {
             let Some(body) = &mut func.body else {
                 return Err(self.error_at_span(

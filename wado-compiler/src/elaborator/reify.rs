@@ -1736,10 +1736,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// The trait `def` declares.
     fn trait_decl(&self, def: DefId) -> Option<&'a ast::TraitDecl> {
         let target = self.tysys.resolutions.defs().ast_id(def);
-        self.items_declaring(def).iter().find_map(|item| match item {
-            Item::Trait(decl) if decl.id == target => Some(decl),
-            _ => None,
-        })
+        self.items_declaring(def)
+            .iter()
+            .find_map(|item| match item {
+                Item::Trait(decl) if decl.id == target => Some(decl),
+                _ => None,
+            })
     }
 
     /// Report an error at `span` in the module reify stands in.
@@ -10351,8 +10353,8 @@ fn bind_trait_contracts(
         .collect();
     for holder_at in holders {
         let holder = &mut methods[holder_at];
-        // Linking stamps every function's module, but the twin's template key
-        // that the call below records reads it now.
+        // Linking stamps every function's module, but the calls below record
+        // it now, in the holder's template key and its twin's.
         holder.module_source = module.clone();
         let clauses: Vec<Span> = holder
             .body
@@ -10365,8 +10367,8 @@ fn bind_trait_contracts(
         let held = held_method(&holder).expect("filtered above").to_string();
         if let Some(method) = methods.iter_mut().find(|m| method_name(m) == Some(&held)) {
             let mut method_twin = split_unchecked_twin(method, &[]);
-            open_with_call(method, &holder, module, type_table);
-            open_with_call(&mut method_twin, &holder_twin, module, type_table);
+            open_with_call(method, &holder, type_table);
+            open_with_call(&mut method_twin, &holder_twin, type_table);
             methods.push(method_twin);
         }
         methods.push(holder_twin);
@@ -10375,7 +10377,9 @@ fn bind_trait_contracts(
 }
 
 fn method_name(func: &TirFunction) -> Option<&str> {
-    func.method_info.as_ref().map(|info| info.method_name.as_str())
+    func.method_info
+        .as_ref()
+        .map(|info| info.method_name.as_str())
 }
 
 /// The method whose `contract` clauses `func` holds, if it is a holder.
@@ -10383,15 +10387,10 @@ fn held_method(func: &TirFunction) -> Option<&str> {
     method_name(func).and_then(contract_holder_of)
 }
 
-/// Open `func`'s body with a call to `callee`, emitted into `module`, passing
-/// it `func`'s parameters and type parameters. The parser gave `callee` the
-/// type parameters `func` declares, effect parameters dropped.
-fn open_with_call(
-    func: &mut TirFunction,
-    callee: &TirFunction,
-    module: &ModuleSource,
-    type_table: &mut TypeTable,
-) {
+/// Open `func`'s body with a call to `callee`, passing it `func`'s parameters
+/// and type parameters. The parser gave `callee` the type parameters `func`
+/// declares, effect parameters dropped.
+fn open_with_call(func: &mut TirFunction, callee: &TirFunction, type_table: &mut TypeTable) {
     let span = callee.span;
     let type_args: Vec<TypeId> = func
         .type_params
@@ -10413,7 +10412,10 @@ fn open_with_call(
         .collect();
     let call = TirExpr::new(
         TirExprKind::Call {
-            func: Box::new(FunctionRef::from_resolved(callee, module.clone())),
+            func: Box::new(FunctionRef::from_resolved(
+                callee,
+                callee.module_source.clone(),
+            )),
             type_args,
             args: CallArgs::free(args),
         },
