@@ -137,8 +137,9 @@ fn first(x: i32, _: i32) -> i32 {
 ";
     let tokens = tokens_for(src);
 
-    assert!(tokens.iter().all(|t| !(t.line == 0 && t.start == 17)), "{tokens:?}");
-    assert!(tokens.iter().all(|t| !(t.line == 1 && t.start == 12)), "{tokens:?}");
+    let has_token_at = |line, start| tokens.iter().any(|t| t.line == line && t.start == start);
+    assert!(!has_token_at(0, 17), "{tokens:?}");
+    assert!(!has_token_at(1, 12), "{tokens:?}");
     assert_eq!(at(&tokens, 0, 9).token_type, token_type::PARAMETER);
 }
 

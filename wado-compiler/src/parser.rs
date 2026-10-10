@@ -26,9 +26,7 @@ use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
-use crate::lexer::{
-    LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation,
-};
+use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -4077,22 +4075,22 @@ impl Parser {
                             (field_name, None)
                         }
                     } else {
-                        if !matches!(self.peek_kind(), TokenKind::Ident(_))
-                            && self.peek_kind().as_keyword_str().is_none()
-                            && let Expr::Literal(LiteralExpr {
+                        // Allow keywords as field names (unambiguous after dot)
+                        let field = self.consume_field_name().map_err(|error| match &expr {
+                            Expr::Literal(LiteralExpr {
                                 value: Literal::Number(digits),
                                 ..
-                            }) = &expr
-                            && is_decimal_integer(digits)
-                            && receiver_span.end == self.previous().span.start
-                        {
-                            return Err(Self::bare_decimal_point_error(
-                                format!("{digits}.0"),
-                                self.previous().span,
-                            ));
-                        }
-                        // Allow keywords as field names (unambiguous after dot)
-                        (self.consume_field_name()?, None)
+                            }) if is_decimal_integer(digits)
+                                && receiver_span.end == self.previous().span.start =>
+                            {
+                                Self::bare_decimal_point_error(
+                                    format!("{digits}.0"),
+                                    self.previous().span,
+                                )
+                            }
+                            _ => error,
+                        })?;
+                        (field, None)
                     };
 
                     // Check for method call with turbofish: obj.method::<T>(x)
@@ -4569,12 +4567,14 @@ impl Parser {
             }),
             TokenKind::Underscore => Err(self.wildcard_name_error()),
             TokenKind::Dot
-                if let next = self.peek_nth(1)
-                    && let TokenKind::NumberLit(digits) = &next.kind
+                if let TokenKind::NumberLit(digits) = &self.peek_nth(1).kind
                     && is_decimal_integer(digits)
-                    && next.span.start == start_span.end =>
+                    && self.peek_nth(1).span.start == start_span.end =>
             {
-                Err(Self::bare_decimal_point_error(format!("0.{digits}"), start_span))
+                Err(Self::bare_decimal_point_error(
+                    format!("0.{digits}"),
+                    start_span,
+                ))
             }
             _ => Err(ParseError {
                 message: format!("expected expression, found {}", self.peek_kind()),

@@ -46,11 +46,6 @@ pub(crate) fn normalize_line_breaks(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// Whether `text` opens with a line break: an LF or a CRLF, never a bare CR.
-fn starts_with_line_break(text: &str) -> bool {
-    text.starts_with('\n') || text.starts_with("\r\n")
-}
-
 /// Tokenise `source` as its own parse. See module docs for the recovery
 /// contract.
 pub fn lex(source: &str) -> LexResult {
@@ -968,7 +963,8 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedBlockComment,
                         span,
                     });
-                    let text = normalize_line_breaks(&self.input[text_start..self.pos]).into_owned();
+                    let text =
+                        normalize_line_breaks(&self.input[text_start..self.pos]).into_owned();
                     return Comment {
                         text,
                         kind: CommentKind::Block,
@@ -980,7 +976,8 @@ impl<'a> Lexer<'a> {
                     if self.peek_char() == Some('/') {
                         let text_end = self.pos - 1; // before the *
                         self.advance(); // consume /
-                        let text = normalize_line_breaks(&self.input[text_start..text_end]).into_owned();
+                        let text =
+                            normalize_line_breaks(&self.input[text_start..text_end]).into_owned();
                         return Comment {
                             text,
                             kind: CommentKind::Block,
@@ -1008,7 +1005,11 @@ impl<'a> Lexer<'a> {
         }
 
         let after_marker = &remaining[DATA_MARKER.len()..];
-        if !after_marker.is_empty() && !starts_with_line_break(after_marker) {
+        // A bare CR is no line break, so it does not end the marker's line.
+        if !(after_marker.is_empty()
+            || after_marker.starts_with('\n')
+            || after_marker.starts_with("\r\n"))
+        {
             return false;
         }
 
@@ -1229,12 +1230,14 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedString,
                         span: self.span_from(start, start_line, start_column),
                     });
-                    return normalize_line_breaks(&self.input[content_start..self.pos]).into_owned();
+                    return normalize_line_breaks(&self.input[content_start..self.pos])
+                        .into_owned();
                 }
                 Some((_, '"')) => {
                     let content_end = self.pos;
                     self.advance();
-                    return normalize_line_breaks(&self.input[content_start..content_end]).into_owned();
+                    return normalize_line_breaks(&self.input[content_start..content_end])
+                        .into_owned();
                 }
                 Some((_, '\\')) => {
                     self.advance();
@@ -1592,7 +1595,8 @@ impl<'a> Lexer<'a> {
         loop {
             match self.peek() {
                 Some((_, '\'')) => {
-                    let raw = normalize_line_breaks(&self.input[inner_start..self.pos]).into_owned();
+                    let raw =
+                        normalize_line_breaks(&self.input[inner_start..self.pos]).into_owned();
                     self.advance(); // consume closing '
                     return raw;
                 }

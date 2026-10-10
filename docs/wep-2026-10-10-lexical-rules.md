@@ -30,7 +30,7 @@ answered each by accident:
   line continuation as deliberate.
 - `.5` and `5.` stay errors. Many languages accept `.5`, but it is rarely
   written, and a decimal point with a digit on each side keeps `5.max(3)` and
-  `t.0.1` unambiguous.
+  `t.0.1` unambiguous. The diagnostic names the literal meant (`0.5`, `5.0`).
 - A lone surrogate stays an error, and `\x` stays a byte escape. A byte string
   takes a string's escapes (`\b`, `\f` and `\/` among them) and not a
   template's.
