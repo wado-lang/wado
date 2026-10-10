@@ -11,7 +11,7 @@ use crate::ast::Type;
 use crate::call_args::CallArgs;
 use crate::canonical::CanonicalIntrinsic;
 use crate::cm_abi;
-use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, MAX_FLAT_PARAMS};
+use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_export_func_name, cm_post_return_func_name};
@@ -1444,11 +1444,10 @@ fn build_export_adapter_params(
     body_stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
 ) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
-    let flat_count: usize = world_params
-        .iter()
-        .map(|(_, ty)| lift_ctx.cm_interface_registry.cm_flatten(ty).len())
-        .sum();
-    if flat_count > MAX_FLAT_PARAMS {
+    if lift_ctx
+        .cm_interface_registry
+        .params_in_buffer(world_params.iter().map(|(_, ty)| ty), false)
+    {
         return build_spilled_export_params(world_params, lift_ctx, body_stmts, locals);
     }
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, lift_ctx.type_table);

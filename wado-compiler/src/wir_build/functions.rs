@@ -19,8 +19,7 @@ use super::context::{PendingFunctionBody, WirContext};
 use super::translate::resolve_param_names;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
-    CmFunctionInfo, CmInterfaceRegistry, MAX_FLAT_ASYNC_PARAMS, MAX_FLAT_PARAMS,
-    cm_return_needs_outptr, flatten_cm_param_type,
+    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
 };
 use crate::name::wir_func_type_key;
 use crate::nir::FuncId;
@@ -135,6 +134,8 @@ fn cm_import_core_func_type(
         let resolved_ty = cm_interface_registry.resolve_type(ty);
         flatten_cm_param_type(&resolved_ty, &mut param_vts, cm_interface_registry);
     }
+    let in_buffer = cm_interface_registry
+        .params_in_buffer(func.params.iter().map(|(_, _, ty)| ty), func.is_async);
 
     // Per CM spec `flatten_functype('lower')`, past its limit a lowering takes
     // its params through one buffer, and an async one appends the outptr only
@@ -142,7 +143,7 @@ fn cm_import_core_func_type(
     // `wait_until`) has neither results nor outptr.
     if func.is_async {
         let has_results = func.return_type.is_some();
-        if param_vts.len() > MAX_FLAT_ASYNC_PARAMS {
+        if in_buffer {
             param_vts = if has_results {
                 vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32]
             } else {
@@ -156,7 +157,7 @@ fn cm_import_core_func_type(
         return (params, vec![WirType::I32]);
     }
 
-    if param_vts.len() > MAX_FLAT_PARAMS {
+    if in_buffer {
         param_vts = vec![wasm_encoder::ValType::I32];
     }
     let mut results: Vec<WirType> = Vec::new();

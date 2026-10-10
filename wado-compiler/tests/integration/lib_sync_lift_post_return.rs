@@ -96,9 +96,32 @@ export fn measure(s: String) -> u32 {
 }
 "#;
 
-fn run_param(opt_level: OptLevel) {
+/// Seventeen flat values, so the caller writes the params to one buffer and the
+/// string's bytes sit behind it: the buffer and the bytes are both the guest's
+/// to release.
+const SPILLED_PARAM_SOURCE: &str = r#"
+export fn measure(
+    a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8,
+    i: u8, j: u8, k: u8, l: u8, m: u8, n: u8, o: u8, s: String,
+) -> u32 {
+    return s.len() as u32 + a as u32 - 1;
+}
+"#;
+
+/// The strings in a list's elements, each released once with the list.
+const LIST_PARAM_SOURCE: &str = r#"
+export fn measure(xs: List<String>) -> u32 {
+    let mut n = 0;
+    for let x of xs {
+        n += x.len();
+    }
+    return n as u32;
+}
+"#;
+
+fn run_param(opt_level: OptLevel, source: &str, args: impl Fn(&str) -> Vec<Val>) {
     let engine = capped_engine(MEMORY_CAP);
-    let wasm = compile_lib_world(PARAM_SOURCE, LIB_WORLD_FQ, opt_level, Some("freelist"));
+    let wasm = compile_lib_world(source, LIB_WORLD_FQ, opt_level, Some("freelist"));
     let component = Component::new(&engine, &wasm).expect("component failed to load");
     let arg = "x".repeat(PAYLOAD);
 
@@ -113,7 +136,7 @@ fn run_param(opt_level: OptLevel) {
 
         for call in 0..CALLS {
             let mut results = vec![Val::Bool(false)];
-            func.call_async(&mut store, &[Val::String(arg.clone())], &mut results)
+            func.call_async(&mut store, &args(&arg), &mut results)
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
@@ -134,14 +157,38 @@ fn run_param(opt_level: OptLevel) {
     });
 }
 
+fn one_string(arg: &str) -> Vec<Val> {
+    vec![Val::String(arg.to_string())]
+}
+
+fn spilled(arg: &str) -> Vec<Val> {
+    let mut args: Vec<Val> = (0..15).map(|_| Val::U8(1)).collect();
+    args.push(Val::String(arg.to_string()));
+    args
+}
+
+fn listed(arg: &str) -> Vec<Val> {
+    vec![Val::List(vec![Val::String(arg.to_string())])]
+}
+
 #[test]
 fn lib_sync_lift_param_buffer_is_reclaimed_o0() {
-    run_param(OptLevel::O0);
+    run_param(OptLevel::O0, PARAM_SOURCE, one_string);
 }
 
 #[test]
 fn lib_sync_lift_param_buffer_is_reclaimed_o2() {
-    run_param(OptLevel::O2);
+    run_param(OptLevel::O2, PARAM_SOURCE, one_string);
+}
+
+#[test]
+fn lib_sync_lift_spilled_param_buffer_is_reclaimed() {
+    run_param(OptLevel::O2, SPILLED_PARAM_SOURCE, spilled);
+}
+
+#[test]
+fn lib_sync_lift_listed_string_is_reclaimed_once() {
+    run_param(OptLevel::O2, LIST_PARAM_SOURCE, listed);
 }
 
 /// Every direction of the canonical option in one component: a result that owns

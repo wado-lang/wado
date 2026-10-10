@@ -5,10 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::component_model::{
-    CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, MAX_FLAT_ASYNC_PARAMS,
-    MAX_FLAT_PARAMS,
-};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
@@ -489,18 +486,8 @@ pub(super) fn synthesize_adapter(
     };
 
     let plans = builder.plan_params();
-    let flat_param_count: usize = plans
-        .iter()
-        .map(|plan| {
-            flatten_param_type(plan.ty, cm_interface_registry, &builder.lower_ctx.names).len()
-        })
-        .sum();
-    builder.params_in_buffer = flat_param_count
-        > if func_info.is_async {
-            MAX_FLAT_ASYNC_PARAMS
-        } else {
-            MAX_FLAT_PARAMS
-        };
+    builder.params_in_buffer = cm_interface_registry
+        .params_in_buffer(plans.iter().map(|plan| plan.ty), func_info.is_async);
     builder.emit_param_lowering(&plans);
 
     let async_outptr = if func_info.is_async {
@@ -677,8 +664,7 @@ struct AdapterBuilder<'a> {
     body_stmts: Vec<TirStmt>,
     flat_args: Vec<TirExpr>,
     auxiliary: Vec<Rc<RefCell<TirFunction>>>,
-    /// An async call whose flat params exceed [`MAX_FLAT_ASYNC_PARAMS`] passes
-    /// them all through one linear-memory buffer instead.
+    /// See [`CmInterfaceRegistry::params_in_buffer`].
     params_in_buffer: bool,
 }
 
@@ -1058,8 +1044,8 @@ impl<'a> AdapterBuilder<'a> {
         Some(OutptrBuffer { local, size, align })
     }
 
-    /// Indirect async calling: write all params to one linear-memory buffer
-    /// and replace the flat args with (`params_ptr`[, `results_ptr`]).
+    /// Indirect calling: write all params to one linear-memory buffer and
+    /// replace the flat args with (`params_ptr`[, `results_ptr`]).
     ///
     /// The buffer layout follows the Component Model Canonical ABI spec,
     /// which uses component-level type sizes (e.g., flags with ≤8 labels =
