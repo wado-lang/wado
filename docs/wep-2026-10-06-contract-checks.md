@@ -99,9 +99,8 @@ already traps out of range.
 
 ### The caller decides whether a check can be removed
 
-The sections above describe what is built. This one and the next are adopted
-but not built, since they wait on a syntax. They lower to
-`builtin::contract_checks()`.
+The sections above describe what is built. This one and the two after it are
+adopted but not built. They lower to `builtin::contract_checks()`.
 
 A checked function and its `_unchecked` twin state the same contract. They
 differ in who guarantees it. The checked function guarantees a trap on a call
@@ -163,6 +162,53 @@ cost, but it redesigns newtypes: `as` would convert only toward the base type,
 and a conversion toward the newtype would go through `TryFrom`. That belongs
 in a proposal of its own.
 
+### Syntax: `contract` and `unchecked`
+
+A function declares its contract with `contract` clauses, placed after the
+`with` clause and before the body, or before the `;` of a trait method without
+one. Each clause is a condition and an optional message, as an `assert` is,
+and a function may have any number of them:
+
+```text
+pub fn slice(&self, start: i32, end: i32) -> StrSlice
+    contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+    contract self.is_char_boundary(start) && self.is_char_boundary(end)
+{
+    …
+}
+```
+
+A condition is parsed as an `if` condition is, with no struct literal, so the
+body's `{` cannot be read as one. Contracts state inputs only, so a clause
+names no result and no old value.
+
+A caller marks a call with `unchecked`, a prefix unary operator. Postfix
+operators bind tighter than prefix ones, so `unchecked a.f().g()` marks `g`,
+as `-a.f().g()` negates the whole chain. The operand must be a call to a
+function with a contract; anything else is a compile error.
+
+```text
+let b = unchecked s.get_byte(i);
+let v = (unchecked s.slice(a, b)).to_string();
+let x = unchecked xs[i];    // an index read with no range check
+```
+
+`xs[i]` is a call to an indexing trait's method, so `unchecked xs[i]` is an
+index read whose range check the caller vouches for.
+
+`contract` is a contextual keyword: no identifier can follow a signature, so
+code that names something `contract` keeps working.
+
+The two words are asymmetric by design. `contract` names what the function
+declares, an obligation. `unchecked` names what the caller gives up, the
+check, and the contract stays in force. `check` and `unchecked` would read as
+a clause and its negation, as if the marker removed the contract. `check` is
+also a verb, so it reads as a statement run at that point, like `assert`.
+
+`unchecked` means that the caller does not ask for the check in a shipping
+build. A build under `-f contract-checks` still checks a marked call. The word
+was kept despite that because it continues the `_unchecked` names it replaces.
+
 ## Roadmap
 
 1. `-f contract-checks`, `builtin::contract_checks()`, and the checks in
@@ -178,12 +224,16 @@ in a proposal of its own.
 - A clause that costs more than the function it guards is not checked: that
   the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
   that a write keeps them UTF-8 in `set_byte_unchecked`.
-- Neither the contract nor the call's marker has a syntax. The clauses live in
-  each function's body, and its doc comment restates them. A clause on the
-  signature has to sit beside `with`, which already follows the return type.
+- The syntax is not built. The clauses live in each function's body, and its
+  doc comment restates them.
+- Whether `unchecked` marks the place of an index assignment, `xs[i] = v`.
+- Whether `unchecked` is reserved or contextual. As a contextual keyword,
+  `unchecked(x)` and `unchecked[i]` already mean a call and an index on
+  something named `unchecked`.
 - A call whose callee is not known statically, through a trait bound or a
   function value, has no call site to place the check at. How a trait
-  method's contract binds an impl is not settled either.
+  method's contract binds an impl is not settled either, and `unchecked xs[i]`
+  reaches an indexing trait's method.
 - An input contract cannot say that a method taking `&mut self` keeps its
   type's invariant. It can only require inputs that imply it.
 - Only the standard library declares a contract. The reason
