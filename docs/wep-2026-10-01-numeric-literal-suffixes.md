@@ -1,89 +1,94 @@
-# WEP: Numeric Literal Suffixes
+# WEP: Numeric Literal Suffixes — Withdrawn
 
 ## Context
 
 A numeric literal has no type of its own. It takes the type its context
-expects, and `i32` or `f64` where nothing expects one. Inside an expression the
-only way to give it another type is a cast: `255 as u8`, `1.5 as f32`.
+expects, and `i32` or `f64` where nothing expects one. Inside an expression,
+`255 as u8` gives it another type, checked as the annotation `let x: u8 = 255`
+is, so `300 as u8` is an error.
 
-A cast on a literal does two jobs at once. It types the literal as an
-annotation of the target would, range check included, so `300 as u8` is an
-error. Applied to a value, the same `as` converts and never checks a range, so
-`300_i32 as u8` would be `44`. A reader has to look at the operand to know
-which job a cast does.
+This WEP first adopted Rust-style suffixes written after an `_`: `255_u8`,
+`1.5_f32`. Its argument was that `as` does two jobs: on a literal it types and
+range-checks, on a value it converts without a check. A reader has to look at
+the operand to know which job a cast does.
 
-Rust gives a literal its type with a suffix, `255u8`. In a hex literal the
-letters `b` and `f` are digits, so Rust reads `0x1f32` as the hex number
-`0x1F32`, not as `1` of type `f32`.
+Using the suffix showed two problems.
+
+- The `_` both separates digits and introduces the suffix, and in a hex literal
+  `b` and `f` are digits. `0xff_f16` is the integer `0xFFF16`, not `255` as an
+  `f16`, with no diagnostic. Rust reads it the same way, and neither rustc nor
+  clippy warns.
+- The argument for it is weak. Whether a cast's operand is a literal is visible
+  in the source text. The risky job is the other one, a value cast that
+  truncates, and a suffix does nothing for it.
 
 ## Decision
 
-A numeric literal may end with a type suffix: one of `i8`, `i16`, `i32`, `i64`,
-`i128`, `u8`, `u16`, `u32`, `u64`, `u128`, `f16`, `bf16`, `f32` and `f64`.
+Wado has no numeric literal suffix. A literal takes its type from its context
+or from `as T`, and otherwise defaults to `i32` or `f64`.
 
-```wado
-let a = 255_u8;          // u8
-let b = 1_000_000_i64;   // i64
-let c = 1.5_f32;         // f32
-let d = 0xFF_u8;         // u8
-let e = 1_f64;           // f64: an integer literal with a float suffix
-```
+Three ways to give a literal a type were compared:
 
-### The `_` separator is required
+| Property                              | `255_u8`                    | `255@u8`                           | `255 as u8`                    |
+| ------------------------------------- | --------------------------- | ---------------------------------- | ------------------------------ |
+| New syntax                            | a suffix grammar            | a suffix grammar and the `@` token | none: `as` exists already      |
+| Unambiguous in every base             | no: `0x1_f32` is `0x1F32`   | yes                                | yes                            |
+| Role of `_`                           | separator and suffix marker | separator only                     | separator only                 |
+| Names a newtype (`Meters`)            | no                          | only with a further rule           | yes: `4 as Meters`             |
+| Range-checked as an annotation        | yes                         | yes                                | yes                            |
+| Left operand of `<<`                  | `1_i64 << 40`               | `1@i64 << 40`                      | `1 as i64 << 40`               |
+| Method receiver                       | `1_u64.to_string()`         | `1@u64.to_string()`                | `(1 as u64).to_string()`       |
+| Pattern                               | `1_i32 =>`                  | `1@i32 =>`                         | `1 =>`: typed by the scrutinee |
+| Lint steering one spelling to another | `literal_cast`              | `literal_cast`                     | none                           |
 
-An underscore always separates the digits from the suffix. `255u8` is an error
-that says to write `255_u8`. Letters written directly after a literal are read
-as its suffix, so `255_u9` is an error naming the suffix `u9`, not a number
-followed by a name.
+`as` binds tighter than every binary operator, so a cast operand needs
+parentheses only as a method receiver. That pair of parentheses is the whole
+loss. Wado chooses the smaller language: one way to type a literal, no new
+token, and no lexical rule that depends on the base.
 
-The separator makes the suffix visible at a glance, where `1e5f32` and `1e5_f32`
-otherwise look alike. It costs one character against Rust, and the error tells
-a Rust writer exactly what to type.
+### What Rust writes
 
-### Which literal takes which suffix
+A lexeme Rust accepts never means a different value in Wado. Wado may reject or
+warn about one that Rust accepts.
 
-A decimal literal takes any suffix. An integer literal with a float suffix is a
-float, as in Rust. A float literal with an integer suffix is an error, as
-`let x: i32 = 1.5` is.
+- Letters written directly after a literal's digits are an error, and the
+  diagnostic suggests the cast: `255u8` and `255_u8` both say to write
+  `255 as u8`.
+- In a hex literal, `_f16`, `_bf16`, `_f32` and `_f64` are digits, so the
+  literal keeps the value Rust gives it. A literal ending in one warns, since
+  it reads as a type.
 
-A hex, octal or binary literal takes an integer suffix only. In a hex literal
-`b` and `f` are digits, so `0x1_f32` stays the hex number `0x1F32`, as it is
-today. Reading it as a suffix would change the value of programs that already
-compile. In an octal or binary literal a float suffix is an error.
+### The `_` separator
 
-### A suffix is a type annotation
+An `_` stands between two digits, one at a time. `1_000` and `0xFF_FF` are
+literals. `1_`, `1__0`, `0x_FF`, `1_.5` and `1._5` are errors.
 
-A suffixed literal has the type its suffix names. It is checked as the same
-literal annotated with that type: `300_u8` and `1e40_f32` are errors, as
-`let x: u8 = 300` and `let x: f32 = 1e40` are. A minus sign in front belongs to
-the literal for this check, so `-128_i8` is valid and `-1_u8` is an error.
+### Exponent literals
 
-The context does not retype a suffixed literal. `let x: i64 = 1_i32` is a type
-mismatch, and so is `let m: Meters = 1.0_f64` for a newtype `Meters`. An
-operand beside it takes its type from it, as beside any typed value:
-`1_u8 + 2` adds two `u8`s.
+A literal with an exponent and no type context is an `f64`, as `1e10` is in
+Rust. Where an integer type is expected, it is that integer if its value is a
+whole number in the type's range: `let n: i64 = 1e10` is `10_000_000_000`, and
+`let n: i32 = 1e-1` is an error.
 
-A suffixed literal is a pattern of its suffix type, which must be the type of
-the scrutinee.
+### Diagnostics
 
-### The `literal_cast` lint
-
-`lit as T` warns where `T` is a suffix type and the literal can carry that
-suffix, and the warning gives the suffixed spelling: `255 as u8` suggests
-`255_u8`. The cast and the suffix mean the same thing there, and the suffix
-says it without the reader checking the operand. `0x10 as f64` does not warn,
-since no suffix can write it. `#[allow(literal_cast)]` waives the lint for an
-item, and `#![allow(literal_cast)]` for a module.
-
-The cast keeps its meaning on a literal. Changing it to always convert would
-silently change programs that compile today.
+`literal_cast` is gone, since there is no other spelling to suggest. The
+arithmetic lints treat `lit as T` as a constant operand of type `T`, so
+`2 as u8 * 200` is reported as an `arithmetic_overflow`.
 
 ## Roadmap
 
-- [x] Lex and parse the suffix, with the errors for a missing separator, an
-  unknown suffix, and a float suffix on an octal or binary literal.
-- [x] Type a suffixed literal as an annotated one, in expressions and patterns.
-- [x] The `literal_cast` lint, and the repository's own sources migrated to the
-  suffix.
-- [x] The specification, the cheatsheet, the formatter tests and the syntax
-  highlighting grammar.
+- [ ] Remove the suffix from the lexer and the parser. Letters after a
+  literal's digits are an error that suggests `as`.
+- [ ] Hold `_` to one between two digits.
+- [ ] Type an exponent literal as above.
+- [ ] Warn about a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`.
+- [ ] Remove `literal_cast`, and count `lit as T` as a constant operand.
+- [ ] Migrate the repository's sources from suffixes to `as`.
+- [ ] The specification, the cheatsheet, the formatter tests and the syntax
+  highlighting grammars.
+
+## Known gaps
+
+- Whether a literal with both a `.` and an exponent, such as `1.5e1`, can be an
+  integer where one is expected.
