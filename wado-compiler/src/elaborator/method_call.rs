@@ -1467,13 +1467,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `target` is a generic declaration applied to arguments, which
     /// [`Self::with_written_args`] can apply to others.
     fn applies_written_args(&self, target: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(target),
-            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
-        ) || matches!(
-            self.tysys.type_table.borrow().get(target),
-            ResolvedType::Newtype { type_args, .. } if !type_args.is_empty()
-        )
+        match self.tysys.type_table.borrow().get(target) {
+            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => true,
+            ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
+            _ => false,
+        }
     }
 
     /// `target` with its written arguments replaced by `args`, which fill the
@@ -1877,14 +1875,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let inst = Instantiated::of_vars(vars.clone());
             // What the site expects of the result answers a `_` too, as it does
             // a slot the bare spelling leaves out.
-            let ret = callee_sig.as_ref().zip(expected_type).map(|(sig, expected)| {
-                let declaring = sig.declaring_impl.map(|id| self.tysys.signatures.impl_sig(id));
-                let declared = sig
-                    .instantiate_call_with(&self.tysys.type_table, declaring, &declaring_args, &method_type_args)
-                    .return_type;
-                ExpectedReturn { declared, expected }
-            });
-            let args = self.resolve_args_against_params(&static_call.args, ctx, &param_types, Some(&inst), ret);
+            let ret = callee_sig
+                .as_ref()
+                .zip(expected_type)
+                .map(|(sig, expected)| {
+                    let declaring = sig
+                        .declaring_impl
+                        .map(|id| self.tysys.signatures.impl_sig(id));
+                    let declared = sig
+                        .instantiate_call_with(
+                            &self.tysys.type_table,
+                            declaring,
+                            &declaring_args,
+                            &method_type_args,
+                        )
+                        .return_type;
+                    ExpectedReturn { declared, expected }
+                });
+            let args = self.resolve_args_against_params(
+                &static_call.args,
+                ctx,
+                &param_types,
+                Some(&inst),
+                ret,
+            );
             let mut infer = InferCtx::new(&self.tysys.type_table, vars);
             if let Some(ret) = ret {
                 infer.add_expected_return(ret.declared, ret.expected);

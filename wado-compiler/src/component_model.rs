@@ -3789,9 +3789,21 @@ impl CmInterfaceRegistry {
 
     /// Whether a call taking `params` passes them through one buffer rather
     /// than as flat core values (`flatten_functype`).
-    pub fn params_in_buffer<'t>(&self, params: impl IntoIterator<Item = &'t Type>, is_async: bool) -> bool {
-        let limit = if is_async { MAX_FLAT_ASYNC_PARAMS } else { MAX_FLAT_PARAMS };
-        params.into_iter().map(|ty| self.cm_flatten(ty).len()).sum::<usize>() > limit
+    pub fn params_in_buffer<'t>(
+        &self,
+        params: impl IntoIterator<Item = &'t Type>,
+        is_async: bool,
+    ) -> bool {
+        let limit = if is_async {
+            MAX_FLAT_ASYNC_PARAMS
+        } else {
+            MAX_FLAT_PARAMS
+        };
+        params
+            .into_iter()
+            .map(|ty| self.cm_flatten(ty).len())
+            .sum::<usize>()
+            > limit
     }
 
     fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<CmValType>) {

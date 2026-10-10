@@ -142,7 +142,11 @@ fn synthesize_lift_inner(
                     "$str_len",
                     len_local,
                     TypeTable::I32,
-                    builtin_call("i32_load", vec![binary_add(addr, i32_const(4))], TypeTable::I32),
+                    builtin_call(
+                        "i32_load",
+                        vec![binary_add(addr, i32_const(4))],
+                        TypeTable::I32,
+                    ),
                 ));
                 let ptr = || local_ref(ptr_local, "$str_ptr", TypeTable::I32);
                 let len = || local_ref(len_local, "$str_len", TypeTable::I32);
@@ -1135,4 +1139,3 @@ fn synthesize_lift_tuple(
         synth_span(),
     )
 }
-

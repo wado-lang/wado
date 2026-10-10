@@ -360,7 +360,9 @@ impl WebGpuBackend {
             if len > 0 {
                 let at = (offset * 4) as u64 as GpuSize64;
                 match o.source {
-                    Device(d) => encoder.copy_buffer_to_buffer(&d.buffer, null, &pack, Option::Some(at), Option::Some(byte_size(len))),
+                    Device(d) => encoder.copy_buffer_to_buffer(&d.buffer, null, &pack, Option::Some(at), Option::Some(
+                        byte_size(len),
+                    )),
                     Host(data) => {
                         let Ok(_) = self.queue.write_buffer_with_copy(&pack, at, float_bytes(data), null, null) else {
                             panic("loam: a host tensor did not write to the device");
