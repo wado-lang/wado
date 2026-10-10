@@ -684,7 +684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// Whether `answer` can stand as a variable's solution: not another variable,
     /// nor one of the [`says_nothing`] types.
-    fn is_usable_answer(&self, answer: TypeId) -> bool {
+    pub(super) fn is_usable_answer(&self, answer: TypeId) -> bool {
         !says_nothing(answer) && !self.type_table.borrow().contains_infer_var(answer)
     }
 }

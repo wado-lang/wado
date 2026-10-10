@@ -5,6 +5,8 @@
 //! input files' streams, and `Host`, which takes its diagnostics.
 
 use { loam } from "./main.wado";
+use { Report } from "./dump.wado";
+use { from_string } from "core:json";
 use { generate as kiln_generate, Options } from "./generator.wado";
 use { LayoutRule } from "./schema.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
@@ -171,10 +173,13 @@ weights
     W: f32 [In=2, Out=3]
     B: f32 [Out=3]
 nodes
-    kernel H = MatMul(X, W)
+    fused  H = MatMul(X, W)
         H: f32 [Batch=N, Out=3]
+        into the kernel writing Y
     kernel Y = Add(H, B)
         Y: f32 [Batch=N, Out=3]
+        written: the scope returns it
+        takes in H, keeping 12 * N bytes out of memory
     alias  Z = Identity(Y)
         Z: f32 [Batch=N, Out=3]
     folded S = Shape(X)
@@ -183,7 +188,7 @@ outputs
     Y: f32 [Batch=N, Out=3]
     Z: f32 [Batch=N, Out=3]
 
-2 kernels, 1 folded, 1 aliases, 0 branches
+1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches
 ", report;
 }
 
@@ -210,6 +215,13 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
             nodes
                 kernel T = Concat(P, X)
                     T: f32 [Total=M + N, Embed=2]
+                    written: a regrouping takes in no operator after it
+"), report;
+    assert report.contains("
+                kernel TZ = Mul(SK, W)
+                    TZ: f32 [Seq=N, Embed=2]
+                    written: the scope returns it
+                    takes in S, SK, keeping 16 * N bytes out of memory
 "), report;
     assert report.contains("
             owed
@@ -220,7 +232,25 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
             nodes
                 kernel E = Relu(X)
 "), report;
-    assert report.ends_with("\n6 kernels, 1 folded, 0 aliases, 1 branches\n"), report;
+    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches\n"), report;
+}
+
+test "dump reports as JSON, every kernel with where its output goes" {
+    let dir = scratch("dump-json");
+    let json = on_graph("dump", &dir, ["--format", "json"]).unwrap();
+    assert json.contains("\"lowering\":\"fused\"") && json.contains("\"written\":\"returned\""), json;
+    let nodes = from_string::<Report>(&json).unwrap().scope.nodes;
+    assert nodes[0].lowering matches { Fused } && nodes[0].into == Option::Some("Y");
+    assert nodes[1].lowering matches { Kernel } && nodes[1].written matches { Some(Returned) };
+    assert nodes[1].takes_in == ["H"] as List<String>;
+    assert nodes[1].kept_bytes == Option::Some("12 * N");
+    assert nodes[2].lowering matches { Alias } && nodes[2].written matches { None };
+}
+
+test "dump's format is text or json" {
+    let dir = scratch("dump-format");
+    let refused = on_graph("dump", &dir, ["--format", "yaml"]).unwrap_err();
+    assert refused.starts_with("loam dump: --format is text or json\n"), refused;
 }
 
 test "a graph's type is required, and names the types there are" {

@@ -77,7 +77,7 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 7, "stdout: {stdout}");
+    assert_eq!(lines.len(), 8, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')

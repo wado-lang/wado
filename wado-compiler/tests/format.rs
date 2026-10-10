@@ -1611,6 +1611,53 @@ fn test_format_preserves_trait_assoc_type_leading_comment() {
 }
 
 #[test]
+fn test_format_keeps_members_in_source_order() {
+    // Regression: a trait's or an impl's associated type written after a
+    // method was emitted ahead of every method, leaving the method's doc
+    // comment and the blank lines around both where the type had been.
+    let source = r"trait T {
+    type A;
+
+    /// Doc of f.
+    fn f(&self) -> i32;
+    /// Doc of B.
+    type B;
+}
+
+impl T for S {
+    type A = i32;
+
+    /// Doc of f.
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    /// Doc of B.
+    type B = i32;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "members should keep their order");
+}
+
+#[test]
+fn test_format_rest_clause_follows_the_last_member() {
+    // The blank line before `..trap` is a method's, so a member after the
+    // method takes it away.
+    let source = r"impl T for S {
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    type B = i32;
+    ..trap
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "no blank line after a non-method member");
+}
+
+#[test]
 fn test_format_preserves_trait_doc_before_attributed_member() {
     // Regression (#1598): a doc comment immediately before a member carrying
     // an attribute must stay attached — no blank line inserted between the

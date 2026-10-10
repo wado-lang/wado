@@ -24,6 +24,10 @@ pub struct Options {
     pub dims: TreeMap<String, i32> = {},
     /// The graph outputs `forward` returns. Empty keeps every output.
     pub outputs: List<String> = [],
+    /// Whether operators fuse into one kernel where the plan finds they can.
+    /// Off, every kernel writes its output, which is what a fused module is
+    /// compared against.
+    pub fuse: bool = true,
 }
 
 impl Deserialize for Options;
@@ -62,10 +66,11 @@ fn read_graph(path: &String, spelling: Spelling, bytes: ByteList) -> Result<Grap
     return onnx_text::read(&text_of(path, bytes)?).map_err(|e| at(path, &e));
 }
 
-/// A graph and what checking it proved.
+/// A graph, what checking it proved, and whether its kernels fuse.
 pub struct Model {
     pub graph: Graph,
     pub checked: Checked,
+    pub fuse: bool,
 }
 
 /// The graph at `path`, specialized by `options` and checked.
@@ -77,7 +82,7 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
     // tier below this is `forward`, which checks only an inequality over the
     // input symbols.
     let checked = infer(&graph, &Schema { layout: options.layout }).map_err(|e| at(path, &e))?;
-    return Result::Ok(Model { graph, checked });
+    return Result::Ok(Model { graph, checked, fuse: options.fuse });
 }
 
 /// The module `model`'s `forward` runs in, importing its runtime from the
@@ -91,7 +96,7 @@ pub fn generate_model(
 ) -> Result<String, String> {
     // Emitting first refuses an element type no kernel holds, which the check
     // below takes as given.
-    let generated = emit(&model.graph, &model.checked, runtime).map_err(|e| at(path, &e))?;
+    let generated = emit(&model.graph, &model.checked, runtime, model.fuse).map_err(|e| at(path, &e))?;
     for let [input_path, header] of headers {
         let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
         check_checkpoint(&model.graph, &model.checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;

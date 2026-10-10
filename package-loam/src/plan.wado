@@ -1,0 +1,265 @@
+//! How `forward` lowers each node of a checked graph, and which kernels fuse
+//! into the kernel after them. Emission and `loam dump` read the one answer.
+//! See WEP 2026-09-20 § "Fusion Is Decided by Operator Kind".
+
+use { TreeMap } from "core:collections";
+use { Graph, KERNEL_ELEMENT, Node, data_type, is_binary_elementwise, is_unary_operator, settled } from "./graph.wado";
+use { Checked } from "./infer.wado";
+use { Shape } from "./shape.wado";
+
+/// What `forward` does for one node.
+pub enum Lowering {
+    /// Nothing: stage 0 computed its outputs, which `forward` spells as
+    /// literals or folds into the kernels that read them.
+    Folded,
+    /// Nothing: its output is another name for its operand (`is_alias`).
+    Alias,
+    /// An `if` over the condition, each branch a block of its own.
+    Branch,
+    /// One kernel call per output, or a step of the kernel `Plan` puts it in.
+    Kernel,
+}
+
+/// How `forward` lowers `node`, in the scope `checked`.
+pub fn lowering_of(node: &Node, checked: &Checked) -> Lowering {
+    if checked.known.contains_key(node.outputs[0]) {
+        return Lowering::Folded;
+    }
+    if is_alias(node, checked) {
+        return Lowering::Alias;
+    }
+    if node.op == "If" {
+        return Lowering::Branch;
+    }
+    return Lowering::Kernel;
+}
+
+/// Whether a node computes nothing, so its output is another name for its
+/// operand: an `Identity`, or a `Cast` to the primitive the operand has. An
+/// int32 target is held in `i64` too, but keeps only the low half.
+pub fn is_alias(node: &Node, checked: &Checked) -> bool {
+    let primitives = &checked.primitives;
+    return node.op == "Identity"
+        || node.op == "Cast"
+            && !data_type(settled(node.required_int_attr("to"))) matches { Some(Int32) }
+            && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
+}
+
+/// One branch of an `If`: the attribute holding it, the graph stage 0 read
+/// from it, and the scope stage 0 checked it in.
+pub struct IfBranch {
+    pub attr: String,
+    pub graph: Graph,
+    pub checked: Checked,
+}
+
+/// An `If`'s two branches, then before else.
+pub fn branches(node: &Node, checked: &Checked) -> [IfBranch, IfBranch] {
+    let [then_scope, else_scope] = checked.branches[node.outputs[0]];
+    let branch = |attr: String, scope: Checked| IfBranch {
+        attr,
+        graph: node.attr(attr).unwrap().graph.unwrap(),
+        checked: scope,
+    };
+    return [
+        branch("then_branch", then_scope),
+        branch("else_branch", else_scope),
+    ];
+}
+
+/// What an operator does with the elements it reads, which decides what it
+/// fuses with.
+pub enum Kind {
+    /// Each output element reads each operand at its own position, or
+    /// stretched to it.
+    Elementwise,
+    /// Each output element sums over whole rows of its operands: `MatMul`,
+    /// `Gemm` and `Conv`.
+    Contraction,
+    /// Each output element reads an axis whole: `ReduceMean`, `ReduceSum` and
+    /// `Softmax`.
+    Reduction,
+    /// Each output element reads a window of its operand: `MaxPool`.
+    Window,
+    /// Elements moved rather than computed on: `Reshape`, `Transpose`,
+    /// `Concat`, `Split`, `Slice` and the rest.
+    Regrouping,
+    /// Elements picked by an index or a condition: `Gather` and `Where`.
+    Selection,
+    /// Elements converted to another type: `Cast`.
+    Conversion,
+    /// Elements made from extents alone: `Range`, `ConstantOfShape`, `Shape`
+    /// and `Constant`.
+    Generation,
+    /// An `If`, whose branches read the tensor.
+    Branch,
+}
+
+/// The kind of the operator `op`, one stage 0 lowers.
+pub fn kind_of(op: &String) -> Kind {
+    if is_unary_operator(op) || is_binary_elementwise(op) {
+        return Kind::Elementwise;
+    }
+    return match op.as_str_slice() {
+        "MatMul" | "Gemm" | "Conv" => Kind::Contraction,
+        "ReduceMean" | "ReduceSum" | "Softmax" => Kind::Reduction,
+        "MaxPool" => Kind::Window,
+        "Reshape" | "Flatten" | "Squeeze" | "Unsqueeze" | "Transpose" | "Concat" | "Split" | "Slice" | "Identity" => Kind::Regrouping,
+        "Gather" | "Where" => Kind::Selection,
+        "Cast" => Kind::Conversion,
+        "Range" | "ConstantOfShape" | "Shape" | "Constant" => Kind::Generation,
+        "If" => Kind::Branch,
+        // Stage 0 refuses every other operator.
+        _ => unreachable(),
+    };
+}
+
+/// Where a kernel's output goes.
+pub variant Decision {
+    /// Computed inside the kernel that writes the tensor named, and never
+    /// written itself.
+    Fused(String),
+    /// Written as a tensor, for the reason given.
+    Written(Reason),
+}
+
+/// Why a kernel writes its output rather than handing it to the kernel after
+/// it.
+pub variant Reason {
+    /// The invocation asked for no fusion (`fuse: false`).
+    Unfused,
+    /// The operator does not compute elementwise or contract, so no kernel
+    /// takes it in.
+    Computes(Kind),
+    /// The scope returns it.
+    Returned,
+    /// It is read this many times, a branch's reads among them. Fusing would
+    /// compute it once per read.
+    ReadTimes(i32),
+    /// The one node reading it is of this kind, which takes no operator
+    /// before it.
+    Reader(Kind),
+    /// Its reader stretches it over more elements than it has, so it would be
+    /// computed once per element read.
+    Stretched,
+    /// Its reader's kernel already follows another contraction.
+    SecondContraction,
+}
+
+/// Each kernel's decision in one scope, by the first tensor it computes.
+pub struct Plan {
+    pub decisions: TreeMap<String, Decision>,
+}
+
+impl Plan {
+    /// The decision for the kernel computing `tensor`.
+    pub fn of(&self, tensor: &String) -> Decision {
+        return self.decisions[*tensor];
+    }
+
+    /// Whether `tensor` is computed inside a later kernel rather than written.
+    pub fn is_fused(&self, tensor: &String) -> bool {
+        return self.decisions.get(*tensor) matches { Some(Fused(_)) };
+    }
+}
+
+/// The decisions for `graph`'s kernels, checked as `checked`. With `fuse`
+/// false, every kernel writes its output.
+pub fn plan(graph: &Graph, checked: &Checked, fuse: bool) -> Plan {
+    let mut readers = TreeMap::<String, List<i32>>::new();
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        for let tensor of node.reads() {
+            let mut at_reads = readers.get(tensor).unwrap_or([]);
+            at_reads.push(at);
+            readers[tensor] = at_reads;
+        }
+    }
+    let mut returned = TreeMap::<String, bool>::new();
+    for let vi of &graph.outputs {
+        returned[vi.name] = true;
+    }
+    // Whether the kernel computing each tensor follows a contraction, itself
+    // or through what fused into it, so a second one is refused.
+    let mut contracts = TreeMap::<String, bool>::new();
+    let mut direct = TreeMap::<String, Decision>::new();
+    for let node of &graph.nodes {
+        if !lowering_of(node, checked) matches { Kernel } {
+            continue;
+        }
+        let tensor = node.outputs[0];
+        let own = kind_of(&node.op) matches { Contraction } || contracts.get(tensor).unwrap_or(false);
+        contracts[tensor] = own;
+        let decision = decided(graph, checked, node, &readers, &returned, fuse, own, &contracts);
+        if let Fused(into) = decision {
+            contracts[into] = contracts.get(into).unwrap_or(false) || own;
+        }
+        direct[tensor] = decision;
+    }
+    // A tensor fused into one that is itself fused names the kernel that
+    // finally writes it.
+    let mut decisions = TreeMap::<String, Decision>::new();
+    for let [tensor, decision] of direct.entries() {
+        let mut d = *decision;
+        while let Fused(into) = d && direct[into] matches { Fused(_) } {
+            d = direct[into];
+        }
+        decisions[*tensor] = d;
+    }
+    return Plan { decisions };
+}
+
+/// Where `node`'s output goes, its readers and the scope's returns counted.
+fn decided(
+    graph: &Graph,
+    checked: &Checked,
+    node: &Node,
+    readers: &TreeMap<String, List<i32>>,
+    returned: &TreeMap<String, bool>,
+    fuse: bool,
+    contracts: bool,
+    after: &TreeMap<String, bool>,
+) -> Decision {
+    if !fuse {
+        return Decision::Written(Reason::Unfused);
+    }
+    let kind = kind_of(&node.op);
+    if !kind matches { Elementwise | Contraction } {
+        return Decision::Written(Reason::Computes(kind));
+    }
+    let tensor = node.outputs[0];
+    if returned.contains_key(tensor) {
+        return Decision::Written(Reason::Returned);
+    }
+    let reads = readers.get(tensor).unwrap_or([]);
+    if reads.len() != 1 {
+        return Decision::Written(Reason::ReadTimes(reads.len()));
+    }
+    let reader = &graph.nodes[reads[0]];
+    let reader_kind = kind_of(&reader.op);
+    if !lowering_of(reader, checked) matches { Kernel } || !reader_kind matches { Elementwise } {
+        return Decision::Written(Reason::Reader(reader_kind));
+    }
+    // Every elementwise and contraction kernel computes in f32.
+    assert checked.primitives[tensor] == KERNEL_ELEMENT;
+    if !same_space(&checked.shapes[tensor], &checked.shapes[reader.outputs[0]]) {
+        return Decision::Written(Reason::Stretched);
+    }
+    if contracts && after.get(reader.outputs[0]).unwrap_or(false) {
+        return Decision::Written(Reason::SecondContraction);
+    }
+    return Decision::Fused(reader.outputs[0]);
+}
+
+/// Whether two tensors cover one iteration space under one axis list, so one
+/// computes element `i` exactly where the other reads it.
+fn same_space(a: &Shape, b: &Shape) -> bool {
+    if a.rank() != b.rank() {
+        return false;
+    }
+    for let i of 0..<a.rank() {
+        if a.axes[i].name != b.axes[i].name || !a.axes[i].extent.agrees(&b.axes[i].extent) {
+            return false;
+        }
+    }
+    return true;
+}

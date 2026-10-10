@@ -1,0 +1,78 @@
+// A `_` in a static call's receiver turbofish is inferred from the arguments,
+// as the bare spelling's omitted turbofish is, while the arguments it writes
+// stay as written.
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T> Wrap<T> {
+    fn make(v: T) -> Wrap<T> {
+        return Wrap { v };
+    }
+}
+
+impl<T: Default> Wrap<T> {
+    fn empty() -> Wrap<T> {
+        return Wrap { v: T::default() };
+    }
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A, B> Pair<A, B> {
+    fn of(a: A, b: B) -> Pair<A, B> {
+        return Pair { a, b };
+    }
+}
+
+type Boxed<T> = Wrap<T>;
+
+impl<T> Boxed<T> {
+    fn boxed(v: T) -> Boxed<T> {
+        return Wrap { v } as Boxed<T>;
+    }
+}
+
+test "a `_` on a generic newtype's receiver is answered by the argument" {
+    let b = Boxed::<_>::boxed(5);
+    assert b.v == 5;
+}
+
+test "a `_` on the receiver is answered by the argument" {
+    let w = Wrap::<_>::make(5);
+    assert w.v == 5;
+    let s = Wrap::<_>::make("five");
+    assert s.v == "five";
+}
+
+test "a `_` is answered by the expected type" {
+    let w: Wrap<i64> = Wrap::<_>::make(5);
+    assert w.v == 5 as i64;
+    let e: Wrap<String> = Wrap::<_>::empty();
+    assert e.v == "";
+}
+
+fn id<T>(x: T) -> T {
+    return x;
+}
+
+test "a `_` is answered by the argument where the expected type is still open" {
+    let w = id(Wrap::<_>::make(5));
+    assert w.v == 5;
+    let n = Wrap::<_>::make(Wrap::<_>::make(5));
+    assert n.v.v == 5;
+}
+
+test "a `_` beside a written argument takes the other slot only" {
+    let p = Pair::<i64, _>::of(7, true);
+    assert p.a == 7 as i64 && p.b;
+}
+
+test "a `_` is answered through a list literal" {
+    let w = Wrap::<_>::make([1, 2, 3] as List<u8>);
+    assert w.v.len() == 3;
+}

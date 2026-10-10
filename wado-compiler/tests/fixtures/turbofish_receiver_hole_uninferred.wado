@@ -1,0 +1,19 @@
+// A `_` in a static call's receiver turbofish that nothing infers is refused,
+// as the bare `Wrap::mk` spelling is, rather than instantiated as unknown.
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Default> Wrap<T> {
+    fn mk<U: Default>(u: U) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    let n = Wrap::<_>::mk::<String>("s");
+}
+
+__DATA__
+{"compile_error": ":15:13: analysis error: cannot infer type parameter `T` of `Wrap::mk`; add a turbofish (`Wrap::<...>::mk()`) or a type annotation"}

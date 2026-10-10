@@ -1,0 +1,19 @@
+// A `_` in the turbofish of a receiver that takes no type arguments is
+// reported as the arity error, with no argument for it to infer.
+
+struct Point {
+    x: i32,
+}
+
+impl Point {
+    fn make(x: i32) -> Point {
+        return Point { x };
+    }
+}
+
+export fn run() {
+    let p = Point::<_>::make(1);
+}
+
+__DATA__
+{"compile_error": ":15:13: analysis error: `Point` takes no type arguments, but 1 was supplied"}

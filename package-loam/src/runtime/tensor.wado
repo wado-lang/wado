@@ -139,20 +139,33 @@ pub fn refuse(reason: Option<String>) {
 }
 
 /// A batched matrix product whose operands share every batch axis.
-pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    return matmul_broadcast(a, b);
+pub fn matmul<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Tensor<f32, [..Bs, K, N]>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    return matmul_broadcast(a, b, then);
 }
 
 /// `matmul` with one matrix on the right, shared by every batch element, as a
 /// language model's head multiplies each position by one weight.
-pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [K, N]>) -> Tensor<f32, [..Bs, M, N]> {
-    return matmul_broadcast(a, b);
+pub fn matmul_shared<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Tensor<f32, [K, N]>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    return matmul_broadcast(a, b, then);
 }
 
 /// ONNX's `MatMul` in full, which is numpy's: a rank-1 operand is a row on the
 /// left or a column on the right, whose axis the result drops, and the batch
-/// axes broadcast. The caller spells `Out`.
-pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
+/// axes broadcast. The caller spells `Out`. `then` is applied to each batch
+/// element's matrix as it completes.
+pub fn matmul_broadcast<A, B, Out>(
+    a: &Tensor<f32, A>,
+    b: &Tensor<f32, B>,
+    then: &Option<Epilogue<Read<Out>>>,
+) -> Tensor<f32, Out> {
     let a_matrix = if a.extents.len() == 1 { [1, a.extents[0]] as List<i32> } else { a.extents };
     let b_matrix = if b.extents.len() == 1 { [b.extents[0], 1] as List<i32> } else { b.extents };
     let ra = a_matrix.len();
@@ -172,6 +185,7 @@ pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Te
         extents.push(cols);
     }
     let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    let finishing = finish(then, &extents);
     // Each batch element's matrices, where a batch axis of 1 stretches.
     let a_carries = stretched_carries(&a_batch, &batch);
     let b_carries = stretched_carries(&b_batch, &batch);
@@ -190,6 +204,9 @@ pub fn matmul_broadcast<A, B, Out>(a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Te
                     out[out_base + r * cols + c] += lhs * rhs_data[b_base + k * cols + c];
                 }
             }
+        }
+        if let Some(f) = &finishing {
+            f.apply(&mut out, out_base, rows * cols);
         }
         let axis = advance(&mut index, &batch);
         if axis >= 0 {
@@ -245,65 +262,6 @@ fn gathered<E, D, Ix, Out>(data: &Tensor<E, D>, indices: &Tensor<i64, Ix>, axis:
     return Tensor { data: out, extents };
 }
 
-/// Two operands of one axis list combined elementwise through `op`.
-pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
-    if a.extents != b.extents {
-        return stretched_zip(a.data, a.extents, b.data, b.extents, op);
-    }
-    let mut out = List::<f32>::with_capacity(a.data.len());
-    for let [i, v] of a.data.into_iter().enumerate() {
-        out.push(op(v, b.data[i]));
-    }
-    return Tensor { data: out, extents: a.extents };
-}
-
-/// `zip` with `b` holding `a`'s trailing axes, repeated across the leading ones.
-pub fn zip_suffix<..Pre, ..Suf>(
-    a: &Tensor<f32, [..Pre, ..Suf]>,
-    b: &Tensor<f32, [..Suf]>,
-    op: fn(f32, f32) -> f32,
-) -> Tensor<f32, [..Pre, ..Suf]> {
-    if !ends_with(&a.extents, &b.extents) {
-        return stretched_zip(a.data, a.extents, b.data, b.extents, op);
-    }
-    let period = element_count(&b.extents);
-    let mut out = List::<f32>::with_capacity(a.data.len());
-    for let [i, v] of a.data.into_iter().enumerate() {
-        out.push(op(v, b.data[i % period]));
-    }
-    return Tensor { data: out, extents: a.extents };
-}
-
-/// `zip_suffix` with the operands the other way round. It is written out
-/// rather than flipping the closure, since this is an elementwise inner loop.
-pub fn zip_suffix_lhs<..Pre, ..Suf>(
-    a: &Tensor<f32, [..Suf]>,
-    b: &Tensor<f32, [..Pre, ..Suf]>,
-    op: fn(f32, f32) -> f32,
-) -> Tensor<f32, [..Pre, ..Suf]> {
-    if !ends_with(&b.extents, &a.extents) {
-        return stretched_zip(a.data, a.extents, b.data, b.extents, op);
-    }
-    let period = element_count(&a.extents);
-    let mut out = List::<f32>::with_capacity(b.data.len());
-    for let [i, v] of b.data.into_iter().enumerate() {
-        out.push(op(a.data[i % period], v));
-    }
-    return Tensor { data: out, extents: b.extents };
-}
-
-/// Arithmetic before opset 7 aligned at an axis: `b` meets `a`'s axes from
-/// there, and repeats across the `trailing` axes after them as well as those
-/// before.
-pub fn zip_at<..Pre, ..Mid, ..Post>(
-    a: &Tensor<f32, [..Pre, ..Mid, ..Post]>,
-    b: &Tensor<f32, [..Mid]>,
-    trailing: i32,
-    op: fn(f32, f32) -> f32,
-) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
-    return stretched_zip(a.data, a.extents, b.data, followed_by_units(&b.extents, trailing), op);
-}
-
 /// `extents` followed by `count` extents of 1, which broadcasting from the end
 /// stretches across the axes they stand for.
 pub fn followed_by_units(extents: &List<i32>, count: i32) -> List<i32> {
@@ -314,50 +272,29 @@ pub fn followed_by_units(extents: &List<i32>, count: i32) -> List<i32> {
     return out;
 }
 
-/// Whether `whole`'s trailing extents are `suffix`, as `zip_suffix` reads
-/// them. The caller's types put `suffix` no longer than `whole`.
-pub fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {
-    assert suffix.len() <= whole.len();
-    let offset = whole.len() - suffix.len();
-    for let mut i = 0; i < suffix.len(); i += 1 {
-        if whole[offset + i] != suffix[i] {
+/// Whether an operand of `extents`, broadcast to `out`, repeats one run of its
+/// elements across `out`'s leading axes: its extents past its leading ones of
+/// 1 are `out`'s trailing ones. Element `i` of the output then reads its
+/// element `i % len`, with no stretched copy made.
+pub fn repeats_over(extents: &List<i32>, out: &List<i32>) -> bool {
+    let mut first = 0;
+    while first < extents.len() && extents[first] == 1 {
+        first += 1;
+    }
+    let offset = out.len() - (extents.len() - first);
+    if offset < 0 {
+        return false;
+    }
+    for let i of first..<extents.len() {
+        if out[offset + i - first] != extents[i] {
             return false;
         }
     }
     return true;
 }
 
-/// Two operands combined under ONNX's broadcasting: aligned from the end, an
-/// axis one operand lacks or holds at extent 1 stretches to meet the other.
-fn stretched_zip<Axes>(
-    a: List<f32>,
-    a_extents: List<i32>,
-    b: List<f32>,
-    b_extents: List<i32>,
-    op: fn(f32, f32) -> f32,
-) -> Tensor<f32, Axes> {
-    let extents = broadcast_extents(&a_extents, &b_extents).unwrap();
-    let rank = extents.len();
-    let a_carries = stretched_carries(&a_extents, &extents);
-    let b_carries = stretched_carries(&b_extents, &extents);
-    let count = element_count(&extents);
-    let mut out = List::<f32>::with_capacity(count);
-    let mut index = List::<i32>::filled(rank, 0);
-    let mut at_a = 0;
-    let mut at_b = 0;
-    for let _ of 0..<count {
-        out.push(op(a[at_a], b[at_b]));
-        let axis = advance(&mut index, &extents);
-        if axis >= 0 {
-            at_a += a_carries[axis];
-            at_b += b_carries[axis];
-        }
-    }
-    return Tensor { data: out, extents };
-}
-
 /// ONNX's `Where`: `x` where `cond` holds and `y` elsewhere, each operand
-/// stretched as `zip` stretches one.
+/// stretched under ONNX's broadcasting.
 pub fn select<E, Axes>(cond: &Tensor<bool, Axes>, x: &Tensor<E, Axes>, y: &Tensor<E, Axes>) -> Tensor<E, Axes> {
     let extents = broadcast_extents(&broadcast_extents(&cond.extents, &x.extents).unwrap(), &y.extents).unwrap();
     let rank = extents.len();
@@ -573,13 +510,14 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
 }
 
 /// ONNX's `Conv` over `window`: each output channel sums every input channel
-/// under its kernel.
+/// under its kernel, and `then` is applied once every element is complete.
 pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
     x: &Tensor<f32, [N, Ci, ..In]>,
     w: &Tensor<f32, [Co, Ci, ..K]>,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), 1, window);
+    return conv_grouped::<N, Ci, Ci, Co, [..In], [..K], [..Out]>(x, w, 1, window, then);
 }
 
 /// `conv` plus each output channel's bias.
@@ -588,8 +526,9 @@ pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
     w: &Tensor<f32, [Co, Ci, ..K]>,
     b: &Tensor<f32, [Co]>,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, b.data, 1, window);
+    return conv_grouped_bias::<N, Ci, Ci, Co, [..In], [..K], [..Out]>(x, w, b, 1, window, then);
 }
 
 /// `conv` in `group` groups: each reads its own run of `Cg` input channels
@@ -599,8 +538,9 @@ pub fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
     w: &Tensor<f32, [Co, Cg, ..K]>,
     group: i32,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window);
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), group, window, then);
 }
 
 /// `conv_grouped` plus each output channel's bias.
@@ -610,18 +550,23 @@ pub fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
     b: &Tensor<f32, [Co]>,
     group: i32,
     window: &Window,
+    then: &Option<Epilogue<Read<[N, Co, ..Out]>>>,
 ) -> Tensor<f32, [N, Co, ..Out]> {
-    return convolve(x, w, b.data, group, window);
+    return convolve(x, w, b.data, group, window, then);
 }
 
 /// A convolution in `group` groups, each output channel reading the input
-/// channels of its own group.
+/// channels of its own group, and `then` applied in place once every element
+/// is complete. The loops run tap by tap over every output channel, so one
+/// input element serves each channel while it is in cache; no channel's plane
+/// completes before the last tap.
 fn convolve<X, W, Y>(
     x: &Tensor<f32, X>,
     w: &Tensor<f32, W>,
     bias: List<f32>,
     group: i32,
     window: &Window,
+    then: &Option<Epilogue<Read<Y>>>,
 ) -> Tensor<f32, Y> {
     let batch = x.extents[0];
     let channels = x.extents[1];
@@ -635,6 +580,7 @@ fn convolve<X, W, Y>(
     let taps = element_count(&window.kernel);
     assert element_count(&spatial_extents(&w.extents)) == taps;
     let extents = windowed_extents(batch, outputs, window);
+    let finishing = finish(then, &extents);
     let mut out = List::<f32>::with_capacity(element_count(&extents));
     for let _ of 0..<batch {
         for let oc of 0..<outputs {
@@ -660,6 +606,9 @@ fn convolve<X, W, Y>(
                 }
             }
         }
+    }
+    if let Some(f) = &finishing {
+        f.apply(&mut out, 0, out.len());
     }
     return Tensor { data: out, extents };
 }
@@ -994,40 +943,71 @@ impl Expr {
         return Expr { steps };
     }
 
-    /// The output's `count` elements over whole operands: `x` the first's
-    /// elements, `y` the second's. Each holds `count` elements or one, which
-    /// every output element reads.
-    pub fn over(&self, count: i32, x: &List<f32>, y: &List<f32>) -> List<f32> {
-        assert (x.len() == count || x.len() == 1) && (y.len() == count || y.len() == 1);
-        if count == 0 {
-            return [];
+    /// The output's `count` elements over whole operands, `operand(i)` reading
+    /// `operands[i]`. Each holds a run of elements the output repeats, so
+    /// output element `j` reads its element `j % len`: all `count` of them,
+    /// one, or the output's trailing axes.
+    pub fn over(&self, count: i32, operands: &List<&List<f32>>) -> List<f32> {
+        for let o of *operands {
+            assert count == 0 || o.len() > 0 && count % o.len() == 0;
         }
-        let mut values: List<List<f32>> = [];
-        for let step of self.steps {
-            values.push(match step {
-                Operand(_) => [],
-                Constant(c) => [c],
-                Unary([op, a]) => unary_over(op, self.value(&values, x, y, a)),
-                Binary([op, a, b]) => binary_over(op, self.value(&values, x, y, a), self.value(&values, x, y, b)),
-            });
+        let mut out = List::<f32>::filled(count, 0.0);
+        for let mut start = 0; start < count; start += CHUNK {
+            self.pass(&mut out, start, i32::min(CHUNK, count - start), operands);
         }
-        let last = self.value(&values, x, y, self.steps.len() - 1);
-        return if last.len() == count { *last } else { List::<f32>::filled(count, last[0]) };
+        return out;
     }
 
-    fn value(&self, values: &List<List<f32>>, x: &List<f32>, y: &List<f32>, i: i32) -> &List<f32> {
-        return match self.steps[i] {
-            Operand(0) => x,
-            Operand(_) => y,
-            _ => &values[i],
-        };
+    /// The `n` output elements from `start`, every step run over them before
+    /// the next pass, written to `out` there.
+    fn pass(&self, out: &mut List<f32>, start: i32, n: i32, operands: &List<&List<f32>>) {
+        let mut values: List<Slice<f32>> = [];
+        for let step of self.steps {
+            values.push(match step {
+                Operand(k) => run_of(operands[k], start, n),
+                Constant(c) => whole([c]),
+                Unary([op, a]) => whole(unary_over(op, &values[a])),
+                Binary([op, a, b]) => whole(binary_over(op, &values[a], &values[b])),
+            });
+        }
+        let last = &values[values.len() - 1];
+        for let j of 0..<n {
+            out[start + j] = if last.len() == 1 { last[0] } else { last[j] };
+        }
     }
 }
 
-// Each step is one loop whose operator is fixed before it starts. Read step by
-// step per element, an `Expr` runs several times slower.
+fn whole(values: List<f32>) -> Slice<f32> {
+    return values[0..<values.len()];
+}
 
-fn unary_over(op: UnaryOp, v: &List<f32>) -> List<f32> {
+/// The output elements an `Expr` computes per pass. A step's values never
+/// outgrow it, so what one operator hands the next stays in cache rather than
+/// becoming a tensor. Each step is still one loop whose operator is fixed
+/// before it starts: read step by step per element, an `Expr` runs several
+/// times slower.
+global CHUNK: i32 = 1024;
+
+/// The `n` output elements from `start` read from `values`, which the output
+/// repeats: a slice where they lie in one stretch, its one value where it
+/// holds one, and gathered where the pass wraps around it.
+fn run_of(values: &List<f32>, start: i32, n: i32) -> Slice<f32> {
+    let len = values.len();
+    if len == 1 {
+        return values[0..<1];
+    }
+    let at = start % len;
+    if at + n <= len {
+        return values[at..<at + n];
+    }
+    let mut out = List::<f32>::with_capacity(n);
+    for let j of 0..<n {
+        out.push(values[(start + j) % len]);
+    }
+    return whole(out);
+}
+
+fn unary_over(op: UnaryOp, v: &Slice<f32>) -> List<f32> {
     return match op {
         Relu => each(v, |e| f32::ieee754_max(e, 0.0)),
         Sigmoid => each(v, |e| sigmoid_f32(e)),
@@ -1041,7 +1021,7 @@ fn unary_over(op: UnaryOp, v: &List<f32>) -> List<f32> {
     };
 }
 
-fn binary_over(op: BinaryOp, a: &List<f32>, b: &List<f32>) -> List<f32> {
+fn binary_over(op: BinaryOp, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
     return match op {
         Add => pairwise(a, b, |x, y| x + y),
         Sub => pairwise(a, b, |x, y| x - y),
@@ -1051,7 +1031,7 @@ fn binary_over(op: BinaryOp, a: &List<f32>, b: &List<f32>) -> List<f32> {
     };
 }
 
-fn each(v: &List<f32>, f: fn(f32) -> f32) -> List<f32> {
+fn each(v: &Slice<f32>, f: fn(f32) -> f32) -> List<f32> {
     let mut out = List::<f32>::with_capacity(v.len());
     for let e of *v {
         out.push(f(e));
@@ -1060,7 +1040,7 @@ fn each(v: &List<f32>, f: fn(f32) -> f32) -> List<f32> {
 }
 
 /// `f` over `a` and `b` element by element, a one-element side read at each.
-fn pairwise(a: &List<f32>, b: &List<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
+fn pairwise(a: &Slice<f32>, b: &Slice<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
     let count = i32::max(a.len(), b.len());
     assert (a.len() == count || a.len() == 1) && (b.len() == count || b.len() == 1);
     let mut out = List::<f32>::with_capacity(count);
@@ -1082,9 +1062,88 @@ fn pairwise(a: &List<f32>, b: &List<f32>, f: fn(f32, f32) -> f32) -> List<f32> {
     return out;
 }
 
-/// `op` over `a` and `b`, both already of the output's extents.
-fn elementwise<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-    return Tensor { data: op.over(a.data.len(), &a.data, &b.data), extents: a.extents };
+/// An operand of a fused elementwise kernel whose output has the axes `Axes`:
+/// its elements, and its extents aligned with the output's from the end, where
+/// an extent of 1 or a missing axis stretches.
+pub struct Read<Axes> {
+    pub data: &List<f32>,
+    pub extents: List<i32>,
+}
+
+/// `op` over `operands`, stretched to the extents they broadcast to.
+pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
+    assert !operands.is_empty();
+    let mut extents: List<i32> = [];
+    for let o of *operands {
+        extents = broadcast_extents(&extents, &o.extents).unwrap();
+    }
+    return Tensor { data: op.over(element_count(&extents), &repeated_over(operands, &extents)), extents };
+}
+
+/// Each of `operands` as a run of elements an output of `extents` repeats:
+/// itself where it repeats over them, and otherwise stretched to them.
+fn repeated_over<Axes>(operands: &List<Read<Axes>>, extents: &List<i32>) -> List<&List<f32>> {
+    let mut reads: List<&List<f32>> = [];
+    for let o of *operands {
+        if repeats_over(&o.extents, extents) {
+            reads.push(o.data);
+        } else {
+            let stretched = stretched_to(o.data, &o.extents, extents);
+            reads.push(&stretched);
+        }
+    }
+    return reads;
+}
+
+/// The elementwise operators a contraction applies to each element it
+/// computes, once the element is complete: `op` reads that element as
+/// `operand(0)`, and `operands[i]` as `operand(i + 1)`.
+pub struct Epilogue<O> {
+    pub operands: List<O>,
+    pub op: Expr,
+}
+
+/// An epilogue ready to apply to a contraction's output of `extents`.
+struct Finish {
+    op: Expr,
+    /// Each operand after the contraction's own, as `repeated_over` reads it.
+    reads: List<&List<f32>>,
+}
+
+fn finish<Axes>(then: &Option<Epilogue<Read<Axes>>>, extents: &List<i32>) -> Option<Finish> {
+    let Some(e) = then else {
+        return null;
+    };
+    return Option::Some(Finish { op: e.op, reads: repeated_over(&e.operands, extents) });
+}
+
+impl Finish {
+    /// The epilogue over `out`'s `n` elements from `start`, which the
+    /// contraction has just completed, written back in place.
+    fn apply(&self, out: &mut List<f32>, start: i32, n: i32) {
+        let mut operands: List<&List<f32>> = [out];
+        operands.extend(&self.reads);
+        for let mut at = start; at < start + n; at += CHUNK {
+            self.op.pass(out, at, i32::min(CHUNK, start + n - at), &operands);
+        }
+    }
+}
+
+/// `data`, of `from`, repeated over `to` where `from` stretches.
+fn stretched_to(data: &List<f32>, from: &List<i32>, to: &List<i32>) -> List<f32> {
+    let count = element_count(to);
+    let steps = stretched_carries(from, to);
+    let mut out = List::<f32>::with_capacity(count);
+    let mut index = List::<i32>::filled(to.len(), 0);
+    let mut at = 0;
+    for let _ of 0..<count {
+        out.push(data[at]);
+        let axis = advance(&mut index, to);
+        if axis >= 0 {
+            at += steps[axis];
+        }
+    }
+    return out;
 }
 
 /// Where the kernels run. `forward` is instantiated at each backend, and the
@@ -1094,6 +1153,10 @@ fn elementwise<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) ->
 /// against the function.
 pub trait Backend with _ {
     type Tensor<E: Element, Axes>;
+    /// An operand of an elementwise kernel whose output has the axes `Axes`.
+    /// Each `read` checks a tensor against the output's axes, so `fused`
+    /// takes its operands as one list.
+    type Operand<Axes>;
 
     /// `t`, held on the host, as this backend holds it.
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
@@ -1109,33 +1172,21 @@ pub trait Backend with _ {
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Self::Tensor<i64, [A]>;
 
-    fn map<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, op: &Expr) -> Self::Tensor<f32, Axes>;
-    fn cast<A: Element, B: Element, Axes>(&mut self, t: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
-    fn zip<Axes>(
+    /// `t` as an operand over its own axes.
+    fn read<Axes>(&mut self, t: &Self::Tensor<f32, Axes>) -> Self::Operand<Axes>;
+    /// `t` repeated across the leading axes `Pre`.
+    fn read_suffix<..Pre, ..Suf>(&mut self, t: &Self::Tensor<f32, [..Suf]>) -> Self::Operand<[..Pre, ..Suf]>;
+    /// `t` meeting the output at `Mid`, repeated across the `trailing` axes
+    /// after it as well as those before, as arithmetic before opset 7 aligned.
+    fn read_at<..Pre, ..Mid, ..Post>(
         &mut self,
-        a: &Self::Tensor<f32, Axes>,
-        b: &Self::Tensor<f32, Axes>,
-        op: &Expr,
-    ) -> Self::Tensor<f32, Axes>;
-    fn zip_suffix<..Pre, ..Suf>(
-        &mut self,
-        a: &Self::Tensor<f32, [..Pre, ..Suf]>,
-        b: &Self::Tensor<f32, [..Suf]>,
-        op: &Expr,
-    ) -> Self::Tensor<f32, [..Pre, ..Suf]>;
-    fn zip_suffix_lhs<..Pre, ..Suf>(
-        &mut self,
-        a: &Self::Tensor<f32, [..Suf]>,
-        b: &Self::Tensor<f32, [..Pre, ..Suf]>,
-        op: &Expr,
-    ) -> Self::Tensor<f32, [..Pre, ..Suf]>;
-    fn zip_at<..Pre, ..Mid, ..Post>(
-        &mut self,
-        a: &Self::Tensor<f32, [..Pre, ..Mid, ..Post]>,
-        b: &Self::Tensor<f32, [..Mid]>,
+        t: &Self::Tensor<f32, [..Mid]>,
         trailing: i32,
-        op: &Expr,
-    ) -> Self::Tensor<f32, [..Pre, ..Mid, ..Post]>;
+    ) -> Self::Operand<[..Pre, ..Mid, ..Post]>;
+    /// `op` over `operands`, `operand(i)` reading the `i`th.
+    fn fused<Axes>(&mut self, operands: List<Self::Operand<Axes>>, op: &Expr) -> Self::Tensor<f32, Axes>;
+
+    fn cast<A: Element, B: Element, Axes>(&mut self, t: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
     fn select<E: Element, Axes>(
         &mut self,
         cond: &Self::Tensor<bool, Axes>,
@@ -1143,20 +1194,25 @@ pub trait Backend with _ {
         y: &Self::Tensor<E, Axes>,
     ) -> Self::Tensor<E, Axes>;
 
+    // A contraction takes the elementwise operators after it as `then`, applied
+    // to each element once it is complete.
     fn matmul<..Bs, M, K, N>(
         &mut self,
         a: &Self::Tensor<f32, [..Bs, M, K]>,
         b: &Self::Tensor<f32, [..Bs, K, N]>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
     ) -> Self::Tensor<f32, [..Bs, M, N]>;
     fn matmul_shared<..Bs, M, K, N>(
         &mut self,
         a: &Self::Tensor<f32, [..Bs, M, K]>,
         b: &Self::Tensor<f32, [K, N]>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
     ) -> Self::Tensor<f32, [..Bs, M, N]>;
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Self::Tensor<f32, A>,
         b: &Self::Tensor<f32, B>,
+        then: Option<Epilogue<Self::Operand<Out>>>,
     ) -> Self::Tensor<f32, Out>;
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
@@ -1199,6 +1255,7 @@ pub trait Backend with _ {
         x: &Self::Tensor<f32, [N, Ci, ..In]>,
         w: &Self::Tensor<f32, [Co, Ci, ..K]>,
         window: &Window,
+        then: Option<Epilogue<Self::Operand<[N, Co, ..Out]>>>,
     ) -> Self::Tensor<f32, [N, Co, ..Out]>;
     fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
         &mut self,
@@ -1206,6 +1263,7 @@ pub trait Backend with _ {
         w: &Self::Tensor<f32, [Co, Ci, ..K]>,
         b: &Self::Tensor<f32, [Co]>,
         window: &Window,
+        then: Option<Epilogue<Self::Operand<[N, Co, ..Out]>>>,
     ) -> Self::Tensor<f32, [N, Co, ..Out]>;
     fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
         &mut self,
@@ -1213,6 +1271,7 @@ pub trait Backend with _ {
         w: &Self::Tensor<f32, [Co, Cg, ..K]>,
         group: i32,
         window: &Window,
+        then: Option<Epilogue<Self::Operand<[N, Co, ..Out]>>>,
     ) -> Self::Tensor<f32, [N, Co, ..Out]>;
     fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
         &mut self,
@@ -1221,6 +1280,7 @@ pub trait Backend with _ {
         b: &Self::Tensor<f32, [Co]>,
         group: i32,
         window: &Window,
+        then: Option<Epilogue<Self::Operand<[N, Co, ..Out]>>>,
     ) -> Self::Tensor<f32, [N, Co, ..Out]>;
 
     fn softmax<Axes>(&mut self, t: &Self::Tensor<f32, Axes>, axis: i32) -> Self::Tensor<f32, Axes>;
@@ -1235,6 +1295,7 @@ pub struct Cpu {
 
 impl Backend for Cpu {
     type Tensor<E: Element, Axes> = Tensor<E, Axes>;
+    type Operand<Axes> = Read<Axes>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
@@ -1252,47 +1313,24 @@ impl Backend for Cpu {
         return range_i64(start, count, delta);
     }
 
-    fn map<Axes>(&mut self, t: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-        return Tensor { data: op.over(t.data.len(), &t.data, &[0.0]), extents: t.extents };
+    fn read<Axes>(&mut self, t: &Tensor<f32, Axes>) -> Read<Axes> {
+        return Read { data: &t.data, extents: t.extents };
+    }
+
+    fn read_suffix<..Pre, ..Suf>(&mut self, t: &Tensor<f32, [..Suf]>) -> Read<[..Pre, ..Suf]> {
+        return Read { data: &t.data, extents: t.extents };
+    }
+
+    fn read_at<..Pre, ..Mid, ..Post>(&mut self, t: &Tensor<f32, [..Mid]>, trailing: i32) -> Read<[..Pre, ..Mid, ..Post]> {
+        return Read { data: &t.data, extents: followed_by_units(&t.extents, trailing) };
+    }
+
+    fn fused<Axes>(&mut self, operands: List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
+        return fused(&operands, op);
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Tensor<A, Axes>) -> Tensor<B, Axes> {
         return map(t, |v| v.cast_to::<B>());
-    }
-
-    fn zip<Axes>(&mut self, a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: &Expr) -> Tensor<f32, Axes> {
-        if a.extents == b.extents {
-            return elementwise(a, b, op);
-        }
-        return elementwise(&zip(a, b, |x, y| x), &zip(a, b, |x, y| y), op);
-    }
-
-    fn zip_suffix<..Pre, ..Suf>(
-        &mut self,
-        a: &Tensor<f32, [..Pre, ..Suf]>,
-        b: &Tensor<f32, [..Suf]>,
-        op: &Expr,
-    ) -> Tensor<f32, [..Pre, ..Suf]> {
-        return elementwise(a, &zip_suffix(a, b, |x, y| y), op);
-    }
-
-    fn zip_suffix_lhs<..Pre, ..Suf>(
-        &mut self,
-        a: &Tensor<f32, [..Suf]>,
-        b: &Tensor<f32, [..Pre, ..Suf]>,
-        op: &Expr,
-    ) -> Tensor<f32, [..Pre, ..Suf]> {
-        return elementwise(&zip_suffix_lhs(a, b, |x, y| x), b, op);
-    }
-
-    fn zip_at<..Pre, ..Mid, ..Post>(
-        &mut self,
-        a: &Tensor<f32, [..Pre, ..Mid, ..Post]>,
-        b: &Tensor<f32, [..Mid]>,
-        trailing: i32,
-        op: &Expr,
-    ) -> Tensor<f32, [..Pre, ..Mid, ..Post]> {
-        return elementwise(a, &zip_at(a, b, trailing, |x, y| y), op);
     }
 
     fn select<E: Element, Axes>(
@@ -1308,20 +1346,27 @@ impl Backend for Cpu {
         &mut self,
         a: &Tensor<f32, [..Bs, M, K]>,
         b: &Tensor<f32, [..Bs, K, N]>,
+        then: Option<Epilogue<Read<[..Bs, M, N]>>>,
     ) -> Tensor<f32, [..Bs, M, N]> {
-        return matmul(a, b);
+        return matmul(a, b, &then);
     }
 
     fn matmul_shared<..Bs, M, K, N>(
         &mut self,
         a: &Tensor<f32, [..Bs, M, K]>,
         b: &Tensor<f32, [K, N]>,
+        then: Option<Epilogue<Read<[..Bs, M, N]>>>,
     ) -> Tensor<f32, [..Bs, M, N]> {
-        return matmul_shared(a, b);
+        return matmul_shared(a, b, &then);
     }
 
-    fn matmul_broadcast<A, B, Out>(&mut self, a: &Tensor<f32, A>, b: &Tensor<f32, B>) -> Tensor<f32, Out> {
-        return matmul_broadcast(a, b);
+    fn matmul_broadcast<A, B, Out>(
+        &mut self,
+        a: &Tensor<f32, A>,
+        b: &Tensor<f32, B>,
+        then: Option<Epilogue<Read<Out>>>,
+    ) -> Tensor<f32, Out> {
+        return matmul_broadcast(a, b, &then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
@@ -1390,8 +1435,9 @@ impl Backend for Cpu {
         x: &Tensor<f32, [N, Ci, ..In]>,
         w: &Tensor<f32, [Co, Ci, ..K]>,
         window: &Window,
+        then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return conv::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, window);
+        return conv::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, window, &then);
     }
 
     fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
@@ -1400,8 +1446,9 @@ impl Backend for Cpu {
         w: &Tensor<f32, [Co, Ci, ..K]>,
         b: &Tensor<f32, [Co]>,
         window: &Window,
+        then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, b, window);
+        return conv_bias::<N, Ci, Co, [..In], [..K], [..Out]>(x, w, b, window, &then);
     }
 
     fn conv_grouped<N, Ci, Cg, Co, ..In, ..K, ..Out>(
@@ -1410,8 +1457,9 @@ impl Backend for Cpu {
         w: &Tensor<f32, [Co, Cg, ..K]>,
         group: i32,
         window: &Window,
+        then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, group, window);
+        return conv_grouped::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, group, window, &then);
     }
 
     fn conv_grouped_bias<N, Ci, Cg, Co, ..In, ..K, ..Out>(
@@ -1421,8 +1469,9 @@ impl Backend for Cpu {
         b: &Tensor<f32, [Co]>,
         group: i32,
         window: &Window,
+        then: Option<Epilogue<Read<[N, Co, ..Out]>>>,
     ) -> Tensor<f32, [N, Co, ..Out]> {
-        return conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, b, group, window);
+        return conv_grouped_bias::<N, Ci, Cg, Co, [..In], [..K], [..Out]>(x, w, b, group, window, &then);
     }
 
     fn softmax<Axes>(&mut self, t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
