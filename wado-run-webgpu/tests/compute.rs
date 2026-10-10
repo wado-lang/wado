@@ -108,7 +108,11 @@ fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
         assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
         // Ten a layer over five layers, and the embeddings, the last
         // normalization and the head: `package-loam/webgpu.md` counts them.
-        assert_eq!(words[words.len() - 5..words.len() - 3], ["dispatches", "56"], "{line}");
+        assert_eq!(
+            words[words.len() - 5..words.len() - 3],
+            ["dispatches", "56"],
+            "{line}"
+        );
         let deviation: f32 = words[words.len() - 6]
             .parse()
             .unwrap_or_else(|_| panic!("no deviation in {line:?}"));
