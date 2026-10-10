@@ -88,7 +88,8 @@ pub enum Kind {
     Selection,
     /// Elements converted to another type: `Cast`.
     Conversion,
-    /// Elements made from extents alone: `Range` and `ConstantOfShape`.
+    /// Elements made from extents alone: `Range`, `ConstantOfShape`, `Shape`
+    /// and `Constant`.
     Generation,
     /// An `If`, whose branches read the tensor.
     Branch,
@@ -106,7 +107,7 @@ pub fn kind_of(op: &String) -> Kind {
         "Reshape" | "Flatten" | "Squeeze" | "Unsqueeze" | "Transpose" | "Concat" | "Split" | "Slice" | "Identity" => Kind::Regrouping,
         "Gather" | "Where" => Kind::Selection,
         "Cast" => Kind::Conversion,
-        "Range" | "ConstantOfShape" => Kind::Generation,
+        "Range" | "ConstantOfShape" | "Shape" | "Constant" => Kind::Generation,
         "If" => Kind::Branch,
         // Stage 0 refuses every other operator.
         _ => unreachable(),

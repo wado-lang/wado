@@ -65,6 +65,30 @@ test "a contraction and the elementwise chain after it fuse into the last kernel
     assert p.of(&"Y") == written(Reason::Returned);
 }
 
+test "a kernel read only by a Shape is written, its reader making elements from extents alone" {
+    let p = plan_of(
+        `
+shaped (float[N, 4] X) => (int64[2] S, float[N, 4] Y)
+{
+    R = Relu(X)
+    S = Shape(R)
+    Y = Neg(X)
+}
+`,
+        [
+            [
+                "X",
+                ["Batch", "In"],
+            ],
+            [
+                "S",
+                ["Rank"],
+            ],
+        ],
+    );
+    assert p.of(&"R") == written(Reason::Reader(Kind::Generation));
+}
+
 test "with fusion off, every kernel writes its output" {
     let p = plan_of(MLP, mlp_layout(), false);
     for let tensor of ["H", "HB", "A", "T", "Y"] {

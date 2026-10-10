@@ -1641,6 +1641,23 @@ impl T for S {
 }
 
 #[test]
+fn test_format_rest_clause_follows_the_last_member() {
+    // The blank line before `..trap` is a method's, so a member after the
+    // method takes it away.
+    let source = r"impl T for S {
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    type B = i32;
+    ..trap
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "no blank line after a non-method member");
+}
+
+#[test]
 fn test_format_preserves_trait_doc_before_attributed_member() {
     // Regression (#1598): a doc comment immediately before a member carrying
     // an attribute must stay attached — no blank line inserted between the

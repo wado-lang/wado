@@ -1211,7 +1211,7 @@ impl<'a> Unparser<'a> {
             }
 
             if let Some(rest) = i.rest {
-                if !i.methods.is_empty() {
+                if previous.is_some_and(Member::is_method) {
                     this.output.push('\n');
                 }
                 this.write_indent();
