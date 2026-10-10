@@ -1,0 +1,41 @@
+// A build without contract checks skips a trait clause on an `unchecked`
+// call, direct or through a bound, and only there.
+use { println, Stdout } from "core:cli";
+
+trait Pick with () {
+    fn size(&self) -> i32;
+
+    fn pick(&self, i: i32) -> i32
+        contract 0 <= i < self.size(), "index out of range";
+}
+
+struct Digits { base: i32, count: i32 }
+
+impl Pick for Digits {
+    fn size(&self) -> i32 {
+        return self.count;
+    }
+
+    fn pick(&self, i: i32) -> i32 {
+        return self.base + i;
+    }
+}
+
+fn pick_unchecked<P: Pick>(p: &P, i: i32) -> i32 {
+    return unchecked p.pick(i);
+}
+
+export fn run() with Stdout {
+    let d = Digits { base: 10, count: 3 };
+    println(`${unchecked d.pick(builtin::black_box(4))}`);
+    println(`${pick_unchecked(&d, builtin::black_box(5))}`);
+    println(`${d.pick(builtin::black_box(6))}`);
+}
+
+__DATA__
+{
+    "only_opt": ["O1", "O2", "O3", "Os"],
+    "stdout": "14\n15\n",
+    "stderr_contains": ["index out of range"],
+    "trapped": true
+}

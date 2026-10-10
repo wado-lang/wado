@@ -1,0 +1,70 @@
+// A trait method's clauses bind every impl and the trait's default bodies,
+// whether the call names the type or goes through a bound.
+trait Pick with () {
+    fn size(&self) -> i32;
+
+    fn pick(&self, i: i32) -> i32
+        contract 0 <= i < self.size(), "index out of range";
+
+    fn first(&self) -> i32
+        contract self.size() > 0
+    {
+        return self.pick(0);
+    }
+}
+
+struct Digits { base: i32, count: i32 }
+
+impl Pick for Digits {
+    fn size(&self) -> i32 {
+        return self.count;
+    }
+
+    fn pick(&self, i: i32) -> i32 {
+        return self.base + i;
+    }
+}
+
+fn pick_through<P: Pick>(p: &P, i: i32) -> i32 {
+    return p.pick(i);
+}
+
+fn pick_through_unchecked<P: Pick>(p: &P, i: i32) -> i32 {
+    return unchecked p.pick(i);
+}
+
+test "a call within the clauses" {
+    let d = Digits { base: 10, count: 3 };
+    assert d.pick(2) == 12;
+    assert unchecked d.pick(1) == 11;
+    assert pick_through(&d, 0) == 10;
+    assert pick_through_unchecked(&d, 2) == 12;
+    assert d.first() == 10;
+}
+
+#[expect_trap]
+test "a direct call outside the clauses" {
+    let d = Digits { base: 10, count: 3 };
+    let _ = d.pick(builtin::black_box(3));
+}
+
+#[expect_trap]
+test "a call through a bound outside the clauses" {
+    let d = Digits { base: 10, count: 3 };
+    let _ = pick_through(&d, builtin::black_box(-1));
+}
+
+#[expect_trap]
+test "the test world checks an unchecked call" {
+    let d = Digits { base: 10, count: 3 };
+    let _ = pick_through_unchecked(&d, builtin::black_box(3));
+}
+
+#[expect_trap]
+test "a default body's clause" {
+    let d = Digits { base: 10, count: builtin::black_box(0) };
+    let _ = d.first();
+}
+
+__DATA__
+{"test": {}}

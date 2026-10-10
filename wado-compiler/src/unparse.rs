@@ -887,6 +887,13 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_function(&mut self, f: &Function) {
+        let contracts: Vec<&AssertStmt> = f.contracts().collect();
+        self.unparse_function_with_contracts(f, &contracts);
+    }
+
+    /// Emit `f` with `contracts` as its `contract` clauses, which a trait
+    /// method's hidden holder keeps rather than its body.
+    fn unparse_function_with_contracts(&mut self, f: &Function, contracts: &[&AssertStmt]) {
         self.emit_outer_attrs(&f.attrs);
         function_decl_keyword_into(f, &mut self.output);
         self.emit_kw_if(f.is_async, "async ");
@@ -905,7 +912,7 @@ impl<'a> Unparser<'a> {
         });
 
         self.indent_level += 1;
-        for clause in f.contracts() {
+        for clause in contracts {
             self.output.push('\n');
             self.write_indent();
             self.output.push_str("contract ");
@@ -918,7 +925,7 @@ impl<'a> Unparser<'a> {
         self.indent_level -= 1;
 
         if let Some(body) = &f.body {
-            if f.contracts().next().is_none() {
+            if contracts.is_empty() {
                 self.output.push(' ');
             } else {
                 self.output.push('\n');
@@ -1230,11 +1237,16 @@ impl<'a> Unparser<'a> {
                 });
             }
 
-            for method in &t.methods {
+            for method in t.methods.iter().filter(|m| !m.is_contract_holder()) {
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
                 this.open_member(method.id, method.span.start);
                 this.emit_blank_lines_to(effective_line);
-                this.unparse_function(method);
+                let contracts: Vec<&AssertStmt> = t
+                    .contract_holder(&method.name)
+                    .into_iter()
+                    .flat_map(Function::contracts)
+                    .collect();
+                this.unparse_function_with_contracts(method, &contracts);
                 this.last_source_line = method.span.end_line();
             }
         });

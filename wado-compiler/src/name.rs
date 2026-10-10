@@ -106,6 +106,21 @@ pub fn unchecked_twin_name(name: &str) -> String {
     format!("{name}$unchecked")
 }
 
+const CONTRACT_HOLDER_PREFIX: &str = "$contract$";
+
+/// The name of the hidden default method a trait declares to hold the
+/// `contract` clauses of its method `method`, which every impl of the method
+/// calls at its head.
+pub fn contract_holder_name(method: &str) -> String {
+    format!("{CONTRACT_HOLDER_PREFIX}{method}")
+}
+
+/// The method whose `contract` clauses the hidden method `name` holds, if it
+/// is one. See [`contract_holder_name`].
+pub fn contract_holder_of(name: &str) -> Option<&str> {
+    name.strip_prefix(CONTRACT_HOLDER_PREFIX)
+}
+
 /// The name of the function holding an effect operation's default
 /// implementation — the body that runs when the operation is dispatched with
 /// no handler installed. `$`-prefixed like the other synthesized helpers, so it

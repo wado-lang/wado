@@ -23,7 +23,10 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
+use crate::name::{
+    FqTypeName, Receiver, contract_holder_of, global_init_function, global_name,
+    unchecked_twin_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -715,14 +718,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if let Some(tir_impl) = self.reify_impl_decl(impl_block) {
                         tir_module.add_impl(tir_impl);
                     }
-                    for tir_func in self.reify_impl(impl_block) {
-                        tir_module.add_function(tir_func);
-                    }
                     // Reify is the sole producer of
                     // trait default-method `TirFunction`s, synthesised here
                     // from the per-impl facts the body walk recorded on
                     // `sem.default_method_facts`.
-                    for tir_func in self.reify_impl_default_methods(impl_block) {
+                    let mut methods = self.reify_impl(impl_block);
+                    methods.extend(self.reify_impl_default_methods(impl_block));
+                    for tir_func in bind_trait_contracts(methods, &self.current_module_source) {
                         tir_module.add_function(tir_func);
                     }
                 }
@@ -1488,15 +1490,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             impl_type_params = Vec::new();
         }
 
-        if facts.trait_name.is_some()
-            && let Some(clause) = func.contracts().next()
-        {
-            self.error_at(
-                Code::UnsupportedFeature,
-                clause.span,
-                "a `contract` on a trait's method is not supported".to_string(),
-            );
-        }
         let mut tir_func = self.reify_callable(func, display_name);
         tir_func.name = mangled_name;
         tir_func.is_export = false;
@@ -1663,46 +1656,84 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Point the call `expr` reified to at its callee's `unchecked` twin, or
-    /// say why it has none.
-    fn retarget_to_unchecked_twin(&self, expr: &mut TirExpr) -> Result<(), &'static str> {
+    /// say why it has none. `dispatched` is the method a call through a bound
+    /// reaches, which names no template.
+    fn retarget_to_unchecked_twin(
+        &self,
+        expr: &mut TirExpr,
+        dispatched: Option<DefId>,
+    ) -> Result<(), &'static str> {
         const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
         let TirExprKind::Call { func, .. } = &mut expr.kind else {
             return Err(NOT_A_CALL);
         };
-        let Some(TemplateId::Declared { def, block }) = func.template.clone() else {
+        let declared = match func.template.clone() {
+            Some(TemplateId::Declared { def, block }) => Some((def, block)),
+            Some(TemplateId::Synthesized { .. }) => return Err(NOT_A_CALL),
+            None => None,
+        };
+        let Some(def) = declared.map(|(def, _)| def).or(dispatched) else {
             return Err(NOT_A_CALL);
         };
         if !self.declares_contract(def) {
             return Err("the callee has no `contract` clause for `unchecked` to vouch for");
         }
-        let defs = self.tysys.resolutions.defs();
-        let home = TemplateId::Declared { def, block }.home(defs);
         func.name = unchecked_twin_name(&func.name);
         if let Some(info) = &mut func.method_info {
             info.method_name = unchecked_twin_name(&info.method_name);
         }
-        func.template = Some(TemplateId::Synthesized {
-            module: home,
-            name: func.name.clone(),
-        });
+        if let Some((def, block)) = declared {
+            let defs = self.tysys.resolutions.defs();
+            func.template = Some(TemplateId::Synthesized {
+                module: TemplateId::Declared { def, block }.home(defs),
+                name: func.name.clone(),
+            });
+        }
         Ok(())
     }
 
-    /// Whether the function `def` declares writes a `contract` clause.
+    /// Whether the function `def` declares is bound by a `contract` clause:
+    /// one it writes, or one its trait declares for it.
     fn declares_contract(&self, def: DefId) -> bool {
-        let defs = self.tysys.resolutions.defs();
-        let Some(module) = self.loaded_modules.get(defs.module(def)) else {
-            return false;
-        };
-        let target = defs.ast_id(def);
         let has_contract = |func: &ast::Function| func.contracts().next().is_some();
-        module.items.iter().any(|item| match item {
+        let trait_binds = |decl: &ast::TraitDecl, method: &ast::Function| {
+            decl.contract_holder(&method.name).is_some()
+        };
+        let target = self.tysys.resolutions.defs().ast_id(def);
+        self.items_declaring(def).iter().any(|item| match item {
             Item::Function(func) => func.id == target && has_contract(func),
-            Item::Impl(block) => block
+            Item::Impl(block) => block.methods.iter().any(|method| {
+                method.id == target
+                    && (has_contract(method)
+                        || block
+                            .trait_type
+                            .as_ref()
+                            .and_then(|ty| self.tysys.resolutions.head_decl(ty))
+                            .and_then(|decl| self.trait_decl(decl))
+                            .is_some_and(|decl| trait_binds(decl, method)))
+            }),
+            Item::Trait(decl) => decl
                 .methods
                 .iter()
-                .any(|method| method.id == target && has_contract(method)),
+                .any(|method| method.id == target && trait_binds(decl, method)),
             _ => false,
+        })
+    }
+
+    /// The items of the module `def` is declared in.
+    fn items_declaring(&self, def: DefId) -> &'a [Item] {
+        let module = self.tysys.resolutions.defs().module(def);
+        self.loaded_modules
+            .get(module)
+            .map_or(&[], |m| m.items.as_slice())
+    }
+
+    /// The trait `def` declares.
+    fn trait_decl(&self, def: DefId) -> Option<&'a ast::TraitDecl> {
+        let target = self.tysys.resolutions.defs().ast_id(def);
+        self.items_declaring(def).iter().find_map(|item| match item {
+            Item::Trait(decl) if decl.id == target => Some(decl),
+            _ => None,
         })
     }
 
@@ -2548,7 +2579,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Unchecked => {
                 let mut call = self.reify_expr(&unary.expr, ctx, expected_type);
-                if let Err(message) = self.retarget_to_unchecked_twin(&mut call) {
+                // A call through a bound names no template, only the trait's method.
+                let dispatched = match &unary.expr {
+                    ast::Expr::MethodCall(method_call) => self
+                        .ann_method_dispatch(method_call.id)
+                        .and_then(|dispatch| dispatch.method_def),
+                    _ => None,
+                };
+                if let Err(message) = self.retarget_to_unchecked_twin(&mut call, dispatched) {
                     self.error_at(Code::UncheckedInvalid, unary.span, message.to_string());
                 }
                 call
@@ -10292,6 +10330,79 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
         })
         .collect();
     twin
+}
+
+/// Bind an impl's `methods` to the `contract` clauses their trait declares.
+/// Each clause holder among them splits into the checked holder and its
+/// `unchecked` twin, and the method it holds the clauses of splits likewise,
+/// each half opening with a call to the matching half of the holder.
+fn bind_trait_contracts(
+    mut methods: Vec<TirFunction>,
+    module: &ModuleSource,
+) -> Vec<TirFunction> {
+    let holders: Vec<usize> = (0..methods.len())
+        .filter(|&i| held_method(&methods[i]).is_some())
+        .collect();
+    for holder_at in holders {
+        let holder = &mut methods[holder_at];
+        let clauses: Vec<Span> = holder
+            .body
+            .iter()
+            .flat_map(|body| &body.stmts)
+            .map(|stmt| stmt.span)
+            .collect();
+        let holder_twin = split_unchecked_twin(holder, &clauses);
+        let holder = holder.clone();
+        let held = held_method(&holder).expect("filtered above").to_string();
+        if let Some(method) = methods.iter_mut().find(|m| method_name(m) == Some(&held)) {
+            let mut method_twin = split_unchecked_twin(method, &[]);
+            open_with_call(method, &holder, module);
+            open_with_call(&mut method_twin, &holder_twin, module);
+            methods.push(method_twin);
+        }
+        methods.push(holder_twin);
+    }
+    methods
+}
+
+fn method_name(func: &TirFunction) -> Option<&str> {
+    func.method_info.as_ref().map(|info| info.method_name.as_str())
+}
+
+/// The method whose `contract` clauses `func` holds, if it is a holder.
+fn held_method(func: &TirFunction) -> Option<&str> {
+    method_name(func).and_then(contract_holder_of)
+}
+
+/// Open `func`'s body with a call to `callee`, emitted into `module`, passing
+/// it `func`'s parameters.
+fn open_with_call(func: &mut TirFunction, callee: &TirFunction, module: &ModuleSource) {
+    let span = callee.span;
+    let args = func
+        .params
+        .iter()
+        .map(|param| {
+            let local = TirExprKind::Local {
+                index: param.local_index,
+                name: param.name.clone(),
+            };
+            CallArg::new(TirExpr::new(local, param.type_id, span), false)
+        })
+        .collect();
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef::from_resolved(callee, module.clone())),
+            type_args: Vec::new(),
+            args: CallArgs::free(args),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    func.body
+        .as_mut()
+        .expect("a method a trait's contract binds has a body")
+        .stmts
+        .insert(0, TirStmt::new(TirStmtKind::Expr(call), span));
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {

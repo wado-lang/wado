@@ -27,6 +27,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, lex_interpolation};
+use crate::name::contract_holder_name;
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -1970,6 +1971,31 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
+        let (mut func, contracts) =
+            self.parse_function_and_contracts(id, visibility, is_export, is_async, attrs, is_method)?;
+        if let Some(contract) = contracts.first() {
+            let Some(body) = &mut func.body else {
+                return Err(self.error_at_span(
+                    contract.span(),
+                    "a `contract` needs a body to check it in; one on a bodyless declaration is not supported",
+                ));
+            };
+            body.stmts.splice(0..0, contracts);
+        }
+        Ok(func)
+    }
+
+    /// Parse a function as [`Self::parse_function`] does, handing back its
+    /// `contract` clauses rather than opening its body with them.
+    fn parse_function_and_contracts(
+        &mut self,
+        id: AstId,
+        visibility: Visibility,
+        is_export: bool,
+        is_async: bool,
+        attrs: Vec<Attribute>,
+        is_method: bool,
+    ) -> ParseResult<(Function, Vec<Stmt>)> {
         reject_resource_linearity(&attrs)?;
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
@@ -2022,12 +2048,6 @@ impl Parser {
         // trait-method signature) e.g., `pub fn stream_new() -> i64;`
         let mut decl_end_span = None;
         let body = if self.check(&TokenKind::Semicolon) {
-            if let Some(contract) = contracts.first() {
-                return Err(self.error_at_span(
-                    contract.span(),
-                    "a `contract` needs a body to check it in; one on a bodyless declaration is not supported",
-                ));
-            }
             self.advance();
             // Span must cover through the terminating `;`, not just the `fn`
             // keyword line. The formatter's blank-line accounting keys off
@@ -2039,9 +2059,7 @@ impl Parser {
             decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
             None
         } else {
-            let mut body = self.parse_block()?;
-            body.stmts.splice(0..0, contracts);
-            Some(body)
+            Some(self.parse_block()?)
         };
 
         let span = match (&body, decl_end_span) {
@@ -2050,7 +2068,7 @@ impl Parser {
             (None, None) => start_span,
         };
 
-        Ok(Function {
+        let func = Function {
             id,
             name,
             name_span,
@@ -2066,6 +2084,59 @@ impl Parser {
             effects,
             effects_inherited: false,
             body,
+            span,
+        };
+        Ok((func, contracts))
+    }
+
+    /// The hidden default method holding the `contract` clauses of the trait
+    /// method `method`, whose `fn` is the token at `fn_pos`. It takes the
+    /// method's parameters, read again from its head so that they are nodes of
+    /// their own, and returns nothing: its body is the clauses.
+    fn contract_holder(
+        &mut self,
+        method: &Function,
+        fn_pos: usize,
+        contracts: Vec<Stmt>,
+    ) -> ParseResult<Function> {
+        let end = self.checkpoint();
+        self.pos = fn_pos;
+        self.expect(&TokenKind::Fn)?;
+        self.consume_ident()?;
+        let mut type_params = self.parse_generic_params()?;
+        type_params.retain(|param| !param.is_effect);
+        let lparen_span = self.expect(&TokenKind::LParen)?.span;
+        let params = self.parse_param_list()?;
+        let rparen_span = self.expect(&TokenKind::RParen)?.span;
+        let next_ast_id = self.next_ast_id;
+        self.restore(end);
+        self.next_ast_id = next_ast_id;
+
+        let span = contracts
+            .iter()
+            .map(Stmt::span)
+            .reduce(|a, b| a.merge(&b))
+            .expect("a holder holds a clause");
+        Ok(Function {
+            id: self.alloc_ast_id(),
+            name: contract_holder_name(&method.name),
+            name_span: method.name_span,
+            visibility: Visibility::Private,
+            is_export: false,
+            export_targets: Vec::new(),
+            is_async: false,
+            type_params,
+            attrs: Vec::new(),
+            params,
+            params_span: lparen_span.merge(&rparen_span),
+            return_type: None,
+            effects: Vec::new(),
+            effects_inherited: false,
+            body: Some(Block {
+                id: self.alloc_ast_id(),
+                stmts: contracts,
+                span,
+            }),
             span,
         })
     }
@@ -6176,7 +6247,16 @@ impl Parser {
                     });
                 } else {
                     let id = self.alloc_ast_id();
-                    methods.push(self.parse_function(id, member_vis, false, false, attrs, true)?);
+                    let method = self.parse_function(id, member_vis, false, false, attrs, true)?;
+                    if trait_type.is_some()
+                        && let Some(clause) = method.contracts().next()
+                    {
+                        return Err(self.error_at_span(
+                            clause.span,
+                            "an impl writes no `contract`: the trait's clauses bind it",
+                        ));
+                    }
+                    methods.push(method);
                 }
             }
         }
@@ -6345,8 +6425,15 @@ impl Parser {
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
                 let id = self.alloc_ast_id();
-                let mut method =
-                    self.parse_function(id, Visibility::Private, false, false, attrs, true)?;
+                let fn_pos = self.pos;
+                let (mut method, contracts) = self.parse_function_and_contracts(
+                    id,
+                    Visibility::Private,
+                    false,
+                    false,
+                    attrs,
+                    true,
+                )?;
                 // A method that declares nothing takes what the head says, at
                 // sites of its own that the trait's scope answers.
                 if method.effects.is_empty() {
@@ -6356,7 +6443,11 @@ impl Parser {
                         method.effects.push(self.effect_name(name, span));
                     }
                 }
+                let holder = (!contracts.is_empty())
+                    .then(|| self.contract_holder(&method, fn_pos, contracts))
+                    .transpose()?;
                 methods.push(method);
+                methods.extend(holder);
             }
         }
 

@@ -1,0 +1,20 @@
+// A trait's clause performs no effect, as a function's does not.
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> bool with Stdout {
+    println("checked");
+    return n > 0;
+}
+
+trait Get with () {
+    fn get(&self, i: i32) -> i32
+        contract noisy(i);
+}
+
+export fn run() {
+}
+
+__DATA__
+{
+  "compile_error": ":11:18: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'"
+}

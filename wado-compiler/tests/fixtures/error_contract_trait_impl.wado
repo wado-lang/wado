@@ -1,6 +1,5 @@
-// A contract on a trait's method is not supported yet: how one binds an impl
-// is undecided.
-trait Get {
+// An impl writes no clause: the trait's clauses bind every impl.
+trait Get with () {
     fn get(&self, i: i32) -> i32;
 }
 
@@ -21,5 +20,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":11:9: analysis error: a `contract` on a trait's method is not supported"
+  "compile_error": ":10:9: parse error: an impl writes no `contract`: the trait's clauses bind it"
 }

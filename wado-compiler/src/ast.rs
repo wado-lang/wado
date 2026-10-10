@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::UNIT_TYPE_NAME;
+use crate::name::{UNIT_TYPE_NAME, contract_holder_of};
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -2453,6 +2453,13 @@ impl Function {
             })
     }
 
+    /// Whether this is the default method a trait declares, hidden, to hold
+    /// the `contract` clauses of one of its methods. Each impl of that method
+    /// calls it at its head.
+    pub fn is_contract_holder(&self) -> bool {
+        contract_holder_of(&self.name).is_some()
+    }
+
     /// Whether this is an `export fn` exported under its own name: an
     /// `export(…)` names the world exports it provides instead.
     #[must_use]
@@ -4694,10 +4701,21 @@ pub struct TraitDecl {
     pub supertraits: Vec<TraitBound>,
     /// Associated type declarations: `type Output;`
     pub associated_types: Vec<AssociatedTypeDecl>,
-    /// Trait methods. Body is None for required methods.
+    /// Trait methods. Body is None for required methods. A method with
+    /// `contract` clauses is followed by the hidden default method holding
+    /// them (see [`Function::is_contract_holder`]).
     pub methods: Vec<Function>,
     pub attrs: Vec<Attribute>,
     pub span: Span,
+}
+
+impl TraitDecl {
+    /// The hidden default method holding the `contract` clauses of `method`.
+    pub fn contract_holder(&self, method: &str) -> Option<&Function> {
+        self.methods
+            .iter()
+            .find(|m| contract_holder_of(&m.name) == Some(method))
+    }
 }
 
 /// What an effect handler does with an operation it does not implement.

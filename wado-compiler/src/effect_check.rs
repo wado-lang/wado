@@ -2358,7 +2358,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                     // defaults, so their calls leave no `references` edge to flag
                     // until that annotation lands.
                     for method in &trait_decl.methods {
-                        walker.check_defaults(&method.params);
+                        walker.check_trait_method(method);
                     }
                 }
                 Item::Interface(interface_decl) => {
@@ -2458,6 +2458,24 @@ impl<'a> PurityWalker<'a> {
     /// A function's defaults and its `contract` clauses.
     fn check_signature(&mut self, func: &ast::Function) {
         self.check_defaults(&func.params);
+        self.check_contracts(func);
+    }
+
+    /// A trait method's defaults, and the `contract` clauses of a holder in
+    /// each impl's walk of it.
+    fn check_trait_method(&mut self, func: &ast::Function) {
+        self.check_defaults(&func.params);
+        let module_view = self.sem;
+        for walk in module_view.default_walks(func.id) {
+            self.sem = walk;
+            self.annotations = walk.annotations(self.module_source);
+            self.check_contracts(func);
+        }
+        self.sem = module_view;
+        self.annotations = module_view.annotations(self.module_source);
+    }
+
+    fn check_contracts(&mut self, func: &ast::Function) {
         for clause in func.contracts() {
             self.check(PureContext::Contract, &clause.condition);
             if let Some(message) = &clause.message {

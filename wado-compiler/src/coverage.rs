@@ -548,7 +548,11 @@ impl Planner<'_> {
 
     fn function(&mut self, f: &Function) {
         let Some(body) = &f.body else { return };
-        if attribute::coverage_off(&f.attrs) || self.reaches_only_unreachable(&body.stmts, false) {
+        // A contract clause is no coverage target, and a holder is nothing else.
+        if f.is_contract_holder()
+            || attribute::coverage_off(&f.attrs)
+            || self.reaches_only_unreachable(&body.stmts, false)
+        {
             return;
         }
         let name = match &self.owner {
