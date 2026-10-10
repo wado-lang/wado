@@ -49,6 +49,8 @@ finding was:
   value was in the claim, not the suggestion.
 - Grounded in a project rule the code breaks → fix it, and cite the rule.
 - Not real, or already recorded as a known gap → skip, and say why.
+- A missing doc comment → skip. A comment is written only for what the code
+  cannot say (`AGENTS.md` § General Rules), so its absence is not a defect.
 
 Whose defect it is does not enter into it. `AGENTS.md` settles the question: a
 pre-existing issue must be fixed whether you found it or a reviewer pointed it
