@@ -4289,12 +4289,11 @@ impl TypeTable {
                     .is_some_and(|filled| self.same_types(&filled, wanted))
             })
         });
-        let entry = match reached {
-            Some(entry) => entry.clone(),
-            None => {
-                let bare = answers.bare()?;
-                answers.0.iter().find(|entry| entry.answer == bare)?.clone()
-            }
+        let entry = if let Some(entry) = reached {
+            entry.clone()
+        } else {
+            let bare = answers.bare()?;
+            answers.0.iter().find(|entry| entry.answer == bare)?.clone()
         };
         let slots = self.entry_slots_mut(&entry, &type_args);
         Some(self.substitute_type_params(entry.answer, &slots))

@@ -525,7 +525,7 @@ Used with the `${x:E}` format specifier.
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
-### `pub trait Iterator with ()`
+### `pub trait Iterator with _`
 
 The core iterator trait for sequences of values.
 Types implementing this trait can be iterated over using `for-of` loops.
@@ -537,36 +537,29 @@ Returns None when iteration is complete.
 
 #### `fn collect<C: FromIterator<Elem = Self::Item> = List<Self::Item>>(&mut self) -> C`
 
-Collects the remaining elements into any `FromIterator` target,
-defaulting to `List<Self::Item>`.
-
 #### `fn count(&mut self) -> i32`
 
-Counts the number of remaining elements in the iterator.
+#### `fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U> with ()`
 
-#### `fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U>`
-
-Transforms each element using a function.
-
-#### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc) -> Acc`
+#### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc with _) -> Acc with _`
 
 Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
 Always returns a value (unlike `reduce`, which returns None for empty iterators).
 
-#### `fn for_each(&mut self, mut f: fn mut(Self::Item))`
+#### `fn for_each(&mut self, mut f: fn mut(Self::Item) with _) with _`
 
 Calls `f` for every remaining element. Consumes the iterator.
 
-#### `fn find(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<Self::Item>`
+#### `fn find(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<Self::Item> with _`
 
 Returns the first element for which `pred` returns true, advancing the iterator up to that point.
 
-#### `fn any(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool`
+#### `fn any(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> bool with _`
 
 Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a matching element is found.
 
-#### `fn all(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool`
+#### `fn all(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> bool with _`
 
 Returns true if `pred` returns true for every element (∀). True for empty iterators.
 Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
@@ -577,43 +570,39 @@ Advances the entire iterator and returns the last element, or None if empty.
 
 #### `fn nth(&mut self, n: i32) -> Option<Self::Item>`
 
-Returns the nth element (0-indexed), advancing the iterator up to and including it.
+#### `fn position(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<i32> with _`
 
-#### `fn position(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<i32>`
-
-Returns the 0-based index of the first element for which `pred` returns true, or None.
-
-#### `fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item>`
+#### `fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item with _) -> Option<Self::Item> with _`
 
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-#### `fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self>`
+#### `fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self> with ()`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
-#### `fn enumerate(&self) -> IterEnumerate<Self>`
+#### `fn enumerate(&self) -> IterEnumerate<Self> with ()`
 
 Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
 
-#### `fn take(&self, n: i32) -> IterTake<Self>`
+#### `fn take(&self, n: i32) -> IterTake<Self> with ()`
 
 Returns an adapter that stops after yielding at most `n` elements.
 
-#### `fn skip(&self, n: i32) -> IterSkip<Self>`
+#### `fn skip(&self, n: i32) -> IterSkip<Self> with ()`
 
 Returns an adapter that discards the first `n` elements before yielding the rest.
 
-#### `fn step_by(&self, step: i32) -> IterStepBy<Self>`
+#### `fn step_by(&self, step: i32) -> IterStepBy<Self> with ()`
 
 Returns an adapter that yields the first element, then every `step`-th after it.
 Panics unless `step` is positive.
 
-#### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>`
+#### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> with ()`
 
 Returns an adapter that yields all elements of `self`, then all elements of `other`.
 
-#### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J>`
+#### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> with ()`
 
 Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
 
@@ -623,33 +612,25 @@ Adds the remaining elements. None for an empty iterator.
 
 #### `fn product<P: Product<Elem = Self::Item> = Self::Item>(&mut self) -> Option<P>`
 
-Multiplies the remaining elements. None for an empty iterator.
-
 #### `fn min<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
-
-The smallest remaining element, the first on ties. None for an empty iterator.
 
 #### `fn max<E: Extremum<Elem = Self::Item> = Self::Item>(&mut self) -> Option<E>`
 
-The largest remaining element, the last on ties. None for an empty iterator.
+#### `fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _`
 
-#### `fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item>`
-
-The smallest remaining element under `cmp`, the first on ties.
-
-#### `fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item>`
+#### `fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _`
 
 The largest remaining element under `cmp`, the last on ties.
 
-#### `fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item>`
+#### `fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K with _) -> Option<Self::Item> with _`
 
 The remaining element with the smallest `key`, the first on ties.
 
-#### `fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item>`
+#### `fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K with _) -> Option<Self::Item> with _`
 
 The remaining element with the largest `key`, the last on ties.
 
-### `pub trait IntoIterator with ()`
+### `pub trait IntoIterator with _`
 
 Conversion into an Iterator.
 Types implementing this trait can be used in `for-of` loops directly.
@@ -685,29 +666,29 @@ Attempts to convert a value of type `T` into `Self`.
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 bound. Implemented for every `Add<Output = Self>`.
 
-#### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+#### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait Product with ()`
 
 Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
 element bound. Implemented for every `Mul<Output = Self>`.
 
-#### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+#### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait Extremum with ()`
 
 Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 `max`'s element bound. Implemented for every `Ord`.
 
-#### `fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+#### `fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
-#### `fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
+#### `fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _`
 
 ### `pub trait FromIterator with ()`
 
 Trait for creating a collection from any iterator of `Elem`.
 
-#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
+#### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _`
 
 ### `pub trait LiteralSpread with ()`
 
@@ -777,7 +758,7 @@ or a trap.
 
 #### `fn last(&self) -> Option<Self::Elem>`
 
-#### `fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32>`
+#### `fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _`
 
 ### `pub trait AsSlice: Sequence with ()`
 
@@ -905,7 +886,7 @@ literals stops folding to one.
 
 #### `fn contains_char(&self, ch: char) -> bool`
 
-#### `fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32>`
+#### `fn find_char(&self, pred: fn mut(char) -> bool with _) -> Option<i32> with _`
 
 #### `fn repeat(&self, n: i32) -> String`
 
@@ -3518,7 +3499,7 @@ Generic map iterator adapter that wraps any Iterator.
 
 #### `impl Iterator for IterMap<I, U>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterMap<I, U>`
 
@@ -3534,7 +3515,7 @@ Generic filter iterator adapter that wraps any Iterator.
 
 #### `impl Iterator for IterFilter<I>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterFilter<I>`
 
@@ -3550,7 +3531,7 @@ Generic enumerate iterator adapter that yields (index, element) pairs.
 
 #### `impl Iterator for IterEnumerate<I>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterEnumerate<I>`
 
@@ -3566,7 +3547,7 @@ Generic take iterator adapter that limits elements from any Iterator.
 
 #### `impl Iterator for IterTake<I>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterTake<I>`
 
@@ -3582,7 +3563,7 @@ Generic skip iterator adapter that skips elements from any Iterator.
 
 #### `impl Iterator for IterSkip<I>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterSkip<I>`
 
@@ -3600,7 +3581,7 @@ Generic step iterator adapter that yields every `gap + 1`-th element of any Iter
 
 #### `impl Iterator for IterStepBy<I>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterStepBy<I>`
 
@@ -3618,7 +3599,7 @@ Generic chain iterator adapter that chains two iterators of the same item type.
 
 #### `impl Iterator for IterChain<I, J>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterChain<I, J>`
 
@@ -3634,7 +3615,7 @@ Generic zip iterator adapter that pairs elements from two iterators.
 
 #### `impl Iterator for IterZip<I, J>`
 
-##### `fn next(&mut self) -> Option<Self::Item>`
+##### `fn next(&mut self) -> Option<Self::Item> with _`
 
 #### `impl IntoIterator for IterZip<I, J>`
 
@@ -4918,7 +4899,7 @@ Returns the byte index of the last occurrence of `pat`, or None.
 
 Returns true if the string contains the given character.
 
-#### `pub fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32>`
+#### `pub fn find_char(&self, pred: fn mut(char) -> bool with _) -> Option<i32> with _`
 
 Returns the byte index of the first character matching the predicate, or None.
 
@@ -4984,11 +4965,11 @@ Replaces all occurrences of `from` with `to`.
 Replaces the first `count` occurrences of `from` with `to`.
 If `count` is negative, replaces all occurrences.
 
-#### `pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String`
+#### `pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String with _`
 
 Build a `String` from an iterable of chars.
 
-#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error>`
+#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _`
 
 Build a `String` from an iterable of bytes, validating UTF-8.
 
@@ -5012,11 +4993,11 @@ string is untouched: the prefix is validated before any of it is appended.
 
 Whether `bytes` is well-formed UTF-8.
 
-#### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String`
+#### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String with _`
 
 Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
 
-#### `pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String`
+#### `pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String with _`
 
 Build a `String` from an iterable of bytes without UTF-8 validation.
 
@@ -5374,7 +5355,7 @@ Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn contains_char(&self, ch: char) -> bool`
 
-#### `pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32>`
+#### `pub fn find_char(&self, mut pred: fn mut(char) -> bool with _) -> Option<i32> with _`
 
 #### `pub fn repeat(&self, n: i32) -> String`
 
@@ -5547,11 +5528,11 @@ Walks by reference: an element yielded by value is copied out.
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
 addressable cell, so a write through the reference would be lost.
 
-#### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering)`
+#### `pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _`
 
 In-place sort with comparator. Stable, O(n log n) worst case.
 
-#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T>`
+#### `pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _`
 
 #### `pub fn sort(&mut self)`
 
@@ -5615,7 +5596,7 @@ Joins elements into a string with the given separator.
 
 #### `impl FromIterator for List<T>`
 
-##### `fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T>`
+##### `fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> with _`
 
 #### `impl From<Array<T>> for List<T>`
 
