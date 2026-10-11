@@ -26,14 +26,8 @@ use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
-<<<<<<< HEAD
-use crate::lexer::{LexResult, lex_interpolation};
-use crate::name::contract_holder_name;
-||||||| f3f76a82d
-use crate::lexer::{LexResult, lex_interpolation};
-=======
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
->>>>>>> origin/main
+use crate::name::contract_holder_name;
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};

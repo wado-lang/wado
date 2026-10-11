@@ -1238,7 +1238,7 @@ impl<'a> Unparser<'a> {
                     }
                     _ => {}
                 }
-                this.unparse_member(member);
+                this.unparse_member(member, None);
                 previous = Some(member);
             }
 
@@ -1272,65 +1272,24 @@ impl<'a> Unparser<'a> {
             t.associated_types
                 .iter()
                 .map(Member::Declared)
-                .chain(t.methods.iter().map(Member::Method)),
+                .chain(
+                    t.methods
+                        .iter()
+                        .filter(|m| !m.is_contract_holder())
+                        .map(Member::Method),
+                ),
         );
         self.with_braced_body(t.span, |this| {
-<<<<<<< HEAD
-            for assoc in &t.associated_types {
-                this.emit_member(assoc.id, assoc.span, &[], |this| {
-                    this.output.push_str("type ");
-                    this.output.push_str(&assoc.name);
-                    this.unparse_generic_params(&assoc.type_params);
-                    if !assoc.bounds.is_empty() {
-                        this.output.push_str(": ");
-                        this.unparse_trait_bounds(&assoc.bounds);
-                    }
-                    this.output.push(';');
-                });
-            }
-
-            for method in t.methods.iter().filter(|m| !m.is_contract_holder()) {
-                let effective_line = effective_start_line(&method.attrs, method.span.line);
-                this.open_member(method.id, method.span.start);
-                this.emit_blank_lines_to(effective_line);
-                let contracts: Vec<&AssertStmt> = t
-                    .contract_holder(&method.name)
-                    .into_iter()
-                    .flat_map(Function::contracts)
-                    .collect();
-                this.unparse_function_with_contracts(method, &contracts);
-                this.last_source_line = method.span.end_line();
-||||||| f3f76a82d
-            for assoc in &t.associated_types {
-                this.emit_member(assoc.id, assoc.span, &[], |this| {
-                    this.output.push_str("type ");
-                    this.output.push_str(&assoc.name);
-                    this.unparse_generic_params(&assoc.type_params);
-                    if !assoc.bounds.is_empty() {
-                        this.output.push_str(": ");
-                        this.unparse_trait_bounds(&assoc.bounds);
-                    }
-                    this.output.push(';');
-                });
-            }
-
-            for method in &t.methods {
-                let effective_line = effective_start_line(&method.attrs, method.span.line);
-                this.open_member(method.id, method.span.start);
-                this.emit_blank_lines_to(effective_line);
-                this.unparse_function(method);
-                this.last_source_line = method.span.end_line();
-=======
             for member in &members {
-                this.unparse_member(member);
->>>>>>> origin/main
+                this.unparse_member(member, Some(t));
             }
         });
     }
 
     /// One member of a trait or an impl body, its leading comments and blank
-    /// lines with it.
-    fn unparse_member(&mut self, member: &Member<'_>) {
+    /// lines with it. A trait's method takes its clauses from the trait's
+    /// holder of them.
+    fn unparse_member(&mut self, member: &Member<'_>, trait_: Option<&TraitDecl>) {
         let (id, span, attrs) = (member.id(), member.span(), member.attrs());
         match member {
             Member::Declared(assoc) => self.emit_member(id, span, attrs, |this| {
@@ -1364,7 +1323,17 @@ impl<'a> Unparser<'a> {
             Member::Method(method) => {
                 self.open_member(id, span.start);
                 self.emit_blank_lines_to(effective_start_line(attrs, span.line));
-                self.unparse_function(method);
+                match trait_ {
+                    Some(t) => {
+                        let contracts: Vec<&AssertStmt> = t
+                            .contract_holder(&method.name)
+                            .into_iter()
+                            .flat_map(Function::contracts)
+                            .collect();
+                        self.unparse_function_with_contracts(method, &contracts);
+                    }
+                    None => self.unparse_function(method),
+                }
                 self.last_source_line = span.end_line();
             }
         }
