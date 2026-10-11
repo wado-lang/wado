@@ -832,7 +832,7 @@ impl<'a> WirContext<'a> {
                 // Cross-module `TypeId`s for one element resolve by the
                 // element's name, which registration aliases both spellings of.
                 let type_id = self.array_type_map.get(elem_type_id).or_else(|| {
-                    let elem_name = type_table.mangle_type_arg_for_generic(*elem_type_id);
+                    let elem_name = type_table.mangle_type_arg_rowless(*elem_type_id);
                     self.array_type_by_name.get(&elem_name)
                 });
                 let Some(type_id) = type_id else {

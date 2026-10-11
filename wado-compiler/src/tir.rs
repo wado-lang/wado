@@ -4980,13 +4980,9 @@ impl TypeTable {
         }
     }
 
-    /// Redirect each type to the one monomorphization reads, once the effect
-    /// check has solved the variables. Effects carry no representation: a
-    /// function value is one whatever its row, so a generic instance's
-    /// arguments lose their rows, and two instances that differ only there
-    /// are one. A function type keeps its row, which selects an impl written
-    /// for it, with each variable replaced by what `solved` says it stands for
-    /// and one nothing solved by the empty row.
+    /// Redirect each type holding an effect variable to the type with each
+    /// variable replaced by what `solved` says it stands for, and one nothing
+    /// solved by the empty row, once the effect check has solved them.
     pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
         self.effect_vars_solved = true;
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
@@ -4994,24 +4990,16 @@ impl TypeTable {
         for &id in &ids {
             self.unsolved_vars_in(id, &mut rows);
         }
+        if rows.is_empty() {
+            return;
+        }
         for id in ids {
             if self.redirects.get(id).is_some() {
                 continue;
             }
-            let erased = match self.types.get(id).unwrap() {
-                ResolvedType::Function { .. } => self.substitute_effect_rows(id, &rows),
-                ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => self
-                    .subst_rec(
-                        id,
-                        &Leaves {
-                            erase_rows: true,
-                            ..Leaves::NONE
-                        },
-                    ),
-                _ => id,
-            };
-            if erased != id {
-                self.redirects.set_growing(id, erased);
+            let solved_type = self.substitute_effect_rows(id, &rows);
+            if solved_type != id {
+                self.redirects.set_growing(id, solved_type);
             }
         }
     }
@@ -5939,7 +5927,7 @@ impl TypeTable {
     /// (`wir_build/context.rs`).
     pub fn mangle_type_arg_for_generic_resolving_newtypes(&self, id: TypeId) -> String {
         let resolved = self.representation_head(id);
-        self.mangle_type_arg_for_generic(resolved)
+        self.mangle_type_arg_rowless(resolved)
     }
 
     /// [`Self::mangle_type_arg_for_generic`] as it reads *after*
@@ -5969,15 +5957,18 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
             }
-            _ => self.mangle_type_arg_for_generic(id),
+            _ => self.mangle_type_arg_rowless(id),
         }
     }
 
-    /// [`Self::mangle_type_arg_for_generic`] as the type read *before*
+    /// [`Self::mangle_type_arg_rowless`] as the type read *before*
     /// `boxing::prepare_types` redefined every borrowed `TypeId` into `Box<T>`,
     /// so a post-boxing call site names the bridge pre-boxing synthesis minted.
+    /// A bridge is keyed by a type its struct takes as an argument, which no
+    /// row tells apart.
     pub fn mangle_type_arg_unboxed(&self, id: TypeId) -> String {
-        self.fq_type_name_unboxed(id).to_mangled()
+        self.fq_type_name_spelled_in(id, true, RowSpelling::Nowhere)
+            .to_mangled()
     }
 
     /// The base type name without type arguments: the head's own name, so

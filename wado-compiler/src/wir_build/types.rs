@@ -464,7 +464,7 @@ fn register_raw_array_type(
     // lookup misses and the wrapper struct ends up unregistered for
     // any element whose qualified form differs from the unqualified
     // one (i.e. user-defined Structs / GenericInstances).
-    let elem_name = type_table.mangle_type_arg_for_generic(element_type_id);
+    let elem_name = type_table.mangle_type_arg_rowless(element_type_id);
     if ctx.array_type_by_name.contains_key(&elem_name) {
         // Already registered under a different TypeId
         let existing = ctx.array_type_by_name.get(&elem_name).unwrap().clone();
