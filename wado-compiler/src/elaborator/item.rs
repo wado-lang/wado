@@ -1498,67 +1498,72 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Whether `type_id` is, or contains anywhere within it, a `Slice<T>` — a
-    /// reference view, which has no Component Model representation. A nested
-    /// one degrades just as loudly as a top-level one, so the search reaches
-    /// tuple members, struct fields, variant payloads, and type arguments.
-    pub(super) fn type_contains_slice_view(&self, type_id: TypeId) -> bool {
+    /// The first view `type_id` is or holds anywhere within it, as the program
+    /// names it. A view (`Slice<T>`, `StrSlice`, any struct with a field
+    /// borrowing what is not a resource) points into storage it does not own,
+    /// which has no Component Model representation. A nested one degrades just
+    /// as loudly as a top-level one, so the search reaches tuple members, struct
+    /// fields, variant payloads, and type arguments.
+    pub(super) fn cm_view_within(&self, type_id: TypeId) -> Option<TypeId> {
         let tt = self.tysys.type_table.borrow();
         let mut visited: IndexSet<TypeId> = IndexSet::default();
-        self.type_contains_slice_view_inner(&tt, type_id, &mut visited)
+        self.cm_view_within_inner(&tt, type_id, &mut visited)
     }
 
-    fn type_contains_slice_view_inner(
+    fn cm_view_within_inner(
         &self,
         type_table: &TypeTable,
         type_id: TypeId,
         visited: &mut IndexSet<TypeId>,
-    ) -> bool {
+    ) -> Option<TypeId> {
         use crate::tir::ResolvedType;
         if !visited.insert(type_id) {
-            return false;
+            return None;
         }
         let base = type_table.representation_head(type_id);
-        if base != type_id && self.type_contains_slice_view_inner(type_table, base, visited) {
-            return true;
+        if base != type_id
+            && let Some(view) = self.cm_view_within_inner(type_table, base, visited)
+        {
+            return Some(view);
         }
+        let mut within = |types: Vec<TypeId>| {
+            types
+                .into_iter()
+                .find_map(|t| self.cm_view_within_inner(type_table, t, visited))
+        };
         match type_table.get(base) {
-            ResolvedType::Ref(t) | ResolvedType::MutRef(t) => {
-                self.type_contains_slice_view_inner(type_table, *t, visited)
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
+                within(vec![*t])
             }
-            ResolvedType::BuiltinArray(t) => {
-                self.type_contains_slice_view_inner(type_table, *t, visited)
-            }
-            ResolvedType::Newtype { base_type, .. } => {
-                self.type_contains_slice_view_inner(type_table, *base_type, visited)
-            }
+            ResolvedType::Newtype { base_type, .. } => within(vec![*base_type]),
             ResolvedType::GenericInstance { def, type_args } => {
                 if type_table.is_compiler_item(*def, CompilerItem::Slice) {
-                    return true;
+                    return Some(type_id);
                 }
-                type_args
-                    .iter()
-                    .any(|t| self.type_contains_slice_view_inner(type_table, *t, visited))
+                within(type_args.clone())
             }
-            ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.type_contains_slice_view_inner(type_table, *t, visited)),
+            ResolvedType::GenericResource { type_args, .. } => within(type_args.clone()),
             ResolvedType::Struct { .. } => {
                 let field_types: Vec<TypeId> = self
                     .struct_fields_of_type(base)
                     .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
                     .unwrap_or_default();
-                field_types
-                    .into_iter()
-                    .any(|t| self.type_contains_slice_view_inner(type_table, t, visited))
+                let borrows_storage = field_types.iter().any(|&t| match type_table.get(t) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => !matches!(
+                        type_table.get(type_table.representation_head(*inner)),
+                        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
+                    ),
+                    _ => false,
+                });
+                if borrows_storage {
+                    return Some(type_id);
+                }
+                within(field_types)
             }
-            ResolvedType::Variant { .. } => self
-                .tysys
-                .case_payload_types(base)
-                .unwrap_or_default()
-                .into_iter()
-                .any(|t| self.type_contains_slice_view_inner(type_table, t, visited)),
-            _ => false,
+            ResolvedType::Variant { .. } => {
+                within(self.tysys.case_payload_types(base).unwrap_or_default())
+            }
+            _ => None,
         }
     }
 
@@ -2598,13 +2603,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            // A slice has no CM representation. Rejecting it here keeps the
+            // A view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && scope.type_contains_slice_view(type_id) {
-                let _ = scope.emit(TypeError::SliceAtCmBoundary {
+            if crosses_cm_boundary && let Some(view) = scope.cm_view_within(type_id) {
+                let _ = scope.emit(TypeError::ViewAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
+                    view: scope.tysys.type_table.borrow().type_name(view),
                     span: param.span,
                 });
             }
@@ -2629,10 +2635,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: func.span,
             });
         }
-        if crosses_cm_boundary && scope.type_contains_slice_view(declared_return_type) {
-            let _ = scope.emit(TypeError::SliceAtCmBoundary {
+        if crosses_cm_boundary && let Some(view) = scope.cm_view_within(declared_return_type) {
+            let _ = scope.emit(TypeError::ViewAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
+                view: scope.tysys.type_table.borrow().type_name(view),
                 span: func.span,
             });
         }

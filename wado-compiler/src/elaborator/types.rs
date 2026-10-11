@@ -1331,12 +1331,13 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A slice view has no Component Model representation. Triggered when an
-    /// `export` (or imported) function has a slice-typed parameter or return
-    /// type.
-    SliceAtCmBoundary {
+    /// A view has no Component Model representation. Triggered when an
+    /// `export` (or imported) function's parameter or return type is or holds
+    /// one; `view` is the type that makes it one.
+    ViewAtCmBoundary {
         function: String,
         position: String,
+        view: String,
         span: Span,
     },
 
@@ -2766,14 +2767,15 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::SliceAtCmBoundary {
+            TypeError::ViewAtCmBoundary {
                 function,
                 position,
+                view,
                 span,
             } => (
                 Code::CmBoundaryType,
                 format!(
-                    "slice type in {position} of `{function}` is not allowed: a slice is a reference view with no Component Model representation; use `List<T>` or `Array<T>`"
+                    "`{view}` in {position} of `{function}` is not allowed: a view points into storage it does not own and has no Component Model representation; copy it into a `List<T>` or a `String`"
                 ),
                 *span,
             ),

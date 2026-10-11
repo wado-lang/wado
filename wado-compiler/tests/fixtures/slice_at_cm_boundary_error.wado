@@ -1,5 +1,6 @@
-// A slice is a reference view with no Component Model representation, so it is
-// rejected at the definition site of anything crossing the CM boundary.
+// A view (a slice, a `StrSlice`, any struct borrowing storage it does not own)
+// has no Component Model representation, so it is rejected at the definition
+// site of anything crossing the CM boundary, under the name the program uses.
 //
 // Regression for a silent-degradation bug: the signature type-checked, and the
 // failure surfaced only in `wit_emit`, whose error made the CLI skip the
@@ -11,5 +12,14 @@ export fn takes_slice(a: Slice<i32>) -> i32 {
     return a.len();
 }
 
+export fn takes_str_slice(s: StrSlice) -> i32 {
+    return s.len();
+}
+
 __DATA__
-{"compile_error": "slice is a reference view with no Component Model representation"}
+{
+  "compile_errors_contains": [
+    ":11:23: error: `Slice<i32>` in parameter 'a' of `takes_slice` is not allowed: a view points into storage it does not own and has no Component Model representation; copy it into a `List<T>` or a `String`",
+    ":15:27: error: `StrSlice` in parameter 's' of `takes_str_slice` is not allowed"
+  ]
+}

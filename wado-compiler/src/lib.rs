@@ -129,6 +129,7 @@ pub use semantics::{
 
 pub use compiler_host::InMemoryCompilerHost;
 use constant_arithmetic::constant_arithmetic_diagnostics;
+use synthesis::SynthesisError;
 pub use effect_check::{
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
     check_effects_semantic, check_purity_semantic, check_semantics,
@@ -259,6 +260,19 @@ pub(crate) fn bail_with<H: CompilerHost>(
     message: String,
 ) -> Bail {
     report_without_span(logger, code, message);
+    Bail
+}
+
+/// Report a synthesis failure, at the declaration it concerns where it names one.
+fn bail_with_synthesis<H: CompilerHost>(logger: &Logger<'_, H>, error: SynthesisError) -> Bail {
+    let _ = logger.error(Diagnostic {
+        severity: Severity::Error,
+        code: Code::UnsupportedFeature,
+        message: error.message,
+        span: error
+            .span
+            .map(|span| DiagnosticSpan::from_span(&span, None)),
+    });
     Bail
 }
 
@@ -1759,8 +1773,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(package)
-            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
+        synthesis::synthesize(package).map_err(|error| bail_with_synthesis(logger, error))?
     };
 
     // === Phase 8c: Effect Dispatch Synthesis ===
@@ -2258,7 +2271,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let package = {
                 let _span = logger.span("synthesis");
                 synthesis::synthesize(package)
-                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
+                    .map_err(|error| bail_with_synthesis(&logger, error))?
             };
 
             // Effect dispatch synthesis (lowers WithHandler / Resume).
