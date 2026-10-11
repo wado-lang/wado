@@ -11,6 +11,8 @@ use crate::resolve::Resolutions;
 
 const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
+const INNER_CALL: &str = "postfix operators bind tighter than `unchecked`, so it marks the \
+                          whole chain; write `(unchecked …)` around the call it vouches for";
 
 /// An error for each `unchecked` in `module` that marks no call a `contract`
 /// clause binds. `sem` holds the facts the body walk recorded for `module`.
@@ -79,6 +81,25 @@ impl Finder<'_> {
             _ => Vec::new(),
         }
     }
+
+    /// Whether `expr` reaches a call a `contract` clause binds.
+    fn binds(&self, expr: &Expr) -> bool {
+        let callees = self.callees(expr);
+        !callees.is_empty() && callees.iter().all(|&def| self.contracts.binds(def))
+    }
+
+    /// Whether a postfix operand inside `expr`'s chain is a call a `contract`
+    /// clause binds: what `unchecked` meant to mark in `unchecked f(x)?`.
+    fn binds_inside_chain(&self, expr: &Expr) -> bool {
+        let operand = match expr {
+            Expr::TryOp(op) => &op.expr,
+            Expr::MethodCall(call) => &call.receiver,
+            Expr::FieldAccess(access) => &access.expr,
+            Expr::Index(index) => &index.expr,
+            _ => return false,
+        };
+        self.binds(operand) || self.binds_inside_chain(operand)
+    }
 }
 
 impl AstVisitor for Finder<'_> {
@@ -86,13 +107,14 @@ impl AstVisitor for Finder<'_> {
         if let Expr::Unary(unary) = expr
             && unary.op == UnaryOp::Unchecked
         {
-            let callees = self.callees(&unary.expr);
-            let message = if callees.is_empty() {
-                Some(NOT_A_CALL)
-            } else if !callees.iter().all(|&def| self.contracts.binds(def)) {
-                Some(NO_CONTRACT)
-            } else {
+            let message = if self.binds(&unary.expr) {
                 None
+            } else if self.binds_inside_chain(&unary.expr) {
+                Some(INNER_CALL)
+            } else if self.callees(&unary.expr).is_empty() {
+                Some(NOT_A_CALL)
+            } else {
+                Some(NO_CONTRACT)
             };
             if let Some(message) = message {
                 self.found.push(Diagnostic {
