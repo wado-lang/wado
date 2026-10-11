@@ -449,10 +449,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         result
     }
 
-    /// Record each row of `actual` holding an effect variable beside the row
-    /// of `expected` it moves into. The type check admits a variable
+    /// Record each row of `actual` beside the row of `expected` it moves into,
+    /// where either holds an effect variable. The type check admits a variable
     /// unbounded, since only the effect check knows what it stands for; the
-    /// effect check bounds it there. A callee's slot names the callee's own
+    /// effect check bounds or widens it there. A callee's slot names the callee's own
     /// effect parameters, which the argument determines rather than meets, so
     /// those rows are left to the call's resolution.
     pub(super) fn record_row_flows(
@@ -468,7 +468,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         table.zip_rows(expected, actual, false, &mut |into, from| {
             let determined_by_it =
                 frame == SlotFrame::Callee && into.iter().any(EffectRef::is_param);
-            if from.iter().any(EffectRef::is_var) && from != into && !determined_by_it {
+            let open = from.iter().chain(into).any(EffectRef::is_var);
+            if open && from != into && !determined_by_it {
                 flows.push(RowFlow {
                     from: from.to_vec(),
                     into: into.to_vec(),

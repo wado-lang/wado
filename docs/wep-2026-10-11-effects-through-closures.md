@@ -65,9 +65,9 @@ effect row is not yet known, and the effect check solves it.
   parameter or a variable meet any row. The trait solver does so for a
   parameter, and reads a variable as the empty row, so a closure literal
   selects one impl rather than every impl of its signature.
-- Where the type check admits a value whose row holds a variable into a slot,
-  it records the move as a flow: the value's row beside the slot's. A binding,
-  an argument, a cast, an element, a branch's value are all slots.
+- Where the type check admits a value into a slot and either's row holds a
+  variable, it records the move as a flow: the value's row beside the slot's.
+  A binding, an argument, a cast, an element, a branch's value are all slots.
 - The effect check solves the variables. It checks a call after its
   arguments, so a variable a call among them mints is solved before the call
   reads it. A call's variable is what its parameter resolved to there, read off

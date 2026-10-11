@@ -5967,11 +5967,9 @@ impl TypeTable {
         self.fq_type_name_rowless(id).to_mangled()
     }
 
-    /// Module-qualifying analogue of
-    /// [`Self::mangle_type_name_resolving_newtypes`]. Used by the few WIR
-    /// fq lookup sites that consult the newtype-resolved form
-    /// (`wir_build/context.rs`).
-    pub fn mangle_type_arg_for_generic_resolving_newtypes(&self, id: TypeId) -> String {
+    /// [`Self::mangle_type_arg_rowless`] of the newtype-resolved form, which
+    /// the WIR array and `List` wrapper registrations key on.
+    pub fn mangle_type_arg_rowless_resolving_newtypes(&self, id: TypeId) -> String {
         let resolved = self.representation_head(id);
         self.mangle_type_arg_rowless(resolved)
     }

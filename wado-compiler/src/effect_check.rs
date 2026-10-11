@@ -683,7 +683,7 @@ struct Brought {
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
 struct OwnedEffectData {
-    flows_from: IndexMap<String, Vec<usize>>,
+    flows_by_var: IndexMap<String, Vec<usize>>,
     fn_effects: IndexMap<AstId, Vec<EffectRef>>,
     fn_params: IndexMap<AstId, Vec<TypeId>>,
     /// Each function's declared return type, by declaration: where a call's
@@ -940,10 +940,10 @@ impl OwnedEffectData {
             }
         }
 
-        let mut flows_from: IndexMap<String, Vec<usize>> = IndexMap::default();
+        let mut flows_by_var: IndexMap<String, Vec<usize>> = IndexMap::default();
         for (at, flow) in sem.types.row_flows().iter().enumerate() {
-            for var in flow.from.iter().filter(|e| e.is_var()) {
-                flows_from
+            for var in flow.from.iter().chain(&flow.into).filter(|e| e.is_var()) {
+                flows_by_var
                     .entry(var.name().to_string())
                     .or_default()
                     .push(at);
@@ -951,7 +951,7 @@ impl OwnedEffectData {
         }
 
         Self {
-            flows_from,
+            flows_by_var,
             fn_effects,
             fn_params,
             fn_returns,
@@ -980,7 +980,7 @@ impl OwnedEffectData {
     fn index<'a>(&'a self, types: &'a TypeTable) -> EffectIndex<'a> {
         EffectIndex {
             types,
-            flows_from: &self.flows_from,
+            flows_by_var: &self.flows_by_var,
             fn_effects: &self.fn_effects,
             fn_params: &self.fn_params,
             fn_returns: &self.fn_returns,
@@ -1011,9 +1011,9 @@ impl OwnedEffectData {
 struct EffectIndex<'a> {
     /// The program's types, which a static call's impl type arguments name.
     types: &'a TypeTable,
-    /// Each effect variable → the [`TypeTable::row_flows`] moving a value
-    /// whose row holds it.
-    flows_from: &'a IndexMap<String, Vec<usize>>,
+    /// Each effect variable → the [`TypeTable::row_flows`] whose value's row or
+    /// slot's row holds it.
+    flows_by_var: &'a IndexMap<String, Vec<usize>>,
     /// Declaration key → resolved effects (free calls resolve via `references`).
     fn_effects: &'a IndexMap<AstId, Vec<EffectRef>>,
     /// Declaration key → parameter type ids (for effect-parameter resolution).
@@ -1840,12 +1840,13 @@ impl EffectIndex<'_> {
         }
     }
 
-    /// The flows moving a value whose row holds a variable `rows` has solved.
+    /// The flows whose value's or slot's row holds a variable `rows` has
+    /// solved.
     fn flows_of(&self, rows: &Rows) -> Vec<&RowFlow> {
         let at: IndexSet<usize> = rows
             .solved
             .keys()
-            .filter_map(|var| self.flows_from.get(var))
+            .filter_map(|var| self.flows_by_var.get(var))
             .flatten()
             .copied()
             .collect();
