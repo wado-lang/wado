@@ -1,0 +1,31 @@
+// A trait's clause performs no effect, as a function's does not. The clause
+// is reported once, as impure, not again for the effect it would need.
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> bool with Stdout {
+    println("checked");
+    return n > 0;
+}
+
+trait Get with () {
+    fn get(&self, i: i32) -> i32
+        contract noisy(i);
+}
+
+struct Box { value: i32 }
+
+impl Get for Box {
+    fn get(&self, i: i32) -> i32 {
+        return self.value + i;
+    }
+}
+
+export fn run() {
+    let _ = Box { value: 1 }.get(1);
+}
+
+__DATA__
+{
+  "compile_error": ":12:18: analysis error: contract clause cannot perform effects, but calls effectful function 'noisy'",
+  "compile_errors_not_contains": ["missing effect"]
+}

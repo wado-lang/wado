@@ -14,7 +14,9 @@ struct P {
     v: i32,
 }
 
-trait Holder with () {
+// `with _`: a default body is checked once against the trait, where iterating
+// through the open `IntoIterator` bound leaves its effects to each impl.
+trait Holder with _ {
     type Items: IntoIterator;
 
     fn items(&mut self) -> Self::Items;

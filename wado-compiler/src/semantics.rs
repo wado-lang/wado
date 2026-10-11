@@ -300,6 +300,36 @@ impl Semantics {
         self.facts_at(fact, id).next()
     }
 
+    /// The patterns naming one float a rounding step can miss, by the module
+    /// that writes them, keyed by the span of the arm or statement holding
+    /// them. A walk resolving another module's default argument, associated
+    /// constant or trait default body notes it in its own facts, so every
+    /// walk's notes are gathered and routed by the span's id space.
+    pub(crate) fn inexact_float_patterns(
+        &self,
+    ) -> IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> {
+        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> =
+            IndexMap::default();
+        let walks = self.state.iter().flat_map(|state| {
+            state.module_semantics.values().flat_map(|sem| {
+                std::iter::once(&sem.types)
+                    .chain(sem.default_method_facts.values().map(|facts| &facts.types))
+            })
+        });
+        for types in walks {
+            for (site, shown) in &types.inexact_float_patterns {
+                let module = self.space_modules[&site.space].clone();
+                by_module
+                    .entry(module)
+                    .or_default()
+                    .entry(*site)
+                    .or_default()
+                    .extend(shown.iter().cloned());
+            }
+        }
+        by_module
+    }
+
     /// Every value recorded for `fact` at `id`, from the module
     /// [`Self::fact_home`] routes it to: one for a binding, and for a body fact
     /// one per walk that reached the node — the module's own, then each
@@ -770,7 +800,12 @@ impl Semantics {
                     );
                 }
                 Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
-                    names.extend(t.methods.iter().map(|m| m.name.clone()));
+                    names.extend(
+                        t.methods
+                            .iter()
+                            .filter(|m| !m.is_contract_holder())
+                            .map(|m| m.name.clone()),
+                    );
                 }
                 _ => {}
             }

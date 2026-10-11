@@ -67,11 +67,12 @@ constant. Where the build keeps the check, its body is part of the enclosing
 region. Where the build deletes it, under `-f no-contract-checks`, it holds no
 line.
 
-It is `internal` to `core:builtin`, so only the standard library calls it.
-Open to every program, it would be a removable `assert`. Every language that
+It is `pub`, since contracts are open to every program and this is what they
+lower to. Written by hand, it is a removable `assert`. Every language that
 offers one reports it used for checks that must hold in production, and
 removed with them (`assert` under Python's `-O`, Rust's `debug_assert!` in
-RUSTSEC-2025-0137).
+RUSTSEC-2025-0137). The `contract` syntax below is the form that keeps a check
+unless the call is marked.
 
 ### A skipped check is not an assumption
 
@@ -97,6 +98,173 @@ is a Unicode scalar, a byte below `0x80`. A function that forwards to another
 `Sequence::get_unchecked` on an `Array` checks nothing: the array access
 already traps out of range.
 
+### The caller decides whether a check can be removed
+
+A checked function and its `_unchecked` twin state the same contract. They
+differ in who guarantees it. The checked function guarantees a trap on a call
+outside the contract, and its caller may rely on that trap, so no build may
+remove it. The `_unchecked` twin leaves the guarantee to its caller, so its
+check only diagnoses the caller's bug, and a build may remove it.
+
+Whether a check can be removed is therefore a property of the call, not of the
+function. A contract is declared once, on the function. A call without a
+marker always checks it. A call with a marker states that the caller
+guarantees the contract, and that call is checked only where
+`-f contract-checks` is on. An `_unchecked` twin that is its checked function
+minus the check becomes a marked call to the checked function.
+
+The author of a function never chooses whether its check can be removed, so
+the misuse of a removable `assert` cannot arise: removing a check takes a
+marker that is visible at the call. A call from another component carries no
+marker, so a contract on an `export fn` is always checked at the boundary.
+
+The check runs at the call. It reports the caller's position and blames the
+caller. Its predicate is evaluated in the context where the function is
+defined, as a default argument's expression is. A predicate may therefore
+name a private field, though the caller could not write it.
+
+A marked call outside the contract, in a build that does not check, is never
+undefined behavior. It has the class the function states. An unconstrained
+violation is still a bug that must not reach production, but the four
+guarantees of [Behavior Classes](./spec-overview.md#behavior-classes) still
+hold.
+
+We know of no language with this design. The nearest is Rust, whose caller
+writes `unsafe { … }` and whose standard library checks `unsafe` preconditions
+according to the caller's `debug_assertions`. Rust's precondition is prose,
+though, and breaking it is undefined behavior.
+
+### A contract states inputs only
+
+A contract states preconditions and nothing else. A postcondition is the
+callee's own obligation, so a caller's marker cannot vouch for it, and the
+mechanism above could never remove its check. An `assert` in the body already
+states it, checked in every build.
+
+The code shows little demand for more. In `core:*`, Gale and Loam, the
+`assert`s placed just before a `return` are either preconditions on the
+arguments or invariants of a value the body computed, such as the normalized
+mantissa in `int128.wado` or the loop entry `plus_body_entry` finds in Gale.
+Neither states what the result means to the caller.
+
+What a function guarantees about its result is better stated as a type: a type
+whose invariant holds. Constructing such a type has the invariant as its
+precondition, so its contract is again an input contract, and the same
+mechanism checks it. `String` is the example: its UTF-8 invariant is the
+precondition of `from_utf8_unchecked`. A broken type invariant is also what
+makes a violation unconstrained, since other code relies on the invariant.
+
+Today such a type is a `struct` with a private field and a checked
+constructor. A newtype that carries an invariant would state the same at no
+cost, but it redesigns newtypes: `as` would convert only toward the base type,
+and a conversion toward the newtype would go through `TryFrom`. That belongs
+in a proposal of its own.
+
+### Syntax: `contract` and `unchecked`
+
+A function declares its contract with `contract` clauses, placed after the
+`with` clause and before the body, or before the `;` of a trait method without
+one. Each clause is a condition and an optional message, as an `assert` is,
+and a function may have any number of them:
+
+```text
+pub fn slice(&self, start: i32, end: i32) -> StrSlice
+    contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+    contract self.is_char_boundary(start) && self.is_char_boundary(end)
+{
+    …
+}
+```
+
+A condition is parsed as an `if` condition is, with no struct literal, so the
+body's `{` cannot be read as one.
+
+Clauses are separated by nothing but the `contract` that opens each, as `->`
+and `with` open theirs. A comma between them would also be the comma before a
+message, and brackets around each would set the clause apart from the rest of
+the signature. Run together on one line they read poorly, so the formatter
+puts each clause on a line of its own. Contracts state inputs only, so a clause
+names no result and no old value.
+
+A condition performs no effect. It may call a function that has a contract of
+its own; that call is an ordinary call, checked unless it is marked.
+
+Every program may declare a contract, not only the standard library.
+
+A caller marks a call with `unchecked`, a prefix unary operator. Postfix
+operators bind tighter than prefix ones, so `unchecked a.f().g()` marks `g`,
+as `-a.f().g()` negates the whole chain. The operand must be a call to a
+function with a contract; anything else is a compile error.
+
+```text
+let b = unchecked s.get_byte(i);
+let v = (unchecked s.slice(a, b)).to_string();
+let x = unchecked xs[i];    // an index read with no range check
+```
+
+`xs[i]` is a call to an indexing trait's method, so `unchecked xs[i]` is an
+index read whose range check the caller vouches for. An index assignment takes
+no marker. `unchecked xs[i] = v` would put the operator on an assignment's
+target, outside what a unary operator is, and is a compile error.
+
+`contract` is a contextual keyword: no identifier can follow a signature, so
+code that names something `contract` keeps working. `unchecked` is reserved.
+As a contextual keyword it would be ambiguous: `unchecked(x)` and
+`unchecked[i]` already mean a call and an index on something named
+`unchecked`.
+
+The two words are asymmetric by design. `contract` names what the function
+declares, an obligation. `unchecked` names what the caller gives up, the
+check, and the contract stays in force. `check` and `unchecked` would read as
+a clause and its negation, as if the marker removed the contract. `check` is
+also a verb, so it reads as a statement run at that point, like `assert`.
+
+A contract clause is not a coverage target, whether the call checks it or not.
+
+A contract on an `export fn` has no place in WIT. The generated WIT carries it
+as a comment on the function.
+
+An `_unchecked` function becomes an `unchecked` call to its checked twin. The
+old name stays, as an `#[unavailable]` declaration pointing at the new call,
+only where Rust has a method of that name, such as `get_unchecked` or
+`from_utf8_unchecked`, since that is the name a reader from Rust reaches for.
+Any other `_unchecked` name is removed.
+
+`unchecked` means that the caller does not ask for the check in a shipping
+build. A build under `-f contract-checks` still checks a marked call. The word
+was kept despite that because it continues the `_unchecked` names it replaces.
+
+### A trait method's contract belongs to the trait
+
+A trait method's clauses are written on the trait's declaration, a signature
+without a body included, and bind every impl, as its default arguments do. An
+impl writes none: it neither restates them nor adds one. Trait dispatch is
+static, so a call through a bound reaches a known impl, and each impl checks the
+trait's clauses at its head.
+
+An impl that added a clause would make `unchecked` remove a check its caller
+never saw: generic code marks a call vouching for the trait's clauses, not for
+those of whichever impl it reaches. Removing a check takes a marker at the
+call, and that marker means only what the call site can read.
+
+Where what an impl accepts differs between impls, the trait declares a
+predicate method and its clause calls it. The indexing traits are the case:
+a list takes an index in range, a range index takes ends in range, and a map
+takes a key it holds, so `len` would not do. Each declares `contains_index`,
+and `index_value` and its siblings require it:
+
+```text
+trait IndexValue<I> {
+    type Output;
+    fn contains_index(&self, index: &I) -> bool;
+    fn index_value(&self, index: I) -> Self::Output
+        contract self.contains_index(&index), "index out of range";
+}
+```
+
+An impl whose type cannot take every input its trait admits is a design error
+in that impl, not a contract to add.
+
 ## Roadmap
 
 1. `-f contract-checks`, `builtin::contract_checks()`, and the checks in
@@ -104,13 +272,42 @@ already traps out of range.
    suites found one violation, in the standard library itself:
    `StrSlice::replacen` copied a non-matching byte at a time, so the tail view
    it appended could start inside a character.
+2. `contract` clauses and the `unchecked` operator. Done. A function with a
+   contract is reified twice: itself, which always checks, and a twin named
+   with an `$unchecked` suffix that checks under `builtin::contract_checks()`.
+   A marked call reaches the twin. The parser puts each clause at the head of
+   the body as an `assert` marked as a contract, so every pass over a body
+   sees it, and the formatter prints it back as a clause.
+3. A trait method's contract: written on the trait, checked in every impl and
+   default body. Done. The parser keeps the clauses in a hidden default method
+   of the trait, `$contract$<method>`, which takes the method's parameters.
+   Reify opens the method and each impl's method with a call to it, and their
+   `$unchecked` twins with a call to its twin, so a marked call through a bound
+   reaches the twin of whichever impl the bound resolves to. The elaborator
+   walks the holder, as it walks every default body, once in the trait's own
+   frame with `Self` abstract, so the effect and purity checks and the language
+   service answer for a trait that no impl takes.
+4. An `interface` operation's contract: written on the operation, checked in
+   its default body and in every handler of it, and held to the purity check.
+   Until then the parser rejects one.
+5. The indexing traits declare `contains_index` and require it, so
+   `unchecked xs[i]` is an index read with no range check.
+6. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
+   `#[unavailable]` declaration where Rust has a method of the same name.
+7. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps
 
-- A failed check reports the position inside the `_unchecked` function, not
-  the call that broke the contract.
+- A failed check reports the clause's position inside the function, not the
+  call that broke the contract.
+- A function reached by both a marked and an unmarked call is emitted twice,
+  once for each.
+- A contract on a declaration with no body, outside a trait, is a compile
+  error.
 - A clause that costs more than the function it guards is not checked: that
   the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
   that a write keeps them UTF-8 in `set_byte_unchecked`.
-- Contracts have no syntax. The clauses live in each function's body, and its
-  doc comment restates them.
+- A call through a function value has no callee known statically, so it has no
+  contract to check or to remove.
+- An input contract cannot say that a method taking `&mut self` keeps its
+  type's invariant. It can only require inputs that imply it.

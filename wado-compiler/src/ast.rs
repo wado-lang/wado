@@ -1680,6 +1680,8 @@ pub mod lint {
     pub const UNCONDITIONAL_TRAP: &str = "unconditional_trap";
     /// A hex literal ending in digits that read as a float type: `0x1_f32`.
     pub const HEX_SUFFIX_LOOKALIKE: &str = "hex_suffix_lookalike";
+    /// A pattern naming one float a rounding step can miss: `1.5 =>`.
+    pub const FLOAT_LITERAL_PATTERN: &str = "float_literal_pattern";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow
@@ -2449,7 +2451,12 @@ pub struct Function {
     pub effects: Vec<EffectName>,
     /// Where `effects` came from. The formatter prints what the source wrote.
     pub effects_source: EffectsSource,
-    /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
+    /// The trait method whose `contract` clauses this hidden default method
+    /// holds, where it is one. Each impl of that method calls it at its head.
+    pub holds_contracts_of: Option<AstId>,
+    /// Function body. None indicates a compiler built-in (bodyless declaration
+    /// like `pub fn foo();`). Its leading [`AssertStmt::contract`] statements
+    /// are the `contract` clauses written ahead of it.
     pub body: Option<Block>,
     pub span: Span,
 }
@@ -2480,6 +2487,20 @@ pub struct ExportTarget {
 }
 
 impl Function {
+    /// The `contract` clauses: the leading statements of the body.
+    pub fn contracts(&self) -> impl Iterator<Item = &AssertStmt> {
+        self.body
+            .iter()
+            .flat_map(|body| &body.stmts)
+            .map_while(Stmt::as_contract)
+    }
+
+    /// Whether this is the default method a trait declares, hidden, to hold
+    /// the `contract` clauses of one of its methods.
+    pub fn is_contract_holder(&self) -> bool {
+        self.holds_contracts_of.is_some()
+    }
+
     /// Whether this is an `export fn` exported under its own name: an
     /// `export(…)` names the world exports it provides instead.
     #[must_use]
@@ -2611,6 +2632,9 @@ pub struct AssertStmt {
     pub condition: Expr,
     /// Optional message expression (typically a String literal or template string)
     pub message: Option<Expr>,
+    /// Written as a `contract` clause, which the parser places at the front of
+    /// the body: a precondition the caller owes.
+    pub contract: bool,
     pub span: Span,
 }
 
@@ -2801,6 +2825,14 @@ pub struct ContinueStmt {
 }
 
 impl Stmt {
+    /// The `contract` clause this statement is, if it is one.
+    pub fn as_contract(&self) -> Option<&AssertStmt> {
+        match self {
+            Stmt::Assert(clause) if clause.contract => Some(clause),
+            _ => None,
+        }
+    }
+
     /// Returns the [`AstId`] for this statement.
     pub fn id(&self) -> AstId {
         match self {
@@ -3540,6 +3572,9 @@ pub enum UnaryOp {
     Ref,
     MutRef,
     Deref,
+    /// `unchecked call`: the caller vouches for the callee's contract, so only
+    /// a build under `-f contract-checks` checks it.
+    Unchecked,
 }
 
 #[derive(Debug, Clone)]
@@ -4604,10 +4639,23 @@ pub struct TraitDecl {
     pub supertraits: Vec<TraitBound>,
     /// Associated type declarations: `type Output;`
     pub associated_types: Vec<AssociatedTypeDecl>,
-    /// Trait methods. Body is None for required methods.
+    /// Trait methods. Body is None for required methods. A method with
+    /// `contract` clauses is followed by the hidden default method holding
+    /// them (see [`Function::is_contract_holder`]).
     pub methods: Vec<Function>,
     pub attrs: Vec<Attribute>,
     pub span: Span,
+}
+
+impl TraitDecl {
+    /// The hidden default method holding the `contract` clauses of the method
+    /// named `method`, which is how an impl's method names the one it answers.
+    pub fn contract_holder(&self, method: &str) -> Option<&Function> {
+        let held = self.methods.iter().find(|m| m.name == method)?;
+        self.methods
+            .iter()
+            .find(|m| m.holds_contracts_of == Some(held.id))
+    }
 }
 
 /// What an effect handler does with an operation it does not implement.

@@ -41,8 +41,52 @@ test "router: no backtracking from literal dead-end" {
     let mut r = Router::<i32>::new();
     r.get("/users/list", 1);
     r.get("/users/:id", 2);
+    r.get("/users/:id/extra", 3);
+    r.get("/teams/:tid/new", 4);
+    r.get("/teams/new/:x/y", 5);
 
     assert r.match_path(Method::Get, &"/users/list/extra") matches { None };
+    assert r.match_path(Method::Get, &"/users/7/extra") matches { Some(m) && m.handler == 3 };
+    assert r.match_path(Method::Get, &"/teams/new/new") matches { None };
+}
+
+test "router: a literal's method miss does not fall to a param sibling" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/me", 1);
+    r.post("/users/:id", 2);
+
+    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.allowed_methods("/users/me") == [Method::Get];
+    r.get("/users/me/:x", 9);
+    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.allowed_methods("/users/me") == [Method::Get];
+}
+
+test "router: a dead end falls back to the deepest wildcard on the way" {
+    let mut r = Router::<i32>::new();
+    r.get("/*rest", 1);
+    r.get("/files/*rest", 2);
+    r.get("/files/:id/meta", 3);
+    r.get("/api/:v/x", 4);
+
+    assert r.match_path(Method::Get, &"/files/a") matches { Some(m) && m.handler == 2 && m.params["rest"] == "a" };
+    assert r.match_path(Method::Get, &"/files/a/b") matches { Some(m) && m.handler == 2 && m.params["rest"] == "a/b" };
+    assert r.match_path(Method::Get, &"/files/a/meta") matches { Some(m) && m.handler == 3 && m.params["id"] == "a" };
+    assert r.match_path(Method::Get, &"/api") matches { Some(m) && m.handler == 1 && m.params["rest"] == "api" };
+    assert r.match_path(Method::Get, &"/api/v1/y") matches { Some(m) && m.handler == 1
+        && m.params.len() == 1
+        && m.params["rest"] == "api/v1/y" };
+}
+
+test "router: a method miss falls back to a wildcard that takes the method" {
+    let mut r = Router::<i32>::new();
+    r.any("/*rest", 1);
+    r.post("/files/*rest", 2);
+    r.get("/users/:id", 3);
+
+    assert r.match_path(Method::Post, &"/users/1") matches { Some(m) && m.handler == 1 && m.params["rest"] == "users/1" };
+    assert r.match_path(Method::Get, &"/files/a") matches { Some(m) && m.handler == 1 && m.params["rest"] == "files/a" };
+    assert r.match_path(Method::Post, &"/files/a") matches { Some(m) && m.handler == 2 && m.params["rest"] == "a" };
 }
 
 test "router: wildcard catch-all" {
@@ -82,6 +126,11 @@ test "router: root pattern" {
     assert r.match_path(Method::Get, &"/").unwrap().handler == 7;
     assert r.match_path(Method::Get, &"/foo").unwrap().handler == 8;
     assert r.match_path(Method::Get, &"/bar") matches { None };
+    assert r.match_path(Method::Post, &"/") matches { None };
+    assert r.allowed_methods("/") == [Method::Get];
+    r.post("/*rest", 9);
+    assert r.match_path(Method::Post, &"/") matches { Some(m) && m.handler == 9 && m.params["rest"] == "" };
+    assert r.allowed_methods("/") == [Method::Get, Method::Post];
 }
 
 test "router: trailing slash differs from no slash" {
@@ -218,6 +267,27 @@ test "router: allowed_methods lists a path's methods in registration order" {
     assert r.allowed_methods("/users/7") == [Method::Put, Method::Get];
 }
 
+test "router: allowed_methods agrees with match_path" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/me", 1);
+    r.post("/users/:id", 2);
+    r.get("/users/:id", 3);
+    r.delete("/users/*rest", 4);
+    r.any("/s", 5);
+    r.put("/:name", 6);
+
+    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.match_path(Method::Delete, &"/users/me") matches { Some(m) && m.handler == 4 };
+    assert r.allowed_methods("/users/me") == [Method::Get, Method::Delete];
+    assert r.allowed_methods("/users/7") == [Method::Post, Method::Get, Method::Delete];
+    assert r.allowed_methods("/users/7/x") == [Method::Delete];
+    assert r.match_path(Method::Put, &"/s") matches { Some(m) && m.handler == 5 };
+    assert r.allowed_methods("/s").is_empty();
+    r.get("/users/*rest", 7);
+    assert r.allowed_methods("/users/7") == [Method::Post, Method::Get, Method::Delete];
+    assert r.allowed_methods("/t") == [Method::Put];
+}
+
 test "router: generic over String handler" {
     let mut r = Router::<String>::new();
     r.get("/hello", "hi");
@@ -279,6 +349,20 @@ test "router: panic on conflicting param names at same node" {
     let mut r = Router::<i32>::new();
     r.get("/users/:id", 1);
     r.get("/users/:name/profile", 2);
+}
+
+
+#[expect_trap]
+test "router: panic on a repeated param name" {
+    let mut r = Router::<i32>::new();
+    r.get("/a/:id/:id", 1);
+}
+
+
+#[expect_trap]
+test "router: panic on a wildcard named like a param" {
+    let mut r = Router::<i32>::new();
+    r.get("/a/:id/*id", 1);
 }
 
 
@@ -553,10 +637,15 @@ test "router: deserialize rejects a scalar root" {
 
 test "router: a path without a leading slash or with an empty segment" {
     let mut r = Router::<i32>::new();
+    r.get("/health", 2);
     r.get("/users/:id", 1);
-    assert r.match_path(Method::Get, &"users/42") matches { Some(m) && m.handler == 1 };
+    r.get("/files/*rest", 3);
+    assert r.match_path(Method::Get, &"health") matches { None };
+    assert r.match_path(Method::Get, &"users/42") matches { None };
+    assert r.match_path(Method::Get, &"") matches { None };
     assert r.match_path(Method::Get, &"/users//42") matches { None };
-    assert r.allowed_methods("users/42") == [Method::Get];
+    assert r.match_path(Method::Get, &"/files//a") matches { Some(m) && m.params["rest"] == "/a" };
+    assert r.allowed_methods("users/42").is_empty();
     assert r.allowed_methods("/users//42").is_empty();
 }
 

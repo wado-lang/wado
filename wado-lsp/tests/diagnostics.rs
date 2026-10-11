@@ -131,6 +131,22 @@ fn missing_import_is_reported_on_the_importer() {
     });
 }
 
+/// An `unchecked` with no contract to vouch for is reported without reify,
+/// which the language service never runs.
+#[test]
+fn unchecked_without_contract_is_reported_without_reify() {
+    futures::executor::block_on(async {
+        let source = "fn twice(n: i32) -> i32 {\n    return n * 2;\n}\n\nexport fn run() {\n    let _ = unchecked twice(1);\n}\n";
+        let diags = diagnostics_for("/work/unchecked.wado", source).await;
+        assert!(
+            errors(&diags)
+                .iter()
+                .any(|d| d.message.contains("no `contract` clause") && d.range.start.line == 5),
+            "a misused `unchecked` must be reported, got {diags:#?}"
+        );
+    });
+}
+
 /// `set_unused_diagnostics(false)` takes effect at the next query, no edit.
 #[test]
 fn toggling_unused_diagnostics_takes_effect_without_reopen() {

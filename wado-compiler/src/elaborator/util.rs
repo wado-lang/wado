@@ -6,7 +6,7 @@ use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::types::TypeError;
 use crate::escape::{unescape_byte, unescape_char};
-use crate::lexer::{defaults_to_float, has_decimal_point};
+use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::tir::{
@@ -48,24 +48,46 @@ fn saturated_value(magnitude: u128, negated: bool) -> i128 {
     }
 }
 
-/// The value a number, byte, char or bool literal pattern names, or why it
-/// names none.
-pub(super) fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
+/// What a number, byte, char or bool literal pattern names, or why it names
+/// nothing: a value, or the one float a literal names that no integer is.
+pub(super) fn literal_pattern(lit: &Literal) -> Result<InstancePattern, String> {
     match lit {
-        Literal::Number(repr) => {
-            if has_decimal_point(repr) {
-                return Err("float literals cannot be used in match patterns".to_string());
-            }
-            let (negated, digits) = repr
-                .strip_prefix('-')
-                .map_or((false, repr.as_str()), |digits| (true, digits));
-            Ok(PatternLiteral::Int {
-                magnitude: parse_u128_literal(digits)?,
+        Literal::Number(repr) => number_bound(repr).map(|bound| match bound {
+            RangeBound::Discrete(value) => InstancePattern::Literal(value),
+            RangeBound::Float(float) => InstancePattern::Float(float),
+        }),
+        _ => pattern_literal(lit).map(InstancePattern::Literal),
+    }
+}
+
+/// The number literal `repr` as a pattern or range bound. An exponent literal
+/// names an integer where its value is one, as it does where an integer is
+/// expected, and a float otherwise.
+fn number_bound(repr: &str) -> Result<RangeBound, String> {
+    let (negated, digits) = repr
+        .strip_prefix('-')
+        .map_or((false, repr), |digits| (true, digits));
+    match parse_u128_literal(digits) {
+        Ok(magnitude) => Ok(RangeBound::Discrete(PatternLiteral::Int {
+            magnitude,
+            negated,
+            owner: None,
+            shown: repr.to_string(),
+        })),
+        Err(_) if defaults_to_float(repr) => Ok(RangeBound::Float(FloatBound {
+            kind: FloatBoundKind::Literal {
+                digits: digits.to_string(),
                 negated,
-                owner: None,
-                shown: repr.clone(),
-            })
-        }
+            },
+            shown: repr.to_string(),
+        })),
+        Err(error) => Err(error),
+    }
+}
+
+/// The value a byte, char or bool literal pattern names, or why it names none.
+fn pattern_literal(lit: &Literal) -> Result<PatternLiteral, String> {
+    match lit {
         Literal::Byte(raw) => Ok(PatternLiteral::Int {
             magnitude: unescape_byte(raw)?.into(),
             negated: false,
@@ -86,55 +108,57 @@ pub(super) fn range_bound(
     resolutions: &Resolutions,
 ) -> Option<Result<RangeBound, String>> {
     match pattern {
-        // An exponent literal names an integer where its value is one, as it
-        // does where an integer is expected, and a float otherwise.
-        Pattern::Literal(lit @ Literal::Number(repr)) => match pattern_literal(lit) {
-            Ok(value) => Some(Ok(RangeBound::Discrete(value))),
-            Err(_) if defaults_to_float(repr) => {
-                let (negated, digits) = repr
-                    .strip_prefix('-')
-                    .map_or((false, repr.as_str()), |digits| (true, digits));
-                Some(Ok(RangeBound::Float(FloatBound {
-                    kind: FloatBoundKind::Literal {
-                        digits: digits.to_string(),
-                        negated,
-                    },
-                    shown: repr.clone(),
-                })))
-            }
-            Err(error) => Some(Err(error)),
-        },
+        Pattern::Literal(Literal::Number(repr)) => Some(number_bound(repr)),
         Pattern::Literal(lit @ (Literal::Byte(_) | Literal::Char(_))) => {
             Some(pattern_literal(lit).map(RangeBound::Discrete))
         }
-        Pattern::Variant {
-            variant_name,
-            variant_qualifier: Some(qualifier),
-            bindings,
-            ..
-        } if bindings.is_empty() => {
-            let shown = format!("{}::{variant_name}", written_type_source(qualifier));
-            if let Some((owner, value)) =
-                primitive_int_limit(Some(qualifier), variant_name, resolutions)
-            {
-                return Some(Ok(RangeBound::Discrete(PatternLiteral::Int {
-                    magnitude: value.unsigned_abs(),
-                    negated: value < 0,
-                    owner: Some(owner),
-                    shown,
-                })));
-            }
-            let owner = primitive_float_limit_owner(Some(qualifier), variant_name, resolutions)?;
-            Some(Ok(RangeBound::Float(FloatBound {
-                kind: FloatBoundKind::Limit {
-                    owner,
-                    name: variant_name.clone(),
-                },
-                shown,
-            })))
-        }
-        _ => None,
+        _ => primitive_limit(pattern, resolutions).map(Ok),
     }
+}
+
+/// The float type's limit `pattern` names (`f64::MAX`, `f32::NAN`), which a
+/// pattern matches as the one value it is.
+pub(super) fn float_limit_pattern(
+    pattern: &Pattern,
+    resolutions: &Resolutions,
+) -> Option<InstancePattern> {
+    match primitive_limit(pattern, resolutions)? {
+        RangeBound::Float(float) => Some(InstancePattern::Float(float)),
+        RangeBound::Discrete(_) => None,
+    }
+}
+
+/// The primitive's limit `pattern` names: `i32::MAX`, `f64::INFINITY`.
+fn primitive_limit(pattern: &Pattern, resolutions: &Resolutions) -> Option<RangeBound> {
+    let Pattern::Variant {
+        variant_name,
+        variant_qualifier: Some(qualifier),
+        bindings,
+        ..
+    } = pattern
+    else {
+        return None;
+    };
+    if !bindings.is_empty() {
+        return None;
+    }
+    let shown = format!("{}::{variant_name}", written_type_source(qualifier));
+    if let Some((owner, value)) = primitive_int_limit(Some(qualifier), variant_name, resolutions) {
+        return Some(RangeBound::Discrete(PatternLiteral::Int {
+            magnitude: value.unsigned_abs(),
+            negated: value < 0,
+            owner: Some(owner),
+            shown,
+        }));
+    }
+    let owner = primitive_float_limit_owner(Some(qualifier), variant_name, resolutions)?;
+    Some(RangeBound::Float(FloatBound {
+        kind: FloatBoundKind::Limit {
+            owner,
+            name: variant_name.clone(),
+        },
+        shown,
+    }))
 }
 
 /// The range pattern `start..end` (`..=` where `inclusive`), or why a bound
@@ -170,13 +194,14 @@ pub(super) enum SettledPattern {
         inclusive: bool,
         is_unsigned: bool,
     },
+    /// A float range, or the one float a literal or a limit names.
     Float(FloatRange),
 }
 
 impl SettledPattern {
-    /// The keys of the values a range takes, inclusive, ordered as the
+    /// The keys of the values the pattern takes, inclusive, ordered as the
     /// scrutinee orders them.
-    pub(super) fn range_keys(&self) -> (i128, i128) {
+    pub(super) fn keys(&self) -> (i128, i128) {
         match self {
             SettledPattern::Range {
                 start,
@@ -185,8 +210,26 @@ impl SettledPattern {
                 ..
             } => (*start, if *inclusive { *end } else { end - 1 }),
             SettledPattern::Float(range) => range.keys(),
-            SettledPattern::Literal(_) => unreachable!("a literal pattern is no range"),
+            SettledPattern::Literal(value) => {
+                let key = match value {
+                    TirLiteralPattern::I128(v) => *v,
+                    TirLiteralPattern::U128(v) => v.cast_signed(),
+                    TirLiteralPattern::Char(c) => i128::from(u32::from(*c)),
+                    TirLiteralPattern::Bool(_)
+                    | TirLiteralPattern::String(_)
+                    | TirLiteralPattern::Null => {
+                        unreachable!("only an integer or `char` literal keys a point")
+                    }
+                };
+                (key, key)
+            }
         }
+    }
+
+    /// Whether the pattern names one float that a rounding step can miss: any
+    /// but a zero, an infinity or a NaN.
+    pub(super) fn names_inexact_float(&self) -> bool {
+        matches!(self, SettledPattern::Float(range) if range.names_inexact_float())
     }
 }
 
@@ -197,18 +240,34 @@ pub(super) fn settle_instance_pattern(
     type_table: &mut TypeTable,
 ) -> Result<SettledPattern, Vec<PatternLiteralError>> {
     let is_unsigned = type_table.is_unsigned_int(type_table.peel_refs(scrutinee));
+    let format = float_format(scrutinee, type_table);
     match pattern {
         InstancePattern::Literal(value) => {
+            if let Some(format) = format
+                && let Some(bits) = int_literal_float_bits(value, format)
+            {
+                return bits
+                    .map(|bits| SettledPattern::Float(FloatRange::point(format, bits)))
+                    .map_err(|error| vec![error]);
+            }
             match pattern_literal_error(value, scrutinee, type_table) {
                 Some(error) => Err(vec![error]),
                 None => Ok(SettledPattern::Literal(value.to_tir(is_unsigned))),
             }
         }
+        InstancePattern::Float(bound) => {
+            let Some(format) = format else {
+                return Err(vec![PatternLiteralError::Mismatch(bound.demands())]);
+            };
+            float_bound_bits(bound, format)
+                .map(|bits| SettledPattern::Float(FloatRange::point(format, bits)))
+                .map_err(|error| vec![error])
+        }
         InstancePattern::Range {
             start,
             end,
             inclusive,
-        } if float_format(scrutinee, type_table).is_some() => {
+        } if format.is_some() => {
             float_range(start, end, *inclusive, scrutinee, type_table).map(SettledPattern::Float)
         }
         InstancePattern::Range {
@@ -242,23 +301,19 @@ pub(super) fn settle_instance_pattern(
 
 /// Why `pattern` names no value whatever type reads it, as far as that shows
 /// before an instance settles the type: a range out of order, or a float range
-/// with a NaN bound or with bounds out of order or equal as `f64` reads them.
-/// Every float type rounds alike, so what is out of order in `f64` is out of
-/// order, or equal, in each.
+/// with a NaN bound or with bounds out of order as `f64` reads them. Every
+/// float type rounds alike, so what is out of order in `f64` is out of order,
+/// or equal, in each.
 pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<PatternLiteralError> {
     match pattern {
-        InstancePattern::Literal(_) => Vec::new(),
+        InstancePattern::Literal(_) | InstancePattern::Float(_) => Vec::new(),
         InstancePattern::Range {
             start: start @ RangeBound::Discrete(_),
             end: end @ RangeBound::Discrete(_),
             inclusive,
         } => discrete_order_errors(start, end, *inclusive),
-        InstancePattern::Range {
-            start,
-            end,
-            inclusive,
-        } => {
-            let mut errors: Vec<_> = [start, end]
+        InstancePattern::Range { start, end, .. } => {
+            let errors: Vec<_> = [start, end]
                 .into_iter()
                 .filter_map(|bound| match bound {
                     RangeBound::Float(float) => {
@@ -267,19 +322,48 @@ pub(super) fn unsettled_pattern_errors(pattern: &InstancePattern) -> Vec<Pattern
                     RangeBound::Discrete(_) => None,
                 })
                 .collect();
-            if errors.is_empty()
-                && let (Some(start), Some(end)) = (start.f64_bits(), end.f64_bits())
-            {
-                let range = FloatRange {
-                    format: FloatFormat::F64,
-                    start,
-                    end,
-                    inclusive: *inclusive,
-                };
-                errors.extend(range.checked().err().into_iter().flatten());
+            if !errors.is_empty() {
+                return errors;
             }
-            errors
+            f64_reading(pattern)
+                .map(FloatRange::checked)
+                .and_then(Result::err)
+                .unwrap_or_default()
         }
+    }
+}
+
+/// Whether `pattern` names one float a rounding step can miss on every float
+/// type that reads it, before an instance settles the type. Only a pattern
+/// that names a float whatever reads it is judged: a decimal literal, a float
+/// limit, or a range with one of them as a bound.
+pub(super) fn unsettled_names_inexact_float(pattern: &InstancePattern) -> bool {
+    let names_float = match pattern {
+        InstancePattern::Literal(_) => false,
+        InstancePattern::Float(_) => true,
+        InstancePattern::Range { start, end, .. } => [start, end]
+            .into_iter()
+            .any(|bound| matches!(bound, RangeBound::Float(_))),
+    };
+    names_float && f64_reading(pattern).is_some_and(|range| range.names_inexact_float())
+}
+
+/// `pattern` as `f64` reads it, where it names floats there.
+fn f64_reading(pattern: &InstancePattern) -> Option<FloatRange> {
+    let format = FloatFormat::F64;
+    match pattern {
+        InstancePattern::Literal(_) => None,
+        InstancePattern::Float(float) => Some(FloatRange::point(format, float.f64_bits()?)),
+        InstancePattern::Range {
+            start,
+            end,
+            inclusive,
+        } => Some(FloatRange {
+            format,
+            start: start.f64_bits()?,
+            end: end.f64_bits()?,
+            inclusive: *inclusive,
+        }),
     }
 }
 
@@ -305,6 +389,8 @@ fn discrete_order_errors(
 }
 
 /// A float range pattern, its bounds rounded into the float type that reads it.
+/// A pattern naming one float is the range from it to itself, a NaN included:
+/// no range bound is a NaN, so a NaN range is that point.
 pub(super) struct FloatRange {
     pub(super) format: FloatFormat,
     pub(super) start: u64,
@@ -313,23 +399,49 @@ pub(super) struct FloatRange {
 }
 
 impl FloatRange {
+    /// The pattern naming the one float `bits` holds in `format`.
+    fn point(format: FloatFormat, bits: u64) -> Self {
+        Self {
+            format,
+            start: bits,
+            end: bits,
+            inclusive: true,
+        }
+    }
+
     /// The keys of the values the range takes, inclusive: [`float_order_key`]
     /// of its bounds, the end stepped back below an exclusive bound.
     pub(super) fn keys(&self) -> (i128, i128) {
-        let [start, end] =
-            [self.start, self.end].map(|bits| float_order_key(self.format.value(bits)));
+        let [start, end] = [self.start, self.end].map(|bits| float_order_key(self.format, bits));
         (start, if self.inclusive { end } else { end - 1 })
     }
 
-    /// This range, or why it names no values: its bounds out of order, or equal.
+    /// Whether this is a NaN, which matches every NaN.
+    pub(super) fn is_nan(&self) -> bool {
+        self.format.value(self.start).is_nan()
+    }
+
+    /// Whether the range takes one value, the float order's one `0` counted
+    /// once.
+    pub(super) fn is_point(&self) -> bool {
+        let (lo, hi) = self.keys();
+        lo == hi
+    }
+
+    /// Whether the range takes one float a rounding step can miss: any but a
+    /// zero, an infinity or a NaN.
+    fn names_inexact_float(&self) -> bool {
+        let value = self.format.value(self.start);
+        self.is_point() && value != 0.0 && value.is_finite()
+    }
+
+    /// This range, or why it names no values: its bounds out of order.
     fn checked(self) -> Result<Self, Vec<PatternLiteralError>> {
         let (lo, hi) = self.keys();
         let message = if lo > hi + i128::from(!self.inclusive) {
             "reversed range pattern"
         } else if lo > hi {
             "empty range pattern"
-        } else if lo == hi && self.inclusive {
-            "a float range with equal bounds names one value, as a float literal pattern would"
         } else {
             return Ok(self);
         };
@@ -337,18 +449,39 @@ impl FloatRange {
     }
 }
 
-/// A key ordering the non-NaN floats as the float order does, so a range of
-/// floats is a range of keys: `-0.0` keys as `0.0`, and adjacent `f64`s key
-/// adjacently.
-fn float_order_key(value: f64) -> i128 {
-    assert!(!value.is_nan(), "a NaN is no range bound");
-    // `-0.0 + 0.0` is `0.0`, so no negative key is spent on `-0.0`.
-    let bits = (value + 0.0).to_bits().cast_signed();
-    i128::from(if bits < 0 {
-        (bits ^ i64::MAX) + 1
+/// A key ordering the floats of `format` as the float order does, so a range of
+/// them is a range of keys: `-0.0` keys as `0.0`, adjacent floats key
+/// adjacently, and every NaN keys as one value past `+Inf`.
+pub(super) fn float_order_key(format: FloatFormat, bits: u64) -> i128 {
+    let magnitude = i128::from(bits & !format.sign_bit());
+    let infinity = float_infinity_key(format);
+    if magnitude > infinity {
+        infinity + 1
+    } else if bits & format.sign_bit() == 0 {
+        magnitude
     } else {
-        bits
-    })
+        -magnitude
+    }
+}
+
+/// The [`float_order_key`] of `+Inf` in `format`: its magnitude. `-Inf` keys
+/// as its negation, and a NaN as one past it.
+pub(super) fn float_infinity_key(format: FloatFormat) -> i128 {
+    i128::from(format.infinity_bits())
+}
+
+/// The bits of a float of `format` that [`float_order_key`] keys as `key`,
+/// `-0.0` as `0.0` and a NaN as the format's own.
+pub(super) fn float_of_order_key(format: FloatFormat, key: i128) -> u64 {
+    let infinity = format.infinity_bits();
+    let magnitude = u64::try_from(key.unsigned_abs()).expect("a float key fits its format");
+    if magnitude > infinity {
+        format.limit("NAN").expect("every float type has a NaN")
+    } else if key < 0 {
+        magnitude | format.sign_bit()
+    } else {
+        magnitude
+    }
 }
 
 /// The float range `start..end` (`..=` where `inclusive`) over `scrutinee`, or
@@ -426,7 +559,11 @@ pub(super) fn bound_value(
             })
         }
         (RangeBound::Float(bound), Some(format)) => {
-            float_bound_bits(bound, format).map(|bits| BoundValue::Float(format, bits))
+            let bits = float_bound_bits(bound, format)?;
+            match nan_bound_error(bound, format, bits) {
+                Some(error) => Err(error),
+                None => Ok(BoundValue::Float(format, bits)),
+            }
         }
         (RangeBound::Float(bound), None) => Err(PatternLiteralError::Mismatch(bound.demands())),
     }
@@ -434,22 +571,18 @@ pub(super) fn bound_value(
 
 /// The bits `bound` names in `format`, or why it names none.
 fn float_bound_bits(bound: &FloatBound, format: FloatFormat) -> Result<u64, PatternLiteralError> {
-    let bits = match &bound.kind {
+    match &bound.kind {
         FloatBoundKind::Literal { digits, negated } => {
             signed_literal_bits(digits, *negated, format)
-                .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))?
+                .map_err(|error| PatternLiteralError::Invalid(error.message(&bound.shown)))
         }
         FloatBoundKind::Limit { owner, name } => {
             let (owner_format, bits) = limit_bits(*owner, name);
             if owner_format != format {
                 return Err(PatternLiteralError::Mismatch(owner.as_str().to_string()));
             }
-            bits
+            Ok(bits)
         }
-    };
-    match nan_bound_error(bound, format, bits) {
-        Some(error) => Err(error),
-        None => Ok(bits),
     }
 }
 
@@ -616,17 +749,6 @@ pub(super) fn pattern_literal_error(
     type_table: &mut TypeTable,
 ) -> Option<PatternLiteralError> {
     let scrutinee = type_table.peel_refs(scrutinee);
-    if let PatternLiteral::Int {
-        owner: None, shown, ..
-    } = lit
-        && float_format(scrutinee, type_table).is_some()
-    {
-        let float = type_table.type_name(scrutinee);
-        return Some(PatternLiteralError::Invalid(format!(
-            "`{shown}` is a float on `{float}`, and a float literal is no pattern; \
-             compare it in a guard"
-        )));
-    }
     if let Some(expected) = pattern_literal_mismatch(lit, scrutinee, type_table) {
         return Some(PatternLiteralError::Mismatch(expected));
     }
@@ -815,12 +937,27 @@ mod tests {
     #[test]
     fn adjacent_floats_key_adjacently() {
         let tiny = f64::from_bits(1);
-        let key = float_order_key;
+        let key = |value: f64| float_order_key(FloatFormat::F64, value.to_bits());
         assert_eq!(key(-tiny) + 1, key(0.0));
         assert_eq!(key(-0.0), key(0.0));
         assert_eq!(key(0.0) + 1, key(tiny));
         assert_eq!(key(f64::MAX) + 1, key(f64::INFINITY));
         assert_eq!(key(f64::NEG_INFINITY) + 1, key(f64::MIN));
+        assert_eq!(key(f64::INFINITY) + 1, key(f64::NAN));
+        assert_eq!(key(-f64::NAN), key(f64::NAN));
         assert!(key(-1.0) < key(-0.5));
+    }
+
+    #[test]
+    fn order_keys_invert() {
+        for format in [FloatFormat::F64, FloatFormat::F32, FloatFormat::F16] {
+            let nan = float_order_key(format, format.limit("NAN").unwrap());
+            for key in [-nan + 1, -1, 0, 1, nan - 1, nan] {
+                assert_eq!(
+                    float_order_key(format, float_of_order_key(format, key)),
+                    key
+                );
+            }
+        }
     }
 }

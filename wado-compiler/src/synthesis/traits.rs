@@ -18,9 +18,9 @@ use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, ResolvedType, StructDef,
-    TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStructField, TirTypeParam, TraitRef, TypeId, TypeTable,
+    TemplateShape, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern,
+    TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirTypeParam, TraitRef, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -4901,7 +4901,7 @@ fn trait_call_on_type(
             // A written block is the one answering these trait arguments, where
             // the receiver alone can reach several (`Eq for &T`, `Eq<String> for &T`).
             let impl_module = match &template {
-                Some(template @ TemplateId::Declared { .. }) => template.home(&trait_env.defs),
+                Some(template) if template.def().is_some() => template.home(&trait_env.defs),
                 _ => impl_module,
             };
             (impl_module, monomorph_info, template)

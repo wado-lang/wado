@@ -7052,6 +7052,8 @@ pub enum TirPattern {
 #[derive(Debug, Clone)]
 pub enum InstancePattern {
     Literal(PatternLiteral),
+    /// The one float a decimal literal or a float type's limit names.
+    Float(FloatBound),
     /// Integer, `char` or float, as the scrutinee's type decides.
     Range {
         start: RangeBound,
@@ -7069,7 +7071,7 @@ pub enum RangeBound {
     Float(FloatBound),
 }
 
-/// A float range bound, before a float type rounds it.
+/// A float pattern or range bound, before a float type rounds it.
 #[derive(Debug, Clone)]
 pub struct FloatBound {
     /// What the bound is written as.
@@ -7078,7 +7080,8 @@ pub struct FloatBound {
     pub shown: String,
 }
 
-/// A float range bound as written: a literal or a float type's limit.
+/// A float pattern or range bound as written: a literal or a float type's
+/// limit.
 #[derive(Debug, Clone)]
 pub enum FloatBoundKind {
     /// The unsigned literal `digits`, negated where `negated`.
@@ -7747,6 +7750,9 @@ pub enum TemplateId {
     /// A written declaration, and the impl block its body was emitted into —
     /// a trait's default body is emitted once per impl.
     Declared { def: DefId, block: Option<DefId> },
+    /// The `unchecked` twin of the `Declared` template with these fields,
+    /// which a call marked `unchecked` reaches.
+    Unchecked { def: DefId, block: Option<DefId> },
     /// A body synthesis minted, which declares nothing: the name it gave it in
     /// its module.
     Synthesized { module: ModuleSource, name: String },
@@ -7761,14 +7767,54 @@ impl TemplateId {
         }
     }
 
+    /// The impl block a written declaration's body is emitted into, its
+    /// `unchecked` twin's included.
+    pub fn block(&self) -> Option<DefId> {
+        match self {
+            Self::Declared { block, .. } | Self::Unchecked { block, .. } => *block,
+            Self::Synthesized { .. } => None,
+        }
+    }
+
+    /// The written declaration answering, its `unchecked` twin's included;
+    /// `None` for a synthesized body.
+    pub fn def(&self) -> Option<DefId> {
+        match self {
+            Self::Declared { def, .. } | Self::Unchecked { def, .. } => Some(*def),
+            Self::Synthesized { .. } => None,
+        }
+    }
+
     /// The module the body is emitted into: its block's where it has one.
     pub fn home(&self, defs: &DefTable) -> ModuleSource {
         match self {
-            Self::Declared {
-                block: Some(block), ..
-            } => defs.module(*block).clone(),
-            Self::Declared { def, block: None } => defs.module(*def).clone(),
+            Self::Declared { def, block } | Self::Unchecked { def, block } => {
+                defs.module(block.unwrap_or(*def)).clone()
+            }
             Self::Synthesized { module, .. } => module.clone(),
+        }
+    }
+
+    /// The template of this one's `unchecked` twin.
+    pub fn unchecked_twin(&self) -> Self {
+        match self {
+            Self::Declared { def, block } => Self::Unchecked {
+                def: *def,
+                block: *block,
+            },
+            Self::Unchecked { .. } | Self::Synthesized { .. } => {
+                panic!("only a declaration has an unchecked twin: {self:?}")
+            }
+        }
+    }
+
+    /// The template a call of `info` reaches, given that its method answers
+    /// with this one: the `unchecked` twin where the call is marked.
+    pub fn called_by(self, info: &LocalMethodName) -> Self {
+        if info.is_unchecked() {
+            self.unchecked_twin()
+        } else {
+            self
         }
     }
 
@@ -8628,6 +8674,9 @@ pub enum FunctionKind {
     /// `type_id`. Calls to such functions may be elided when the argument is
     /// provably fresh.
     ValueCopy { type_id: TypeId },
+    /// The `unchecked` twin of the function `of` declares: its body, with the
+    /// `contract` clauses checked only under `-f contract-checks`.
+    UncheckedTwin { of: DefId },
     /// Auto-derived `fn(..)^Inspect::inspect` dispatch stub. The TIR body is
     /// `unreachable()` — enough to register the function and resolve calls to
     /// it — and WIR build supplies the real one, a `call_ref` through
@@ -9290,6 +9339,12 @@ impl TirFunction {
     pub fn template_id(&self) -> Option<TemplateId> {
         if self.monomorph_info.is_some() {
             return None;
+        }
+        if let FunctionKind::UncheckedTwin { of } = self.kind {
+            return Some(TemplateId::Unchecked {
+                def: of,
+                block: self.impl_origin,
+            });
         }
         Some(match self.def_id {
             Some(def) => TemplateId::Declared {

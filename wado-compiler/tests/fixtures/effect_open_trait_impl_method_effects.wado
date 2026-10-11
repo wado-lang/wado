@@ -1,0 +1,31 @@
+// A call on a concrete receiver of an open trait requires what the impl's
+// method it reaches performs: not its siblings', and not an effect parameter
+// its own arguments determine.
+use { println, Stdout } from "core:cli";
+
+trait Run with _ {
+    fn apply(&self, f: fn(i32) -> i32 with _, n: i32) -> i32 with _;
+    fn count(&self, n: i32) -> i32 with _;
+}
+
+struct Twice {}
+
+impl Run for Twice {
+    fn apply(&self, f: fn(i32) -> i32 with _, n: i32) -> i32 with _ {
+        return f(f(n));
+    }
+
+    fn count(&self, n: i32) -> i32 {
+        return n * 2;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Twice {}.apply(|x| x + 1, 1)}`);
+    println(`${Twice {}.count(4)}`);
+}
+
+__DATA__
+{
+  "stdout": "3\n8\n"
+}

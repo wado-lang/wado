@@ -12,11 +12,12 @@ use {
     ParserRule,
     Element,
     AltAction,
+    ActionKind,
     find_lexer_rule,
     lexer_alias_text,
     NO_MODE,
 } from "./ir.wado";
-use { negate_cond } from "./gen_util.wado";
+use { negate_cond, open_chain_arm } from "./gen_util.wado";
 use { gen_visibility_comment } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { literal_const_name } from "./ident.wado";
@@ -703,7 +704,7 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
 ) {
     let rule = find_fragment(all_rules, &frag.key.name).expect("a fragment matcher names no fragment");
     begin_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name);
-    end_lexer_matcher(w, rule, &frag.plan, all_rules, frag.key.ci, ea, hm);
+    end_lexer_matcher(w, rule, &frag.plan, &LexerEmit { all_rules, ci: frag.key.ci, hm }, ea);
 }
 
 /// Open a matcher `fn_name(chars, start) -> i32` over `rule`'s text.
@@ -734,18 +735,18 @@ fn begin_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
     }
 }
 
-/// Emit `rule`'s body under `plan` and close the matcher, returning the end.
-fn end_lexer_matcher(
-    w: &mut CodeWriter,
-    rule: &LexerRule,
-    plan: &LexerBodyPlan,
+/// What every emit inside one matcher reads and none changes. `hm` says the
+/// grammar has members, so the matcher reads its chars through `lx: &Lexer`.
+struct LexerEmit {
     all_rules: &List<LexerRule>,
     ci: bool,
-    ea: bool,
     hm: bool,
-) {
+}
+
+/// Emit `rule`'s body under `plan` and close the matcher, returning the end.
+fn end_lexer_matcher(w: &mut CodeWriter, rule: &LexerRule, plan: &LexerBodyPlan, e: &LexerEmit, ea: bool) {
     w.line("let mut pos = start;");
-    gen_lexer_body(w, &rule.body, plan, all_rules, "return -1", ci, ea, hm, false);
+    gen_lexer_body(w, &rule.body, plan, e, "return -1", ea, false);
     w.line("return pos;");
     w.end();
     w.blank();
@@ -1429,7 +1430,8 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     let Some(plan) = plan else {
         unreachable();
     };
-    end_lexer_matcher(w, rule, plan, all_rules, resolve_ci(grammar_opts, &rule.options), ea, hm);
+    let e = LexerEmit { all_rules, ci: resolve_ci(grammar_opts, &rule.options), hm };
+    end_lexer_matcher(w, rule, plan, &e, ea);
 }
 
 /// Emit each semantic predicate at position `before` as a guard
@@ -1674,7 +1676,8 @@ fn gen_lexer_apply_replay_body(
     // nothing to select, so it never re-evaluates a predicate.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
     let ea = plan matches { Alts(_) };
-    gen_lexer_body(w, &rule.body, &plan, all_rules, "return", ci, ea, has_members, true);
+    let e = LexerEmit { all_rules, ci, hm: has_members };
+    gen_lexer_body(w, &rule.body, &plan, &e, "return", ea, true);
 }
 
 /// Emit a staged lexer-action body as a statement, normalizing the trailing
@@ -1712,11 +1715,7 @@ fn gen_lexer_action_replay(
     }
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
         let call = `${apply_fn_name(&act_rule_names[i])}(&mut lexer, start, best_end);`;
-        if i == 0 {
-            w.begin(`if best_act == ${i}`);
-        } else {
-            w.else_begin(`else if best_act == ${i}`);
-        }
+        open_chain_arm(w, i > 0, `best_act == ${i}`);
         w.line(&call);
     }
     w.end();
@@ -1871,16 +1870,14 @@ fn gen_lexer_body<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerBodyPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
     match plan {
-        Single(seq) => gen_lexer_alt_seq(w, &alts[0], seq, 0, all_rules, fail_action, ci, ea, hm, replay),
-        Alts(ap) => gen_lexer_alts(w, alts, ap, all_rules, fail_action, ci, ea, hm, replay),
+        Single(seq) => gen_lexer_alt_seq(w, &alts[0], seq, 0, e, fail_action, ea, replay),
+        Alts(ap) => gen_lexer_alts(w, alts, ap, e, fail_action, ea, replay),
     }
 }
 
@@ -1888,121 +1885,75 @@ fn gen_lexer_alts<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerAltsPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
-    if replay {
-        gen_lexer_alts_replay(w, alts, plan, all_rules, fail_action, ci, ea, hm);
-        return;
-    }
-    if plan.emit matches { MaximalMunch } {
-        gen_lexer_alts_longest(w, alts, plan, all_rules, fail_action, ci, ea, hm);
-        return;
-    }
-    // Sibling arms leaving one block: a cascade of `if !ok` nests a level per
-    // alternative, eleven deep for a css3 unit fragment.
-    let id = w.next_id();
-    w.line(`let alts_saved_${id} = pos;`);
-    w.begin(`alts_done_${id}:`);
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let label = `alts_${id}_${i}`;
-        w.begin(`${label}:`);
-        w.line(`pos = alts_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
-        w.line(`break alts_done_${id};`);
-        w.end();
-    }
-    w.line(`${fail_action};`);
-    w.end();
-}
-
-/// Maximal-munch emit for an alternation in tail position: every alternative is
-/// scanned forward from the same start and the longest match wins, matching
-/// ANTLR4's NFA→DFA lexer simulation (`I : ('a' | 'ab')` matches `ab`). Sound
-/// without backtracking precisely because nothing follows the alternation, so
-/// the alternative's length is the rule's length — an alternation with a suffix
-/// keeps the first-match emit, where a longer arm could strand the suffix.
-fn gen_lexer_alts_longest<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alts: &List<LexerAlternative>,
-    plan: &LexerAltsPlan,
-    all_rules: &List<LexerRule>,
-    fail_action: S,
-    ci: bool,
-    ea: bool,
-    hm: bool,
-) {
-    let id = w.next_id();
-    w.line(`let alts_saved_${id} = pos;`);
-    w.line(`let mut alts_best_${id} = -1;`);
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let label = `alts_${id}_${i}`;
-        w.begin(`${label}:`);
-        w.line(`pos = alts_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ false);
-        w.line(`if pos > alts_best_${id} { alts_best_${id} = pos; }`);
-        w.end();
-    }
-    w.line(`if alts_best_${id} < 0 { ${fail_action}; }`);
-    w.line(`pos = alts_best_${id};`);
-}
-
-/// Replay an alternation: first pick the arm the match picked — scanning
-/// match-only, so a losing arm's actions never run — then re-run just that arm
-/// with its actions in place. Selection mirrors `gen_lexer_alts` exactly
-/// (longest in tail position, first-match otherwise), so the replay lands on the
-/// alternative the tournament actually matched.
-fn gen_lexer_alts_replay<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alts: &List<LexerAlternative>,
-    plan: &LexerAltsPlan,
-    all_rules: &List<LexerRule>,
-    fail_action: S,
-    ci: bool,
-    ea: bool,
-    hm: bool,
-) {
-    let id = w.next_id();
+    // Maximal munch runs every arm from the same start and keeps the longest,
+    // as ANTLR4's NFA→DFA simulation does (`I : ('a' | 'ab')` matches `ab`). It
+    // is sound without backtracking only in tail position, where the arm's
+    // length is the rule's; elsewhere a longer arm could strand the suffix, so
+    // the first arm to match wins. First-match arms are siblings leaving one
+    // block: a cascade of `if !ok` nests a level per alternative, eleven deep
+    // for a css3 unit fragment.
+    //
+    // A replay first picks the arm the match picked by that same rule, scanning
+    // match-only so a losing arm's actions never run, then re-runs just that
+    // arm with its actions in place.
     let longest = plan.emit matches { MaximalMunch };
-    w.line(`let sel_saved_${id} = pos;`);
-    w.line(`let mut sel_alt_${id} = -1;`);
+    let id = w.next_id();
+    let p = if replay { "sel" } else { "alts" };
+    let saved = `${p}_saved_${id}`;
+    let best = `${p}_best_${id}`;
+    let done = `${p}_done_${id}`;
+    let picked = `sel_alt_${id}`;
+    w.line(`let ${saved} = pos;`);
+    if replay {
+        w.line(`let mut ${picked} = -1;`);
+    }
     if longest {
-        w.line(`let mut sel_best_${id} = -1;`);
+        w.line(`let mut ${best} = -1;`);
     } else {
-        w.begin(`sel_done_${id}:`);
+        w.begin(`${done}:`);
     }
     for let mut i = 0; i < alts.len(); i += 1 {
-        let label = `sel_${id}_${i}`;
+        let label = `${p}_${id}_${i}`;
         w.begin(`${label}:`);
-        w.line(`pos = sel_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ true);
+        w.line(`pos = ${saved};`);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], e, `break ${label}`, ea, replay);
+        let pick = if replay { ` ${picked} = ${i};` } else { "" };
         if longest {
-            w.line(`if pos > sel_best_${id} { sel_best_${id} = pos; sel_alt_${id} = ${i}; }`);
+            w.line(`if pos > ${best} { ${best} = pos;${pick} }`);
         } else {
-            w.line(`sel_alt_${id} = ${i};`);
-            w.line(`break sel_done_${id};`);
+            if replay {
+                w.line(`${picked} = ${i};`);
+            }
+            w.line(`break ${done};`);
         }
         w.end();
+    }
+    if !replay {
+        if longest {
+            w.line(`if ${best} < 0 { ${fail_action}; }`);
+            w.line(`pos = ${best};`);
+        } else {
+            w.line(`${fail_action};`);
+            w.end();
+        }
+        return;
     }
     if !longest {
         w.end();
     }
-    w.line(`if sel_alt_${id} < 0 { ${fail_action}; }`);
-    w.line(`pos = sel_saved_${id};`);
+    w.line(`if ${picked} < 0 { ${fail_action}; }`);
+    w.line(`pos = ${saved};`);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i == 0 {
-            w.begin(`if sel_alt_${id} == ${i}`);
-        } else {
-            w.else_begin(`else if sel_alt_${id} == ${i}`);
-        }
+        open_chain_arm(w, i > 0, `${picked} == ${i}`);
         // `ea = false`: the selection pass already evaluated this arm. Running a
         // state-dependent predicate twice could reject here what it accepted
         // there, dropping the winner's actions while the token still commits.
-        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, all_rules, fail_action, ci, false, hm, true);
+        gen_lexer_alt_seq(w, &alts[i], &plan.arms[i], 0, e, fail_action, false, true);
     }
     w.end();
 }
@@ -2012,18 +1963,21 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
 /// says whether its own arm matches, never how the lengths compare, so an arm
 /// carrying one is measured like any other.
 fn lexer_arms_share_fixed_len(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
-    let mut common = -1;
+    return lexer_alts_fixed_len(alts, all_rules) matches { Some(_) };
+}
+
+/// The number of chars every one of `alts` consumes, or null when they differ
+/// or one is not a fixed count.
+fn lexer_alts_fixed_len(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> Option<i32> {
+    let mut common: Option<i32> = null;
     for let alt of alts {
-        let Some(n) = lexer_alt_fixed_len(alt, all_rules) else {
-            return false;
-        };
-        if common < 0 {
-            common = n;
-        } else if common != n {
-            return false;
+        let n = lexer_alt_fixed_len(alt, all_rules)?;
+        if common matches { Some(c) && c != n } {
+            return null;
         }
+        common = Option::Some(n);
     }
-    return true;
+    return common;
 }
 
 /// The emit an alternation takes, tail position included: the whole
@@ -2112,46 +2066,32 @@ fn lexer_elem_has_non_greedy(elem: &LexerElement, all_rules: &List<LexerRule>, v
 }
 
 /// Whether `alt` carries a semantic predicate at its own level or anywhere the
-/// emit inlines below it (a group's arms, a non-recursive fragment's body). A
-/// nested predicate constrains the emit exactly as a top-level one does, so both
-/// must disable the maximal-munch scan.
+/// emit inlines below it. A nested predicate constrains the emit exactly as a
+/// top-level one does, so both must disable the maximal-munch scan.
 fn lexer_alt_has_predicate_below(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
-    for let a of &alt.actions {
-        if a.kind matches { Predicate } {
-            return true;
-        }
-    }
-    return alt.elements.iter_ref().any(|e| lexer_elem_has_predicate_below(e, all_rules));
+    return lexer_alt_carries(alt, ActionKind::Predicate, all_rules);
 }
 
-fn lexer_elem_has_predicate_below(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+/// Whether `alt` carries an action of `kind` at its own level or anywhere the
+/// emit inlines below it: a group's arms, a repeat's or `~`'s element, a
+/// non-recursive fragment's body.
+fn lexer_alt_carries(alt: &LexerAlternative, kind: ActionKind, all_rules: &List<LexerRule>) -> bool {
+    return alt.actions.iter_ref().any(|a: &AltAction| a.kind == kind)
+        || alt.elements.iter_ref().any(|el: &LexerElement| lexer_elem_carries(el, kind, all_rules));
+}
+
+fn lexer_elem_carries(elem: &LexerElement, kind: ActionKind, all_rules: &List<LexerRule>) -> bool {
     return match *elem {
-        Group(alts) => {
-            for let a of alts {
-                if lexer_alt_has_predicate_below(&a, all_rules) {
-                    return true;
-                }
-            }
-            false;
-        },
-        Repeat(rep) => lexer_elem_has_predicate_below(&rep.element, all_rules),
-        Not(n) => lexer_elem_has_predicate_below(&n.element, all_rules),
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_carries(a, kind, all_rules)),
+        Repeat(rep) => lexer_elem_carries(&rep.element, kind, all_rules),
+        Not(n) => lexer_elem_carries(&n.element, kind, all_rules),
         RuleRef(name) => match find_fragment(all_rules, &name) {
-            // A recursive fragment is a call, so its predicates stay inside it.
-            Some(f) => {
-                if fragment_is_recursive(f, all_rules) {
-                    return false;
-                }
-                for let a of &f.body {
-                    if lexer_alt_has_predicate_below(a, all_rules) {
-                        return true;
-                    }
-                }
-                false;
-            },
+            // A recursive fragment is a call, so what it carries stays inside it.
+            Some(f) => !fragment_is_recursive(f, all_rules)
+                && f.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_carries(a, kind, all_rules)),
             None => false,
         },
-        _ => false,
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
     };
 }
 
@@ -2160,14 +2100,9 @@ fn lexer_elem_has_predicate_below(elem: &LexerElement, all_rules: &List<LexerRul
 fn lexer_alt_fixed_len(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> Option<i32> {
     let mut total = 0;
     for let elem of &alt.elements {
-        let len = lexer_elem_fixed_len(elem, all_rules);
-        if let Some(n) = len {
-            total += n;
-        } else {
-            return null;
-        }
+        total += lexer_elem_fixed_len(elem, all_rules)?;
     }
-    return Option::<i32>::Some(total);
+    return Option::Some(total);
 }
 
 fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Option<i32> {
@@ -2176,24 +2111,7 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
         CharRange(_) | CharClass(_) | AnyChar => Option::<i32>::Some(1),
         // The g4 parser admits only a set under a `~`, so it takes one char.
         Not(_) => Option::<i32>::Some(1),
-        Group(alts) => {
-            let mut common: Option<i32> = null;
-            for let alt of alts {
-                let len = lexer_alt_fixed_len(&alt, all_rules);
-                if let Some(n) = len {
-                    if let Some(c) = common {
-                        if c != n {
-                            return null;
-                        }
-                    } else {
-                        common = Option::<i32>::Some(n);
-                    }
-                } else {
-                    return null;
-                }
-            }
-            common;
-        },
+        Group(alts) => lexer_alts_fixed_len(&alts, all_rules),
         RuleRef(name) => {
             if name == "EOF" {
                 return Option::<i32>::Some(0);
@@ -2203,7 +2121,7 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
                 if fragment_is_recursive(f, all_rules) {
                     return null;
                 }
-                return lexer_elem_fixed_len(&LexerElement::Group(f.body), all_rules);
+                return lexer_alts_fixed_len(&f.body, all_rules);
             }
             null;
         },
@@ -2230,14 +2148,12 @@ fn gen_lexer_arm_probe<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
-    gen_lexer_alt_seq(w, alt, plan, 0, all_rules, fail_action, ci, probe_ea(replay, ea), hm, false);
+    gen_lexer_alt_seq(w, alt, plan, 0, e, fail_action, probe_ea(replay, ea), false);
 }
 
 /// The id a probe's locals carry. Only a replay emits a probe, so only a replay
@@ -2773,11 +2689,9 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
     assert !replay || !ea, "the replay pass never re-evaluates a predicate the selection pass already answered";
@@ -2794,7 +2708,7 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
                 let Repeat(rep) = &alt.elements[i] else {
                     panic("a repeat step plans something other than a repeat");
                 };
-                if gen_lexer_repeat_step(w, alt, plan, i, rep, rp, all_rules, fail_action, ci, ea, hm, replay) {
+                if gen_lexer_repeat_step(w, alt, plan, i, rep, rp, e, fail_action, ea, replay) {
                     return;
                 }
             },
@@ -2804,30 +2718,17 @@ fn gen_lexer_alt_seq<S: AsStrSlice>(
                 };
                 match &gp.shape {
                     Scored(arms) => {
-                        gen_lexer_alts_lookahead_aware(
-                            w,
-                            g_alts,
-                            arms,
-                            alt,
-                            plan,
-                            i + 1,
-                            all_rules,
-                            fail_action,
-                            ci,
-                            ea,
-                            hm,
-                            replay,
-                        );
+                        gen_lexer_alts_lookahead_aware(w, g_alts, arms, alt, plan, i + 1, e, fail_action, ea, replay);
                         // Off the replay path the scoring peek consumed the
                         // suffix, trailing predicate included.
                         if !replay {
                             return;
                         }
                     },
-                    FirstMatch(body) => gen_lexer_body(w, g_alts, body, all_rules, fail_action, ci, ea, hm, replay),
+                    FirstMatch(body) => gen_lexer_body(w, g_alts, body, e, fail_action, ea, replay),
                 }
             },
-            Elem(ep) => gen_lexer_elem(w, &alt.elements[i], ep, all_rules, fail_action, ci, ea, hm, replay),
+            Elem(ep) => gen_lexer_elem(w, &alt.elements[i], ep, e, fail_action, ea, replay),
         }
     }
     gen_lexer_rule_predicates(w, &alt.actions, alt.elements.len(), ea, fail_action);
@@ -2845,11 +2746,9 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
     index: i32,
     rep: &LexerRepeatElement,
     rp: &LexerRepeatPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) -> bool {
     if rp.emit matches { NonGreedy } {
@@ -2857,19 +2756,7 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
             panic("a non-greedy repeat plans no rest");
         };
         // The rest alt covers `index + 1` through the trailing predicate.
-        gen_lexer_non_greedy_repeat(
-            w,
-            rep,
-            &rp.inner,
-            &cut.alt,
-            &cut.plan,
-            all_rules,
-            fail_action,
-            ci,
-            ea,
-            hm,
-            replay,
-        );
+        gen_lexer_non_greedy_repeat(w, rep, &rp.inner, &cut.alt, &cut.plan, e, fail_action, ea, replay);
         return true;
     }
     if rp.emit matches { LookaheadAware } {
@@ -2880,25 +2767,12 @@ fn gen_lexer_repeat_step<S: AsStrSlice>(
         // forward pass with explicit accept-state tracking — each iteration peeks
         // how far the suffix reaches from here and keeps the stop reaching
         // furthest, and once the inner stops matching the cursor resumes there.
-        gen_lexer_repeat_lookahead_aware(
-            w,
-            rep,
-            &rp.inner,
-            alt,
-            plan,
-            index + 1,
-            all_rules,
-            fail_action,
-            ci,
-            ea,
-            hm,
-            replay,
-        );
+        gen_lexer_repeat_lookahead_aware(w, rep, &rp.inner, alt, plan, index + 1, e, fail_action, ea, replay);
         // The emit consumes the suffix itself, predicates included, and on the
         // replay path runs the actions written across it.
         return true;
     }
-    gen_lexer_repeat(w, rep, &rp.inner, all_rules, fail_action, ci, ea, hm, replay);
+    gen_lexer_repeat(w, rep, &rp.inner, e, fail_action, ea, replay);
     return false;
 }
 
@@ -3434,11 +3308,9 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
     let id = w.next_id();
@@ -3458,7 +3330,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
 
     // Plus: the first iteration is mandatory and may not be skipped.
     if let Plus = rep.kind {
-        gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, pea, hm, false);
+        gen_lexer_elem(w, &rep.element, inner, e, fail_action, pea, false);
     }
     let once_var = `la_once_${id}`;
     let once = rep.kind matches { Optional };
@@ -3472,14 +3344,14 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     // one peek site, so nested lookahead-aware repeats grow the matcher
     // linearly rather than doubling it per nesting level.
     w.begin("loop");
-    gen_lexer_repeat_stop_peek(w, alt, plan, from, all_rules, &accept_var, &reach_var, ci, pea, hm);
+    gen_lexer_repeat_stop_peek(w, alt, plan, from, e, &accept_var, &reach_var, pea);
     if once {
         w.line(`if ${once_var} { break; }`);
         w.line(`${once_var} = true;`);
     }
     w.line(`let la_saved_${id} = pos;`);
     w.begin(`${loop_label}:`);
-    gen_lexer_elem(w, &rep.element, inner, all_rules, `break ${loop_label}`, ci, pea, hm, false);
+    gen_lexer_elem(w, &rep.element, inner, e, `break ${loop_label}`, pea, false);
     w.line("continue;");
     w.end();
     w.line(`pos = la_saved_${id};`);
@@ -3494,8 +3366,8 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
         // The accept position alone says how many iterations the match kept.
         assert lexer_element_one_path(&rep.element), "a lookahead-aware repeat's inner matches each iteration along one path";
         w.line(`pos = la_start_${id};`);
-        gen_lexer_replay_to(w, &rep.element, inner, all_rules, accept, ci, hm);
-        gen_lexer_alt_seq(w, alt, plan, from, all_rules, fail_action, ci, ea, hm, /*replay=*/ true);
+        gen_lexer_replay_to(w, &rep.element, inner, e, accept);
+        gen_lexer_alt_seq(w, alt, plan, from, e, fail_action, ea, /*replay=*/ true);
         return;
     }
     // The winning peek matched the suffix through to `reach_var`, predicates
@@ -3515,16 +3387,14 @@ fn gen_lexer_repeat_stop_peek(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     accept_var: &Option<String>,
     reach_var: &String,
-    ci: bool,
     ea: bool,
-    hm: bool,
 ) {
     let tot = `la_tot_${w.next_id()}`;
     w.line(`let mut ${tot}: i32 = -1;`);
-    gen_lexer_suffix_peek(w, alt, plan, from, all_rules, &tot, ci, ea, hm);
+    gen_lexer_suffix_peek(w, alt, plan, from, e, &tot, ea);
     w.begin(`if ${tot} >= 0 && ${tot} >= ${*reach_var}`);
     w.line(`${*reach_var} = ${tot};`);
     if let Some(accept) = accept_var {
@@ -3541,15 +3411,13 @@ fn gen_lexer_replay_to<S: AsStrSlice>(
     w: &mut CodeWriter,
     inner: &LexerElement,
     inner_plan: &LexerElemPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     bound: S,
-    ci: bool,
-    hm: bool,
 ) {
     let msg = `lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted`;
     let fail = `panic("${msg}")`;
     w.begin(`while pos < ${bound}`);
-    gen_lexer_elem(w, inner, inner_plan, all_rules, &fail, ci, /*ea=*/ false, hm, /*replay=*/ true);
+    gen_lexer_elem(w, inner, inner_plan, e, &fail, /*ea=*/ false, /*replay=*/ true);
     w.end();
     w.line(`if pos != ${bound} { ${fail}; }`);
 }
@@ -3574,11 +3442,9 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
     let id = w.next_id();
@@ -3591,7 +3457,7 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
         w.line(`let mut la_arm_${id}_${i}: i32 = -1;`);
         w.begin(`${label}:`);
         w.line(`pos = la_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
+        gen_lexer_arm_probe(w, &alts[i], &arms[i], e, `break ${label}`, ea, replay);
         w.line(`la_arm_${id}_${i} = pos;`);
         w.end();
         let pattern = if i == alts.len() - 1 { "_" } else { `${i}` };
@@ -3604,17 +3470,7 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     w.line(`if la_at_${id} < 0 { continue; }`);
     w.line(`pos = la_at_${id};`);
     w.line(`let mut la_tot_${id}: i32 = -1;`);
-    gen_lexer_suffix_peek(
-        w,
-        alt,
-        plan,
-        from,
-        all_rules,
-        `la_tot_${id}`,
-        ci,
-        probe_ea(replay, ea),
-        hm,
-    );
+    gen_lexer_suffix_peek(w, alt, plan, from, e, `la_tot_${id}`, probe_ea(replay, ea));
     // Strict `>` over arms in source order gives ANTLR4's tie-break.
     w.begin(`if la_tot_${id} > la_reach_${id}`);
     w.line(`la_reach_${id} = la_tot_${id};`);
@@ -3633,12 +3489,8 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     // what the selection pass accepted.
     w.line(`pos = la_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i == 0 {
-            w.begin(`if la_win_${id} == ${i}`);
-        } else {
-            w.else_begin(`else if la_win_${id} == ${i}`);
-        }
-        gen_lexer_alt_seq(w, &alts[i], &arms[i], 0, all_rules, fail_action, ci, false, hm, true);
+        open_chain_arm(w, i > 0, `la_win_${id} == ${i}`);
+        gen_lexer_alt_seq(w, &alts[i], &arms[i], 0, e, fail_action, false, true);
     }
     w.end();
 }
@@ -3656,24 +3508,22 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     end_var: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
 ) {
     let id = w.next_id();
     let save_var = `peek_save_${id}`;
     let label = `peek_${id}`;
     w.line(`let ${save_var} = pos;`);
     if lexer_suffix_always_matches(alt, plan, from) {
-        gen_lexer_alt_seq(w, alt, plan, from, all_rules, "unreachable()", ci, ea, hm, /*replay=*/ false);
+        gen_lexer_alt_seq(w, alt, plan, from, e, "unreachable()", ea, /*replay=*/ false);
         w.line(`${end_var} = pos;`);
         w.line(`pos = ${save_var};`);
         return;
     }
     w.begin(`${label}:`);
-    gen_lexer_alt_seq(w, alt, plan, from, all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ false);
+    gen_lexer_alt_seq(w, alt, plan, from, e, `break ${label}`, ea, /*replay=*/ false);
     w.line(`${end_var} = pos;`);
     w.end();
     w.line(`pos = ${save_var};`);
@@ -3703,11 +3553,9 @@ fn gen_lexer_elem<S: AsStrSlice>(
     w: &mut CodeWriter,
     elem: &LexerElement,
     plan: &LexerElemPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
     match plan {
@@ -3715,18 +3563,18 @@ fn gen_lexer_elem<S: AsStrSlice>(
         // inheriting the caller's CI context, where a fragment reached by call
         // uses the grammar-level one in its own `try_*` fn.
         Body(body) => {
-            let alts = elem_inlined_body(elem, all_rules);
-            gen_lexer_body(w, &alts, body, all_rules, fail_action, ci, ea, hm, replay);
+            let alts = elem_inlined_body(elem, e.all_rules);
+            gen_lexer_body(w, &alts, body, e, fail_action, ea, replay);
         },
         Not(nested) => {
             let Not(not_elem) = elem else {
                 panic("a negation plan against something other than a `~`");
             };
-            gen_lexer_not(w, not_elem, &nested.inner, all_rules, fail_action, ci, ea, hm);
+            gen_lexer_not(w, not_elem, &nested.inner, e, fail_action, ea);
         },
         CharSet(set) => gen_char_class(w, set, fail_action),
-        Call(key) => gen_lexer_call(w, &key.fn_name(), fail_action, hm),
-        Leaf => gen_lexer_leaf(w, elem, fail_action, ci, hm),
+        Call(key) => gen_lexer_call(w, &key.fn_name(), fail_action, e.hm),
+        Leaf => gen_lexer_leaf(w, elem, fail_action, e.ci, e.hm),
     }
 }
 
@@ -3837,11 +3685,9 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool = false,
 ) {
     let id = w.next_id();
@@ -3850,14 +3696,14 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     // An iteration that fails before it moves the cursor leaves nothing to undo.
     let rewinds = replay || !lexer_elem_fails_in_place(&rep.element, inner);
     if let Star = rep.kind {
-        gen_lexer_repeat_loop(w, rep, inner, all_rules, &label, rewinds, ci, ea, hm, replay, id, id);
+        gen_lexer_repeat_loop(w, rep, inner, e, &label, rewinds, ea, replay, id, id);
     }
     if let Plus = rep.kind {
-        gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, id);
+        gen_lexer_repeat_iteration(w, rep, inner, e, fail_action, ea, replay, id);
         // The loop's own probe names, minted rather than derived: two iterations
         // in one fn must not share a `rep_probe_`.
         let loop_id = w.next_id();
-        gen_lexer_repeat_loop(w, rep, inner, all_rules, &label, rewinds, ci, ea, hm, replay, id, loop_id);
+        gen_lexer_repeat_loop(w, rep, inner, e, &label, rewinds, ea, replay, id, loop_id);
     }
     if let Optional = rep.kind {
         if rewinds {
@@ -3865,7 +3711,7 @@ fn gen_lexer_repeat<S: AsStrSlice>(
             w.line(`let mut opt_ok_${id} = false;`);
         }
         w.begin(`${label}:`);
-        gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, id);
+        gen_lexer_repeat_iteration(w, rep, inner, e, &break_label, ea, replay, id);
         if rewinds {
             w.line(`opt_ok_${id} = true;`);
         }
@@ -3882,12 +3728,10 @@ fn gen_lexer_repeat_loop(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     label: &String,
     rewinds: bool,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
     id: i32,
     iteration_id: i32,
@@ -3897,7 +3741,7 @@ fn gen_lexer_repeat_loop(
         w.line(`let rep_saved_${id} = pos;`);
     }
     w.begin(`${*label}:`);
-    gen_lexer_repeat_iteration(w, rep, inner, all_rules, `break ${*label}`, ci, ea, hm, replay, iteration_id);
+    gen_lexer_repeat_iteration(w, rep, inner, e, `break ${*label}`, ea, replay, iteration_id);
     w.line("continue;");
     w.end();
     if rewinds {
@@ -3927,23 +3771,22 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
     id: i32,
 ) {
     if !replay {
-        gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, false);
+        gen_lexer_elem(w, &rep.element, inner, e, fail_action, ea, false);
         return;
     }
     // Whether this iteration ran is the match's decision, so the probe evaluates
     // the predicates the match evaluated (`probe_ea`); the walk below does not.
     let pea = probe_ea(replay, ea);
-    if !lexer_element_has_action(&rep.element, all_rules) {
-        gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, pea, hm, false);
+    // An action inside the element is the only reason for the match-only probe.
+    if !lexer_elem_carries(&rep.element, ActionKind::Action, e.all_rules) {
+        gen_lexer_elem(w, &rep.element, inner, e, fail_action, pea, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
         w.line(`if pos > end { ${fail_action}; }`);
@@ -3953,37 +3796,18 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     w.line(`let ${probe}_saved = pos;`);
     w.line(`let mut ${probe}_ok = false;`);
     w.begin(`${probe}:`);
-    gen_lexer_elem(w, &rep.element, inner, all_rules, `break ${probe}`, ci, pea, hm, false);
+    gen_lexer_elem(w, &rep.element, inner, e, `break ${probe}`, pea, false);
     w.line(`${probe}_ok = true;`);
     w.end();
     // The winner's extent bounds the replay: an iteration reaching past `end`
     // is not part of the match, however the match pass came to stop there.
     w.line(`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${fail_action}; }`);
     w.line(`pos = ${probe}_saved;`);
-    gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, true);
-}
-
-/// Whether `elem` carries an action anywhere inside it, counting what a rule
-/// reference inlines — the only reason an iteration needs its match-only probe.
-fn lexer_element_has_action(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
-    return match *elem {
-        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)),
-        Repeat(rep) => lexer_element_has_action(&rep.element, all_rules),
-        Not(n) => lexer_element_has_action(&n.element, all_rules),
-        RuleRef(name) => match find_fragment(all_rules, &name) {
-            Some(f) => !fragment_is_recursive(f, all_rules)
-                && f.body.iter_ref().any(
-                    |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
-                ),
-            None => false,
-        },
-        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
-    };
+    gen_lexer_elem(w, &rep.element, inner, e, fail_action, ea, true);
 }
 
 fn lexer_alt_has_any_action(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
-    return alt.actions.iter_ref().any(|a: &AltAction| a.kind matches { Action })
-        || alt.elements.iter_ref().any(|e: &LexerElement| lexer_element_has_action(e, all_rules));
+    return lexer_alt_carries(alt, ActionKind::Action, all_rules);
 }
 
 /// Emit a non-greedy `*?` / `+?`: each iteration tries the rest first and only
@@ -3998,11 +3822,9 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     inner: &LexerElemPlan,
     rest: &LexerAlternative,
     rest_plan: &LexerSeqPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
     replay: bool,
 ) {
     let id = w.next_id();
@@ -4017,7 +3839,7 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     let iter_id = probe_id(w, replay);
     if let Plus = rep.kind {
         let plus_id = probe_id(w, replay);
-        gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, plus_id);
+        gen_lexer_repeat_iteration(w, rep, inner, e, fail_action, ea, replay, plus_id);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
     w.begin("loop");
@@ -4025,7 +3847,7 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     w.line(`let ng_saved_${id} = pos;`);
     w.line(`let mut ng_exit_${id} = false;`);
     w.begin(`${label}:`);
-    gen_lexer_alt_seq(w, rest, rest_plan, 0, all_rules, `break ${label}`, ci, pea, hm, false);
+    gen_lexer_alt_seq(w, rest, rest_plan, 0, e, `break ${label}`, pea, false);
     w.line(`ng_exit_${id} = true;`);
     w.end();
     if replay {
@@ -4038,10 +3860,10 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     if !replay {
         w.line(`pos = ng_saved_${id};`);
     }
-    gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, iter_id);
+    gen_lexer_repeat_iteration(w, rep, inner, e, fail_action, ea, replay, iter_id);
     w.end();
     if replay {
-        gen_lexer_alt_seq(w, rest, rest_plan, 0, all_rules, fail_action, ci, ea, hm, /*replay=*/ true);
+        gen_lexer_alt_seq(w, rest, rest_plan, 0, e, fail_action, ea, /*replay=*/ true);
     }
 }
 
@@ -4049,11 +3871,9 @@ fn gen_lexer_not<S: AsStrSlice>(
     w: &mut CodeWriter,
     not_elem: &LexerNotElement,
     inner: &LexerElemPlan,
-    all_rules: &List<LexerRule>,
+    e: &LexerEmit,
     fail_action: S,
-    ci: bool,
     ea: bool,
-    hm: bool,
 ) {
     let id = w.next_id();
     let label = `not_${id}`;
@@ -4061,7 +3881,7 @@ fn gen_lexer_not<S: AsStrSlice>(
     w.line(`let not_saved_${id} = pos;`);
     w.line(`let mut not_matched_${id} = false;`);
     w.begin(`${label}:`);
-    gen_lexer_elem(w, &not_elem.element, inner, all_rules, `break ${label}`, ci, ea, hm, false);
+    gen_lexer_elem(w, &not_elem.element, inner, e, `break ${label}`, ea, false);
     w.line(`not_matched_${id} = true;`);
     w.end();
     w.line(`pos = not_saved_${id};`);
@@ -5688,11 +5508,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     let needs_extras = use_modes || has_set_mode_rules || has_more_rules || has_channel_rules;
     if use_modes {
         for let mut mi = 0; mi < mode_names.len(); mi += 1 {
-            if mi == 0 {
-                w.begin(`if current_mode == ${mi}`);
-            } else {
-                w.else_begin(`else if current_mode == ${mi}`);
-            }
+            open_chain_arm(w, mi > 0, `current_mode == ${mi}`);
             let calls = build_mode_try_calls(
                 mi,
                 lexer_rules,

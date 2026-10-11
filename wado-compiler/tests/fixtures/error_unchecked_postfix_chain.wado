@@ -1,0 +1,17 @@
+// Postfix operators bind tighter than `unchecked`, so here it marks `?`, not
+// the contracted call inside it, and the error says how to mark the call.
+fn half(n: i32) -> Result<i32, String>
+    contract n % 2 == 0
+{
+    return Ok(n / 2);
+}
+
+fn run() -> Result<i32, String> {
+    let v = unchecked half(4)?;
+    return Ok(v);
+}
+
+__DATA__
+{
+  "compile_error": ":10:13: analysis error: postfix operators bind tighter than `unchecked`, so it marks the whole chain; write `(unchecked …)` around the call it vouches for"
+}

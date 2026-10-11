@@ -3,6 +3,8 @@
 
 use std::rc::Rc;
 
+use crate::elaborator::float_literal::FloatFormat;
+use crate::elaborator::util::{float_infinity_key, float_of_order_key};
 use crate::tir::TypeId;
 
 /// An arm pattern as coverage reads it. A constructor carries the set its
@@ -47,7 +49,16 @@ pub(super) struct IntDomain {
     pub(super) max: i128,
     /// The values between `min` and `max` the type never holds, inclusive.
     pub(super) hole: Option<[i128; 2]>,
-    pub(super) is_char: bool,
+    pub(super) kind: DomainKind,
+}
+
+/// What the keys of an [`IntDomain`] stand for, which a witness is written as.
+#[derive(Clone, Copy)]
+pub(super) enum DomainKind {
+    Int,
+    Char,
+    /// The [`float_order_key`]s of a float type, the NaN at `max`.
+    Float(FloatFormat),
 }
 
 impl IntDomain {
@@ -55,10 +66,53 @@ impl IntDomain {
         self.hole.is_some_and(|[lo, hi]| lo <= value && value <= hi)
     }
 
-    /// Whether no value of the domain lies between `hi` and `lo`.
+    /// Whether no value of the domain lies between `hi` and `lo`, and one
+    /// pattern can take both. No range takes a float's NaN.
     fn adjacent(self, hi: i128, lo: i128) -> bool {
-        hi + 1 == lo || self.hole == Some([hi + 1, lo - 1])
+        !self.is_nan(lo) && (hi + 1 == lo || self.hole == Some([hi + 1, lo - 1]))
     }
+
+    fn is_nan(self, key: i128) -> bool {
+        matches!(self.kind, DomainKind::Float(_)) && key == self.max
+    }
+}
+
+/// The float witness `lo..=hi`, keys of `format`, as a pattern taking it: the
+/// NaN alone, or a stretch of the line from `-Inf` to `+Inf`.
+fn write_float_witness(
+    f: &mut std::fmt::Formatter<'_>,
+    format: FloatFormat,
+    lo: i128,
+    hi: i128,
+) -> std::fmt::Result {
+    let infinity = float_infinity_key(format);
+    let show = |f: &mut std::fmt::Formatter<'_>, key: i128| {
+        let value = format.value(float_of_order_key(format, key));
+        let name = format.name();
+        if value.is_nan() {
+            write!(f, "{name}::NAN")
+        } else if value == f64::INFINITY {
+            write!(f, "{name}::INFINITY")
+        } else if value == f64::NEG_INFINITY {
+            write!(f, "{name}::NEG_INFINITY")
+        } else if format == FloatFormat::F64 {
+            write!(f, "{value:?}")
+        } else {
+            // The narrower formats widen to `f32` exactly, whose shortest form
+            // is the shortest that reads back.
+            write!(f, "{:?}", value as f32)
+        }
+    };
+    show(f, lo)?;
+    if lo == hi {
+        return Ok(());
+    }
+    if hi == infinity {
+        write!(f, "..=")?;
+        return show(f, hi);
+    }
+    write!(f, "..<")?;
+    show(f, hi + 1)
 }
 
 /// A value no arm takes, as a pattern that would take it.
@@ -328,6 +382,10 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
 fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor> {
     let mut cuts = vec![domain.min, domain.max + 1];
     cuts.extend(domain.hole.iter().flat_map(|[lo, hi]| [*lo, hi + 1]));
+    // A float's NaN, at `max`, is a piece of its own: no range reaches it.
+    if let DomainKind::Float(_) = domain.kind {
+        cuts.push(domain.max);
+    }
     for row in rows {
         if let Pat::Int { lo, hi, .. } = row.pats()[0] {
             cuts.extend([
@@ -452,11 +510,14 @@ impl std::fmt::Display for Witness {
             } => write!(f, "{name}({payload})"),
             Witness::Bool(value) => write!(f, "{value}"),
             Witness::Int { lo, hi, domain } => {
+                if let DomainKind::Float(format) = domain.kind {
+                    return write_float_witness(f, format, *lo, *hi);
+                }
                 let show = |f: &mut std::fmt::Formatter<'_>, v: i128| match u32::try_from(v)
                     .ok()
                     .and_then(char::from_u32)
                 {
-                    Some(c) if domain.is_char => write!(f, "{c:?}"),
+                    Some(c) if matches!(domain.kind, DomainKind::Char) => write!(f, "{c:?}"),
                     _ => write!(f, "{v}"),
                 };
                 show(f, *lo)?;

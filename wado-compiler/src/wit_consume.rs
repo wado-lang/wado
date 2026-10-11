@@ -332,6 +332,7 @@ impl Builder {
                 return_type,
                 effects: Vec::new(),
                 effects_source: EffectsSource::Written,
+                holds_contracts_of: None,
                 body: None,
                 span: syn(),
             });
@@ -420,6 +421,7 @@ impl Builder {
             return_type,
             effects: Vec::new(),
             effects_source: EffectsSource::Written,
+            holds_contracts_of: None,
             body: None,
             span: syn(),
         }));

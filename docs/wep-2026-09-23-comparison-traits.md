@@ -228,6 +228,10 @@ from the order.
 
 ### Float patterns
 
+> Superseded in part by [WEP: Float Literal Patterns](./wep-2026-10-11-float-literal-patterns.md):
+> a float literal, a float constant and a range with equal bounds are patterns,
+> warning where they name one value that rounding can miss.
+
 A float literal stays out of patterns, though one equality now gives it a
 meaning. Whether a float equals a literal turns on rounding the source does not
 show: `0.1 + 0.2` is not `0.3`, and an arm `0.3 =>` would miss it. A NaN is the

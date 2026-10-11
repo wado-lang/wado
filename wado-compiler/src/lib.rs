@@ -30,6 +30,7 @@ pub mod effect_check;
 pub mod elaborator;
 pub(crate) mod escape;
 pub mod flat_package;
+pub mod float_literal_pattern;
 pub mod format_spec;
 pub(crate) mod graph;
 pub mod hashmap;
@@ -134,6 +135,7 @@ pub use effect_check::{
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
+use float_literal_pattern::float_literal_pattern_diagnostics;
 use hex_suffix_lookalike::hex_suffix_lookalike_diagnostics;
 pub use lexer::{LexError, LexErrorKind, LexResult, lex, lex_in};
 pub use loader::{LoadError, LoadResult, ModuleLoader};
@@ -550,6 +552,7 @@ pub fn lint_diagnostics(
     lints.extend(self_comparison_diagnostics(sem));
     lints.extend(constant_arithmetic_diagnostics(sem));
     lints.extend(hex_suffix_lookalike_diagnostics(sem));
+    lints.extend(float_literal_pattern_diagnostics(sem));
     if unused {
         lints.extend(unused_diagnostics(sem, is_test_world));
     }

@@ -45,8 +45,10 @@
 "null" @constant.builtin
 "self" @constant.builtin
 
-; `matches` lexes as a keyword but is a binary pattern-test operator.
+; `matches` lexes as a keyword but is a binary pattern-test operator, and
+; `unchecked` a prefix one.
 "matches" @operator
+"unchecked" @operator
 
 ; Identifiers the grammar can classify on its own, most specific first. An
 ; override matches anywhere under its rule and the first one declared wins, so
@@ -81,6 +83,7 @@
 (pathSegment "type" @variable)
 (pathSegment "flags" @variable)
 (pathSegment "extends" @variable)
+(pathSegment "contract" @variable)
 (pathSegment "test" @variable)
 (pathSegment "do" @variable)
 (pathSegment "task" @variable)
@@ -119,6 +122,7 @@
 (identifier "do" @variable)
 (identifier "task" @variable)
 (identifier "extends" @variable)
+(identifier "contract" @variable)
 ; `resume` declares a name wherever no expression begins.
 (typeName "resume" @type)
 (withItem "resume" @type)
@@ -176,6 +180,7 @@
 "break" @keyword
 "const" @keyword
 "continue" @keyword
+"contract" @keyword
 "do" @keyword
 "effect" @keyword
 "else" @keyword

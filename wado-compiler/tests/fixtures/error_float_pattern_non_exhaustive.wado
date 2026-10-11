@@ -1,0 +1,42 @@
+// A match on a float names what it misses as float patterns: the NaN, or a
+// stretch of the line from `-Inf` to `+Inf`. A float literal is one value of
+// that line, so a range holding it overlaps it.
+
+fn no_nan(x: f64) -> i32 {
+    return match x {
+        f64::NEG_INFINITY..=f64::INFINITY => 1,
+    };
+}
+
+fn gap(x: f64) -> i32 {
+    return match x {
+        f64::NAN => 0,
+        f64::NEG_INFINITY..<0.0 => 1,
+        1.0..=f64::INFINITY => 2,
+    };
+}
+
+fn positive_side(x: f32) -> i32 {
+    return match x {
+        f32::NAN => 0,
+        f32::NEG_INFINITY..<0.0 => 1,
+        0.0 => 2,
+    };
+}
+
+fn point_in_range(x: f64) -> i32 {
+    return match x {
+        0.5 => 0,
+        0.0..<1.0 => 1,
+        _ => 2,
+    };
+}
+
+export fn run() {
+    let _ = no_nan(0.0) + gap(0.0) + positive_side(0.0) + point_in_range(0.0);
+}
+
+__DATA__
+{
+  "compile_error": ":6:12: analysis error: invalid pattern: non-exhaustive match: missing case `f64::NAN`; 12:12: invalid pattern: non-exhaustive match: missing case `0.0..<1.0`; 20:12: invalid pattern: non-exhaustive match: missing case `1e-45..=f32::INFINITY`; 28:12: invalid pattern: overlapping range patterns in match arms"
+}

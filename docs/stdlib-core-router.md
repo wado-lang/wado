@@ -6,26 +6,48 @@
 
 HTTP path router (`core:router`).
 
-Generic over the handler type `H`. Match algorithm is a segment-level
-tagged DFA: routes split at `/` boundaries and each segment becomes a
-single transition. Hot-path is a deterministic loop with no
-backtracking; at each state, transitions are tried in this order:
-literal, then `:param`, then `*wildcard`. Once a terminal (or wildcard)
-is reached, method dispatch tries the specific-method list first, then
-falls back to the optional `any` slot.
+A `Router<H>` maps a request's method and path to a handler of any type
+`H`, and captures the parameters its pattern names.
 
-Static routes (no `:param`, no `*wildcard`) are routed through a hashed
-side-table with pre-built `RouteMatch` shells. Hits on a static route
-return a reference into the table, which (assuming `Option<&T>` niche
-optimization) costs zero heap allocations per match.
+## Patterns
 
-Captured parameters are accessible either by name via `params["id"]`
-(`IndexValue<String>`) or as a typed struct via
-`params.deserialize::<T>()` (`T: Deserialize`). The latter parses
-directly from byte ranges of the path string without intermediate
-substring allocations for scalar fields.
+A pattern is a path of `/`-separated segments. Each segment is one of:
 
-See `docs/wep-2026-05-06-core-router.md`.
+- a literal, which matches itself exactly (`/api/v1/health`)
+- `:name`, a parameter that captures one whole segment (`/users/:id`)
+- `*name`, a wildcard that captures the rest of the path, slashes included
+  (`/static/*path`). It must be the last segment.
+
+`/` alone is the root. Registering a pattern panics when it does not start
+with `/`, has an empty segment (`/a//b`, or a trailing `/`), has nothing
+after a `:` or `*`, or uses one name twice. It also panics when a parameter
+or wildcard takes a different name from one registered before at the same
+place: `/users/:id` and then `/users/:name/posts`.
+
+## Matching
+
+A path is matched one segment at a time. Where a literal and a parameter
+could both take a segment, the literal takes it. A path that then finds no
+route does not go back to try the parameter: with `/users/list` and
+`/users/:id` registered, `/users/list/extra` matches neither.
+
+A path that finds no route, or finds one without a handler for the request's
+method, falls back to a wildcard. The deepest wildcard passed on the way that
+takes the method matches, so `/*rest` catches whatever no other route takes.
+
+A trailing slash matters: `/users` and `/users/` are different paths. A
+wildcard matches the empty rest after one (`/static/`), but not the bare
+prefix (`/static`). A path that does not start with `/` matches nothing.
+Parameters hold the path's raw text: `%20` is not decoded.
+
+A route registered for a method takes that method alone, so `HEAD` does not
+fall back to `GET`. A route registered with `any` takes every method, but a
+handler registered for the method itself at the same pattern wins.
+
+When `match_path` returns `None`, `allowed_methods` tells a 405 from a 404:
+it lists the methods the path would match under, and is empty for a 404.
+
+See `docs/wep-2026-05-06-core-router.md` for the design.
 
 ## Synopsis
 
@@ -42,36 +64,35 @@ assert routes.match_path(Method::Get, &"/users/42") matches { Some(hit) && hit.h
 
 ### `pub struct PathParams`
 
-Captured path parameters for a matched route.
-
-`PathParams` is a thin handle of references into router-owned data:
-`path` is the request path that produced the match, `names` is the
-parameter-name list shared with the matched terminal state, and
-`ranges` is a flat `[start0, end0, start1, end1, ...]` of byte ranges
-into `path`. Empty for static-route matches; in that case all three
-fields point at shared empty singletons.
+The parameters a matched route captured, by name. Each value is the raw
+text the parameter or wildcard took from the path.
 
 _Fields are private._
 
 #### `pub fn len(&self) -> i32`
 
-Number of captured parameters (0 for static routes).
+The number of captured parameters: 0 for a route with none.
 
 #### `pub fn is_empty(&self) -> bool`
 
-True when no parameters were captured.
+True when the route captured no parameters.
 
 #### `pub fn get<S: AsStrSlice>(&self, name: S) -> Option<String>`
 
-Look up a captured parameter by name. Returns `None` if absent.
-The returned `String` is freshly allocated from the matched
-byte range of the path.
+The value captured as `name`, or `None` when the route has no such
+parameter.
 
 #### `pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>`
 
-Deserialize captured parameters into a typed struct `T`. Scalar
-fields parse directly from path bytes; only `String` fields incur
-a substring allocation.
+Deserializes the parameters into the struct `T`, each into the field of
+its name (`#[wire]` renames apply). A field parses from the parameter's
+text, so it may be a number, `bool`, `char`, `String`, any type that
+deserializes from a string, or an `Option` of one. A parameter `T` does
+not name is skipped.
+
+Fails with `InvalidValue` on text the field's type cannot parse, and with
+`UnexpectedType` when `T` is not a struct or has a field of a list, map,
+struct, or other variant type.
 
 #### `impl IndexValue<String> for PathParams`
 
@@ -79,7 +100,7 @@ a substring allocation.
 
 ### `pub struct RouteMatch<H>`
 
-Result of a successful route match.
+A route that matched: its handler, and the parameters it captured.
 
 #### `handler: H`
 
@@ -87,60 +108,62 @@ Result of a successful route match.
 
 ### `pub struct Router<H>`
 
-Generic HTTP path router.
+An HTTP path router over handlers of type `H`.
 
 _Fields are private._
 
 #### `pub fn new() -> Router<H>`
 
+An empty router.
+
 #### `pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H)`
 
-Registers a handler for `(method, pattern)`. Last-write-wins.
-Panics on a malformed pattern.
+Registers `handler` for `method` at `pattern`, replacing the handler
+registered for both before. Panics on a malformed pattern.
 
 #### `pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
+`route(Method::Get, pattern, handler)`.
+
 #### `pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
+
+`route(Method::Post, pattern, handler)`.
 
 #### `pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
+`route(Method::Put, pattern, handler)`.
+
 #### `pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
+
+`route(Method::Patch, pattern, handler)`.
 
 #### `pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
+`route(Method::Delete, pattern, handler)`.
+
 #### `pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
+
+`route(Method::Options, pattern, handler)`.
 
 #### `pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-Registers a handler that matches any HTTP method (including
-`Method::Other(_)`) at `pattern`. Specific-method handlers at the
-same pattern take precedence; `any` is the fallback.
+Registers `handler` for every method at `pattern`, `Method::Other(_)`
+included, replacing the `any` handler registered there before. A handler
+registered for the request's method at the same pattern wins over it.
+Panics on a malformed pattern.
 
 #### `pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>`
 
-Matches `(method, path)`. The path argument must be a URL path
-(no query string, no fragment).
+The route `path` matches under `method`, or `None`. `path` is the path
+alone, with no query or fragment; `match_request` strips them.
 
 #### `pub fn allowed_methods<S: AsStrSlice>(&self, path: S) -> List<Method>`
 
-Returns the specific methods registered for `path`. `any` does not
-contribute. Empty array on a 404 or when only `any` is registered.
+The methods `match_path` would match `path` under, each once. A method
+only an `any` handler takes is not listed, so the list is empty on a 404
+and where only `any` handlers match.
 
 #### `pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>`
 
-Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
-from the path before matching.
-
-### `pub struct PathParamsStructAccess`
-
-_Fields are private._
-
-#### `impl DeserializeStruct for PathParamsStructAccess`
-
-##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
-
-##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
-
-##### `fn skip(&mut self) -> Result<(), DeserializeError>`
-
-##### `fn end(&mut self) -> Result<(), DeserializeError>`
+Matches a `wasi:http` request: its method, and its path with the query
+and fragment stripped. A request without a path matches as `/`.

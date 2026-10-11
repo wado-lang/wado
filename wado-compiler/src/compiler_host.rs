@@ -123,7 +123,8 @@ pub enum Code {
     MissingEffect,
     /// An impl method declaring an effect its trait method leaves out
     EffectNotInTrait,
-    /// A default value or a global initializer that performs an effect
+    /// A default value, a global initializer or a contract clause that performs
+    /// an effect
     EffectNotAllowed,
     /// Unknown type name
     UnknownType,
@@ -133,6 +134,9 @@ pub enum Code {
     /// missing or mismatching turbofish, no usable expected type, or
     /// arity mismatch against an expected `fn(...)` signature.
     GenericFunctionRef,
+    /// An `unchecked` whose operand is not a call to a function with a
+    /// `contract` clause
+    UncheckedInvalid,
 
     // Module errors
     /// An import path that resolves to no module
@@ -196,6 +200,8 @@ pub enum Code {
     UnconditionalTrap,
     /// A hex literal ending in digits that read as a float type: `0x1_f32`.
     HexSuffixLookalike,
+    /// A pattern naming one float a rounding step can miss: `1.5 =>`.
+    FloatLiteralPattern,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -324,6 +330,7 @@ impl std::fmt::Display for Code {
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",
             Code::HexSuffixLookalike => "HEX_SUFFIX_LOOKALIKE",
+            Code::FloatLiteralPattern => "FLOAT_LITERAL_PATTERN",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
@@ -346,6 +353,7 @@ impl std::fmt::Display for Code {
             Code::ParamInvalid => "PARAM_INVALID",
             Code::ParamMissing => "PARAM_MISSING",
             Code::GenericFunctionRef => "GENERIC_FUNCTION_REF",
+            Code::UncheckedInvalid => "UNCHECKED_INVALID",
         };
         write!(f, "{name}")
     }

@@ -1,0 +1,19 @@
+// A trait method's parameter default performs no effect, as a function's does
+// not.
+use { println, Stdout } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("x");
+    return 1;
+}
+
+trait Get with () {
+    fn get(&self, i: i32 = noisy()) -> i32;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":11:28: analysis error: default value expression cannot perform effects, but calls effectful function 'noisy'"
+}

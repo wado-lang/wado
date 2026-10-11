@@ -939,6 +939,13 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_function(&mut self, f: &Function) {
+        let contracts: Vec<&AssertStmt> = f.contracts().collect();
+        self.unparse_function_with_contracts(f, &contracts);
+    }
+
+    /// Emit `f` with `contracts` as its `contract` clauses, which a trait
+    /// method's hidden holder keeps rather than its body.
+    fn unparse_function_with_contracts(&mut self, f: &Function, contracts: &[&AssertStmt]) {
         self.emit_outer_attrs(&f.attrs);
         function_decl_keyword_into(f, &mut self.output);
         self.emit_kw_if(f.is_async, "async ");
@@ -956,8 +963,38 @@ impl<'a> Unparser<'a> {
             unparse_effects_clause_into(f, &mut s.output);
         });
 
+        self.indent_level += 1;
+        for clause in contracts {
+            self.output.push('\n');
+            self.flush_comments_before(
+                self.leading_start(clause.id, clause.span.start),
+                Spacing::Tight,
+            );
+            self.emit_leading_for(clause.id);
+            self.write_indent();
+            self.output.push_str("contract ");
+            self.unparse_expr(&clause.condition);
+            if let Some(message) = &clause.message {
+                self.output.push_str(", ");
+                self.unparse_expr(message);
+            }
+            self.emit_trailing_for(clause.id);
+        }
+        if !contracts.is_empty()
+            && let Some(body) = &f.body
+        {
+            self.output.push('\n');
+            self.flush_comments_before(body.span.start, Spacing::Tight);
+        }
+        self.indent_level -= 1;
+
         if let Some(body) = &f.body {
-            self.output.push_str(" {\n");
+            if contracts.is_empty() {
+                self.output.push(' ');
+            } else {
+                self.write_indent();
+            }
+            self.output.push_str("{\n");
             self.indent_level += 1;
             self.unparse_block(body);
             self.indent_level -= 1;
@@ -1206,7 +1243,7 @@ impl<'a> Unparser<'a> {
                     }
                     _ => {}
                 }
-                this.unparse_member(member);
+                this.unparse_member(member, None);
                 previous = Some(member);
             }
 
@@ -1237,21 +1274,24 @@ impl<'a> Unparser<'a> {
         unparse_trait_head_into(&t.head, &mut self.output);
 
         let members = in_source_order(
-            t.associated_types
-                .iter()
-                .map(Member::Declared)
-                .chain(t.methods.iter().map(Member::Method)),
+            t.associated_types.iter().map(Member::Declared).chain(
+                t.methods
+                    .iter()
+                    .filter(|m| !m.is_contract_holder())
+                    .map(Member::Method),
+            ),
         );
         self.with_braced_body(t.span, |this| {
             for member in &members {
-                this.unparse_member(member);
+                this.unparse_member(member, Some(t));
             }
         });
     }
 
     /// One member of a trait or an impl body, its leading comments and blank
-    /// lines with it.
-    fn unparse_member(&mut self, member: &Member<'_>) {
+    /// lines with it. A trait's method takes its clauses from the trait's
+    /// holder of them.
+    fn unparse_member(&mut self, member: &Member<'_>, trait_: Option<&TraitDecl>) {
         let (id, span, attrs) = (member.id(), member.span(), member.attrs());
         match member {
             Member::Declared(assoc) => self.emit_member(id, span, attrs, |this| {
@@ -1285,7 +1325,17 @@ impl<'a> Unparser<'a> {
             Member::Method(method) => {
                 self.open_member(id, span.start);
                 self.emit_blank_lines_to(effective_start_line(attrs, span.line));
-                self.unparse_function(method);
+                match trait_ {
+                    Some(t) => {
+                        let contracts: Vec<&AssertStmt> = t
+                            .contract_holder(&method.name)
+                            .into_iter()
+                            .flat_map(Function::contracts)
+                            .collect();
+                        self.unparse_function_with_contracts(method, &contracts);
+                    }
+                    None => self.unparse_function(method),
+                }
                 self.last_source_line = span.end_line();
             }
         }
@@ -1426,6 +1476,9 @@ impl<'a> Unparser<'a> {
         self.last_source_line = block.span.line;
 
         for stmt in &block.stmts {
+            if stmt.as_contract().is_some() {
+                continue;
+            }
             let stmt_span = get_stmt_span(stmt);
             let stmt_id = stmt.id();
             // Whatever the statements before this one had no slot for. Flushing
@@ -3176,6 +3229,7 @@ fn unary_op_str(op: UnaryOp) -> &'static str {
         UnaryOp::Ref => "&",
         UnaryOp::MutRef => "&mut ",
         UnaryOp::Deref => "*",
+        UnaryOp::Unchecked => "unchecked ",
     }
 }
 
@@ -5533,6 +5587,7 @@ pub fn unparse_instance_pattern(pattern: &InstancePattern) -> String {
 fn emit_instance_pattern(pattern: &InstancePattern, output: &mut String) {
     match pattern {
         InstancePattern::Literal(value) => emit_pattern_literal(value, output),
+        InstancePattern::Float(FloatBound { shown, .. }) => output.push_str(shown),
         InstancePattern::Range {
             start,
             end,

@@ -24,7 +24,7 @@ use crate::defs::DefId;
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
-    ranked_value_blanket, ref_blanket_call, trait_call_template,
+    ranked_value_blanket, ref_blanket_instance, trait_call_template,
 };
 use crate::tir;
 use crate::token::Span;
@@ -200,6 +200,20 @@ fn blanket_template_name(
         method.method_name.clone(),
     )
     .to_mangled_name()
+}
+
+/// The call `method` of `trait_name` names through the universal `&T`
+/// blanket, before its pointee keys it.
+fn ref_blanket_generic(
+    ref_kind: RefKind,
+    trait_name: &FqTraitName,
+    method: &LocalMethodName,
+) -> LocalMethodName {
+    LocalMethodName::new_ref(
+        ref_kind,
+        Some(trait_name.clone()),
+        method.method_name.clone(),
+    )
 }
 
 /// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
@@ -756,10 +770,7 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<TemplateId> {
         match blanket {
-            Some(b) => self
-                .functions
-                .trait_env
-                .method_template(b.def, &info.method_name),
+            Some(b) => self.functions.trait_env.call_template(b.def, info),
             None => self.dispatch_template(info, receiver, home, type_table),
         }
     }
@@ -773,10 +784,7 @@ impl Monomorphizer {
         head_args: &[TypeId],
         type_table: &mut TypeTable,
     ) -> Option<TemplateId> {
-        let Some(TemplateId::Declared {
-            block: Some(block), ..
-        }) = written
-        else {
+        let Some(block) = written.as_ref().and_then(TemplateId::block) else {
             return written;
         };
         type_table
@@ -2229,10 +2237,8 @@ impl Monomorphizer {
         };
         let method_type_args =
             self.substituted_method_type_args(method_func, substitution, type_table);
-        let (ref_info, monomorph_info) = ref_blanket_call(
-            ref_kind,
-            trait_fq,
-            &info.method_name,
+        let (ref_info, monomorph_info) = ref_blanket_instance(
+            ref_blanket_generic(ref_kind, trait_fq, info),
             inner,
             method_type_args,
             type_table,
@@ -2240,10 +2246,7 @@ impl Monomorphizer {
         *method_func = FunctionRef {
             module_source: blanket.module.clone(),
             name: ref_info.to_mangled_name(),
-            template: self
-                .functions
-                .trait_env
-                .method_template(blanket.def, &info.method_name),
+            template: self.functions.trait_env.call_template(blanket.def, info),
             monomorph_info: Some(monomorph_info),
             method_info: Some(ref_info),
         };
@@ -2293,10 +2296,8 @@ impl Monomorphizer {
         let pointee = self.substitute_type(pointee, substitution, type_table);
         let method_type_args =
             self.substituted_method_type_args(method_func, substitution, type_table);
-        let (ref_info, monomorph_info) = ref_blanket_call(
-            ref_kind,
-            trait_name,
-            &info.method_name,
+        let (ref_info, monomorph_info) = ref_blanket_instance(
+            ref_blanket_generic(ref_kind, trait_name, info),
             pointee,
             method_type_args,
             type_table,
@@ -2454,15 +2455,12 @@ impl Monomorphizer {
     }
 
     fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
-        let Some(TemplateId::Declared {
-            block: Some(block), ..
-        }) = &func.template
-        else {
+        let Some(block) = func.template.as_ref().and_then(TemplateId::block) else {
             return false;
         };
         self.functions
             .trait_env
-            .blanket_of_block(*block)
+            .blanket_of_block(block)
             .is_some_and(|blanket| matches!(blanket.receiver, BlanketReceiver::Ref { .. }))
     }
 
