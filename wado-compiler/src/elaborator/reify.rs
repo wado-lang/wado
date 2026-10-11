@@ -10244,9 +10244,8 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
     )
 }
 
-/// Point the call `expr` reified to at its callee's `unchecked` twin, which
-/// the check of `unchecked`'s operand established it has.
-/// Retarget the call `unchecked` marks, spanning `call_span`, to its twin.
+/// Retarget the call `unchecked` marks, spanning `call_span`, to its callee's
+/// twin, which the check of `unchecked`'s operand established it has.
 /// Reify may wrap that call (a default argument naming another parameter
 /// hoists the arguments into a block around it), so the call is found by the
 /// span of the operand it was reified from.
@@ -10295,10 +10294,10 @@ fn unchecked_twin(decl: &ast::Function, func: &mut TirFunction) -> Option<TirFun
     (!clauses.is_empty()).then(|| split_unchecked_twin(func, &clauses))
 }
 
-/// Split `func`, whose body opens with its `contract` clauses (spanning
-/// `clauses`) as [`contract_check`]s, into the function every unmarked call
-/// reaches, which always checks them, and the `unchecked` twin a marked call
-/// reaches, which checks them only in a build under `-f contract-checks`.
+/// Split `func`, whose body holds its `contract` clauses (spanning `clauses`)
+/// as [`contract_check`]s, into the function every unmarked call reaches,
+/// which always checks them, and the `unchecked` twin a marked call reaches,
+/// which checks them only in a build under `-f contract-checks`.
 fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction {
     let mut twin = func.clone();
     twin.name = unchecked_twin_name(&func.name);
@@ -10318,13 +10317,23 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
         .body
         .as_mut()
         .expect("a function with a `contract` clause has a body");
+    let mut unwrapped = 0;
     body.stmts = std::mem::take(&mut body.stmts)
         .into_iter()
         .flat_map(|stmt| match stmt.kind {
-            TirStmtKind::If { then_block, .. } if clauses.contains(&stmt.span) => then_block.stmts,
+            TirStmtKind::If { then_block, .. } if clauses.contains(&stmt.span) => {
+                unwrapped += 1;
+                then_block.stmts
+            }
             kind => vec![TirStmt { kind, ..stmt }],
         })
         .collect();
+    assert_eq!(
+        unwrapped,
+        clauses.len(),
+        "every `contract` clause of `{}` reifies to a contract check in its body",
+        func.name
+    );
     twin
 }
 
@@ -10354,6 +10363,7 @@ fn bind_trait_contracts(
             .body
             .iter()
             .flat_map(|body| &body.stmts)
+            .filter(|stmt| matches!(stmt.kind, TirStmtKind::If { .. }))
             .map(|stmt| stmt.span)
             .collect();
         let holder_twin = split_unchecked_twin(holder, &clauses);
