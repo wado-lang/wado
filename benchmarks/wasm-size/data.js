@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791680626928,
+  "lastUpdate": 1791687992640,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66013,6 +66013,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/72d6f886d3e9dec0b868f378d5b15741ef473156"
         },
         "date": 1791680626310,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "feef811e5d88668a5ed6a9e8c80587027aa40da8",
+          "message": "Merge pull request #2326 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat(lexer): make `_` the wildcard and line breaks follow Rust",
+          "timestamp": "2026-10-11T11:47:03+09:00",
+          "tree_id": "a00d10e9dcc31020e668c338a859babf9f9df66b",
+          "url": "https://github.com/wado-lang/wado/commit/feef811e5d88668a5ed6a9e8c80587027aa40da8"
+        },
+        "date": 1791687992206,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
