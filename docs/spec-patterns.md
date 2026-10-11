@@ -376,7 +376,7 @@ A NaN bound is an error, so no range matches a NaN.
 `f64::NEG_INFINITY..=f64::INFINITY` matches every float but a NaN, and with a
 NaN pattern covers the type:
 
-<!-- {"fixture":"float_pattern_exhaustive.wado"} -->
+<!-- {"fixture":"float_literal_pattern.wado"} -->
 
 ```wado
 fn sign(x: f64) -> i32 {

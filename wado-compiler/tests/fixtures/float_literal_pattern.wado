@@ -1,7 +1,10 @@
-// A float literal, an integer literal on a float, a primitive's limit and a
-// range taking one float each match one value, by the float order: `0.0`
-// takes `-0.0`, and a NaN pattern takes every NaN. Only a zero, an infinity or
-// a NaN goes without the `float_literal_pattern` warning.
+// A float literal, an integer literal on a float, a primitive's limit, a range
+// taking one float and a constant holding a float each match one value, by the
+// float order: `0.0` takes `-0.0`, and a NaN pattern takes every NaN. Only a
+// zero, an infinity or a NaN the compiler knows goes without the
+// `float_literal_pattern` warning; a constant always warns. A pattern another
+// module declares warns in that module, under that module's `allow`.
+use { is_five_eighths, is_tenth, Probe, SevenEighths } from "./sub/float_literal_pattern_lib.wado";
 
 fn classify(x: f64) -> String {
     return match x {
@@ -21,6 +24,30 @@ test {
     let v = |x: f64| builtin::black_box(x);
     assert classify(v(0.0)) == "zero" && classify(v(-0.0)) == "zero";
     assert classify(v(f64::NAN)) == "nan" && classify(v(-f64::NAN)) == "nan";
+}
+
+fn sign(x: f64) -> i32 {
+    return match x {
+        f64::NAN => 0,
+        f64::NEG_INFINITY..<0.0 => -1,
+        0.0..=f64::INFINITY => 1,
+    };
+}
+
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert sign(v(f64::NAN)) == 0 && sign(v(-0.5)) == -1 && sign(v(-0.0)) == 1;
+}
+
+fn sign_f32(x: f32) -> i32 {
+    return match x {
+        f32::NEG_INFINITY..<-1.0 => -2,
+        -1.0..<0.0 => -1,
+        f32::MIN_POSITIVE..=f32::INFINITY => 1,
+        f32::NAN => 2,
+        // Zero and the subnormals above it.
+        0.0..<f32::MIN_POSITIVE => 0,
+    };
 }
 
 fn classify_f32(x: f32) -> i32 {
@@ -77,25 +104,87 @@ fn let_else(x: f64) -> i32 {
     return 1;
 }
 
+global LIMIT: f32 = 0.1;
+global ZERO: f64 = 0.0;
+global MISSING: f64 = f64::NAN;
+
+struct Inner {
+    x: f64,
+}
+
+struct Outer {
+    id: i32,
+    inner: Inner,
+}
+
+global ORIGIN: Outer = Outer { id: 0, inner: Inner { x: 0.0 } };
+
+type Meters = f64;
+
+global FAR: Meters = 1000.0;
+
+fn global_float(x: f32) -> bool {
+    return x matches { LIMIT };
+}
+
+fn zero_or_missing(x: f64) -> i32 {
+    return match x {
+        ZERO => 1,
+        MISSING => 2,
+        _ => 0,
+    };
+}
+
+fn nested_struct(o: Outer) -> bool {
+    return o matches { ORIGIN };
+}
+
+fn newtype(m: Meters) -> bool {
+    return m matches { FAR };
+}
+
+fn in_payload(o: Option<f32>) -> bool {
+    return o matches { Some(LIMIT) };
+}
+
+struct Gauge {}
+
+impl SevenEighths for Gauge {}
+
 test {
     let v = |x: f64| builtin::black_box(x);
+    let w = |x: f32| builtin::black_box(x);
     assert classify(v(f64::INFINITY)) == "inf" && classify(v(f64::NEG_INFINITY)) == "-inf";
     assert classify(v(1.5)) == "one and a half" && classify(v(2.0)) == "two";
     assert classify(v(3.0)) == "three" && classify(v(f64::MAX)) == "max";
     assert classify(v(1.0)) == "other" && classify(v(2.5)) == "other";
-    assert classify_f32(builtin::black_box(0.0)) == 0 && classify_f32(builtin::black_box(-0.0)) == 0;
-    assert classify_f32(builtin::black_box(0.25)) == 1 && classify_f32(builtin::black_box(f32::NAN)) == 2;
-    assert classify_f32(builtin::black_box(0.5)) == 3;
+    assert sign(v(f64::INFINITY)) == 1 && sign(v(f64::NEG_INFINITY)) == -1;
+    assert sign_f32(w(-1.5)) == -2 && sign_f32(w(-1.0)) == -1 && sign_f32(w(-0.0)) == 0;
+    assert sign_f32(w(1.0)) == 1 && sign_f32(w(f32::NAN)) == 2;
+    assert classify_f32(w(0.0)) == 0 && classify_f32(w(-0.0)) == 0;
+    assert classify_f32(w(0.25)) == 1 && classify_f32(w(f32::NAN)) == 2;
+    assert classify_f32(w(0.5)) == 3;
     assert half(builtin::black_box(0.5)) && !half(builtin::black_box(0.25));
     assert nested(Some(v(4.5))) == 1 && nested(Some(v(f64::NAN))) == 2;
     assert nested(Some(v(4.0))) == 3 && nested(null) == 0;
-    assert rounded_equal(builtin::black_box(1.0)) && !rounded_equal(builtin::black_box(1.5));
+    assert rounded_equal(w(1.0)) && !rounded_equal(w(1.5));
     assert next_after_one(v(1.0)) && !next_after_one(v(1.0000000000000002));
     assert is_seven(v(7.0)) && is_seven(7) && !is_seven(v(7.5));
-    assert is_three_quarters(v(0.75)) && is_three_quarters(builtin::black_box(0.75) as f32);
+    assert is_three_quarters(v(0.75)) && is_three_quarters(w(0.75));
     assert zero_range(v(-0.0)) && zero_range(v(0.0)) && !zero_range(v(f64::MIN_POSITIVE));
     assert waived(v(7.25)) && !waived(v(7.0));
     assert let_else(v(8.5)) == 1 && let_else(v(8.0)) == 0;
+    assert global_float(w(0.1)) && !global_float(w(0.2));
+    assert zero_or_missing(v(0.0)) == 1 && zero_or_missing(v(-0.0)) == 1;
+    assert zero_or_missing(v(f64::NAN)) == 2 && zero_or_missing(v(1.0)) == 0;
+    assert nested_struct(Outer { id: 0, inner: Inner { x: v(-0.0) } });
+    assert !nested_struct(Outer { id: 0, inner: Inner { x: v(1.0) } });
+    assert newtype(v(1000.0) as Meters) && !newtype(v(999.0) as Meters);
+    assert in_payload(Some(w(0.1))) && !in_payload(null);
+    assert Gauge {}.is_seven_eighths(v(0.875));
+    assert is_five_eighths(v(0.625)) && !is_five_eighths(v(0.25));
+    assert is_tenth(v(0.1));
+    assert Probe::THREE_EIGHTHS;
 }
 
 __DATA__
@@ -113,6 +202,14 @@ __DATA__
     "`1.0..=1.00000001` matches one exact float",
     "`1.0..<1.0000000000000002` matches one exact float",
     "`0.75` matches one exact float",
+    "`LIMIT` matches one exact float",
+    "`ZERO` matches one exact float",
+    "`MISSING` matches one exact float",
+    "`ORIGIN` matches one exact float",
+    "`FAR` matches one exact float",
+    "`0.625` matches one exact float",
+    "`0.375` matches one exact float",
+    "`0.875` matches one exact float",
     "`#[allow(float_literal_pattern)]` waives this"
   ],
   "warnings_not_contains": [
@@ -121,6 +218,7 @@ __DATA__
     "INFINITY` matches",
     "NAN` matches",
     "`-0.0..=0.0` matches",
-    "`7.25` matches"
+    "`7.25` matches",
+    "`0.1` matches"
   ]
 }

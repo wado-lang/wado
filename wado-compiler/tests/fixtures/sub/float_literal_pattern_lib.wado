@@ -1,19 +1,19 @@
 // Float patterns resolved where another module reads them: a default argument,
 // an associated constant's body, and a trait's default method.
 
-pub fn is_half(x: f64, half: bool = x matches { 0.5 }) -> bool {
-    return half;
+pub fn is_five_eighths(x: f64, hit: bool = x matches { 0.625 }) -> bool {
+    return hit;
 }
 
 pub struct Probe {}
 
 impl Probe {
-    pub const QUARTER: bool = builtin::black_box(0.25) matches { 0.25 };
+    pub const THREE_EIGHTHS: bool = builtin::black_box(0.375) matches { 0.375 };
 }
 
-pub trait ThreeQuarters with () {
-    fn is_three_quarters(&self, x: f64) -> bool {
-        return x matches { 0.75 };
+pub trait SevenEighths with () {
+    fn is_seven_eighths(&self, x: f64) -> bool {
+        return x matches { 0.875 };
     }
 }
 
