@@ -67,6 +67,19 @@ test {
         && hit.params.get("id") matches { Some(v) && v == "42" } };
 }
 
+test "re-registering a route replaces its handler in place" {
+    let mut r = Router::<i32>::new();
+    r.get("/a/:id", 1);
+    r.get("/a/:id", 2);
+    r.any("/a/:id", 3);
+    r.any("/a/:id", 4);
+    r.get("/f/*rest", 5);
+    r.get("/f/*rest", 6);
+    r.get("/s", 7);
+    r.get("/s", 8);
+    assert r.handlers.len() == 4;
+}
+
 /// The parameters a matched route captured, by name. Each value is the raw
 /// text the parameter or wildcard took from the path.
 pub struct PathParams {
@@ -103,12 +116,13 @@ impl PathParams {
 
     /// Deserializes the parameters into the struct `T`, each into the field of
     /// its name (`#[wire]` renames apply). A field parses from the parameter's
-    /// text, so it may be a number, `bool`, `char`, `String`, or any type that
-    /// deserializes from a string. A parameter `T` does not name is skipped.
+    /// text, so it may be a number, `bool`, `char`, `String`, any type that
+    /// deserializes from a string, or an `Option` of one. A parameter `T` does
+    /// not name is skipped.
     ///
     /// Fails with `InvalidValue` on text the field's type cannot parse, and with
     /// `UnexpectedType` when `T` is not a struct or has a field of a list, map,
-    /// variant, or struct type.
+    /// struct, or other variant type.
     pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError> {
         let mut d = PathParamsDeserializer { src: self, cursor: 0 };
         return T::deserialize(&mut d);
@@ -318,21 +332,23 @@ impl<H> Router<H> {
     fn insert<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) {
         let segs = parse_pattern(&pattern);
         if is_static_pattern(&segs) {
-            self.insert_static(method_opt, pattern, handler);
-            return;
+            self.cache_static(&method_opt, pattern, handler);
         }
-        self.insert_dynamic(&method_opt, &segs, handler);
+        self.insert_route(&method_opt, &segs, handler);
     }
 
-    fn insert_static<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) {
+    /// Builds the match a static pattern always gives, so a hit on it builds
+    /// nothing. The DFA holds the route as well, and decides every path the
+    /// cache does not answer outright.
+    fn cache_static<S: AsStrSlice>(&mut self, method_opt: &Option<Method>, pattern: S, handler: H) {
         let rm = RouteMatch { handler, params: empty_path_params() };
         let key = pattern.to_string();
         self.static_routes.try_insert(key, StaticRoute { table: MethodTable::new(), matches: [] });
         let route = &mut self.static_routes[key];
-        store_in(&mut route.matches, &mut route.table, &method_opt, rm);
+        store_in(&mut route.matches, &mut route.table, method_opt, rm);
     }
 
-    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) {
+    fn insert_route(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) {
         let mut cur: i32 = 0;
         let mut names: List<String> = [];
         for let seg of segs {
@@ -342,10 +358,11 @@ impl<H> Router<H> {
                     if existing.is_empty() {
                         names.push(*name);
                         self.states[cur].wildcard_names = names;
-                    } else if existing[existing.len() - 1] != *name {
-                        panic(
-                            `wildcard name conflict: '*${existing[existing.len() - 1]}' vs '*${*name}' at the same node`,
-                        );
+                    } else {
+                        let held = existing[existing.len() - 1];
+                        if held != *name {
+                            panic(`wildcard name conflict: '*${held}' vs '*${*name}' at the same node`);
+                        }
                     }
                     store_in(&mut self.handlers, &mut self.states[cur].wildcard, method_opt, handler);
                     return;
@@ -374,11 +391,9 @@ impl<H> Router<H> {
                 },
             }
         }
-        // Routes that share a terminal share its names: a differing name
-        // panicked on the way here.
-        if self.states[cur].terminal_names.is_empty() {
-            self.states[cur].terminal_names = names;
-        }
+        // A differing name panicked on the way here.
+        assert self.states[cur].terminal_names.is_empty() || self.states[cur].terminal_names == names;
+        self.states[cur].terminal_names = names;
         store_in(&mut self.handlers, &mut self.states[cur].terminal, method_opt, handler);
     }
 
@@ -388,7 +403,7 @@ impl<H> Router<H> {
         if let Some(rm) = self.match_static(&method, path) {
             return Option::Some(rm);
         }
-        return self.match_dynamic(&method, path);
+        return self.match_walk(&method, path);
     }
 
     fn match_static<S: AsStrSlice>(&self, method: &Method, path: S) -> Option<&RouteMatch<H>> {
@@ -402,11 +417,11 @@ impl<H> Router<H> {
         return Option::Some(&route.matches[idx]);
     }
 
-    fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> {
+    fn match_walk(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> {
         let mut m = Matcher {
             method,
             ranges: [],
-            wildcard_state: -1,
+            wildcard_names: &EMPTY_NAMES,
             wildcard_handler: -1,
             wildcard_pos: 0,
             wildcard_ranges: 0,
@@ -424,7 +439,7 @@ impl<H> Router<H> {
         m.ranges.truncate(m.wildcard_ranges);
         m.ranges.push(m.wildcard_pos);
         m.ranges.push(path.len());
-        return self.hit(m.wildcard_handler, path, &self.states[m.wildcard_state].wildcard_names, &m.ranges);
+        return self.hit(m.wildcard_handler, path, m.wildcard_names, &m.ranges);
     }
 
     /// A fresh match, which the returned reference keeps alive.
@@ -437,8 +452,8 @@ impl<H> Router<H> {
     }
 
     /// Walks `path` through the DFA, reporting to `v` on the way. Returns the
-    /// state the path ends at, or -1 when it leaves the graph, ends in `/`, or
-    /// does not start with `/`.
+    /// state the path ends at, or -1 when it leaves the graph, ends in a `/`
+    /// other than the root, or does not start with `/`.
     fn walk<S: AsStrSlice, V: PathVisitor>(&self, path: S, v: &mut V) -> i32 {
         let plen = path.len();
         if plen == 0 || path.get_byte_unchecked(0) != b'/' {
@@ -450,10 +465,10 @@ impl<H> Router<H> {
         loop {
             let s = &self.states[state];
             if !s.wildcard.is_empty() {
-                v.wildcard(state, s, pos);
+                v.wildcard(s, pos);
             }
             if pos == plen {
-                return -1;
+                return if plen == 1 { 0 } else { -1 };
             }
             let mut end = pos;
             while end < plen && path.get_byte_unchecked(end) != b'/' {
@@ -482,9 +497,6 @@ impl<H> Router<H> {
     /// and where only `any` handlers match.
     pub fn allowed_methods<S: AsStrSlice>(&self, path: S) -> List<Method> {
         let mut methods: List<Method> = [];
-        if let Some(route) = self.static_routes.get_ref_str(path) {
-            route.table.add_methods_to(&mut methods);
-        }
         let mut c = MethodCollector { wildcard_methods: [] };
         let end = self.walk(path, &mut c);
         if end >= 0 {
@@ -514,9 +526,8 @@ trait PathVisitor with () {
     /// A parameter captured the bytes `start..end`.
     fn param(&mut self, start: i32, end: i32);
 
-    /// `s`, the state numbered `state`, has a wildcard, which would capture the
-    /// path from `pos`.
-    fn wildcard(&mut self, state: i32, s: &DfaState, pos: i32);
+    /// `s` has a wildcard, which would capture the path from `pos`.
+    fn wildcard(&mut self, s: &DfaState, pos: i32);
 }
 
 /// Matches under one method, keeping the deepest wildcard on the way that
@@ -524,10 +535,10 @@ trait PathVisitor with () {
 struct Matcher {
     method: &Method,
     ranges: List<i32>,
-    wildcard_state: i32,
+    wildcard_names: &List<String>,
     wildcard_handler: i32,
     wildcard_pos: i32,
-    /// How many `ranges` entries the walk had made at `wildcard_state`.
+    /// How many `ranges` entries the walk had made at that wildcard.
     wildcard_ranges: i32,
 }
 
@@ -537,10 +548,10 @@ impl PathVisitor for Matcher {
         self.ranges.push(end);
     }
 
-    fn wildcard(&mut self, state: i32, s: &DfaState, pos: i32) {
+    fn wildcard(&mut self, s: &DfaState, pos: i32) {
         let h = s.wildcard.dispatch(self.method);
         if h >= 0 {
-            self.wildcard_state = state;
+            self.wildcard_names = &s.wildcard_names;
             self.wildcard_handler = h;
             self.wildcard_pos = pos;
             self.wildcard_ranges = self.ranges.len();
@@ -557,7 +568,7 @@ impl PathVisitor for MethodCollector {
     fn param(&mut self, _start: i32, _end: i32) {
     }
 
-    fn wildcard(&mut self, _state: i32, s: &DfaState, _pos: i32) {
+    fn wildcard(&mut self, s: &DfaState, _pos: i32) {
         s.wildcard.add_methods_to(&mut self.wildcard_methods);
     }
 }

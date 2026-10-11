@@ -106,8 +106,10 @@ compound type fails with `UnexpectedType`, since a segment holds text alone.
 ### Algorithm: segment-level DFA
 
 The router is a deterministic automaton over whole segments: each segment is
-one transition. A route without parameters stays out of the automaton: its
-pattern is a key in a hash table, which a path is looked up in first.
+one transition. A route without parameters is also cached in a hash table under
+its pattern, with its match built once, so a hit on it builds nothing. The cache
+answers only a hit whose method it holds; the automaton decides every other
+path, so the two cannot disagree on precedence.
 
 `example/router_*.wado` implements three engines against one fixture of 100
 routes: 70 static, 25 parametric, and 5 wildcard, clustered under

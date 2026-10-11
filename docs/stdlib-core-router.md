@@ -86,12 +86,13 @@ parameter.
 
 Deserializes the parameters into the struct `T`, each into the field of
 its name (`#[wire]` renames apply). A field parses from the parameter's
-text, so it may be a number, `bool`, `char`, `String`, or any type that
-deserializes from a string. A parameter `T` does not name is skipped.
+text, so it may be a number, `bool`, `char`, `String`, any type that
+deserializes from a string, or an `Option` of one. A parameter `T` does
+not name is skipped.
 
 Fails with `InvalidValue` on text the field's type cannot parse, and with
 `UnexpectedType` when `T` is not a struct or has a field of a list, map,
-variant, or struct type.
+struct, or other variant type.
 
 #### `impl IndexValue<String> for PathParams`
 

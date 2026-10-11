@@ -41,8 +41,25 @@ test "router: no backtracking from literal dead-end" {
     let mut r = Router::<i32>::new();
     r.get("/users/list", 1);
     r.get("/users/:id", 2);
+    r.get("/users/:id/extra", 3);
+    r.get("/teams/:tid/new", 4);
+    r.get("/teams/new/:x/y", 5);
 
     assert r.match_path(Method::Get, &"/users/list/extra") matches { None };
+    assert r.match_path(Method::Get, &"/users/7/extra") matches { Some(m) && m.handler == 3 };
+    assert r.match_path(Method::Get, &"/teams/new/new") matches { None };
+}
+
+test "router: a literal's method miss does not fall to a param sibling" {
+    let mut r = Router::<i32>::new();
+    r.get("/users/me", 1);
+    r.post("/users/:id", 2);
+
+    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.allowed_methods("/users/me") == [Method::Get];
+    r.get("/users/me/:x", 9);
+    assert r.match_path(Method::Post, &"/users/me") matches { None };
+    assert r.allowed_methods("/users/me") == [Method::Get];
 }
 
 test "router: a dead end falls back to the deepest wildcard on the way" {
@@ -254,13 +271,14 @@ test "router: allowed_methods agrees with match_path" {
     r.any("/s", 5);
     r.put("/:name", 6);
 
-    assert r.match_path(Method::Post, &"/users/me") matches { Some(m) && m.handler == 2 };
+    assert r.match_path(Method::Post, &"/users/me") matches { None };
     assert r.match_path(Method::Delete, &"/users/me") matches { Some(m) && m.handler == 4 };
-    assert r.allowed_methods("/users/me") == [Method::Get, Method::Post, Method::Delete];
+    assert r.allowed_methods("/users/me") == [Method::Get, Method::Delete];
     assert r.allowed_methods("/users/7") == [Method::Post, Method::Get, Method::Delete];
     assert r.allowed_methods("/users/7/x") == [Method::Delete];
     assert r.match_path(Method::Put, &"/s") matches { Some(m) && m.handler == 5 };
-    assert r.allowed_methods("/s") == [Method::Put];
+    assert r.allowed_methods("/s").is_empty();
+    assert r.allowed_methods("/t") == [Method::Put];
 }
 
 test "router: generic over String handler" {
