@@ -60,6 +60,12 @@ fn classify(x: f64) -> String {
         _ => "other",
     };
 }
+
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert classify(v(0.0)) == "zero" && classify(v(-0.0)) == "zero";
+    assert classify(v(f64::NAN)) == "nan" && classify(v(-f64::NAN)) == "nan";
+}
 ```
 
 Any other float than a zero, an infinity or a NaN can be missed by one rounding
@@ -379,6 +385,11 @@ fn sign(x: f64) -> i32 {
         f64::NEG_INFINITY..<0.0 => -1,
         0.0..=f64::INFINITY => 1,
     };
+}
+
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert sign(v(f64::NAN)) == 0 && sign(v(-0.5)) == -1 && sign(v(-0.0)) == 1;
 }
 ```
 

@@ -17,6 +17,12 @@ fn classify(x: f64) -> String {
     };
 }
 
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert classify(v(0.0)) == "zero" && classify(v(-0.0)) == "zero";
+    assert classify(v(f64::NAN)) == "nan" && classify(v(-f64::NAN)) == "nan";
+}
+
 fn classify_f32(x: f32) -> i32 {
     return match x {
         -0.0 => 0,
@@ -69,8 +75,6 @@ fn let_else(x: f64) -> i32 {
 
 test {
     let v = |x: f64| builtin::black_box(x);
-    assert classify(v(0.0)) == "zero" && classify(v(-0.0)) == "zero";
-    assert classify(v(f64::NAN)) == "nan" && classify(v(-f64::NAN)) == "nan";
     assert classify(v(f64::INFINITY)) == "inf" && classify(v(f64::NEG_INFINITY)) == "-inf";
     assert classify(v(1.5)) == "one and a half" && classify(v(2.0)) == "two";
     assert classify(v(3.0)) == "three" && classify(v(f64::MAX)) == "max";

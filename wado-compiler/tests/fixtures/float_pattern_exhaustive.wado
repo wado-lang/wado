@@ -9,6 +9,11 @@ fn sign(x: f64) -> i32 {
     };
 }
 
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert sign(v(f64::NAN)) == 0 && sign(v(-0.5)) == -1 && sign(v(-0.0)) == 1;
+}
+
 fn sign_f32(x: f32) -> i32 {
     return match x {
         f32::NEG_INFINITY..<-1.0 => -2,
@@ -22,7 +27,6 @@ fn sign_f32(x: f32) -> i32 {
 
 test {
     let v = |x: f64| builtin::black_box(x);
-    assert sign(v(f64::NAN)) == 0 && sign(v(-0.5)) == -1 && sign(v(-0.0)) == 1;
     assert sign(v(f64::INFINITY)) == 1 && sign(v(f64::NEG_INFINITY)) == -1;
     let w = |x: f32| builtin::black_box(x);
     assert sign_f32(w(-1.5)) == -2 && sign_f32(w(-1.0)) == -1 && sign_f32(w(-0.0)) == 0;
