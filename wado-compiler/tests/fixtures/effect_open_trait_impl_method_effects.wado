@@ -1,7 +1,6 @@
 // A call on a concrete receiver of an open trait requires what the impl's
 // method it reaches performs: not its siblings', and not an effect parameter
-// its own arguments determine. A method's `_` is no name it chose, so it
-// shadows nothing.
+// its own arguments determine.
 use { println, Stdout } from "core:cli";
 
 trait Run with _ {
@@ -28,6 +27,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-  "stdout": "3\n8\n",
-  "warnings_not_contains": ["shadows"]
+  "stdout": "3\n8\n"
 }

@@ -704,8 +704,7 @@ impl Resolver<'_> {
         self_binder: Option<AstId>,
         walk: impl FnOnce(&mut Self),
     ) {
-        // A `with _` hole is minted, not named, so it shadows nothing.
-        for p in params.iter().filter(|p| p.name != ast::EFFECT_HOLE) {
+        for p in params {
             let allowed = ast::attrs_allow(&p.attrs, ast::lint::SHADOWED_NAME);
             self.check_shadowing(&p.name, p.name_span, allowed);
         }
