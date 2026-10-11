@@ -1,0 +1,39 @@
+// The struct a call builds around a function value carries its `Stdout` in
+// its type, so a function declaring no effects cannot advance it.
+use { println, Stdout } from "core:cli";
+
+struct Mapped<I, F> {
+    inner: I,
+    f: F,
+}
+
+impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for Mapped<I, F> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<U> with E {
+        let Some(x) = self.inner.next() else {
+            return null;
+        };
+        return Option::Some((self.f)(x));
+    }
+}
+
+fn mapped<U, effect E, F: fn mut(i32) -> U with E>(f: F) -> Mapped<SliceValueIter<i32>, F> {
+    let xs: List<i32> = [1, 2];
+    return Mapped { inner: xs.iter_value(), f };
+}
+
+fn total(g: fn mut(i32) -> i32 with Stdout) -> i32 {
+    let mut t = 0;
+    for let y of mapped(g) {
+        t += y;
+    }
+    return t;
+}
+
+export fn run() with Stdout {
+    println(`${total(|x| x)}`);
+}
+
+__DATA__
+{"compile_error": ":28:5: analysis error: missing effect 'Stdout' required by 'into_iter'", "compile_error_count": 1}

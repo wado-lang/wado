@@ -182,9 +182,10 @@ fn check_at(
         }
         // A call through the slot performs no more than its type says. Where a
         // value can also be written back through the slot, a narrower row would
-        // admit a wider one, so there the rows match. An effect parameter is
-        // the effect check's to resolve.
-        if !expected_effects.iter().any(EffectRef::is_param) {
+        // admit a wider one, so there the rows match. An effect parameter or
+        // variable is the effect check's to resolve.
+        let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
+        if !open(expected_effects) && !actual_effects.iter().any(EffectRef::is_var) {
             let covers = |wide: &[EffectRef], narrow: &[EffectRef]| {
                 narrow.iter().all(|effect| wide.contains(effect))
             };

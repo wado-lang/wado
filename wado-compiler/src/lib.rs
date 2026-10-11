@@ -1280,7 +1280,7 @@ fn compile_after_load<H: CompilerHost>(
         scope,
         contract_checks: codegen_flags.contract_checks,
     });
-    let sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
+    let mut sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -1326,6 +1326,7 @@ fn compile_after_load<H: CompilerHost>(
         let diags = effect_check::check_semantics(&sem, provided_import_fqs);
         let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
+        sem.types.redirect_effect_vars(&diags.rows);
         for error in diags.effects {
             let _ = logger.error(error);
         }

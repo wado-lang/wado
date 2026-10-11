@@ -23,7 +23,7 @@ use crate::token::Span;
 
 use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
-use super::sig::{DeclSig, MethodSig};
+use super::sig::{DeclSig, MethodSig, own_effect_params};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -1414,6 +1414,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params,
                         param_types,
                         return_type,
+                        own_effects: own_effect_params(&method.type_params),
                     },
                     self_kind,
                     params: method
@@ -1920,6 +1921,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_params,
                             param_types,
                             return_type,
+                            own_effects: own_effect_params(&method.type_params),
                         },
                         self_kind: method
                             .params
@@ -2158,6 +2160,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params: decl_slots.clone(),
                         param_types: params.iter().map(|p| p.type_id).collect(),
                         return_type: method.return_type.as_ref().map(|_| return_type),
+                        own_effects: own_effect_params(&method.type_params),
                     },
                     self_kind,
                     params: sig_params,
@@ -2429,6 +2432,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 type_params: real_type_params,
                 param_types,
                 return_type,
+                own_effects: own_effect_params(&func.type_params),
             },
             type_param_ids,
             params: func

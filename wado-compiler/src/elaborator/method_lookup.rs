@@ -2188,10 +2188,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // `Self` needs no special handling: the canonical frame bound it
             // to the impl target, so filling the slots with the receiver's
-            // arguments yields the concrete receiver.
-            let instantiated = method_sig
-                .decl
-                .instantiate_slots(&scope.tysys.type_table, &impl_slots);
+            // arguments yields the concrete receiver. The impl's effect
+            // parameters are the receiver's rows at the same places.
+            let effect_binding = scope
+                .tysys
+                .type_table
+                .borrow()
+                .impl_effect_binding(impl_ref.0, receiver_type_args.unwrap_or(&[]));
+            let instantiated = method_sig.decl.instantiate_bound(
+                &scope.tysys.type_table,
+                &impl_slots,
+                &SlotProjections::default(),
+                &effect_binding,
+            );
 
             // Remove method-level type params from scope
             for type_param in &method_type_params {
@@ -3508,7 +3517,16 @@ impl TypeSystem {
             .type_table
             .borrow_mut()
             .impl_slots(impl_ref.0, receiver_type_args);
-        let instantiated = sig.decl.instantiate_slots(&self.type_table, &slots);
+        let effect_binding = self
+            .type_table
+            .borrow()
+            .impl_effect_binding(impl_ref.0, receiver_type_args);
+        let instantiated = sig.decl.instantiate_bound(
+            &self.type_table,
+            &slots,
+            &SlotProjections::default(),
+            &effect_binding,
+        );
         let table = &self.type_table;
         Some(MethodInfo {
             impl_type_bindings: slot_type_bindings(

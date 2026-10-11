@@ -61,12 +61,18 @@ pub enum EffectRef {
     },
     /// An effect parameter from a generic effect declaration (e.g., `E` in `<effect E>`)
     Param { name: String },
+    /// A row the elaborator cannot know yet, which the effect check solves: a
+    /// closure literal's, or an effect parameter one call instantiates. Minted
+    /// by [`TypeTable::mint_effect_var`]; `name` is the id's spelling.
+    Var { id: u32, name: String },
 }
 
 impl EffectRef {
     pub fn name(&self) -> &str {
         match self {
-            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name,
+            EffectRef::Concrete { name, .. }
+            | EffectRef::Param { name }
+            | EffectRef::Var { name, .. } => name,
         }
     }
 
@@ -78,12 +84,19 @@ impl EffectRef {
                 name,
                 module_source,
             } if qualified => render(&module_source.to_string(), name),
-            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name.clone(),
+            EffectRef::Concrete { name, .. }
+            | EffectRef::Param { name }
+            | EffectRef::Var { name, .. } => name.clone(),
         }
     }
 
     pub fn is_param(&self) -> bool {
         matches!(self, EffectRef::Param { .. })
+    }
+
+    /// Whether this is a row still to be solved.
+    pub fn is_var(&self) -> bool {
+        matches!(self, EffectRef::Var { .. })
     }
 
     /// A `with`-clause name written in `module` that reaches no effect; it
@@ -1039,6 +1052,11 @@ pub struct TypeTable {
     /// The slot each inference variable stands for, read only by diagnostics.
     /// Beside the variant, not inside it, so the interning key stays the id.
     infer_var_names: IndexMap<InferVarId, String>,
+    /// The id the next [`EffectRef::Var`] takes.
+    next_effect_var: u32,
+    /// Whether the effect check has solved the variables, after which a use
+    /// mints none: no check is left to solve it.
+    effect_vars_solved: bool,
     /// Registry of stdlib items the compiler is allowed to reference
     /// (Box, Option, Default, `push_str`, …). Populated during the
     /// annotate pass from `#[compiler_item("...")]` attributes; see
@@ -1257,6 +1275,8 @@ impl TypeTable {
             types: TypeMap::default(),
             intern_map: IndexMap::default(),
             infer_var_names: IndexMap::default(),
+            next_effect_var: 0,
+            effect_vars_solved: false,
             compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
@@ -1839,7 +1859,7 @@ impl TypeTable {
             return id;
         }
         let id = AnonStructId(u32::try_from(self.anon_structs.len()).expect("anon struct space"));
-        let mut mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_for_generic(ty));
+        let mut mangle = self.render_shape(&key.1, &|tt, ty| tt.mangle_type_arg_rowless(ty));
         // A template shape renders as a hash of its text, so two shapes can
         // collide; the mangle is the whole identity of a shape, and sharing
         // one would give both the other's bridges. Widen the loser instead.
@@ -3011,7 +3031,7 @@ impl TypeTable {
     fn rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
         let args: Vec<String> = type_args
             .iter()
-            .map(|&a| self.mangle_type_arg_for_generic(a))
+            .map(|&a| self.mangle_type_arg_rowless(a))
             .collect();
         mangle_generic_name(decl_name, &args)
     }
@@ -3024,7 +3044,25 @@ impl TypeTable {
         def: StructDef,
         type_args: Vec<TypeId>,
     ) -> TypeId {
+        // An argument's row selects no representation, so instantiations
+        // differing only there are one struct, as their names already are.
+        let type_args = type_args
+            .into_iter()
+            .map(|arg| self.without_rows(arg))
+            .collect();
         self.intern(ResolvedType::Struct { def, type_args })
+    }
+
+    /// `id` with every function type's row emptied: what it is as a type's
+    /// argument, where no row tells two instances apart.
+    pub fn without_rows(&mut self, id: TypeId) -> TypeId {
+        self.subst_rec(
+            id,
+            &Leaves {
+                erase_rows: true,
+                ..Leaves::NONE
+            },
+        )
     }
 
     pub fn make_variant(&mut self, def: DefId) -> TypeId {
@@ -3468,6 +3506,17 @@ impl TypeTable {
     /// Create an inference variable (see [`ResolvedType::InferVar`]).
     pub fn make_infer_var(&mut self, id: InferVarId) -> TypeId {
         self.intern(ResolvedType::InferVar(id))
+    }
+
+    /// A fresh effect row for the effect check to solve. Ids are unique across
+    /// the program, which the check solves as one.
+    pub fn mint_effect_var(&mut self) -> EffectRef {
+        let id = self.next_effect_var;
+        self.next_effect_var += 1;
+        EffectRef::Var {
+            id,
+            name: format!("{}e{id}", crate::name::INTERNAL_PREFIX),
+        }
     }
 
     /// Record the slot `id` stands for, for diagnostics. Called on every mint,
@@ -4392,6 +4441,143 @@ impl TypeTable {
         )
     }
 
+    /// `type_id` with each effect parameter or variable `rows` names replaced
+    /// by its row, wherever a function type in it carries one.
+    pub fn substitute_effect_rows(&mut self, type_id: TypeId, rows: &EffectRows) -> TypeId {
+        self.subst_rec(
+            type_id,
+            &Leaves {
+                rows,
+                ..Leaves::NONE
+            },
+        )
+    }
+
+    /// A declared type with each effect parameter its rows name replaced by a
+    /// fresh variable, for the effect check to solve at one use. Applied in the
+    /// declaration's frame, before its type arguments are, so a parameter the
+    /// use site declares under the same name stays its own.
+    pub fn instantiate_effect_params(&mut self, type_id: TypeId) -> TypeId {
+        let mut named = IndexSet::default();
+        self.effect_params_in(type_id, &mut named);
+        let rows = self.fresh_effect_vars(named.iter());
+        self.substitute_effect_rows(type_id, &rows)
+    }
+
+    /// A fresh variable for each of the effect parameters `names`, or none
+    /// once the effect check has solved the variables: no check is left to
+    /// solve a new one.
+    pub fn fresh_effect_vars<'n>(
+        &mut self,
+        names: impl IntoIterator<Item = &'n String>,
+    ) -> EffectRows {
+        if self.effect_vars_solved {
+            return EffectRows::default();
+        }
+        names
+            .into_iter()
+            .map(|name| (name.clone(), vec![self.mint_effect_var()]))
+            .collect()
+    }
+
+    /// What the effect parameters an impl's target writes in its function
+    /// types' rows stand for at a receiver with `receiver_args`: the row the
+    /// receiver's argument has at the same place, less what the target names
+    /// outright there.
+    pub fn impl_effect_binding(&self, def: DefId, receiver_args: &[TypeId]) -> EffectRows {
+        let mut rows = EffectRows::default();
+        for (&written, &arg) in self.impl_target_args(def).iter().zip(receiver_args) {
+            self.bind_rows(written, arg, &mut rows);
+        }
+        rows
+    }
+
+    /// [`Self::impl_effect_binding`] for one written type beside the type
+    /// that meets it.
+    fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {
+        let each = |w: &[TypeId], a: &[TypeId], rows: &mut EffectRows| {
+            for (&w, &a) in w.iter().zip(a) {
+                self.bind_rows(w, a, rows);
+            }
+        };
+        match (self.get(written), self.get(actual)) {
+            (
+                ResolvedType::Function {
+                    params: wp,
+                    return_type: wr,
+                    effects: we,
+                    ..
+                },
+                ResolvedType::Function {
+                    params: ap,
+                    return_type: ar,
+                    effects: ae,
+                    ..
+                },
+            ) => {
+                let met: Vec<EffectRef> = ae.iter().filter(|e| !we.contains(e)).cloned().collect();
+                for param in we.iter().filter(|e| e.is_param()) {
+                    let row = rows.entry(param.name().to_string()).or_default();
+                    for e in &met {
+                        if !row.contains(e) {
+                            row.push(e.clone());
+                        }
+                    }
+                }
+                each(wp, ap, rows);
+                each(&[*wr], &[*ar], rows);
+            }
+            (
+                ResolvedType::Ref(w) | ResolvedType::MutRef(w) | ResolvedType::BuiltinArray(w),
+                ResolvedType::Ref(a) | ResolvedType::MutRef(a) | ResolvedType::BuiltinArray(a),
+            ) => each(&[*w], &[*a], rows),
+            _ => {
+                if let (Some(w), Some(a)) = (
+                    self.generic_type_args(written),
+                    self.generic_type_args(actual),
+                ) {
+                    each(&w, &a, rows);
+                }
+            }
+        }
+    }
+
+    /// Every effect parameter named in a function type's row anywhere in
+    /// `type_id`.
+    pub fn effect_params_in(&self, type_id: TypeId, out: &mut IndexSet<String>) {
+        match self.get(type_id) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                effects,
+                ..
+            } => {
+                out.extend(
+                    effects
+                        .iter()
+                        .filter(|e| e.is_param())
+                        .map(|e| e.name().to_string()),
+                );
+                for &p in params {
+                    self.effect_params_in(p, out);
+                }
+                self.effect_params_in(*return_type, out);
+            }
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::BuiltinArray(inner) => {
+                self.effect_params_in(*inner, out);
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                for &a in type_args {
+                    self.effect_params_in(a, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// `owning_trait`'s generic associated type `assoc_name`, bound to
     /// `family`, at a projection's `args`: each of that family's
     /// [`ResolvedType::AssocParam`]s replaced by the argument at its index.
@@ -4521,10 +4707,12 @@ impl TypeTable {
                 let new_params: Vec<TypeId> =
                     params.iter().map(|&p| self.subst_rec(p, leaves)).collect();
                 let new_return_type = self.subst_rec(return_type, leaves);
-                if new_params == params && new_return_type == return_type {
+                let new_effects = leaves.row(&effects);
+                if new_params == params && new_return_type == return_type && new_effects == effects
+                {
                     type_id
                 } else {
-                    self.make_function_with_mut(is_mut, new_params, new_return_type, effects)
+                    self.make_function_with_mut(is_mut, new_params, new_return_type, new_effects)
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {
@@ -4788,6 +4976,52 @@ impl TypeTable {
             };
             if let Some(target) = redirect {
                 self.redirects.set_growing(id, target);
+            }
+        }
+    }
+
+    /// Redirect each type to the one monomorphization reads, once the effect
+    /// check has solved the variables. Effects carry no representation: a
+    /// function value is one whatever its row, so a generic instance's
+    /// arguments lose their rows, and two instances that differ only there
+    /// are one. A function type keeps its row, which selects an impl written
+    /// for it, with each variable replaced by what `solved` says it stands for
+    /// and one nothing solved by the empty row.
+    pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
+        self.effect_vars_solved = true;
+        let ids: Vec<TypeId> = self.iter_type_ids().collect();
+        let mut rows = solved.clone();
+        for &id in &ids {
+            self.unsolved_vars_in(id, &mut rows);
+        }
+        for id in ids {
+            if self.redirects.get(id).is_some() {
+                continue;
+            }
+            let erased = match self.types.get(id).unwrap() {
+                ResolvedType::Function { .. } => self.substitute_effect_rows(id, &rows),
+                ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => self
+                    .subst_rec(
+                        id,
+                        &Leaves {
+                            erase_rows: true,
+                            ..Leaves::NONE
+                        },
+                    ),
+                _ => id,
+            };
+            if erased != id {
+                self.redirects.set_growing(id, erased);
+            }
+        }
+    }
+
+    /// Note each effect variable in `id`'s rows that `rows` holds no solution
+    /// for, as standing for the empty row.
+    fn unsolved_vars_in(&self, id: TypeId, rows: &mut EffectRows) {
+        if let ResolvedType::Function { effects, .. } = self.types.get(id).unwrap() {
+            for effect in effects.iter().filter(|e| e.is_var()) {
+                rows.entry(effect.name().to_string()).or_default();
             }
         }
     }
@@ -5493,7 +5727,7 @@ impl TypeTable {
                 } else {
                     let args: Vec<String> = type_args
                         .iter()
-                        .map(|&a| self.mangle_type_arg_for_generic(a))
+                        .map(|&a| self.mangle_type_arg_rowless(a))
                         .collect();
                     mangle_generic_name(&head, &args)
                 }
@@ -5691,6 +5925,14 @@ impl TypeTable {
         self.fq_type_name(id).to_mangled()
     }
 
+    /// [`Self::mangle_type_arg_for_generic`] as a type's own argument, where
+    /// a function value's row selects no representation: instances whose
+    /// arguments differ only in rows are one type.
+    pub fn mangle_type_arg_rowless(&self, id: TypeId) -> String {
+        self.fq_type_name_spelled_in(id, false, RowSpelling::Nowhere)
+            .to_mangled()
+    }
+
     /// Module-qualifying analogue of
     /// [`Self::mangle_type_name_resolving_newtypes`]. Used by the few WIR
     /// fq lookup sites that consult the newtype-resolved form
@@ -5769,7 +6011,7 @@ impl TypeTable {
             ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .map(|t| self.mangle_type_arg_rowless(*t))
                     .collect();
                 Some(if self.is_tuple_def(*def) {
                     mangle_tuple_type(&args)
@@ -5913,18 +6155,36 @@ impl TypeTable {
     }
 
     fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
+        self.fq_type_name_spelled_in(id, unboxed, RowSpelling::OutsideArgs)
+    }
+
+    /// [`Self::fq_type_name`] with every function type's row spelled, inside
+    /// type arguments too: what the effect check reads a receiver's argument
+    /// rows off.
+    pub fn fq_type_name_with_rows(&self, id: TypeId) -> FqTypeName {
+        self.fq_type_name_spelled_in(id, false, RowSpelling::Everywhere)
+    }
+
+    /// [`Self::fq_type_name_spelled`], with function types' rows spelled where
+    /// `rows` says.
+    fn fq_type_name_spelled_in(&self, id: TypeId, unboxed: bool, rows: RowSpelling) -> FqTypeName {
+        let rowless = rows == RowSpelling::Nowhere;
+        let arg_rows = match rows {
+            RowSpelling::Everywhere => RowSpelling::Everywhere,
+            RowSpelling::OutsideArgs | RowSpelling::Nowhere => RowSpelling::Nowhere,
+        };
         // Only a borrow is read off the slot's own type. Every other shape
         // keeps the erased view below, where ids that erase together must
         // answer one name.
         if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
             return self
-                .fq_type_name_spelled(payload, unboxed)
+                .fq_type_name_spelled_in(payload, unboxed, rows)
                 .with_reference(kind);
         }
         let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
             type_args
                 .iter()
-                .map(|t| self.fq_type_name_spelled(*t, unboxed))
+                .map(|t| self.fq_type_name_spelled_in(*t, unboxed, arg_rows))
                 .collect()
         };
         // The erased view, unlike [`Self::fq_base_type_name`]: this spelling
@@ -5969,12 +6229,12 @@ impl TypeTable {
                 FqTypeName::declared(&self.defs, *def).with_args(args_of(type_args))
             }
             ResolvedType::BuiltinArray(elem) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME)
-                .with_args(vec![self.fq_type_name_spelled(*elem, unboxed)]),
+                .with_args(vec![self.fq_type_name_spelled_in(*elem, unboxed, arg_rows)]),
             ResolvedType::Ref(inner) => self
-                .fq_type_name_spelled(*inner, unboxed)
+                .fq_type_name_spelled_in(*inner, unboxed, rows)
                 .with_reference(RefKind::Shared),
             ResolvedType::MutRef(inner) => self
-                .fq_type_name_spelled(*inner, unboxed)
+                .fq_type_name_spelled_in(*inner, unboxed, rows)
                 .with_reference(RefKind::Mut),
             // Structural, so substituting the base reaches it: the base is what
             // a monomorphized call answers, and the projection follows.
@@ -5993,9 +6253,20 @@ impl TypeTable {
                 trait_args.as_ref().map(|given| args_of(given)),
             )
             .with_args(args_of(args)),
-            resolved @ ResolvedType::Function { .. } => {
-                self.fq_fn_name(resolved, |t| self.fq_type_name_spelled(t, unboxed))
-            }
+            ResolvedType::Function {
+                is_mut,
+                params,
+                return_type,
+                effects,
+            } => FqTypeName::function(
+                *is_mut,
+                params
+                    .iter()
+                    .map(|&p| self.fq_type_name_spelled_in(p, unboxed, rows))
+                    .collect(),
+                self.fq_type_name_spelled_in(*return_type, unboxed, rows),
+                if rowless { Vec::new() } else { effects.clone() },
+            ),
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
@@ -6036,7 +6307,7 @@ impl TypeTable {
             ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .map(|t| self.mangle_type_arg_rowless(*t))
                     .collect();
                 // A tuple is module-independent; its elements stay qualified.
                 if self.is_tuple_def(*def) {
@@ -6062,7 +6333,7 @@ impl TypeTable {
             ResolvedType::GenericResource { def, type_args } => {
                 let args: Vec<String> = type_args
                     .iter()
-                    .map(|t| self.mangle_type_arg_for_generic(*t))
+                    .map(|t| self.mangle_type_arg_rowless(*t))
                     .collect();
                 TypeNameInfo::Generic {
                     name: self.def_name(*def).to_string(),
@@ -7258,16 +7529,46 @@ impl ProjectionAnswer {
 static NO_PARAMS: IndexMap<u32, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_VARS: IndexMap<InferVarId, TypeId> = IndexMap::with_hasher(FxBuildHasher);
 static NO_PROJECTIONS: SlotProjections = IndexMap::with_hasher(FxBuildHasher);
+static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
+
+/// Effect parameters and variables, by name, and the row each stands for.
+pub type EffectRows = IndexMap<String, Vec<EffectRef>>;
+
+/// Where a type's spelling writes its function types' rows. A function value
+/// is one whatever its row, so an instance whose arguments differ only in
+/// rows is one instance and answers one name; a function type standing alone
+/// keeps its row, which selects an impl written for it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RowSpelling {
+    /// Outside type arguments only: the name an instance answers to.
+    OutsideArgs,
+    /// Nowhere: inside a type argument.
+    Nowhere,
+    /// Everywhere: the rows themselves, for the effect check to read.
+    Everywhere,
+}
+
+/// Whether two function types' rows can be one: equal, or one still open. An
+/// effect parameter stands for whatever row meets it, and a variable for the
+/// row the effect check solves it to.
+fn rows_agree(a: &[EffectRef], b: &[EffectRef]) -> bool {
+    let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
+    a == b || open(a) || open(b)
+}
 
 /// What one substitution replaces, leaf by leaf: a declaration's slots, solved
-/// inference variables, a generic associated type's own parameters, and the
-/// projections a use site answers.
+/// inference variables, a generic associated type's own parameters, the
+/// projections a use site answers, and the effect parameters and variables in
+/// a function type's row.
 #[derive(Clone, Copy)]
 struct Leaves<'s> {
     params: &'s IndexMap<u32, TypeId>,
     vars: &'s IndexMap<InferVarId, TypeId>,
     family: Option<FamilyAt<'s>>,
     projections: &'s SlotProjections,
+    rows: &'s EffectRows,
+    /// Whether every row is emptied, not just the names `rows` holds.
+    erase_rows: bool,
 }
 
 /// One generic associated type's parameters, and the arguments a projection
@@ -7285,6 +7586,8 @@ impl Leaves<'static> {
         vars: &NO_VARS,
         family: None,
         projections: &NO_PROJECTIONS,
+        rows: &NO_ROWS,
+        erase_rows: false,
     };
 }
 
@@ -7294,6 +7597,29 @@ impl Leaves<'_> {
             && self.vars.is_empty()
             && self.family.is_none_or(|at| at.args.is_empty())
             && self.projections.is_empty()
+            && self.rows.is_empty()
+            && !self.erase_rows
+    }
+
+    /// `effects` with each parameter or variable this substitution names
+    /// replaced by its row, each effect once.
+    fn row(&self, effects: &[EffectRef]) -> Vec<EffectRef> {
+        if self.erase_rows {
+            return Vec::new();
+        }
+        let mut out: Vec<EffectRef> = Vec::new();
+        for effect in effects {
+            let replaced = match effect {
+                EffectRef::Param { name } | EffectRef::Var { name, .. } => self.rows.get(name),
+                EffectRef::Concrete { .. } => None,
+            };
+            for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
+                if !out.contains(e) {
+                    out.push(e.clone());
+                }
+            }
+        }
+        out
     }
 }
 
@@ -7979,7 +8305,7 @@ impl TypeTable {
                 },
             ) => Some(
                 x_mut == y_mut
-                    && x_effects == y_effects
+                    && rows_agree(x_effects, y_effects)
                     && all(x_params, y_params)
                     && all(&[*x_ret], &[*y_ret]),
             ),

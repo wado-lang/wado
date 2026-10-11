@@ -50,6 +50,9 @@ pub enum SolverType {
         /// empty for one that declares no parameters.
         args: Vec<SolverType>,
     },
+    /// A function type's row holding an effect parameter or a variable the
+    /// effect check solves: it stands for whatever row meets it.
+    AnyRow,
 }
 
 /// An associated type of a trait: `Mul::Output`.
@@ -72,6 +75,7 @@ impl SolverType {
     pub fn mentions(&self, pred: &dyn Fn(&Self) -> bool) -> bool {
         match self {
             Self::Param(_) | Self::Pack(_) => pred(self),
+            Self::AnyRow => false,
             Self::Decl(_, inner) | Self::Tuple(inner) => inner.iter().any(|t| t.mentions(pred)),
             Self::Ref { inner, .. } => inner.mentions(pred),
             Self::Projection { base, args, .. } => {
@@ -85,7 +89,7 @@ impl SolverType {
     #[must_use]
     pub fn mentions_decl(&self, pred: &dyn Fn(TypeDeclId) -> bool) -> bool {
         match self {
-            Self::Param(_) | Self::Pack(_) => false,
+            Self::Param(_) | Self::Pack(_) | Self::AnyRow => false,
             Self::Decl(id, inner) => pred(*id) || inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Tuple(inner) => inner.iter().any(|t| t.mentions_decl(pred)),
             Self::Ref { inner, .. } => inner.mentions_decl(pred),
@@ -110,6 +114,7 @@ impl SolverType {
         };
         Some(match self {
             Self::Param(index) | Self::Pack(index) => arg(*index)?,
+            Self::AnyRow => Self::AnyRow,
             Self::Decl(head, inner) => Self::Decl(*head, each(inner)?),
             // A pack spread in a tuple splices its elements in: `[..T]` at
             // `T = [i32, bool]` is `[i32, bool]`, not `[[i32, bool]]`.
@@ -449,7 +454,8 @@ impl Program {
             SolverType::Decl(..)
             | SolverType::Tuple(_)
             | SolverType::Ref { .. }
-            | SolverType::Projection { .. } => true,
+            | SolverType::Projection { .. }
+            | SolverType::AnyRow => true,
         };
         let undeclared = |ty: &SolverType| ty.mentions(&|p| !declared(p));
         assert!(

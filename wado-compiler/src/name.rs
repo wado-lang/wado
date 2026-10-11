@@ -2232,7 +2232,7 @@ fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
             name,
             module_source,
         } => format!("{module_source}/{name}"),
-        tir::EffectRef::Param { name } => name.clone(),
+        tir::EffectRef::Param { name } | tir::EffectRef::Var { name, .. } => name.clone(),
     }
 }
 

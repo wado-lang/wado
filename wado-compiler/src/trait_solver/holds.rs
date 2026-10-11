@@ -458,7 +458,7 @@ impl Query<'_> {
                 is_mut: *is_mut,
                 inner: Box::new(self.normalized(inner)),
             },
-            SolverType::Param(_) | SolverType::Pack(_) => ty.clone(),
+            SolverType::Param(_) | SolverType::Pack(_) | SolverType::AnyRow => ty.clone(),
         }
     }
 }
@@ -608,7 +608,8 @@ fn fact_head(program: &Program, ty: &SolverType) -> Option<TypeDeclId> {
         SolverType::Param(_)
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
-        | SolverType::Projection { .. } => None,
+        | SolverType::Projection { .. }
+        | SolverType::AnyRow => None,
     }
 }
 
@@ -721,6 +722,8 @@ fn match_target(
             deferred.push((target.clone(), ty.clone()));
             true
         }
+        // An open row meets any row, on either side.
+        (SolverType::AnyRow, _) | (_, SolverType::AnyRow) => true,
         (
             SolverType::Decl(_, _)
             | SolverType::Ref { .. }

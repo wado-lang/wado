@@ -344,7 +344,7 @@ fn register_struct(
         let qualified_args: Vec<String> = mono
             .impl_type_args
             .iter()
-            .map(|t| type_table.mangle_type_arg_for_generic(*t))
+            .map(|t| type_table.mangle_type_arg_rowless(*t))
             .collect();
         let qualified_name = mangle_generic_name(&mono.generic_name, &qualified_args);
         if qualified_name != tir_struct.name {
@@ -1166,7 +1166,12 @@ pub(super) fn generic_instance_name(
 ) -> String {
     let type_arg_names: Vec<String> = type_args
         .iter()
-        .map(|t| normalized_projection_name(type_table, *t).to_mangled())
+        .map(|&t| match type_table.get(t) {
+            ResolvedType::AssocTypeProjection { .. } => {
+                normalized_projection_name(type_table, t).to_mangled()
+            }
+            _ => type_table.mangle_type_arg_rowless(t),
+        })
         .collect();
     mangle_generic_name(name, &type_arg_names)
 }

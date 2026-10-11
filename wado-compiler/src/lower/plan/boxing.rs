@@ -238,7 +238,7 @@ impl TypeBuilder {
         // making one module's iterator hand back the other module's `Child`
         // and tripping a WIR ref-nullability ICE. Primitives are unaffected
         // (`mangle_type_arg_for_generic(i32) == "i32"`).
-        let inner_name = type_table.mangle_type_arg_for_generic(inner_type_id);
+        let inner_name = type_table.mangle_type_arg_rowless(inner_type_id);
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
         // Register under the Box definition's module source (from #[compiler_item("box")]).

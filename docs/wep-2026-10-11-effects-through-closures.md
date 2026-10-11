@@ -48,6 +48,34 @@ leak.
   `fold`, `sort_by`, `Option::map`) is generic over its effects,
   `<effect E>`, as `Benchmark::run` already is.
 
+### Mechanism
+
+The elaborator cannot work out what a closure body performs: that needs every
+call in it resolved, which is the effect check's work, and the effect check runs
+on the whole program after reify. So the elaborator leaves a variable where an
+effect row is not yet known, and the effect check solves it.
+
+- An effect variable is one more kind of `EffectRef`, minted by the type table.
+  A call gives each of its callee's own effect parameters a fresh one in the
+  return type it produces, in the callee's frame before the type arguments
+  fill it. An effect parameter of the enclosing impl is the receiver's row at
+  the place the impl's target writes it, as an impl's type parameter is the
+  receiver's argument. A closure literal's type takes a fresh one for its row.
+- The type check, impl target matching and the trait solver all let a row
+  holding an effect parameter or a variable meet any row.
+- The effect check solves the variables, walking a body until no solution
+  changes: an outer call's arguments are read before the inner call that
+  minted their variable. A call's variable is what its parameter resolved to
+  there, read off by setting the callee's declared return type beside the
+  call's type. A closure's is what its body performs.
+- Effects carry no representation: a function value is one whatever its row.
+  So a type's own arguments are spelled and interned without rows, and two
+  instances that differ only there are one struct. A function type standing
+  alone keeps its row, which selects an impl written for it, and so does a
+  function instance's type argument. After the check, a type holding a
+  variable is redirected to the type with it solved, or emptied where nothing
+  solved it, as newtype erasure redirects a newtype to its base.
+
 ## Roadmap
 
 1. [x] A type parameter bounded by a function type is that signature in an
@@ -66,7 +94,7 @@ leak.
    its effects of the caller.
 4. [x] The eager functions taking a closure declare an effect parameter, and a
    function value declaring effects passes to one.
-5. [ ] An effect parameter a call resolves is substituted in the types the call
+5. [x] An effect parameter a call resolves is substituted in the types the call
    produces, as a type parameter is. The lazy adapters are generic over their
    closure's type, so an adapter built from a function value carries its
    effects.

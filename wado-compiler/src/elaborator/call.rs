@@ -2247,7 +2247,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Look up function return type
-        let mut return_type = self.lookup_function_return_type(&callee, effect_op.as_ref());
+        let return_type = self.lookup_function_return_type(&callee, effect_op.as_ref());
+        let mut return_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .instantiate_effect_params(return_type);
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
