@@ -440,38 +440,20 @@ fn run_effect_checks(
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-<<<<<<< HEAD
-                    check_function_effects_sem(sem, src, func, index, None, out, solved);
-||||||| 1a5c90c73ad
-                    check_function_effects_sem(sem, src, func, index, None, out);
-=======
-                    check_function_effects_sem(sem, src, func, index, &[], out);
->>>>>>> origin/main
+                    check_function_effects_sem(sem, src, func, index, &[], out, solved);
                 }
                 Item::Impl(impl_block) => {
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
-<<<<<<< HEAD
-                        check_function_effects_sem(sem, src, method, index, None, out, solved);
-||||||| 1a5c90c73ad
-                        check_function_effects_sem(sem, src, method, index, None, out);
-=======
-                        check_function_effects_sem(sem, src, method, index, &[], out);
->>>>>>> origin/main
+                        check_function_effects_sem(sem, src, method, index, &[], out, solved);
                     }
                 }
                 // A default body holds what the trait declares for it.
                 Item::Trait(trait_decl) => {
                     let def = index.resolutions.defs().def_at(trait_decl.id);
                     for method in &trait_decl.methods {
-<<<<<<< HEAD
-                        check_function_effects_sem(sem, src, method, index, None, out, solved);
-||||||| 1a5c90c73ad
-                        check_function_effects_sem(sem, src, method, index, None, out);
-=======
                         let declared = &index.trait_method_effects[&(def, method.name.clone())];
-                        check_function_effects_sem(sem, src, method, index, declared, out);
->>>>>>> origin/main
+                        check_function_effects_sem(sem, src, method, index, declared, out, solved);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
@@ -481,14 +463,8 @@ fn run_effect_checks(
                     let def = index.resolutions.defs().def_at(interface_decl.id);
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
-<<<<<<< HEAD
-                        check_function_effects_sem(sem, src, method, index, own, out, solved);
-||||||| 1a5c90c73ad
-                        check_function_effects_sem(sem, src, method, index, own, out);
-=======
                         let held = own.map_or(&[][..], std::slice::from_ref);
-                        check_function_effects_sem(sem, src, method, index, held, out);
->>>>>>> origin/main
+                        check_function_effects_sem(sem, src, method, index, held, out, solved);
                     }
                 }
                 // What the initializer performs is the purity check's; only an
@@ -1294,44 +1270,8 @@ fn check_function_effects_sem(
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
     current.extend(benign);
-<<<<<<< HEAD
-    current.extend(held.cloned());
-    let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
-||||||| 1a5c90c73ad
-    current.extend(held.cloned());
-    if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
-        current.extend(index.waiting.iter().cloned());
-    }
-    // A function holding `Stdout` may call operations that internally need
-    // `Stream`, etc.
-    let mut current = expand_through_closure(&current, index.closure);
-    if let Some(ann) = annotations {
-        add_narrowed_resources(
-            |v| ast::walk_block(v, body),
-            ann,
-            &scan,
-            index.closure,
-            &mut current,
-        );
-    }
-=======
     current.extend(held.iter().cloned());
-    if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
-        current.extend(index.waiting.iter().cloned());
-    }
-    // A function holding `Stdout` may call operations that internally need
-    // `Stream`, etc.
-    let mut current = expand_through_closure(&current, index.closure);
-    if let Some(ann) = annotations {
-        add_narrowed_resources(
-            |v| ast::walk_block(v, body),
-            ann,
-            &scan,
-            index.closure,
-            &mut current,
-        );
-    }
->>>>>>> origin/main
+    let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -1948,41 +1888,17 @@ impl EffectIndex<'_> {
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
         };
-<<<<<<< HEAD
         // The method the dispatch selected, and the impl block declaring it.
-        let impl_method = match &func_ref.template {
-            Some(TemplateId::Declared { def, .. }) => self
-                .resolutions
-                .defs()
-                .parent(*def)
-                .filter(|&owner| self.resolutions.defs().kind(owner) == DefKind::Impl)
-                .map(|owner| (self.resolutions.defs().ast_id(*def), owner)),
-            _ => None,
-        };
-||||||| 1a5c90c73ad
-        let impl_method =
-            match &func_ref.template {
-                Some(TemplateId::Declared { def, .. })
-                    if self.resolutions.defs().parent(*def).is_some_and(|owner| {
-                        self.resolutions.defs().kind(owner) == DefKind::Impl
-                    }) =>
-                {
-                    Some(self.resolutions.defs().ast_id(*def))
-                }
-                _ => None,
-            };
-=======
         let defs = self.resolutions.defs();
         let impl_method = func_ref
             .template
             .as_ref()
             .and_then(TemplateId::def)
-            .filter(|&def| {
+            .and_then(|def| {
                 defs.parent(def)
-                    .is_some_and(|owner| defs.kind(owner) == DefKind::Impl)
-            })
-            .map(|def| defs.ast_id(def));
->>>>>>> origin/main
+                    .filter(|&owner| defs.kind(owner) == DefKind::Impl)
+                    .map(|owner| (defs.ast_id(def), owner))
+            });
         if let Some(trait_name) = &method_info.trait_name
             && let Some((receiver, key)) = impl_key(&method_info.fq_base_struct_name(), trait_name)
             && self.open_traits.contains(&key)
@@ -2236,11 +2152,9 @@ impl EffectIndex<'_> {
 
     /// The declared return type of the declaration a dispatch selected.
     fn callee_return(&self, func_ref: &FunctionRef) -> Option<TypeId> {
-        let Some(TemplateId::Declared { def, .. }) = &func_ref.template else {
-            return None;
-        };
+        let def = func_ref.template.as_ref().and_then(TemplateId::def)?;
         self.fn_returns
-            .get(&self.resolutions.defs().ast_id(*def))
+            .get(&self.resolutions.defs().ast_id(def))
             .copied()
     }
 
