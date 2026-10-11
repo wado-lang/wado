@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791694981759,
+  "lastUpdate": 1791701471694,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66101,6 +66101,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aaf4052abf621d7326758611276327914f8e0b5a"
         },
         "date": 1791694980853,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1a5c90c73ad4a1336c10e414ea5fa4fd24919278",
+          "message": "Merge pull request #2327 from wado-lang/effects-through-closures\n\nfeat: iterators and closure-taking functions carry their effects to the caller",
+          "timestamp": "2026-10-11T15:32:11+09:00",
+          "tree_id": "7f330b7fe672d6f3b958825e56aec3ff4e51fc0d",
+          "url": "https://github.com/wado-lang/wado/commit/1a5c90c73ad4a1336c10e414ea5fa4fd24919278"
+        },
+        "date": 1791701470793,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
