@@ -1592,7 +1592,7 @@ impl TraitEnv {
         block: DefId,
         info: &name::LocalMethodName,
     ) -> Option<TemplateId> {
-        self.method_template(block, &info.method_name)
+        self.method_template(block, info.declared_method_name())
             .map(|template| template.called_by(info))
     }
 

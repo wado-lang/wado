@@ -1688,7 +1688,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         func.name = unchecked_twin_name(&func.name);
         if let Some(info) = &mut func.method_info {
-            info.unchecked = true;
+            info.mark_unchecked();
         }
         if let Some(mono) = &mut func.monomorph_info {
             mono.generic_name = unchecked_twin_name(&mono.generic_name);
@@ -10360,7 +10360,7 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
     twin.export_name = None;
     twin.compiler_item = None;
     if let Some(info) = &mut twin.method_info {
-        info.unchecked = true;
+        info.mark_unchecked();
     }
     let body = func
         .body
