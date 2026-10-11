@@ -6,6 +6,7 @@ use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lexer::WILDCARD;
 
 use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
@@ -629,7 +630,7 @@ impl ClosureLowerer {
                 .iter()
                 .enumerate()
                 .map(|(i, (name, type_id))| {
-                    let name = if name == "_" {
+                    let name = if name == WILDCARD {
                         discarded_param_name(i)
                     } else {
                         name.clone()
@@ -1305,7 +1306,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                         !orig_name.is_empty(),
                         "function parameter name should never be empty (function: {func_name}, index: {i})",
                     );
-                    let name = if orig_name == "_" {
+                    let name = if orig_name == WILDCARD {
                         discarded_param_name(i)
                     } else {
                         orig_name.clone()

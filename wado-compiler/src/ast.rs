@@ -8,6 +8,7 @@ use std::borrow::Cow;
 
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lexer::WILDCARD;
 use crate::name::UNIT_TYPE_NAME;
 use crate::token::Span;
 
@@ -4570,7 +4571,7 @@ impl TraitHead {
 
 /// The name `with _` carries, both as an effect reference and as the name of
 /// the effect parameter it mints.
-pub const EFFECT_HOLE: &str = "_";
+pub const EFFECT_HOLE: &str = WILDCARD;
 
 /// The params the source spells, skipping the one `with _` mints.
 pub fn written_params(params: &[GenericParam]) -> impl Iterator<Item = &GenericParam> {
