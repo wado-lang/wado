@@ -843,19 +843,26 @@ impl Monomorphizer {
         // the root and the newtype kind are synthesized per newtype and carry
         // no AST header, so the checks below would peel past them and a
         // derivation would answer with the base's name. Every other trait does
-        // inherit, and peeling is how it is reached.
+        // inherit, and peeling is how it is reached. The root's wire-name
+        // policy is not identity but a fact about the members, which a newtype
+        // inherits too.
         if type_table.reflect_kind(tid) == Some(CompilerItem::ReflectNewtype)
-            && trait_name.canonical().is_some_and(|declared| {
-                type_table
-                    .compiler_items()
-                    .trait_among(
-                        declared,
-                        &[CompilerItem::Reflect, CompilerItem::ReflectNewtype],
-                    )
-                    .is_some()
-            })
+            && let Some(declared) = trait_name.canonical()
+            && let Some(reflect_trait) = type_table.compiler_items().trait_among(
+                declared,
+                &[CompilerItem::Reflect, CompilerItem::ReflectNewtype],
+            )
         {
-            return tid;
+            let asks_policy = reflect_trait == CompilerItem::Reflect
+                && info.method_name
+                    == type_table
+                        .compiler_items()
+                        .method_name(CompilerItem::ReflectWireNamePolicy);
+            return if asks_policy {
+                type_table.wire_policy_subject(tid)
+            } else {
+                tid
+            };
         }
         if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
             if self.has_own_trait_impl(type_table, tid, decl) {

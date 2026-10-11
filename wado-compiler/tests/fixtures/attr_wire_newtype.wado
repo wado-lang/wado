@@ -1,0 +1,10 @@
+// A newtype takes no `#[wire]`: it has no members of its own to name, and it
+// serializes as the declaration it wraps, under that declaration's names.
+
+#[wire(name_policy = "kebab-case")]
+type UserName = String;
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":4:1: `wire` does not belong on a newtype; it belongs on a struct, a struct field, an enum, an enum case, a variant, a variant case or a flags declaration", "compile_error_codes": ["ATTR_MISUSE"]}
