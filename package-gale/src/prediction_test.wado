@@ -10,7 +10,7 @@ use {
     prediction_node_eq,
 } from "./prediction.wado";
 
-fn ambiguous(alts: List<i32>, reason: AmbiguityReason, branch_tokens: List<String>) -> PredictionNode {
+fn ambiguous(alts: List<i32>, reason: AmbiguityReason, branch_tokens: List<i32>) -> PredictionNode {
     return PredictionNode::Ambiguous(AmbiguousNode { alts, reason, branch_tokens });
 }
 
@@ -19,7 +19,7 @@ fn dispatch(child: PredictionNode) -> PredictionNode {
         depth: 1,
         branches: [
             PredictionBranch {
-                tokens: ["TK_X"],
+                tokens: [1],
                 child,
             },
         ],
@@ -27,14 +27,14 @@ fn dispatch(child: PredictionNode) -> PredictionNode {
 }
 
 test "prediction_node_eq: identical Ambiguous leaves are equal" {
-    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
-    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
+    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
     assert prediction_node_eq(&a, &b);
 }
 
 test "prediction_node_eq: only AtEndConflict can route to the simulator, so it does not fold with another reason" {
-    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
-    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]);
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
+    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, [4]);
     assert !prediction_node_eq(&a, &b);
 }
 
@@ -47,25 +47,25 @@ test "prediction_node_eq: two non-AtEndConflict reasons fold" {
 }
 
 test "prediction_node_eq: branch tokens do not split a non-AtEndConflict node" {
-    let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]);
-    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_B"]);
+    let a = ambiguous([0, 1], AmbiguityReason::MaxDepth, [4]);
+    let b = ambiguous([0, 1], AmbiguityReason::MaxDepth, [5]);
     assert prediction_node_eq(&a, &b);
 }
 
 test "prediction_node_eq: differing at-end branch tokens are not equal" {
     // The other half of the ATN routing decision
     // (`at_end_conflict_routes` overlaps these against the rule's FOLLOW).
-    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]);
-    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_B"]);
+    let a = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]);
+    let b = ambiguous([0, 1], AmbiguityReason::AtEndConflict, [5]);
     assert !prediction_node_eq(&a, &b);
 }
 
 test "prediction_node_eq: a nested Ambiguous is compared through the Dispatch" {
     // A leaf difference must survive one level of nesting.
-    let a = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]));
-    let b = dispatch(ambiguous([0, 1], AmbiguityReason::MaxDepth, ["TK_A"]));
+    let a = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]));
+    let b = dispatch(ambiguous([0, 1], AmbiguityReason::MaxDepth, [4]));
     assert !prediction_node_eq(&a, &b);
-    let c = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, ["TK_A"]));
+    let c = dispatch(ambiguous([0, 1], AmbiguityReason::AtEndConflict, [4]));
     assert prediction_node_eq(&a, &c);
 }
 
@@ -74,7 +74,7 @@ test "prediction_node_eq: sub-dispatches differing in guard tokens are not equal
         depth: 1,
         branches: [
             PredictionBranch {
-                tokens: ["TK_X"],
+                tokens: [1],
                 child: PredictionNode::Leaf(0),
             },
         ],
@@ -83,7 +83,7 @@ test "prediction_node_eq: sub-dispatches differing in guard tokens are not equal
         depth: 1,
         branches: [
             PredictionBranch {
-                tokens: ["TK_Y"],
+                tokens: [2],
                 child: PredictionNode::Leaf(0),
             },
         ],
@@ -96,7 +96,7 @@ test "prediction_node_eq: sub-dispatches differing in depth are not equal" {
         depth: 1,
         branches: [
             PredictionBranch {
-                tokens: ["TK_X"],
+                tokens: [1],
                 child: PredictionNode::Leaf(0),
             },
         ],
@@ -105,7 +105,7 @@ test "prediction_node_eq: sub-dispatches differing in depth are not equal" {
         depth: 2,
         branches: [
             PredictionBranch {
-                tokens: ["TK_X"],
+                tokens: [1],
                 child: PredictionNode::Leaf(0),
             },
         ],

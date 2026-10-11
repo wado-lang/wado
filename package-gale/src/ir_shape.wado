@@ -1,0 +1,304 @@
+//! What codegen reads off the surface IR's shape: how a group is classified,
+//! and the type, field and case names its alternatives get.
+
+use { Alternative, Element, Visibility } from "./ir.wado";
+use { to_pascal_case } from "./ident.wado";
+use { literal_field_name } from "./gen_util.wado";
+use { unwrap_label } from "./lr_util.wado";
+use { CodeWriter } from "lib:wadopoet";
+
+/// Emit a `// rule visibility: <name> (ignored by codegen, matches ANTLR4)`
+/// comment for a rule whose .g4 source carried a `public` / `private` /
+/// `protected` modifier. ANTLR4 itself ignores these modifiers at code
+/// generation time, so Gale matches that behavior but surfaces the value as
+/// a doc comment above the generated `parse_X` / `try_X` function so the
+/// modifier stays observable in the output.
+pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
+    let label = match *visibility {
+        Default => "",
+        Public => "public",
+        Private => "private",
+        Protected => "protected",
+    };
+    if label == "" {
+        return;
+    }
+    w.line(`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
+}
+
+/// Field base name for a parser-side `~ X` (set complement). The inner element
+/// is typically a terminal (TokenRef / Literal) or a simple terminal set; we
+/// derive a readable name from it so multi-element alternatives can dedup.
+pub fn not_element_field_name(inner: &Element) -> String {
+    return match *inner {
+        TokenRef(t) => `not_${t.lower_name}`,
+        Literal(l) => `not_${literal_field_name(&l.text)}`,
+        _ => "not_set",
+    };
+}
+
+/// Whether each alternative is a single RuleRef, as in `(a | b)`.
+fn is_simple_cst_group(alts: &List<Alternative>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 || !alt.elements[0] matches { RuleRef(_) } {
+            return false;
+        }
+    }
+    return true;
+}
+
+pub fn group_variant_type_name(alts: &List<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            result.push_str("Or");
+        }
+        if let RuleRef(r) = &alts[i].elements[0] {
+            result.push_str(&to_pascal_case(&r.name));
+        }
+    }
+    result.push_str("Group");
+    return result;
+}
+
+pub fn group_field_base_name(alts: &List<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            result.push_str("_or_");
+        }
+        if let RuleRef(r) = &alts[i].elements[0] {
+            result.push_str(&r.snake_name);
+        }
+    }
+    return result;
+}
+
+/// Only a `SimpleCst` group's alternatives reach here.
+pub fn group_case_name(alt: &Alternative) -> String {
+    let RuleRef(r) = &alt.elements[0] else {
+        unreachable();
+    };
+    return to_pascal_case(&r.name);
+}
+
+/// A single-alternative multi-element group, as in `(',' pair)`.
+pub fn is_single_alt_group(alts: &List<Alternative>) -> bool {
+    return classify_group(alts) matches { SingleAlt };
+}
+
+/// True when every alternative carries a `# Label` (ANTLR4 requires
+/// all-or-none labeling). Drives the per-rule `<Rule>Alt` enum emission and
+/// the parser's `set_alt` stamping; unlabeled rules stay byte-identical.
+pub fn rule_alts_labeled(alts: &List<Alternative>) -> bool {
+    return !alts.is_empty() && alts.iter_ref().all(|a: &Alternative| a.label matches { Some(_) });
+}
+
+/// Every group except a `GroupClass::Transparent` one is storable: multi-alt
+/// groups get a variant type, a single alt with 2+ elements gets a struct.
+pub fn is_storable_group(alts: &List<Alternative>) -> bool {
+    return !classify_group(alts) matches { Transparent };
+}
+
+pub enum GroupClass {
+    Transparent,
+    SingleAlt,
+    TokenOnly,
+    SimpleCst,
+    General,
+}
+
+pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
+    assert alts.len() > 0, "Group with no alts is not a valid lowering input";
+    if alts.len() == 1 {
+        assert alts[0].elements.len() > 0, "Group with empty alt is not a valid lowering input";
+        if alts[0].elements.len() == 1 {
+            return GroupClass::Transparent;
+        }
+        return GroupClass::SingleAlt;
+    }
+    // Only the General shape keeps a per-alternative body to run an action in
+    // and a per-alternative condition for a predicate to gate.
+    if group_alts_have_actions(alts) {
+        return GroupClass::General;
+    }
+    if all_alts_are_single_token(alts) {
+        return GroupClass::TokenOnly;
+    }
+    if is_simple_cst_group(alts) {
+        return GroupClass::SimpleCst;
+    }
+    return GroupClass::General;
+}
+
+/// Whether any alternative of `alts` carries an action or a predicate.
+fn group_alts_have_actions(alts: &List<Alternative>) -> bool {
+    return alts.iter_ref().any(|a: &Alternative| !a.actions.is_empty());
+}
+
+/// Count how many general groups are in an element list.
+/// Matches the type gen's counting logic (looks through Repeat wrappers).
+pub fn count_general_groups(elements: &List<Element>) -> i32 {
+    let mut count: i32 = 0;
+    for let elem of elements {
+        count += count_element_groups(elem);
+    }
+    return count;
+}
+
+/// Groups nested under `alts`, plus one when `alts` is itself a general group.
+fn group_nesting_count(alts: &List<Alternative>) -> i32 {
+    let mut max_nested: i32 = 0;
+    for let alt of alts {
+        let nested = count_general_groups(&alt.elements);
+        if nested > max_nested {
+            max_nested = nested;
+        }
+    }
+    if classify_group(alts) matches { General } {
+        return 1 + max_nested;
+    }
+    return max_nested;
+}
+
+fn count_element_groups(elem: &Element) -> i32 {
+    return match elem {
+        Group(g) => group_nesting_count(&g.alternatives),
+        Repeat(rep) => count_element_groups(&rep.element),
+        Label(lab) => count_element_groups(&lab.element),
+        TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => 0,
+    };
+}
+
+/// Generate a variant type name for a general multi-alt group.
+/// Uses parent rule name + group index: "InsertStmtGroup0"
+pub fn general_group_type_name<S: AsStrSlice>(rule_name: S, group_index: i32) -> String {
+    return `${to_pascal_case(rule_name)}Group${group_index}`;
+}
+
+/// Generate a field base name for a general multi-alt group.
+/// Uses group index: "group_0"
+pub fn general_group_field_name(group_index: i32) -> String {
+    return `group_${group_index}`;
+}
+
+/// Generate a struct name for a specific alternative in a general group.
+/// Uses parent rule name + group index + alt index: "InsertStmtGroup0Alt1"
+pub fn general_group_alt_struct_name<S: AsStrSlice>(rule_name: S, group_index: i32, alt_index: i32) -> String {
+    return `${to_pascal_case(rule_name)}Group${group_index}Alt${alt_index}`;
+}
+
+/// Get a field name for the elements in a single-alt group's element.
+fn element_base_name(elem: &Element) -> String {
+    return match elem {
+        RuleRef(r) => r.field_name,
+        TokenRef(t) => t.field_name,
+        Literal(l) => literal_field_name(&l.text),
+        Repeat(rep) => element_base_name(&rep.element),
+        Label(lab) => lab.field_name,
+        _ => "item",
+    };
+}
+
+/// Get a type-disambiguating base name for an element, including repeat suffixes.
+/// E.g. ','? -> "comma_opt", ','* -> "comma_list", ',' -> "comma"
+fn element_type_base_name(elem: &Element) -> String {
+    if let Repeat(rep) = elem {
+        let inner = element_base_name(&rep.element);
+        return match rep.kind {
+            Optional => `${inner}_opt`,
+            Star | Plus => `${inner}_list`,
+        };
+    }
+    return element_base_name(elem);
+}
+
+/// Generate a struct type name for a single-alt group from its elements.
+/// (',' pair) -> "CommaPairItem"
+/// (',' pair?) -> "CommaOptPairItem"  (distinguishes from non-optional)
+pub fn single_alt_group_type_name(alt: &Alternative) -> String {
+    let mut result = String::with_capacity(64);
+    for let elem of &alt.elements {
+        result.push_str(&to_pascal_case(&element_type_base_name(elem)));
+    }
+    result.push_str("Item");
+    return result;
+}
+
+/// Generate a field base name for a single-alt group.
+/// (',' pair) -> "comma_pair"
+pub fn single_alt_group_field_name(alt: &Alternative) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        if i > 0 {
+            result.push_str("_");
+        }
+        result.push_str(&element_base_name(&alt.elements[i]));
+    }
+    return result;
+}
+
+/// Generate a field base name for a token-only group.
+/// (K_INSERT | K_REPLACE) -> "k_insert_or_k_replace"
+pub fn token_group_field_name(alts: &List<Alternative>) -> String {
+    let mut result = String::with_capacity(64);
+    for let mut i = 0; i < alts.len(); i += 1 {
+        if i > 0 {
+            result.push_str("_or_");
+        }
+        result.push_str(&element_base_name(&alts[i].elements[0]));
+    }
+    return result;
+}
+
+/// Returns true if every alt in `alts` is a single TokenRef or Literal
+/// element. Such rules collapse to a one-token kind check at scan time
+/// and to a compact `{ span, token }` struct (instead of an N-arm
+/// variant) at CST / parse / walk time. Labelled single tokens
+/// (`x='+'`) are `Label(...)`, not `TokenRef(...)`, so they are
+/// excluded — the compaction drops the per-alt label name.
+pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
+    for let alt of alts {
+        if alt.elements.len() != 1 {
+            return false;
+        }
+        let elem = &alt.elements[0];
+        if !elem matches { TokenRef(_) | Literal(_) } {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// One case name per alternative: `Alt<i>` unless every alternative is
+/// labeled, then the label, with a label several alternatives share
+/// numbered from 0 in order.
+pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
+    if !rule_alts_labeled(alts) {
+        return (0..<alts.len()).map(|i| `Alt${i}`).collect();
+    }
+    let labels: List<String> = alts.iter_ref().map(|a: &Alternative| a.label.unwrap()).collect();
+    let mut names: List<String> = [];
+    for let mut i = 0; i < labels.len(); i += 1 {
+        let lab = labels[i];
+        if labels.iter_ref().filter(|l| *l == lab).count() == 1 {
+            names.push(lab);
+        } else {
+            let before = labels.iter_ref().take(i).filter(|l| *l == lab).count();
+            names.push(`${lab}${before}`);
+        }
+    }
+    return names;
+}
+
+/// Check if a consumed element matches the expected element at a given skip position.
+/// Returns true only for exact terminal matches (TokenRef or Literal).
+/// Unwraps Labels to compare inner elements.
+pub fn elements_match(consumed: &Element, expected: &Element) -> bool {
+    let exp = unwrap_label(expected);
+    return match consumed {
+        TokenRef(a) => *exp matches { TokenRef(b) && b.name == a.name },
+        Literal(a) => *exp matches { Literal(b) && b.text == a.text },
+        RuleRef(_) | Group(_) | Repeat(_) | Label(_) | Wildcard(_) | Not(_) => false,
+    };
+}

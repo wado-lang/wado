@@ -52,8 +52,10 @@ fn merged_source<S: AsStrSlice>(input: S) -> Grammar {
 
 fn atn_dump_source<S: AsStrSlice>(input: S) -> String {
     let mut merged = merged_source(input);
-    let [lowered, _] = lower_pipeline(&mut merged);
-    return render_atn_dump(&merged, &lowered);
+    let token_kinds = canonicalize_for_analysis(&mut merged);
+    let num_tokens = token_kinds.len();
+    let [lowered, _] = lower_for_analysis(&mut merged, token_kinds);
+    return render_atn_dump(&merged, &lowered, num_tokens);
 }
 
 /// `cmd_dump`'s prologue, whole.

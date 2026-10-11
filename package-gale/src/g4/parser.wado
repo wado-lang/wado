@@ -53,6 +53,7 @@ use {
     INVALID_ESCAPE,
 } from "./lexer.wado";
 use { collect_range } from "../text.wado";
+use { push_unique } from "../list_util.wado";
 use { scan_balanced, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
 use {
     clip_to_scalars,
@@ -565,9 +566,7 @@ impl G4Parser {
                     ),
                 );
             }
-            if !self.imports.contains(&name) {
-                self.imports.push(name);
-            }
+            push_unique(&mut self.imports, name);
             if self.is_kind(G4Token::Comma) {
                 self.advance();
                 continue;

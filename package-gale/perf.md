@@ -160,7 +160,7 @@ each left-recursive rule's answer for the whole parse (`ScanMemo`, in
 `lr_cont` and the gate. The answer is the end and the gate the scan leaves.
 
 A simulator decision inside the walk also reads the ATN caller stack, which the
-key does not hold. The walk hides the frames below it (`AtnState::hide_callers`).
+key does not hold. The walk hides the frames below it (`AtnPredictor::hide_callers`).
 A prediction still undecided when it pops into them reads the whole stack, and
 the walk's answer is then not kept. A left-recursion loop the simulator decides
 reads its callers outside that check, so a grammar with one has no memo.
@@ -346,7 +346,7 @@ Found by reading generated code (2026-09), not yet measured on a benchmark:
   `finish()` would make each wrap O(1).
 - [ ] **`atn_predict` allocates per prediction.** Each call builds a fresh
   `CtxArena` and `ClosureScratch`, and each step a new `AtnKeyMap`, move list
-  and one `AtnConfig` per work item. Keeping the scratch in `AtnState` and
+  and one `AtnConfig` per work item. Keeping the scratch in `AtnPredictor` and
   clearing it would remove most of that.
 - [ ] **The LR scan gate runs before every suffix.** `scan_<rule>_lr_N` re-scans
   the right operand even where the suffix's first token already decides.

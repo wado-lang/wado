@@ -78,7 +78,6 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Write all documentation and comments in clear, simple English.
   - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. Make the code say what it can: rename and decompose until the comment is redundant, then delete it.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
-  - Doc comments (`///`, `//!`): write one on every `pub` item. Say what the item is, not how it works.
   - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
   - Issue references: an issue or pull request in another repository is written fully qualified, `org/repo#num` (`antlr/antlr4#4911`). A bare `#num` means this repository.
   - Timings: no wall-clock seconds in comments or docs. This machine is the fastest one, so write the ratio.
