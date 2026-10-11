@@ -1757,7 +1757,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         this,
                         |e| &mut e.annotate_ctx,
                         walk,
-                        |this| this.walk_trait_body(trait_decl, func),
+                        |this| this.restoring_decls(|this| this.walk_trait_body(trait_decl, func)),
                     )
                 },
             )
@@ -1777,19 +1777,50 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// holder, once with `Self` abstract. The trait answers for its bodies
     /// whether or not an impl inherits them: this walk is what the effect and
     /// purity checks and the language service read.
+    /// Each walk also records what [`Self::abstract_selections`] would, so an
+    /// impl walked after it reads that rather than walking the body again.
     pub(super) fn resolve_trait_bodies(&mut self, trait_decl: &ast::TraitDecl) {
         let def = self.tysys.def_at(trait_decl.id);
-        for func in trait_decl.methods.iter().filter(|m| m.body.is_some()) {
-            self.walk_trait_body(def, func);
+        let bodies: Vec<&Function> = trait_decl
+            .methods
+            .iter()
+            .filter(|m| m.body.is_some())
+            .collect();
+        if bodies.is_empty() {
+            return;
         }
+        self.restoring_decls(|this| {
+            for func in bodies {
+                this.annotate_ctx.abstract_selections = Some(hashmap::IndexMap::default());
+                this.walk_trait_body(def, func);
+                let selections = this
+                    .annotate_ctx
+                    .abstract_selections
+                    .take()
+                    .expect("the walk records into the table it was given");
+                this.abstract_selection_cache
+                    .borrow_mut()
+                    .entry(func.id)
+                    .or_insert_with(|| Rc::new(selections));
+            }
+        });
+    }
+
+    /// Run `walk` over trait bodies, every declaration of which is against the
+    /// abstract `Self`, so none outlives it. An anonymous struct shape is the
+    /// exception: it is interned in the shared type table, so the next sighting
+    /// finds the type and mints nothing.
+    fn restoring_decls(&mut self, walk: impl FnOnce(&mut Self)) {
+        let decls = self.sem.decls.clone();
+        walk(self);
+        let walked_decls = std::mem::replace(&mut self.sem.decls, decls);
+        self.sem.decls.anon_struct_fields = walked_decls.anon_struct_fields;
+        self.sem.decls.pending_anonymous_structs = walked_decls.pending_anonymous_structs;
     }
 
     /// Walk `func`, a body `trait_decl` declares, in the frame
-    /// [`Self::resolve_trait_decl`] gives the trait's signatures. Every
-    /// declaration it writes is against the abstract `Self`, so none outlives
-    /// the walk. An anonymous struct shape is the exception: it is interned in
-    /// the shared type table, so the next sighting finds the type and mints
-    /// nothing.
+    /// [`Self::resolve_trait_decl`] gives the trait's signatures, within
+    /// [`Self::restoring_decls`].
     fn walk_trait_body(&mut self, trait_decl: DefId, func: &Function) {
         let header = self
             .tysys
@@ -1807,7 +1838,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .decl
             .clone();
         let trait_id = self.tysys.resolutions.defs().ast_id(trait_decl);
-        let decls = self.sem.decls.clone();
         {
             let (mut scope, _, next_slot) =
                 self.enter_trait_frame(trait_id, &name, span, &type_params);
@@ -1821,9 +1851,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             scope.walk_fn_body(func, return_type, &mut ctx);
         }
-        let walked_decls = std::mem::replace(&mut self.sem.decls, decls);
-        self.sem.decls.anon_struct_fields = walked_decls.anon_struct_fields;
-        self.sem.decls.pending_anonymous_structs = walked_decls.pending_anonymous_structs;
         self.sem
             .types
             .fn_param_types
