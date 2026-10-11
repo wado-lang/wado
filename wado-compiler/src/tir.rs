@@ -4495,17 +4495,38 @@ impl TypeTable {
     /// [`Self::impl_effect_binding`] for one written type beside the type
     /// that meets it.
     fn bind_rows(&self, written: TypeId, actual: TypeId, rows: &mut EffectRows) {
-        let each = |w: &[TypeId], a: &[TypeId], rows: &mut EffectRows| {
-            for (&w, &a) in w.iter().zip(a) {
-                self.bind_rows(w, a, rows);
+        self.zip_rows(written, actual, &mut |we, ae| {
+            let met: Vec<EffectRef> = ae.iter().filter(|e| !we.contains(e)).cloned().collect();
+            for param in we.iter().filter(|e| e.is_param()) {
+                let row = rows.entry(param.name().to_string()).or_default();
+                for e in &met {
+                    if !row.contains(e) {
+                        row.push(e.clone());
+                    }
+                }
+            }
+        });
+    }
+
+    /// Walk a declared type beside a type that meets it, calling `each` with
+    /// every function type's row in `declared` and the same row in `actual`.
+    pub fn zip_rows(
+        &self,
+        declared: TypeId,
+        actual: TypeId,
+        each: &mut impl FnMut(&[EffectRef], &[EffectRef]),
+    ) {
+        let all = |d: &[TypeId], a: &[TypeId], each: &mut _| {
+            for (&d, &a) in d.iter().zip(a) {
+                self.zip_rows(d, a, each);
             }
         };
-        match (self.get(written), self.get(actual)) {
+        match (self.get(declared), self.get(actual)) {
             (
                 ResolvedType::Function {
-                    params: wp,
-                    return_type: wr,
-                    effects: we,
+                    params: dp,
+                    return_type: dr,
+                    effects: de,
                     ..
                 },
                 ResolvedType::Function {
@@ -4515,28 +4536,20 @@ impl TypeTable {
                     ..
                 },
             ) => {
-                let met: Vec<EffectRef> = ae.iter().filter(|e| !we.contains(e)).cloned().collect();
-                for param in we.iter().filter(|e| e.is_param()) {
-                    let row = rows.entry(param.name().to_string()).or_default();
-                    for e in &met {
-                        if !row.contains(e) {
-                            row.push(e.clone());
-                        }
-                    }
-                }
-                each(wp, ap, rows);
-                each(&[*wr], &[*ar], rows);
+                each(de, ae);
+                all(dp, ap, each);
+                all(&[*dr], &[*ar], each);
             }
             (
-                ResolvedType::Ref(w) | ResolvedType::MutRef(w) | ResolvedType::BuiltinArray(w),
+                ResolvedType::Ref(d) | ResolvedType::MutRef(d) | ResolvedType::BuiltinArray(d),
                 ResolvedType::Ref(a) | ResolvedType::MutRef(a) | ResolvedType::BuiltinArray(a),
-            ) => each(&[*w], &[*a], rows),
+            ) => all(&[*d], &[*a], each),
             _ => {
-                if let (Some(w), Some(a)) = (
-                    self.generic_type_args(written),
+                if let (Some(d), Some(a)) = (
+                    self.generic_type_args(declared),
                     self.generic_type_args(actual),
                 ) {
-                    each(&w, &a, rows);
+                    all(&d, &a, each);
                 }
             }
         }
@@ -7608,20 +7621,26 @@ impl Leaves<'_> {
         if self.erase_rows {
             return Vec::new();
         }
-        let mut out: Vec<EffectRef> = Vec::new();
-        for effect in effects {
-            let replaced = match effect {
-                EffectRef::Param { name } | EffectRef::Var { name, .. } => self.rows.get(name),
-                EffectRef::Concrete { .. } => None,
-            };
-            for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
-                if !out.contains(e) {
-                    out.push(e.clone());
-                }
+        substitute_row(effects, self.rows)
+    }
+}
+
+/// `effects` with each parameter or variable `rows` names replaced by its row,
+/// each effect once.
+pub fn substitute_row(effects: &[EffectRef], rows: &EffectRows) -> Vec<EffectRef> {
+    let mut out: Vec<EffectRef> = Vec::new();
+    for effect in effects {
+        let replaced = match effect {
+            EffectRef::Param { name } | EffectRef::Var { name, .. } => rows.get(name),
+            EffectRef::Concrete { .. } => None,
+        };
+        for e in replaced.map_or(std::slice::from_ref(effect), Vec::as_slice) {
+            if !out.contains(e) {
+                out.push(e.clone());
             }
         }
-        out
     }
+    out
 }
 
 /// Substitution-key base for method-level type params: past the highest

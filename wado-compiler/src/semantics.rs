@@ -131,7 +131,11 @@ impl Semantics {
     pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
         self.types.redirect_effect_vars(solved);
         if let Some(state) = &self.state {
-            state.tysys.type_table.borrow_mut().redirect_effect_vars(solved);
+            state
+                .tysys
+                .type_table
+                .borrow_mut()
+                .redirect_effect_vars(solved);
         }
     }
 

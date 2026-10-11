@@ -987,8 +987,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348). A
                 // tuple keeps the `[a,b]` spelling every other namespace gives it.
-                let type_arg_names: Vec<FqTypeName> =
-                    type_args.iter().map(|t| tt.fq_type_name_rowless(*t)).collect();
+                let type_arg_names: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|t| tt.fq_type_name_rowless(*t))
+                    .collect();
                 let base = if tt.is_tuple(method_impl_type_id) {
                     FqTypeName::tuple(Vec::new())
                 } else {

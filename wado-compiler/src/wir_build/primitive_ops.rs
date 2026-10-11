@@ -855,7 +855,7 @@ impl FunctionTranslator<'_, '_> {
 
         // Get the raw GC array type. Element name must match the
         // key `register_raw_array_type` uses
-        // (`mangle_type_arg_for_generic`, qualifies Struct /
+        // (`mangle_type_arg_rowless`, qualifies Struct /
         // GenericInstance args by `ModuleSource`).
         let elem_name = self.type_table.mangle_type_arg_rowless(element_type_id);
         let raw_array_type = self

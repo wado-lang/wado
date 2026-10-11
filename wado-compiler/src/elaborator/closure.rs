@@ -333,7 +333,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
         let mut table = self.tysys.type_table.borrow_mut();
         let row = vec![table.mint_effect_var()];
-        let func_type = table.make_function_with_mut(any_mutating_capture, param_types, return_type, row);
+        let func_type =
+            table.make_function_with_mut(any_mutating_capture, param_types, return_type, row);
         drop(table);
 
         ctx.source_bindings.extend(closure_ctx.source_bindings);

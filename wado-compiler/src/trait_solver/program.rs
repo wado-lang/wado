@@ -50,8 +50,8 @@ pub enum SolverType {
         /// empty for one that declares no parameters.
         args: Vec<SolverType>,
     },
-    /// A function type's row holding an effect parameter or a variable the
-    /// effect check solves: it stands for whatever row meets it.
+    /// A function type's row holding an effect parameter: it stands for
+    /// whatever row meets it.
     AnyRow,
 }
 
