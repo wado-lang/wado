@@ -1,0 +1,27 @@
+// A closure's row travels with the value, not only with the literal: moving it
+// into a slot whose function type declares less is the same escape as writing
+// the literal there (issue #1087), whether the slot is a binding, a parameter,
+// a cast's target or a list's element.
+use { println, Stdout } from "core:cli";
+
+fn pure_caller(f: fn()) {
+    f();
+}
+
+fn leak() {
+    let g = || { println("x"); };
+    let inner: fn() = g;
+    inner();
+    pure_caller(g);
+    let cast = g as fn();
+    cast();
+    let listed: List<fn()> = [g];
+    listed[0]();
+}
+
+export fn run() with Stdout {
+    leak();
+}
+
+__DATA__
+{"compile_error": "this function value performs effect 'Stdout', which the function type it is expected to be does not declare", "compile_error_count": 4}

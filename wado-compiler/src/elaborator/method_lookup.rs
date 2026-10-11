@@ -95,7 +95,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn impl_receiver(&self, header: &ImplHeader, type_id: TypeId) -> FqTypeName {
         self.tysys.fq_receiver_of_impl(
             type_id,
-            self.tysys.impl_is_concrete_instantiation(&header.ty),
+            self.tysys
+                .impl_is_concrete_instantiation(&header.ty, &header.type_params),
         )
     }
 
@@ -333,20 +334,37 @@ impl TypeSystem {
     }
 
     /// Whether every head inside the impl target argument `arg` names a
-    /// declaration, so it stands for one type rather than whatever the receiver supplies.
-    pub(crate) fn arg_pins(&self, arg: &Type) -> bool {
-        let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a));
+    /// declaration, so it stands for one type rather than whatever the receiver
+    /// supplies. A parameter of `type_params` bounded by a function type is
+    /// that type, so it pins where the type does.
+    pub(crate) fn arg_pins(&self, arg: &Type, type_params: &[ast::GenericParam]) -> bool {
+        let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a, type_params));
         match arg {
             // A reference pins what it refers to; the kind is structural.
-            Type::Reference(inner) | Type::MutReference(inner) => self.arg_pins(inner),
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                self.arg_pins(inner, type_params)
+            }
             // `[]` is the unit type and pins by itself.
             Type::Tuple(elems) => nested_pin(elems),
             // A function type is spelled by its whole shape, so a head in the
             // parameter list names as much as the return type does.
-            Type::Function(ft) => nested_pin(&ft.params) && self.arg_pins(&ft.return_type),
+            Type::Function(ft) => {
+                nested_pin(&ft.params) && self.arg_pins(&ft.return_type, type_params)
+            }
             Type::Generic(g) => self.head_is_declared(arg) && nested_pin(&g.args),
             Type::NamespacedGeneric(ns) => self.head_is_declared(arg) && nested_pin(&ns.args),
-            Type::Named(_) => self.head_is_declared(arg),
+            Type::Named(named) => {
+                self.head_is_declared(arg)
+                    || type_params
+                        .iter()
+                        .filter(|param| param.name == named.name)
+                        .flat_map(|param| &param.bounds)
+                        .find_map(|bound| bound.fn_signature.as_deref())
+                        .is_some_and(|signature| {
+                            nested_pin(&signature.params)
+                                && self.arg_pins(&signature.return_type, type_params)
+                        })
+            }
             // A pack, an `_`, a parse error: nothing to name.
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
         }
@@ -1935,7 +1953,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A concrete generic instantiation trait impl (`impl Tag for
         // List<u8>`) yields a per-instantiation concrete method, called
         // directly (no monomorphization), living in the impl's module.
-        let impl_is_concrete = self.tysys.impl_is_concrete_instantiation(&header.ty);
+        let impl_is_concrete = self
+            .tysys
+            .impl_is_concrete_instantiation(&header.ty, &header.type_params);
 
         // Save trait context for this impl block scope. We use an inherited
         // scope (saves the full ctx via clone) and then selectively clear
@@ -3536,7 +3556,8 @@ impl TypeSystem {
             ),
             impl_block: Some(impl_ref.0),
             impl_module: Some(self.impl_block_module_source(impl_ref)),
-            from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
+            from_concrete_impl: self
+                .impl_is_concrete_instantiation(&header.ty, &header.type_params),
             inherent_visibility: Some(method_header.visibility),
             ..MethodInfo::of_sig(sig, instantiated)
         })

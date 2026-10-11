@@ -65,11 +65,20 @@ effect row is not yet known, and the effect check solves it.
   parameter or a variable meet any row. The trait solver does so for a
   parameter, and reads a variable as the empty row, so a closure literal
   selects one impl rather than every impl of its signature.
-- The effect check solves the variables, walking a body until no solution
-  changes: an outer call's arguments are read before the inner call that
-  minted their variable. A call's variable is what its parameter resolved to
-  there, read off by setting the callee's declared return type beside the
-  call's type. A closure's is what its body performs.
+- Where the type check admits a value whose row holds a variable into a slot,
+  it records the move as a flow: the value's row beside the slot's. A binding,
+  an argument, a cast, an element, a branch's value are all slots.
+- The effect check solves the variables. It checks a call after its
+  arguments, so a variable a call among them mints is solved before the call
+  reads it. A call's variable is what its parameter resolved to there, read off
+  by setting the callee's declared return type beside the call's type. A
+  closure's is what its body performs, wherever the literal is written. A flow
+  into a slot whose row holds a variable widens that variable. A flow into a
+  row that holds none is bounded by it: what the value performs beyond it is
+  an error at the move.
+- A solution only grows. The check walks a body again only when a solution
+  it read grew after the read, so a body whose solutions arrive before they are
+  read is walked once.
 - Effects carry no representation: a function value is one whatever its row.
   So a type's own arguments are spelled and interned without rows, and two
   instances that differ only there are one struct. A function type standing
@@ -113,4 +122,6 @@ effect row is not yet known, and the effect check solves it.
   the effect check has solved its row, and takes the row to be empty. Where
   impls exist for the same signature with and without an effect, a closure
   performing that effect is dispatched to the pure one, while the effect check
-  reads the one its row names.
+  reads the one its row names. A bound naming an effect outright
+  (`G: fn() with Stderr`) rejects a closure literal that performs it: only a
+  value annotated with that row meets it.

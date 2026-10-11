@@ -5,7 +5,7 @@
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TupleSlot, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -265,6 +265,51 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
+/// Call `each` with every function type's row in `expected` and the same row
+/// in `actual`, where a value of `actual` hands its row on: the value itself,
+/// a referent, an element, a type argument, a function's result. A function's
+/// parameters are left out: there the row flows the other way.
+fn covariant_rows(
+    table: &TypeTable,
+    expected: TypeId,
+    actual: TypeId,
+    each: &mut impl FnMut(&[EffectRef], &[EffectRef]),
+) {
+    let expected = table.representation_head(expected);
+    let actual = table.representation_head(actual);
+    match (table.get(expected), table.get(actual)) {
+        (
+            ResolvedType::Function {
+                return_type: expected_ret,
+                effects: expected_row,
+                ..
+            },
+            ResolvedType::Function {
+                return_type: actual_ret,
+                effects: actual_row,
+                ..
+            },
+        ) => {
+            each(expected_row, actual_row);
+            covariant_rows(table, *expected_ret, *actual_ret, each);
+        }
+        (
+            ResolvedType::Ref(e) | ResolvedType::MutRef(e) | ResolvedType::BuiltinArray(e),
+            ResolvedType::Ref(a) | ResolvedType::MutRef(a) | ResolvedType::BuiltinArray(a),
+        ) => covariant_rows(table, *e, *a, each),
+        _ => {
+            if let (Some(e), Some(a)) = (
+                table.generic_type_args(expected),
+                table.generic_type_args(actual),
+            ) {
+                for (&e, &a) in e.iter().zip(&a) {
+                    covariant_rows(table, e, a, each);
+                }
+            }
+        }
+    }
+}
+
 /// Two tuple types over the same packs are the same type only when their
 /// layouts line up. Each pack stands for the same arity on both sides, so every
 /// other element has a settled offset: `[..R, L]` is never `[..R]`, never
@@ -403,7 +448,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(mismatch(payload));
             return;
         }
+        self.record_row_flows(actual, expected, span);
         self.reject_pack_layout_mismatch(actual, expected, span);
+    }
+
+    /// [`check_assignable`], recording what [`Self::record_row_flows`] says
+    /// where the value is admitted.
+    pub(super) fn assignable(&self, actual: TypeId, expected: TypeId, span: Span) -> TypeCheckResult {
+        let result = check_assignable(actual, expected, &self.tysys.type_table.borrow());
+        if result != TypeCheckResult::Incompatible {
+            self.record_row_flows(actual, expected, span);
+        }
+        result
+    }
+
+    /// Record each row of `actual` holding an effect variable beside the row
+    /// of `expected` it moves into. The type check admits a variable
+    /// unbounded, since only the effect check knows what it stands for; the
+    /// effect check bounds it there.
+    pub(super) fn record_row_flows(&self, actual: TypeId, expected: TypeId, span: Span) {
+        let module = self.current_module_source.source_path();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let mut flows = Vec::new();
+        covariant_rows(&table, expected, actual, &mut |into, from| {
+            if from.iter().any(EffectRef::is_var) && from != into {
+                flows.push(RowFlow {
+                    from: from.to_vec(),
+                    into: into.to_vec(),
+                    span,
+                    module: module.clone(),
+                });
+            }
+        });
+        for flow in flows {
+            table.record_row_flow(flow);
+        }
     }
 
     /// Reject a value carrying no pack where one element of a pack, or a tuple

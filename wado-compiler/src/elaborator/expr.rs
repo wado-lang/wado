@@ -2414,10 +2414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// expected result type; the same rule lives inline in
     /// `resolve_match_expr` for arm bodies.
     pub(super) fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
-        let result = {
-            let tt = self.tysys.type_table.borrow();
-            check_assignable(actual, expected, &tt)
-        };
+        let result = self.assignable(actual, expected, span);
         if matches!(result, TypeCheckResult::Incompatible) {
             let (expected_name, found_name) = self
                 .tysys
@@ -2890,10 +2887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
             for &(arm_type, arm_span) in &arm_bodies {
-                let result = {
-                    let tt = self.tysys.type_table.borrow();
-                    check_assignable(arm_type, type_id, &tt)
-                };
+                let result = self.assignable(arm_type, type_id, arm_span);
                 if matches!(result, TypeCheckResult::Incompatible) {
                     let (expected_name, found_name) = self
                         .tysys
@@ -3637,6 +3631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return target_type;
         }
+        self.record_row_flows(source_type, target_type, cast.span);
 
         // Reify rebuilds the `Cast` from `cast.expr` + the target
         // type recorded in `expression_types[cast.id]`; the char-cast

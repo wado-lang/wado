@@ -1057,6 +1057,9 @@ pub struct TypeTable {
     /// Whether the effect check has solved the variables, after which a use
     /// mints none: no check is left to solve it.
     effect_vars_solved: bool,
+    /// Where a function value whose row holds a variable moved into a slot,
+    /// which the type check admits unbounded and the effect check bounds.
+    row_flows: IndexSet<RowFlow>,
     /// Registry of stdlib items the compiler is allowed to reference
     /// (Box, Option, Default, `push_str`, …). Populated during the
     /// annotate pass from `#[compiler_item("...")]` attributes; see
@@ -1277,6 +1280,7 @@ impl TypeTable {
             infer_var_names: IndexMap::default(),
             next_effect_var: 0,
             effect_vars_solved: false,
+            row_flows: IndexSet::default(),
             compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
@@ -3508,6 +3512,14 @@ impl TypeTable {
         self.intern(ResolvedType::InferVar(id))
     }
 
+    pub fn record_row_flow(&mut self, flow: RowFlow) {
+        self.row_flows.insert(flow);
+    }
+
+    pub fn row_flows(&self) -> &IndexSet<RowFlow> {
+        &self.row_flows
+    }
+
     /// A fresh effect row for the effect check to solve. Ids are unique across
     /// the program, which the check solves as one.
     pub fn mint_effect_var(&mut self) -> EffectRef {
@@ -5006,6 +5018,16 @@ impl TypeTable {
         if rows.is_empty() {
             return;
         }
+        // A solution may name another variable, which stands for what that one
+        // is solved to, or for nothing where it is solved nowhere.
+        let rows: EffectRows = rows
+            .iter()
+            .map(|(var, solution)| {
+                let mut solved = solve_row(solution, &rows, &mut |_| {});
+                solved.retain(|effect| !effect.is_var());
+                (var.clone(), solved)
+            })
+            .collect();
         for id in ids {
             if self.redirects.get(id).is_some() {
                 continue;
@@ -7548,6 +7570,17 @@ static NO_ROWS: EffectRows = IndexMap::with_hasher(FxBuildHasher);
 /// Effect parameters and variables, by name, and the row each stands for.
 pub type EffectRows = IndexMap<String, Vec<EffectRef>>;
 
+/// A function value with row `from` moved into a slot whose function type has
+/// row `into`: what the value performs must be what the slot admits.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RowFlow {
+    pub from: Vec<EffectRef>,
+    pub into: Vec<EffectRef>,
+    pub span: Span,
+    /// The source path of the module the move is written in.
+    pub module: String,
+}
+
 /// Where a type's spelling writes its function types' rows. A function value
 /// is one whatever its row, so an instance whose arguments differ only in
 /// rows is one instance and answers one name; a function type standing alone
@@ -7623,6 +7656,41 @@ impl Leaves<'_> {
         }
         substitute_row(effects, self.rows)
     }
+}
+
+/// `effects` with each variable `rows` solves replaced by its solution, and each
+/// variable in that solution in turn, each effect once. `read` sees every
+/// variable looked up; one with no solution stays as it is.
+pub fn solve_row(
+    effects: &[EffectRef],
+    rows: &EffectRows,
+    read: &mut impl FnMut(&str),
+) -> Vec<EffectRef> {
+    fn expand(
+        effects: &[EffectRef],
+        rows: &EffectRows,
+        read: &mut impl FnMut(&str),
+        expanded: &mut IndexSet<String>,
+        out: &mut Vec<EffectRef>,
+    ) {
+        for effect in effects {
+            if let EffectRef::Var { name, .. } = effect {
+                read(name);
+                if let Some(solution) = rows.get(name) {
+                    if expanded.insert(name.clone()) {
+                        expand(solution, rows, read, expanded, out);
+                    }
+                    continue;
+                }
+            }
+            if !out.contains(effect) {
+                out.push(effect.clone());
+            }
+        }
+    }
+    let mut out = Vec::new();
+    expand(effects, rows, read, &mut IndexSet::default(), &mut out);
+    out
 }
 
 /// `effects` with each parameter or variable `rows` names replaced by its row,

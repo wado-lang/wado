@@ -1344,7 +1344,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// question: whether an impl reaches a receiver reads its recorded target.
     pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
         let mut block = self.enter_impl_params_scope(impl_block);
-        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = block
+            .tysys
+            .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params);
         block.record_impl_sig(impl_block, impl_is_concrete);
     }
 
@@ -1354,7 +1356,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let impl_def = self.tysys.def_at(impl_block.id);
         let mut block = self.enter_impl_params_scope(impl_block);
 
-        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = block
+            .tysys
+            .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params);
 
         if impl_block.is_synthesize_request {
             return;
@@ -2887,12 +2891,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
 impl TypeSystem {
     /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
-    /// [i32, i32]`): every target argument pins a position (`arg_pins`).
-    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
+    /// [i32, i32]`): every target argument pins a position (`arg_pins`), a
+    /// parameter of `type_params` an `fn` bound fixes among them.
+    pub(super) fn impl_is_concrete_instantiation(
+        &self,
+        impl_ty: &ast::Type,
+        type_params: &[ast::GenericParam],
+    ) -> bool {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.arg_pins(a))
+        !args.is_empty() && args.iter().all(|a| self.arg_pins(a, type_params))
     }
 }
 

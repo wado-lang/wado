@@ -757,9 +757,10 @@ fn pure_caller(g: fn mut(i32) with Stdout) {
 Where a value can also be written back through the slot, as an element of a
 list behind `&mut`, the rows must be equal.
 
-A closure literal's type carries the effects its body performs. Where a
-function type is expected, the body may perform only what that type's row
-holds:
+A closure literal's type carries the effects its body performs, and the value
+carries them wherever it moves. Where it moves into a slot of a function type,
+a binding, a parameter, a cast's target or an element, it may perform only what
+that type's row holds:
 
 <!-- {"fixture":"error_closure_beyond_expected_fn_type.wado"} -->
 
