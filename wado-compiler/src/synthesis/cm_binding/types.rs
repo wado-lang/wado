@@ -156,8 +156,12 @@ impl LiftContext<'_> {
     /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
     /// a name rather than following a reference site.
     pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
+        self.cm_decl_at(&self.type_table.borrow(), source, name)
+    }
+
+    /// [`Self::cm_decl`] in `type_table`, for a caller already holding it.
+    fn cm_decl_at(&self, type_table: &TypeTable, source: &str, name: &str) -> DefId {
         let module_source = self.module_source_for(source);
-        let type_table = self.type_table.borrow();
         type_table
             .cm_decl_in(name, &module_source)
             // A lib-local type defined in a submodule: the interface FQ maps to
@@ -190,10 +194,7 @@ impl LiftContext<'_> {
                         .get_struct_fields_by_source(&src, &n.name)
                         .is_some()
                     {
-                        let ms = self.module_source_for(&src);
-                        let def = tt
-                            .cm_decl_in(&n.name, &ms)
-                            .expect("the declaration this type names exists");
+                        let def = self.cm_decl_at(tt, &src, &n.name);
                         return tt.make_struct(StructDef::Decl(def));
                     }
                     if self
@@ -201,10 +202,7 @@ impl LiftContext<'_> {
                         .get_variant_cases_by_source(&src, &n.name)
                         .is_some()
                     {
-                        let ms = self.module_source_for(&src);
-                        let def = tt
-                            .cm_decl_in(&n.name, &ms)
-                            .expect("the declaration this type names exists");
+                        let def = self.cm_decl_at(tt, &src, &n.name);
                         return tt.make_variant(def);
                     }
                 }

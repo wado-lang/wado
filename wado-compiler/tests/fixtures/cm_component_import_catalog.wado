@@ -140,6 +140,13 @@ test "map in the indirect params buffer" {
     assert CmCatalog::map_in_params_buffer(m, Option::Some(7), 9).wait() == 30709;
 }
 
+// Past sixteen flat params a sync call writes them to one buffer, on both
+// sides of the boundary: this one lowers into it, the catalog lifts from it.
+test "sync params past the flat limit cross in one buffer" {
+    let got = CmCatalog::past_flat_params(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, "wide");
+    assert got == "wide:49:16110";
+}
+
 test "async option within the flat params" {
     assert CmCatalog::option_passed_flat(Option::Some(4)).wait() == 5;
     assert CmCatalog::option_passed_flat(null).wait() == 1;

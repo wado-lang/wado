@@ -1,6 +1,30 @@
 use { Benchmark, format_rate } from "core:benchmark";
 use { MonotonicClock } from "wasi:clocks";
 
+interface Tally {
+    fn add();
+}
+
+struct Counted {
+    n: i32,
+}
+
+impl Tally for Counted {
+    fn add(&mut self) {
+        self.n += 1;
+        resume ();
+    }
+}
+
+test "a phase may perform effects, the caller handling them" {
+    let mut counted = Counted { n: 0 };
+    with Tally => &mut counted do {
+        let mut b = Benchmark { name: "effects", iterations: 3, warmup: 0 };
+        b.run("tally", || Tally::add());
+    };
+    assert counted.n == 3;
+}
+
 test "Benchmark literal defaults" {
     let b = Benchmark { name: "smoke" };
     assert b.iterations == 0;

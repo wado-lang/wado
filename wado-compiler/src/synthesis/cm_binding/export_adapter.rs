@@ -33,8 +33,7 @@ use super::cm_free::{
     CmShapeContext, FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value,
 };
 use super::import_adapter::make_binding_function;
-use super::lift::synthesize_lift_list;
-use super::lift::synthesize_lift_map;
+use super::lift::{lift_string_and_free, materialize_if_needed, synthesize_lift_into};
 use super::lower::buffer_bytes;
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
@@ -45,6 +44,7 @@ use super::types::{
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 use crate::ast::Visibility;
+use crate::cm_abi::layout_tuple_with_registry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
@@ -753,33 +753,15 @@ pub(super) fn synthesize_lift_from_flat_params(
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
-            // The caller lowered it there through *our* `realloc`, so the buffer
-            // is the guest's to release once it has been copied onto the GC
-            // heap. Nested strings are released by the lift site that reads
-            // them; this arm is the only top-level one.
-            let ptr = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
-            let len = local_ref(flat_param_locals[1], "$p", TypeTable::I32);
-            let lifted_local = alloc_local(next_local, locals, target_type_id);
-            stmts.push(let_stmt(
-                "$lifted_string",
-                lifted_local,
+            let lifted = lift_string_and_free(
+                local_ref(flat_param_locals[0], "$p", TypeTable::I32),
+                local_ref(flat_param_locals[1], "$p", TypeTable::I32),
                 target_type_id,
-                internal_call(
-                    CompilerItem::MemoryToGcString.attr_name(),
-                    vec![ptr.clone(), len.clone()],
-                    target_type_id,
-                ),
-            ));
-            stmts.push(if_stmt(
-                binary(TirBinaryOp::Gt, len.clone(), i32_const(0), TypeTable::BOOL),
-                block(vec![expr_stmt(builtin_call(
-                    "realloc",
-                    vec![ptr, len, i32_const(1), i32_const(0)],
-                    TypeTable::I32,
-                ))]),
-                None,
-            ));
-            (local_ref(lifted_local, "$lifted_string", target_type_id), 2)
+                next_local,
+                stmts,
+                locals,
+            );
+            (lifted, 2)
         }
         Type::Named(_)
             if matches!(
@@ -902,35 +884,16 @@ pub(super) fn synthesize_lift_from_flat_params(
             }
         }
         Type::Generic(generic) => match generic.name.as_str() {
-            n if n == names.array => {
-                // list<T> flat ABI: (ptr: i32, len: i32) — elements in linear memory.
-                // Write ptr/len to a temp memory block so we can reuse synthesize_lift
+            n if n == names.array || names.is_tree_map(generic) => {
+                // list<T> / map<K, V> flat ABI: (ptr: i32, len: i32), the
+                // elements in linear memory. Spilled to a temp block so the
+                // memory lift reads them.
                 let tmp_ptr_local =
                     spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
-                // Lift into the user function's exact `List<T>` type
-                // (`target_type_id`), not a rebuilt one, so a shared stdlib
-                // element type (e.g. `InputFile`) does not resolve to a second
-                // GC `TypeId` and mismatch the parameter.
-                let lifted = synthesize_lift_list(
-                    &generic.args[0],
+                let lifted = synthesize_lift_into(
+                    ty,
                     local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
-                    Some(target_type_id),
-                    next_local,
-                    stmts,
-                    locals,
-                    &lift_ctx,
-                );
-                free_ptr_len_temp(tmp_ptr_local, stmts);
-                (lifted, 2)
-            }
-            _ if names.is_tree_map(generic) => {
-                let tmp_ptr_local =
-                    spill_ptr_len_to_temp(flat_param_locals, next_local, stmts, locals);
-                let lifted = synthesize_lift_map(
-                    &generic.args[0],
-                    &generic.args[1],
-                    local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
-                    Some(target_type_id),
+                    target_type_id,
                     next_local,
                     stmts,
                     locals,
@@ -1378,6 +1341,71 @@ fn lift_variant_from_flat_params(
     )
 }
 
+/// The adapter parameters and call arguments of an export whose parameters
+/// arrive in memory: one `$params` pointer, each parameter lifted from its
+/// offset in the tuple layout, and the buffer released once all are lifted.
+/// The caller allocated it through this component's `realloc`.
+fn build_spilled_export_params(
+    user_func_ref: &TirFunction,
+    world_params: &[(String, Type)],
+    lift_ctx: LiftContext<'_>,
+    body_stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
+    let params = vec![TirParam {
+        name: "$params".to_string(),
+        type_id: TypeTable::I32,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span: synth_span(),
+    }];
+    locals.push(param_local("$params", TypeTable::I32, false));
+    let mut next_local = 1;
+    let base = || local_ref(0, "$params", TypeTable::I32);
+    let types: Vec<Type> = world_params.iter().map(|(_, ty)| ty.clone()).collect();
+    let layout = layout_tuple_with_registry(&types, lift_ctx.cm_interface_registry);
+    assert_eq!(
+        types.len(),
+        user_func_ref.params.len(),
+        "an export lifts one value per parameter"
+    );
+    let mut args = Vec::with_capacity(types.len());
+    for ((ty, offset), param) in types.iter().zip(&layout.offsets).zip(&user_func_ref.params) {
+        let addr = if *offset == 0 {
+            base()
+        } else {
+            binary_add(base(), i32_const(*offset as i32))
+        };
+        let lifted = synthesize_lift_into(
+            ty,
+            addr,
+            param.type_id,
+            &mut next_local,
+            body_stmts,
+            locals,
+            &lift_ctx,
+        );
+        args.push(materialize_if_needed(
+            lifted,
+            &mut next_local,
+            body_stmts,
+            locals,
+        ));
+    }
+    body_stmts.push(expr_stmt(builtin_call(
+        "realloc",
+        vec![
+            base(),
+            i32_const(layout.size as i32),
+            i32_const(layout.align as i32),
+            i32_const(0),
+        ],
+        TypeTable::I32,
+    )));
+    (params, args, next_local)
+}
+
 /// Build an export binding's adapter parameters and call arguments — the shared
 /// prelude of [`synthesize_export_binding`], run whichever
 /// [`ExportReturnStrategy`] follows. Lifts the flat CM params back to Wado-typed
@@ -1391,6 +1419,18 @@ fn build_export_adapter_params(
     body_stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
 ) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
+    if lift_ctx
+        .cm_interface_registry
+        .params_in_buffer(world_params.iter().map(|(_, ty)| ty), false)
+    {
+        return build_spilled_export_params(
+            user_func_ref,
+            world_params,
+            lift_ctx,
+            body_stmts,
+            locals,
+        );
+    }
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, lift_ctx.type_table);
     if needs_lifting {
         let flat_param_types: Vec<cm_abi::CmValType> = world_params

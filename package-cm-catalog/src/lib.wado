@@ -650,6 +650,33 @@ export async fn map_in_params_buffer(m: TreeMap<String, u32>, o: Option<u8>, tai
     task return total * 10000 + o.unwrap_or(0) as u32 * 100 + tail as u32;
 }
 
+// Seventeen flat params put a sync call past the sixteen it passes directly,
+// so the caller writes them all to one buffer and passes its address. Each
+// param gets a band of its own, so one slot read wrong shows in the total.
+export fn past_flat_params(
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+    e: u8,
+    f: u8,
+    g: u8,
+    h: u8,
+    i: u8,
+    j: u8,
+    k: u8,
+    l: u8,
+    m: u8,
+    n: u8,
+    o: u8,
+    p: u8,
+    name: String,
+) -> String {
+    let small: u64 = a as u64 + b as u64 * 2 + c as u64 * 4 + d as u64 * 8;
+    let rest: u64 = e as u64 + f as u64 + g as u64 + h as u64 + i as u64 + j as u64 + k as u64 + l as u64 + m as u64 + n as u64 + o as u64 + p as u64 * 1000;
+    return `${name}:${small}:${rest}`;
+}
+
 // Within four flat params an async call passes them directly, `Option` included.
 export async fn option_passed_flat(o: Option<u32>) -> u32 {
     task return o.unwrap_or(0) + 1;
