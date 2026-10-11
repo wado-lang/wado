@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791724809078,
+  "lastUpdate": 1791731697735,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66277,6 +66277,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf0c69a1abaa2a05cfe7436ad57827679e1ef45e"
         },
         "date": 1791724808391,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7200061384890fbdec4d63692e9bb6878350a7f8",
+          "message": "Merge pull request #2330 from wado-lang/ccr-9fb4fe02-uiokqj\n\nfeat: `contract` clauses and the `unchecked` call marker",
+          "timestamp": "2026-10-11T23:56:08+09:00",
+          "tree_id": "f8f8ba051a4f2d2ec7b91aa3114a24da0538f9b1",
+          "url": "https://github.com/wado-lang/wado/commit/7200061384890fbdec4d63692e9bb6878350a7f8"
+        },
+        "date": 1791731696824,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
