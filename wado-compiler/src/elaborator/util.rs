@@ -218,7 +218,7 @@ impl SettledPattern {
                     TirLiteralPattern::Bool(_)
                     | TirLiteralPattern::String(_)
                     | TirLiteralPattern::Null => {
-                        unreachable!("a bool literal is no point on a line")
+                        unreachable!("only an integer or `char` literal keys a point")
                     }
                 };
                 (key, key)

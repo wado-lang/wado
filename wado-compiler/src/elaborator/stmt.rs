@@ -2070,8 +2070,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // allocate their own locals (walk-order parity) but the scope
                 // entries below are remapped to the first's.
                 for (i, alt) in alternatives.iter().enumerate().skip(1) {
-                    let mut alt_bindings =
-                        self.resolve_if_pattern_inner(alt, scrutinee_type, ctx, span, site, ref_binding);
+                    let mut alt_bindings = self.resolve_if_pattern_inner(
+                        alt,
+                        scrutinee_type,
+                        ctx,
+                        span,
+                        site,
+                        ref_binding,
+                    );
                     alt_bindings.sort_by(|a, b| a.0.cmp(&b.0));
 
                     // Validate same names and types

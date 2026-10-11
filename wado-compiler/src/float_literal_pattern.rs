@@ -68,7 +68,8 @@ impl Sites {
             return;
         };
         if !self.waived {
-            self.found.extend(shown.into_iter().map(|shown| (shown, span)));
+            self.found
+                .extend(shown.into_iter().map(|shown| (shown, span)));
         }
     }
 
@@ -93,7 +94,8 @@ impl AstVisitor for Sites {
     /// A `let`'s own attributes waive its pattern, which the walk reaches
     /// before them.
     fn visit_stmt(&mut self, stmt: &Stmt) {
-        let waives = matches!(stmt, Stmt::Let(s) if attrs_allow(&s.attrs, lint::FLOAT_LITERAL_PATTERN));
+        let waives =
+            matches!(stmt, Stmt::Let(s) if attrs_allow(&s.attrs, lint::FLOAT_LITERAL_PATTERN));
         self.waiving(waives, |walk| walk_stmt(walk, stmt));
     }
 
