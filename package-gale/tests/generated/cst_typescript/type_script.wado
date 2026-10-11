@@ -1344,7 +1344,7 @@ global ATN_READS_HIDDEN: i32 = -6;
 global CTX_EMPTY: i32 = 0;
 global CTX_UNKNOWN: i32 = 1;
 
-internal struct AtnState {
+internal struct AtnPredictor {
     internal stack: List<i32>,
     floor: i32,
     reach: i32,
@@ -1361,9 +1361,9 @@ internal struct AtnFloor {
     reach: i32,
 }
 
-impl AtnState {
-    internal fn new() -> AtnState {
-        return AtnState {
+impl AtnPredictor {
+    internal fn new() -> AtnPredictor {
+        return AtnPredictor {
             stack: [],
             floor: 0,
             reach: 0,
@@ -2102,7 +2102,7 @@ internal global ATN_NO_DISABLED: List<i32> = [];
 internal fn atn_predict_once(
     sim: &AtnSim,
     decision: i32,
-    atn: &mut AtnState,
+    atn: &mut AtnPredictor,
     tokens: &Array<i32>,
     pos: i32,
     eof: i32,
@@ -5643,7 +5643,7 @@ pub struct Parser {
     failed_expected: List<i32>,
     recovery_pos: i32,
     recovered_failures: List<[NodeKind, List<i32>]>,
-    atn: AtnState,
+    atn: AtnPredictor,
     atn_ret_pending: i32,
     b: TreeBuilder,
     diagnostics: List<Diagnostic>,
@@ -5662,7 +5662,7 @@ fn kind_names(kinds: &List<i32>) -> List<String> {
 impl Parser {
     fn new(tokens: TokenStream) -> Parser {
         let kinds = tokens.kinds.to_array();
-        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], atn: AtnState::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars), memo: ScanMemo::new(kinds.len()) };
+        return Parser { tokens, kinds, pos: 0, pending: null, recovering: false, speculating: false, max_errors: i32::MAX, site: -1, sites: [], failed_expected: [], recovery_pos: -1, recovered_failures: [], atn: AtnPredictor::new(), atn_ret_pending: -1, b: TreeBuilder::with_capacity(tokens.len() * 4), diagnostics: [], line_starts: line_starts(tokens.chars), memo: ScanMemo::new(kinds.len()) };
     }
 
     pub fn emit(&mut self, s: String) {
@@ -6065,7 +6065,7 @@ impl Parser {
     }
 }
 
-fn scan_initializer(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_initializer(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Assign { return -1; }
     pos += 1;
@@ -6076,7 +6076,7 @@ fn scan_initializer(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return pos;
 }
 
-fn scan_binding_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_binding_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     sg_83_done: {
         let sgk_83 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6102,7 +6102,7 @@ fn scan_binding_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_type_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LessThan { return -1; }
     pos += 1;
@@ -6118,7 +6118,7 @@ fn scan_type_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(349);
     pos = scan_type_parameter(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_1, 16, follow));
@@ -6143,7 +6143,7 @@ fn scan_type_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_type_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6175,7 +6175,7 @@ fn scan_type_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return -1;
 }
 
-fn scan_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Extends { return -1; }
     pos += 1;
@@ -6186,7 +6186,7 @@ fn scan_constraint(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
     return pos;
 }
 
-fn scan_type_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LessThan { return -1; }
     pos += 1;
@@ -6202,7 +6202,7 @@ fn scan_type_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(401);
     pos = scan_type_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_4, 16, follow));
@@ -6227,7 +6227,7 @@ fn scan_type_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_type_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(416);
@@ -6238,7 +6238,7 @@ fn scan_type_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return pos;
 }
 
-fn scan_type_(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6276,7 +6276,7 @@ fn scan_type_(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut Scan
     return -1;
 }
 
-fn scan_union_or_intersection_or_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_union_or_intersection_or_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(445);
     pos = scan_primary_type(tokens, pos, atn, memo, follow, 0);
@@ -6285,7 +6285,7 @@ fn scan_union_or_intersection_or_primary_type_atom(tokens: &Array<i32>, pos: i32
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BitOr { return -1; }
     pos += 1;
@@ -6296,7 +6296,7 @@ fn scan_union_or_intersection_or_primary_type_lr_0(tokens: &Array<i32>, pos: i32
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BitAnd { return -1; }
     pos += 1;
@@ -6307,7 +6307,7 @@ fn scan_union_or_intersection_or_primary_type_lr_1(tokens: &Array<i32>, pos: i32
     return pos;
 }
 
-fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
     let memo_at = memo.find(10, pos, min_prec, follow, 0, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
@@ -6319,7 +6319,7 @@ fn scan_union_or_intersection_or_primary_type(tokens: &Array<i32>, pos: i32, atn
     return memo_end;
 }
 
-fn scan_union_or_intersection_or_primary_type__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+fn scan_union_or_intersection_or_primary_type__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_union_or_intersection_or_primary_type_atom(tokens, pos, atn, memo, follow);
     if pos < 0 { return -1; }
     loop {
@@ -6347,7 +6347,7 @@ fn scan_union_or_intersection_or_primary_type__walk(tokens: &Array<i32>, pos: i3
     return pos;
 }
 
-fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6435,7 +6435,7 @@ fn scan_primary_type_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return -1;
 }
 
-fn scan_primary_type_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_primary_type_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
@@ -6451,7 +6451,7 @@ fn scan_primary_type_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_primary_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+fn scan_primary_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
     let memo_at = memo.find(11, pos, min_prec, follow, 0, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
@@ -6463,7 +6463,7 @@ fn scan_primary_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return memo_end;
 }
 
-fn scan_primary_type__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+fn scan_primary_type__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_primary_type_atom(tokens, pos, atn, memo, follow);
     if pos < 0 { return -1; }
     loop {
@@ -6483,7 +6483,7 @@ fn scan_primary_type__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_predefined_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_predefined_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6507,7 +6507,7 @@ fn scan_predefined_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return -1;
 }
 
-fn scan_type_reference(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_reference(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_type_name(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_8)));
     if pos < 0 { return -1; }
@@ -6524,7 +6524,7 @@ fn scan_type_reference(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_type_generic(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_generic(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LessThan { return -1; }
     pos += 1;
@@ -6544,7 +6544,7 @@ fn scan_type_generic(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_type_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6560,7 +6560,7 @@ fn scan_type_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return -1;
 }
 
-fn scan_object_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_object_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -6576,7 +6576,7 @@ fn scan_object_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return pos;
 }
 
-fn scan_type_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(604);
     pos = scan_type_member_list(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_10)));
@@ -6590,7 +6590,7 @@ fn scan_type_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return pos;
 }
 
-fn scan_type_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(619);
     pos = scan_type_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_11, 16, follow));
@@ -6627,7 +6627,7 @@ fn scan_type_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_type_member(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_member(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6675,7 +6675,7 @@ fn scan_type_member(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return -1;
 }
 
-fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(684);
@@ -6720,7 +6720,7 @@ fn scan_tuple_element_types(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_function_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_function_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LessThan {
         let sp = pos;
@@ -6749,7 +6749,7 @@ fn scan_function_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return pos;
 }
 
-fn scan_constructor_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_constructor_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_New { return -1; }
     pos += 1;
@@ -6780,7 +6780,7 @@ fn scan_constructor_type(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_type_query(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_type_query(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Typeof { return -1; }
     pos += 1;
@@ -6789,7 +6789,7 @@ fn scan_type_query(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
     return pos;
 }
 
-fn scan_type_query_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_type_query_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -6815,7 +6815,7 @@ fn scan_type_query_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState,
     return -1;
 }
 
-fn scan_property_signatur(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_signatur(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_ReadOnly {
         let sp = pos;
@@ -6896,7 +6896,7 @@ fn scan_property_signatur(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_type_annotation(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_annotation(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Colon { return -1; }
     pos += 1;
@@ -6907,7 +6907,7 @@ fn scan_type_annotation(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_call_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_call_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LessThan {
         let sp = pos;
@@ -6940,7 +6940,7 @@ fn scan_call_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -7043,7 +7043,7 @@ fn scan_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return -1;
 }
 
-fn scan_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -7061,7 +7061,7 @@ fn scan_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return -1;
 }
 
-fn scan_optional_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_optional_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_At {
         let sp = pos;
@@ -7166,7 +7166,7 @@ fn scan_optional_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_rest_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_rest_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Ellipsis { return -1; }
     pos += 1;
@@ -7187,7 +7187,7 @@ fn scan_rest_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_required_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_required_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_At {
         let sp = pos;
@@ -7239,7 +7239,7 @@ fn scan_required_parameter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_identifier_or_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_identifier_or_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -7263,7 +7263,7 @@ fn scan_identifier_or_pattern(tokens: &Array<i32>, pos: i32, atn: &mut AtnState,
     return -1;
 }
 
-fn scan_construct_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_construct_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_New { return -1; }
     pos += 1;
@@ -7298,7 +7298,7 @@ fn scan_construct_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_index_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_index_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
@@ -7317,7 +7317,7 @@ fn scan_index_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_method_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_method_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(994);
     pos = scan_property_name(tokens, pos, atn, memo, 0);
@@ -7333,7 +7333,7 @@ fn scan_method_signature(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_type_alias_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_alias_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Export {
         pos += 1;
@@ -7360,7 +7360,7 @@ fn scan_type_alias_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return pos;
 }
 
-fn scan_constructor_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_constructor_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_38(tokens[pos]) {
         let sp = pos;
@@ -7412,7 +7412,7 @@ fn scan_constructor_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_interface_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_interface_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Export {
         pos += 1;
@@ -7448,7 +7448,7 @@ fn scan_interface_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState,
     return pos;
 }
 
-fn scan_interface_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_interface_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Extends { return -1; }
     pos += 1;
@@ -7459,7 +7459,7 @@ fn scan_interface_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnSta
     return pos;
 }
 
-fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1096);
     pos = scan_type_reference(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_30, 16, follow));
@@ -7484,7 +7484,7 @@ fn scan_class_or_interface_type_list(tokens: &Array<i32>, pos: i32, atn: &mut At
     return pos;
 }
 
-fn scan_enum_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_enum_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Const {
         pos += 1;
@@ -7507,7 +7507,7 @@ fn scan_enum_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_enum_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_enum_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1130);
     pos = scan_enum_member_list(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_14)));
@@ -7519,7 +7519,7 @@ fn scan_enum_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return pos;
 }
 
-fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1139);
     pos = scan_enum_member(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_31, 16, follow));
@@ -7556,7 +7556,7 @@ fn scan_enum_member_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_enum_member(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_enum_member(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1154);
     pos = scan_property_name(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_32)));
@@ -7580,7 +7580,7 @@ fn scan_enum_member(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return pos;
 }
 
-fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Declare {
         pos += 1;
@@ -7603,7 +7603,7 @@ fn scan_namespace_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState,
     return pos;
 }
 
-fn scan_namespace_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_namespace_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -7627,7 +7627,7 @@ fn scan_namespace_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_decorator_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_decorator_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1215);
     pos = scan_decorator(tokens, pos, atn, memo);
@@ -7644,7 +7644,7 @@ fn scan_decorator_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_decorator(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_decorator(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_At { return -1; }
     pos += 1;
@@ -7677,7 +7677,7 @@ fn scan_decorator(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return pos;
 }
 
-fn scan_decorator_member_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_decorator_member_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -7700,7 +7700,7 @@ fn scan_decorator_member_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mu
     return -1;
 }
 
-fn scan_decorator_member_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_decorator_member_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Dot { return -1; }
     pos += 1;
@@ -7709,7 +7709,7 @@ fn scan_decorator_member_expression_lr_1(tokens: &Array<i32>, pos: i32, atn: &mu
     return pos;
 }
 
-fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
     let memo_at = memo.find(55, pos, min_prec, follow, 0, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
@@ -7721,7 +7721,7 @@ fn scan_decorator_member_expression(tokens: &Array<i32>, pos: i32, atn: &mut Atn
     return memo_end;
 }
 
-fn scan_decorator_member_expression__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
+fn scan_decorator_member_expression__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0) -> i32 {
     let mut pos = scan_decorator_member_expression_atom(tokens, pos, atn, memo, follow);
     if pos < 0 { return -1; }
     loop {
@@ -7741,7 +7741,7 @@ fn scan_decorator_member_expression__walk(tokens: &Array<i32>, pos: i32, atn: &m
     return pos;
 }
 
-fn scan_decorator_call_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_decorator_call_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1255);
     pos = scan_decorator_member_expression(tokens, pos, atn, memo, FOLLOW_MASK_15, 0);
@@ -7754,7 +7754,7 @@ fn scan_decorator_call_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     return pos;
 }
 
-fn scan_source_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_source_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     let mut cont_done_0 = false;
@@ -7790,7 +7790,7 @@ fn scan_source_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8122,7 +8122,7 @@ fn scan_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return -1;
 }
 
-fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -8138,7 +8138,7 @@ fn scan_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut Scan
     return pos;
 }
 
-fn scan_statement_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(1379);
@@ -8169,7 +8169,7 @@ fn scan_statement_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_abstract_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_abstract_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Abstract { return -1; }
     pos += 1;
@@ -8214,7 +8214,7 @@ fn scan_abstract_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_import_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_import_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Import { return -1; }
     pos += 1;
@@ -8223,7 +8223,7 @@ fn scan_import_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_import_from_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_import_from_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8307,7 +8307,7 @@ fn scan_import_from_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return -1;
 }
 
-fn scan_import_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_import_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -8387,7 +8387,7 @@ fn scan_import_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_import_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_import_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_module_export_name(tokens, pos, atn, memo);
     if pos < 0 { return -1; }
@@ -8407,7 +8407,7 @@ fn scan_import_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_module_export_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_module_export_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8425,7 +8425,7 @@ fn scan_module_export_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return -1;
 }
 
-fn scan_import_default(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_import_default(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_alias_name(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_14, 8, follow));
     if pos < 0 { return -1; }
@@ -8434,7 +8434,7 @@ fn scan_import_default(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_import_namespace(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_import_namespace(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     sg_103_done: {
         let sgk_103 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8466,7 +8466,7 @@ fn scan_import_namespace(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_import_from(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_import_from(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_From { return -1; }
     pos += 1;
@@ -8475,7 +8475,7 @@ fn scan_import_from(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return pos;
 }
 
-fn scan_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_name(tokens, pos, atn, memo);
     if pos < 0 { return -1; }
@@ -8495,7 +8495,7 @@ fn scan_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
     return pos;
 }
 
-fn scan_export_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_export_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8509,7 +8509,7 @@ fn scan_export_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return -1;
 }
 
-fn scan_export_from_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_export_from_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8545,7 +8545,7 @@ fn scan_export_from_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return -1;
 }
 
-fn scan_export_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_export_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -8625,7 +8625,7 @@ fn scan_export_module_items(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_export_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_export_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_module_export_name(tokens, pos, atn, memo);
     if pos < 0 { return -1; }
@@ -8645,7 +8645,7 @@ fn scan_export_alias_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8677,7 +8677,7 @@ fn scan_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return -1;
 }
 
-fn scan_variable_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_variable_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8716,7 +8716,7 @@ fn scan_variable_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return -1;
 }
 
-fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1689);
     pos = scan_variable_declaration(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_44, 16, follow));
@@ -8741,7 +8741,7 @@ fn scan_variable_declaration_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     return pos;
 }
 
-fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     sg_75_done: {
         let sgk_75 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8823,7 +8823,7 @@ fn scan_variable_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_expression_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expression_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1744);
     pos = scan_expression_sequence(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_29)));
@@ -8835,7 +8835,7 @@ fn scan_expression_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_if_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_if_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_If { return -1; }
     pos += 1;
@@ -8869,7 +8869,7 @@ fn scan_if_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_iteration_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -8935,7 +8935,7 @@ fn scan_iteration_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return -1;
 }
 
-fn scan_continue_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_continue_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Continue { return -1; }
     pos += 1;
@@ -8952,7 +8952,7 @@ fn scan_continue_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_break_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_break_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Break { return -1; }
     pos += 1;
@@ -8969,7 +8969,7 @@ fn scan_break_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_return_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_return_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Return { return -1; }
     pos += 1;
@@ -8988,7 +8988,7 @@ fn scan_return_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_yield_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_yield_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_133(tokens[pos]) { return -1; }
     pos += 1;
@@ -9007,7 +9007,7 @@ fn scan_yield_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_with_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_with_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_With { return -1; }
     pos += 1;
@@ -9026,7 +9026,7 @@ fn scan_with_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_switch_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_switch_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Switch { return -1; }
     pos += 1;
@@ -9045,7 +9045,7 @@ fn scan_switch_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_case_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_case_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -9089,7 +9089,7 @@ fn scan_case_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
     return pos;
 }
 
-fn scan_case_clauses(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_case_clauses(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2064);
     pos = scan_case_clause(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_53, 16, follow));
@@ -9106,7 +9106,7 @@ fn scan_case_clauses(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_case_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_case_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Case { return -1; }
     pos += 1;
@@ -9129,7 +9129,7 @@ fn scan_case_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mu
     return pos;
 }
 
-fn scan_default_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_default_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Default { return -1; }
     pos += 1;
@@ -9148,7 +9148,7 @@ fn scan_default_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_labelled_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_labelled_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -9161,7 +9161,7 @@ fn scan_labelled_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_throw_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_throw_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Throw { return -1; }
     pos += 1;
@@ -9174,7 +9174,7 @@ fn scan_throw_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_try_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_try_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Try { return -1; }
     pos += 1;
@@ -9217,7 +9217,7 @@ fn scan_try_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return pos;
 }
 
-fn scan_catch_production(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_catch_production(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Catch { return -1; }
     pos += 1;
@@ -9249,7 +9249,7 @@ fn scan_catch_production(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_finally_production(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_finally_production(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Finally { return -1; }
     pos += 1;
@@ -9260,7 +9260,7 @@ fn scan_finally_production(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_debugger_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_debugger_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Debugger { return -1; }
     pos += 1;
@@ -9269,7 +9269,7 @@ fn scan_debugger_statement(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Async {
         pos += 1;
@@ -9314,7 +9314,7 @@ fn scan_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_class_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_At {
         let sp = pos;
@@ -9358,7 +9358,7 @@ fn scan_class_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_class_heritage(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_heritage(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Extends {
         let sp = pos;
@@ -9383,7 +9383,7 @@ fn scan_class_heritage(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_class_tail(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_tail(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -9400,7 +9400,7 @@ fn scan_class_tail(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
     return pos;
 }
 
-fn scan_class_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Extends { return -1; }
     pos += 1;
@@ -9411,7 +9411,7 @@ fn scan_class_extends_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_implements_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_implements_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Implements { return -1; }
     pos += 1;
@@ -9422,7 +9422,7 @@ fn scan_implements_clause(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_class_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9462,7 +9462,7 @@ fn scan_class_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return -1;
 }
 
-fn scan_property_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9495,7 +9495,7 @@ fn scan_property_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut Atn
     return -1;
 }
 
-fn scan_property_member_base(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_member_base(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_38(tokens[pos]) {
         let sp = pos;
@@ -9517,7 +9517,7 @@ fn scan_property_member_base(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_index_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_index_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2365);
     pos = scan_index_signature(tokens, pos, atn, memo, follow_then(FOLLOW_MASK_29, 8, follow));
@@ -9528,7 +9528,7 @@ fn scan_index_member_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnSta
     return pos;
 }
 
-fn scan_generator_method(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_generator_method(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Async {
         let sp = pos;
@@ -9600,7 +9600,7 @@ fn scan_generator_method(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_generator_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_generator_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Async {
         pos += 1;
@@ -9636,7 +9636,7 @@ fn scan_generator_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut 
     return pos;
 }
 
-fn scan_generator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_generator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -9683,7 +9683,7 @@ fn scan_generator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_generator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_generator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Multiply { return -1; }
     pos += 1;
@@ -9694,7 +9694,7 @@ fn scan_generator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_iterator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iterator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -9741,7 +9741,7 @@ fn scan_iterator_block(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_iterator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iterator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
@@ -9773,7 +9773,7 @@ fn scan_iterator_definition(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_class_element_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_element_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9797,7 +9797,7 @@ fn scan_class_element_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return -1;
 }
 
-fn scan_private_identifier(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_private_identifier(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Hashtag { return -1; }
     pos += 1;
@@ -9806,7 +9806,7 @@ fn scan_private_identifier(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_formal_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_formal_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -9844,7 +9844,7 @@ fn scan_formal_parameter_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState,
     return -1;
 }
 
-fn scan_formal_parameter_arg(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_formal_parameter_arg(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_At {
         let sp = pos;
@@ -9932,7 +9932,7 @@ fn scan_formal_parameter_arg(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_last_formal_parameter_arg(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_last_formal_parameter_arg(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Ellipsis { return -1; }
     pos += 1;
@@ -9951,7 +9951,7 @@ fn scan_last_formal_parameter_arg(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     return pos;
 }
 
-fn scan_function_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_function_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let memo_at = memo.find(123, pos, 0, follow, 0, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
@@ -9963,7 +9963,7 @@ fn scan_function_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return memo_end;
 }
 
-fn scan_function_body__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_function_body__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_46(tokens[pos]) {
         let sp = pos;
@@ -9978,7 +9978,7 @@ fn scan_function_body__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_source_elements(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_source_elements(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2616);
     pos = scan_source_element(tokens, pos, atn, memo, 0);
@@ -9995,7 +9995,7 @@ fn scan_source_elements(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return pos;
 }
 
-fn scan_array_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_array_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     sg_63_done: {
         sg_63: {
@@ -10014,7 +10014,7 @@ fn scan_array_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return pos;
 }
 
-fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_Comma && !follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF) {
         let sp = pos;
@@ -10113,7 +10113,7 @@ fn scan_element_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_array_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_array_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Ellipsis {
@@ -10156,7 +10156,7 @@ fn scan_array_element(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return pos;
 }
 
-fn scan_object_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_object_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -10198,7 +10198,7 @@ fn scan_object_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: 
     return pos;
 }
 
-fn scan_property_assignment(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10270,7 +10270,7 @@ fn scan_property_assignment(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return -1;
 }
 
-fn scan_get_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_get_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2759);
     pos = scan_getter(tokens, pos, atn, memo, FOLLOW_MASK_70);
@@ -10298,7 +10298,7 @@ fn scan_get_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_set_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_set_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2778);
     pos = scan_setter(tokens, pos, atn, memo, FOLLOW_MASK_15);
@@ -10326,7 +10326,7 @@ fn scan_set_accessor(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_property_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10356,7 +10356,7 @@ fn scan_property_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return -1;
 }
 
-fn scan_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
@@ -10391,7 +10391,7 @@ fn scan_arguments(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut 
     return pos;
 }
 
-fn scan_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2833);
     pos = scan_argument(tokens, pos, atn, memo, follow_then_opening(FOLLOW_MASK_71, 16, follow));
@@ -10428,7 +10428,7 @@ fn scan_argument_list(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return pos;
 }
 
-fn scan_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Ellipsis {
@@ -10468,7 +10468,7 @@ fn scan_argument(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut S
     return pos;
 }
 
-fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let scan_start = pos;
     let mut pos = pos;
     atn.stack.push(2863);
@@ -10507,7 +10507,7 @@ fn scan_expression_sequence(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return pos;
 }
 
-fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10762,7 +10762,7 @@ fn scan_single_expression_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return -1;
 }
 
-fn scan_single_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_QuestionMarkDot {
         pos += 1;
@@ -10778,7 +10778,7 @@ fn scan_single_expression_lr_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return pos;
 }
 
-fn scan_single_expression_lr_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_QuestionMarkDot { return -1; }
     pos += 1;
@@ -10789,7 +10789,7 @@ fn scan_single_expression_lr_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return pos;
 }
 
-fn scan_single_expression_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Not {
         pos += 1;
@@ -10814,7 +10814,7 @@ fn scan_single_expression_lr_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return pos;
 }
 
-fn scan_single_expression_lr_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_QuestionMark {
         pos += 1;
@@ -10839,7 +10839,7 @@ fn scan_single_expression_lr_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return pos;
 }
 
-fn scan_single_expression_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(3067);
     pos = scan_arguments(tokens, pos, atn, memo, follow);
@@ -10848,21 +10848,21 @@ fn scan_single_expression_lr_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return pos;
 }
 
-fn scan_single_expression_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_PlusPlus { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_lr_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_MinusMinus { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Power { return -1; }
     pos += 1;
@@ -10873,7 +10873,7 @@ fn scan_single_expression_lr_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_109(tokens[pos]) { return -1; }
     pos += 1;
@@ -10884,7 +10884,7 @@ fn scan_single_expression_lr_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_110(tokens[pos]) { return -1; }
     pos += 1;
@@ -10895,7 +10895,7 @@ fn scan_single_expression_lr_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_NullCoalesce { return -1; }
     pos += 1;
@@ -10906,7 +10906,7 @@ fn scan_single_expression_lr_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     let gp_85 = pos;
     let sgk_85 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -10945,7 +10945,7 @@ fn scan_single_expression_lr_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_132(tokens[pos]) { return -1; }
     pos += 1;
@@ -10956,7 +10956,7 @@ fn scan_single_expression_lr_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Instanceof { return -1; }
     pos += 1;
@@ -10967,7 +10967,7 @@ fn scan_single_expression_lr_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_In { return -1; }
     pos += 1;
@@ -10978,7 +10978,7 @@ fn scan_single_expression_lr_28(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_113(tokens[pos]) { return -1; }
     pos += 1;
@@ -10989,7 +10989,7 @@ fn scan_single_expression_lr_29(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_30(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_30(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BitAnd { return -1; }
     pos += 1;
@@ -11000,7 +11000,7 @@ fn scan_single_expression_lr_30(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_31(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_31(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BitXOr { return -1; }
     pos += 1;
@@ -11011,7 +11011,7 @@ fn scan_single_expression_lr_31(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_32(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_32(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BitOr { return -1; }
     pos += 1;
@@ -11022,7 +11022,7 @@ fn scan_single_expression_lr_32(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_33(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_33(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_And { return -1; }
     pos += 1;
@@ -11033,7 +11033,7 @@ fn scan_single_expression_lr_33(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_34(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_34(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Or { return -1; }
     pos += 1;
@@ -11044,7 +11044,7 @@ fn scan_single_expression_lr_34(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_35(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_35(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_QuestionMark { return -1; }
     pos += 1;
@@ -11061,7 +11061,7 @@ fn scan_single_expression_lr_35(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_36(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_36(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Assign { return -1; }
     pos += 1;
@@ -11072,7 +11072,7 @@ fn scan_single_expression_lr_36(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_37(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_37(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_114(tokens[pos]) { return -1; }
     pos += 1;
@@ -11083,7 +11083,7 @@ fn scan_single_expression_lr_37(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_38(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_38(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(3219);
     pos = scan_template_string_literal(tokens, pos, atn, memo, follow);
@@ -11092,7 +11092,7 @@ fn scan_single_expression_lr_38(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_51(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_51(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_As { return -1; }
     pos += 1;
@@ -11103,14 +11103,14 @@ fn scan_single_expression_lr_51(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_single_expression_lr_52(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression_lr_52(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Not { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_single_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
     let memo_at = memo.find(137, pos, min_prec, follow, lr_cont, &());
     if memo_at >= 0 {
         return memo.end_of(memo_at);
@@ -11122,7 +11122,7 @@ fn scan_single_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return memo_end;
 }
 
-fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, min_prec: i32 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = scan_single_expression_atom(tokens, pos, atn, memo, follow, lr_cont);
     if pos < 0 { return -1; }
     loop {
@@ -11440,7 +11440,7 @@ fn scan_single_expression__walk(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_as_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_as_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11460,7 +11460,7 @@ fn scan_as_expression(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return -1;
 }
 
-fn scan_assignable(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_assignable(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11502,7 +11502,7 @@ fn scan_assignable(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut
     return -1;
 }
 
-fn scan_anonymous_function(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_anonymous_function(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11524,7 +11524,7 @@ fn scan_anonymous_function(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return -1;
 }
 
-fn scan_arrow_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_arrow_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Async {
         let sp = pos;
@@ -11578,7 +11578,7 @@ fn scan_arrow_function_declaration(tokens: &Array<i32>, pos: i32, atn: &mut AtnS
     return pos;
 }
 
-fn scan_arrow_function_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_arrow_function_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11610,7 +11610,7 @@ fn scan_arrow_function_parameters(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     return -1;
 }
 
-fn scan_arrow_function_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_arrow_function_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11630,7 +11630,7 @@ fn scan_arrow_function_body(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, m
     return -1;
 }
 
-fn scan_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11653,7 +11653,7 @@ fn scan_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut Sc
     return -1;
 }
 
-fn scan_template_string_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_template_string_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_BackTick { return -1; }
     pos += 1;
@@ -11670,7 +11670,7 @@ fn scan_template_string_literal(tokens: &Array<i32>, pos: i32, atn: &mut AtnStat
     return pos;
 }
 
-fn scan_template_string_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_template_string_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11696,7 +11696,7 @@ fn scan_template_string_atom(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return -1;
 }
 
-fn scan_getter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_getter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -11707,7 +11707,7 @@ fn scan_getter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut Sca
     return pos;
 }
 
-fn scan_setter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_setter(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -11718,7 +11718,7 @@ fn scan_setter(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut Sca
     return pos;
 }
 
-fn scan_identifier_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_identifier_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11740,7 +11740,7 @@ fn scan_identifier_name(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo:
     return -1;
 }
 
-fn scan_identifier_or_key_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_identifier_or_key_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11764,7 +11764,7 @@ fn scan_identifier_or_key_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnState
     return -1;
 }
 
-fn scan_reserved_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_reserved_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11775,7 +11775,7 @@ fn scan_reserved_word(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &
     return -1;
 }
 
-fn scan_eos(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_eos(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let start = pos;
     let mut pos = pos;
     let kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -11936,7 +11936,7 @@ fn _parse_type_parameter__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () wit
     return;
 }
 
-fn scan_type_parameter__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_parameter__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -11964,7 +11964,7 @@ fn _parse_type_parameter__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () wit
     return;
 }
 
-fn scan_type_parameter__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_parameter__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -12144,7 +12144,7 @@ fn _parse_type___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with TypeScr
     return;
 }
 
-fn scan_type___alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type___alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_4(tokens[pos]) {
         let sp = pos;
@@ -12158,7 +12158,7 @@ fn scan_type___alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_type___alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type___alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(434);
     pos = scan_function_type(tokens, pos, atn, memo, follow);
@@ -12167,7 +12167,7 @@ fn scan_type___alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &m
     return pos;
 }
 
-fn scan_type___alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type___alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(440);
     pos = scan_type_generic(tokens, pos, atn, memo, follow);
@@ -12349,7 +12349,7 @@ fn _parse_primary_type__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () with 
     return;
 }
 
-fn scan_primary_type__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_primary_type__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(473);
     pos = scan_type_reference(tokens, pos, atn, memo, follow);
@@ -12370,7 +12370,7 @@ fn _parse_primary_type__inner_alt_8(p: &mut Parser, follow: i64 = 0) -> () with 
     return;
 }
 
-fn scan_primary_type__alt_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_primary_type__alt_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(492);
     pos = scan_type_reference(tokens, pos, atn, memo, FOLLOW_MASK_7);
@@ -12394,7 +12394,7 @@ fn _parse_primary_type__inner_alt_9(p: &mut Parser, follow: i64 = 0) -> () with 
     return;
 }
 
-fn scan_primary_type__alt_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_primary_type__alt_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_KeyOf { return -1; }
     pos += 1;
@@ -12706,7 +12706,7 @@ fn _parse_type_generic(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPar
     p.sites.pop();
 }
 
-fn scan_type_name__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_name__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -12879,7 +12879,7 @@ fn _parse_type_member_list(p: &mut Parser, follow: i64 = 0) -> () with TypeScrip
     p.sites.pop();
 }
 
-fn scan_type_member__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_member__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(640);
     pos = scan_property_signatur(tokens, pos, atn, memo, follow);
@@ -12888,7 +12888,7 @@ fn scan_type_member__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_type_member__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_member__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(646);
     pos = scan_construct_signature(tokens, pos, atn, memo, follow);
@@ -12897,7 +12897,7 @@ fn scan_type_member__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_type_member__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_member__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(649);
     pos = scan_index_signature(tokens, pos, atn, memo, follow);
@@ -12919,7 +12919,7 @@ fn _parse_type_member__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> () with T
     return;
 }
 
-fn scan_type_member__alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_type_member__alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(652);
     pos = scan_method_signature(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_12)));
@@ -13282,7 +13282,7 @@ fn _parse_type_query(p: &mut Parser) -> () with TypeScriptParserBase {
     p.sites.pop();
 }
 
-fn scan_type_query_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_type_query_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -13339,7 +13339,7 @@ fn _parse_type_query_expression__inner_alt_1(p: &mut Parser) -> () with TypeScri
     return;
 }
 
-fn scan_type_query_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_type_query_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     sg_4_done: {
         sg_4: {
@@ -13770,7 +13770,7 @@ fn _parse_required_parameter_list(p: &mut Parser, follow: i64 = 0) -> () with Ty
     p.sites.pop();
 }
 
-fn scan_parameter__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_parameter__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(865);
     pos = scan_required_parameter(tokens, pos, atn, memo, follow);
@@ -13779,7 +13779,7 @@ fn scan_parameter__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_parameter__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_parameter__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(868);
     pos = scan_optional_parameter(tokens, pos, atn, memo, follow);
@@ -14975,7 +14975,7 @@ fn _parse_source_element(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
     p.sites.pop();
 }
 
-fn scan_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1280);
     pos = scan_block(tokens, pos, atn, memo, follow);
@@ -14984,7 +14984,7 @@ fn scan_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1283);
     pos = scan_variable_statement(tokens, pos, atn, memo, follow);
@@ -14993,7 +14993,7 @@ fn scan_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1289);
     pos = scan_export_statement(tokens, pos, atn, memo, follow);
@@ -15002,7 +15002,7 @@ fn scan_statement__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1295);
     pos = scan_abstract_declaration(tokens, pos, atn, memo, follow);
@@ -15011,7 +15011,7 @@ fn scan_statement__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1298);
     pos = scan_class_declaration(tokens, pos, atn, memo, follow);
@@ -15020,7 +15020,7 @@ fn scan_statement__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1301);
     pos = scan_function_declaration(tokens, pos, atn, memo, follow);
@@ -15029,7 +15029,7 @@ fn scan_statement__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1304);
     pos = scan_expression_statement(tokens, pos, atn, memo, follow);
@@ -15038,7 +15038,7 @@ fn scan_statement__alt_8(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1307);
     pos = scan_interface_declaration(tokens, pos, atn, memo, follow);
@@ -15047,7 +15047,7 @@ fn scan_statement__alt_9(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo
     return pos;
 }
 
-fn scan_statement__alt_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1310);
     pos = scan_namespace_declaration(tokens, pos, atn, memo, follow);
@@ -15056,7 +15056,7 @@ fn scan_statement__alt_10(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1313);
     pos = scan_if_statement(tokens, pos, atn, memo, follow);
@@ -15065,7 +15065,7 @@ fn scan_statement__alt_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1316);
     pos = scan_iteration_statement(tokens, pos, atn, memo, follow);
@@ -15074,7 +15074,7 @@ fn scan_statement__alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_15(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_15(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1325);
     pos = scan_return_statement(tokens, pos, atn, memo, follow);
@@ -15083,7 +15083,7 @@ fn scan_statement__alt_15(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_16(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_16(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1328);
     pos = scan_yield_statement(tokens, pos, atn, memo, follow);
@@ -15092,7 +15092,7 @@ fn scan_statement__alt_16(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1331);
     pos = scan_with_statement(tokens, pos, atn, memo, follow);
@@ -15101,7 +15101,7 @@ fn scan_statement__alt_17(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1334);
     pos = scan_labelled_statement(tokens, pos, atn, memo, follow);
@@ -15110,7 +15110,7 @@ fn scan_statement__alt_18(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1337);
     pos = scan_switch_statement(tokens, pos, atn, memo, follow);
@@ -15119,7 +15119,7 @@ fn scan_statement__alt_19(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1340);
     pos = scan_throw_statement(tokens, pos, atn, memo, follow);
@@ -15128,7 +15128,7 @@ fn scan_statement__alt_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1343);
     pos = scan_try_statement(tokens, pos, atn, memo, follow);
@@ -15137,11 +15137,11 @@ fn scan_statement__alt_21(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_22(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     return scan_debugger_statement(tokens, pos, atn, memo);
 }
 
-fn scan_statement__alt_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1349);
     pos = scan_arrow_function_declaration(tokens, pos, atn, memo, follow);
@@ -15150,7 +15150,7 @@ fn scan_statement__alt_23(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1352);
     pos = scan_generator_function_declaration(tokens, pos, atn, memo, follow);
@@ -15159,7 +15159,7 @@ fn scan_statement__alt_24(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1355);
     pos = scan_type_alias_declaration(tokens, pos, atn, memo, follow);
@@ -15168,7 +15168,7 @@ fn scan_statement__alt_25(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, mem
     return pos;
 }
 
-fn scan_statement__alt_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_26(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1358);
     pos = scan_enum_declaration(tokens, pos, atn, memo, follow);
@@ -15185,7 +15185,7 @@ fn _parse_statement__inner_alt_27(p: &mut Parser, follow: i64 = 0) -> () with Ty
     return;
 }
 
-fn scan_statement__alt_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_statement__alt_27(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Export { return -1; }
     pos += 1;
@@ -17054,7 +17054,7 @@ fn _parse_export_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () w
     return;
 }
 
-fn scan_export_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_export_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Export { return -1; }
     pos += 1;
@@ -17179,7 +17179,7 @@ fn _parse_export_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () w
     return;
 }
 
-fn scan_export_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_export_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Export { return -1; }
     pos += 1;
@@ -17430,7 +17430,7 @@ fn _parse_export_alias_name(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
     p.sites.pop();
 }
 
-fn scan_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1631);
     pos = scan_variable_statement(tokens, pos, atn, memo, follow);
@@ -17439,7 +17439,7 @@ fn scan_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1634);
     pos = scan_class_declaration(tokens, pos, atn, memo, follow);
@@ -17448,7 +17448,7 @@ fn scan_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, me
     return pos;
 }
 
-fn scan_declaration__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_declaration__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1637);
     pos = scan_function_declaration(tokens, pos, atn, memo, follow);
@@ -17563,7 +17563,7 @@ fn _parse_variable_statement__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn scan_variable_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_variable_statement__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(1642);
     pos = scan_binding_pattern(tokens, pos, atn, memo);
@@ -17612,7 +17612,7 @@ fn _parse_variable_statement__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn scan_variable_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_variable_statement__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_38(tokens[pos]) {
         let sp = pos;
@@ -17945,7 +17945,7 @@ fn _parse_iteration_statement__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_iteration_statement__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
@@ -18016,7 +18016,7 @@ fn _parse_iteration_statement__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_iteration_statement__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
@@ -18073,7 +18073,7 @@ fn _parse_iteration_statement__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_iteration_statement__alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement__alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
@@ -18119,7 +18119,7 @@ fn _parse_iteration_statement__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_iteration_statement__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
@@ -18183,7 +18183,7 @@ fn _parse_iteration_statement__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_iteration_statement__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
@@ -18266,7 +18266,7 @@ fn _parse_iteration_statement__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_iteration_statement__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_iteration_statement__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_For { return -1; }
     pos += 1;
@@ -19261,7 +19261,7 @@ fn _parse_implements_clause(p: &mut Parser, follow: i64 = 0) -> () with TypeScri
     p.sites.pop();
 }
 
-fn scan_class_element__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_element__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2271);
     pos = scan_constructor_declaration(tokens, pos, atn, memo, follow);
@@ -19283,7 +19283,7 @@ fn _parse_class_element__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () with
     return;
 }
 
-fn scan_class_element__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_element__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_At {
         let sp = pos;
@@ -19299,7 +19299,7 @@ fn scan_class_element__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_class_element__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_element__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2281);
     pos = scan_index_member_declaration(tokens, pos, atn, memo, follow);
@@ -19308,7 +19308,7 @@ fn scan_class_element__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_class_element__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_class_element__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2284);
     pos = scan_statement(tokens, pos, atn, memo, follow);
@@ -19461,7 +19461,7 @@ fn _parse_property_member_declaration__inner_alt_0(p: &mut Parser, follow: i64 =
     return;
 }
 
-fn scan_property_member_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_member_declaration__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_property_member_base(tokens, pos, atn, memo, FOLLOW_MASK_59);
     if pos < 0 { return -1; }
@@ -19518,7 +19518,7 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: i64 =
     return;
 }
 
-fn scan_property_member_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_member_declaration__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_property_member_base(tokens, pos, atn, memo, FOLLOW_MASK_59);
     if pos < 0 { return -1; }
@@ -19612,7 +19612,7 @@ fn _parse_property_member_declaration__inner_alt_2(p: &mut Parser, follow: i64 =
     return;
 }
 
-fn scan_property_member_declaration__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_member_declaration__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_property_member_base(tokens, pos, atn, memo, FOLLOW_MASK_51);
     if pos < 0 { return -1; }
@@ -19653,7 +19653,7 @@ fn _parse_property_member_declaration__inner_alt_3(p: &mut Parser, follow: i64 =
     return;
 }
 
-fn scan_property_member_declaration__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_member_declaration__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2341);
     pos = scan_abstract_declaration(tokens, pos, atn, memo, follow);
@@ -20318,7 +20318,7 @@ fn _parse_formal_parameter_list__inner_alt_0(p: &mut Parser, follow: i64 = 0) ->
     return;
 }
 
-fn scan_formal_parameter_list__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_formal_parameter_list__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2522);
     pos = scan_formal_parameter_arg(tokens, pos, atn, memo, follow_open_with(follow_then_opening(FOLLOW_MASK_64, 16, follow), follow_open_set(FOLLOW_MASK_14)));
@@ -20404,7 +20404,7 @@ fn scan_formal_parameter_list__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut At
     return pos;
 }
 
-fn scan_formal_parameter_list__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_formal_parameter_list__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2551);
     pos = scan_array_literal(tokens, pos, atn, memo, follow);
@@ -20426,7 +20426,7 @@ fn _parse_formal_parameter_list__inner_alt_3(p: &mut Parser, follow: i64 = 0) ->
     return;
 }
 
-fn scan_formal_parameter_list__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_formal_parameter_list__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2554);
     pos = scan_object_literal(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_24)));
@@ -21090,7 +21090,7 @@ fn _parse_property_assignment__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2711);
     pos = scan_property_name(tokens, pos, atn, memo, FOLLOW_MASK_68);
@@ -21119,7 +21119,7 @@ fn _parse_property_assignment__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBracket { return -1; }
     pos += 1;
@@ -21146,7 +21146,7 @@ fn _parse_property_assignment__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2735);
     pos = scan_get_accessor(tokens, pos, atn, memo, follow);
@@ -21163,7 +21163,7 @@ fn _parse_property_assignment__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_3(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2738);
     pos = scan_set_accessor(tokens, pos, atn, memo, follow);
@@ -21180,7 +21180,7 @@ fn _parse_property_assignment__inner_alt_4(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_4(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2741);
     pos = scan_generator_method(tokens, pos, atn, memo, follow);
@@ -21197,7 +21197,7 @@ fn _parse_property_assignment__inner_alt_5(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_5(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     return scan_identifier_or_key_word(tokens, pos, atn, memo);
 }
 
@@ -21213,7 +21213,7 @@ fn _parse_property_assignment__inner_alt_6(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Ellipsis {
         pos += 1;
@@ -21233,7 +21233,7 @@ fn _parse_property_assignment__inner_alt_7(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_property_assignment__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_property_assignment__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2754);
     pos = scan_rest_parameter(tokens, pos, atn, memo, follow);
@@ -21820,7 +21820,7 @@ fn _parse_single_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0, lr_con
     return;
 }
 
-fn scan_single_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2878);
     pos = scan_anonymous_function(tokens, pos, atn, memo, follow);
@@ -21853,7 +21853,7 @@ fn _parse_single_expression__inner_alt_1(p: &mut Parser, follow: i64 = 0, lr_con
     return;
 }
 
-fn scan_single_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Class { return -1; }
     pos += 1;
@@ -21898,7 +21898,7 @@ fn _parse_single_expression__inner_alt_6(p: &mut Parser, follow: i64 = 0, lr_con
     return;
 }
 
-fn scan_single_expression__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_6(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_New { return -1; }
     pos += 1;
@@ -21948,7 +21948,7 @@ fn _parse_single_expression__inner_alt_7(p: &mut Parser, follow: i64 = 0, lr_con
     return;
 }
 
-fn scan_single_expression__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_7(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_New { return -1; }
     pos += 1;
@@ -21978,7 +21978,7 @@ fn _parse_single_expression__inner_alt_11(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_11(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Delete { return -1; }
     pos += 1;
@@ -21998,7 +21998,7 @@ fn _parse_single_expression__inner_alt_12(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_12(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Void { return -1; }
     pos += 1;
@@ -22018,7 +22018,7 @@ fn _parse_single_expression__inner_alt_13(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_13(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Typeof { return -1; }
     pos += 1;
@@ -22038,7 +22038,7 @@ fn _parse_single_expression__inner_alt_20(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_20(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Await { return -1; }
     pos += 1;
@@ -22057,7 +22057,7 @@ fn _parse_single_expression__inner_alt_41(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_41(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_41(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2972);
     pos = scan_generator_function_declaration(tokens, pos, atn, memo, follow);
@@ -22074,7 +22074,7 @@ fn _parse_single_expression__inner_alt_42(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_42(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_42(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2975);
     pos = scan_yield_statement(tokens, pos, atn, memo, follow);
@@ -22089,7 +22089,7 @@ fn _parse_single_expression__inner_alt_43(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_43(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_43(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_This { return -1; }
     pos += 1;
@@ -22123,7 +22123,7 @@ fn _parse_single_expression__inner_alt_44(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_44(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_44(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_identifier_name(tokens, pos, atn, memo);
     if pos < 0 { return -1; }
@@ -22146,7 +22146,7 @@ fn _parse_single_expression__inner_alt_45(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_45(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_45(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_Super { return -1; }
     pos += 1;
@@ -22161,7 +22161,7 @@ fn _parse_single_expression__inner_alt_46(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_46(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_46(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2991);
     pos = scan_literal(tokens, pos, atn, memo, follow);
@@ -22178,7 +22178,7 @@ fn _parse_single_expression__inner_alt_47(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_47(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_47(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2994);
     pos = scan_array_literal(tokens, pos, atn, memo, follow);
@@ -22197,7 +22197,7 @@ fn _parse_single_expression__inner_alt_49(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_49(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_49(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenParen { return -1; }
     pos += 1;
@@ -22218,7 +22218,7 @@ fn _parse_single_expression__inner_alt_39(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_39(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_39(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2966);
     pos = scan_iterator_block(tokens, pos, atn, memo, follow);
@@ -22235,7 +22235,7 @@ fn _parse_single_expression__inner_alt_40(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_40(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_40(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2969);
     pos = scan_generator_block(tokens, pos, atn, memo, follow);
@@ -22252,7 +22252,7 @@ fn _parse_single_expression__inner_alt_48(p: &mut Parser, follow: i64 = 0, lr_co
     return;
 }
 
-fn scan_single_expression__alt_48(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
+fn scan_single_expression__alt_48(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0, lr_cont: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(2997);
     pos = scan_object_literal(tokens, pos, atn, memo, follow);
@@ -23513,7 +23513,7 @@ fn _parse_as_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with
     return;
 }
 
-fn scan_as_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_as_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     pos = scan_predefined_type(tokens, pos, atn, memo, follow_open_with(follow, follow_open_set(FOLLOW_MASK_74)));
     if pos < 0 { return -1; }
@@ -23533,7 +23533,7 @@ fn scan_as_expression__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, 
     return pos;
 }
 
-fn scan_as_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_as_expression__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(3244);
     pos = scan_single_expression(tokens, pos, atn, memo, follow, 0);
@@ -23596,14 +23596,14 @@ fn _parse_as_expression(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptPa
     p.sites.pop();
 }
 
-fn scan_assignable__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_assignable__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
     return pos;
 }
 
-fn scan_assignable__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_assignable__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_117(tokens[pos]) { return -1; }
     pos += 1;
@@ -23682,7 +23682,7 @@ fn _parse_assignable(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParse
     p.sites.pop();
 }
 
-fn scan_anonymous_function__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_anonymous_function__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(3263);
     pos = scan_function_declaration(tokens, pos, atn, memo, follow);
@@ -23723,7 +23723,7 @@ fn _parse_anonymous_function__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> ()
     return;
 }
 
-fn scan_anonymous_function__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_anonymous_function__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_Async {
         pos += 1;
@@ -23762,7 +23762,7 @@ fn scan_anonymous_function__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnSt
     return pos;
 }
 
-fn scan_anonymous_function__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_anonymous_function__alt_2(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(3295);
     pos = scan_arrow_function_declaration(tokens, pos, atn, memo, follow);
@@ -23941,7 +23941,7 @@ fn _parse_arrow_function_parameters(p: &mut Parser, follow: i64 = 0) -> () with 
     p.sites.pop();
 }
 
-fn scan_arrow_function_body__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_arrow_function_body__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     atn.stack.push(3331);
     pos = scan_single_expression(tokens, pos, atn, memo, follow, 0);
@@ -23959,7 +23959,7 @@ fn _parse_arrow_function_body__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> (
     return;
 }
 
-fn scan_arrow_function_body__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
+fn scan_arrow_function_body__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_OpenBrace { return -1; }
     pos += 1;
@@ -24294,7 +24294,7 @@ fn _parse_setter(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBas
     p.sites.pop();
 }
 
-fn scan_identifier_name__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_identifier_name__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -24391,7 +24391,7 @@ fn _parse_identifier(p: &mut Parser) -> () with TypeScriptParserBase {
     p.sites.pop();
 }
 
-fn scan_identifier_or_key_word__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_identifier_or_key_word__alt_0(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { return -1; }
     pos += 1;
@@ -24403,7 +24403,7 @@ fn _parse_identifier_or_key_word__inner_alt_1(p: &mut Parser) -> () with TypeScr
     return;
 }
 
-fn scan_identifier_or_key_word__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnState, memo: &mut ScanMemo<()>) -> i32 {
+fn scan_identifier_or_key_word__alt_1(tokens: &Array<i32>, pos: i32, atn: &mut AtnPredictor, memo: &mut ScanMemo<()>) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_TypeAlias { return -1; }
     pos += 1;
