@@ -2357,7 +2357,15 @@ internal fn atn_lr_loop_decision(
     return alt;
 }
 
-fn atn_record_callers_exit(sim: &AtnSim, atn: &mut AtnPredictor, decision: i32, pos: i32, min_prec: i32, t: i32, eof: i32) {
+fn atn_record_callers_exit(
+    sim: &AtnSim,
+    atn: &mut AtnPredictor,
+    decision: i32,
+    pos: i32,
+    min_prec: i32,
+    t: i32,
+    eof: i32,
+) {
     let dstate = sim.decision_state[decision];
     let exit_alt = sim.state_tr_count[dstate] - 1;
     let mut mp = min_prec;
