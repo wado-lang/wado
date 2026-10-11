@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791701471694,
+  "lastUpdate": 1791710184076,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66145,6 +66145,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1a5c90c73ad4a1336c10e414ea5fa4fd24919278"
         },
         "date": 1791701470793,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2bdf912c33390cf5b078d142da832b95085eb125",
+          "message": "Merge pull request #2329 from wado-lang/ccr-327c3cc4-bq13x1\n\nrefactor(gale): one implementation per emit shape in the parser and lexer generators",
+          "timestamp": "2026-10-11T18:02:24+09:00",
+          "tree_id": "6d69c216e2b17e0b5f1e65281b7092a722d7cbc1",
+          "url": "https://github.com/wado-lang/wado/commit/2bdf912c33390cf5b078d142da832b95085eb125"
+        },
+        "date": 1791710183467,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
