@@ -1,0 +1,17 @@
+// An interface operation takes no `contract` clause yet.
+interface Op {
+    fn go(n: i32) -> i32
+        contract n >= 0
+    {
+        return n;
+    }
+}
+
+export fn run() {
+    let _ = Op::go(1);
+}
+
+__DATA__
+{
+  "compile_error": ":4:9: parse error: an interface operation takes no `contract` clause yet"
+}

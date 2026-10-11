@@ -1,0 +1,25 @@
+// A trait method whose parameter takes `with _` may carry a clause: the
+// clause's holder reads the same parameters.
+use { println, Stdout } from "core:cli";
+
+trait Run with _ {
+    fn apply(&self, f: fn(i32) -> i32 with _, n: i32) -> i32 with _
+        contract n >= 0;
+}
+
+struct Twice {}
+
+impl Run for Twice {
+    fn apply(&self, f: fn(i32) -> i32 with _, n: i32) -> i32 with _ {
+        return f(f(n));
+    }
+}
+
+export fn run() with Stdout {
+    println(`${Twice {}.apply(|x| x + 1, 1)}`);
+}
+
+__DATA__
+{
+  "stdout": "3\n"
+}
