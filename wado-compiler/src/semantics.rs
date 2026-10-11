@@ -287,15 +287,34 @@ impl Semantics {
         self.facts_at(fact, id).next()
     }
 
-    /// The patterns in `module` naming one float a rounding step can miss,
-    /// keyed by the span of the arm or statement holding them. `None` where the
-    /// elaborator left no state.
+    /// The patterns naming one float a rounding step can miss, by the module
+    /// that writes them, keyed by the span of the arm or statement holding
+    /// them. A walk resolving another module's default argument, associated
+    /// constant or trait default body notes it in its own facts, so every
+    /// walk's notes are gathered and routed by the span's id space.
     pub(crate) fn inexact_float_patterns(
         &self,
-        module: &ModuleSource,
-    ) -> Option<&IndexMap<Span, Vec<String>>> {
-        let module_sem = self.state.as_ref()?.module_semantics.get(module)?;
-        Some(&module_sem.types.inexact_float_patterns)
+    ) -> IndexMap<ModuleSource, IndexMap<Span, Vec<String>>> {
+        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, Vec<String>>> =
+            IndexMap::default();
+        let walks = self.state.iter().flat_map(|state| {
+            state.module_semantics.values().flat_map(|sem| {
+                std::iter::once(&sem.types)
+                    .chain(sem.default_method_facts.values().map(|facts| &facts.types))
+            })
+        });
+        for types in walks {
+            for (site, shown) in &types.inexact_float_patterns {
+                let module = self.space_modules[&site.space].clone();
+                let noted = by_module.entry(module).or_default().entry(*site).or_default();
+                for shown in shown {
+                    if !noted.contains(shown) {
+                        noted.push(shown.clone());
+                    }
+                }
+            }
+        }
+        by_module
     }
 
     /// Every value recorded for `fact` at `id`, from the module

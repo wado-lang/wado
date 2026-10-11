@@ -17,15 +17,13 @@ use crate::token::Span;
 /// noted.
 pub fn float_literal_pattern_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    for (src, module) in &sem.modules {
-        let Some(noted) = sem.inexact_float_patterns(src) else {
-            continue;
-        };
-        if noted.is_empty() || !is_user_authored(src) {
+    for (src, noted) in sem.inexact_float_patterns() {
+        if !is_user_authored(&src) {
             continue;
         }
+        let module = &sem.modules[&src];
         let mut walk = Sites {
-            noted: noted.clone(),
+            noted,
             waived: inner_attrs_allow(&module.inner_attributes, lint::FLOAT_LITERAL_PATTERN),
             found: Vec::new(),
         };
