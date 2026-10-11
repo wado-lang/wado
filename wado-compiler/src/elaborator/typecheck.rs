@@ -452,9 +452,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Record each row of `actual` beside the row of `expected` it moves into,
     /// where either holds an effect variable. The type check admits a variable
     /// unbounded, since only the effect check knows what it stands for; the
-    /// effect check bounds or widens it there. A callee's slot names the callee's own
-    /// effect parameters, which the argument determines rather than meets, so
-    /// those rows are left to the call's resolution.
+    /// effect check bounds or widens it there. A callee's slot names the
+    /// callee's own effect parameters, which the argument determines rather
+    /// than meets, so those rows are left to the call's resolution.
     pub(super) fn record_row_flows(
         &self,
         actual: TypeId,
