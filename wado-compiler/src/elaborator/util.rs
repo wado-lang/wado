@@ -931,12 +931,24 @@ mod tests {
     #[test]
     fn adjacent_floats_key_adjacently() {
         let tiny = f64::from_bits(1);
-        let key = float_order_key;
+        let key = |value: f64| float_order_key(FloatFormat::F64, value.to_bits());
         assert_eq!(key(-tiny) + 1, key(0.0));
         assert_eq!(key(-0.0), key(0.0));
         assert_eq!(key(0.0) + 1, key(tiny));
         assert_eq!(key(f64::MAX) + 1, key(f64::INFINITY));
         assert_eq!(key(f64::NEG_INFINITY) + 1, key(f64::MIN));
+        assert_eq!(key(f64::INFINITY) + 1, key(f64::NAN));
+        assert_eq!(key(-f64::NAN), key(f64::NAN));
         assert!(key(-1.0) < key(-0.5));
+    }
+
+    #[test]
+    fn order_keys_invert() {
+        for format in [FloatFormat::F64, FloatFormat::F32, FloatFormat::F16] {
+            let nan = float_order_key(format, format.limit("NAN").unwrap());
+            for key in [-nan + 1, -1, 0, 1, nan - 1, nan] {
+                assert_eq!(float_order_key(format, float_of_order_key(format, key)), key);
+            }
+        }
     }
 }
