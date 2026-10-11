@@ -1,0 +1,116 @@
+// A float literal, an integer literal on a float, a primitive's limit and a
+// range with equal bounds each match one value, by the float order: `0.0`
+// takes `-0.0`, and a NaN pattern takes every NaN. Only a zero, an infinity or
+// a NaN goes without the `float_literal_pattern` warning.
+
+fn classify(x: f64) -> String {
+    return match x {
+        0.0 => "zero",
+        f64::INFINITY => "inf",
+        f64::NEG_INFINITY => "-inf",
+        f64::NAN => "nan",
+        1.5 => "one and a half",
+        2 => "two",
+        3.0..=3.0 => "three",
+        f64::MAX => "max",
+        _ => "other",
+    };
+}
+
+fn classify_f32(x: f32) -> i32 {
+    return match x {
+        -0.0 => 0,
+        0.25 => 1,
+        f32::NAN => 2,
+        _ => 3,
+    };
+}
+
+fn half(x: f16) -> bool {
+    return x matches { 0.5 };
+}
+
+fn nested(o: Option<f64>) -> i32 {
+    return match o {
+        Some(4.5) => 1,
+        Some(f64::NAN) => 2,
+        Some(_) => 3,
+        None => 0,
+    };
+}
+
+fn rounded_equal(x: f32) -> bool {
+    return x matches { 1.0..=1.00000001 };
+}
+
+fn is_seven<T>(x: T) -> bool {
+    return x matches { 7 };
+}
+
+fn is_three_quarters<T>(x: T) -> bool {
+    return x matches { 0.75 };
+}
+
+fn zero_range(x: f64) -> bool {
+    return x matches { -0.0..=0.0 };
+}
+
+#[allow(float_literal_pattern)]
+fn waived(x: f64) -> bool {
+    return x matches { 7.25 };
+}
+
+fn let_else(x: f64) -> i32 {
+    let 8.5 = x else {
+        return 0;
+    };
+    return 1;
+}
+
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert classify(v(0.0)) == "zero" && classify(v(-0.0)) == "zero";
+    assert classify(v(f64::NAN)) == "nan" && classify(v(-f64::NAN)) == "nan";
+    assert classify(v(f64::INFINITY)) == "inf" && classify(v(f64::NEG_INFINITY)) == "-inf";
+    assert classify(v(1.5)) == "one and a half" && classify(v(2.0)) == "two";
+    assert classify(v(3.0)) == "three" && classify(v(f64::MAX)) == "max";
+    assert classify(v(1.0)) == "other" && classify(v(2.5)) == "other";
+    assert classify_f32(builtin::black_box(0.0)) == 0 && classify_f32(builtin::black_box(-0.0)) == 0;
+    assert classify_f32(builtin::black_box(0.25)) == 1 && classify_f32(builtin::black_box(f32::NAN)) == 2;
+    assert classify_f32(builtin::black_box(0.5)) == 3;
+    assert half(builtin::black_box(0.5)) && !half(builtin::black_box(0.25));
+    assert nested(Some(v(4.5))) == 1 && nested(Some(v(f64::NAN))) == 2;
+    assert nested(Some(v(4.0))) == 3 && nested(null) == 0;
+    assert rounded_equal(builtin::black_box(1.0)) && !rounded_equal(builtin::black_box(1.5));
+    assert is_seven(v(7.0)) && is_seven(7) && !is_seven(v(7.5));
+    assert is_three_quarters(v(0.75)) && is_three_quarters(builtin::black_box(0.75) as f32);
+    assert zero_range(v(-0.0)) && zero_range(v(0.0)) && !zero_range(v(f64::MIN_POSITIVE));
+    assert waived(v(7.25)) && !waived(v(7.0));
+    assert let_else(v(8.5)) == 1 && let_else(v(8.0)) == 0;
+}
+
+__DATA__
+{
+  "test": {},
+  "warnings_contains": [
+    "`1.5` matches one exact float",
+    "`2` matches one exact float",
+    "`3.0..=3.0` matches one exact float",
+    "`f64::MAX` matches one exact float",
+    "`0.25` matches one exact float",
+    "`0.5` matches one exact float",
+    "`4.5` matches one exact float",
+    "`8.5` matches one exact float",
+    "`1.0..=1.00000001` matches one exact float",
+    "`0.75` matches one exact float",
+    "`#[allow(float_literal_pattern)]` waives this"
+  ],
+  "warnings_not_contains": [
+    "`0.0` matches",
+    "`-0.0` matches",
+    "INFINITY` matches",
+    "NAN` matches",
+    "`-0.0..=0.0` matches",
+    "`7.25` matches"
+  ]
+}

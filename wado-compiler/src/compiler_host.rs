@@ -196,6 +196,8 @@ pub enum Code {
     UnconditionalTrap,
     /// A hex literal ending in digits that read as a float type: `0x1_f32`.
     HexSuffixLookalike,
+    /// A pattern naming one float a rounding step can miss: `1.5 =>`.
+    FloatLiteralPattern,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -324,6 +326,7 @@ impl std::fmt::Display for Code {
             Code::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
             Code::UnconditionalTrap => "UNCONDITIONAL_TRAP",
             Code::HexSuffixLookalike => "HEX_SUFFIX_LOOKALIKE",
+            Code::FloatLiteralPattern => "FLOAT_LITERAL_PATTERN",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

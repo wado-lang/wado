@@ -287,6 +287,17 @@ impl Semantics {
         self.facts_at(fact, id).next()
     }
 
+    /// The patterns in `module` naming one float a rounding step can miss,
+    /// keyed by the span of the arm or statement holding them. `None` where the
+    /// elaborator left no state.
+    pub(crate) fn inexact_float_patterns(
+        &self,
+        module: &ModuleSource,
+    ) -> Option<&IndexMap<Span, Vec<String>>> {
+        let module_sem = self.state.as_ref()?.module_semantics.get(module)?;
+        Some(&module_sem.types.inexact_float_patterns)
+    }
+
     /// Every value recorded for `fact` at `id`, from the module
     /// [`Self::fact_home`] routes it to: one for a binding, and for a body fact
     /// one per walk that reached the node — the module's own, then each

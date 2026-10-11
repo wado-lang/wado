@@ -1,0 +1,26 @@
+// A literal inside another arm's range overlaps it, whichever arm comes first,
+// so the order of the arms never decides between them.
+fn literal_first(n: i32) -> i32 {
+    return match n {
+        5 => 1,
+        0..=9 => 2,
+        _ => 0,
+    };
+}
+
+fn range_first(c: char) -> i32 {
+    return match c {
+        'a'..='z' => 1,
+        'q' => 2,
+        _ => 0,
+    };
+}
+
+export fn run() {
+    let _ = literal_first(1) + range_first('a');
+}
+
+__DATA__
+{
+  "compile_error": ":4:12: analysis error: invalid pattern: overlapping range patterns in match arms; 12:12: invalid pattern: overlapping range patterns in match arms"
+}

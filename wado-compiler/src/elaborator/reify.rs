@@ -68,8 +68,9 @@ use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
     BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value,
-    constant_pattern_site, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
-    range_pattern, settle_instance_pattern, settles_literal_patterns,
+    constant_pattern_site, float_limit_pattern, literal_pattern, parse_i128_literal,
+    parse_u128_literal, range_bound, range_pattern, settle_instance_pattern,
+    settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -9099,15 +9100,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     | ast::Literal::Bool(_) => {
                         // A literal naming no value is already diagnosed, so
                         // the pattern standing in for it is never lowered.
-                        let Ok(value) = pattern_literal(lit) else {
+                        let Ok(value) = literal_pattern(lit) else {
                             return TirPattern::Wildcard;
                         };
-                        return self.literal_value_pattern(
-                            InstancePattern::Literal(value),
-                            scrutinee_type,
-                            site,
-                            ctx,
-                        );
+                        return self.literal_value_pattern(value, scrutinee_type, site, ctx);
                     }
                 };
                 TirPattern::Literal(tir_lit)
@@ -9145,6 +9141,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 bindings,
                 ..
             } => {
+                // A float type's limit is the one value it holds.
+                if let Some(point) = float_limit_pattern(pattern, &self.tysys.resolutions) {
+                    return self.literal_value_pattern(point, scrutinee_type, site, ctx);
+                }
                 // An associated constant (`TokenKind::FOO`, `i32::MAX`) or a
                 // namespaced global (`ns::NAME`) matches by value. No case is
                 // either, so the lookup distinguishes the two.
@@ -10351,9 +10351,7 @@ fn widen_half(type_table: &TypeTable, value: TirExpr, half: PrimitiveType, span:
     )
 }
 
-/// `pattern` on the settled `scrutinee`, or why it names no value of it. A
-/// float range holds the scrutinee in the local `add_local` allocates, so
-/// annotate, lowering the same pattern, reserves the local reify takes.
+/// `pattern` on the settled `scrutinee`, or why it names no value of it.
 pub(crate) fn lower_instance_pattern(
     pattern: &InstancePattern,
     scrutinee: TypeId,
@@ -10361,33 +10359,49 @@ pub(crate) fn lower_instance_pattern(
     add_local: impl FnOnce(String, TypeId) -> u32,
     span: Span,
 ) -> Result<TirPattern, Vec<PatternLiteralError>> {
-    Ok(
-        match settle_instance_pattern(pattern, scrutinee, type_table)? {
-            SettledPattern::Literal(value) => TirPattern::Literal(value),
-            SettledPattern::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            } => TirPattern::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            },
-            SettledPattern::Float(range) => {
-                // Lowering peels a reference scrutinee, as match ergonomics reads it.
-                let float_type = type_table.peel_refs(scrutinee);
-                let local_index = add_local(range_local_name(), float_type);
-                let shown = unparse_instance_pattern(pattern);
-                float_range_narrow(&range, float_type, local_index, shown, type_table, span)
-            }
+    let settled = settle_instance_pattern(pattern, scrutinee, type_table)?;
+    Ok(lower_settled_pattern(
+        settled, pattern, scrutinee, type_table, add_local, span,
+    ))
+}
+
+/// `pattern`, settled on `scrutinee` as `settled`. A float pattern holds the
+/// scrutinee in the local `add_local` allocates, so annotate, lowering the
+/// same pattern, reserves the local reify takes.
+pub(super) fn lower_settled_pattern(
+    settled: SettledPattern,
+    pattern: &InstancePattern,
+    scrutinee: TypeId,
+    type_table: &TypeTable,
+    add_local: impl FnOnce(String, TypeId) -> u32,
+    span: Span,
+) -> TirPattern {
+    match settled {
+        SettledPattern::Literal(value) => TirPattern::Literal(value),
+        SettledPattern::Range {
+            start,
+            end,
+            inclusive,
+            is_unsigned,
+        } => TirPattern::Range {
+            start,
+            end,
+            inclusive,
+            is_unsigned,
         },
-    )
+        SettledPattern::Float(range) => {
+            // Lowering peels a reference scrutinee, as match ergonomics reads it.
+            let float_type = type_table.peel_refs(scrutinee);
+            let local_index = add_local(range_local_name(), float_type);
+            let shown = unparse_instance_pattern(pattern);
+            float_range_narrow(&range, float_type, local_index, shown, type_table, span)
+        }
+    }
 }
 
 /// A float range holding its scrutinee, of `float_type`, in `local_index`,
-/// matching where it lies between the bounds. Neither bound is a NaN, so IEEE's
+/// matching where it lies between the bounds: a NaN where the range is the NaN,
+/// the value where it is one. No bound of a wider range is a NaN, so IEEE's
 /// comparisons answer as the float order does, one instruction each. A half
 /// compares as the `f32` it widens to exactly.
 fn float_range_narrow(
@@ -10442,16 +10456,22 @@ fn float_range_narrow(
             TypeTable::BOOL,
         )
     };
-    let below_end = if range.inclusive { "le" } else { "lt" };
-    let test = TirExpr::new(
-        TirExprKind::Binary {
-            op: TirBinaryOp::And,
-            left: Box::new(compare("ge", value.clone(), bound(range.start))),
-            right: Box::new(compare(below_end, value, bound(range.end))),
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let test = if range.is_nan() {
+        compare("ne", value.clone(), value)
+    } else if range.is_point() {
+        compare("eq", value, bound(range.start))
+    } else {
+        let below_end = if range.inclusive { "le" } else { "lt" };
+        TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(compare("ge", value.clone(), bound(range.start))),
+                right: Box::new(compare(below_end, value, bound(range.end))),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    };
     TirPattern::Narrow {
         name: None,
         local_index,

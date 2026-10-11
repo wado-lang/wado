@@ -1,0 +1,70 @@
+// A constant whose type is or holds a float is a pattern, at the top of an arm
+// or nested, and compares by the float order: a NaN constant takes every NaN,
+// and a zero takes `-0.0`. Its value shows only when the match runs, so every
+// one warns under `float_literal_pattern`, a zero or a NaN included.
+
+global LIMIT: f32 = 0.1;
+global ZERO: f64 = 0.0;
+global MISSING: f64 = f64::NAN;
+
+struct Inner {
+    x: f64,
+}
+
+struct Outer {
+    id: i32,
+    inner: Inner,
+}
+
+global ORIGIN: Outer = Outer { id: 0, inner: Inner { x: 0.0 } };
+
+type Meters = f64;
+
+global FAR: Meters = 1000.0;
+
+fn global_float(x: f32) -> bool {
+    return x matches { LIMIT };
+}
+
+fn zero_or_missing(x: f64) -> i32 {
+    return match x {
+        ZERO => 1,
+        MISSING => 2,
+        _ => 0,
+    };
+}
+
+fn nested_struct(o: Outer) -> bool {
+    return o matches { ORIGIN };
+}
+
+fn newtype(m: Meters) -> bool {
+    return m matches { FAR };
+}
+
+fn in_payload(o: Option<f32>) -> bool {
+    return o matches { Some(LIMIT) };
+}
+
+test {
+    assert global_float(builtin::black_box(0.1)) && !global_float(builtin::black_box(0.2));
+    let v = |x: f64| builtin::black_box(x);
+    assert zero_or_missing(v(0.0)) == 1 && zero_or_missing(v(-0.0)) == 1;
+    assert zero_or_missing(v(f64::NAN)) == 2 && zero_or_missing(v(1.0)) == 0;
+    assert nested_struct(Outer { id: 0, inner: Inner { x: v(-0.0) } });
+    assert !nested_struct(Outer { id: 0, inner: Inner { x: v(1.0) } });
+    assert newtype(v(1000.0) as Meters) && !newtype(v(999.0) as Meters);
+    assert in_payload(Some(builtin::black_box(0.1))) && !in_payload(null);
+}
+
+__DATA__
+{
+  "test": {},
+  "warnings_contains": [
+    "`LIMIT` matches one exact float",
+    "`ZERO` matches one exact float",
+    "`MISSING` matches one exact float",
+    "`ORIGIN` matches one exact float",
+    "`FAR` matches one exact float"
+  ]
+}

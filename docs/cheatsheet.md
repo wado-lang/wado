@@ -773,8 +773,9 @@ let grade = match score {
     90..=100 => "A",
     _ => "invalid",
 };
-// A float range takes -0.0 where it takes 0.0, and a NaN never: `_` is required
-let unit = match x { 0.0..<1.0 => true, _ => false };
+// A float pattern takes -0.0 where it takes 0.0, and f64::NAN every NaN.
+// One exact float other than a zero, ±Inf or NaN warns: match a range instead.
+let unit = match x { f64::NAN => 0, 0.0..<1.0 => 1, 1.5 => 2, _ => 3 };  // `1.5` warns
 // A bound may be a constant (a global, `Type::CONST`): compared when it runs
 let band = match n { LOW..<HIGH => 1, _ => 0 };
 

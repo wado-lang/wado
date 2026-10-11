@@ -7,9 +7,10 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::elaborator::sig::AssocConstSig;
-use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{InstancePattern, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
+use crate::unparse::unparse_instance_pattern;
 
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
@@ -22,7 +23,7 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::reify::lower_instance_pattern;
+use crate::elaborator::reify::lower_settled_pattern;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
@@ -1579,8 +1580,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
     /// it on the pattern and reserve the local reify holds the scrutinee in. A
-    /// constant holding a float is no pattern, since it carries the rounding a
-    /// float literal pattern would.
+    /// constant holding a float names a value only the run shows, so it is noted
+    /// for `float_literal_pattern` at `site`.
     fn resolve_constant_pattern(
         &mut self,
         pattern_id: AstId,
@@ -1588,6 +1589,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
+        site: Span,
     ) {
         let PatternConstant {
             shown,
@@ -1595,15 +1597,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = constant;
         let constant = *constant;
         if self.tysys.holds_float(constant) {
-            let type_name = self.tysys.type_table.borrow().type_name(constant);
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "a constant holding a float is not a pattern: `{shown}` is `{type_name}`; \
-                     compare it in a guard"
-                ),
-                span,
-            });
-            return;
+            self.note_inexact_float_pattern(site, shown.clone());
         }
         {
             let type_table = self.tysys.type_table.borrow();
@@ -1664,6 +1658,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             self.reject_refutable(site, &reason, span);
         }
+        // A variant pattern's own span shadows the site's below.
+        let site = span;
         match pattern {
             Pattern::Wildcard => Vec::new(),
             Pattern::Ident {
@@ -1707,7 +1703,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(constant.ty, peeled, *name_span);
-                    self.resolve_constant_pattern(*id, &constant, scrutinee_type, ctx, *name_span);
+                    self.resolve_constant_pattern(
+                        *id,
+                        &constant,
+                        scrutinee_type,
+                        ctx,
+                        *name_span,
+                        span,
+                    );
                     return Vec::new();
                 }
                 let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
@@ -1723,7 +1726,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // `null` lowers to a `None` variant pattern (no binding).
                         let _ = self.try_null_as_none_pattern(scrutinee_type);
                     }
-                    _ => self.check_pattern_value(lit, scrutinee_type, span),
+                    _ => self.resolve_literal_pattern(lit, scrutinee_type, ctx, span),
                 }
                 Vec::new()
             }
@@ -1785,6 +1788,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         variant_qualifier.as_ref(),
                     )
                 {
+                    // A float type's limit is the one value it holds.
+                    if let Some(point) = util::float_limit_pattern(pattern, &self.tysys.resolutions)
+                    {
+                        self.resolve_instance_pattern(&point, scrutinee_type, ctx, *span, site);
+                        return Vec::new();
+                    }
                     // An associated constant (`i32::MAX`, `f64::PI`) or a
                     // namespaced global binds nothing: it matches by value.
                     if let Some(constant) = self.resolve_pattern_constant(pattern, ctx) {
@@ -1795,6 +1804,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             scrutinee_type,
                             ctx,
                             *span,
+                            site,
                         );
                         return Vec::new();
                     }
@@ -2124,9 +2134,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind,
                 span: range_span,
             } => {
-                // Range patterns introduce no binding; resolve for the
-                // reversed/empty-range diagnostics only.
-                self.resolve_range_pattern(start, end, *kind, scrutinee_type, ctx, *range_span);
+                self.resolve_range_pattern(
+                    start,
+                    end,
+                    *kind,
+                    scrutinee_type,
+                    ctx,
+                    *range_span,
+                    site,
+                );
                 Vec::new()
             }
             Pattern::Typed {
@@ -2306,7 +2322,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report a literal pattern that names no value of `scrutinee_type`: one
     /// that names no value at all, or, on a settled scrutinee, one of another
     /// kind or out of its range.
-    fn check_pattern_value(&mut self, lit: &Literal, scrutinee_type: TypeId, span: Span) {
+    fn resolve_literal_pattern(
+        &mut self,
+        lit: &Literal,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) {
         if let Literal::String(_) = lit {
             if self.string_pattern_mismatch(scrutinee_type) {
                 self.emit_pattern_literal_error(
@@ -2317,23 +2339,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             return;
         }
-        let value = match util::pattern_literal(lit) {
-            Ok(value) => value,
+        match util::literal_pattern(lit) {
+            Ok(pattern) => self.resolve_instance_pattern(&pattern, scrutinee_type, ctx, span, span),
             Err(message) => {
                 let _ = self.emit(TypeError::InvalidPattern { message, span });
-                return;
             }
-        };
-        if !self.settles_literal_patterns(scrutinee_type) {
-            return;
         }
-        let error = util::pattern_literal_error(
-            &value,
-            scrutinee_type,
-            &mut self.tysys.type_table.borrow_mut(),
-        );
-        if let Some(error) = error {
+    }
+
+    /// Report what `pattern` names no value of `scrutinee_type` at `span`, and
+    /// note at `site` a float it names that a rounding step can miss. Reify
+    /// rebuilds the pattern, so none is produced here; lowering a settled one
+    /// reserves the local a float pattern holds its scrutinee in.
+    fn resolve_instance_pattern(
+        &mut self,
+        pattern: &InstancePattern,
+        scrutinee_type: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+        site: Span,
+    ) {
+        let (errors, inexact) = if self.settles_literal_patterns(scrutinee_type) {
+            let mut type_table = self.tysys.type_table.borrow_mut();
+            match util::settle_instance_pattern(pattern, scrutinee_type, &mut type_table) {
+                Ok(settled) => {
+                    let inexact = settled.names_inexact_float();
+                    lower_settled_pattern(
+                        settled,
+                        pattern,
+                        scrutinee_type,
+                        &type_table,
+                        |name, ty| ctx.add_local(name, ty, false, None),
+                        span,
+                    );
+                    (Vec::new(), inexact)
+                }
+                Err(errors) => (errors, false),
+            }
+        } else {
+            (
+                util::unsettled_pattern_errors(pattern),
+                util::unsettled_names_inexact_float(pattern),
+            )
+        };
+        for error in errors {
             self.emit_pattern_literal_error(error, scrutinee_type, span);
+        }
+        if inexact {
+            self.note_inexact_float_pattern(site, unparse_instance_pattern(pattern));
+        }
+    }
+
+    /// Note a pattern, written `shown`, that names one float a rounding step
+    /// can miss, for the `float_literal_pattern` lint to report at `site`.
+    fn note_inexact_float_pattern(&mut self, site: Span, shown: String) {
+        let noted = self
+            .sem
+            .types
+            .inexact_float_patterns
+            .entry(site)
+            .or_default();
+        if !noted.contains(&shown) {
+            noted.push(shown);
         }
     }
 
@@ -2348,9 +2415,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report a range pattern (`0..<10`, `'a'..='z'` or `0.0..<1.0`) that names
-    /// no values of `scrutinee_type`. Range patterns bind nothing and reify
-    /// rebuilds the real pattern, so no pattern node is produced here; lowering
-    /// a settled one reserves the local a float range holds its scrutinee in.
+    /// no values of `scrutinee_type`. Range patterns bind nothing.
     fn resolve_range_pattern(
         &mut self,
         start: &Pattern,
@@ -2359,6 +2424,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
+        site: Span,
     ) {
         let inclusive = matches!(kind, RangeKind::Inclusive);
         let pattern = match util::range_pattern(start, end, inclusive, &self.tysys.resolutions) {
@@ -2371,22 +2437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             None => return self.resolve_constant_range([start, end], scrutinee_type, ctx, span),
         };
-        let errors = if self.settles_literal_patterns(scrutinee_type) {
-            lower_instance_pattern(
-                &pattern,
-                scrutinee_type,
-                &mut self.tysys.type_table.borrow_mut(),
-                |name, ty| ctx.add_local(name, ty, false, None),
-                span,
-            )
-            .err()
-            .unwrap_or_default()
-        } else {
-            util::unsettled_pattern_errors(&pattern)
-        };
-        for error in errors {
-            self.emit_pattern_literal_error(error, scrutinee_type, span);
-        }
+        self.resolve_instance_pattern(&pattern, scrutinee_type, ctx, span, site);
     }
 
     /// A range with a bound naming a constant other than a primitive's limit.

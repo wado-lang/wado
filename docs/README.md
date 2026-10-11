@@ -202,6 +202,7 @@
 - [Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md)
 - [Lexical Rules Left Open](./wep-2026-10-10-lexical-rules.md)
 - [Effects Through Closures and Iterators](./wep-2026-10-11-effects-through-closures.md)
+- [Float Literal Patterns](./wep-2026-10-11-float-literal-patterns.md)
 
 ## Standard Library
 

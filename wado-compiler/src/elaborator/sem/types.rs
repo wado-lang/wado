@@ -12,6 +12,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, Receiver};
 use crate::tir;
 use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
+use crate::token::Span;
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without
@@ -397,6 +398,12 @@ pub(crate) struct TypeAnnotations {
     /// [`BodyFacts`] because an identifier's place does not depend on the
     /// element a tuple `for-of` binds, so the effect check reads one copy.
     pub(crate) assign_places: IndexMap<AstId, AssignPlace>,
+    /// The patterns naming one float a rounding step can miss, as written,
+    /// keyed by the span of the arm or statement holding them: what the
+    /// `float_literal_pattern` lint reports, where no `allow` waives it.
+    /// Outside [`BodyFacts`] because a pattern names the same float whichever
+    /// element a tuple `for-of` binds.
+    pub(crate) inexact_float_patterns: IndexMap<Span, Vec<String>>,
 }
 
 impl std::ops::Deref for TypeAnnotations {

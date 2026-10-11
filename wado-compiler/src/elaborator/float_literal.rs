@@ -53,6 +53,16 @@ impl FloatFormat {
         1 << (self.exponent_bits + self.mantissa_bits)
     }
 
+    /// The bits of `+Inf`, which every NaN's magnitude exceeds.
+    pub(crate) fn infinity_bits(self) -> u64 {
+        ((1 << self.exponent_bits) - 1) << self.mantissa_bits
+    }
+
+    /// The type's name, as `f64::NAN` spells it.
+    pub(crate) fn name(self) -> &'static str {
+        self.name
+    }
+
     fn bias(self) -> i64 {
         (1 << (self.exponent_bits - 1)) - 1
     }
@@ -92,7 +102,7 @@ impl FloatFormat {
     /// `INFINITY`, `NEG_INFINITY` and `NAN`.
     pub(crate) fn limit(self, name: &str) -> Option<u64> {
         let mb = self.mantissa_bits;
-        let infinity = ((1 << self.exponent_bits) - 1) << mb;
+        let infinity = self.infinity_bits();
         let max = infinity - 1;
         Some(match name {
             "MAX" => max,

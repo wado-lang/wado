@@ -5524,6 +5524,7 @@ pub fn unparse_instance_pattern(pattern: &InstancePattern) -> String {
 fn emit_instance_pattern(pattern: &InstancePattern, output: &mut String) {
     match pattern {
         InstancePattern::Literal(value) => emit_pattern_literal(value, output),
+        InstancePattern::Float(FloatBound { shown, .. }) => output.push_str(shown),
         InstancePattern::Range {
             start,
             end,
