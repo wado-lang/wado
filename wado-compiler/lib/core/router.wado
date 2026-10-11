@@ -258,14 +258,6 @@ global EMPTY_STR: String = "";
 global EMPTY_NAMES: List<String> = [];
 global EMPTY_RANGES: List<i32> = [];
 
-fn empty_path_params() -> PathParams {
-    return PathParams {
-        path: &EMPTY_STR,
-        names: &EMPTY_NAMES,
-        ranges: &EMPTY_RANGES,
-    };
-}
-
 /// An HTTP path router over handlers of type `H`.
 pub struct Router<H> {
     static_routes: HashMap<String, StaticRoute<H>>,
@@ -341,7 +333,10 @@ impl<H> Router<H> {
     /// nothing. The DFA holds the route as well, and decides every path the
     /// cache does not answer outright.
     fn cache_static<S: AsStrSlice>(&mut self, method_opt: &Option<Method>, pattern: S, handler: H) {
-        let rm = RouteMatch { handler, params: empty_path_params() };
+        let rm = RouteMatch {
+            handler,
+            params: PathParams { path: &EMPTY_STR, names: &EMPTY_NAMES, ranges: &EMPTY_RANGES },
+        };
         let key = pattern.to_string();
         self.static_routes.try_insert(key, StaticRoute { table: MethodTable::new(), matches: [] });
         let route = &mut self.static_routes[key];
