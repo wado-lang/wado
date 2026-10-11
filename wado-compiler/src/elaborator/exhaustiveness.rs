@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use crate::elaborator::float_literal::FloatFormat;
-use crate::elaborator::util::{float_of_order_key, float_order_key};
+use crate::elaborator::util::{float_infinity_key, float_of_order_key};
 use crate::tir::TypeId;
 
 /// An arm pattern as coverage reads it. A constructor carries the set its
@@ -85,7 +85,7 @@ fn write_float_witness(
     lo: i128,
     hi: i128,
 ) -> std::fmt::Result {
-    let infinity = float_order_key(format, format.infinity_bits());
+    let infinity = float_infinity_key(format);
     let show = |f: &mut std::fmt::Formatter<'_>, key: i128| {
         let value = format.value(float_of_order_key(format, key));
         let name = format.name();
@@ -382,7 +382,8 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
 fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor> {
     let mut cuts = vec![domain.min, domain.max + 1];
     cuts.extend(domain.hole.iter().flat_map(|[lo, hi]| [*lo, hi + 1]));
-    if domain.is_nan(domain.max) {
+    // A float's NaN, at `max`, is a piece of its own: no range reaches it.
+    if let DomainKind::Float(_) = domain.kind {
         cuts.push(domain.max);
     }
     for row in rows {

@@ -454,7 +454,7 @@ impl FloatRange {
 /// adjacently, and every NaN keys as one value past `+Inf`.
 pub(super) fn float_order_key(format: FloatFormat, bits: u64) -> i128 {
     let magnitude = i128::from(bits & !format.sign_bit());
-    let infinity = i128::from(format.infinity_bits());
+    let infinity = float_infinity_key(format);
     if magnitude > infinity {
         infinity + 1
     } else if bits & format.sign_bit() == 0 {
@@ -462,6 +462,12 @@ pub(super) fn float_order_key(format: FloatFormat, bits: u64) -> i128 {
     } else {
         -magnitude
     }
+}
+
+/// The [`float_order_key`] of `+Inf` in `format`: its magnitude. `-Inf` keys
+/// as its negation, and a NaN as one past it.
+pub(super) fn float_infinity_key(format: FloatFormat) -> i128 {
+    i128::from(format.infinity_bits())
 }
 
 /// The bits of a float of `format` that [`float_order_key`] keys as `key`,

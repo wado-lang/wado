@@ -96,7 +96,7 @@ Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
 
 The `float_literal_pattern` lint warns about a pattern that names one float,
 since a rounding step can miss it: a float literal, an integer literal on a
-float, a primitive's limit, a range whose bounds are equal, or a constant whose
+float, a primitive's limit, a range that takes one float, or a constant whose
 type is or holds a float. A zero, an infinity and a NaN are exempt where the
 compiler knows the value, which it does for a literal and a primitive's limit.
 A constant's value shows only when the match runs, so a constant always warns.

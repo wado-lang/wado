@@ -28,8 +28,10 @@ unless the compiler knows the value and it is a zero, an infinity or a NaN:
 
 - A literal or a primitive's limit (`f64::MAX`) names a known value, so `0.0`,
   `-0.0`, `f64::INFINITY` and `f64::NAN` do not warn and `1.5` does.
-- A range with equal bounds (`1.0..=1.0`) names one value, so it warns as the
-  literal would. `-0.0..=0.0` is the value 0 and does not.
+- A range that takes one float names one value, so it warns as the literal
+  would: `1.0..=1.0`, or an exclusive range ending at the next float. The rule
+  follows from what the lint is about, one exact float, rather than from how
+  the bounds are written. `-0.0..=0.0` is the value 0 and does not.
 - A `global`, an associated constant, or a constant whose type holds a float
   (a struct with an `f64` field) always warns. Its value shows only when the
   match runs.
@@ -45,7 +47,7 @@ a primitive's limit counts as no value, as any constant pattern does.
 ## Known gaps
 
 - A pattern on a type parameter warns only where every float type reads it as
-  one value: a decimal literal, or a range whose bounds are equal in `f64`. Two
+  one value: a decimal literal, or a range that takes one `f64`. Two
   instances match one float without a warning: an integer literal on a float
   instance (`7` in `fn is_seven<T>(x: T)` called with an `f64`), and a narrower
   type rounding two bounds onto one (`1.0..=1.0001` on `f16`).

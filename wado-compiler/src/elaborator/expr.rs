@@ -5313,7 +5313,7 @@ impl TypeSystem {
             return None;
         };
         if let Some(format) = FloatFormat::of(prim) {
-            let infinity = util::float_order_key(format, format.infinity_bits());
+            let infinity = util::float_infinity_key(format);
             return Some(IntDomain {
                 min: -infinity,
                 max: infinity + 1,

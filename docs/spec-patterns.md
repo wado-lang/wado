@@ -393,9 +393,10 @@ test {
 }
 ```
 
-A range whose bounds are equal (`1.0..=1.0`) names one float, and warns as that
-literal would ([Float Patterns](#float-patterns)). `-0.0..=0.0` names the value
-zero and does not.
+A range that takes one float warns as that literal would
+([Float Patterns](#float-patterns)): `1.0..=1.0`, and `1.0..<1.0000000000000002`
+too, whose end is the next `f64` after `1.0`. `-0.0..=0.0` takes the value zero
+and does not.
 
 The range operators themselves are in [Ranges](./spec-expressions.md#ranges).
 

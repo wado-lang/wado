@@ -23,7 +23,7 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::reify::lower_settled_pattern;
+use crate::elaborator::reify::reserve_float_pattern_locals;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
@@ -2367,8 +2367,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report what `pattern` names no value of `scrutinee_type` at `span`, and
     /// note at `site` a float it names that a rounding step can miss. Reify
-    /// rebuilds the pattern, so none is produced here; lowering a settled one
-    /// reserves the local a float pattern holds its scrutinee in.
+    /// rebuilds the pattern, so none is produced here, but the locals a float
+    /// pattern takes are reserved, as reify takes them.
     fn resolve_instance_pattern(
         &mut self,
         pattern: &InstancePattern,
@@ -2381,16 +2381,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut type_table = self.tysys.type_table.borrow_mut();
             match util::settle_instance_pattern(pattern, scrutinee_type, &mut type_table) {
                 Ok(settled) => {
-                    let inexact = settled.names_inexact_float();
-                    lower_settled_pattern(
-                        settled,
-                        pattern,
-                        scrutinee_type,
-                        &type_table,
-                        |name, ty| ctx.add_local(name, ty, false, None),
-                        span,
-                    );
-                    (Vec::new(), inexact)
+                    if let util::SettledPattern::Float(_) = settled {
+                        reserve_float_pattern_locals(scrutinee_type, &type_table, |name, ty| {
+                            ctx.add_local(name, ty, false, None)
+                        });
+                    }
+                    (Vec::new(), settled.names_inexact_float())
                 }
                 Err(errors) => (errors, false),
             }
