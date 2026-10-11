@@ -20,7 +20,7 @@ fn through<X: Store>(x: &X) -> i32 {
 test "generic method" {
     let s = S { n: 3 };
     assert s.put(1, 2) == 3;
-    assert unchecked s.put(1_i64, 2_i64) == 3;
+    assert unchecked s.put(1 as i64, 2 as i64) == 3;
     assert through(&s) == 3;
 }
 
