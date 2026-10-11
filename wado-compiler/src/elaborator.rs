@@ -219,6 +219,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             let Some(slot) = slots.of_name(&param.name) else {
                 continue;
             };
+            // `<F: fn(...)>` is its signature, as a function's is: bound below.
+            if !param.is_pack && param.has_fn_bound() {
+                continue;
+            }
             // A name the enclosing frame already numbered keeps that number;
             // renumbering it here would give one parameter two indices.
             if self
@@ -240,15 +244,25 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 Vec::new(),
             );
         }
+        // A bound writing no `Self` is in force before the signatures are
+        // bound, which may project off it: `F: fn mut(I::Item) -> U`.
+        let (early, late): (Vec<_>, Vec<_>) = impl_block
+            .type_params
+            .iter()
+            .partition(|param| !param.bounds.iter().any(ast::TraitBound::writes_self));
+        for param in early {
+            let bounds = self.scoped_bounds(param);
+            self.add_param_bounds(&param.name, bounds);
+        }
         self.bind_fn_bound_params(&impl_block.type_params);
-        // Between the names and their bounds: the target is resolved from the
-        // names, and a bound's `Self::Assoc` projects off the target. What the
-        // target owes is asked once the bounds are in force.
+        // Between the names and the rest of their bounds: the target is
+        // resolved from the names, and a bound's `Self::Assoc` projects off the
+        // target. What the target owes is asked once the bounds are in force.
         let (implementing, held) = self.holding_bounds(|this| {
             this.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref())
         });
         self.set_self_binding(implementing);
-        for param in &impl_block.type_params {
+        for param in late {
             let bounds = self.scoped_bounds(param);
             self.add_param_bounds(&param.name, bounds);
         }
@@ -1986,10 +2000,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // monomorphizer reads to answer a `GenericInstance`.
                 let base_decl = self.tysys.type_table.borrow().decl_of_type(target_type_id);
                 if let Some(base_decl) = base_decl {
+                    let impl_def = self.tysys.def_at(impl_block.id);
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .register_generic_assoc_type_def(base_decl, trait_ref, name, type_id);
+                        .register_generic_assoc_type_def(
+                            base_decl,
+                            trait_ref,
+                            name,
+                            type_id,
+                            Some(impl_def),
+                        );
                 }
             }
         }

@@ -723,6 +723,7 @@ fn register_reflect_assoc_types(
                 TraitRef::bare(trait_key),
                 (*assoc_name).to_string(),
                 *resolved,
+                None,
             );
         } else {
             tt.register_assoc_type_resolution(

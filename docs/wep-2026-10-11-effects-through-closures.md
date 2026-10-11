@@ -12,7 +12,7 @@ does I/O. The compiler holds neither.
   effects its expected type declares, plus every effect of the function it is
   written in.
 - So a closure passed where a `fn()` is expected performs what its writer holds,
-  and nobody declares it (`closure_escapes_effect_todo.wado`).
+  and nobody declares it (`closure_escapes_effect_todo.wado`, #1087).
 - An effect parameter is inferred from the function-typed arguments' effects
   (`resolve_effect_params`). A closure's type carries none, so `E` in
   `wrapper(|| println("hi"))` resolves to nothing. The call only works because
@@ -45,20 +45,24 @@ leak.
 
 ## Roadmap
 
-1. A type parameter bounded by a function type is callable wherever a value of
-   it is: a local, a parameter, a field. An impl whose parameter only a bound
-   names matches the types it should.
-2. A closure literal's type carries the effects inferred from its body, and an
+1. [x] A type parameter bounded by a function type is that signature in an
+   impl as in a function: callable wherever a value of it is, a field among
+   them. The impl matches a target whose argument is a closure of that
+   signature, solving the parameters only the signature names, and an
+   associated type naming one of them is what the target binds at the
+   receiver. That last held of no impl parameter away from its declaration
+   position, a nested one included.
+2. [ ] A closure literal's type carries the effects inferred from its body, and an
    effect parameter is resolved from them. The body is still checked against
    its enclosing function, so nothing that compiles today stops compiling.
-3. `Iterator` and `IntoIterator` are open, the lazy adapters are generic over
+3. [ ] `Iterator` and `IntoIterator` are open, the lazy adapters are generic over
    their closure's type, and the eager functions taking a closure declare an
    effect parameter. An iterator whose `next` performs I/O, and an effectful
    closure through `map`, both compile and demand their effects of the caller.
-4. A closure body is checked against the effects its type carries, and an
+4. [ ] A closure body is checked against the effects its type carries, and an
    expected type without `with` admits none. `closure_escapes_effect_todo.wado`
    is rejected as it states.
-5. The specification states the rules above, and no longer says every standard
+5. [ ] The specification states the rules above, and no longer says every standard
    library trait is `with ()`.
 
 ## Known gaps

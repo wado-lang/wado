@@ -2379,6 +2379,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             TraitRef::bare(trait_key),
                             binding.name.clone(),
                             type_param_id,
+                            Some(resolutions.defs().def_at(impl_block.id)),
                         );
                     }
                 }

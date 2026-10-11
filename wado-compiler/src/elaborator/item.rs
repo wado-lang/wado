@@ -520,6 +520,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let Some(slot) = slots.of_name(name) else {
                 continue;
             };
+            let decl = impl_declared_params.iter().find(|p| &p.name == name);
+            // `<F: fn(...)>` is its signature, which `bind_fn_bound_params`
+            // binds once the bounds it may project off are in force.
+            if decl.is_some_and(|p| !p.is_real_type_param()) {
+                continue;
+            }
             params.push(self.bind_target_param(
                 name,
                 slot,

@@ -306,8 +306,15 @@ impl Query<'_> {
             return None;
         }
         let mut bindings: Vec<Option<Binding>> = vec![None; def.params.len()];
-        if !match_target(&def.target, ty, &mut bindings) {
+        let mut deferred = Vec::new();
+        if !match_target(&def.target, ty, &mut bindings, &mut deferred) {
             return None;
+        }
+        for (projection, met) in &deferred {
+            let expected = self.at_bindings(projection, &bindings)?;
+            if expected != self.normalized(met) {
+                return None;
+            }
         }
         if reached_by(program, implemented, ty, def.origin.yields_to()) {
             return None;
@@ -466,10 +473,10 @@ fn reached_by(
     origins: &[ImplOrigin],
 ) -> bool {
     !origins.is_empty()
-        && program.impls.values().any(|def| {
-            at_self(program, def, trait_, origins)
-                && match_target(&def.target, ty, &mut vec![None; def.params.len()])
-        })
+        && program
+            .impls
+            .values()
+            .any(|def| at_self(program, def, trait_, origins) && reaches_target(def, ty))
 }
 
 /// Whether `def` is an impl of `trait_` at its defaults from one of `origins`,
@@ -524,8 +531,7 @@ pub fn comparison_row(program: &Program, ty: &SolverType) -> Option<(TraitDeclId
             .impls
             .iter()
             .filter(|(_, def)| {
-                at_self(program, def, trait_, &[ImplOrigin::Written])
-                    && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+                at_self(program, def, trait_, &[ImplOrigin::Written]) && reaches_target(def, ty)
             })
             .min_by_key(|(_, def)| !def.params.is_empty())
             .map(|(&id, _)| id)
@@ -662,8 +668,16 @@ pub(super) fn at_defaults(program: &Program, def: &ImplDef) -> bool {
 }
 
 /// Match an impl target against a type, binding the target's parameters by
-/// position.
-fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Binding>]) -> bool {
+/// position. A projection the target writes, inside an `<F: fn(...)>`
+/// signature, is decided only once its base is bound, so it is left in
+/// `deferred` beside the type it met.
+fn match_target(
+    target: &SolverType,
+    ty: &SolverType,
+    bindings: &mut [Option<Binding>],
+    deferred: &mut Vec<(SolverType, SolverType)>,
+) -> bool {
+    let mut each = |a: &SolverType, b: &SolverType| match_target(a, b, bindings, deferred);
     match (target, ty) {
         (SolverType::Param(index), _) => {
             let slot = &mut bindings[*index as usize];
@@ -676,10 +690,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
         (SolverType::Decl(head, args), SolverType::Decl(ty_head, ty_args)) => {
             head == ty_head
                 && args.len() == ty_args.len()
-                && args
-                    .iter()
-                    .zip(ty_args)
-                    .all(|(a, b)| match_target(a, b, bindings))
+                && args.iter().zip(ty_args).all(|(a, b)| each(a, b))
         }
         (
             SolverType::Ref { is_mut, inner },
@@ -687,14 +698,11 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
                 is_mut: ty_mut,
                 inner: ty_inner,
             },
-        ) => is_mut == ty_mut && match_target(inner, ty_inner, bindings),
+        ) => is_mut == ty_mut && each(inner, ty_inner),
         (SolverType::Tuple(elems), SolverType::Tuple(ty_elems)) => match elems.split_last() {
             Some((SolverType::Pack(index), prefix)) => {
                 ty_elems.len() >= prefix.len()
-                    && prefix
-                        .iter()
-                        .zip(ty_elems)
-                        .all(|(a, b)| match_target(a, b, bindings))
+                    && prefix.iter().zip(ty_elems).all(|(a, b)| each(a, b))
                     && {
                         bindings[*index as usize] =
                             Some(Binding::Pack(ty_elems[prefix.len()..].to_vec()));
@@ -702,25 +710,22 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
                     }
             }
             _ => {
-                elems.len() == ty_elems.len()
-                    && elems
-                        .iter()
-                        .zip(ty_elems)
-                        .all(|(a, b)| match_target(a, b, bindings))
+                elems.len() == ty_elems.len() && elems.iter().zip(ty_elems).all(|(a, b)| each(a, b))
             }
         },
         (SolverType::Pack(index), SolverType::Tuple(ty_elems)) => {
             bindings[*index as usize] = Some(Binding::Pack(ty_elems.clone()));
             true
         }
-        // A target never spells a projection; one reaches a target only
-        // through a parameter, above.
+        (SolverType::Projection { .. }, _) => {
+            deferred.push((target.clone(), ty.clone()));
+            true
+        }
         (
             SolverType::Decl(_, _)
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
-            | SolverType::Pack(_)
-            | SolverType::Projection { .. },
+            | SolverType::Pack(_),
             SolverType::Decl(_, _)
             | SolverType::Param(_)
             | SolverType::Pack(_)
@@ -729,6 +734,17 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
             | SolverType::Projection { .. },
         ) => false,
     }
+}
+
+/// Whether `def`'s target meets `ty` on its shape alone, a projection it
+/// writes taken as met.
+fn reaches_target(def: &ImplDef, ty: &SolverType) -> bool {
+    match_target(
+        &def.target,
+        ty,
+        &mut vec![None; def.params.len()],
+        &mut Vec::new(),
+    )
 }
 
 #[cfg(test)]
