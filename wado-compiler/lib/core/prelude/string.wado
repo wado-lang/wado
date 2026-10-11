@@ -921,7 +921,7 @@ impl String {
     }
 
     /// Returns the byte index of the first character matching the predicate, or None.
-    pub fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32> {
+    pub fn find_char(&self, pred: fn mut(char) -> bool with _) -> Option<i32> with _ {
         return self.as_str_slice().find_char(pred);
     }
 
@@ -1041,7 +1041,7 @@ impl String {
     }
 
     /// Build a `String` from an iterable of chars.
-    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String {
+    pub fn from_iter<I: IntoIterator<Item = char>>(iter: I) -> String with _ {
         let mut s = String::with_capacity(8);
         for let c of iter {
             s.push(c);
@@ -1050,7 +1050,7 @@ impl String {
     }
 
     /// Build a `String` from an iterable of bytes, validating UTF-8.
-    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> {
+    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _ {
         let collected: List<u8> = bytes.into_iter().collect();
         return String::from_utf8_slice(collected.as_slice() as ByteSlice);
     }
@@ -1210,7 +1210,7 @@ impl String {
     }
 
     /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
-    pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String {
+    pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String with _ {
         let collected: List<u8> = bytes.into_iter().collect();
         let slice = collected.as_slice() as ByteSlice;
         if let Ok(s) = String::from_utf8_slice(slice) {
@@ -1237,7 +1237,7 @@ impl String {
     /// # Contract
     /// The caller must ensure the bytes form valid UTF-8. Breaking it is a
     /// contract violation, and the behavior is unconstrained.
-    pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String {
+    pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String with _ {
         let mut builder = String::with_capacity(8);
         for let b of bytes {
             let idx = builder.internal_reserve_uninit(1);
@@ -1763,7 +1763,7 @@ impl StrSlice {
         return false;
     }
 
-    pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32> {
+    pub fn find_char(&self, mut pred: fn mut(char) -> bool with _) -> Option<i32> with _ {
         let mut iter = self.chars();
         for let mut byte_index = 0; let Some(c) = iter.next(); byte_index += c.len_utf8() {
             if pred(c) {
@@ -2011,7 +2011,7 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().contains_char(ch);
     }
 
-    fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32> {
+    fn find_char(&self, pred: fn mut(char) -> bool with _) -> Option<i32> with _ {
         return self.as_str_slice().find_char(pred);
     }
 

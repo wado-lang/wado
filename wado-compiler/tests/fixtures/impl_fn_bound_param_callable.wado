@@ -1,0 +1,71 @@
+// A type parameter an impl bounds by a function type is that signature, as a
+// function's is: callable wherever a value of it is, a field among them, and
+// the impl matches the struct whose field holds a closure of it, solving the
+// parameters only the signature names. The lazy iterator adapters of WEP
+// 2026-10-11 are written this way, built through a function whose parameter
+// takes a `fn` where a `fn mut` is expected.
+
+trait Pull with () {
+    type Item;
+    fn pull(&mut self) -> Option<Self::Item>;
+}
+
+struct Count {
+    n: i32,
+}
+
+impl Pull for Count {
+    type Item = i32;
+    fn pull(&mut self) -> Option<i32> {
+        if self.n >= 3 {
+            return null;
+        }
+        self.n += 1;
+        return Option::Some(self.n);
+    }
+}
+
+struct Mapped<I, F> {
+    inner: I,
+    f: F,
+}
+
+impl<I: Pull, U, F: fn mut(I::Item) -> U> Pull for Mapped<I, F> {
+    type Item = U;
+    fn pull(&mut self) -> Option<U> {
+        let Some(x) = self.inner.pull() else {
+            return null;
+        };
+        return Option::Some((self.f)(x));
+    }
+}
+
+fn mapped<I: Pull, U>(inner: I, f: fn mut(I::Item) -> U) -> Mapped<I, fn mut(I::Item) -> U> {
+    return Mapped { inner, f };
+}
+
+fn total<P: Pull<Item = i32>>(p: &mut P) -> i32 {
+    let mut sum = 0;
+    while let Some(x) = p.pull() {
+        sum += x;
+    }
+    return sum;
+}
+
+test "an impl calls the closure its fn-bound parameter types a field as" {
+    let mut m = mapped(Count { n: 0 }, |x: i32| x * 10);
+    assert total(&mut m) == 60;
+}
+
+test "a closure writing its captures through the field still counts" {
+    let mut seen = 0;
+    let mut m = Mapped {
+        inner: Count { n: 0 },
+        f: |x: i32| {
+            seen += 1;
+            return x;
+        },
+    };
+    assert total(&mut m) == 6;
+    assert seen == 3;
+}

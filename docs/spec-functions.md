@@ -738,6 +738,25 @@ let f: fn(i32) -> i32 with Stdout = |x| { println(`${x}`); return x; };
 assert f(7) == 7;
 ```
 
+A function value is accepted where a function type is expected only if the
+expected type's row holds every effect the value's type carries. Otherwise a
+function declaring no effects could perform them through it:
+
+<!-- {"fixture":"error_fn_value_effects_dropped.wado"} -->
+
+```wado
+fn each(mut f: fn mut(i32)) {
+    f(1);
+}
+
+fn pure_caller(g: fn mut(i32) with Stdout) {
+    each(g);                                     // ERROR: `each` takes no `Stdout`
+}
+```
+
+Where a value can also be written back through the slot, as an element of a
+list behind `&mut`, the rows must be equal.
+
 A type parameter may be bounded by a closure type. The bound names the type
 once, so the parameter can be reused across positions:
 

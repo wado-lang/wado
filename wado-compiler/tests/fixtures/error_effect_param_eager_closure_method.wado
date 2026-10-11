@@ -1,0 +1,15 @@
+// `for_each` performs what the function it calls does, so handing it one that
+// declares `Stdout` demands `Stdout` of the caller.
+use { println, Stdout } from "core:cli";
+
+fn each_quietly(xs: List<i32>, show: fn mut(i32) with Stdout) {
+    xs.into_iter().for_each(show);
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1];
+    each_quietly(xs, |x| println(`${x}`));
+}
+
+__DATA__
+{"compile_error": ":6:5: analysis error: missing effect 'Stdout' required by 'for_each'", "compile_error_count": 1}

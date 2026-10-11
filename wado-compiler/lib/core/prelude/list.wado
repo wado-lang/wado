@@ -452,7 +452,7 @@ impl<T> List<T> {
     }
 
     /// In-place sort with comparator. Stable, O(n log n) worst case.
-    pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering) {
+    pub fn sort_by(&mut self, mut cmp: fn mut(&T, &T) -> Ordering with _) with _ {
         let n = self.used;
         if n <= 1 {
             return;
@@ -499,7 +499,7 @@ impl<T> List<T> {
         }
     }
 
-    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering) -> List<T> {
+    pub fn sorted_by(&self, cmp: fn mut(&T, &T) -> Ordering with _) -> List<T> with _ {
         let mut copy = List { repr: builtin::array_clone_prefix(&self.repr, self.used), used: self.used };
         copy.sort_by(cmp);
         return copy;
@@ -585,7 +585,7 @@ impl<T: Display> List<T> {
 impl<T> FromIterator for List<T> {
     type Elem = T;
 
-    fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> {
+    fn from_iter<I: Iterator<Item = T>>(iter: &mut I) -> List<T> with _ {
         let mut result: List<T> = [];
         while let Some(item) = iter.next() {
             result.push(item);

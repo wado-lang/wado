@@ -12,7 +12,7 @@ does I/O. The compiler holds neither.
   effects its expected type declares, plus every effect of the function it is
   written in.
 - So a closure passed where a `fn()` is expected performs what its writer holds,
-  and nobody declares it (`closure_escapes_effect_todo.wado`).
+  and nobody declares it (`closure_escapes_effect_todo.wado`, #1087).
 - An effect parameter is inferred from the function-typed arguments' effects
   (`resolve_effect_params`). A closure's type carries none, so `E` in
   `wrapper(|| println("hi"))` resolves to nothing. The call only works because
@@ -36,6 +36,11 @@ leak.
   carry.
 - `Iterator` and `IntoIterator` have an open head, `with _`. Each impl brings
   its own effects, and a pure one demands nothing of its callers.
+- A method of a trait whose head is not `with ()` may write `with ()` to be
+  pure in every impl. This follows from a method's clause overriding the head:
+  under an open head, writing no clause means `with _`, so `with ()` is the one
+  way to say pure. The default methods that only build an adapter (`map`,
+  `filter`, `zip`, …) say it, so building one demands nothing.
 - A lazy adapter is generic over its closure's type (`IterMap<I, F>`, with
   `F: fn mut(I::Item) -> U with E`), so the adapter's type carries the
   closure's effects. Its `next` is `with _`, resolved from `I` and `F`.
@@ -45,21 +50,32 @@ leak.
 
 ## Roadmap
 
-1. A type parameter bounded by a function type is callable wherever a value of
-   it is: a local, a parameter, a field. An impl whose parameter only a bound
-   names matches the types it should.
-2. A closure literal's type carries the effects inferred from its body, and an
-   effect parameter is resolved from them. The body is still checked against
-   its enclosing function, so nothing that compiles today stops compiling.
-3. `Iterator` and `IntoIterator` are open, the lazy adapters are generic over
-   their closure's type, and the eager functions taking a closure declare an
-   effect parameter. An iterator whose `next` performs I/O, and an effectful
-   closure through `map`, both compile and demand their effects of the caller.
-4. A closure body is checked against the effects its type carries, and an
-   expected type without `with` admits none. `closure_escapes_effect_todo.wado`
-   is rejected as it states.
-5. The specification states the rules above, and no longer says every standard
-   library trait is `with ()`.
+1. [x] A type parameter bounded by a function type is that signature in an
+   impl as in a function: callable wherever a value of it is, a field among
+   them. The impl matches a target whose argument is a closure of that
+   signature, solving the parameters only the signature names, and an
+   associated type naming one of them is what the target binds at the
+   receiver. That last held of no impl parameter away from its declaration
+   position, a nested one included.
+2. [x] An effect parameter is resolved from the effects a closure argument's
+   body performs, inferred where the call is checked. The body is still checked
+   against its enclosing function, so nothing that compiles today stops
+   compiling.
+3. [x] `Iterator` and `IntoIterator` are open. An iterator whose `next` performs
+   I/O compiles, and a loop over it, directly or through an adapter, demands
+   its effects of the caller.
+4. [x] The eager functions taking a closure declare an effect parameter, and a
+   function value declaring effects passes to one.
+5. [ ] An effect parameter a call resolves is substituted in the types the call
+   produces, as a type parameter is. The lazy adapters are generic over their
+   closure's type, so an adapter built from a function value carries its
+   effects.
+6. [ ] A closure literal's type carries the effects inferred from its body. The
+   body is checked against them, and an expected type without `with` admits
+   none. An effectful closure through `map` demands its effects of whoever
+   advances the adapter. `closure_escapes_effect_todo.wado` is rejected as it
+   states.
+7. [ ] The specification states the rules above.
 
 ## Known gaps
 

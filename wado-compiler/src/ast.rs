@@ -2447,12 +2447,22 @@ pub struct Function {
     pub params_span: Span,
     pub return_type: Option<Type>,
     pub effects: Vec<EffectName>,
-    /// Whether `effects` came from the enclosing trait's head rather than from
-    /// a `with` clause here. The formatter prints what the source wrote.
-    pub effects_inherited: bool,
+    /// Where `effects` came from. The formatter prints what the source wrote.
+    pub effects_source: EffectsSource,
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
     pub body: Option<Block>,
     pub span: Span,
+}
+
+/// Where a function's effects come from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectsSource {
+    /// The `with` clause written here, or its absence.
+    Written,
+    /// The enclosing trait's head, against which the method writes no clause.
+    Inherited,
+    /// `with ()` on a trait method, overriding a head that is not pure.
+    Pure,
 }
 
 /// One `World::name` in `export(…)`: the world export a function provides.
@@ -2480,10 +2490,10 @@ impl Function {
     /// The effects the source wrote here. Empty when the enclosing trait's
     /// head supplied them.
     pub fn written_effects(&self) -> &[EffectName] {
-        if self.effects_inherited {
-            return &[];
+        match self.effects_source {
+            EffectsSource::Written => &self.effects,
+            EffectsSource::Inherited | EffectsSource::Pure => &[],
         }
-        &self.effects
     }
 
     /// Whether the Component Model supplies this declaration's body.

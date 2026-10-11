@@ -1,6 +1,6 @@
-// A user iterator whose `next()` carries `with Stdout` implements a trait
-// method that declares no effects. The trait's `with` clause bounds every
-// impl of it, so the impl is reported where it is written.
+// `Iterator` leaves its effects to the impl, so a `next()` may carry
+// `with Stdout`. Iterating it demands `Stdout` of the caller, and a caller
+// declaring none is reported where it iterates.
 use { println, Stdout } from "core:cli";
 
 struct Counter {
@@ -40,4 +40,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"compile_error": "effect 'Stdout' is not declared by trait method 'Iterator::next'", "compile_error_codes": ["EFFECT_NOT_IN_TRAIT"]}
+{"compile_error": ":33:5: analysis error: missing effect 'Stdout' required by 'next'", "compile_error_codes": ["MISSING_EFFECT"]}

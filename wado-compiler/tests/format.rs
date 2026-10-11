@@ -881,7 +881,8 @@ fn test_format_generic_associated_type_roundtrips() {
 }
 
 /// A trait head's `with` clause round-trips in each of its three written forms,
-/// and the parameter `with _` mints stays out of the printed type-param list.
+/// as does a method's `with ()` under an open head, and the parameter `with _`
+/// mints stays out of the printed type-param list.
 #[test]
 fn test_format_trait_head_effects_roundtrip() {
     let source = concat!(
@@ -895,6 +896,8 @@ fn test_format_trait_head_effects_roundtrip() {
         "\n",
         "trait Open with _ {\n",
         "    fn next(&mut self) -> i32;\n",
+        "\n",
+        "    fn label(&self) -> i32 with ();\n",
         "}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");
