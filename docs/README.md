@@ -200,12 +200,8 @@
 - [Contract Checks](./wep-2026-10-06-contract-checks.md)
 - [A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)
 - [Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md)
-<<<<<<< HEAD
 - [Lexical Rules Left Open](./wep-2026-10-10-lexical-rules.md)
-||||||| d947d6f1f5
-=======
 - [Effects Through Closures and Iterators](./wep-2026-10-11-effects-through-closures.md)
->>>>>>> origin/main
 
 ## Standard Library
 
