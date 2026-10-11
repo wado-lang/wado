@@ -49,7 +49,7 @@ struct core:prelude/slice.wado//SliceValueIter<dep:sub/spec_packages_geo/shapes.
     mut end: i32,
 }
 
-struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,i32> {  // TypeId(12)
+struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,fn mut(dep:sub/spec_packages_geo/shapes.wado/Square)->i32> {  // TypeId(12)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>",
     mut f: ref struct,
 }
@@ -138,7 +138,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(47)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,i32>") -> ref "core:prelude//List<i32>";  // TypeId(48)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,fn mut(dep:sub/spec_packages_geo/shapes.wado/Square)->i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,fn mut(dep:sub/spec_packages_geo/shapes.wado/Square)->i32>") -> ref "core:prelude//List<i32>";  // TypeId(48)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(49)
 
@@ -237,7 +237,7 @@ fn "spec_packages_library_api.wado/$test_0"() {
     let $licm_repr_61: ref Array<i32>;
     elements_40 = array.new_fixed<ref "dep:sub/spec_packages_geo/shapes.wado//Square">(struct.new "dep:sub/spec_packages_geo/shapes.wado//Square" { side: 3 }, struct.new "dep:sub/spec_packages_geo/shapes.wado//Square" { side: 1 });
     f_44 = struct.new "spec_packages_library_api.wado//$Closure_1" { $capture_0: local.tee $v2_11(struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_packages_library_api.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_packages_library_api.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_packages_library_api.wado/$closure_wrapper_0" }) };
-    $v3_12 = "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,i32>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>" { repr: elements_40, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_1" { env: f_44, inspect: ref.func "closure/spec_packages_library_api.wado/$closure_inspect_wrapper_1", func: ref.func "closure/spec_packages_library_api.wado/$closure_wrapper_1" } });
+    $v3_12 = "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,fn mut(dep:sub/spec_packages_geo/shapes.wado/Square)->i32>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,fn mut(dep:sub/spec_packages_geo/shapes.wado/Square)->i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>" { repr: elements_40, index: 0, end: 2 }, f: struct.new "canonical//CanonicalClosure_1" { env: f_44, inspect: ref.func "closure/spec_packages_library_api.wado/$closure_inspect_wrapper_1", func: ref.func "closure/spec_packages_library_api.wado/$closure_wrapper_1" } });
     $sroa_other_repr_59 = global:spec_packages_library_api.wado::$const_obj_13;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_i32__10: block -> bool {
         if local.tee a_end($v3_12.used) != 2 {
@@ -1353,7 +1353,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,i32>>"(iter) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<dep:sub/spec_packages_geo/shapes.wado/Square>,fn mut(dep:sub/spec_packages_geo/shapes.wado/Square)->i32>>"(iter) {
     let result: ref "core:prelude//List<i32>";
     let item_9: ref "dep:sub/spec_packages_geo/shapes.wado//Square";
     let used: i32;
@@ -1371,7 +1371,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     $hfs_index_23 = $licm_inner_19.index;
     b182: block {
         l183: loop {
-            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_dep_sub_spec_packages_geo_shapes_wado_Square__i32__core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
+            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_dep_sub_spec_packages_geo_shapes_wado_Square__fn_mut_dep_sub_spec_packages_geo_shapes_wado_Square___i32__core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_dep_sub_spec_packages_geo_shapes_wado_Square__core_prelude_traits_wado_Iterator__next_2: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_dep_sub_spec_packages_geo_shapes_wado_Square__core_prelude_traits_wado_Iterator__next_2 $hfs_index_23 >= $licm_end_21;
                     item_9 = struct.new "dep:sub/spec_packages_geo/shapes.wado//Square" { side: builtin::array_get_value<ref "dep:sub/spec_packages_geo/shapes.wado//Square">($licm_repr_22, $hfs_index_23).side };
@@ -1386,7 +1386,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
                     }
                     builtin::array_set<i32>(result.repr, used, $fused_slot_18);
                     result.used = used + 1;
-                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_dep_sub_spec_packages_geo_shapes_wado_Square__i32__core_prelude_traits_wado_Iterator__next_sroa_return__1;
+                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_dep_sub_spec_packages_geo_shapes_wado_Square__fn_mut_dep_sub_spec_packages_geo_shapes_wado_Square___i32__core_prelude_traits_wado_Iterator__next_sroa_return__1;
                 };
                 $licm_inner_19.index = $hfs_index_23;
                 break b182;
