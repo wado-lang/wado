@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791732676922,
+  "lastUpdate": 1791752126427,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66365,6 +66365,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bab741d0d577a6388748343338a2fd7cdec85f3f"
         },
         "date": 1791732676063,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7432ea442968e39982a5372890faf488793a70cc",
+          "message": "Merge pull request #2335 from wado-lang/effects-through-closures\n\nfeat: a closure's effects travel with its value",
+          "timestamp": "2026-10-12T05:36:43+09:00",
+          "tree_id": "059d97b0e392aa58b9565f4f21ea771a8b22b79f",
+          "url": "https://github.com/wado-lang/wado/commit/7432ea442968e39982a5372890faf488793a70cc"
+        },
+        "date": 1791752125587,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
