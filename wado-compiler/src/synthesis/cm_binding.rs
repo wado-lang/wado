@@ -1125,9 +1125,11 @@ fn validate_world_signature_compatibility(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     registry: &CmInterfaceRegistry,
 ) -> Result<(), SynthesisError> {
-    let at = |span: Span| move |message: String| SynthesisError {
-        message,
-        span: Some(span),
+    let at = |span: Span| {
+        move |message: String| SynthesisError {
+            message,
+            span: Some(span),
+        }
     };
     if user_func.params.len() != export.params.len() {
         return Err(at(user_func.span)(format!(

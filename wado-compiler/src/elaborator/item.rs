@@ -1445,7 +1445,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn type_contains_closure(&self, type_id: TypeId) -> bool {
         self.first_type_within(type_id, true, &|scope: &Self, t| {
             let tt = scope.tysys.type_table.borrow();
-            matches!(tt.get(tt.representation_head(t)), ResolvedType::Function { .. })
+            matches!(
+                tt.get(tt.representation_head(t)),
+                ResolvedType::Function { .. }
+            )
         })
         .is_some()
     }
@@ -1481,9 +1484,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         };
         self.struct_field_types(head).is_some_and(|fields| {
-            fields
-                .iter()
-                .any(|(_, t)| self.first_type_within(*t, false, &borrows_storage).is_some())
+            fields.iter().any(|(_, t)| {
+                self.first_type_within(*t, false, &borrows_storage)
+                    .is_some()
+            })
         })
     }
 
@@ -1524,9 +1528,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
                 vec![t]
             }
-            ResolvedType::Variant { .. } => {
-                self.tysys.case_payload_types(head).unwrap_or_default()
-            }
+            ResolvedType::Variant { .. } => self.tysys.case_payload_types(head).unwrap_or_default(),
             ResolvedType::Struct { .. } if into_fields => self
                 .struct_field_types(head)
                 .map(|fields| fields.into_iter().map(|(_, t)| t).collect())

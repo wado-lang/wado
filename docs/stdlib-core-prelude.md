@@ -118,7 +118,8 @@ compiler-synthesized like the kinds. See WEP 2026-06-13.
 
 `#[compiler_item("reflect_type_name")]`
 
-Returns the declaration's name.
+Returns the declaration's name, or `""` for an anonymous struct, which
+names none.
 
 #### `fn wire_name_policy() -> CaseStyle`
 
