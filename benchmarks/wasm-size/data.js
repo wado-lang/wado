@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791723394270,
+  "lastUpdate": 1791724809078,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66233,6 +66233,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/765e2e1e7202737190f64c0a28d5f1af0669c6b6"
         },
         "date": 1791723393487,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf0c69a1abaa2a05cfe7436ad57827679e1ef45e",
+          "message": "Merge pull request #2334 from wado-lang/ccr-4e9aa2f5-afackk\n\nfix(core:router): one precedence rule for every route, with wildcard fallback",
+          "timestamp": "2026-10-11T21:57:31+09:00",
+          "tree_id": "395c9ca47ec775f6ba8c8ff0a4fd10092ea35e0f",
+          "url": "https://github.com/wado-lang/wado/commit/bf0c69a1abaa2a05cfe7436ad57827679e1ef45e"
+        },
+        "date": 1791724808391,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
