@@ -980,8 +980,8 @@ impl<'a> Unparser<'a> {
             }
             self.emit_trailing_for(clause.id);
         }
-        if let Some(body) = &f.body
-            && !contracts.is_empty()
+        if !contracts.is_empty()
+            && let Some(body) = &f.body
         {
             self.output.push('\n');
             self.flush_comments_before(body.span.start, Spacing::Tight);
