@@ -1,22 +1,28 @@
 // Float patterns resolved where another module reads them: a default argument,
 // an associated constant's body, and a trait's default method.
 
+/// Whether `x` is 0.625, decided in a default argument.
 pub fn is_five_eighths(x: f64, hit: bool = x matches { 0.625 }) -> bool {
     return hit;
 }
 
+/// The holder of a float pattern in an associated constant.
 pub struct Probe {}
 
 impl Probe {
+    /// Whether 0.375 matches itself as a pattern.
     pub const THREE_EIGHTHS: bool = builtin::black_box(0.375) matches { 0.375 };
 }
 
+/// A trait whose default method holds a float pattern.
 pub trait SevenEighths with () {
+    /// Whether `x` is 0.875.
     fn is_seven_eighths(&self, x: f64) -> bool {
         return x matches { 0.875 };
     }
 }
 
+/// Whether `x` is 0.1, decided in a default argument whose warning is waived.
 #[allow(float_literal_pattern)]
 pub fn is_tenth(x: f64, tenth: bool = x matches { 0.1 }) -> bool {
     return tenth;
