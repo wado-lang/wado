@@ -4489,7 +4489,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
 
 /// `?` / `??` under the op-only walker (LR-suffix bodies and the group bodies
 /// inside them), mirroring the surface-element walker's dispatch
-/// (`gen_op_storable_optional` / `gen_op_transparent_optional`): a `??` asks the
+/// (`gen_op_repeat_optional_group`): a `??` asks the
 /// runtime ATN, a shape lookahead branches per shape, and every other strategy
 /// reduces to the single entry condition `gen_op_optional_entry_cond` builds.
 /// `follow_gate` is the caller-FOLLOW yield gate.
@@ -4827,65 +4827,47 @@ fn gen_op_opt_scan_guard_for_group(
     return scan_pos_var;
 }
 
-/// Op-driven emit for Optional + storable Group. Dispatches on
-/// `rep_op.strategy`. The Optional-specialised strategies
-/// (`OptionalLookahead`, `OptionalShapeLookahead`, `OptionalScanGuard`)
-/// are produced by lower's `pick_optional_specialised`; when none
-/// applies, lower falls back to `Plain`. `NonGreedy` only fires for
-/// `*?` / `+?` and is handled by `gen_op_repeat_non_greedy`, so this
-/// `match` is exhaustive over the strategies a greedy `?` can carry.
-///
-/// In every case the inner parse routes through op-driven helpers
-/// (`gen_op_inner_for_storable_repeat`, `gen_op_dispatch_element`).
-fn gen_op_storable_optional(
+/// `?` over a group body, dispatching on `rep_op.strategy`: lower's
+/// `pick_optional_specialised` picks `OptionalLookahead`,
+/// `OptionalShapeLookahead` or `OptionalScanGuard`, else `Plain`. A `??` asks
+/// the runtime ATN instead, and an ambiguous entry the probe.
+fn gen_op_repeat_optional_group(
     w: &mut CodeWriter,
     rep: &RepeatElement,
     rep_op: &RepeatOp,
-    g_op: &GroupOp,
-    g_elem: &GroupElement,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let opt_field = rep_op.field;
-    let _ = dedup_name(&opt_field, name_counts);
-    let inner_elem = &rep.element;
+    let Group(g_op) = &rep_op.body else {
+        unreachable();
+    };
+    let Group(g_elem) = peel_labels(&rep.element) else {
+        unreachable();
+    };
+    let _ = dedup_name(&rep_op.field, name_counts);
+    let opt = OptionalGroup { rep_op, g_op, g_elem, inner: &rep.element };
 
-    // Non-greedy `??`: the enter/skip decision is taken at runtime by the
-    // ATN simulator (full context), not by the static first-set check.
     if rep.non_greedy && ctx.plan.needs_atn {
-        gen_op_storable_optional_with_first(
-            w,
-            rep_op,
-            inner_elem,
-            ctx,
-            &atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos"),
-        );
+        opt.gen_present(w, ctx, &atn_enters_cond(ctx, rep_op.atn_decision, "&p.kinds", "p.pos"));
         return;
     }
     if optional_probe_decides(rep_op, ctx) {
         let verdict = gen_optional_probe_verdict(w, rep_op, ctx, name_counts);
-        gen_op_storable_optional_with_first(w, rep_op, inner_elem, ctx, &verdict);
+        opt.gen_present(w, ctx, &verdict);
         return;
     }
-
-    return match &rep_op.strategy {
-        OptionalLookahead(s) => gen_op_storable_optional_with_first(
+    let follow_gate = rep_op.gate_caller_follow;
+    match &rep_op.strategy {
+        OptionalLookahead(s) => opt.gen_present(
             w,
-            rep_op,
-            inner_elem,
             ctx,
-            &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
+            &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), follow_gate),
             &optional_proven_first(rep_op),
         ),
-        OptionalShapeLookahead(s) => gen_op_optional_with_shape_lookahead_storable(
-            w,
-            g_op,
-            g_elem,
-            s,
-            ctx,
-            name_counts,
-            rep_op.gate_caller_follow,
-        ),
+        OptionalShapeLookahead(s) => {
+            assert rep_op.body_shape matches { StorableGroup }, "a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`";
+            gen_op_optional_with_shape_lookahead_storable(w, g_op, g_elem, s, ctx, name_counts, follow_gate);
+        },
         OptionalScanGuard => {
             if let Some(decision) = group_alt_decision(g_op, g_elem, ctx) {
                 // One answer, one set of scans.
@@ -4895,39 +4877,47 @@ fn gen_op_storable_optional(
                     &g_op.scan_group.alts,
                     ctx,
                     name_counts,
-                    rep_op.gate_caller_follow,
+                    follow_gate,
                 );
-                gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, `${best} >= 0`, Option::Some(winner));
+                gen_op_storable_optional_body(w, rep_op, &rep.element, ctx, `${best} >= 0`, Option::Some(winner));
             } else {
                 let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
-                gen_op_storable_optional_with_first(
-                    w,
-                    rep_op,
-                    inner_elem,
-                    ctx,
-                    &gate_cond_with_caller_follow(`${scan_pos_var} >= 0`, rep_op.gate_caller_follow),
-                );
+                opt.gen_present(w, ctx, &gate_cond_with_caller_follow(`${scan_pos_var} >= 0`, follow_gate));
             }
         },
-        // `pick_optional_specialised` returned `null`: gate on
-        // `body_admits` (`Plain`).
-        Plain => gen_op_storable_optional_with_first(
+        Plain => opt.gen_present(
             w,
-            rep_op,
-            inner_elem,
             ctx,
-            &gate_cond_with_caller_follow(
-                &body_guard_cond(rep_op, ctx),
-                rep_op.gate_caller_follow,
-            ),
+            &gate_cond_with_caller_follow(&body_guard_cond(rep_op, ctx), follow_gate),
             &optional_proven_first(rep_op),
         ),
-        // `NonGreedy` is caught upstream by `gen_op_repeat_non_greedy`;
-        // reaching here is a lower-side bug.
-        NonGreedy(_) => panic(
-            "gen_op_storable_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
-        ),
-    };
+        NonGreedy(_) => unreachable(),
+    }
+}
+
+/// A `?` over a group body, with the surface group it walks.
+struct OptionalGroup {
+    rep_op: &RepeatOp,
+    g_op: &GroupOp,
+    g_elem: &GroupElement,
+    inner: &Element,
+}
+
+impl OptionalGroup {
+    /// `if <cond> { <the body once> }`.
+    fn gen_present<S: AsStrSlice>(&self, w: &mut CodeWriter, ctx: &mut EmitContext, cond: S, proven: &List<i32> = &NO_KINDS) {
+        match self.rep_op.body_shape {
+            TransparentGroup => gen_op_transparent_optional_with_cond(w, self.g_op, self.g_elem, self.inner, ctx, cond, proven),
+            LeafRuleCall | LeafOther | StorableGroup => gen_op_storable_optional_with_first(
+                w,
+                self.rep_op,
+                self.inner,
+                ctx,
+                cond,
+                proven,
+            ),
+        }
+    }
 }
 
 /// Runtime entry condition for a non-greedy repeat's next iteration: the ATN
@@ -5029,74 +5019,6 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
         proven,
     );
     w.end();
-}
-
-/// Op-driven emit for Optional + non-storable (Transparent) Group,
-/// dispatching on `rep_op.strategy`. No outer `Option<T>` wrapping;
-/// each branch inlines the inner alt directly.
-fn gen_op_transparent_optional(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    rep_op: &RepeatOp,
-    g_op: &GroupOp,
-    g_elem: &GroupElement,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-) {
-    let _ = dedup_name(&rep_op.field, name_counts);
-
-    // Non-greedy `??`: runtime ATN decision (see gen_op_storable_optional).
-    if rep.non_greedy && ctx.plan.needs_atn {
-        gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &atn_enters_cond(
-            ctx,
-            rep_op.atn_decision,
-            "&p.kinds",
-            "p.pos",
-        ));
-        return;
-    }
-    if optional_probe_decides(rep_op, ctx) {
-        let verdict = gen_optional_probe_verdict(w, rep_op, ctx, name_counts);
-        gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &verdict);
-        return;
-    }
-
-    return match &rep_op.strategy {
-        OptionalShapeLookahead(_) => panic(
-            "gen_op_transparent_optional: a shape needs a nested optional, and `canon_repeat` folds `(X?)?` to `X?`",
-        ),
-        OptionalLookahead(s) => gen_op_transparent_optional_with_cond(
-            w,
-            g_op,
-            g_elem,
-            &rep.element,
-            ctx,
-            &gate_cond_with_caller_follow(&gen_lookahead_condition(ctx, &s.sig), rep_op.gate_caller_follow),
-            &optional_proven_first(rep_op),
-        ),
-        OptionalScanGuard => {
-            let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
-            gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &gate_cond_with_caller_follow(
-                `${scan_pos_var} >= 0`,
-                rep_op.gate_caller_follow,
-            ));
-        },
-        Plain => gen_op_transparent_optional_with_cond(
-            w,
-            g_op,
-            g_elem,
-            &rep.element,
-            ctx,
-            &gate_cond_with_caller_follow(
-                &body_guard_cond(rep_op, ctx),
-                rep_op.gate_caller_follow,
-            ),
-            &optional_proven_first(rep_op),
-        ),
-        NonGreedy(_) => panic(
-            "gen_op_transparent_optional: NonGreedy strategy reached the greedy-Optional dispatcher — lower-side bug",
-        ),
-    };
 }
 
 /// The kinds an optional's entry condition proves the next token is one of.
@@ -5808,11 +5730,9 @@ fn gen_repeat_iteration(
 
 /// Greedy `?` Repeat. Dispatches on `rep_op.body_shape`: RuleCall
 /// uses caller-follow subtraction (the "next-sibling first"
-/// disambiguation); Group delegates to `gen_op_storable_optional` /
-/// `gen_op_transparent_optional` which consume the baked strategy
-/// variants; other leaves (Token / Literal / Wildcard / Excluded) use
-/// `inner_first` directly. The `match` is exhaustive — lower asserts
-/// at construction time that no other body shape reaches here.
+/// disambiguation); a group consumes the baked strategy
+/// (`gen_op_repeat_optional_group`); other leaves (Token / Literal /
+/// Wildcard / Excluded) use `inner_first` directly.
 fn gen_op_repeat_optional_greedy(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -5825,40 +5745,6 @@ fn gen_op_repeat_optional_greedy(
         LeafRuleCall => gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow),
         LeafOther => gen_op_repeat_optional_leaf(w, rep, rep_op, ctx, name_counts),
         StorableGroup | TransparentGroup => gen_op_repeat_optional_group(w, rep, rep_op, ctx, name_counts),
-    };
-}
-
-/// Greedy `?` Repeat with a `Group`-shaped body. Splits on
-/// `body_shape` (Storable vs Transparent) to pick the storable /
-/// transparent emitter. The body op is `Op::Group(_)` and the
-/// surface element is `Element::Group(_)` by lower's invariant; the
-/// match destructures both with explicit error markers in case a
-/// future lower regression desynchronises them.
-fn gen_op_repeat_optional_group(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    rep_op: &RepeatOp,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-) {
-    let g_op = if let Group(g) = &rep_op.body {
-        g;
-    } else {
-        panic("gen_op_repeat_optional_group: lower marked a Group body_shape but body op is not Op::Group");
-    };
-    let g_elem = if let Group(g) = peel_labels(&rep.element) {
-        g;
-    } else {
-        panic("gen_op_repeat_optional_group: surface element is not Element::Group");
-    };
-    return match rep_op.body_shape {
-        StorableGroup => gen_op_storable_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
-        TransparentGroup => gen_op_transparent_optional(w, rep, rep_op, g_op, g_elem, ctx, name_counts),
-        // Caller (`gen_op_repeat_optional_greedy`) routes only Group
-        // shapes here; the leaf shapes have their own arms upstream.
-        LeafRuleCall | LeafOther => panic(
-            "gen_op_repeat_optional_group: leaf body_shape reached the Group dispatcher — caller-side bug",
-        ),
     };
 }
 
