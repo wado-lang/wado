@@ -15,15 +15,15 @@ use crate::name::{
     split_local_method,
 };
 use crate::tir::{
-    EffectRef, FunctionRef, PatternLiteral, REFLECT_NEWTYPE_BASE, ResolvedType,
-    SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
+    EffectRef, FunctionRef, InstancePattern, REFLECT_NEWTYPE_BASE, ResolvedType,
+    SubstitutionContext, TirField, TirLiteralPattern, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
 use super::Elaborator;
 use super::call::{CaseSite, DefaultTypeBinding, DefaultWalk, WalkedDefault, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, is_numeric_literal_target, range_endpoint_order};
-use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
+use super::exhaustiveness::{self, Case, DomainKind, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
@@ -2999,6 +2999,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .scrutinee_structure_head(written_type);
+        // A float type's limit is the one value it holds.
+        if let Some(point) = util::float_limit_pattern(pattern, &self.tysys.resolutions) {
+            return self.exh_instance_pattern(&point, scrutinee_type);
+        }
         Some(match pattern {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
@@ -3202,9 +3206,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Option<Pat> {
         // A literal that names no value of the scrutinee was reported where it
         // was lexed or resolved.
-        let value = match lit {
+        let pattern = match lit {
             Literal::Number(..) | Literal::Byte(_) | Literal::Char(_) | Literal::Bool(_) => {
-                util::pattern_literal(lit).ok()?
+                util::literal_pattern(lit).ok()?
             }
             Literal::String(_) => {
                 return (!self.string_pattern_mismatch(scrutinee_type)).then_some(Pat::Opaque);
@@ -3225,24 +3229,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return Some(Pat::Opaque),
         };
+        self.exh_instance_pattern(&pattern, scrutinee_type)
+    }
+
+    /// A literal, float or range pattern as coverage reads it. `None` for one
+    /// that names no value of `scrutinee_type`, reported where it resolved.
+    fn exh_instance_pattern(
+        &mut self,
+        pattern: &InstancePattern,
+        scrutinee_type: TypeId,
+    ) -> Option<Pat> {
         // What a pattern on a type parameter names is decided per instance.
         if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
-            return Some(Pat::Opaque);
+            return util::unsettled_pattern_errors(pattern)
+                .is_empty()
+                .then_some(Pat::Opaque);
         }
-        let error = util::pattern_literal_error(
-            &value,
+        let settled = util::settle_instance_pattern(
+            pattern,
             scrutinee_type,
             &mut self.tysys.type_table.borrow_mut(),
-        );
-        if error.is_some() {
-            return None;
+        )
+        .ok()?;
+        if let util::SettledPattern::Literal(TirLiteralPattern::Bool(b)) = settled {
+            return Some(Pat::Bool(b));
         }
-        match value {
-            PatternLiteral::Bool(b) => Some(Pat::Bool(b)),
-            _ => self
-                .tysys
-                .exh_int(value.bits(), value.bits(), scrutinee_type),
-        }
+        let (lo, hi) = settled.keys();
+        self.tysys.exh_int(lo, hi, scrutinee_type)
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload
@@ -3375,21 +3388,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return resolved.then_some(Pat::Opaque);
         };
-        let pattern = pattern.ok()?;
-        // What a pattern on a type parameter names is decided per instance.
-        if !util::settles_literal_patterns(&self.tysys.type_table.borrow(), scrutinee_type) {
-            return util::unsettled_pattern_errors(&pattern)
-                .is_empty()
-                .then_some(Pat::Opaque);
-        }
-        let settled = util::settle_instance_pattern(
-            &pattern,
-            scrutinee_type,
-            &mut self.tysys.type_table.borrow_mut(),
-        )
-        .ok()?;
-        let (lo, hi) = settled.range_keys();
-        self.tysys.exh_int(lo, hi, scrutinee_type)
+        self.exh_instance_pattern(&pattern.ok()?, scrutinee_type)
     }
 
     fn format_missing_cases(cases: &[String]) -> String {
@@ -5307,17 +5306,31 @@ impl TypeSystem {
             .unwrap_or(branch_types[0])
     }
 
-    /// The values an integer pattern of this type may take.
+    /// The keys of the values a pattern of this type may take: an integer's or
+    /// a `char`'s own, or a float's [`util::float_order_key`]s.
     fn int_domain(&self, scrutinee_type: TypeId) -> Option<IntDomain> {
         let ResolvedType::Primitive(prim) = *self.type_table.borrow().get(scrutinee_type) else {
             return None;
         };
+        if let Some(format) = FloatFormat::of(prim) {
+            let infinity = util::float_infinity_key(format);
+            return Some(IntDomain {
+                min: -infinity,
+                max: infinity + 1,
+                hole: None,
+                kind: DomainKind::Float(format),
+            });
+        }
         let is_char = prim == PrimitiveType::Char;
         primitive_range(prim).map(|(min, max)| IntDomain {
             min,
             max,
             hole: is_char.then_some(SURROGATES),
-            is_char,
+            kind: if is_char {
+                DomainKind::Char
+            } else {
+                DomainKind::Int
+            },
         })
     }
 

@@ -33,10 +33,48 @@ any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by
 [`AsStrSlice`](./spec-standard-traits.md#asstrslice) matches as well.
 
-A literal with a decimal point is not a pattern. A float matches a
-[range pattern](#range-patterns) instead. A literal with an exponent and no
-decimal point is the integer of its value, as it is where an integer is
-expected, so `1e3` matches `1000`.
+A literal with an exponent and no decimal point is the integer of its value, as
+it is where an integer is expected, so `1e3` matches `1000`.
+
+## Float Patterns
+
+A float literal is a pattern, and so is an integer literal on a float, a
+primitive's limit (`f64::MAX`), and a [constant](#constant-patterns) holding a
+float. Each matches one value by the
+[float order](./spec-standard-traits.md#float-comparison), as `==` does: `0.0`
+matches `-0.0`, and a NaN pattern matches every NaN.
+
+<!-- {"fixture":"float_literal_pattern.wado"} -->
+
+```wado
+fn classify(x: f64) -> String {
+    return match x {
+        0.0 => "zero",
+        f64::INFINITY => "inf",
+        f64::NEG_INFINITY => "-inf",
+        f64::NAN => "nan",
+        1.5 => "one and a half",
+        2 => "two",
+        3.0..=3.0 => "three",
+        f64::MAX => "max",
+        _ => "other",
+    };
+}
+
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert classify(v(0.0)) == "zero" && classify(v(-0.0)) == "zero";
+    assert classify(v(f64::NAN)) == "nan" && classify(v(-f64::NAN)) == "nan";
+}
+```
+
+Any other float than a zero, an infinity or a NaN can be missed by one rounding
+step: an arm `0.3 =>` misses `0.1 + 0.2`. A pattern naming such a float warns
+under [`float_literal_pattern`](./spec-diagnostics.md#the-float_literal_pattern-lint),
+and a range states the tolerance instead. In the match above, `1.5`, `2`,
+`3.0..=3.0` and `f64::MAX` warn. A constant other than a primitive's limit
+always warns, a zero or a NaN included, since its value shows only when the
+match runs.
 
 A literal or range pattern on a value whose type is a type parameter means, in
 each instance, what it means on that instance's type. An instance whose type
@@ -242,14 +280,23 @@ The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
 type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 `Option` constant matches at the top of an arm or nested in another pattern.
 
-A constant is not a pattern when its type is a float or holds one, in a field,
-element or payload at any depth. So `f64::INFINITY`, a `global` holding `0.1`,
-and a struct constant with an `f64` field are errors here. A float constant is
-still a [range bound](#range-patterns).
+A constant whose type is or holds a float is a pattern too, and warns
+([Float Patterns](#float-patterns)).
+
+A constant other than a primitive's limit shows its value only when the match
+runs, so it covers no value for [exhaustiveness](#exhaustiveness): a `match`
+over `TK_FOO` and `TK_BAR` alone still needs `_`, even if the two cover the
+type.
 
 Only a refutable pattern reads a bare name as a constant: a `match` arm,
-`if let`, `while let`, and `let ... else`. So `let limit = v else { … }` runs
-the `else` block unless `v == limit`. A local, a parameter, or a closure capture
+`if let`, `while let`, and `let ... else`. The two `let` forms differ on that
+alone:
+
+- `let limit = v;` binds a new `limit`, whatever global the name reaches.
+- `let limit = v else { … }` compares `v` with the global `limit`, and runs the
+  `else` block unless `v == limit`.
+
+A local, a parameter, or a closure capture
 that takes the name puts the global out of reach, so the name binds there as it
 would anywhere else. What counts is what is in scope where the pattern starts.
 A name the pattern binds itself reaches none of its own sites, so
@@ -286,8 +333,11 @@ as `i32::MAX` or `f64::INFINITY`. A range bounded by those alone is checked
 before the program runs:
 
 - A reversed range pattern is an error, and so is an empty one (`5..<5`).
-- Two arms' range patterns must not overlap. The alternatives of one arm's
-  or-pattern may.
+- Two reachable guardless arms must not take a value in common, where either
+  is a range: two ranges, or a literal and a later range holding it. So the
+  order of the arms never decides between them. A literal after a range holding
+  it is an unreachable arm instead. The alternatives of one arm's or-pattern may
+  overlap.
 - Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
   `1..=255 => …` together cover a `u8`. A `char` holds no surrogate, so
   `'\0'..='\u{D7FF}'` and `'\u{E000}'..='\u{10FFFF}'` together cover it.
@@ -322,13 +372,31 @@ let nan = builtin::black_box(f64::NAN);
 assert !(nan matches { f64::NEG_INFINITY..=f64::INFINITY });
 ```
 
-Two more rules apply to one the compiler checks:
+A NaN bound is an error, so no range matches a NaN.
+`f64::NEG_INFINITY..=f64::INFINITY` matches every float but a NaN, and with a
+NaN pattern covers the type:
 
-- A NaN bound is an error. A NaN scrutinee therefore matches no range, and a
-  `match` on a float needs a `_` arm. `f64::NEG_INFINITY..=f64::INFINITY`
-  matches every float but a NaN.
-- A range whose bounds are equal (`1.0..=1.0`) is an error, as the float literal
-  it stands for is.
+<!-- {"fixture":"float_literal_pattern.wado"} -->
+
+```wado
+fn sign(x: f64) -> i32 {
+    return match x {
+        f64::NAN => 0,
+        f64::NEG_INFINITY..<0.0 => -1,
+        0.0..=f64::INFINITY => 1,
+    };
+}
+
+test {
+    let v = |x: f64| builtin::black_box(x);
+    assert sign(v(f64::NAN)) == 0 && sign(v(-0.5)) == -1 && sign(v(-0.0)) == 1;
+}
+```
+
+A range that takes one float warns as that literal would
+([Float Patterns](#float-patterns)): `1.0..=1.0`, and `1.0..<1.0000000000000002`
+too, whose end is the next `f64` after `1.0`. `-0.0..=0.0` takes the value zero
+and does not.
 
 The range operators themselves are in [Ranges](./spec-expressions.md#ranges).
 

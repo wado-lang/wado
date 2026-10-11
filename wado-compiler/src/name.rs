@@ -580,6 +580,13 @@ pub fn range_local_name() -> String {
     format!("{INTERNAL_PREFIX}range")
 }
 
+/// Local holding the `f32` a half scrutinee of a float pattern widens to, so
+/// its comparisons widen it once.
+#[must_use]
+pub fn widened_half_local_name() -> String {
+    format!("{INTERNAL_PREFIX}range_f32")
+}
+
 /// Local holding one flattened field of a variant-return slot. `slot_local`
 /// trails verbatim, so a source name and a minted one cannot collide.
 #[must_use]

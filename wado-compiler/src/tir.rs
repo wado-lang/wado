@@ -6738,6 +6738,8 @@ pub enum TirPattern {
 #[derive(Debug, Clone)]
 pub enum InstancePattern {
     Literal(PatternLiteral),
+    /// The one float a decimal literal or a float type's limit names.
+    Float(FloatBound),
     /// Integer, `char` or float, as the scrutinee's type decides.
     Range {
         start: RangeBound,
@@ -6755,7 +6757,7 @@ pub enum RangeBound {
     Float(FloatBound),
 }
 
-/// A float range bound, before a float type rounds it.
+/// A float pattern or range bound, before a float type rounds it.
 #[derive(Debug, Clone)]
 pub struct FloatBound {
     /// What the bound is written as.
@@ -6764,7 +6766,8 @@ pub struct FloatBound {
     pub shown: String,
 }
 
-/// A float range bound as written: a literal or a float type's limit.
+/// A float pattern or range bound as written: a literal or a float type's
+/// limit.
 #[derive(Debug, Clone)]
 pub enum FloatBoundKind {
     /// The unsigned literal `digits`, negated where `negated`.

@@ -1680,6 +1680,8 @@ pub mod lint {
     pub const UNCONDITIONAL_TRAP: &str = "unconditional_trap";
     /// A hex literal ending in digits that read as a float type: `0x1_f32`.
     pub const HEX_SUFFIX_LOOKALIKE: &str = "hex_suffix_lookalike";
+    /// A pattern naming one float a rounding step can miss: `1.5 =>`.
+    pub const FLOAT_LITERAL_PATTERN: &str = "float_literal_pattern";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow

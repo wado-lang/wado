@@ -11,15 +11,16 @@ only in the user's own modules, never in the standard library.
 
 The lints are:
 
-| Lint                                                     | Reports                                                                         |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [`shadowed_name`](#the-shadowed_name-lint)               | a binder that takes a name already reaching a known symbol                      |
-| [`self_comparison`](#the-self_comparison-lint)           | a comparison of an expression with itself                                       |
-| [`arithmetic_overflow`](#the-arithmetic_overflow-lint)   | constant integer arithmetic that wraps, or a constant shift amount out of range |
-| [`unconditional_trap`](#the-unconditional_trap-lint)     | an integer division or remainder that always traps                              |
-| [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint) | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
-| [`undecided_effects`](#the-undecided_effects-lint)       | a trait head that writes no `with` clause                                       |
-| [`dead_code`](#the-dead_code-lint)                       | an unused or test-only free function or global                                  |
+| Lint                                                       | Reports                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [`shadowed_name`](#the-shadowed_name-lint)                 | a binder that takes a name already reaching a known symbol                      |
+| [`self_comparison`](#the-self_comparison-lint)             | a comparison of an expression with itself                                       |
+| [`float_literal_pattern`](#the-float_literal_pattern-lint) | a pattern naming one float other than a zero, an infinity or a NaN              |
+| [`arithmetic_overflow`](#the-arithmetic_overflow-lint)     | constant integer arithmetic that wraps, or a constant shift amount out of range |
+| [`unconditional_trap`](#the-unconditional_trap-lint)       | an integer division or remainder that always traps                              |
+| [`hex_suffix_lookalike`](#the-hex_suffix_lookalike-lint)   | a hex literal ending in `_f16`, `_bf16`, `_f32` or `_f64`                       |
+| [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
+| [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 
 ## The `shadowed_name` Lint
 
@@ -90,6 +91,18 @@ On a float the warning adds that a NaN is tested with `is_nan()`, since `x != x`
 is the NaN test other languages teach.
 
 Rationale: [WEP: One Order per Type](./wep-2026-09-23-comparison-traits.md).
+
+## The `float_literal_pattern` Lint
+
+The `float_literal_pattern` lint warns about a pattern that names one float,
+since a rounding step can miss it: a float literal, an integer literal on a
+float, a primitive's limit, a range that takes one float, or a constant whose
+type is or holds a float. A zero, an infinity and a NaN are exempt where the
+compiler knows the value, which it does for a literal and a primitive's limit.
+A constant's value shows only when the match runs, so a constant always warns.
+[Float Patterns](./spec-patterns.md#float-patterns) gives the examples.
+
+Rationale: [WEP: Float Literal Patterns](./wep-2026-10-11-float-literal-patterns.md).
 
 ## Constant Integer Arithmetic
 

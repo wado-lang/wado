@@ -69,8 +69,9 @@ use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::util::{
     BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value,
-    constant_pattern_site, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
-    range_pattern, settle_instance_pattern, settles_literal_patterns,
+    constant_pattern_site, float_limit_pattern, literal_pattern, parse_i128_literal,
+    parse_u128_literal, range_bound, range_pattern, settle_instance_pattern,
+    settles_literal_patterns,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -80,7 +81,7 @@ use crate::lexer::defaults_to_float;
 use crate::name::{
     LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    minted_name, range_local_name, test_function_name,
+    minted_name, range_local_name, test_function_name, widened_half_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
@@ -9162,15 +9163,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     | ast::Literal::Bool(_) => {
                         // A literal naming no value is already diagnosed, so
                         // the pattern standing in for it is never lowered.
-                        let Ok(value) = pattern_literal(lit) else {
+                        let Ok(value) = literal_pattern(lit) else {
                             return TirPattern::Wildcard;
                         };
-                        return self.literal_value_pattern(
-                            InstancePattern::Literal(value),
-                            scrutinee_type,
-                            site,
-                            ctx,
-                        );
+                        return self.literal_value_pattern(value, scrutinee_type, site, ctx);
                     }
                 };
                 TirPattern::Literal(tir_lit)
@@ -9208,6 +9204,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 bindings,
                 ..
             } => {
+                // A float type's limit is the one value it holds.
+                if let Some(point) = float_limit_pattern(pattern, &self.tysys.resolutions) {
+                    return self.literal_value_pattern(point, scrutinee_type, site, ctx);
+                }
                 // An associated constant (`TokenKind::FOO`, `i32::MAX`) or a
                 // namespaced global (`ns::NAME`) matches by value. No case is
                 // either, so the lookup distinguishes the two.
@@ -10606,14 +10606,12 @@ fn widen_half(type_table: &TypeTable, value: TirExpr, half: PrimitiveType, span:
     )
 }
 
-/// `pattern` on the settled `scrutinee`, or why it names no value of it. A
-/// float range holds the scrutinee in the local `add_local` allocates, so
-/// annotate, lowering the same pattern, reserves the local reify takes.
+/// `pattern` on the settled `scrutinee`, or why it names no value of it.
 pub(crate) fn lower_instance_pattern(
     pattern: &InstancePattern,
     scrutinee: TypeId,
     type_table: &mut TypeTable,
-    add_local: impl FnOnce(String, TypeId) -> u32,
+    add_local: impl FnMut(String, TypeId) -> u32,
     span: Span,
 ) -> Result<TirPattern, Vec<PatternLiteralError>> {
     Ok(
@@ -10631,54 +10629,105 @@ pub(crate) fn lower_instance_pattern(
                 is_unsigned,
             },
             SettledPattern::Float(range) => {
-                // Lowering peels a reference scrutinee, as match ergonomics reads it.
-                let float_type = type_table.peel_refs(scrutinee);
-                let local_index = add_local(range_local_name(), float_type);
+                let locals = reserve_float_pattern_locals(scrutinee, type_table, add_local);
                 let shown = unparse_instance_pattern(pattern);
-                float_range_narrow(&range, float_type, local_index, shown, type_table, span)
+                float_range_narrow(&range, &locals, shown, type_table, span)
             }
         },
     )
 }
 
-/// A float range holding its scrutinee, of `float_type`, in `local_index`,
-/// matching where it lies between the bounds. Neither bound is a NaN, so IEEE's
-/// comparisons answer as the float order does, one instruction each. A half
-/// compares as the `f32` it widens to exactly.
+/// The locals a float pattern compares its scrutinee through: the scrutinee,
+/// and for a half the `f32` it widens to, read by every comparison so the
+/// widening runs once.
+pub(super) struct FloatPatternLocals {
+    float_type: TypeId,
+    scrutinee: u32,
+    widened: Option<u32>,
+}
+
+/// Reserve the locals of a float pattern on `scrutinee`, in the order annotate
+/// and reify both take them.
+pub(super) fn reserve_float_pattern_locals(
+    scrutinee: TypeId,
+    type_table: &TypeTable,
+    mut add_local: impl FnMut(String, TypeId) -> u32,
+) -> FloatPatternLocals {
+    // Lowering peels a reference scrutinee, as match ergonomics reads it.
+    let float_type = type_table.peel_refs(scrutinee);
+    let scrutinee = add_local(range_local_name(), float_type);
+    let is_half = matches!(
+        type_table.primitive_head(float_type),
+        Some(PrimitiveType::F16 | PrimitiveType::Bf16)
+    );
+    let widened = is_half.then(|| add_local(widened_half_local_name(), TypeTable::F32));
+    FloatPatternLocals {
+        float_type,
+        scrutinee,
+        widened,
+    }
+}
+
+/// A float range holding its scrutinee in `locals`, matching where it lies
+/// between the bounds: a NaN where the range is the NaN, the value where it is
+/// one. No bound of a wider range is a NaN, so IEEE's comparisons answer as the
+/// float order does, one instruction each. A half compares as the `f32` it
+/// widens to exactly.
 fn float_range_narrow(
     range: &FloatRange,
-    float_type: TypeId,
-    local_index: u32,
+    locals: &FloatPatternLocals,
     shown: String,
     type_table: &TypeTable,
     span: Span,
 ) -> TirPattern {
-    let value = TirExpr::new(
+    let float_type = locals.float_type;
+    let scrutinee = TirExpr::new(
         TirExprKind::Local {
-            index: local_index,
+            index: locals.scrutinee,
             name: range_local_name(),
         },
         float_type,
         span,
     );
-    let (value, operand, width) = match type_table.primitive_head(float_type) {
-        Some(half @ (PrimitiveType::F16 | PrimitiveType::Bf16)) => (
-            widen_half(type_table, value, half, span),
-            TypeTable::F32,
-            "f32",
-        ),
-        Some(PrimitiveType::F32) => (
-            bare_cast(value, TypeTable::F32, span),
-            TypeTable::F32,
-            "f32",
-        ),
-        Some(PrimitiveType::F64) => (
-            bare_cast(value, TypeTable::F64, span),
-            TypeTable::F64,
-            "f64",
-        ),
-        _ => unreachable!("a float range reads a float"),
-    };
+    let (value, operand, width, widen) =
+        match (type_table.primitive_head(float_type), locals.widened) {
+            (Some(half @ (PrimitiveType::F16 | PrimitiveType::Bf16)), Some(widened)) => {
+                let name = widened_half_local_name();
+                let widen = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index: widened,
+                        is_mut: false,
+                        type_id: TypeTable::F32,
+                        value: widen_half(type_table, scrutinee, half, span),
+                        storage: LetStorage::Planned,
+                    },
+                    span,
+                );
+                let value = TirExpr::new(
+                    TirExprKind::Local {
+                        index: widened,
+                        name,
+                    },
+                    TypeTable::F32,
+                    span,
+                );
+                (value, TypeTable::F32, "f32", Some(widen))
+            }
+            (Some(PrimitiveType::F32), None) => (
+                bare_cast(scrutinee, TypeTable::F32, span),
+                TypeTable::F32,
+                "f32",
+                None,
+            ),
+            (Some(PrimitiveType::F64), None) => (
+                bare_cast(scrutinee, TypeTable::F64, span),
+                TypeTable::F64,
+                "f64",
+                None,
+            ),
+            _ => unreachable!("a float pattern reads a float, and a half alone widens"),
+        };
     let bound = |bits: u64| {
         let value = range.format.value(bits);
         TirExpr::new(
@@ -10697,19 +10746,36 @@ fn float_range_narrow(
             TypeTable::BOOL,
         )
     };
-    let below_end = if range.inclusive { "le" } else { "lt" };
-    let test = TirExpr::new(
-        TirExprKind::Binary {
-            op: TirBinaryOp::And,
-            left: Box::new(compare("ge", value.clone(), bound(range.start))),
-            right: Box::new(compare(below_end, value, bound(range.end))),
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let test = if range.is_nan() {
+        compare("ne", value.clone(), value)
+    } else if range.is_point() {
+        compare("eq", value, bound(range.start))
+    } else {
+        let below_end = if range.inclusive { "le" } else { "lt" };
+        TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(compare("ge", value.clone(), bound(range.start))),
+                right: Box::new(compare(below_end, value, bound(range.end))),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    };
+    let test = match widen {
+        Some(widen) => {
+            let stmts = vec![widen, TirStmt::new(TirStmtKind::Expr(test), span)];
+            TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, span)),
+                TypeTable::BOOL,
+                span,
+            )
+        }
+        None => test,
+    };
     TirPattern::Narrow {
         name: None,
-        local_index,
+        local_index: locals.scrutinee,
         type_id: float_type,
         test: Box::new(test),
         shown,

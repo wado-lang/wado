@@ -6,7 +6,7 @@ enum B { X }
 fn by_float(x: f64) -> i32 {
     return match x {
         0.0 => 1,
-        1.5 => 2,
+        0.0..=f64::NAN => 2,
         _ => 3,
     };
 }
@@ -31,7 +31,7 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": "float literals cannot be used in match patterns",
+  "compile_error": "a NaN is no range bound",
   "compile_errors_contains": ["pattern mismatch"],
   "compile_errors_not_contains": ["unreachable arm", "non-exhaustive"]
 }
