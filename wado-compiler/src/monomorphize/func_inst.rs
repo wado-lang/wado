@@ -784,10 +784,7 @@ impl Monomorphizer {
         head_args: &[TypeId],
         type_table: &mut TypeTable,
     ) -> Option<TemplateId> {
-        let Some(TemplateId::Declared {
-            block: Some(block), ..
-        }) = written
-        else {
+        let Some(block) = written.as_ref().and_then(TemplateId::block) else {
             return written;
         };
         type_table
@@ -2458,15 +2455,12 @@ impl Monomorphizer {
     }
 
     fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
-        let Some(TemplateId::Declared {
-            block: Some(block), ..
-        }) = &func.template
-        else {
+        let Some(block) = func.template.as_ref().and_then(TemplateId::block) else {
             return false;
         };
         self.functions
             .trait_env
-            .blanket_of_block(*block)
+            .blanket_of_block(block)
             .is_some_and(|blanket| matches!(blanket.receiver, BlanketReceiver::Ref { .. }))
     }
 

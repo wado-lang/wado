@@ -7349,17 +7349,29 @@ impl TemplateId {
         }
     }
 
+    /// The impl block a written declaration's body is emitted into, its
+    /// `unchecked` twin's included.
+    pub fn block(&self) -> Option<DefId> {
+        match self {
+            Self::Declared { block, .. } | Self::Unchecked { block, .. } => *block,
+            Self::Synthesized { .. } => None,
+        }
+    }
+
+    /// The written declaration answering, its `unchecked` twin's included;
+    /// `None` for a synthesized body.
+    pub fn def(&self) -> Option<DefId> {
+        match self {
+            Self::Declared { def, .. } | Self::Unchecked { def, .. } => Some(*def),
+            Self::Synthesized { .. } => None,
+        }
+    }
+
     /// The module the body is emitted into: its block's where it has one.
     pub fn home(&self, defs: &DefTable) -> ModuleSource {
         match self {
-            Self::Declared {
-                block: Some(block), ..
-            }
-            | Self::Unchecked {
-                block: Some(block), ..
-            } => defs.module(*block).clone(),
-            Self::Declared { def, block: None } | Self::Unchecked { def, block: None } => {
-                defs.module(*def).clone()
+            Self::Declared { def, block } | Self::Unchecked { def, block } => {
+                defs.module(block.unwrap_or(*def)).clone()
             }
             Self::Synthesized { module, .. } => module.clone(),
         }

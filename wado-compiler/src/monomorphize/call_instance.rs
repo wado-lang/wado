@@ -151,17 +151,9 @@ impl Monomorphizer {
             .monomorph
             .map(|m| m.impl_type_args.as_slice())
             .filter(|args| !args.is_empty());
-        let blanket = match id {
-            TemplateId::Declared {
-                block: Some(block), ..
-            }
-            | TemplateId::Unchecked {
-                block: Some(block), ..
-            } => self.functions.trait_env.blanket_of_block(*block).cloned(),
-            TemplateId::Declared { block: None, .. }
-            | TemplateId::Unchecked { block: None, .. }
-            | TemplateId::Synthesized { .. } => None,
-        };
+        let blanket = id
+            .block()
+            .and_then(|block| self.functions.trait_env.blanket_of_block(block).cloned());
         if let Some(blanket) = blanket {
             return self.blanket_args_at(&blanket, site, recorded, type_table);
         }

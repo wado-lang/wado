@@ -1650,11 +1650,11 @@ fn dispatch_effects(
 ) -> Vec<EffectRef> {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
-    let has_receiver = match &func_ref.template {
-        Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) => index
+    let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
+        Some(def) => index
             .receiver_methods
-            .contains(&index.resolutions.defs().ast_id(*def)),
-        Some(TemplateId::Synthesized { .. }) | None => func_ref.method_info.is_some(),
+            .contains(&index.resolutions.defs().ast_id(def)),
+        None => func_ref.method_info.is_some(),
     };
     let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
@@ -1734,17 +1734,16 @@ impl EffectIndex<'_> {
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
         };
-        let impl_method =
-            match &func_ref.template {
-                Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. })
-                    if self.resolutions.defs().parent(*def).is_some_and(|owner| {
-                        self.resolutions.defs().kind(owner) == DefKind::Impl
-                    }) =>
-                {
-                    Some(self.resolutions.defs().ast_id(*def))
-                }
-                _ => None,
-            };
+        let defs = self.resolutions.defs();
+        let impl_method = func_ref
+            .template
+            .as_ref()
+            .and_then(TemplateId::def)
+            .filter(|&def| {
+                defs.parent(def)
+                    .is_some_and(|owner| defs.kind(owner) == DefKind::Impl)
+            })
+            .map(|def| defs.ast_id(def));
         if let Some(trait_name) = &method_info.trait_name
             && let Some((receiver, key)) = impl_key(&method_info.fq_base_struct_name(), trait_name)
             && self.open_traits.contains(&key)
@@ -1775,12 +1774,10 @@ impl EffectIndex<'_> {
                 }
             }
         }
-        let Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) =
-            &func_ref.template
-        else {
+        let Some(def) = func_ref.template.as_ref().and_then(TemplateId::def) else {
             return brought;
         };
-        let method = self.resolutions.defs().ast_id(*def);
+        let method = self.resolutions.defs().ast_id(def);
         let spelled = |args: &[TypeId]| -> Vec<Vec<FqTypeName>> {
             args.iter().map(|&arg| self.spellings(arg)).collect()
         };
@@ -1967,13 +1964,9 @@ impl EffectIndex<'_> {
         by_decl: &IndexMap<AstId, V>,
         by_name: &IndexMap<(ModuleSource, String), V>,
     ) -> V {
-        let entry = match &func_ref.template {
-            Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) => {
-                by_decl.get(&self.resolutions.defs().ast_id(*def))
-            }
-            Some(TemplateId::Synthesized { .. }) | None => {
-                by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            }
+        let entry = match func_ref.template.as_ref().and_then(TemplateId::def) {
+            Some(def) => by_decl.get(&self.resolutions.defs().ast_id(def)),
+            None => by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone())),
         };
         entry.cloned().unwrap_or_default()
     }
