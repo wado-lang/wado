@@ -1,0 +1,33 @@
+// A stream read must leave nothing behind under the bump allocator. Each
+// `read_dir` reads entries into a buffer, and the host allocates each entry's
+// name after it (after a wait's event record too, when the read blocks). The
+// binding frees them in allocation order, which leaves only the last block at
+// the frontier, so the bump allocator once stranded the rest on every read: a
+// walk of a large tree ran linear memory out (`mise run format` over 40,000
+// entries).
+
+use { println, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+export fn run() with (Stdout, Preopens) {
+    for let name of ["a.txt", "b.txt", "c.txt"] {
+        fs::write(name, &"x").unwrap();
+    }
+    let mut seen = 0;
+    for let _ of 0..<10 {
+        seen += fs::read_dir("").unwrap().len();
+    }
+    let settled = builtin::memory_size();
+    for let _ of 0..<1000 {
+        seen += fs::read_dir("").unwrap().len();
+    }
+    println(`${seen} ${builtin::memory_size() - settled}`);
+}
+
+__DATA__
+{
+    "allocator": "bump",
+    "preopened_dirs": [["", "scratch"]],
+    "stdout": "3030 0\n"
+}

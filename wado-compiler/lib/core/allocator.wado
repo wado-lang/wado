@@ -97,19 +97,41 @@ fn bump(align: u32, size: u32) -> u32 {
     return start as u32;
 }
 
+/// The freed run `[freed_start, freed_end)` the bump allocator could not
+/// rewind yet, `freed_end == 0` when there is none. A run freed in allocation
+/// order, as a stream read frees the names the host allocated after its buffer,
+/// leaves only its last block at the frontier; this is what rewinds the rest.
+global mut freed_start: u32 = 0;
+global mut freed_end: u32 = 0;
+
 /// Bump allocator — advances a pointer with alignment.
-/// When newsize is 0 and the allocation was the most recent one, rewinds the heap pointer.
+/// A free rewinds the frontier when it frees the latest allocation, and also
+/// over the freed run that then ends there. Any other free extends the run
+/// when it starts where the run ends, and otherwise replaces it.
 /// Selected by `--allocator bump` (default for CLI/HTTP worlds).
 #[allocator("bump")]
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    // Free: rewind if this was the most recent allocation
     if newsize == 0 {
-        if (oldptr + oldsize) as u32 == frontier() {
-            set_frontier(oldptr as u32);
-        }
+        bump_free(oldptr as u32, oldptr as u32 + oldsize as u32);
         return 0;
     }
     return bump(align as u32, newsize as u32) as i32;
+}
+
+fn bump_free(start: u32, end: u32) {
+    if end == frontier() {
+        if start == freed_end {
+            set_frontier(freed_start);
+            freed_end = 0;
+        } else {
+            set_frontier(start);
+        }
+    } else if start == freed_end {
+        freed_end = end;
+    } else if start != end {
+        freed_start = start;
+        freed_end = end;
+    }
 }
 
 /// Debug allocator — advances a pointer with alignment, never reuses freed memory.
