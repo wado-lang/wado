@@ -1182,6 +1182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id,
             &mut ctx.replacing(|ctx| &mut ctx.must_bind, Some(MustBind { site, is_mut })),
             span,
+            span,
             RefBinding::None,
         );
     }
@@ -1632,15 +1633,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (peeled_type, ref_binding) = self
             .tysys
             .peel_scrutinee_refs(scrutinee_type, RefBinding::None);
-        self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
+        self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, span, ref_binding)
     }
 
+    /// `span` locates what this level reports; `site` is the whole pattern's
+    /// arm or statement, where a note for the lint pass is keyed.
     fn resolve_if_pattern_inner(
         &mut self,
         pattern: &Pattern,
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
+        site: Span,
         ref_binding: RefBinding,
     ) -> PatBindings {
         if scrutinee_type == TypeTable::ERROR
@@ -1649,17 +1653,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return subpatterns
                 .into_iter()
                 .flat_map(|p| {
-                    self.resolve_if_pattern_inner(p, TypeTable::ERROR, ctx, span, ref_binding)
+                    self.resolve_if_pattern_inner(p, TypeTable::ERROR, ctx, span, site, ref_binding)
                 })
                 .collect();
         }
-        if let Some(MustBind { site, .. }) = ctx.must_bind
+        if let Some(MustBind {
+            site: binding_site, ..
+        }) = ctx.must_bind
             && let Some(reason) = self.refutation(pattern, scrutinee_type)
         {
-            self.reject_refutable(site, &reason, span);
+            self.reject_refutable(binding_site, &reason, span);
         }
-        // A variant pattern's own span shadows the site's below.
-        let site = span;
         match pattern {
             Pattern::Wildcard => Vec::new(),
             Pattern::Ident {
@@ -1693,6 +1697,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         scrutinee_type,
                         ctx,
                         span,
+                        site,
                         ref_binding,
                     );
                 }
@@ -1709,7 +1714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         scrutinee_type,
                         ctx,
                         *name_span,
-                        span,
+                        site,
                     );
                     return Vec::new();
                 }
@@ -1726,7 +1731,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // `null` lowers to a `None` variant pattern (no binding).
                         let _ = self.try_null_as_none_pattern(scrutinee_type);
                     }
-                    _ => self.resolve_literal_pattern(lit, scrutinee_type, ctx, span),
+                    _ => self.resolve_literal_pattern(lit, scrutinee_type, ctx, span, site),
                 }
                 Vec::new()
             }
@@ -1754,7 +1759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .zip(element_types)
                     .flat_map(|(p, ty)| {
-                        self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding)
+                        self.resolve_if_pattern_inner(p, ty, ctx, span, site, ref_binding)
                     })
                     .collect()
             }
@@ -1968,6 +1973,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         payload_type,
                         ctx,
                         *span,
+                        site,
                         ref_binding,
                     )
                 } else if bindings.is_empty() {
@@ -1983,6 +1989,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             TypeTable::UNKNOWN,
                             ctx,
                             *span,
+                            site,
                             ref_binding,
                         ));
                     }
@@ -2027,6 +2034,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_type,
                         ctx,
                         field.span,
+                        site,
                         ref_binding,
                     ));
                 }
@@ -2048,6 +2056,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     scrutinee_type,
                     ctx,
                     span,
+                    site,
                     ref_binding,
                 );
                 // Match the old `collect_pattern_bindings_with_index` ordering
@@ -2062,7 +2071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // entries below are remapped to the first's.
                 for (i, alt) in alternatives.iter().enumerate().skip(1) {
                     let mut alt_bindings =
-                        self.resolve_if_pattern_inner(alt, scrutinee_type, ctx, span, ref_binding);
+                        self.resolve_if_pattern_inner(alt, scrutinee_type, ctx, span, site, ref_binding);
                     alt_bindings.sort_by(|a, b| a.0.cmp(&b.0));
 
                     // Validate same names and types
@@ -2160,18 +2169,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     self.require_handle_classes(target, *typed_span);
                     match ctx.must_bind {
-                        Some(MustBind { site, .. }) => self.reject_refutable_narrowing(
+                        Some(MustBind {
+                            site: binding_site, ..
+                        }) => self.reject_refutable_narrowing(
                             scrutinee_type,
                             target,
                             *typed_span,
-                            site,
+                            binding_site,
                         ),
                         None => self.check_narrowing_shape(inner, ref_binding, *typed_span),
                     }
                 } else {
                     self.check_ascription(scrutinee_type, target, *typed_span);
                 }
-                self.resolve_if_pattern_inner(inner, target, ctx, span, ref_binding)
+                self.resolve_if_pattern_inner(inner, target, ctx, span, site, ref_binding)
             }
             // Parser error-recovery placeholder; inert.
             Pattern::Error(_) => Vec::new(),
@@ -2328,6 +2339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
         span: Span,
+        site: Span,
     ) {
         if let Literal::String(_) = lit {
             if self.string_pattern_mismatch(scrutinee_type) {
@@ -2340,7 +2352,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         match util::literal_pattern(lit) {
-            Ok(pattern) => self.resolve_instance_pattern(&pattern, scrutinee_type, ctx, span, span),
+            Ok(pattern) => self.resolve_instance_pattern(&pattern, scrutinee_type, ctx, span, site),
             Err(message) => {
                 let _ = self.emit(TypeError::InvalidPattern { message, span });
             }
