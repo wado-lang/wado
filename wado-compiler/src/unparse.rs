@@ -1269,15 +1269,12 @@ impl<'a> Unparser<'a> {
         unparse_trait_head_into(&t.head, &mut self.output);
 
         let members = in_source_order(
-            t.associated_types
-                .iter()
-                .map(Member::Declared)
-                .chain(
-                    t.methods
-                        .iter()
-                        .filter(|m| !m.is_contract_holder())
-                        .map(Member::Method),
-                ),
+            t.associated_types.iter().map(Member::Declared).chain(
+                t.methods
+                    .iter()
+                    .filter(|m| !m.is_contract_holder())
+                    .map(Member::Method),
+            ),
         );
         self.with_braced_body(t.span, |this| {
             for member in &members {

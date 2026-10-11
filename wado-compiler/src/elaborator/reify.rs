@@ -10363,7 +10363,6 @@ fn bind_trait_contracts(
             .body
             .iter()
             .flat_map(|body| &body.stmts)
-            .filter(|stmt| matches!(stmt.kind, TirStmtKind::If { .. }))
             .map(|stmt| stmt.span)
             .collect();
         let holder_twin = split_unchecked_twin(holder, &clauses);

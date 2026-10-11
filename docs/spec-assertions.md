@@ -93,7 +93,9 @@ message included. A caller that guarantees the contract itself marks the call
 with the prefix operator `unchecked`, and a marked call is checked only where
 the build checks contracts. A call without the marker is checked in every
 build. The operand of `unchecked` is a call to a function with a contract;
-anything else is a compile error.
+anything else is a compile error. Postfix operators bind tighter, so
+`unchecked f(x)?` marks the `?`, an error, and `(unchecked f(x))?` marks the
+call.
 
 <!-- {"fixture":"contract_clause.wado"} -->
 
