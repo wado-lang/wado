@@ -1662,7 +1662,11 @@ impl EffectIndex<'_> {
             && self.open_traits.contains(&key)
         {
             brought.determined = true;
-            match self.impl_effects.get(&(receiver, key)) {
+            let reached = self.reached_impl_method_effects(func_ref);
+            match reached
+                .as_deref()
+                .or_else(|| self.impl_effects.get(&(receiver, key)).map(Vec::as_slice))
+            {
                 Some(declared) => brought.effects.extend(self.close_over_args(
                     declared,
                     &key,
@@ -1717,6 +1721,51 @@ impl EffectIndex<'_> {
             self.bring(traits, method_args.get(slot).map(type_arg), &mut brought);
         }
         brought
+    }
+
+    /// What the impl's own method a dispatch reaches performs, less the effect
+    /// parameter its function-typed parameters carry, which the arguments
+    /// determine. `None` where the dispatch reaches a trait default, whose body
+    /// performs what the impl's methods do.
+    fn reached_impl_method_effects(&self, func_ref: &FunctionRef) -> Option<Vec<EffectRef>> {
+        let Some(
+            TemplateId::Declared {
+                def,
+                block: Some(block),
+            }
+            | TemplateId::Unchecked {
+                def,
+                block: Some(block),
+            },
+        ) = &func_ref.template
+        else {
+            return None;
+        };
+        let defs = self.resolutions.defs();
+        if defs.parent(*def) != Some(*block) {
+            return None;
+        }
+        let method = defs.ast_id(*def);
+        let carried: IndexSet<&EffectRef> = self
+            .fn_params
+            .get(&method)
+            .into_iter()
+            .flatten()
+            .filter_map(|&param| match self.types.get(param) {
+                ResolvedType::Function { effects, .. } => Some(effects),
+                _ => None,
+            })
+            .flatten()
+            .filter(|effect| effect.is_param())
+            .collect();
+        Some(
+            self.fn_effects
+                .get(&method)?
+                .iter()
+                .filter(|effect| !carried.contains(effect))
+                .cloned()
+                .collect(),
+        )
     }
 
     /// Adds what the type argument `arg` of a parameter bounded by `traits`
@@ -1775,7 +1824,10 @@ impl EffectIndex<'_> {
     /// the dispatch names no trait, or names an `interface` or a `resource`.
     fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
         let method_info = func_ref.method_info.as_ref()?;
-        self.effects_declared_by(method_info.trait_name.as_ref()?, &method_info.method_name)
+        self.effects_declared_by(
+            method_info.trait_name.as_ref()?,
+            method_info.declared_method_name(),
+        )
     }
 
     /// The effects one trait method declares. `None` for a name no trait
