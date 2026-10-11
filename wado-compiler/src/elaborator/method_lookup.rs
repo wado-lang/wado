@@ -1959,6 +1959,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
             }
+            // A parameter nested in a target argument (`T` in `impl<T> Peek for
+            // Listed<Option<T>>`) is what matching the target binds.
+            if blanket_name.is_none() {
+                let slots = ImplParamSlots::of(&header.ty, &header.type_params);
+                let filled = scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .impl_slots(impl_ref.0, type_args);
+                for param in header.type_params.iter().filter(|p| p.is_real_type_param()) {
+                    if scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&param.name)
+                    {
+                        continue;
+                    }
+                    let Some(slot) = slots.of_name(&param.name) else {
+                        continue;
+                    };
+                    let Some(&bound) = filled.get(&slot) else {
+                        continue;
+                    };
+                    Self::bind_type_param(&mut scope, Some(param.id), &param.name, slot, bound);
+                }
+            }
             // For variadic pack params (..T in impl<..T> Trait for [..T]),
             // map the pack to a TypePack so that the method body can reference it.
             if let Some((pack_name, pack_idx)) = &variadic_pack_entry {
