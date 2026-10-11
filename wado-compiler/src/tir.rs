@@ -929,6 +929,16 @@ impl AssocAnswers {
         one_assoc_answer(self.tagged())
     }
 
+    /// The entry [`Self::bare`] answers from, whose impl frame its answer is
+    /// written in: a bare one where one is registered.
+    fn bare_entry(&self) -> Option<&AssocAnswer> {
+        let answer = self.bare()?;
+        let any_bare = self.0.iter().any(|entry| entry.written.is_empty());
+        self.0
+            .iter()
+            .find(|entry| (entry.written.is_empty() || !any_bare) && entry.answer == answer)
+    }
+
     /// The answer of the impl reached at `trait_args`, where they are known
     /// and an impl's, defaults filled, are exactly them; else [`Self::bare`].
     fn at(&self, table: &TypeTable, trait_args: Option<&[TypeId]>) -> Option<TypeId> {
@@ -4289,12 +4299,11 @@ impl TypeTable {
                     .is_some_and(|filled| self.same_types(&filled, wanted))
             })
         });
-        let entry = if let Some(entry) = reached {
-            entry.clone()
-        } else {
-            let bare = answers.bare()?;
-            answers.0.iter().find(|entry| entry.answer == bare)?.clone()
-        };
+        let entry = match reached {
+            Some(entry) => entry,
+            None => answers.bare_entry()?,
+        }
+        .clone();
         let slots = self.entry_slots_mut(&entry, &type_args);
         Some(self.substitute_type_params(entry.answer, &slots))
     }
