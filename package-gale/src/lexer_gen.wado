@@ -1895,109 +1895,69 @@ fn gen_lexer_alts<S: AsStrSlice>(
     hm: bool,
     replay: bool,
 ) {
-    if replay {
-        gen_lexer_alts_replay(w, alts, plan, all_rules, fail_action, ci, ea, hm);
-        return;
-    }
-    if plan.emit matches { MaximalMunch } {
-        gen_lexer_alts_longest(w, alts, plan, all_rules, fail_action, ci, ea, hm);
-        return;
-    }
-    // Sibling arms leaving one block: a cascade of `if !ok` nests a level per
-    // alternative, eleven deep for a css3 unit fragment.
-    let id = w.next_id();
-    w.line(`let alts_saved_${id} = pos;`);
-    w.begin(`alts_done_${id}:`);
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let label = `alts_${id}_${i}`;
-        w.begin(`${label}:`);
-        w.line(`pos = alts_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
-        w.line(`break alts_done_${id};`);
-        w.end();
-    }
-    w.line(`${fail_action};`);
-    w.end();
-}
-
-/// Maximal-munch emit for an alternation in tail position: every alternative is
-/// scanned forward from the same start and the longest match wins, matching
-/// ANTLR4's NFA→DFA lexer simulation (`I : ('a' | 'ab')` matches `ab`). Sound
-/// without backtracking precisely because nothing follows the alternation, so
-/// the alternative's length is the rule's length — an alternation with a suffix
-/// keeps the first-match emit, where a longer arm could strand the suffix.
-fn gen_lexer_alts_longest<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alts: &List<LexerAlternative>,
-    plan: &LexerAltsPlan,
-    all_rules: &List<LexerRule>,
-    fail_action: S,
-    ci: bool,
-    ea: bool,
-    hm: bool,
-) {
-    let id = w.next_id();
-    w.line(`let alts_saved_${id} = pos;`);
-    w.line(`let mut alts_best_${id} = -1;`);
-    for let mut i = 0; i < alts.len(); i += 1 {
-        let label = `alts_${id}_${i}`;
-        w.begin(`${label}:`);
-        w.line(`pos = alts_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ false);
-        w.line(`if pos > alts_best_${id} { alts_best_${id} = pos; }`);
-        w.end();
-    }
-    w.line(`if alts_best_${id} < 0 { ${fail_action}; }`);
-    w.line(`pos = alts_best_${id};`);
-}
-
-/// Replay an alternation: first pick the arm the match picked — scanning
-/// match-only, so a losing arm's actions never run — then re-run just that arm
-/// with its actions in place. Selection mirrors `gen_lexer_alts` exactly
-/// (longest in tail position, first-match otherwise), so the replay lands on the
-/// alternative the tournament actually matched.
-fn gen_lexer_alts_replay<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    alts: &List<LexerAlternative>,
-    plan: &LexerAltsPlan,
-    all_rules: &List<LexerRule>,
-    fail_action: S,
-    ci: bool,
-    ea: bool,
-    hm: bool,
-) {
-    let id = w.next_id();
+    // Maximal munch runs every arm from the same start and keeps the longest,
+    // as ANTLR4's NFA→DFA simulation does (`I : ('a' | 'ab')` matches `ab`). It
+    // is sound without backtracking only in tail position, where the arm's
+    // length is the rule's; elsewhere a longer arm could strand the suffix, so
+    // the first arm to match wins. First-match arms are siblings leaving one
+    // block: a cascade of `if !ok` nests a level per alternative, eleven deep
+    // for a css3 unit fragment.
+    //
+    // A replay first picks the arm the match picked by that same rule, scanning
+    // match-only so a losing arm's actions never run, then re-runs just that
+    // arm with its actions in place.
     let longest = plan.emit matches { MaximalMunch };
-    w.line(`let sel_saved_${id} = pos;`);
-    w.line(`let mut sel_alt_${id} = -1;`);
+    let id = w.next_id();
+    let p = if replay { "sel" } else { "alts" };
+    let saved = `${p}_saved_${id}`;
+    let best = `${p}_best_${id}`;
+    let done = `${p}_done_${id}`;
+    let picked = `sel_alt_${id}`;
+    w.line(`let ${saved} = pos;`);
+    if replay {
+        w.line(`let mut ${picked} = -1;`);
+    }
     if longest {
-        w.line(`let mut sel_best_${id} = -1;`);
+        w.line(`let mut ${best} = -1;`);
     } else {
-        w.begin(`sel_done_${id}:`);
+        w.begin(`${done}:`);
     }
     for let mut i = 0; i < alts.len(); i += 1 {
-        let label = `sel_${id}_${i}`;
+        let label = `${p}_${id}_${i}`;
         w.begin(`${label}:`);
-        w.line(`pos = sel_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ true);
+        w.line(`pos = ${saved};`);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
+        let pick = if replay { ` ${picked} = ${i};` } else { "" };
         if longest {
-            w.line(`if pos > sel_best_${id} { sel_best_${id} = pos; sel_alt_${id} = ${i}; }`);
+            w.line(`if pos > ${best} { ${best} = pos;${pick} }`);
         } else {
-            w.line(`sel_alt_${id} = ${i};`);
-            w.line(`break sel_done_${id};`);
+            if replay {
+                w.line(`${picked} = ${i};`);
+            }
+            w.line(`break ${done};`);
         }
         w.end();
+    }
+    if !replay {
+        if longest {
+            w.line(`if ${best} < 0 { ${fail_action}; }`);
+            w.line(`pos = ${best};`);
+        } else {
+            w.line(`${fail_action};`);
+            w.end();
+        }
+        return;
     }
     if !longest {
         w.end();
     }
-    w.line(`if sel_alt_${id} < 0 { ${fail_action}; }`);
-    w.line(`pos = sel_saved_${id};`);
+    w.line(`if ${picked} < 0 { ${fail_action}; }`);
+    w.line(`pos = ${saved};`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i == 0 {
-            w.begin(`if sel_alt_${id} == ${i}`);
+            w.begin(`if ${picked} == ${i}`);
         } else {
-            w.else_begin(`else if sel_alt_${id} == ${i}`);
+            w.else_begin(`else if ${picked} == ${i}`);
         }
         // `ea = false`: the selection pass already evaluated this arm. Running a
         // state-dependent predicate twice could reject here what it accepted
@@ -2012,18 +1972,21 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
 /// says whether its own arm matches, never how the lengths compare, so an arm
 /// carrying one is measured like any other.
 fn lexer_arms_share_fixed_len(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
-    let mut common = -1;
+    return lexer_alts_fixed_len(alts, all_rules) matches { Some(_) };
+}
+
+/// The number of chars every one of `alts` consumes, or null when they differ
+/// or one is not a fixed count.
+fn lexer_alts_fixed_len(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> Option<i32> {
+    let mut common: Option<i32> = null;
     for let alt of alts {
-        let Some(n) = lexer_alt_fixed_len(alt, all_rules) else {
-            return false;
-        };
-        if common < 0 {
-            common = n;
-        } else if common != n {
-            return false;
+        let n = lexer_alt_fixed_len(alt, all_rules)?;
+        if common matches { Some(c) && c != n } {
+            return null;
         }
+        common = Option::Some(n);
     }
-    return true;
+    return common;
 }
 
 /// The emit an alternation takes, tail position included: the whole
@@ -2160,14 +2123,9 @@ fn lexer_elem_has_predicate_below(elem: &LexerElement, all_rules: &List<LexerRul
 fn lexer_alt_fixed_len(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> Option<i32> {
     let mut total = 0;
     for let elem of &alt.elements {
-        let len = lexer_elem_fixed_len(elem, all_rules);
-        if let Some(n) = len {
-            total += n;
-        } else {
-            return null;
-        }
+        total += lexer_elem_fixed_len(elem, all_rules)?;
     }
-    return Option::<i32>::Some(total);
+    return Option::Some(total);
 }
 
 fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Option<i32> {
@@ -2176,24 +2134,7 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
         CharRange(_) | CharClass(_) | AnyChar => Option::<i32>::Some(1),
         // The g4 parser admits only a set under a `~`, so it takes one char.
         Not(_) => Option::<i32>::Some(1),
-        Group(alts) => {
-            let mut common: Option<i32> = null;
-            for let alt of alts {
-                let len = lexer_alt_fixed_len(&alt, all_rules);
-                if let Some(n) = len {
-                    if let Some(c) = common {
-                        if c != n {
-                            return null;
-                        }
-                    } else {
-                        common = Option::<i32>::Some(n);
-                    }
-                } else {
-                    return null;
-                }
-            }
-            common;
-        },
+        Group(alts) => lexer_alts_fixed_len(&alts, all_rules),
         RuleRef(name) => {
             if name == "EOF" {
                 return Option::<i32>::Some(0);
@@ -2203,7 +2144,7 @@ fn lexer_elem_fixed_len(elem: &LexerElement, all_rules: &List<LexerRule>) -> Opt
                 if fragment_is_recursive(f, all_rules) {
                     return null;
                 }
-                return lexer_elem_fixed_len(&LexerElement::Group(f.body), all_rules);
+                return lexer_alts_fixed_len(&f.body, all_rules);
             }
             null;
         },
