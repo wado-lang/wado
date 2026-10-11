@@ -12,6 +12,7 @@ use {
     ParserRule,
     Element,
     AltAction,
+    ActionKind,
     find_lexer_rule,
     lexer_alias_text,
     NO_MODE,
@@ -2073,46 +2074,32 @@ fn lexer_elem_has_non_greedy(elem: &LexerElement, all_rules: &List<LexerRule>, v
 }
 
 /// Whether `alt` carries a semantic predicate at its own level or anywhere the
-/// emit inlines below it (a group's arms, a non-recursive fragment's body). A
-/// nested predicate constrains the emit exactly as a top-level one does, so both
-/// must disable the maximal-munch scan.
+/// emit inlines below it. A nested predicate constrains the emit exactly as a
+/// top-level one does, so both must disable the maximal-munch scan.
 fn lexer_alt_has_predicate_below(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
-    for let a of &alt.actions {
-        if a.kind matches { Predicate } {
-            return true;
-        }
-    }
-    return alt.elements.iter_ref().any(|e| lexer_elem_has_predicate_below(e, all_rules));
+    return lexer_alt_carries(alt, ActionKind::Predicate, all_rules);
 }
 
-fn lexer_elem_has_predicate_below(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+/// Whether `alt` carries an action of `kind` at its own level or anywhere the
+/// emit inlines below it: a group's arms, a repeat's or `~`'s element, a
+/// non-recursive fragment's body.
+fn lexer_alt_carries(alt: &LexerAlternative, kind: ActionKind, all_rules: &List<LexerRule>) -> bool {
+    return alt.actions.iter_ref().any(|a: &AltAction| a.kind == kind)
+        || alt.elements.iter_ref().any(|el: &LexerElement| lexer_elem_carries(el, kind, all_rules));
+}
+
+fn lexer_elem_carries(elem: &LexerElement, kind: ActionKind, all_rules: &List<LexerRule>) -> bool {
     return match *elem {
-        Group(alts) => {
-            for let a of alts {
-                if lexer_alt_has_predicate_below(&a, all_rules) {
-                    return true;
-                }
-            }
-            false;
-        },
-        Repeat(rep) => lexer_elem_has_predicate_below(&rep.element, all_rules),
-        Not(n) => lexer_elem_has_predicate_below(&n.element, all_rules),
+        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_carries(a, kind, all_rules)),
+        Repeat(rep) => lexer_elem_carries(&rep.element, kind, all_rules),
+        Not(n) => lexer_elem_carries(&n.element, kind, all_rules),
         RuleRef(name) => match find_fragment(all_rules, &name) {
-            // A recursive fragment is a call, so its predicates stay inside it.
-            Some(f) => {
-                if fragment_is_recursive(f, all_rules) {
-                    return false;
-                }
-                for let a of &f.body {
-                    if lexer_alt_has_predicate_below(a, all_rules) {
-                        return true;
-                    }
-                }
-                false;
-            },
+            // A recursive fragment is a call, so what it carries stays inside it.
+            Some(f) => !fragment_is_recursive(f, all_rules)
+                && f.body.iter_ref().any(|a: &LexerAlternative| lexer_alt_carries(a, kind, all_rules)),
             None => false,
         },
-        _ => false,
+        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
     };
 }
 
@@ -3809,7 +3796,8 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     // Whether this iteration ran is the match's decision, so the probe evaluates
     // the predicates the match evaluated (`probe_ea`); the walk below does not.
     let pea = probe_ea(replay, ea);
-    if !lexer_element_has_action(&rep.element, e.all_rules) {
+    // An action inside the element is the only reason for the match-only probe.
+    if !lexer_elem_carries(&rep.element, ActionKind::Action, e.all_rules) {
         gen_lexer_elem(w, &rep.element, inner, e, fail_action, pea, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
@@ -3830,27 +3818,8 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     gen_lexer_elem(w, &rep.element, inner, e, fail_action, ea, true);
 }
 
-/// Whether `elem` carries an action anywhere inside it, counting what a rule
-/// reference inlines — the only reason an iteration needs its match-only probe.
-fn lexer_element_has_action(elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
-    return match *elem {
-        Group(alts) => alts.iter_ref().any(|a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules)),
-        Repeat(rep) => lexer_element_has_action(&rep.element, all_rules),
-        Not(n) => lexer_element_has_action(&n.element, all_rules),
-        RuleRef(name) => match find_fragment(all_rules, &name) {
-            Some(f) => !fragment_is_recursive(f, all_rules)
-                && f.body.iter_ref().any(
-                    |a: &LexerAlternative| lexer_alt_has_any_action(a, all_rules),
-                ),
-            None => false,
-        },
-        Literal(_) | CharRange(_) | CharClass(_) | AnyChar => false,
-    };
-}
-
 fn lexer_alt_has_any_action(alt: &LexerAlternative, all_rules: &List<LexerRule>) -> bool {
-    return alt.actions.iter_ref().any(|a: &AltAction| a.kind matches { Action })
-        || alt.elements.iter_ref().any(|e: &LexerElement| lexer_element_has_action(e, all_rules));
+    return lexer_alt_carries(alt, ActionKind::Action, all_rules);
 }
 
 /// Emit a non-greedy `*?` / `+?`: each iteration tries the rest first and only
