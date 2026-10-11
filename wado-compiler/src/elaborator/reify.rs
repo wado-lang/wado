@@ -2623,6 +2623,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     ast::Expr::MethodCall(method_call) => self
                         .ann_method_dispatch(method_call.id)
                         .and_then(|dispatch| dispatch.method_def),
+                    ast::Expr::Call(call) => self
+                        .ann_static_method_dispatch(call.id)
+                        .and_then(|dispatch| dispatch.method_def),
+                    ast::Expr::StaticMethodCall(static_call) => self
+                        .ann_static_method_dispatch(static_call.id)
+                        .and_then(|dispatch| dispatch.method_def),
                     _ => None,
                 };
                 if let Err(message) = self.retarget_to_unchecked_twin(&mut call, dispatched) {
