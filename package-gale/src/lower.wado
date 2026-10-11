@@ -1641,7 +1641,7 @@ fn build_overlap_dispatch(
     let cause = if shared.is_empty() {
         "an open-ended alternative (`.` / `~X`) overlaps every lookahead";
     } else {
-        `share lookahead ${join_kind_set(&ctx.analysis.token_names_of(&shared))}`;
+        `share lookahead {${ctx.analysis.token_names_of(&shared).join(", ")}}`;
     };
     ctx.diagnostics.warn(
         owner,
@@ -1697,21 +1697,6 @@ fn join_kind_list(indices: &List<i32>) -> String {
     }
     return out;
 }
-
-/// Render a token-kind set as `{A, B}` for a diagnostic message.
-fn join_kind_set(kinds: &List<String>) -> String {
-    let mut out = String::with_capacity(kinds.len() * 8 + 2);
-    out.push('{');
-    for let mut i = 0; i < kinds.len(); i += 1 {
-        if i > 0 {
-            out.push_str(", ");
-        }
-        out.push_str(&kinds[i]);
-    }
-    out.push('}');
-    return out;
-}
-
 
 /// Whether the rule has at least one directly-left-recursive
 /// alternative. Mirrors `parser_gen::is_left_recursive`'s shallow

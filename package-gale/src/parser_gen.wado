@@ -46,7 +46,6 @@ use {
     follow_yields_call_if,
     follow_yields_call_of,
     rule_kind_const,
-    join_kinds,
 } from "./gen_util.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
@@ -56,7 +55,7 @@ use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE, scan_fn_nam
 use { is_nullable } from "./grammar_analysis.wado";
 use { RuleOverlap } from "./rule_overlap.wado";
 use { CallForm, CallStmt, CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
-use { HashMap, HashSet } from "core:collections";
+use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 use {
     PredictionNode,
@@ -283,7 +282,7 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
     let mut sets: List<String> = [];
     let mut index: List<String> = [];
     for let follow of &ctx.plan.recovery_sets().call_follow {
-        let words = join_kinds(&kind_bitset_words(follow));
+        let words = kind_bitset_words(follow).join(", ");
         let id = if let Some(id) = set_ids.get(words) {
             id;
         } else {
@@ -293,13 +292,13 @@ fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &EmitContext) {
         };
         index.push(`${id}`);
     }
-    w.line(`global CALL_FOLLOW_SETS: List<List<i32>> = [${join_kinds(&sets)}];`);
-    w.line(`global CALL_FOLLOW: List<i32> = [${join_kinds(&index)}];`);
+    w.line(`global CALL_FOLLOW_SETS: List<List<i32>> = [${sets.join(", ")}];`);
+    w.line(`global CALL_FOLLOW: List<i32> = [${index.join(", ")}];`);
     let mut ends: List<String> = [];
     for let e of &ctx.plan.recovery_sets().call_follow_ends {
         ends.push(`${*e}`);
     }
-    w.line(`global CALL_FOLLOW_ENDS: List<bool> = [${join_kinds(&ends)}];`);
+    w.line(`global CALL_FOLLOW_ENDS: List<bool> = [${ends.join(", ")}];`);
     w.blank();
 }
 
@@ -430,7 +429,7 @@ fn end_fn(w: &mut CodeWriter, ctx: &mut EmitContext) {
 /// itself.
 fn scan_trailing_args(ctx: &EmitContext, to_walker: bool = false) -> String {
     let args = scan_trailing_arg_list(ctx, to_walker);
-    return if args.is_empty() { "" } else { `, ${join_kinds(&args)}` };
+    return if args.is_empty() { "" } else { `, ${args.join(", ")}` };
 }
 
 /// `scan_trailing_args`, one argument each.
@@ -6529,7 +6528,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
 fn rep_recovery_expr(rep_op: &RepeatOp, ctx: &mut EmitContext) -> Option<String> {
     if let LeafRuleCall = rep_op.body_shape {
         if let RuleCall(r) = &rep_op.body {
-            return Option::Some(`_parse_${r.target_snake}(${join_kinds(&parse_call_args(r, ctx))})`);
+            return Option::Some(`_parse_${r.target_snake}(${parse_call_args(r, ctx).join(", ")})`);
         }
     }
     return null;
@@ -7678,7 +7677,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut EmitConte
         panic("SimpleCst group alt op is not RuleCall");
     };
     let local_var = rc.target_snake;
-    let args = join_kinds(&parse_call_args(rc, ctx));
+    let args = parse_call_args(rc, ctx).join(", ");
     let span_field = open_call_capture(w, op, ctx);
     gen_call_site_stamps(w, ctx, rc.atn_call_site);
     w.line(`${leaf_binding(ctx, &local_var, &local_var)}_parse_${rc.target_snake}(${args});`);
@@ -8512,7 +8511,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
             w.call(scan);
         } else {
             ctx.cursor.note_ref(&scan.callee);
-            w.line(`let _sd_p_${idx} = if ${gate} { ${scan.callee}(${join_kinds(&scan.args)}) } else { -1 };`);
+            w.line(`let _sd_p_${idx} = if ${gate} { ${scan.callee}(${scan.args.join(", ")}) } else { -1 };`);
         }
     }
     if ctx.settings.trace {

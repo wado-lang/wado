@@ -6,7 +6,7 @@
 use { EmitContext } from "./emit_context.wado";
 use { follow_mask_name, kind_set_fn_name, sync_bits_name, sync_list_name } from "./table_registry.wado";
 use { HashSet } from "core:collections";
-use { join_kinds, sets_overlap, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
+use { sets_overlap, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
 use { DISPATCH_KIND_LOCAL } from "./ident.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
@@ -121,9 +121,9 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &Has
     }
     let mut rendered: List<String> = [];
     for let set of &sets {
-        rendered.push(`[${join_kinds(&kind_bitset_words(set))}]`);
+        rendered.push(`[${kind_bitset_words(set).join(", ")}]`);
     }
-    w.line(`global FOLLOW_SETS: List<List<i32>> = [${join_kinds(&rendered)}];`);
+    w.line(`global FOLLOW_SETS: List<List<i32>> = [${rendered.join(", ")}];`);
     for let mask of &masks {
         w.line(mask);
     }
@@ -171,11 +171,11 @@ pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &EmitContext, used: &HashSe
     for let entry of ctx.tables.sync_sets() {
         let bits = sync_bits_name(entry.id);
         if used.contains(bits) {
-            w.line(`global ${bits}: List<i32> = [${join_kinds(&kind_bitset_words(&entry.tokens))}];`);
+            w.line(`global ${bits}: List<i32> = [${kind_bitset_words(&entry.tokens).join(", ")}];`);
         }
         let list = sync_list_name(entry.id);
         if used.contains(list) {
-            w.line(`global ${list}: List<i32> = [${join_kinds(&ctx.analysis.token_names_of(&entry.tokens))}];`);
+            w.line(`global ${list}: List<i32> = [${ctx.analysis.token_names_of(&entry.tokens).join(", ")}];`);
         }
     }
     w.blank();

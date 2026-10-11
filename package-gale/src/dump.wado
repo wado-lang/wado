@@ -495,12 +495,5 @@ fn render_summary(out: &mut String, lowered: &LoweredGrammar) {
 
 /// Render a token-kind set as `[A, B, C]`.
 fn push_token_set(out: &mut String, tokens: &List<i32>, analysis: &GrammarAnalysis) {
-    out.push('[');
-    for let mut i = 0; i < tokens.len(); i += 1 {
-        if i > 0 {
-            out.push_str(", ");
-        }
-        out.push_str(&analysis.token_name(tokens[i]));
-    }
-    out.push(']');
+    out.push_str(`[${analysis.token_names_of(tokens).join(", ")}]`);
 }

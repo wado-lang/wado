@@ -7,7 +7,6 @@
 use { Grammar } from "./ir.wado";
 use { DiagnosticKind, DiagnosticOwner, LoweredGrammar, Rule, rule_header } from "./gir.wado";
 use { ATN_HANDLE, ATN_PREDICTOR_TYPE, EmitContext, SCAN_MEMO_HANDLE } from "./emit_context.wado";
-use { join_kinds } from "./gen_util.wado";
 use { kind_bitset_words } from "./kind_set_gen.wado";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "lib:wadopoet";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
@@ -57,10 +56,10 @@ internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut EmitContext) -
 internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &EmitContext) {
     let mut starts: List<i32> = [];
     for let mut i = 0; i < entries.len(); i += 1 {
-        w.line(`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&kind_bitset_words(&entries[i].first_ids))}];`);
+        w.line(`global _FRAGMENT_FIRST_${i}: List<i32> = [${kind_bitset_words(&entries[i].first_ids).join(", ")}];`);
         starts.extend(&entries[i].first_ids);
     }
-    w.line(`global _FRAGMENT_STARTS: List<i32> = [${join_kinds(&kind_bitset_words(&starts))}];`);
+    w.line(`global _FRAGMENT_STARTS: List<i32> = [${kind_bitset_words(&starts).join(", ")}];`);
     w.blank();
 
     let mut d = FnSpec::new("_recover_fragment");
