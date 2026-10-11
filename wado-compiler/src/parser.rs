@@ -2133,7 +2133,16 @@ impl Parser {
         let mut type_params = self.parse_generic_params()?;
         let held_hole = std::mem::replace(&mut self.effect_hole, EffectHole::Unwritten);
         let lparen_span = self.expect(&TokenKind::LParen)?.span;
-        let params = self.parse_param_list()?;
+        // The method's call site fills the defaults; the holder is only ever
+        // called with every argument, so it keeps none to resolve twice.
+        let params: Vec<Param> = self
+            .parse_param_list()?
+            .into_iter()
+            .map(|param| Param {
+                default: None,
+                ..param
+            })
+            .collect();
         let rparen_span = self.expect(&TokenKind::RParen)?.span;
         self.effect_hole = held_hole;
         let next_ast_id = self.next_ast_id;
