@@ -3,6 +3,7 @@ use { ParseError } from "./g4/parse_error.wado";
 use { escape_ident, to_snake_case, to_lower, to_pascal_case, literal_const_name } from "./ident.wado";
 use { HashMap } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
+use { dedup_append_arr, push_unique } from "./list_util.wado";
 
 /// OptionValue is the typed right-hand side of an ANTLR4 `key = value` option
 /// entry. ANTLR4 options can be a bare identifier, a dotted qualified name,
@@ -701,9 +702,7 @@ fn collect_element_corners(
     match elem {
         RuleRef(r) => {
             if let Some(idx) = index.get(r.name) {
-                if !out.contains(&idx) {
-                    out.push(idx);
-                }
+                push_unique(out, idx);
             }
         },
         Label(l) => collect_element_corners(&l.element, index, nullable, scan, out),
@@ -1299,11 +1298,7 @@ pub fn merge_grammars(grammars: List<Grammar>) -> Grammar {
         }
         // Either half of a split grammar may name delegates; the composite
         // imports the union, first declaration deciding the order.
-        for let im of &g.imports {
-            if !imports.contains(im) {
-                imports.push(*im);
-            }
-        }
+        dedup_append_arr(&mut imports, &g.imports);
         // Concatenate pending refs from every split so `check_references`
         // can resolve cross-file references (token refs in a parser grammar
         // resolve against lexer rules from its sibling lexer grammar).
@@ -1405,11 +1400,7 @@ pub fn compose_grammars(grammars: List<Grammar>) -> Result<Grammar, ParseError> 
 fn imported_names(grammars: &List<Grammar>) -> List<String> {
     let mut names: List<String> = [];
     for let g of grammars {
-        for let im of &g.imports {
-            if !names.contains(im) {
-                names.push(*im);
-            }
-        }
+        dedup_append_arr(&mut names, &g.imports);
     }
     return names;
 }

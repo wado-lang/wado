@@ -1,0 +1,12 @@
+pub fn push_unique<T: Eq>(arr: &mut List<T>, item: T) {
+    if !arr.contains(&item) {
+        arr.push(item);
+    }
+}
+
+/// Append every item in `source` to `arr`, skipping duplicates already in `arr`.
+pub fn dedup_append_arr<T: Eq>(arr: &mut List<T>, source: &List<T>) {
+    for let item of source {
+        push_unique(arr, *item);
+    }
+}

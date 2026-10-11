@@ -1,7 +1,7 @@
 //! Parser rule-body emit: recursive descent, static scan, multi-alt
 //! dispatch, and the LR climb, per rule of a `LoweredGrammar`.
 //! Not here: scaffolding (`parser_runtime_gen`), actions (`action_gen`),
-//! token-set tables (`kind_set_gen`), naming leaves (`gen_util`).
+//! token-set tables (`kind_set_gen`), naming leaves (`ir_shape`, `gen_util`).
 
 use {
     Grammar,
@@ -22,18 +22,16 @@ use {
     token_group_field_name,
     general_group_field_name,
     gen_visibility_comment,
-    dedup_append_arr,
-    subtract_sets,
-    dedup_name,
     all_alts_are_single_token,
     rule_alts_labeled,
-    follow_sep,
     elements_match,
+} from "./ir_shape.wado";
+use { dedup_append_arr, push_unique } from "./list_util.wado";
+use {
+    dedup_name,
+    follow_sep,
     negate_cond,
     and_operand,
-    push_unique,
-    sets_overlap,
-    union_kind_arrays,
     follow_composed,
     follow_alternative,
     follow_opened,
@@ -47,7 +45,7 @@ use {
     follow_yields_call_of,
     rule_kind_const,
 } from "./gen_util.wado";
-use { bits_set, bits_test } from "./token_kinds.wado";
+use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
 use { GateScope, SCAN_GATE_HANDLE, SCAN_GATE_TYPE, runnable_gate_scope } from "./scan_gate.wado";
 use { DiagnosticKind, DiagnosticOwner, DiagnosticSite } from "./gir.wado";
