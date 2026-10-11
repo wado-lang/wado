@@ -341,9 +341,7 @@ impl TypeSystem {
         let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a, type_params));
         match arg {
             // A reference pins what it refers to; the kind is structural.
-            Type::Reference(inner) | Type::MutReference(inner) => {
-                self.arg_pins(inner, type_params)
-            }
+            Type::Reference(inner) | Type::MutReference(inner) => self.arg_pins(inner, type_params),
             // `[]` is the unit type and pins by itself.
             Type::Tuple(elems) => nested_pin(elems),
             // A function type is spelled by its whole shape, so a head in the

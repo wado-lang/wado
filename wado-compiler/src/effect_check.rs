@@ -485,6 +485,15 @@ struct ImplEffects {
     target_args: Vec<FqTypeName>,
 }
 
+/// Impl block `def`'s target arguments as written, rows included.
+fn spelled_target_args(types: &TypeTable, def: DefId) -> Vec<FqTypeName> {
+    types
+        .impl_target_args(def)
+        .iter()
+        .map(|&arg| types.fq_type_name_with_rows(arg))
+        .collect()
+}
+
 /// The key one `impl Trait for Type` is recorded under. `None` for a trait
 /// reaching no declaration.
 fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
@@ -875,15 +884,9 @@ impl OwnedEffectData {
                             let trait_name = facts.trait_name.as_ref()?;
                             impl_key(&facts.struct_name, trait_name)
                         }) {
-                            let def = defs.def_at(block.id);
                             let entry = impl_effects.entry(key).or_insert_with(|| ImplEffects {
                                 declared: Vec::new(),
-                                target_args: sem
-                                    .types
-                                    .impl_target_args(def)
-                                    .iter()
-                                    .map(|&arg| sem.types.fq_type_name_with_rows(arg))
-                                    .collect(),
+                                target_args: spelled_target_args(&sem.types, defs.def_at(block.id)),
                             });
                             for effect in &declared {
                                 if !entry.declared.contains(effect) {
@@ -932,7 +935,10 @@ impl OwnedEffectData {
         let mut flows_from: IndexMap<String, Vec<usize>> = IndexMap::default();
         for (at, flow) in sem.types.row_flows().iter().enumerate() {
             for var in flow.from.iter().filter(|e| e.is_var()) {
-                flows_from.entry(var.name().to_string()).or_default().push(at);
+                flows_from
+                    .entry(var.name().to_string())
+                    .or_default()
+                    .push(at);
             }
         }
 
@@ -1687,7 +1693,6 @@ fn call_site_effects(
     callee: &Expr,
     id: AstId,
     args: &[Expr],
-    closures: &ClosureEffects,
     rows: &Rows,
 ) -> Vec<CalleeEffects> {
     let bare = |name: String, declared: Vec<EffectRef>| CalleeEffects {
@@ -1707,8 +1712,7 @@ fn call_site_effects(
         } else {
             Brought::default()
         };
-        let resolved =
-            resolve_effect_params(sem, effects, &params, false, args, &brought, closures, rows);
+        let resolved = resolve_effect_params(sem, effects, &params, false, args, &brought, rows);
         return vec![CalleeEffects {
             params: resolved.params,
             returns: index.fn_returns.get(&def).copied(),
@@ -1725,10 +1729,7 @@ fn call_site_effects(
         let ResolvedType::Function { effects, .. } = sem.types.get(callee_type) else {
             return Vec::new();
         };
-        return vec![bare(
-            INDIRECT_CALLEE.to_string(),
-            rows.row(effects),
-        )];
+        return vec![bare(INDIRECT_CALLEE.to_string(), rows.row(effects))];
     }
     // Only a free function outside the bindings dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
@@ -1741,8 +1742,7 @@ fn call_site_effects(
         .map(|(func_ref, self_in_args)| {
             let dispatches_through_path = func_ref.method_info.is_none()
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
-            let resolved =
-                dispatch_effects(sem, index, &func_ref, self_in_args, args, closures, rows);
+            let resolved = dispatch_effects(sem, index, &func_ref, self_in_args, args, rows);
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolved.required,
@@ -1767,7 +1767,6 @@ fn dispatch_effects(
     func_ref: &FunctionRef,
     self_in_args: bool,
     args: &[Expr],
-    closures: &ClosureEffects,
     rows: &Rows,
 ) -> Resolved {
     // A synthesized template (a derived method) is a method of the type it is
@@ -1791,13 +1790,12 @@ fn dispatch_effects(
         has_receiver && !self_in_args,
         args,
         &brought,
-        closures,
         rows,
     )
 }
 
-/// The effects each closure literal's body performs, by the literal's node:
-/// what an effect parameter its argument determines is resolved from.
+/// The effects each closure literal's body performs, by the literal's node,
+/// worked out once per walk.
 type ClosureEffects = IndexMap<AstId, Vec<EffectRef>>;
 
 /// Walks a function body, checking that each call's required effects are held.
@@ -1919,12 +1917,7 @@ impl EffectIndex<'_> {
                     .get(&method)
                     .map(Vec::as_slice)
                     .unwrap_or_default();
-                let target_args: Vec<FqTypeName> = self
-                    .types
-                    .impl_target_args(block)
-                    .iter()
-                    .map(|&arg| self.types.fq_type_name_with_rows(arg))
-                    .collect();
+                let target_args = spelled_target_args(self.types, block);
                 brought.effects.extend(
                     self.close_over_args(declared, &key, &target_args, &receiver_args)
                         .into_iter()
@@ -2190,7 +2183,6 @@ fn resolve_effect_params(
     is_method: bool,
     args: &[Expr],
     brought: &Brought,
-    closures: &ClosureEffects,
     rows: &Rows,
 ) -> Resolved {
     let type_table = &sem.types;
@@ -2237,26 +2229,6 @@ fn resolve_effect_params(
         {
             continue;
         }
-        // A closure performs what its body does, less what the parameter's
-        // type names outright, which the callee answers itself.
-        if let Expr::Closure(closure) = arg
-            && let Some(performed) = closures.get(&closure.id)
-        {
-            let actual: Vec<EffectRef> = performed
-                .iter()
-                .filter(|e| e.is_param() || !formal.contains(e))
-                .cloned()
-                .collect();
-            for formal_effect in formal {
-                if let EffectRef::Param { name } = formal_effect
-                    && let Some(slot) = concrete.get_mut(name)
-                {
-                    slot.get_or_insert_with(IndexSet::default)
-                        .extend(actual.iter().cloned());
-                }
-            }
-            continue;
-        }
         let Some(ResolvedType::Function {
             effects: actual, ..
         }) = sem
@@ -2271,7 +2243,13 @@ fn resolve_effect_params(
             );
             continue;
         };
-        let actual = rows.row(actual);
+        // A function value performs what its row holds, less what the
+        // parameter's type names outright, which the callee answers itself.
+        let actual: Vec<EffectRef> = rows
+            .row(actual)
+            .into_iter()
+            .filter(|e| e.is_param() || !formal.contains(e))
+            .collect();
         for formal_effect in formal {
             if let EffectRef::Param { name } = formal_effect
                 && let Some(slot) = concrete.get_mut(name)
@@ -2340,7 +2318,7 @@ fn pair_rows(
     actual: TypeId,
     met: &mut IndexMap<String, IndexSet<String>>,
 ) {
-    types.zip_rows(declared, actual, &mut |de, ae| {
+    types.zip_rows(declared, actual, true, &mut |de, ae| {
         for param in de.iter().filter(|e| e.is_param()) {
             met.entry(param.name().to_string()).or_default().extend(
                 ae.iter()
@@ -2361,7 +2339,7 @@ fn pair_effects(
     rows: &Rows,
     met: &mut IndexMap<String, Option<IndexSet<EffectRef>>>,
 ) {
-    types.zip_rows(declared, actual, &mut |de, ae| {
+    types.zip_rows(declared, actual, true, &mut |de, ae| {
         let performed: Vec<EffectRef> = rows
             .row(ae)
             .into_iter()
@@ -2435,7 +2413,12 @@ fn rows_written_as(
     {
         if written_row.contains(param) {
             found = true;
-            out.extend(actual_row.iter().filter(|e| !written_row.contains(e)).cloned());
+            out.extend(
+                actual_row
+                    .iter()
+                    .filter(|e| !written_row.contains(e))
+                    .cloned(),
+            );
         }
         for (w, a) in written_signature.iter().zip(actual_signature) {
             found |= rows_written_as(w, a, param, out);
@@ -2527,24 +2510,14 @@ impl SemEffectWalker<'_> {
             if self.current.contains(effect) {
                 continue;
             }
-            self.report(effect, callee, span, fault);
+            self.out.push(EffectError {
+                callee: callee.to_string(),
+                missing_effect: effect.name().to_string(),
+                fault: fault(self.index.kind_of(effect)),
+                span,
+                module: self.module.clone(),
+            });
         }
-    }
-
-    fn report(
-        &mut self,
-        effect: &EffectRef,
-        callee: &str,
-        span: Span,
-        fault: fn(EffectKind) -> EffectFault,
-    ) {
-        self.out.push(EffectError {
-            callee: callee.to_string(),
-            missing_effect: effect.name().to_string(),
-            fault: fault(self.index.kind_of(effect)),
-            span,
-            module: self.module.clone(),
-        });
     }
 }
 
@@ -2565,15 +2538,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let resolved = dispatch_effects(
-                        self.sem,
-                        self.index,
-                        func_ref,
-                        false,
-                        &[],
-                        &self.closures,
-                        &self.rows,
-                    );
+                    let resolved =
+                        dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.rows);
                     let callee = func_ref
                         .method_info
                         .as_ref()
@@ -2646,7 +2612,6 @@ impl AstVisitor for SemEffectWalker<'_> {
                         &dispatch.function_ref,
                         false,
                         &method_call.args,
-                        &self.closures,
                         &self.rows,
                     );
                     let returns = self.index.callee_return(&dispatch.function_ref);
@@ -2662,7 +2627,6 @@ impl AstVisitor for SemEffectWalker<'_> {
                         &func_ref,
                         self_in_args,
                         &static_call.args,
-                        &self.closures,
                         &self.rows,
                     );
                     let returns = self.index.callee_return(&func_ref);
@@ -2761,7 +2725,6 @@ impl SemEffectWalker<'_> {
             callee,
             id,
             args,
-            &self.closures,
             &self.rows,
         );
         for site in sites {
@@ -2869,7 +2832,8 @@ impl Rows {
             if flow.into.iter().any(|e| e.is_var() || e.is_param()) {
                 continue;
             }
-            let admitted = expand_through_closure(&flow.into.iter().cloned().collect(), index.closure);
+            let admitted =
+                expand_through_closure(&flow.into.iter().cloned().collect(), index.closure);
             for effect in self.row(&flow.from) {
                 if effect.is_var() || effect.is_param() || admitted.contains(&effect) {
                     continue;
@@ -3086,9 +3050,9 @@ impl<'a> PurityWalker<'a> {
         // can have installed, so it is unanswered like any other. A variable
         // stands for what a closure written in the expression performs, which
         // the walk reads where the closure is written.
-        effects.iter().any(|effect| {
-            !effect.is_var() && (effect.is_param() || !self.granted.contains(effect))
-        })
+        effects
+            .iter()
+            .any(|effect| !effect.is_var() && (effect.is_param() || !self.granted.contains(effect)))
     }
 
     fn flag_if_effectful(
@@ -3105,7 +3069,6 @@ impl<'a> PurityWalker<'a> {
             func_ref,
             self_in_args,
             args,
-            &ClosureEffects::default(),
             &Rows::default(),
         )
         .required;
@@ -3136,7 +3099,6 @@ impl<'a> PurityWalker<'a> {
             callee,
             id,
             args,
-            &ClosureEffects::default(),
             &Rows::default(),
         );
         // `dispatched` is left to `flag_if_operation`, which asks the owner
