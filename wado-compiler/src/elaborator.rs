@@ -60,7 +60,7 @@ use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
-use crate::elaborator::method_lookup::ImplParamSlots;
+pub(crate) use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{DefaultMethodFacts, ModuleSemantics};

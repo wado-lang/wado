@@ -1873,7 +1873,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.reject_declaration_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
             // The head's names were resolved above, once for every method.
-            if !method.effects_inherited {
+            if method.effects_source == ast::EffectsSource::Written {
                 method_scope.resolve_effects(&method.effects);
             }
             method_scope.register_generic_params(&method.type_params, next_slot);

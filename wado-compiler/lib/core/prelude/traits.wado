@@ -1052,7 +1052,7 @@ pub trait UpperExp with () {
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
-pub trait Iterator with () {
+pub trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -1075,7 +1075,7 @@ pub trait Iterator with () {
     }
 
     /// Transforms each element using a function.
-    fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U> {
+    fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U> with () {
         return IterMap { inner: *self, f };
     }
 
@@ -1175,28 +1175,28 @@ pub trait Iterator with () {
     }
 
     /// Returns an adapter that skips elements for which `pred` returns false.
-    fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self> {
+    fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self> with () {
         return IterFilter { inner: *self, pred };
     }
 
     /// Returns an adapter that yields `[i, element]` tuples, where `i` starts at 0.
-    fn enumerate(&self) -> IterEnumerate<Self> {
+    fn enumerate(&self) -> IterEnumerate<Self> with () {
         return IterEnumerate { inner: *self, count: 0 };
     }
 
     /// Returns an adapter that stops after yielding at most `n` elements.
-    fn take(&self, n: i32) -> IterTake<Self> {
+    fn take(&self, n: i32) -> IterTake<Self> with () {
         return IterTake { inner: *self, remaining: n };
     }
 
     /// Returns an adapter that discards the first `n` elements before yielding the rest.
-    fn skip(&self, n: i32) -> IterSkip<Self> {
+    fn skip(&self, n: i32) -> IterSkip<Self> with () {
         return IterSkip { inner: *self, remaining: n };
     }
 
     /// Returns an adapter that yields the first element, then every `step`-th after it.
     /// Panics unless `step` is positive.
-    fn step_by(&self, step: i32) -> IterStepBy<Self> {
+    fn step_by(&self, step: i32) -> IterStepBy<Self> with () {
         if step <= 0 {
             panic("step_by: step must be positive");
         }
@@ -1204,12 +1204,12 @@ pub trait Iterator with () {
     }
 
     /// Returns an adapter that yields all elements of `self`, then all elements of `other`.
-    fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> {
+    fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> with () {
         return IterChain { first: *self, second: other, first_done: false };
     }
 
     /// Returns an adapter that yields `[a, b]` pairs, stopping when either iterator is exhausted.
-    fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> {
+    fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> with () {
         return IterZip { first: *self, second: other };
     }
 
@@ -1305,7 +1305,7 @@ pub struct IterMap<I: Iterator, U> {
 impl<I: Iterator, U> Iterator for IterMap<I, U> {
     type Item = U;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if let Some(item) = self.inner.next() {
             return Option::Some((self.f)(item));
         }
@@ -1331,7 +1331,7 @@ pub struct IterFilter<I: Iterator> {
 impl<I: Iterator> Iterator for IterFilter<I> {
     type Item = I::Item;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         loop {
             if let Some(item) = self.inner.next() {
                 if (self.pred)(item) {
@@ -1362,7 +1362,7 @@ pub struct IterEnumerate<I: Iterator> {
 impl<I: Iterator> Iterator for IterEnumerate<I> {
     type Item = [i32, I::Item];
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if let Some(item) = self.inner.next() {
             let idx = self.count;
             self.count += 1;
@@ -1390,7 +1390,7 @@ pub struct IterTake<I: Iterator> {
 impl<I: Iterator> Iterator for IterTake<I> {
     type Item = I::Item;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if self.remaining <= 0 {
             return null;
         }
@@ -1421,7 +1421,7 @@ pub struct IterSkip<I: Iterator> {
 impl<I: Iterator> Iterator for IterSkip<I> {
     type Item = I::Item;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         while self.remaining > 0 {
             if let Some(_) = self.inner.next() {
                 self.remaining -= 1;
@@ -1452,7 +1452,7 @@ pub struct IterStepBy<I: Iterator> {
 impl<I: Iterator> Iterator for IterStepBy<I> {
     type Item = I::Item;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if self.started {
             return self.inner.nth(self.gap);
         }
@@ -1480,7 +1480,7 @@ pub struct IterChain<I: Iterator, J: Iterator> {
 impl<I: Iterator, J: Iterator<Item = I::Item>> Iterator for IterChain<I, J> {
     type Item = I::Item;
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if !self.first_done {
             if let Some(item) = self.first.next() {
                 return Option::Some(item);
@@ -1509,7 +1509,7 @@ pub struct IterZip<I: Iterator, J: Iterator> {
 impl<I: Iterator, J: Iterator> Iterator for IterZip<I, J> {
     type Item = [I::Item, J::Item];
 
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if let Some(a) = self.first.next() {
             if let Some(b) = self.second.next() {
                 return Option::Some([a, b]);
@@ -1531,7 +1531,7 @@ impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
 #[compiler_item("into_iterator")]
-pub trait IntoIterator with () {
+pub trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -1595,13 +1595,13 @@ impl Error for ConvertError {
 /// bound. Implemented for every `Add<Output = Self>`.
 pub trait Sum with () {
     type Elem;
-    fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+    fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
 }
 
 impl<T: Add<Output = T>> Sum for T {
     type Elem = T;
 
-    fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+    fn sum_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.reduce(|a: T, b: T| a + b);
     }
 }
@@ -1610,13 +1610,13 @@ impl<T: Add<Output = T>> Sum for T {
 /// element bound. Implemented for every `Mul<Output = Self>`.
 pub trait Product with () {
     type Elem;
-    fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+    fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
 }
 
 impl<T: Mul<Output = T>> Product for T {
     type Elem = T;
 
-    fn product_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+    fn product_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.reduce(|a: T, b: T| a * b);
     }
 }
@@ -1625,18 +1625,18 @@ impl<T: Mul<Output = T>> Product for T {
 /// `max`'s element bound. Implemented for every `Ord`.
 pub trait Extremum with () {
     type Elem;
-    fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
-    fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
+    fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
+    fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self> with _;
 }
 
 impl<T: Ord> Extremum for T {
     type Elem = T;
 
-    fn min_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+    fn min_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.min_by(|a: &T, b: &T| a.cmp(b));
     }
 
-    fn max_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> {
+    fn max_iter<I: Iterator<Item = T>>(iter: &mut I) -> Option<T> with _ {
         return iter.max_by(|a: &T, b: &T| a.cmp(b));
     }
 }
@@ -1644,7 +1644,7 @@ impl<T: Ord> Extremum for T {
 /// Trait for creating a collection from any iterator of `Elem`.
 pub trait FromIterator with () {
     type Elem;
-    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
 }
 
 /// `..base` inside a `{ … }` literal: merge `base` into `self`, last write

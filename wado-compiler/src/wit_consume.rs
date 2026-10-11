@@ -9,10 +9,10 @@
 //! cannot drift on how `option`/`list`/`tuple`/`result` are structured.
 
 use crate::ast::{
-    AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl,
-    FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
-    Newtype, Param, SelfKind, StructDecl, StructField, Type, UseDecl, UseItem, VariantCase,
-    VariantDecl, Visibility, cm_import_of,
+    AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
+    FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
+    NamedType, Newtype, Param, SelfKind, StructDecl, StructField, Type, UseDecl, UseItem,
+    VariantCase, VariantDecl, Visibility, cm_import_of,
 };
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -331,7 +331,7 @@ impl Builder {
                 params_span: syn(),
                 return_type,
                 effects: Vec::new(),
-                effects_inherited: false,
+                effects_source: EffectsSource::Written,
                 body: None,
                 span: syn(),
             });
@@ -419,7 +419,7 @@ impl Builder {
             params_span: syn(),
             return_type,
             effects: Vec::new(),
-            effects_inherited: false,
+            effects_source: EffectsSource::Written,
             body: None,
             span: syn(),
         }));

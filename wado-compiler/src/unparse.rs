@@ -7,16 +7,16 @@ use crate::ast::{
     AstVisitor, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block,
     BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
-    FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
-    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
-    Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
-    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
-    Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
-    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr,
-    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
-    VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
-    written_params,
+    EffectsSource, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt,
+    ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
+    LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl, TraitBound, TraitDecl,
+    TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -953,7 +953,7 @@ impl<'a> Unparser<'a> {
                 s.output.push_str(" -> ");
                 s.unparse_type(ret);
             }
-            unparse_with_row_into(f.written_effects(), &mut s.output);
+            unparse_effects_clause_into(f, &mut s.output);
         });
 
         if let Some(body) = &f.body {
@@ -4209,6 +4209,15 @@ pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
     {
         output.push_str(" -> ");
         unparse_type_into(ret, output);
+    }
+    unparse_effects_clause_into(f, output);
+}
+
+/// Emit a function's `with` clause as the source wrote it.
+fn unparse_effects_clause_into(f: &Function, output: &mut String) {
+    if f.effects_source == EffectsSource::Pure {
+        output.push_str(" with ()");
+        return;
     }
     unparse_with_row_into(f.written_effects(), output);
 }

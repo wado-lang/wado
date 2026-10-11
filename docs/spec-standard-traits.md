@@ -14,8 +14,9 @@ The prelude defines iterator traits for generic iteration over collections.
 <!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
 
 ```wado
-/// Types that can yield a sequence of values
-pub trait Iterator with () {
+/// Types that can yield a sequence of values, each impl performing what its
+/// `next` does
+pub trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -29,13 +30,18 @@ test {
 }
 ```
 
+An iterator may perform effects as it advances: a `next` reading the next line
+of a stream does I/O. A loop over it, and any adapter wrapping it, demands what
+its `next` performs. A function generic over an iterator forwards that with
+[`with _`](./spec-effects.md#with-_).
+
 ### IntoIterator - Conversion Trait
 
 <!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
 
 ```wado
 /// Types that can be converted into an iterator
-pub trait IntoIterator with () {
+pub trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -57,7 +63,7 @@ test {
 /// Types that can be constructed from an iterator of `Elem`
 pub trait FromIterator with () {
     type Elem;
-    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
 }
 
 test {
