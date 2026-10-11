@@ -483,6 +483,18 @@ A loop over `mapped(|x: i32| x + 1)` demands nothing. `mapped(loud)` with
 `Mapped<…, fn mut(i32) -> i32 with Stdout>`, and a loop over it demands
 `Stdout`.
 
+A function generic over `E` holds for every row a caller may pick for it, the
+empty one among them. So a value it moves into a slot whose row is `E` may
+perform only `E`, and an `E` nothing at a call determines stands for no effect:
+
+<!-- {"fixture":"error_effect_flow_into_param_row.wado"} -->
+
+```wado
+fn make<effect E>() -> fn() with E {
+    return || { println("leak"); };   // ERROR: `E` may be no effect at all
+}
+```
+
 ### `with _`
 
 `with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter, distinct from any `<effect E>` the signature declares:

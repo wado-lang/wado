@@ -388,19 +388,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
-        self.typecheck_worded(actual, expected, span, SlotFrame::Own, |payload| {
-            TypeError::TypeMismatch {
-                expected: payload.expected,
-                found: payload.found,
-                span,
-            }
-        });
+        self.typecheck_in(actual, expected, span, SlotFrame::Own);
     }
 
     /// [`Self::typecheck`] on a value bound to a callee's parameter, whose type
     /// is written in the callee's frame.
     pub(super) fn typecheck_into_callee(&self, actual: TypeId, expected: TypeId, span: Span) {
-        self.typecheck_worded(actual, expected, span, SlotFrame::Callee, |payload| {
+        self.typecheck_in(actual, expected, span, SlotFrame::Callee);
+    }
+
+    fn typecheck_in(&self, actual: TypeId, expected: TypeId, span: Span, frame: SlotFrame) {
+        self.typecheck_worded(actual, expected, span, frame, |payload| {
             TypeError::TypeMismatch {
                 expected: payload.expected,
                 found: payload.found,
