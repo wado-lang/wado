@@ -49,11 +49,11 @@ use crate::elaborator::liveness::{CompilerNamed, Liveness, References};
 use crate::elaborator::reify::Reify;
 use crate::elaborator::sem::ModuleSemantics;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::elaborator::unchecked::misplaced_unchecked;
 use crate::elaborator::trait_env::{
     ImplHeader, ImplTargetKey, TraitEnv, inherent_impl_overlaps, is_user_local,
     namespace_imports_of, written_arg_nodes,
 };
+use crate::elaborator::unchecked::misplaced_unchecked;
 use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;

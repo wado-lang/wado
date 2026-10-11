@@ -23,10 +23,7 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTypeName, Receiver, global_init_function, global_name,
-    unchecked_twin_name,
-};
+use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -59,9 +56,6 @@ use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
-#[cfg(doc)]
-use crate::elaborator::unchecked::misplaced_unchecked;
-use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
     KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch, MethodNames,
@@ -72,6 +66,7 @@ use crate::elaborator::stmt::{
 };
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
+use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::util::{
     BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value,
     constant_pattern_site, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
@@ -10257,7 +10252,7 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
 }
 
 /// Point the call `expr` reified to at its callee's `unchecked` twin, which
-/// [`misplaced_unchecked`] established it has.
+/// the check of `unchecked`'s operand established it has.
 fn retarget_to_unchecked_twin(expr: &mut TirExpr) {
     let TirExprKind::Call { func, .. } = &mut expr.kind else {
         unreachable!("`unchecked` marks a call: {:?}", expr.kind);
@@ -10317,16 +10312,15 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
 /// `unchecked` twin, and the method it holds the clauses of splits likewise,
 /// each half opening with a call to the matching half of the holder.
 /// `bindings` pairs each holder's declaration with the method's, as
-/// [`Reifier::contract_bindings`] answers them.
+/// [`Reify::contract_bindings`] answers them.
 fn bind_trait_contracts(
     mut methods: Vec<TirFunction>,
     bindings: &[(DefId, DefId)],
     module: &ModuleSource,
     type_table: &mut TypeTable,
 ) -> Vec<TirFunction> {
-    let position = |methods: &[TirFunction], def: DefId| {
-        methods.iter().position(|m| m.def_id == Some(def))
-    };
+    let position =
+        |methods: &[TirFunction], def: DefId| methods.iter().position(|m| m.def_id == Some(def));
     for &(holder_def, held_def) in bindings {
         let Some(holder_at) = position(&methods, holder_def) else {
             continue;

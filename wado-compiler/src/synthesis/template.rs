@@ -1137,7 +1137,13 @@ pub(crate) fn trait_call_template(
     info.trait_name
         .as_ref()
         .and_then(|trait_name| {
-            trait_method_template(trait_env, trait_name, info.declared_method_name(), receiver, tt)
+            trait_method_template(
+                trait_env,
+                trait_name,
+                info.declared_method_name(),
+                receiver,
+                tt,
+            )
         })
         .map(|template| template.called_by(info))
         .or_else(|| Some(TemplateId::derived(home.clone(), info)))
@@ -1157,9 +1163,13 @@ pub(crate) fn method_template_at(
         tt.peel_refs(receiver)
     };
     match &info.trait_name {
-        Some(trait_name) => {
-            trait_method_template(trait_env, trait_name, info.declared_method_name(), receiver, tt)
-        }
+        Some(trait_name) => trait_method_template(
+            trait_env,
+            trait_name,
+            info.declared_method_name(),
+            receiver,
+            tt,
+        ),
         None => inherent_method_template(trait_env, info.declared_method_name(), receiver, tt),
     }
     .map(|template| template.called_by(info))

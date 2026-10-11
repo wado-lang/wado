@@ -5550,8 +5550,14 @@ impl Parser {
         // Visibility comes from the interface itself, and an operation is
         // never exported at the CM boundary on its own.
         let id = self.alloc_ast_id();
-        let (func, contracts) =
-            self.parse_function_and_contracts(id, Visibility::Private, false, is_async, attrs, true)?;
+        let (func, contracts) = self.parse_function_and_contracts(
+            id,
+            Visibility::Private,
+            false,
+            is_async,
+            attrs,
+            true,
+        )?;
         if let Some(clause) = contracts.first() {
             return Err(self.error_at_span(
                 clause.span(),

@@ -1777,6 +1777,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// holder, once with `Self` abstract. The trait answers for its bodies
     /// whether or not an impl inherits them: this walk is what the effect and
     /// purity checks and the language service read.
+    ///
     /// Each walk also records what [`Self::abstract_selections`] would, so an
     /// impl walked after it reads that rather than walking the body again.
     pub(super) fn resolve_trait_bodies(&mut self, trait_decl: &ast::TraitDecl) {

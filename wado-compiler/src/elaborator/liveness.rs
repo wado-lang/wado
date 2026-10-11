@@ -80,12 +80,12 @@ pub(crate) fn compute(
             let Item::Trait(trait_decl) = item else {
                 continue;
             };
-            for method in &trait_decl.methods {
-                let Some(holder) = trait_decl.contract_holder(&method.name) else {
+            for holder in &trait_decl.methods {
+                let Some(held) = holder.holds_contracts_of else {
                     continue;
                 };
-                let impls = trait_method_impls.get(&method.id).into_iter().flatten();
-                for caller in std::iter::once(&method.id).chain(impls) {
+                let impls = trait_method_impls.get(&held).into_iter().flatten();
+                for caller in std::iter::once(&held).chain(impls) {
                     graph.edges.entry(*caller).or_default().push(holder.id);
                 }
             }

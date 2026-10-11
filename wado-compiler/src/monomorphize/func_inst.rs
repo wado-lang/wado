@@ -210,8 +210,12 @@ fn ref_blanket_generic(
     trait_name: &FqTraitName,
     method: &LocalMethodName,
 ) -> LocalMethodName {
-    LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method.method_name.clone())
-        .with_unchecked(method.unchecked)
+    LocalMethodName::new_ref(
+        ref_kind,
+        Some(trait_name.clone()),
+        method.method_name.clone(),
+    )
+    .with_unchecked(method.unchecked)
 }
 
 /// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
