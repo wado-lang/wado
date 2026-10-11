@@ -542,16 +542,16 @@ impl EmitContext {
     /// The caller stack pushed and predicted with, as this code reaches it. A
     /// scan borrows the parser's, so one launched mid-parse has full context.
     pub fn atn_stack_place(&self) -> String {
-        return `${self.atn_state_path()}.stack`;
+        return `${self.atn_path()}.stack`;
     }
 
-    /// The ATN state as a place.
-    pub fn atn_state_path(&self) -> String {
+    /// The ATN predictor as a place.
+    pub fn atn_path(&self) -> String {
         return self.state_path(ATN_HANDLE, ATN_HANDLE);
     }
 
-    /// The ATN state as an argument.
-    pub fn atn_state_arg(&self) -> String {
+    /// The ATN predictor as an argument.
+    pub fn atn_arg(&self) -> String {
         return self.state_arg(ATN_HANDLE, ATN_HANDLE);
     }
 
@@ -580,7 +580,7 @@ impl EmitContext {
             args.push(self.state_arg(SCAN_GATE_HANDLE, SCAN_GATE_FIELD));
         }
         if self.plan.needs_atn {
-            args.push(self.atn_state_arg());
+            args.push(self.atn_arg());
         }
         if self.plan.scan_memo {
             args.push(self.state_arg(SCAN_MEMO_HANDLE, SCAN_MEMO_HANDLE));

@@ -892,7 +892,7 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     // The key holds no caller stack, so a walk whose prediction read one is
     // not kept for another caller.
     if ctx.plan.needs_atn {
-        w.line(`let memo_callers = ${ctx.atn_state_path()}.hide_callers();`);
+        w.line(`let memo_callers = ${ctx.atn_path()}.hide_callers();`);
     }
     let walk_args = if climbs {
         `${scan_trailing_args(ctx, true)}, min_prec${lr_cont_forward(mid_operand_gated)}`;
@@ -902,7 +902,7 @@ fn gen_scan_memo_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     w.line(`let memo_end = ${walk_name}(tokens, pos${walk_args});`);
     let put = `${SCAN_MEMO_HANDLE}.put(${key}, memo_gate, memo_end, ${gate});`;
     if ctx.plan.needs_atn {
-        w.line(`if !${ctx.atn_state_path()}.reveal_callers(memo_callers) { ${put} }`);
+        w.line(`if !${ctx.atn_path()}.reveal_callers(memo_callers) { ${put} }`);
     } else {
         w.line(&put);
     }
@@ -983,7 +983,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin("loop");
     w.line(
-        `${decl} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+        `${decl} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
     let mut is_first = true;
@@ -4246,7 +4246,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line(
-        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_arg()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(
         w,
@@ -7999,9 +7999,9 @@ fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(
     assert ctx.current_rule_asks_simulator(), "a scan call pushes a return state only toward a rule marked as asking the simulator";
     let prec = atn_prec_arg(ctx);
     if disabled.is_empty() {
-        return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${prec})`;
+        return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_arg()}, ${tokens}, ${pos}, TK_EOF, ${prec})`;
     }
-    return `${ctx.atn_state_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${disabled})`;
+    return `${ctx.atn_path()}.predict(&ATN_SIM, ${atn_dec}, ${tokens}, ${pos}, TK_EOF, ${prec}, &${disabled})`;
 }
 
 global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
