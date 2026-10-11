@@ -1724,13 +1724,7 @@ fn call_site_effects(
     if dispatches.is_empty() {
         // The callee is a function-typed value (a closure or `fn(...)`
         // parameter). Its type carries the effects it performs when invoked.
-        let rows_of: Vec<&[EffectRef]> = indirect_callee_types(sem, param_types, callee)
-            .into_iter()
-            .filter_map(|callee_type| match sem.types.get(callee_type) {
-                ResolvedType::Function { effects, .. } => Some(effects.as_slice()),
-                _ => None,
-            })
-            .collect();
+        let rows_of = fn_rows(&sem.types, indirect_callee_types(sem, param_types, callee));
         if rows_of.is_empty() {
             return Vec::new();
         }
@@ -2235,13 +2229,7 @@ fn resolve_effect_params(
         {
             continue;
         }
-        let actual_rows: Vec<&[EffectRef]> = sem
-            .expression_types(arg.id())
-            .filter_map(|arg_type| match type_table.get(arg_type) {
-                ResolvedType::Function { effects, .. } => Some(effects.as_slice()),
-                _ => None,
-            })
-            .collect();
+        let actual_rows = fn_rows(type_table, sem.expression_types(arg.id()));
         if actual_rows.is_empty() {
             unread.extend(
                 formal
@@ -2709,11 +2697,9 @@ impl SemEffectWalker<'_> {
         self.closures = std::mem::take(&mut body.closures);
         self.rows = std::mem::take(&mut body.rows);
         self.closures.insert(closure.id, performed.clone());
-        for closure_type in closure_types {
-            if let ResolvedType::Function { effects, .. } = self.sem.types.get(closure_type) {
-                for var in effects.iter().filter(|e| e.is_var()) {
-                    self.rows.widen(var.name(), &performed);
-                }
+        for row in fn_rows(&self.sem.types, closure_types) {
+            for var in row.iter().filter(|e| e.is_var()) {
+                self.rows.widen(var.name(), &performed);
             }
         }
         performed
@@ -2882,6 +2868,17 @@ impl Rows {
             .iter()
             .all(|(var, len)| self.solved.get(var).map(Vec::len) == *len)
     }
+}
+
+/// The row of each function type among `types`.
+fn fn_rows(table: &TypeTable, types: impl IntoIterator<Item = TypeId>) -> Vec<&[EffectRef]> {
+    types
+        .into_iter()
+        .filter_map(|type_id| match table.get(type_id) {
+            ResolvedType::Function { effects, .. } => Some(effects.as_slice()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Types of `expr`, one per walk that reached it, preferring the type of the
