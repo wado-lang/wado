@@ -60,7 +60,7 @@ pub trait Sequence with () {
         return self.get(self.len() - 1);
     }
 
-    fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32> {
+    fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _ {
         for let mut i = 0; i < self.len(); i += 1 {
             if pred(self.get_unchecked(i)) {
                 return Option::Some(i);

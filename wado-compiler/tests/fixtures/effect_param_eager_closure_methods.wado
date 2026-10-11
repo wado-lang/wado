@@ -1,0 +1,26 @@
+// A standard library function that calls the closure it takes before it
+// returns is generic over the closure's effects. A function value declaring
+// `Stdout` passes to one, and the call demands `Stdout` of its caller.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut show: fn mut(i32) with Stdout = |x| println(`each ${x}`);
+    let xs: List<i32> = [3, 1, 2];
+    xs.into_iter().for_each(show);
+
+    let mut loud_cmp: fn mut(&i32, &i32) -> Ordering with Stdout = |a, b| {
+        println("cmp");
+        return a.cmp(b);
+    };
+    let sorted = xs.sorted_by(loud_cmp);
+    println(`${sorted:?}`);
+
+    let mut loud_inc: fn mut(i32) -> i32 with Stdout = |x| {
+        println("inc");
+        return x + 1;
+    };
+    println(`${Option::Some(1).map(loud_inc):?}`);
+}
+
+__DATA__
+{"stdout": "each 3\neach 1\neach 2\ncmp\ncmp\ncmp\n[1, 2, 3]\ninc\nOption::Some(2)\n"}

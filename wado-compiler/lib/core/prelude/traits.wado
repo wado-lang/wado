@@ -1081,7 +1081,7 @@ pub trait Iterator with _ {
 
     /// Like `reduce`, but takes an explicit initial accumulator instead of using the first element.
     /// Always returns a value (unlike `reduce`, which returns None for empty iterators).
-    fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc) -> Acc {
+    fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc with _) -> Acc with _ {
         let mut acc = init;
         while let Some(item) = self.next() {
             acc = f(acc, item);
@@ -1090,14 +1090,14 @@ pub trait Iterator with _ {
     }
 
     /// Calls `f` for every remaining element. Consumes the iterator.
-    fn for_each(&mut self, mut f: fn mut(Self::Item)) {
+    fn for_each(&mut self, mut f: fn mut(Self::Item) with _) with _ {
         while let Some(item) = self.next() {
             f(item);
         }
     }
 
     /// Returns the first element for which `pred` returns true, advancing the iterator up to that point.
-    fn find(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<Self::Item> {
+    fn find(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<Self::Item> with _ {
         while let Some(item) = self.next() {
             if pred(item) {
                 return Option::Some(item);
@@ -1108,7 +1108,7 @@ pub trait Iterator with _ {
 
     /// Returns true if `pred` returns true for at least one element (∃). False for empty iterators.
     /// Short-circuits: stops advancing the iterator as soon as a matching element is found.
-    fn any(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool {
+    fn any(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> bool with _ {
         while let Some(item) = self.next() {
             if pred(item) {
                 return true;
@@ -1119,7 +1119,7 @@ pub trait Iterator with _ {
 
     /// Returns true if `pred` returns true for every element (∀). True for empty iterators.
     /// Short-circuits: stops advancing the iterator as soon as a non-matching element is found.
-    fn all(&mut self, mut pred: fn mut(Self::Item) -> bool) -> bool {
+    fn all(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> bool with _ {
         while let Some(item) = self.next() {
             if !pred(item) {
                 return false;
@@ -1150,7 +1150,7 @@ pub trait Iterator with _ {
     }
 
     /// Returns the 0-based index of the first element for which `pred` returns true, or None.
-    fn position(&mut self, mut pred: fn mut(Self::Item) -> bool) -> Option<i32> {
+    fn position(&mut self, mut pred: fn mut(Self::Item) -> bool with _) -> Option<i32> with _ {
         let mut idx = 0;
         while let Some(item) = self.next() {
             if pred(item) {
@@ -1163,7 +1163,7 @@ pub trait Iterator with _ {
 
     /// Reduces elements to a single value without an initial accumulator.
     /// Returns None if the iterator is empty.
-    fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item) -> Option<Self::Item> {
+    fn reduce(&mut self, mut f: fn mut(Self::Item, Self::Item) -> Self::Item with _) -> Option<Self::Item> with _ {
         if let Some(first) = self.next() {
             let mut acc = first;
             while let Some(item) = self.next() {
@@ -1234,7 +1234,7 @@ pub trait Iterator with _ {
     }
 
     /// The smallest remaining element under `cmp`, the first on ties.
-    fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item> {
+    fn min_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _ {
         if let Some(first) = self.next() {
             let mut best = first;
             while let Some(item) = self.next() {
@@ -1248,7 +1248,7 @@ pub trait Iterator with _ {
     }
 
     /// The largest remaining element under `cmp`, the last on ties.
-    fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering) -> Option<Self::Item> {
+    fn max_by(&mut self, mut cmp: fn mut(&Self::Item, &Self::Item) -> Ordering with _) -> Option<Self::Item> with _ {
         if let Some(first) = self.next() {
             let mut best = first;
             while let Some(item) = self.next() {
@@ -1262,7 +1262,7 @@ pub trait Iterator with _ {
     }
 
     /// The remaining element with the smallest `key`, the first on ties.
-    fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item> {
+    fn min_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K with _) -> Option<Self::Item> with _ {
         if let Some(first) = self.next() {
             let mut best = first;
             let mut best_key = key(first);
@@ -1279,7 +1279,7 @@ pub trait Iterator with _ {
     }
 
     /// The remaining element with the largest `key`, the last on ties.
-    fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K) -> Option<Self::Item> {
+    fn max_by_key<K: Ord>(&mut self, mut key: fn mut(Self::Item) -> K with _) -> Option<Self::Item> with _ {
         if let Some(first) = self.next() {
             let mut best = first;
             let mut best_key = key(first);

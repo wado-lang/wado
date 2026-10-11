@@ -64,14 +64,18 @@ leak.
 3. [x] `Iterator` and `IntoIterator` are open. An iterator whose `next` performs
    I/O compiles, and a loop over it, directly or through an adapter, demands
    its effects of the caller.
-4. [ ] The lazy adapters are generic over their closure's type, and the eager
-   functions taking a closure declare an effect parameter.
-5. [ ] A closure literal's type carries the effects inferred from its body. The
+4. [x] The eager functions taking a closure declare an effect parameter, and a
+   function value declaring effects passes to one.
+5. [ ] An effect parameter a call resolves is substituted in the types the call
+   produces, as a type parameter is. The lazy adapters are generic over their
+   closure's type, so an adapter built from a function value carries its
+   effects.
+6. [ ] A closure literal's type carries the effects inferred from its body. The
    body is checked against them, and an expected type without `with` admits
    none. An effectful closure through `map` demands its effects of whoever
    advances the adapter. `closure_escapes_effect_todo.wado` is rejected as it
    states.
-6. [ ] The specification states the rules above.
+7. [ ] The specification states the rules above.
 
 ## Known gaps
 
