@@ -4550,20 +4550,46 @@ fn gen_shape_entry_conditions(
         return conditions;
     }
     for let entry of &s.shapes {
-        let pos_var = dedup_name("shape_scan_pos", name_counts);
-        let label = dedup_name("shape_scan", name_counts);
-        w.line(`let mut ${pos_var}: i32 = -1;`);
-        w.begin(`${label}:`);
-        gen_scan_entry(w, ctx, &ScanOrigin::Parser);
+        let [pos_var, label] = open_scan_block(w, ctx, name_counts, "shape_scan_pos", "shape_scan");
         let fail = `break ${label};`;
         for let scan_elem of &entry.scan_body.elements {
             gen_scan_op_element(w, scan_elem, ctx, &fail);
         }
-        w.line(`${pos_var} = pos;`);
-        w.end();
+        close_scan_block(w, &pos_var);
         conditions.push(`${pos_var} >= 0`);
     }
     return conditions;
+}
+
+/// Open a labeled block scanning from `p.pos`; `close_scan_block` closes it:
+/// ```
+/// let mut <pos_prefix>_N: i32 = -1;
+/// <label_prefix>_N: {
+///     let tokens = &p.kinds;
+///     let mut pos: i32 = p.pos;
+///     /* the scan; on fail: break <label_prefix>_N; */
+///     <pos_prefix>_N = pos;
+/// }
+/// ```
+/// Returns `[position variable, label]`: the variable holds `-1` on failure.
+fn open_scan_block<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &mut EmitContext,
+    name_counts: &mut List<[String, i32]>,
+    pos_prefix: S,
+    label_prefix: S1,
+) -> [String, String] {
+    let pos_var = dedup_name(pos_prefix, name_counts);
+    let label = dedup_name(label_prefix, name_counts);
+    w.line(`let mut ${pos_var}: i32 = -1;`);
+    w.begin(`${label}:`);
+    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
+    return [pos_var, label];
+}
+
+fn close_scan_block<S: AsStrSlice>(w: &mut CodeWriter, pos_var: S) {
+    w.line(`${pos_var} = pos;`);
+    w.end();
 }
 
 /// Shape-lookahead Optional under the op-only walker: one branch per shape,
@@ -4678,11 +4704,7 @@ fn gen_op_opt_scan_guard_for_group(
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
-    let scan_pos_var = dedup_name("opt_scan_pos", name_counts);
-    let scan_label = dedup_name("opt_scan", name_counts);
-    w.line(`let mut ${scan_pos_var}: i32 = -1;`);
-    w.begin(`${scan_label}:`);
-    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
+    let [scan_pos_var, scan_label] = open_scan_block(w, ctx, name_counts, "opt_scan_pos", "opt_scan");
     let scan_group = &g_op.scan_group;
     if scan_group.alts.len() == 1 {
         let body = &scan_group.alts[0];
@@ -4699,8 +4721,7 @@ fn gen_op_opt_scan_guard_for_group(
     } else {
         gen_scan_op_group(w, scan_group, ctx, `break ${scan_label};`, scan_group.lenient);
     }
-    w.line(`${scan_pos_var} = pos;`);
-    w.end();
+    close_scan_block(w, &scan_pos_var);
     return scan_pos_var;
 }
 
@@ -6580,17 +6601,8 @@ fn gen_reserve_check<S: AsStrSlice, S1: AsStrSlice>(
     w.end();
 }
 
-/// Emit an inline scan of `scan_inner` from `p.pos`:
-/// ```
-/// let mut <pos_prefix>_N: i32 = -1;
-/// <label_prefix>_N: {
-///     let tokens = &p.kinds;
-///     let mut pos: i32 = p.pos;
-///     /* scan of inner; on fail: break <label_prefix>_N; */
-///     <pos_prefix>_N = pos;
-/// }
-/// ```
-/// Returns the name of the pos variable: `-1` on failure, the end on success.
+/// An inline scan of `scan_inner` in an `open_scan_block`, returning its
+/// position variable.
 fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
@@ -6602,11 +6614,7 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     reserve: &List<ScanElement> = &NO_RESERVE_SCAN,
     body_admits: &List<i32> = &NO_KINDS,
 ) -> String {
-    let scan_pos_var = dedup_name(pos_prefix, name_counts);
-    let scan_label = dedup_name(label_prefix, name_counts);
-    w.line(`let mut ${scan_pos_var}: i32 = -1;`);
-    w.begin(`${scan_label}:`);
-    gen_scan_entry(w, ctx, &ScanOrigin::Parser);
+    let [scan_pos_var, scan_label] = open_scan_block(w, ctx, name_counts, pos_prefix, label_prefix);
     let fail = `break ${scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
@@ -6620,8 +6628,7 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
         let body_end = dedup_name("rep_body_end", name_counts);
         gen_reserve_check(w, reserve, body_admits, &body_end, &fail, ctx, name_counts);
     }
-    w.line(`${scan_pos_var} = pos;`);
-    w.end();
+    close_scan_block(w, &scan_pos_var);
     return scan_pos_var;
 }
 
