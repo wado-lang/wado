@@ -42,6 +42,7 @@ mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
 mod tysys;
+mod unchecked;
 pub(crate) mod util;
 mod written;
 

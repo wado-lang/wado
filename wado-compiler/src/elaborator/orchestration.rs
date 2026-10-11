@@ -49,6 +49,7 @@ use crate::elaborator::liveness::{CompilerNamed, Liveness, References};
 use crate::elaborator::reify::Reify;
 use crate::elaborator::sem::ModuleSemantics;
 use crate::elaborator::solver_bridge::SolverBridge;
+use crate::elaborator::unchecked::misplaced_unchecked;
 use crate::elaborator::trait_env::{
     ImplHeader, ImplTargetKey, TraitEnv, inherent_impl_overlaps, is_user_local,
     namespace_imports_of, written_arg_nodes,
@@ -1550,14 +1551,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // reifying) and the AST is well-formed: recovered syntax errors
             // leave `Error` placeholder nodes reify must not walk, and the
             // TIR would never be consumed anyway.
-            if build_tir
-                && module_walk_clean
+            if module_walk_clean
                 && !decl_failed.contains(module_source)
                 && !module.has_syntax_errors()
             {
                 reify_eligible.insert(module_source.clone());
             }
         }
+
+        // `unchecked` reads the callees the body walks settled, so it waits
+        // for every module's walk. Only a clean walk settled them all.
+        reify_eligible.retain(|module_source| {
+            let misplaced = misplaced_unchecked(
+                &modules[module_source],
+                &state.module_semantics[module_source],
+                &state.tysys.resolutions,
+                modules,
+            );
+            for diagnostic in &misplaced {
+                let _ = logger.error_in(module_source, diagnostic.clone());
+            }
+            misplaced.is_empty()
+        });
 
         // Liveness — source-level reachability over every module's recorded
         // references, between `annotate_bodies` and `reify` (WEP 2026-05-26

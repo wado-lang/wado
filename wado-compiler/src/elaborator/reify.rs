@@ -59,6 +59,9 @@ use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
+#[cfg(doc)]
+use crate::elaborator::unchecked::misplaced_unchecked;
+use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
     KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch, MethodNames,
@@ -1661,42 +1664,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (GlobalInit::Deferred(placeholder), Some(init_fn))
     }
 
-    /// Point the call `expr` reified to at its callee's `unchecked` twin, or
-    /// say why it has none. `dispatched` is the method a call through a bound
-    /// reaches, which names no template.
-    fn retarget_to_unchecked_twin(
-        &self,
-        expr: &mut TirExpr,
-        dispatched: Option<DefId>,
-    ) -> Result<(), &'static str> {
-        const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
-        let TirExprKind::Call { func, .. } = &mut expr.kind else {
-            return Err(NOT_A_CALL);
-        };
-        let declared = match func.template {
-            Some(TemplateId::Declared { def, .. }) => Some(def),
-            Some(TemplateId::Unchecked { .. } | TemplateId::Synthesized { .. }) => {
-                return Err(NOT_A_CALL);
-            }
-            None => None,
-        };
-        let Some(def) = declared.or(dispatched) else {
-            return Err(NOT_A_CALL);
-        };
-        if !self.declares_contract(def) {
-            return Err("the callee has no `contract` clause for `unchecked` to vouch for");
-        }
-        func.name = unchecked_twin_name(&func.name);
-        if let Some(info) = &mut func.method_info {
-            info.mark_unchecked();
-        }
-        if let Some(mono) = &mut func.monomorph_info {
-            mono.generic_name = unchecked_twin_name(&mono.generic_name);
-        }
-        func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
-        Ok(())
-    }
-
     /// Each `contract` clause holder `impl_block`'s trait declares, paired
     /// with the method of the block that answers the one it holds the clauses
     /// of: the block's own, else the trait's default.
@@ -1729,51 +1696,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Whether the function `def` declares is bound by a `contract` clause:
-    /// one it writes, or one its trait declares for it.
-    fn declares_contract(&self, def: DefId) -> bool {
-        let has_contract = |func: &ast::Function| func.contracts().next().is_some();
-        let trait_binds = |decl: &ast::TraitDecl, method: &ast::Function| {
-            decl.contract_holder(&method.name).is_some()
-        };
-        let target = self.tysys.resolutions.defs().ast_id(def);
-        self.items_declaring(def).iter().any(|item| match item {
-            Item::Function(func) => func.id == target && has_contract(func),
-            Item::Impl(block) => block.methods.iter().any(|method| {
-                method.id == target
-                    && (has_contract(method)
-                        || block
-                            .trait_type
-                            .as_ref()
-                            .and_then(|ty| self.tysys.resolutions.head_decl(ty))
-                            .and_then(|decl| self.trait_decl(decl))
-                            .is_some_and(|decl| trait_binds(decl, method)))
-            }),
-            Item::Trait(decl) => decl
-                .methods
-                .iter()
-                .any(|method| method.id == target && trait_binds(decl, method)),
-            _ => false,
-        })
-    }
-
-    /// The items of the module `def` is declared in.
-    fn items_declaring(&self, def: DefId) -> &'a [Item] {
-        let module = self.tysys.resolutions.defs().module(def);
-        self.loaded_modules
-            .get(module)
-            .map_or(&[], |m| m.items.as_slice())
-    }
-
     /// The trait `def` declares.
     fn trait_decl(&self, def: DefId) -> Option<&'a ast::TraitDecl> {
-        let target = self.tysys.resolutions.defs().ast_id(def);
-        self.items_declaring(def)
-            .iter()
-            .find_map(|item| match item {
-                Item::Trait(decl) if decl.id == target => Some(decl),
-                _ => None,
-            })
+        Contracts {
+            resolutions: &self.tysys.resolutions,
+            modules: self.loaded_modules,
+        }
+        .trait_decl(def)
     }
 
     /// Report an error at `span` in the module reify stands in.
@@ -2618,22 +2547,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Unchecked => {
                 let mut call = self.reify_expr(&unary.expr, ctx, expected_type);
-                // A call through a bound names no template, only the trait's method.
-                let dispatched = match &unary.expr {
-                    ast::Expr::MethodCall(method_call) => self
-                        .ann_method_dispatch(method_call.id)
-                        .and_then(|dispatch| dispatch.method_def),
-                    ast::Expr::Call(call) => self
-                        .ann_static_method_dispatch(call.id)
-                        .and_then(|dispatch| dispatch.method_def),
-                    ast::Expr::StaticMethodCall(static_call) => self
-                        .ann_static_method_dispatch(static_call.id)
-                        .and_then(|dispatch| dispatch.method_def),
-                    _ => None,
-                };
-                if let Err(message) = self.retarget_to_unchecked_twin(&mut call, dispatched) {
-                    self.error_at(Code::UncheckedInvalid, unary.span, message.to_string());
-                }
+                retarget_to_unchecked_twin(&mut call);
                 call
             }
             ast::Expr::Unary(unary) => {
@@ -10340,6 +10254,22 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
         },
         span,
     )
+}
+
+/// Point the call `expr` reified to at its callee's `unchecked` twin, which
+/// [`misplaced_unchecked`] established it has.
+fn retarget_to_unchecked_twin(expr: &mut TirExpr) {
+    let TirExprKind::Call { func, .. } = &mut expr.kind else {
+        unreachable!("`unchecked` marks a call: {:?}", expr.kind);
+    };
+    func.name = unchecked_twin_name(&func.name);
+    if let Some(info) = &mut func.method_info {
+        info.mark_unchecked();
+    }
+    if let Some(mono) = &mut func.monomorph_info {
+        mono.generic_name = unchecked_twin_name(&mono.generic_name);
+    }
+    func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
 }
 
 /// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a
