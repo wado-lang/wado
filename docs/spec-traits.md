@@ -415,6 +415,10 @@ test {
 
 Default methods can call other trait methods (both required and default), and the calls are resolved against the implementing type.
 
+A default body is checked once, against the trait rather than any implementor.
+It sees `Self` only through the trait and its supertraits, so a method that
+every implementor happens to declare on its own is out of its reach.
+
 ### Associated Types
 
 Traits can declare associated types: placeholder types that implementors specify:

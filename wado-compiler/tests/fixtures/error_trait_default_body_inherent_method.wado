@@ -1,0 +1,26 @@
+// A default body sees `Self` through the trait alone: `helper` is declared by
+// the one implementor, not by `Show`.
+trait Show with () {
+    fn twice(&self) -> i32 {
+        return self.helper() * 2;
+    }
+}
+
+struct D {}
+
+impl D {
+    fn helper(&self) -> i32 {
+        return 21;
+    }
+}
+
+impl Show for D {}
+
+fn run() -> i32 {
+    return D {}.twice();
+}
+
+__DATA__
+{
+  "compile_error": ":5:16: analysis error: no method 'helper' found on type 'Self'"
+}
