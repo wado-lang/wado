@@ -37,13 +37,27 @@ The table below is the Wadoâ†”CM correspondence, read in both directions: Wadoâ†
 
 A function type has no row: it crosses only as a [callback](#callbacks).
 
-`f16`, `bf16` ([Half Precision](./spec-types.md#half-precision-f16-bf16)) and
-`v128` have no Component Model type, so they do not cross a component boundary.
-Neither does a SIMD lane type such as `f32x4`, since each is a newtype over
-`v128`. An `export fn` whose signature names any of them is a compile error.
-Every `export fn` is checked, not only a world's entry point, because each one
-lands on the component's surface. A component that carries half precision data
-exports its bits, as a `List<u16>`.
+These types have no Component Model type, so they do not cross a component
+boundary:
+
+- `f16`, `bf16` ([Half Precision](./spec-types.md#half-precision-f16-bf16)) and
+  `v128`, and a SIMD lane type such as `f32x4`, since each is a newtype over
+  `v128`. A component that carries half precision data exports its bits, as a
+  `List<u16>`.
+- `Array<T>` and the newtypes over it (`ByteArray`). A `List<T>` crosses in its
+  place.
+- A view: `Slice<T>`, `StrSlice`, the newtypes over them (`ByteSlice`), and any
+  struct with a field borrowing what is not a resource. A view points into
+  storage it does not own; copy it into a `List<T>` or a `String`.
+- A reference, except as a borrowed resource handle on an import.
+
+A signature that names one of them, anywhere within it, is a compile error at
+that parameter or result. This holds for every `export fn`, not only a world's
+entry point, because each one lands on the component's surface, and for every
+imported operation.
+
+An anonymous struct never crosses either: no signature can name one yet
+([Anonymous Structs](./spec-types.md#anonymous-structs)).
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 

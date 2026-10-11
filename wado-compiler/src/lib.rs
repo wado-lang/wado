@@ -129,7 +129,6 @@ pub use semantics::{
 
 pub use compiler_host::InMemoryCompilerHost;
 use constant_arithmetic::constant_arithmetic_diagnostics;
-use synthesis::SynthesisError;
 pub use effect_check::{
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
     check_effects_semantic, check_purity_semantic, check_semantics,
@@ -149,6 +148,7 @@ pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
+use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
 

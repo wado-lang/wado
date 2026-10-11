@@ -137,9 +137,11 @@ test "a newtype names its own link of the chain" {
 
 `Reflect::<T>::wire_name_policy()` returns the type's
 [`#[wire(name_policy)]`](./spec-attributes.md#wire) as a `CaseStyle`, and
-`CaseStyle::Identity` when the type declares none. A member's
-`wire_name_override()` returns its `#[wire(name)]` as written, or `None`.
-Reflection reports these facts and applies neither:
+`CaseStyle::Identity` when the type declares none. A newtype declares none: the
+policy names members, and a newtype has its base's, so it answers with the
+policy of the declaration it wraps. A member's `wire_name_override()` returns
+its `#[wire(name)]` as written, or `None`. Reflection reports these facts and
+applies neither:
 
 <!-- {"fixture":"spec_reflection_wire.wado"} -->
 

@@ -962,10 +962,16 @@ Rationale: [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
 ### Anonymous Structs
 
 A `{ … }` literal where no struct or map type is expected builds an anonymous
-struct. It names no declaration: its type is its shape, the field names and
-each field's type. Two literals of one shape have one type, so
-`if c { { x: 1, y: 2 } } else { { x: 3, y: 4 } }` type-checks. Its fields are
-read, destructured and nested as a named struct's are.
+struct. It names no declaration: its type is its shape, the field names in the
+order the literal writes them and each field's type. Two literals of one shape
+have one type, so `if c { { x: 1, y: 2 } } else { { x: 3, y: 4 } }` type-checks.
+The order is part of the shape, so `{ x: 1, y: 2 }` and `{ y: 2, x: 1 }` have
+two types and that `if` with one in each branch does not. Its fields are read,
+destructured and nested as a named struct's are.
+
+> Not yet implemented: writing an anonymous struct type where a type is
+> expected. Until then a value of one has its type only by inference from a
+> literal, so no signature names it, and it never crosses a component boundary.
 
 <!-- {"fixture":"spec_types_structs.wado"} -->
 
@@ -1524,6 +1530,9 @@ test {
     assert Perms::all() as u32 == 7;
 }
 ```
+
+A flags value is one `u32`, so a declaration holds at most 32 members. A 33rd
+is a compile error at the declaration.
 
 Arithmetic operators are not defined on flags; use the bitwise ones:
 

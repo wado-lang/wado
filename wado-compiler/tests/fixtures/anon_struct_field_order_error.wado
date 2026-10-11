@@ -1,0 +1,10 @@
+// An anonymous struct's type is its fields in the order the literal writes
+// them, so the same fields in another order are another type.
+
+export fn run() {
+    let c = builtin::black_box(true);
+    let p = if c { { x: 1, y: 2 } } else { { y: 2, x: 1 } };
+}
+
+__DATA__
+{"compile_error": ":6:42: error: type mismatch: expected '{ x: i32, y: i32 }', found '{ y: i32, x: i32 }'"}

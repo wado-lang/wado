@@ -600,6 +600,10 @@ impl TypeSystem {
         let resolved = self.type_table.borrow().get(type_id).clone();
         match resolved {
             ResolvedType::Primitive(prim) => format!("{prim:?}").to_lowercase(),
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.type_table.borrow().anon_struct_name(id),
             ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_name(def),
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = self.type_table.borrow().def_name(def).to_string();

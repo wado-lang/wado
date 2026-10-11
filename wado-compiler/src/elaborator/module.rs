@@ -9,8 +9,7 @@ use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::trait_env;
 use super::types::{
-    EnumInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData,
-    VariantInfo,
+    EnumInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData, VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,

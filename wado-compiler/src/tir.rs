@@ -1883,16 +1883,21 @@ impl TypeTable {
         &self.anon_structs[id.0 as usize].module
     }
 
-    /// The spelling an anonymous struct shows a reader —
-    /// `$anon_{x:i32,y:i32}`, or a template's text. The declaration namespace;
+    /// The spelling an anonymous struct shows a reader — `{ x: i32, y: i32 }`
+    /// as a literal writes it, or a template's text. The declaration namespace;
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
         match &self.anon_structs[id.0 as usize].shape {
             AnonShape::Template(shape) => self.template_shape_name(shape),
-            shape @ (AnonShape::Fields(_) | AnonShape::Synthetic(_)) => {
-                self.render_shape(shape, &|tt, ty| tt.type_name(ty))
+            AnonShape::Fields(fields) => {
+                let parts: Vec<String> = fields
+                    .iter()
+                    .map(|(n, ty)| format!("{n}: {}", self.type_name(*ty)))
+                    .collect();
+                format!("{{ {} }}", parts.join(", "))
             }
+            shape @ AnonShape::Synthetic(_) => self.render_shape(shape, &|tt, ty| tt.type_name(ty)),
         }
     }
 
