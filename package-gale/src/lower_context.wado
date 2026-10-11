@@ -157,13 +157,13 @@ impl LowerContext {
         }
     }
 
-    /// Intern a runtime FOLLOW-continuation mask of `TK_*` names per depth. The
+    /// Intern a runtime FOLLOW-continuation mask of kind ids per depth. The
     /// same canonical mask maps to a single `id`; `null` for one no depth
     /// constrains, where the caller passes `&EMPTY_FOLLOW`.
-    pub fn intern_follow_mask(&mut self, mask: &List<List<String>>) -> Option<i32> {
+    pub fn intern_follow_mask(&mut self, mask: &List<List<i32>>) -> Option<i32> {
         let mut depths: List<List<i32>> = [];
         for let depth of mask {
-            depths.push(self.analysis.canonical_kind_ids(depth));
+            depths.push(self.analysis.canonical_ids(*depth));
         }
         return self.tables.intern_follow_mask(depths);
     }

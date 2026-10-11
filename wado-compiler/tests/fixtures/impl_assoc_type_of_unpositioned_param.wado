@@ -1,0 +1,61 @@
+// A generic impl's associated type names its own parameters, which need not
+// stand where the target's declaration has its own: one nested in a target
+// argument, or one only an `<F: fn(...)>` signature writes. Read through a
+// bound, `P::Item` is what the impl's target binds at the receiver, not the
+// receiver's argument at the parameter's index.
+
+trait Pull with () {
+    type Item;
+    fn pull(&mut self) -> Option<Self::Item>;
+}
+
+struct Listed<L> {
+    items: L,
+    at: i32,
+}
+
+impl<T> Pull for Listed<List<T>> {
+    type Item = T;
+    fn pull(&mut self) -> Option<T> {
+        if self.at >= self.items.len() {
+            return null;
+        }
+        self.at += 1;
+        return Option::Some(self.items[self.at - 1]);
+    }
+}
+
+struct Mapped<I, F> {
+    inner: I,
+    f: F,
+}
+
+impl<I: Pull, U, F: fn mut(I::Item) -> U> Pull for Mapped<I, F> {
+    type Item = U;
+    fn pull(&mut self) -> Option<U> {
+        let Some(x) = self.inner.pull() else {
+            return null;
+        };
+        return Option::Some((self.f)(x));
+    }
+}
+
+fn mapped<I: Pull, U>(inner: I, f: fn mut(I::Item) -> U) -> Mapped<I, fn mut(I::Item) -> U> {
+    return Mapped { inner, f };
+}
+
+fn first<P: Pull>(p: &mut P) -> Option<P::Item> {
+    return p.pull();
+}
+
+test "a parameter nested in the target is what the target binds" {
+    let items: List<i32> = [4, 5];
+    let mut listed = Listed { items, at: 0 };
+    assert first(&mut listed) == Option::Some(4);
+}
+
+test "a parameter only a signature writes is what the closure returns" {
+    let items: List<i32> = [4, 5];
+    let mut lengths = mapped(Listed { items, at: 0 }, |x: i32| `${x * 10}`);
+    assert first(&mut lengths) == Option::Some("40");
+}

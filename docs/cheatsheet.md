@@ -1478,8 +1478,16 @@ fn run<T: Tick>(t: &mut T) -> i32 with _ { return t.tick(); }
 #[allow(undecided_effects)]
 trait Undecided { fn tick(&mut self) -> i32; }
 
-// Every standard library trait says `with ()`, Iterator and FromStr included:
-// an impl of one that performs I/O is a design error.
+// A method may say `with ()` under an open head: pure in every impl.
+trait Source with _ {
+    fn next(&mut self) -> i32;
+    fn label(&self) -> String with () { return "source"; }
+}
+
+// Iterator and IntoIterator are open: a `next` may perform I/O, and a loop
+// over it demands what it performs. Every other standard library trait,
+// FromStr included, says `with ()`: an impl of one performing I/O is a design
+// error.
 
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {

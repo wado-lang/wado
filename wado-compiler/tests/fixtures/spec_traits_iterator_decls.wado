@@ -24,15 +24,16 @@ struct Total { sum: i32 }
 
 impl FromIterator for Total {
     type Elem = i32;
-    fn from_iter<I: Iterator<Item = i32>>(iter: &mut I) -> Total {
+    fn from_iter<I: Iterator<Item = i32>>(iter: &mut I) -> Total with _ {
         let mut sum = 0;
         while let Some(x) = iter.next() { sum += x; }
         return Total { sum };
     }
 }
 
-/// Types that can yield a sequence of values
-pub trait Iterator with () {
+/// Types that can yield a sequence of values, each impl performing what its
+/// `next` does
+pub trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -46,7 +47,7 @@ test {
 }
 
 /// Types that can be converted into an iterator
-pub trait IntoIterator with () {
+pub trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -62,7 +63,7 @@ test {
 /// Types that can be constructed from an iterator of `Elem`
 pub trait FromIterator with () {
     type Elem;
-    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
+    fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self with _;
 }
 
 test {

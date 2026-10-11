@@ -520,6 +520,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             let Some(slot) = slots.of_name(name) else {
                 continue;
             };
+            let decl = impl_declared_params.iter().find(|p| &p.name == name);
+            // `<F: fn(...)>` is its signature, which `bind_fn_bound_params`
+            // binds once the bounds it may project off are in force.
+            if decl.is_some_and(|p| !p.is_real_type_param()) {
+                continue;
+            }
             params.push(self.bind_target_param(
                 name,
                 slot,
@@ -1916,7 +1922,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             scope.reject_declaration_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
             // The head's names were resolved above, once for every method.
-            if !method.effects_inherited {
+            if method.effects_source == ast::EffectsSource::Written {
                 method_scope.resolve_effects(&method.effects);
             }
             method_scope.register_generic_params(&method.type_params, next_slot);

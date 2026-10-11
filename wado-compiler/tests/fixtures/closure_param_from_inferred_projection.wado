@@ -1,7 +1,7 @@
 // A closure parameter typed by a projection of a type parameter an earlier
 // argument settles takes the projected type, as a method's `Self::Item` does.
 
-fn apply<I: Iterator>(mut it: I, f: fn(I::Item) -> i32) -> i32 {
+fn apply<I: Iterator>(mut it: I, f: fn(I::Item) -> i32) -> i32 with _ {
     return f(it.next().unwrap());
 }
 

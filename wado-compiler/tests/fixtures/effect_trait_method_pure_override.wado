@@ -1,0 +1,37 @@
+// A method of a trait whose head is not `with ()` may write `with ()` itself:
+// that method is pure in every impl, so a call to it demands nothing, whatever
+// the impl's other methods perform.
+use { println, Stdout } from "core:cli";
+
+struct Loud {
+    n: i32,
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+trait Source with _ {
+    fn next(&mut self) -> i32;
+
+    fn label(&self) -> String with () {
+        return "source";
+    }
+}
+
+fn name_of<S: Source>(s: &S) -> String {           // demands nothing of `S`
+    return s.label();
+}
+
+export fn run() with Stdout {
+    let mut loud = Loud { n: 0 };
+    assert name_of(&loud) == "source";
+    println(`${loud.next()}`);
+}
+
+__DATA__
+{"stdout": "tick\n1\n"}

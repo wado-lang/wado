@@ -1,0 +1,51 @@
+// An impl's `<F: fn mut(I::Item) -> U>` parameter matches a closure only
+// where the closure takes what `I::Item` is: here `Count` yields `i32`, and
+// the closure takes a `String`.
+
+trait Pull with () {
+    type Item;
+    fn pull(&mut self) -> Option<Self::Item>;
+}
+
+struct Count {
+    n: i32,
+}
+
+impl Pull for Count {
+    type Item = i32;
+    fn pull(&mut self) -> Option<i32> {
+        return null;
+    }
+}
+
+struct Mapped<I, F> {
+    inner: I,
+    f: F,
+}
+
+impl<I: Pull, U, F: fn mut(I::Item) -> U> Pull for Mapped<I, F> {
+    type Item = U;
+    fn pull(&mut self) -> Option<U> {
+        let Some(x) = self.inner.pull() else {
+            return null;
+        };
+        return Option::Some((self.f)(x));
+    }
+}
+
+fn drain<P: Pull>(p: &mut P) {
+    while let Some(_) = p.pull() {
+    }
+}
+
+fn by_text(inner: Count, f: fn mut(String) -> i32) -> Mapped<Count, fn mut(String) -> i32> {
+    return Mapped { inner, f };
+}
+
+export fn run() {
+    let mut m = by_text(Count { n: 0 }, |s: String| s.len());
+    drain(&mut m);
+}
+
+__DATA__
+{"compile_error": "does not implement trait 'Pull' required by bound on 'P'"}

@@ -5,7 +5,7 @@
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TupleSlot, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -167,18 +167,37 @@ fn check_at(
         is_mut: actual_is_mut,
         params: actual_params,
         return_type: actual_ret,
-        ..
+        effects: actual_effects,
     } = type_table.get(actual_inner)
         && let ResolvedType::Function {
             is_mut: expected_is_mut,
             params: expected_params,
             return_type: expected_ret,
-            ..
+            effects: expected_effects,
         } = type_table.get(expected_inner)
     {
         if *actual_is_mut && !*expected_is_mut {
             // `fn mut` cannot widen to `fn`.
             return TypeCheckResult::Incompatible;
+        }
+        // A call through the slot performs no more than its type says. Where a
+        // value can also be written back through the slot, a narrower row would
+        // admit a wider one, so there the rows match. An effect parameter is
+        // the effect check's to resolve.
+        if !expected_effects.iter().any(EffectRef::is_param) {
+            let covers = |wide: &[EffectRef], narrow: &[EffectRef]| {
+                narrow.iter().all(|effect| wide.contains(effect))
+            };
+            let admitted = match position {
+                Position::Covariant => covers(expected_effects, actual_effects),
+                Position::Invariant => {
+                    covers(expected_effects, actual_effects)
+                        && covers(actual_effects, expected_effects)
+                }
+            };
+            if !admitted {
+                return TypeCheckResult::Incompatible;
+            }
         }
         if actual_params.len() != expected_params.len() {
             return TypeCheckResult::Incompatible;

@@ -1,0 +1,31 @@
+// An adapter's `next` performs what the iterator it wraps does, so counting a
+// `map` over a `next` that prints demands `Stdout` of the caller.
+use { println, Stdout } from "core:cli";
+
+struct Ticks {
+    n: i32,
+}
+
+impl Iterator for Ticks {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> with Stdout {
+        if self.n >= 2 {
+            return null;
+        }
+        self.n += 1;
+        println("tick");
+        return Option::Some(self.n);
+    }
+}
+
+fn count_mapped() -> i32 {
+    return Ticks { n: 0 }.map(|x| x * 2).count();
+}
+
+export fn run() with Stdout {
+    println(`${count_mapped()}`);
+}
+
+__DATA__
+{"compile_error": ":23:12: analysis error: missing effect 'Stdout' required by 'count'", "compile_error_count": 1}

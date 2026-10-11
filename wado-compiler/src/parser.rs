@@ -7,13 +7,13 @@ use crate::ast::{
     Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EnumCase, EnumDecl, ErrorExpr,
-    ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant,
-    ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl,
-    HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
-    InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
-    LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
-    NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
+    ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EffectsSource, EnumCase, EnumDecl,
+    ErrorExpr, ErrorItem, ErrorStmt, ExportTarget, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericParam,
+    GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
+    Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
+    NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
     ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
@@ -91,6 +91,9 @@ pub struct Parser {
     /// a backtracking caller even when this flag is set across a checkpoint.
     recovering: bool,
     effect_hole: EffectHole,
+    /// Inside a trait whose head is not `with ()`, where a method's own
+    /// `with ()` says it is pure rather than nothing.
+    pure_override_allowed: bool,
 }
 
 /// Where the parse stands on `with _`, which names an effect only inside a
@@ -245,6 +248,7 @@ impl Parser {
             contextual_keywords: Vec::new(),
             recovering: false,
             effect_hole: EffectHole::Outside,
+            pure_override_allowed: false,
         }
     }
 
@@ -2051,7 +2055,18 @@ impl Parser {
 
         let return_type = self.parse_optional_return_type()?;
 
-        let effects = self.parse_with_clause()?;
+        let pure_override = std::mem::take(&mut self.pure_override_allowed)
+            && self.check(&TokenKind::With)
+            && self.peek_nth(1).kind == TokenKind::LParen
+            && self.peek_nth(2).kind == TokenKind::RParen;
+        let effects = if pure_override {
+            for _ in 0..3 {
+                self.advance();
+            }
+            Vec::new()
+        } else {
+            self.parse_with_clause()?
+        };
 
         // `with _` is sugar for `<effect E> with E`, so the signature carries
         // the parameter it stands for. One per function, as for a written one.
@@ -2108,8 +2123,18 @@ impl Parser {
             params_span,
             return_type,
             effects,
+<<<<<<< HEAD
             effects_inherited: false,
             holds_contracts_of: None,
+||||||| feef811e5
+            effects_inherited: false,
+=======
+            effects_source: if pure_override {
+                EffectsSource::Pure
+            } else {
+                EffectsSource::Written
+            },
+>>>>>>> origin/main
             body,
             span,
         };
@@ -6490,6 +6515,7 @@ impl Parser {
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
                 let id = self.alloc_ast_id();
+<<<<<<< HEAD
                 let fn_pos = self.pos;
                 let (mut method, contracts) = self.parse_function_and_contracts(
                     id,
@@ -6499,11 +6525,23 @@ impl Parser {
                     attrs,
                     true,
                 )?;
+||||||| feef811e5
+                let mut method =
+                    self.parse_function(id, Visibility::Private, false, false, attrs, true)?;
+=======
+                self.pure_override_allowed = !matches!(head, TraitHead::Pure { .. });
+                let parsed =
+                    self.parse_function(id, Visibility::Private, false, false, attrs, true);
+                self.pure_override_allowed = false;
+                let mut method = parsed?;
+>>>>>>> origin/main
                 // A method that declares nothing takes what the head says, at
                 // sites of its own that the trait's scope answers.
-                if method.effects.is_empty() {
+                if method.effects.is_empty() && method.effects_source == EffectsSource::Written {
                     let inherited = head.inherited_effects(name_span);
-                    method.effects_inherited = !inherited.is_empty();
+                    if !inherited.is_empty() {
+                        method.effects_source = EffectsSource::Inherited;
+                    }
                     for (name, span) in inherited {
                         method.effects.push(self.effect_name(name, span));
                     }

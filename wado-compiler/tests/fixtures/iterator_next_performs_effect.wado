@@ -1,0 +1,51 @@
+// `Iterator` leaves its effects to the impl, so a `next` may perform I/O.
+// Iterating it, directly or through an adapter, demands that of the caller. A
+// generic function forwards its iterator's effects with `with _`, and demands
+// nothing where the iterator it is handed is pure.
+use { println, Stdout } from "core:cli";
+
+struct Ticks {
+    n: i32,
+}
+
+impl Iterator for Ticks {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> with Stdout {
+        if self.n >= 2 {
+            return null;
+        }
+        self.n += 1;
+        println(`tick ${self.n}`);
+        return Option::Some(self.n);
+    }
+}
+
+fn total<I: Iterator<Item = i32>>(it: I) -> i32 with _ {
+    let mut t = 0;
+    for let x of it {
+        t += x;
+    }
+    return t;
+}
+
+fn pure_total() -> i32 {
+    let xs: List<i32> = [1, 2, 3];
+    return total(xs.into_iter());
+}
+
+export fn run() with Stdout {
+    let ticks = Ticks { n: 0 };
+    for let x of ticks {
+        println(`got ${x}`);
+    }
+    let doubled: List<i32> = Ticks { n: 0 }.map(|x| x * 10).collect();
+    println(`${doubled:?}`);
+    println(`${total(Ticks { n: 0 })}`);
+    println(`${pure_total()}`);
+}
+
+__DATA__
+{
+    "stdout": "tick 1\ngot 1\ntick 2\ngot 2\ntick 1\ntick 2\n[10, 20]\ntick 1\ntick 2\n3\n6\n"
+}

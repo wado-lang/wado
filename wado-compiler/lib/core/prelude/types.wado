@@ -63,7 +63,7 @@ impl<T> Option<T> {
     }
 
     /// Applies `f` to the contained value, leaving None untouched.
-    pub fn map<U>(self, mut f: fn mut(T) -> U) -> Option<U> {
+    pub fn map<U>(self, mut f: fn mut(T) -> U with _) -> Option<U> with _ {
         return match self {
             Some(v) => Option::<U>::Some(f(v)),
             None => Option::<U>::None,
@@ -148,7 +148,7 @@ impl<T, E> Result<T, E> {
     }
 
     /// Applies `f` to the contained Ok value, leaving an Err untouched.
-    pub fn map<U>(self, mut f: fn mut(T) -> U) -> Result<U, E> {
+    pub fn map<U>(self, mut f: fn mut(T) -> U with _) -> Result<U, E> with _ {
         return match self {
             Ok(v) => Result::<U, E>::Ok(f(v)),
             Err(e) => Result::<U, E>::Err(e),
@@ -156,7 +156,7 @@ impl<T, E> Result<T, E> {
     }
 
     /// Applies `f` to the contained Err value, leaving an Ok untouched.
-    pub fn map_err<F>(self, mut f: fn mut(E) -> F) -> Result<T, F> {
+    pub fn map_err<F>(self, mut f: fn mut(E) -> F with _) -> Result<T, F> with _ {
         return match self {
             Ok(v) => Result::<T, F>::Ok(v),
             Err(e) => Result::<T, F>::Err(f(e)),

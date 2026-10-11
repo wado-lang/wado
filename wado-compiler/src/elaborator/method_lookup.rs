@@ -228,14 +228,14 @@ pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
 /// Where an `impl` block's parameters sit, as positions in the instance's type
 /// arguments. One answer for every frame the block reaches, so no two of them
 /// can number one parameter differently (WEP 2026-08-12).
-pub(super) struct ImplParamSlots {
+pub(crate) struct ImplParamSlots {
     slots: IndexMap<String, u32>,
 }
 
 impl ImplParamSlots {
     /// A parameter the target writes outright sits at its position; one nested
     /// in an argument or projected takes a slot past them, filled by matching.
-    pub(super) fn of(target: &Type, params: &[ast::GenericParam]) -> Self {
+    pub(crate) fn of(target: &Type, params: &[ast::GenericParam]) -> Self {
         let args = impl_target_args(target).unwrap_or_default();
         let written = |param: &ast::GenericParam| {
             let at = args
@@ -262,7 +262,7 @@ impl ImplParamSlots {
         Self { slots }
     }
 
-    pub(super) fn of_name(&self, param: &str) -> Option<u32> {
+    pub(crate) fn of_name(&self, param: &str) -> Option<u32> {
         self.slots.get(param).copied()
     }
 

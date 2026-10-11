@@ -1,0 +1,19 @@
+// A function type carries the effects a call to it performs, so a value whose
+// type declares `Stdout` is no `fn` declaring none. Passing one would let a
+// pure function perform `Stdout` through it.
+use { println, Stdout } from "core:cli";
+
+fn each(mut f: fn mut(i32)) {
+    f(1);
+}
+
+fn pure_caller(g: fn mut(i32) with Stdout) {
+    each(g);                                     // ERROR: `each` takes no `Stdout`
+}
+
+export fn run() with Stdout {
+    pure_caller(|x| println(`${x}`));
+}
+
+__DATA__
+{"compile_error": ":11:10: analysis error: type mismatch: expected 'fn mut(i32) -> ()', found 'fn mut(i32) -> () with Stdout'"}
