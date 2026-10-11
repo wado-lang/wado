@@ -1158,6 +1158,8 @@ fn check_function_effects_sem(
         param_types,
         module: module.source_path(),
         out,
+        closures: ClosureEffects::default(),
+        collecting: None,
     };
     ast::walk_block(&mut walker, body);
 }
@@ -1507,6 +1509,7 @@ fn call_site_effects(
     callee: &Expr,
     id: AstId,
     args: &[Expr],
+    closures: &ClosureEffects,
 ) -> Vec<CalleeEffects> {
     let bare = |name: String, declared: Vec<EffectRef>| CalleeEffects {
         name,
@@ -1523,7 +1526,7 @@ fn call_site_effects(
         } else {
             Brought::default()
         };
-        let resolved = resolve_effect_params(sem, index, effects, &params, false, args, &brought);
+        let resolved = resolve_effect_params(sem, index, effects, &params, false, args, &brought, closures);
         return vec![bare(ident.name.clone(), resolved)];
     }
     let dispatches = dispatches_at(annotations, id);
@@ -1551,7 +1554,7 @@ fn call_site_effects(
                 && !matches!(func_ref.module_source, ModuleSource::Binding { .. });
             CalleeEffects {
                 name: callee_name(callee).to_string(),
-                declared: dispatch_effects(sem, index, &func_ref, self_in_args, args),
+                declared: dispatch_effects(sem, index, &func_ref, self_in_args, args, closures),
                 dispatched: if dispatches_through_path {
                     operation_requirements(sem, index, owner)
                 } else {
@@ -1571,6 +1574,7 @@ fn dispatch_effects(
     func_ref: &FunctionRef,
     self_in_args: bool,
     args: &[Expr],
+    closures: &ClosureEffects,
 ) -> Vec<EffectRef> {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
@@ -1594,8 +1598,13 @@ fn dispatch_effects(
         has_receiver && !self_in_args,
         args,
         &brought,
+        closures,
     )
 }
+
+/// The effects each closure literal's body performs, by the literal's node:
+/// what an effect parameter its argument determines is resolved from.
+type ClosureEffects = IndexMap<AstId, Vec<EffectRef>>;
 
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
@@ -1613,6 +1622,11 @@ struct SemEffectWalker<'a> {
     param_types: IndexMap<String, TypeId>,
     module: String,
     out: &'a mut Vec<EffectError>,
+    /// The closure literals of this body whose effects are worked out so far.
+    closures: ClosureEffects,
+    /// Where the walk is working out a closure body's effects: what it found
+    /// the body to perform beyond `current`, reported as nothing missing.
+    collecting: Option<IndexSet<EffectRef>>,
 }
 
 impl EffectIndex<'_> {
@@ -1817,6 +1831,7 @@ fn resolve_effect_params(
     is_method: bool,
     args: &[Expr],
     brought: &Brought,
+    closures: &ClosureEffects,
 ) -> Vec<EffectRef> {
     let param_names: IndexSet<String> = callee_effects
         .iter()
@@ -1849,6 +1864,25 @@ fn resolve_effect_params(
             .iter()
             .any(|e| e.is_param() && param_names.contains(e.name()))
         {
+            continue;
+        }
+        // A closure performs what its body does, less what the parameter's
+        // type names outright, which the callee answers itself.
+        if let Expr::Closure(closure) = arg
+            && let Some(performed) = closures.get(&closure.id)
+        {
+            let actual: Vec<EffectRef> = performed
+                .iter()
+                .filter(|e| e.is_param() || !formal.contains(e))
+                .cloned()
+                .collect();
+            for formal_effect in formal {
+                if let EffectRef::Param { name } = formal_effect
+                    && let Some(slot) = concrete.get_mut(name)
+                {
+                    slot.get_or_insert_with(IndexSet::default).extend(actual.iter().cloned());
+                }
+            }
             continue;
         }
         let Some(ResolvedType::Function {
@@ -1980,6 +2014,15 @@ impl SemEffectWalker<'_> {
         span: Span,
         fault: fn(EffectKind) -> EffectFault,
     ) {
+        if let Some(collected) = &mut self.collecting {
+            collected.extend(
+                effects
+                    .iter()
+                    .filter(|effect| effect.is_param() || !self.current.contains(*effect))
+                    .cloned(),
+            );
+            return;
+        }
         for effect in effects {
             if effect.is_param() {
                 // An undetermined parameter stands for whatever the callee
@@ -2031,7 +2074,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 .collect();
             for info in &iterators {
                 for func_ref in [&info.into_iter, &info.next] {
-                    let effects = dispatch_effects(self.sem, self.index, func_ref, false, &[]);
+                    let effects = dispatch_effects(self.sem, self.index, func_ref, false, &[], &self.closures);
                     let callee = func_ref
                         .method_info
                         .as_ref()
@@ -2052,6 +2095,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 self.check_call_effects(&tagged.tag, tagged.id, &[], tagged.span);
             }
             Expr::MethodCall(method_call) => {
+                self.infer_closure_args(&method_call.args);
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let resolved = dispatch_effects(
@@ -2060,11 +2104,13 @@ impl AstVisitor for SemEffectWalker<'_> {
                         &dispatch.function_ref,
                         false,
                         &method_call.args,
+                        &self.closures,
                     );
                     self.report_missing(&resolved, &method_call.method, method_call.span);
                 }
             }
             Expr::StaticMethodCall(static_call) => {
+                self.infer_closure_args(&static_call.args);
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let resolved = dispatch_effects(
                         self.sem,
@@ -2072,6 +2118,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                         &func_ref,
                         self_in_args,
                         &static_call.args,
+                        &self.closures,
                     );
                     self.report_missing(&resolved, &static_call.method, static_call.span);
                 }
@@ -2107,6 +2154,9 @@ impl AstVisitor for SemEffectWalker<'_> {
                 });
                 return;
             }
+            // A closure written in a closure body is performed only where it is
+            // called, which a call in the body says.
+            Expr::Closure(_) if self.collecting.is_some() => return,
             Expr::Closure(closure) => {
                 // A closure's body performs what its type carries, not what the
                 // function it is written in holds: it runs wherever it is called.
@@ -2165,7 +2215,39 @@ impl SemEffectWalker<'_> {
 
     /// Report the effects every callee the call at `id` resolves to performs,
     /// and the capability its path demands where it dispatches an operation.
+    /// Work out what each closure literal among `args` performs, for the
+    /// effect parameters it determines. The body is walked holding nothing,
+    /// so every effect it needs is one it performs, a handler it installs
+    /// discharging its own.
+    fn infer_closure_args(&mut self, args: &[Expr]) {
+        for arg in args {
+            let Expr::Closure(closure) = arg else {
+                continue;
+            };
+            if self.closures.contains_key(&closure.id) {
+                continue;
+            }
+            let mut scratch = Vec::new();
+            let mut body = SemEffectWalker {
+                sem: self.sem,
+                annotations: self.annotations,
+                index: self.index,
+                current: IndexSet::default(),
+                param_types: self.param_types.clone(),
+                module: self.module.clone(),
+                out: &mut scratch,
+                closures: std::mem::take(&mut self.closures),
+                collecting: Some(IndexSet::default()),
+            };
+            ast::walk_expr(&mut body, &closure.body);
+            let performed = body.collecting.take().expect("the walk collects").into_iter().collect();
+            self.closures = std::mem::take(&mut body.closures);
+            self.closures.insert(closure.id, performed);
+        }
+    }
+
     fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
+        self.infer_closure_args(args);
         let sites = call_site_effects(
             self.sem,
             self.index,
@@ -2174,6 +2256,7 @@ impl SemEffectWalker<'_> {
             callee,
             id,
             args,
+            &self.closures,
         );
         for site in sites {
             self.report_missing(&site.declared, &site.name, span);
@@ -2384,7 +2467,8 @@ impl<'a> PurityWalker<'a> {
         callee: &str,
         span: Span,
     ) {
-        let effects = dispatch_effects(self.sem, self.index, func_ref, self_in_args, args);
+        let effects =
+            dispatch_effects(self.sem, self.index, func_ref, self_in_args, args, &ClosureEffects::default());
         if self.unanswered(&effects) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
@@ -2412,6 +2496,7 @@ impl<'a> PurityWalker<'a> {
             callee,
             id,
             args,
+            &ClosureEffects::default(),
         );
         // `dispatched` is left to `flag_if_operation`, which asks the owner
         // once per site rather than once per dispatch.

@@ -52,7 +52,7 @@ leak.
    associated type naming one of them is what the target binds at the
    receiver. That last held of no impl parameter away from its declaration
    position, a nested one included.
-2. [ ] A closure literal's type carries the effects inferred from its body, and an
+2. [x] A closure literal's type carries the effects inferred from its body, and an
    effect parameter is resolved from them. The body is still checked against
    its enclosing function, so nothing that compiles today stops compiling.
 3. [ ] `Iterator` and `IntoIterator` are open, the lazy adapters are generic over
