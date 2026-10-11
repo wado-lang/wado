@@ -44,6 +44,7 @@ use {
     follow_yields_call_if,
     follow_yields_call_of,
     rule_kind_const,
+    open_chain_arm,
 } from "./gen_util.wado";
 use { bits_set, bits_test, sets_overlap, subtract_sets, union_kind_arrays } from "./token_kinds.wado";
 use { PARSER_HANDLE, DISPATCH_KIND_LOCAL, FOLLOW_PARAM } from "./ident.wado";
@@ -2991,15 +2992,6 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     w.blank();
 }
 
-/// Open an `if` arm, or chain it onto the arm already open.
-fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S) {
-    if chained {
-        w.else_begin(`else if ${cond}`);
-    } else {
-        w.begin(`if ${cond}`);
-    }
-}
-
 /// Body emitter for multi-alt and left-recursive rules. The
 /// tail-position caller-FOLLOW repair is threaded at runtime: each
 /// `RuleRef` call site carries a `RuleCallOp.follow_arg` and each tail
@@ -4803,9 +4795,23 @@ struct OptionalGroup {
 
 impl OptionalGroup {
     /// `if <cond> { <the body once> }`.
-    fn gen_present<S: AsStrSlice>(&self, w: &mut CodeWriter, ctx: &mut EmitContext, cond: S, proven: &List<i32> = &NO_KINDS) {
+    fn gen_present<S: AsStrSlice>(
+        &self,
+        w: &mut CodeWriter,
+        ctx: &mut EmitContext,
+        cond: S,
+        proven: &List<i32> = &NO_KINDS,
+    ) {
         match self.rep_op.body_shape {
-            TransparentGroup => gen_op_transparent_optional_with_cond(w, self.g_op, self.g_elem, self.inner, ctx, cond, proven),
+            TransparentGroup => gen_op_transparent_optional_with_cond(
+                w,
+                self.g_op,
+                self.g_elem,
+                self.inner,
+                ctx,
+                cond,
+                proven,
+            ),
             LeafRuleCall | LeafOther | StorableGroup => gen_op_storable_optional_with_first(
                 w,
                 self.rep_op,
@@ -5356,7 +5362,16 @@ fn gen_group_shape(
             outer_follow,
             proven,
         ),
-        SimpleCst(_) | General(_) => gen_alt_group(w, g_op, &g_elem.alternatives, entry, ctx, name_counts, decided, atn_dec),
+        SimpleCst(_) | General(_) => gen_alt_group(
+            w,
+            g_op,
+            &g_elem.alternatives,
+            entry,
+            ctx,
+            name_counts,
+            decided,
+            atn_dec,
+        ),
         Transparent => {
             // The inner alt is inlined, actions included, so inside a Repeat
             // they run once per iteration.

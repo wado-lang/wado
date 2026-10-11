@@ -17,7 +17,7 @@ use {
     lexer_alias_text,
     NO_MODE,
 } from "./ir.wado";
-use { negate_cond } from "./gen_util.wado";
+use { negate_cond, open_chain_arm } from "./gen_util.wado";
 use { gen_visibility_comment } from "./ir_shape.wado";
 use { dedup_append_arr, push_unique } from "./list_util.wado";
 use { literal_const_name } from "./ident.wado";
@@ -1715,11 +1715,7 @@ fn gen_lexer_action_replay(
     }
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
         let call = `${apply_fn_name(&act_rule_names[i])}(&mut lexer, start, best_end);`;
-        if i == 0 {
-            w.begin(`if best_act == ${i}`);
-        } else {
-            w.else_begin(`else if best_act == ${i}`);
-        }
+        open_chain_arm(w, i > 0, `best_act == ${i}`);
         w.line(&call);
     }
     w.end();
@@ -1953,11 +1949,7 @@ fn gen_lexer_alts<S: AsStrSlice>(
     w.line(`if ${picked} < 0 { ${fail_action}; }`);
     w.line(`pos = ${saved};`);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i == 0 {
-            w.begin(`if ${picked} == ${i}`);
-        } else {
-            w.else_begin(`else if ${picked} == ${i}`);
-        }
+        open_chain_arm(w, i > 0, `${picked} == ${i}`);
         // `ea = false`: the selection pass already evaluated this arm. Running a
         // state-dependent predicate twice could reject here what it accepted
         // there, dropping the winner's actions while the token still commits.
@@ -3497,11 +3489,7 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     // what the selection pass accepted.
     w.line(`pos = la_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
-        if i == 0 {
-            w.begin(`if la_win_${id} == ${i}`);
-        } else {
-            w.else_begin(`else if la_win_${id} == ${i}`);
-        }
+        open_chain_arm(w, i > 0, `la_win_${id} == ${i}`);
         gen_lexer_alt_seq(w, &alts[i], &arms[i], 0, e, fail_action, false, true);
     }
     w.end();
@@ -5520,11 +5508,7 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     let needs_extras = use_modes || has_set_mode_rules || has_more_rules || has_channel_rules;
     if use_modes {
         for let mut mi = 0; mi < mode_names.len(); mi += 1 {
-            if mi == 0 {
-                w.begin(`if current_mode == ${mi}`);
-            } else {
-                w.else_begin(`else if current_mode == ${mi}`);
-            }
+            open_chain_arm(w, mi > 0, `current_mode == ${mi}`);
             let calls = build_mode_try_calls(
                 mi,
                 lexer_rules,
