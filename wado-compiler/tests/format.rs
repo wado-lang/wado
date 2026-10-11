@@ -3937,3 +3937,86 @@ fn test_format_keeps_an_attribute_on_impl_use_and_assoc_members() {
     assert_eq!(formatted, source);
     assert_format_preserves_ast(source);
 }
+
+/// Each `contract` clause takes a line of its own under the signature, and the
+/// body's `{` then opens a line of its own.
+#[test]
+fn test_format_contract_clauses() {
+    let source = concat!(
+        "pub fn slice(s: &String, start: i32, end: i32) -> i32 contract 0 <= start <= end, ",
+        "\"range\" contract end <= s.len() { return end - start; }\n",
+    );
+    let expected = concat!(
+        "pub fn slice(s: &String, start: i32, end: i32) -> i32\n",
+        "    contract 0 <= start <= end, \"range\"\n",
+        "    contract end <= s.len()\n",
+        "{\n",
+        "    return end - start;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+/// A comment on a `contract` clause stays with the clause, not with the body.
+#[test]
+fn test_format_contract_clause_comments() {
+    let source = concat!(
+        "fn half(n: i32) -> i32\n",
+        "    // why even\n",
+        "    contract n % 2 == 0, \"n must be even\"  // trailing\n",
+        "    contract n >= 0\n",
+        "    // before the body\n",
+        "{\n",
+        "    // body\n",
+        "    return n / 2;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
+/// A trait method's clauses print on the trait's declaration, a bodyless one
+/// ending in `;` after the last clause.
+#[test]
+fn test_format_trait_contract_clauses() {
+    let source = concat!(
+        "trait Pick with () {\n",
+        "    fn pick(&self, i: i32) -> i32 contract i >= 0, \"negative\" contract i < 9;\n",
+        "    fn first(&self) -> i32 contract true { return self.pick(0); }\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "trait Pick with () {\n",
+        "    fn pick(&self, i: i32) -> i32\n",
+        "        contract i >= 0, \"negative\"\n",
+        "        contract i < 9;\n",
+        "    fn first(&self) -> i32\n",
+        "        contract true\n",
+        "    {\n",
+        "        return self.pick(0);\n",
+        "    }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_format_preserves_ast(source);
+}
+
+/// `unchecked` is a prefix operator, so it prints as `-` does, and its operand
+/// keeps the parentheses that limit it to one call of a chain.
+#[test]
+fn test_format_unchecked_operator() {
+    let source = concat!(
+        "fn run(s: String, xs: List<i32>) {\n",
+        "    let a = unchecked s.get_byte(0);\n",
+        "    let b = (unchecked s.slice(0, 1)).len();\n",
+        "    let c = unchecked xs[0] + 1;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}

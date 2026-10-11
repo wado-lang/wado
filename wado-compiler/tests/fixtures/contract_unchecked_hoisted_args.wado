@@ -1,0 +1,36 @@
+// A default argument that names another parameter hoists the arguments into a
+// block around the call; `unchecked` still reaches the call inside it.
+use { println, Stdout } from "core:cli";
+
+fn sum(n: i32, m: i32 = n + 1) -> i32
+    contract n > 0
+{
+    return n + m;
+}
+
+trait Get with () {
+    fn get(&self, i: i32, j: i32 = i) -> i32
+        contract i >= 0;
+}
+
+struct Grid {}
+
+impl Get for Grid {
+    fn get(&self, i: i32, j: i32) -> i32 {
+        return i * 10 + j;
+    }
+}
+
+fn through<G: Get>(g: &G) -> i32 {
+    return unchecked g.get(2);
+}
+
+export fn run() with Stdout {
+    println(`${unchecked sum(1)}`);
+    println(`${through(&Grid {})}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n22\n"
+}

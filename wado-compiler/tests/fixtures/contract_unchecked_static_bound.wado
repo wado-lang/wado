@@ -1,0 +1,32 @@
+// `unchecked` vouches for a trait's clauses on a static call through a bound,
+// as on a method call: the twin it reaches leaves the clause unchecked in a
+// build without contract checks (a CLI program above -O0).
+use { println, Stdout } from "core:cli";
+
+trait Make with () {
+    fn make(n: i32) -> Self
+        contract n >= 0, "n must be non-negative";
+}
+
+struct Count { n: i32 }
+
+impl Make for Count {
+    fn make(n: i32) -> Self {
+        return Count { n };
+    }
+}
+
+fn build<T: Make>(n: i32) -> T {
+    return unchecked T::make(n);
+}
+
+export fn run() with Stdout {
+    let c: Count = build(builtin::black_box(-1));
+    println(`${c.n}`);
+}
+
+__DATA__
+{
+  "only_opt": ["O1", "O2", "O3", "Os"],
+  "stdout": "-1\n"
+}

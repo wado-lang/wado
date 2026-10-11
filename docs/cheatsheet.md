@@ -878,6 +878,26 @@ assert x > 0;
 assert x > 0, "x must be positive";
 ```
 
+A `contract` clause states what a caller owes. An unmarked call checks it in
+every build; a call marked `unchecked` vouches for it, and only a build under
+`-f contract-checks` checks it. See [the spec](./spec-assertions.md#contract-checks).
+
+```wado
+fn half(n: i32) -> i32
+    contract n % 2 == 0, "n must be even"   // any number; no effects
+{
+    return n / 2;
+}
+
+half(4);             // checked, always
+unchecked half(4);   // the caller vouches; checked only under -f contract-checks
+
+trait Pick {
+    fn pick(&self, i: i32) -> i32
+        contract i >= 0;   // binds every impl, which writes no clause of its own
+}
+```
+
 ## Functions, Methods, and Closures
 
 ### Functions

@@ -42,6 +42,7 @@ mod type_resolution;
 mod typecheck;
 pub(crate) mod types;
 mod tysys;
+mod unchecked;
 pub(crate) mod util;
 mod written;
 
@@ -1881,6 +1882,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 Item::Trait(trait_decl) => {
                     self.resolve_trait_param_defaults(trait_decl);
+                    self.resolve_trait_bodies(trait_decl);
                 }
                 Item::Variant(variant_decl) => {
                     self.resolve_variant_decl(variant_decl);

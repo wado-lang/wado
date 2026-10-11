@@ -71,12 +71,50 @@ wado compile -O2 -f bare-asserts app.wado     # silent at -O2 too
 
 ## Contract Checks
 
-A build may check the contracts of the standard library's `_unchecked`
-functions (see [Behavior Classes](./spec-overview.md#behavior-classes)). A
-checking build traps on a call outside the contract, as a failed assertion
-does, message included. A build that does not check evaluates nothing, and the
-compiler does not assume the contract holds: the violation keeps the class the
-function's documentation gives it.
+A function states the preconditions its caller owes with `contract` clauses,
+written after the `with` clause and before the body. Each clause is a condition
+and an optional message, as an `assert` is, and a function may have any number
+of them. A condition is parsed as an `if` condition is, with no struct literal.
+It is evaluated where the function is defined, so it may name a private field
+its caller could not, and it performs no effect.
+
+<!-- {"fixture":"contract_clause.wado", "assert": false} -->
+
+```wado
+fn half(n: i32) -> i32
+    contract n % 2 == 0, "n must be even"
+{
+    return n / 2;
+}
+```
+
+A call traps when it is outside the contract, as a failed assertion does,
+message included. A caller that guarantees the contract itself marks the call
+with the prefix operator `unchecked`, and a marked call is checked only where
+the build checks contracts. A call without the marker is checked in every
+build. The operand of `unchecked` is a call to a function with a contract;
+anything else is a compile error. Postfix operators bind tighter, so
+`unchecked f(x)?` marks the `?`, an error, and `(unchecked f(x))?` marks the
+call.
+
+<!-- {"fixture":"contract_clause.wado"} -->
+
+```wado
+test "calls inside the contract" {
+    assert half(4) == 2;
+    assert unchecked half(6) == 3;
+}
+```
+
+A build that does not check evaluates nothing, and the compiler does not assume
+the contract holds: the violation keeps the class the function's documentation
+gives it (see [Behavior Classes](./spec-overview.md#behavior-classes)). A call
+from another component carries no marker, so a contract on an `export fn` is
+always checked.
+
+A function may also state a check of its own with `builtin::contract_checks()`,
+as the whole condition of an `if` statement with no `else`. Its body runs only
+where the build checks contracts.
 
 `-f contract-checks` and `-f no-contract-checks` choose. Without either, the
 test world checks at every optimization level, and any other world checks at
@@ -88,4 +126,26 @@ wado test -f no-contract-checks app.wado        # does not
 wado run -O0 app.wado                           # checks
 wado run app.wado                               # does not (-O2)
 wado compile -O2 -f contract-checks app.wado    # checks
+```
+
+A trait method's clauses are written on the trait's declaration, one without a
+body included, and bind every impl of the method and the trait's default body.
+An impl writes no clause; one that does is a compile error. A call through a
+bound checks the trait's clauses, and `unchecked` vouches for them.
+
+<!-- {"fixture":"contract_trait_method.wado", "assert": false} -->
+
+```wado
+trait Pick with () {
+    fn size(&self) -> i32;
+
+    fn pick(&self, i: i32) -> i32
+        contract 0 <= i < self.size(), "index out of range";
+
+    fn first(&self) -> i32
+        contract self.size() > 0
+    {
+        return self.pick(0);
+    }
+}
 ```

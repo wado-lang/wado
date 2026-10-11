@@ -133,6 +133,9 @@ impl From<EffectError> for Diagnostic {
 pub enum PureContext {
     DefaultValue,
     GlobalInitializer,
+    /// A build may skip it, so whether its effects happen would depend on the
+    /// build.
+    Contract,
 }
 
 impl PureContext {
@@ -140,6 +143,7 @@ impl PureContext {
         match self {
             Self::DefaultValue => "default value expression",
             Self::GlobalInitializer => "global initializer",
+            Self::Contract => "contract clause",
         }
     }
 }
@@ -409,17 +413,20 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    check_function_effects_sem(sem, src, func, index, None, out);
+                    check_function_effects_sem(sem, src, func, index, &[], out);
                 }
                 Item::Impl(impl_block) => {
                     check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
-                        check_function_effects_sem(sem, src, method, index, None, out);
+                        check_function_effects_sem(sem, src, method, index, &[], out);
                     }
                 }
+                // A default body holds what the trait declares for it.
                 Item::Trait(trait_decl) => {
+                    let def = index.resolutions.defs().def_at(trait_decl.id);
                     for method in &trait_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, None, out);
+                        let declared = &index.trait_method_effects[&(def, method.name.clone())];
+                        check_function_effects_sem(sem, src, method, index, declared, out);
                     }
                 }
                 // An operation's default body is ordinary code, so what it
@@ -429,7 +436,8 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                     let def = index.resolutions.defs().def_at(interface_decl.id);
                     let own = index.interfaces.get(&def).map(|(effect, _)| effect);
                     for method in &interface_decl.methods {
-                        check_function_effects_sem(sem, src, method, index, own, out);
+                        let held = own.map_or(&[][..], std::slice::from_ref);
+                        check_function_effects_sem(sem, src, method, index, held, out);
                     }
                 }
                 // What the initializer performs is the purity check's; only an
@@ -1145,7 +1153,7 @@ fn check_function_effects_sem(
     module: &ModuleSource,
     func: &Function,
     index: &EffectIndex,
-    held: Option<&EffectRef>,
+    held: &[EffectRef],
     out: &mut Vec<EffectError>,
 ) {
     // `#[benign(E)]` admits `E` in the body without a `with E` clause.
@@ -1187,7 +1195,7 @@ fn check_function_effects_sem(
         add_signature_resources(ann, caller_key, &scan, &mut current);
     }
     current.extend(benign);
-    current.extend(held.cloned());
+    current.extend(held.iter().cloned());
     if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
         current.extend(index.waiting.iter().cloned());
     }
@@ -1642,11 +1650,11 @@ fn dispatch_effects(
 ) -> Vec<EffectRef> {
     // A synthesized template (a derived method) is a method of the type it is
     // derived for, so it takes `self`.
-    let has_receiver = match &func_ref.template {
-        Some(TemplateId::Declared { def, .. }) => index
+    let has_receiver = match func_ref.template.as_ref().and_then(TemplateId::def) {
+        Some(def) => index
             .receiver_methods
-            .contains(&index.resolutions.defs().ast_id(*def)),
-        Some(TemplateId::Synthesized { .. }) | None => func_ref.method_info.is_some(),
+            .contains(&index.resolutions.defs().ast_id(def)),
+        None => func_ref.method_info.is_some(),
     };
     let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
@@ -1726,17 +1734,16 @@ impl EffectIndex<'_> {
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
         };
-        let impl_method =
-            match &func_ref.template {
-                Some(TemplateId::Declared { def, .. })
-                    if self.resolutions.defs().parent(*def).is_some_and(|owner| {
-                        self.resolutions.defs().kind(owner) == DefKind::Impl
-                    }) =>
-                {
-                    Some(self.resolutions.defs().ast_id(*def))
-                }
-                _ => None,
-            };
+        let defs = self.resolutions.defs();
+        let impl_method = func_ref
+            .template
+            .as_ref()
+            .and_then(TemplateId::def)
+            .filter(|&def| {
+                defs.parent(def)
+                    .is_some_and(|owner| defs.kind(owner) == DefKind::Impl)
+            })
+            .map(|def| defs.ast_id(def));
         if let Some(trait_name) = &method_info.trait_name
             && let Some((receiver, key)) = impl_key(&method_info.fq_base_struct_name(), trait_name)
             && self.open_traits.contains(&key)
@@ -1767,10 +1774,10 @@ impl EffectIndex<'_> {
                 }
             }
         }
-        let Some(TemplateId::Declared { def, .. }) = &func_ref.template else {
+        let Some(def) = func_ref.template.as_ref().and_then(TemplateId::def) else {
             return brought;
         };
-        let method = self.resolutions.defs().ast_id(*def);
+        let method = self.resolutions.defs().ast_id(def);
         let spelled = |args: &[TypeId]| -> Vec<Vec<FqTypeName>> {
             args.iter().map(|&arg| self.spellings(arg)).collect()
         };
@@ -1929,7 +1936,10 @@ impl EffectIndex<'_> {
     /// the dispatch names no trait, or names an `interface` or a `resource`.
     fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
         let method_info = func_ref.method_info.as_ref()?;
-        self.effects_declared_by(method_info.trait_name.as_ref()?, &method_info.method_name)
+        self.effects_declared_by(
+            method_info.trait_name.as_ref()?,
+            method_info.declared_method_name(),
+        )
     }
 
     /// The effects one trait method declares. `None` for a name no trait
@@ -1954,13 +1964,9 @@ impl EffectIndex<'_> {
         by_decl: &IndexMap<AstId, V>,
         by_name: &IndexMap<(ModuleSource, String), V>,
     ) -> V {
-        let entry = match &func_ref.template {
-            Some(TemplateId::Declared { def, .. }) => {
-                by_decl.get(&self.resolutions.defs().ast_id(*def))
-            }
-            Some(TemplateId::Synthesized { .. }) | None => {
-                by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            }
+        let entry = match func_ref.template.as_ref().and_then(TemplateId::def) {
+            Some(def) => by_decl.get(&self.resolutions.defs().ast_id(def)),
+            None => by_name.get(&(func_ref.module_source.clone(), func_ref.name.clone())),
         };
         entry.cloned().unwrap_or_default()
     }
@@ -2210,6 +2216,11 @@ impl SemEffectWalker<'_> {
 
 impl AstVisitor for SemEffectWalker<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
+        // A clause may perform no effect at all, which the purity check
+        // reports; a missing effect there would be the same fault twice.
+        if stmt.as_contract().is_some() {
+            return;
+        }
         // `for let v of iterable { … }` desugars to synthetic `.into_iter()` /
         // `.next()` calls that have no source call id, so they record no
         // `method_dispatch` fact for `visit_expr` to consult. Check their
@@ -2495,18 +2506,15 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
         let mut walker = PurityWalker::new(sem, state, index, src, out);
         for item in &module.items {
             match item {
-                Item::Function(func) => walker.check_defaults(&func.params),
+                Item::Function(func) => walker.check_signature(func),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        walker.check_defaults(&method.params);
+                        walker.check_signature(method);
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    // The trait method signature path does not yet resolve param
-                    // defaults, so their calls leave no `references` edge to flag
-                    // until that annotation lands.
                     for method in &trait_decl.methods {
-                        walker.check_defaults(&method.params);
+                        walker.check_signature(method);
                     }
                 }
                 Item::Interface(interface_decl) => {
@@ -2600,6 +2608,21 @@ impl<'a> PurityWalker<'a> {
         for param in params {
             if let Some(default) = &param.default {
                 self.check(PureContext::DefaultValue, default);
+            }
+        }
+    }
+
+    /// A function's defaults and its `contract` clauses.
+    fn check_signature(&mut self, func: &ast::Function) {
+        self.check_defaults(&func.params);
+        self.check_contracts(func);
+    }
+
+    fn check_contracts(&mut self, func: &ast::Function) {
+        for clause in func.contracts() {
+            self.check(PureContext::Contract, &clause.condition);
+            if let Some(message) = &clause.message {
+                self.check(PureContext::Contract, message);
             }
         }
     }

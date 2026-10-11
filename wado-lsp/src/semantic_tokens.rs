@@ -1246,6 +1246,13 @@ mod tests {
         assert_eq!(kind_of(&tokens, src, 1, "test"), token_type::KEYWORD);
     }
 
+    #[test]
+    fn contextual_keyword_contract_is_a_keyword() {
+        let src = "fn half(n: i32) -> i32\n    contract n > 0\n{\n    return n;\n}\n";
+        let tokens = compute(src, None);
+        assert_eq!(kind_of(&tokens, src, 1, "contract"), token_type::KEYWORD);
+    }
+
     /// Class (type + modifiers) of the token whose text is `needle` on `line`.
     fn class_of(tokens: &[SemanticToken], src: &str, line: u32, needle: &str) -> (u32, u32) {
         let text = src.split_inclusive('\n').nth(line as usize).expect("line");

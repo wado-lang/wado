@@ -418,6 +418,37 @@ impl CaptureScanner {
         }
     }
 
+    /// Scan what a call evaluates ahead of itself, when `expr` is one.
+    fn scan_call_operands(&mut self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Call(c) => {
+                // The callee is left alone: capturing it would turn a direct
+                // call into an indirect one.
+                self.frontier_ok = false;
+                for arg in &c.args {
+                    self.scan(arg);
+                }
+            }
+            Expr::MethodCall(m) => {
+                // The scan runs ahead of resolution, so `&mut self` is not yet
+                // knowable: every place receiver counts as written.
+                self.record_write(&m.receiver);
+                self.scan_receiver(&m.receiver);
+                for arg in &m.args {
+                    self.scan(arg);
+                }
+            }
+            Expr::StaticMethodCall(s) => {
+                self.frontier_ok = false;
+                for arg in &s.args {
+                    self.scan(arg);
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+
     fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
         let Position {
             is_root,
@@ -436,6 +467,11 @@ impl CaptureScanner {
                 if !is_root {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
+            }
+            // Bound whole, marker and all: a binding of the call alone would
+            // leave the marker nothing to retarget.
+            Expr::Unary(u) if u.op == UnaryOp::Unchecked && self.scan_call_operands(&u.expr) => {
+                self.add(unparse_expr_source(expr), ast_id, false, pos);
             }
             Expr::Unary(u) => {
                 // A binding would type `-50` as `i32`, losing the bidirectional
@@ -458,30 +494,8 @@ impl CaptureScanner {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }
             }
-            Expr::Call(c) => {
-                // The callee is left alone: capturing it would turn a direct
-                // call into an indirect one.
-                self.frontier_ok = false;
-                for arg in &c.args {
-                    self.scan(arg);
-                }
-                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-            }
-            Expr::MethodCall(m) => {
-                // The scan runs ahead of resolution, so `&mut self` is not yet
-                // knowable: every place receiver counts as written.
-                self.record_write(&m.receiver);
-                self.scan_receiver(&m.receiver);
-                for arg in &m.args {
-                    self.scan(arg);
-                }
-                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-            }
-            Expr::StaticMethodCall(s) => {
-                self.frontier_ok = false;
-                for arg in &s.args {
-                    self.scan(arg);
-                }
+            Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
+                self.scan_call_operands(expr);
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::ComparisonChain(chain) => {

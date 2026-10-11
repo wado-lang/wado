@@ -362,6 +362,7 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
     let methods: Vec<DocFunction> = t
         .methods
         .iter()
+        .filter(|m| !m.is_contract_holder())
         .map(|m| build_doc_function(m, trivia))
         .collect();
 

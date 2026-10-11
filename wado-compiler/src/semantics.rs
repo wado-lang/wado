@@ -745,7 +745,12 @@ impl Semantics {
                     );
                 }
                 Item::Trait(t) if want_trait.is_none() && t.name == want_type => {
-                    names.extend(t.methods.iter().map(|m| m.name.clone()));
+                    names.extend(
+                        t.methods
+                            .iter()
+                            .filter(|m| !m.is_contract_holder())
+                            .map(|m| m.name.clone()),
+                    );
                 }
                 _ => {}
             }

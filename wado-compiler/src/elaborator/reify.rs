@@ -23,7 +23,7 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
+use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -66,6 +66,7 @@ use crate::elaborator::stmt::{
 };
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
+use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::util::{
     BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value,
     constant_pattern_site, parse_i128_literal, parse_u128_literal, pattern_literal, range_bound,
@@ -702,7 +703,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if func.body.is_some() && self.is_dead_item(func.id) {
                         continue;
                     }
-                    tir_module.add_function(self.reify_function(func));
+                    let mut tir_func = self.reify_function(func);
+                    let twin = unchecked_twin(func, &mut tir_func);
+                    tir_module.add_function(tir_func);
+                    if let Some(twin) = twin {
+                        tir_module.add_function(twin);
+                    }
                 }
                 Item::Struct(struct_decl) => {
                     tir_module.add_struct(self.reify_struct(struct_decl));
@@ -711,14 +717,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if let Some(tir_impl) = self.reify_impl_decl(impl_block) {
                         tir_module.add_impl(tir_impl);
                     }
-                    for tir_func in self.reify_impl(impl_block) {
-                        tir_module.add_function(tir_func);
-                    }
                     // Reify is the sole producer of
                     // trait default-method `TirFunction`s, synthesised here
                     // from the per-impl facts the body walk recorded on
                     // `sem.default_method_facts`.
-                    for tir_func in self.reify_impl_default_methods(impl_block) {
+                    let mut methods = self.reify_impl(impl_block);
+                    methods.extend(self.reify_impl_default_methods(impl_block));
+                    let bound = bind_trait_contracts(
+                        methods,
+                        &self.contract_bindings(impl_block),
+                        &self.current_module_source,
+                        &mut self.tysys.type_table.borrow_mut(),
+                    );
+                    for tir_func in bound {
                         tir_module.add_function(tir_func);
                     }
                 }
@@ -1330,9 +1341,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .filter(|method| !self.is_dead_item(method.id))
             .collect();
-        live.into_iter()
-            .map(|method| self.reify_method(method, &facts, concrete_owner.as_ref(), origin))
-            .collect()
+        let mut out = Vec::with_capacity(live.len());
+        for method in live {
+            let mut tir_func = self.reify_method(method, &facts, concrete_owner.as_ref(), origin);
+            let twin = unchecked_twin(method, &mut tir_func);
+            out.push(tir_func);
+            out.extend(twin);
+        }
+        out
     }
 
     fn impl_origin(&self, impl_block: &ast::ImplBlock) -> DefId {
@@ -1644,17 +1660,63 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (GlobalInit::Deferred(placeholder), Some(init_fn))
     }
 
-    /// Report a malformed attribute at the attribute's own span.
-    fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
+    /// Each `contract` clause holder `impl_block`'s trait declares, paired
+    /// with the method of the block that answers the one it holds the clauses
+    /// of: the block's own, else the trait's default.
+    fn contract_bindings(&self, impl_block: &ast::ImplBlock) -> Vec<(DefId, DefId)> {
+        let Some(decl) = impl_block
+            .trait_type
+            .as_ref()
+            .and_then(|ty| self.tysys.resolutions.head_decl(ty))
+            .and_then(|decl| self.trait_decl(decl))
+        else {
+            return Vec::new();
+        };
+        let defs = self.tysys.resolutions.defs();
+        decl.methods
+            .iter()
+            .filter_map(|holder| {
+                let held_id = holder.holds_contracts_of?;
+                let held = decl
+                    .methods
+                    .iter()
+                    .find(|m| m.id == held_id)
+                    .expect("a holder follows the method it holds the clauses of");
+                let answering = impl_block
+                    .methods
+                    .iter()
+                    .find(|m| m.name == held.name)
+                    .map_or(held_id, |m| m.id);
+                Some((defs.def_at(holder.id), defs.def_at(answering)))
+            })
+            .collect()
+    }
+
+    /// The trait `def` declares.
+    fn trait_decl(&self, def: DefId) -> Option<&'a ast::TraitDecl> {
+        Contracts {
+            resolutions: &self.tysys.resolutions,
+            modules: self.loaded_modules,
+        }
+        .trait_decl(def)
+    }
+
+    /// Report an error at `span` in the module reify stands in.
+    fn error_at(&self, code: Code, span: Span, message: String) {
         let _ = self.logger.error_in(
             &self.current_module_source,
             Diagnostic {
                 severity: Severity::Error,
                 code,
                 message,
-                span: Some(DiagnosticSpan::from_span(&attr.span, None)),
+                span: Some(DiagnosticSpan::from_span(&span, None)),
             },
         );
+    }
+
+    /// Report a malformed attribute at the attribute's own span.
+    fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
+        self.error_at(code, attr.span, message);
     }
 
     /// Report `call` when it reified to `builtin::contract_checks()` anywhere
@@ -1667,16 +1729,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !func.is_builtin_named("contract_checks") || self.contract_check_call == Some(call.id) {
             return;
         }
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code: Code::UnsupportedFeature,
-                message: "`builtin::contract_checks()` stands only as the whole condition of \
-                          `if builtin::contract_checks() { … }`, with no `else`"
-                    .to_string(),
-                span: Some(DiagnosticSpan::from_span(&call.span, None)),
-            },
+        self.error_at(
+            Code::UnsupportedFeature,
+            call.span,
+            "`builtin::contract_checks()` stands only as the whole condition of \
+             `if builtin::contract_checks() { … }`, with no `else`"
+                .to_string(),
         );
     }
 
@@ -1826,18 +1884,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match builtin_facts::read(&func.attrs, &shapes, ret) {
             Ok(Some(facts)) => Some(facts),
             Ok(None) => {
-                let _ = self.logger.error_in(
-                    &self.current_module_source,
-                    Diagnostic {
-                        severity: Severity::Error,
-                        code: Code::StorageAttr,
-                        message: format!(
-                            "`{}` has no body, so it states what a call does: \
-                             declare #[storage(...)] and #[side_effect(...)]",
-                            func.name
-                        ),
-                        span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
-                    },
+                self.error_at(
+                    Code::StorageAttr,
+                    func.name_span,
+                    format!(
+                        "`{}` has no body, so it states what a call does: \
+                         declare #[storage(...)] and #[side_effect(...)]",
+                        func.name
+                    ),
                 );
                 None
             }
@@ -2245,6 +2299,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Stmt::While(w) => self.reify_while(w, ctx),
             ast::Stmt::For(f) => self.reify_for(f, ctx),
+            ast::Stmt::Assert(assert_stmt) if assert_stmt.contract => {
+                let check = self.reify_assert(assert_stmt, ctx);
+                vec![contract_check(check, assert_stmt.span)]
+            }
             ast::Stmt::Assert(assert_stmt) => self.reify_assert(assert_stmt, ctx),
             ast::Stmt::ForOf(for_of) => self.reify_for_of(for_of, ctx),
             // A local type/impl declaration emits no runtime instruction —
@@ -2482,6 +2540,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let inner =
                     read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
                 self.lower_cast(inner, target_type, span)
+            }
+            ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Unchecked => {
+                let mut call = self.reify_expr(&unary.expr, ctx, expected_type);
+                retarget_to_unchecked_twin(&mut call, unary.expr.span());
+                call
             }
             ast::Expr::Unary(unary) => {
                 // `&mut [1, 2] as List<i32>` parses as `(&mut [1, 2]) as …`,
@@ -10167,6 +10230,197 @@ fn bind_to_local(
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
+/// `if builtin::contract_checks() { check }`: one `contract` clause as the
+/// `unchecked` twin runs it. [`split_unchecked_twin`] unwraps it again for the
+/// checked function.
+fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::If {
+            condition: builtin_call("contract_checks", Vec::new(), TypeTable::BOOL),
+            then_block: TirBlock::new(check, span),
+            else_block: None,
+        },
+        span,
+    )
+}
+
+/// Retarget the call `unchecked` marks, spanning `call_span`, to its callee's
+/// twin, which the check of `unchecked`'s operand established it has.
+/// Reify may wrap that call (a default argument naming another parameter
+/// hoists the arguments into a block around it), so the call is found by the
+/// span of the operand it was reified from.
+fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
+    struct Marked {
+        call_span: Span,
+        found: bool,
+    }
+    impl TirMutVisitor for Marked {
+        fn visit_expr(&mut self, expr: &mut TirExpr) {
+            if self.found {
+                return;
+            }
+            match &mut expr.kind {
+                TirExprKind::Call { func, .. } if expr.span == self.call_span => {
+                    retarget_call(func);
+                    self.found = true;
+                }
+                _ => self.walk_expr(expr),
+            }
+        }
+    }
+    let mut marked = Marked {
+        call_span,
+        found: false,
+    };
+    marked.visit_expr(expr);
+    assert!(marked.found, "`unchecked` marks a call: {:?}", expr.kind);
+}
+
+fn retarget_call(func: &mut FunctionRef) {
+    func.name = unchecked_twin_name(&func.name);
+    if let Some(info) = &mut func.method_info {
+        info.mark_unchecked();
+    }
+    if let Some(mono) = &mut func.monomorph_info {
+        mono.generic_name = unchecked_twin_name(&mono.generic_name);
+    }
+    func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
+}
+
+/// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a
+/// `contract` clause. See [`split_unchecked_twin`].
+fn unchecked_twin(decl: &ast::Function, func: &mut TirFunction) -> Option<TirFunction> {
+    let clauses: Vec<Span> = decl.contracts().map(|clause| clause.span).collect();
+    (!clauses.is_empty()).then(|| split_unchecked_twin(func, &clauses))
+}
+
+/// Split `func`, whose body holds its `contract` clauses (spanning `clauses`)
+/// as [`contract_check`]s, into the function every unmarked call reaches,
+/// which always checks them, and the `unchecked` twin a marked call reaches,
+/// which checks them only in a build under `-f contract-checks`.
+fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction {
+    let mut twin = func.clone();
+    twin.name = unchecked_twin_name(&func.name);
+    twin.def_id = None;
+    twin.kind = FunctionKind::UncheckedTwin {
+        of: func
+            .def_id
+            .expect("a function with a `contract` clause is declared"),
+    };
+    twin.is_export = false;
+    twin.export_name = None;
+    twin.compiler_item = None;
+    if let Some(info) = &mut twin.method_info {
+        info.mark_unchecked();
+    }
+    let body = func
+        .body
+        .as_mut()
+        .expect("a function with a `contract` clause has a body");
+    let mut unwrapped = 0;
+    body.stmts = std::mem::take(&mut body.stmts)
+        .into_iter()
+        .flat_map(|stmt| match stmt.kind {
+            TirStmtKind::If { then_block, .. } if clauses.contains(&stmt.span) => {
+                unwrapped += 1;
+                then_block.stmts
+            }
+            kind => vec![TirStmt { kind, ..stmt }],
+        })
+        .collect();
+    assert_eq!(
+        unwrapped,
+        clauses.len(),
+        "every `contract` clause of `{}` reifies to a contract check in its body",
+        func.name
+    );
+    twin
+}
+
+/// Bind an impl's `methods` to the `contract` clauses their trait declares.
+/// Each clause holder among them splits into the checked holder and its
+/// `unchecked` twin, and the method it holds the clauses of splits likewise,
+/// each half opening with a call to the matching half of the holder.
+/// `bindings` pairs each holder's declaration with the method's, as
+/// [`Reify::contract_bindings`] answers them.
+fn bind_trait_contracts(
+    mut methods: Vec<TirFunction>,
+    bindings: &[(DefId, DefId)],
+    module: &ModuleSource,
+    type_table: &mut TypeTable,
+) -> Vec<TirFunction> {
+    let position =
+        |methods: &[TirFunction], def: DefId| methods.iter().position(|m| m.def_id == Some(def));
+    for &(holder_def, held_def) in bindings {
+        let Some(holder_at) = position(&methods, holder_def) else {
+            continue;
+        };
+        let holder = &mut methods[holder_at];
+        // Linking stamps every function's module, but the calls below record
+        // it now: a call to an instance resolves by name in that module.
+        holder.module_source = module.clone();
+        let clauses: Vec<Span> = holder
+            .body
+            .iter()
+            .flat_map(|body| &body.stmts)
+            .map(|stmt| stmt.span)
+            .collect();
+        let holder_twin = split_unchecked_twin(holder, &clauses);
+        let holder = holder.clone();
+        if let Some(held_at) = position(&methods, held_def) {
+            let method = &mut methods[held_at];
+            let mut method_twin = split_unchecked_twin(method, &[]);
+            open_with_call(method, &holder, type_table);
+            open_with_call(&mut method_twin, &holder_twin, type_table);
+            methods.push(method_twin);
+        }
+        methods.push(holder_twin);
+    }
+    methods
+}
+
+/// Open `func`'s body with a call to `callee`, passing it `func`'s parameters
+/// and type parameters. The parser gave `callee` the type parameters `func`
+/// declares. A call passes no effect argument.
+fn open_with_call(func: &mut TirFunction, callee: &TirFunction, type_table: &mut TypeTable) {
+    let span = callee.span;
+    let type_args: Vec<TypeId> = func
+        .type_params
+        .iter()
+        .filter(|param| !param.is_effect)
+        .map(|param| type_table.make_declared_param(param.name.clone(), param.index, param.is_pack))
+        .collect();
+    assert_eq!(func.type_params.len(), callee.type_params.len());
+    let args = func
+        .params
+        .iter()
+        .map(|param| {
+            let local = TirExprKind::Local {
+                index: param.local_index,
+                name: param.name.clone(),
+            };
+            CallArg::new(TirExpr::new(local, param.type_id, span), false)
+        })
+        .collect();
+    let call = TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(FunctionRef::from_resolved(
+                callee,
+                callee.module_source.clone(),
+            )),
+            type_args,
+            args: CallArgs::free(args),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    func.body
+        .as_mut()
+        .expect("a method a trait's contract binds has a body")
+        .stmts
+        .insert(0, TirStmt::new(TirStmtKind::Expr(call), span));
+}
+
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
     match op {
         ast::UnaryOp::Neg => TirUnaryOp::Neg,
@@ -10175,6 +10429,7 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
         ast::UnaryOp::Ref => TirUnaryOp::Ref,
         ast::UnaryOp::MutRef => TirUnaryOp::MutRef,
         ast::UnaryOp::Deref => TirUnaryOp::Deref,
+        ast::UnaryOp::Unchecked => panic!("`unchecked` is reified as its operand"),
     }
 }
 

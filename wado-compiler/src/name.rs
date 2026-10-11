@@ -100,6 +100,21 @@ pub fn cold_region_helper_name(enclosing_name: &str, ordinal: u32) -> String {
     format!("{enclosing_name}$cold{ordinal}")
 }
 
+/// The name of a function's `unchecked` twin, which an `unchecked` call
+/// reaches: the function's name with an `$unchecked` suffix.
+pub fn unchecked_twin_name(name: &str) -> String {
+    format!("{name}{UNCHECKED_TWIN_SUFFIX}")
+}
+
+const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
+
+/// The name of the hidden default method a trait declares to hold the
+/// `contract` clauses of its method `method`, which every impl of the method
+/// calls at its head.
+pub fn contract_holder_name(method: &str) -> String {
+    format!("$contract${method}")
+}
+
 /// The name of the function holding an effect operation's default
 /// implementation — the body that runs when the operation is dispatched with
 /// no handler installed. `$`-prefixed like the other synthesized helpers, so it
@@ -1264,6 +1279,29 @@ impl LocalMethodName {
             is_ref_impl: false,
             cm_name: None,
         }
+    }
+
+    /// Whether this names the method's `unchecked` twin, which a call marked
+    /// `unchecked` reaches. The suffix is the only record: no Wado identifier
+    /// can spell its `$`, so a copied [`Self::method_name`] carries it along.
+    #[must_use]
+    pub fn is_unchecked(&self) -> bool {
+        self.method_name.ends_with(UNCHECKED_TWIN_SUFFIX)
+    }
+
+    /// Point this name at the method's `unchecked` twin.
+    pub fn mark_unchecked(&mut self) {
+        assert!(!self.is_unchecked(), "{self:?} already names a twin");
+        self.method_name = unchecked_twin_name(&self.method_name);
+    }
+
+    /// The method as its declaration names it, where this name may name its
+    /// `unchecked` twin.
+    #[must_use]
+    pub fn declared_method_name(&self) -> &str {
+        self.method_name
+            .strip_suffix(UNCHECKED_TWIN_SUFFIX)
+            .unwrap_or(&self.method_name)
     }
 
     /// The trait's declaration name without type args (`"Display"`,

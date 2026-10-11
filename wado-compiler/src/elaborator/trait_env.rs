@@ -1586,6 +1586,16 @@ impl TraitEnv {
         Some(TemplateId::in_block(def, block))
     }
 
+    /// [`Self::method_template`] as the call `info` reaches it.
+    pub(crate) fn call_template(
+        &self,
+        block: DefId,
+        info: &name::LocalMethodName,
+    ) -> Option<TemplateId> {
+        self.method_template(block, info.declared_method_name())
+            .map(|template| template.called_by(info))
+    }
+
     /// The block on `receiver` whose body answers `method` of `trait_<wanted>`
     /// where `reaches` admits, a concrete one before a generic one (coherence
     /// Rule 1). An inherent block answers with no `trait_` and no `wanted`.

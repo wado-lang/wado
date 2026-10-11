@@ -73,6 +73,24 @@ pub(crate) fn compute(
             .or_default()
             .extend(impl_methods);
     }
+    // Every impl of a method its trait binds by a `contract` opens with a call
+    // to the clauses' holder, which reify mints after this pass.
+    for module in modules.values() {
+        for item in &module.items {
+            let Item::Trait(trait_decl) = item else {
+                continue;
+            };
+            for holder in &trait_decl.methods {
+                let Some(held) = holder.holds_contracts_of else {
+                    continue;
+                };
+                let impls = trait_method_impls.get(&held).into_iter().flatten();
+                for caller in std::iter::once(&held).chain(impls) {
+                    graph.edges.entry(*caller).or_default().push(holder.id);
+                }
+            }
+        }
+    }
 
     for (source, module) in modules {
         // `#![generated]` modules are machine-emitted (e.g. Gale's parser

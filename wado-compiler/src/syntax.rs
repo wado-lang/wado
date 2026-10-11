@@ -181,6 +181,7 @@ keyword_registry! {
     "false" => False : Constant,
     "null" => Null : Constant,
     "matches" => Matches : Operator,
+    "unchecked" => Unchecked : Operator,
 }
 
 operator_registry! {
@@ -240,6 +241,7 @@ pub const CONTEXTUAL_KEYWORDS: &[(&str, KeywordCategory)] = &[
     ("trap", KeywordCategory::Control),
     ("forward", KeywordCategory::Control),
     ("test", KeywordCategory::Other),
+    ("contract", KeywordCategory::Other),
     ("self", KeywordCategory::Constant),
     ("Self", KeywordCategory::StorageType),
 ];
