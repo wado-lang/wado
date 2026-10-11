@@ -1,0 +1,29 @@
+// A closure literal handed to an open trait's bound selects the impl for the
+// function type its body makes it: what the effect check reads the impl's
+// effects off is the closure's row as solved, not the variable standing for it.
+
+use { println, Stdout } from "core:cli";
+
+trait Apply with _ {
+    fn apply1(&self) -> i32;
+}
+
+impl Apply for fn(i32) -> i32 {
+    fn apply1(&self) -> i32 {
+        return self(1);
+    }
+}
+
+fn through<T: Apply>(t: &T) -> i32 with _ {
+    return t.apply1();
+}
+
+export fn run() with Stdout {
+    let h = |x: i32| x * 10;
+    println(`${through(&h)}`);
+}
+
+__DATA__
+{
+    "stdout": "10\n"
+}

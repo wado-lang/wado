@@ -28,7 +28,7 @@ use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
@@ -126,6 +126,19 @@ pub enum SymbolResolveError {
 }
 
 impl Semantics {
+    /// Point every effect variable at the row the effect check solved it to,
+    /// in the snapshot and in the table the TIR reads alike.
+    pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
+        self.types.redirect_effect_vars(solved);
+        if let Some(state) = &self.state {
+            state
+                .tysys
+                .type_table
+                .borrow_mut()
+                .redirect_effect_vars(solved);
+        }
+    }
+
     /// Power-assert capture plans across every module that annotate reached,
     /// for `wado dump --assert-plan`. `None` before annotate has run.
     pub fn assert_plan_text(&self) -> Option<String> {
@@ -457,6 +470,18 @@ impl Semantics {
     #[must_use]
     pub fn expression_type(&self, id: AstId) -> Option<TypeId> {
         self.fact_at(ModuleSemantics::EXPRESSION_TYPES, id).copied()
+    }
+
+    /// [`Self::expression_type`] from every walk that reached the expression:
+    /// a tuple `for-of`'s body is walked once per element.
+    pub fn expression_types(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
+        self.facts_at(ModuleSemantics::EXPRESSION_TYPES, id)
+            .copied()
+    }
+
+    /// [`Self::local_type`] from every walk that reached the binding.
+    pub fn local_types(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
+        self.facts_at(ModuleSemantics::LOCAL_TYPES, id).copied()
     }
 
     /// Iterate every expression the body walk typed, as `(AstId, TypeId)`.

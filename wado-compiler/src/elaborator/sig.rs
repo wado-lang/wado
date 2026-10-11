@@ -7,7 +7,7 @@ use crate::ast::{Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TemplateId, TypeId, TypeTable, positional_substitution};
+use crate::tir::{EffectRows, TemplateId, TypeId, TypeTable, positional_substitution};
 
 use super::sem::decls::FunctionSig;
 use crate::ast;
@@ -200,6 +200,19 @@ pub(crate) struct DeclSig {
     pub(crate) param_types: Vec<TypeId>,
     /// `None` when the declaration declares no return type.
     pub(crate) return_type: Option<TypeId>,
+    /// The declaration's own effect parameters, `_` among them: each use
+    /// takes a fresh variable for one. An effect parameter of the enclosing
+    /// impl is the receiver's to bind instead.
+    pub(crate) own_effects: Vec<String>,
+}
+
+/// The effect parameters `params` declare, `_` among them.
+pub(crate) fn own_effect_params(params: &[ast::GenericParam]) -> Vec<String> {
+    params
+        .iter()
+        .filter(|p| p.is_effect)
+        .map(|p| p.name.clone())
+        .collect()
 }
 
 /// A method's canonical signature: the frame, plus what dispatch needs
@@ -602,18 +615,41 @@ impl DeclSig {
         substitution: &IndexMap<u32, TypeId>,
         projections: &SlotProjections,
     ) -> InstantiatedSig {
+        self.instantiate_bound(
+            type_table,
+            substitution,
+            projections,
+            &EffectRows::default(),
+        )
+    }
+
+    /// [`Self::instantiate_slots_with`] with what the enclosing impl's effect
+    /// parameters stand for at the receiver, `bound`. Each of the
+    /// declaration's own takes a fresh variable for the result to carry out,
+    /// minted in the declaration's frame before the slots are filled, so a
+    /// parameter of the use site's own keeps its name.
+    pub(crate) fn instantiate_bound(
+        &self,
+        type_table: &RefCell<TypeTable>,
+        substitution: &IndexMap<u32, TypeId>,
+        projections: &SlotProjections,
+        bound: &EffectRows,
+    ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
+        let mut rows = bound.clone();
+        rows.extend(table.fresh_effect_vars(&self.own_effects));
+        let return_type =
+            table.substitute_effect_rows(self.return_type.unwrap_or(TypeTable::UNIT), &rows);
         InstantiatedSig {
             param_types: self
                 .param_types
                 .iter()
-                .map(|&p| table.substitute_type_params_with(p, substitution, projections))
+                .map(|&p| {
+                    let p = table.substitute_effect_rows(p, bound);
+                    table.substitute_type_params_with(p, substitution, projections)
+                })
                 .collect(),
-            return_type: table.substitute_type_params_with(
-                self.return_type.unwrap_or(TypeTable::UNIT),
-                substitution,
-                projections,
-            ),
+            return_type: table.substitute_type_params_with(return_type, substitution, projections),
         }
     }
 }
@@ -630,6 +666,7 @@ mod tests {
             type_params: vec![("T".to_string(), t)],
             param_types: vec![t],
             return_type: Some(t),
+            own_effects: Vec::new(),
         }
     }
 
@@ -665,6 +702,7 @@ mod tests {
             type_params: vec![("T".to_string(), t)],
             param_types: vec![list_of_t],
             return_type: None,
+            own_effects: Vec::new(),
         };
 
         let inst = sig.instantiate(&table, &[TypeTable::I32]);
@@ -683,6 +721,7 @@ mod tests {
             type_params: vec![("T".to_string(), t), ("U".to_string(), u)],
             param_types: vec![t, u],
             return_type: Some(u),
+            own_effects: Vec::new(),
         };
 
         let inst = sig.instantiate(&table, &[TypeTable::I32]);
@@ -698,6 +737,7 @@ mod tests {
             type_params: Vec::new(),
             param_types: vec![TypeTable::I32],
             return_type: Some(TypeTable::BOOL),
+            own_effects: Vec::new(),
         };
 
         let inst = sig.instantiate(&table, &[]);

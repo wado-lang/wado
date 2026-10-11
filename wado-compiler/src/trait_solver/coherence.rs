@@ -95,7 +95,8 @@ fn is_unbounded_value_blanket(def: &ImplDef) -> bool {
         | SolverType::Pack(_)
         | SolverType::Ref { .. }
         | SolverType::Tuple(_)
-        | SolverType::Projection { .. } => false,
+        | SolverType::Projection { .. }
+        | SolverType::AnyRow => false,
     }
 }
 

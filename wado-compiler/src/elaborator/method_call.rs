@@ -957,7 +957,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = substituted_param_types.get(i) {
-                self.typecheck(*arg, expected, args_ast.get(i).map_or(span, Expr::span));
+                self.typecheck_into_callee(
+                    *arg,
+                    expected,
+                    args_ast.get(i).map_or(span, Expr::span),
+                );
             }
         }
 
@@ -987,8 +991,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Qualify the base and the arguments alike, so a concrete-generic
                 // impl's method name matches its definition (issue #1348). A
                 // tuple keeps the `[a,b]` spelling every other namespace gives it.
-                let type_arg_names: Vec<FqTypeName> =
-                    type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
+                let type_arg_names: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|t| tt.fq_type_name_rowless(*t))
+                    .collect();
                 let base = if tt.is_tuple(method_impl_type_id) {
                     FqTypeName::tuple(Vec::new())
                 } else {
@@ -1020,7 +1026,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .fq_base_type_name(method_impl_type_id);
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name_rowless(*t))
                     .collect();
                 let mangled = head.clone().with_args(type_arg_names.clone());
                 (mangled, head, type_arg_names, Some(type_args))
@@ -2333,7 +2339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let impl_only_type_arg_names: Vec<FqTypeName> = struct_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name_rowless(*t))
             .collect();
 
         // Build method_info with base struct name and trait name (if applicable)

@@ -1472,7 +1472,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 name,
                 module_source,
             }) => (name, module_source),
-            Some(EffectRef::Param { name }) => panic!(
+            Some(EffectRef::Param { name } | EffectRef::Var { name, .. }) => panic!(
                 "effect-dispatch synthesis received an unresolved \
                  `EffectRef::Param {{ name: {name:?} }}` in a `with` \
                  binding — the elaborator should have substituted it \

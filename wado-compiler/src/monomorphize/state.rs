@@ -290,7 +290,7 @@ impl Monomorphizer {
         let args: Vec<String> = key
             .impl_type_args
             .iter()
-            .map(|&t| type_table.mangle_type_arg_for_generic(t))
+            .map(|&t| type_table.mangle_type_arg_rowless(t))
             .collect();
         // The declaration's *rendered* head, which is what every reader of
         // this instantiation spells — a function-local generic struct carries
@@ -347,16 +347,24 @@ impl Monomorphizer {
             return self.function_instantiation_name(key, type_table);
         };
 
-        let impl_arg_names: Vec<String> = key
-            .impl_type_args
-            .iter()
-            .map(|t| type_table.mangle_type_arg_for_generic(*t))
-            .collect();
-
         // A blanket impl's receiver IS one of its type params (e.g. "I").
         let is_blanket = method_info
             .receiver()
             .is_declared_binder_of(impl_type_params.iter().map(|p| p.name.as_str()));
+
+        // A receiver's arguments are a type's own, which no row tells apart; a
+        // blanket's receiver is the argument itself, whose row selects its impl.
+        let impl_arg_names: Vec<String> = key
+            .impl_type_args
+            .iter()
+            .map(|&t| {
+                if is_blanket {
+                    type_table.mangle_type_arg_for_generic(t)
+                } else {
+                    type_table.mangle_type_arg_rowless(t)
+                }
+            })
+            .collect();
 
         let receiver = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"

@@ -28,7 +28,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::synth::ArgClass;
-use super::typecheck::{TypeCheckResult, check_assignable};
+use super::typecheck::{SlotFrame, TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
@@ -425,7 +425,13 @@ fn fn_step_refusal(
             return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
         }
     }
-    let missing = |a: &[EffectRef], b: &[EffectRef]| a.iter().find(|e| !b.contains(e)).cloned();
+    // A variable is a row the effect check solves and bounds there.
+    let missing = |a: &[EffectRef], b: &[EffectRef]| {
+        if a.iter().chain(b).any(EffectRef::is_var) {
+            return None;
+        }
+        a.iter().find(|e| !b.contains(e)).cloned()
+    };
     let unmatched = if widening {
         missing(from.effects, to.effects).map(|dropped| (dropped, "`as` cannot drop the effect"))
     } else {
@@ -2408,10 +2414,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// expected result type; the same rule lives inline in
     /// `resolve_match_expr` for arm bodies.
     pub(super) fn check_branch_type(&mut self, actual: TypeId, expected: TypeId, span: Span) {
-        let result = {
-            let tt = self.tysys.type_table.borrow();
-            check_assignable(actual, expected, &tt)
-        };
+        let result = self.assignable(actual, expected, span);
         if matches!(result, TypeCheckResult::Incompatible) {
             let (expected_name, found_name) = self
                 .tysys
@@ -2884,10 +2887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `translate_match` drops each arm's value there.
         if type_id != TypeTable::UNIT {
             for &(arm_type, arm_span) in &arm_bodies {
-                let result = {
-                    let tt = self.tysys.type_table.borrow();
-                    check_assignable(arm_type, type_id, &tt)
-                };
+                let result = self.assignable(arm_type, type_id, arm_span);
                 if matches!(result, TypeCheckResult::Incompatible) {
                     let (expected_name, found_name) = self
                         .tysys
@@ -3630,6 +3630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return target_type;
         }
+        self.record_row_flows(source_type, target_type, cast.span, SlotFrame::Own);
 
         // Reify rebuilds the `Cast` from `cast.expr` + the target
         // type recorded in `expression_types[cast.id]`; the char-cast

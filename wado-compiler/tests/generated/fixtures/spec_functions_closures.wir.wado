@@ -64,7 +64,7 @@ struct spec_functions_closures.wado//$Closure_5 {  // TypeId(13)}
 
 array Array<i32> (mut i32);  // TypeId(14)
 
-struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32> {  // TypeId(15)
+struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32> {  // TypeId(15)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut f: ref struct,
 }
@@ -230,7 +230,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(78)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>") -> [i32, i32];  // TypeId(79)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>") -> [i32, i32];  // TypeId(79)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(80)
 
@@ -426,7 +426,7 @@ fn "spec_functions_closures.wado/$test_3_parameter_inference"() {
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let elements_20: ref Array<i32>;
-    let self_21: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>";
+    let self_21: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>";
     let f_24: ref "spec_functions_closures.wado//$Closure_5";
     let result: ref "core:prelude//List<i32>";
     let $licm_repr_56: ref Array<i32>;
@@ -434,13 +434,13 @@ fn "spec_functions_closures.wado/$test_3_parameter_inference"() {
     let used: i32;
     elements_20 = array.new_fixed<i32>(1, 2, 3);
     f_24 = struct.new "spec_functions_closures.wado//$Closure_5" {  };
-    self_21 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_20, index: 0, end: 3 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_24, func: ref.func "closure/spec_functions_closures.wado/$closure_wrapper_1" } };
+    self_21 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_20, index: 0, end: 3 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_24, func: ref.func "closure/spec_functions_closures.wado/$closure_wrapper_1" } };
     result = struct.new "core:prelude//List<i32>" { repr: local.tee elements_63(array.new_fixed<i32>()), used: 0 };
     b13: block {
         l14: loop {
             let $mv$$local_3$0: i32;
             let $mv$$local_3$1: i32;
-            multivalue_bind [$mv$$local_3$0, $mv$$local_3$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_21);
+            multivalue_bind [$mv$$local_3$0, $mv$$local_3$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_21);
             if $mv$$local_3$0 == 1 {
                 if @unlikely(local.tee used(result.used) >= builtin::array_len(result.repr)) {
                     cold_path;
@@ -2281,7 +2281,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let $load_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let $load_1: i32;
     let item_4: i32;

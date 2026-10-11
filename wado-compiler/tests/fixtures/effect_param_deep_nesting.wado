@@ -1,0 +1,19 @@
+// However deep calls that each instantiate an effect parameter nest, the
+// variables they mint are solved: each call is checked after its arguments.
+use { println, Stdout } from "core:cli";
+
+fn wrap<effect E>(f: fn() with E) -> fn() with E {
+    return f;
+}
+
+fn deep() with Stdout {
+    let h = wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(wrap(|| { println("deep"); }))))))))))))))))));
+    h();
+}
+
+export fn run() with Stdout {
+    deep();
+}
+
+__DATA__
+{"stdout": "deep\n"}

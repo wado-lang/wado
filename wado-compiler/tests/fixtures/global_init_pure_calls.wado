@@ -15,8 +15,15 @@ global APPLIED: i32 = apply(|n| n + 1, 41);
 // A closure whose body performs nothing is a value like any other.
 global DOUBLER: fn(i32) -> i32 = |n| n * 2;
 
+// Calling one is as pure as its body.
+global CALLED: i32 = b: {
+    let inc = |x: i32| x + 1;
+    break b: inc(1);
+};
+
 export fn run() with Stdout {
     assert APPLIED == 42;
+    assert CALLED == 2;
     assert DOUBLER(21) == 42;
     println(`${APPLIED}`);
 }

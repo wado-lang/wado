@@ -1,0 +1,20 @@
+// A closure literal's type carries what its body performs, so it cannot become
+// a function type that declares less: the effect would escape with the value,
+// to a caller that never declares it (issue #1087).
+
+use { println, Stdout } from "core:cli";
+
+fn pure_caller(f: fn()) {
+    f();
+}
+
+export fn run() with Stdout {
+    let inner: fn() = || {
+        println("this println needs Stdout but inner's type does not carry it");
+    };
+    pure_caller(inner);
+    pure_caller(|| { println("as an argument too"); });
+}
+
+__DATA__
+{"compile_error": "this function value performs effect 'Stdout', which the function type it is expected to be does not declare", "compile_error_count": 2}

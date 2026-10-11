@@ -1,0 +1,18 @@
+// A closure literal's type carries what its body performs, so an adapter built
+// from it demands that of whoever advances it: `collect` here, in a function
+// that does not hold `Stdout`.
+use { println, Stdout } from "core:cli";
+
+fn shout(xs: List<i32>) -> List<i32> {
+    return xs.into_iter().map(|x| {
+        println(`${x}`);
+        return x * 2;
+    }).collect();
+}
+
+export fn run() with Stdout {
+    println(`${shout([1, 2]).len()}`);
+}
+
+__DATA__
+{"compile_error": ":7:12: analysis error: missing effect 'Stdout' required by 'collect'", "compile_error_count": 1}

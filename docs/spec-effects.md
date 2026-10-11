@@ -452,6 +452,49 @@ fn bad() {
 
 A closure argument's effects are those inferred from its body (see [Closures](./spec-functions.md#closures)).
 
+What an effect parameter resolves to at a call is substituted in the type the
+call returns, as a type argument is. A value built around a function value
+carries its row, so whatever later calls through it demands what the function
+performs:
+
+<!-- {"fixture":"effect_param_carried_by_type.wado"} -->
+
+```wado
+fn mapped<U, effect E, F: fn mut(i32) -> U with E>(f: F) -> Mapped<SliceValueIter<i32>, F> {
+    let xs: List<i32> = [1, 2];
+    return Mapped { inner: xs.iter_value(), f };
+}
+
+fn pure_total() -> i32 {
+    let mut t = 0;
+    for let y of mapped(|x: i32| x + 1) {
+        t += y;
+    }
+    return t;
+}
+
+test {
+    assert pure_total() == 5;
+}
+```
+
+A loop over `mapped(|x: i32| x + 1)` demands nothing. `mapped(loud)` with
+`loud: fn mut(i32) -> i32 with Stdout` is a
+`Mapped<…, fn mut(i32) -> i32 with Stdout>`, and a loop over it demands
+`Stdout`.
+
+A function generic over `E` holds for every row a caller may pick for it, the
+empty one among them. So a value it moves into a slot whose row is `E` may
+perform only `E`, and an `E` nothing at a call determines stands for no effect:
+
+<!-- {"fixture":"error_effect_flow_into_param_row.wado"} -->
+
+```wado
+fn make<effect E>() -> fn() with E {
+    return || { println("leak"); };   // ERROR: `E` may be no effect at all
+}
+```
+
 ### `with _`
 
 `with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter, distinct from any `<effect E>` the signature declares:
