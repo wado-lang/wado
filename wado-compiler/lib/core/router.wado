@@ -145,7 +145,7 @@ struct MethodEntry {
     handler_idx: i32,
 }
 
-/// One route's handlers, by method, as indices into `Router::handlers`.
+/// One route's handlers by method, as indices into the list holding them.
 struct MethodTable {
     specific: List<MethodEntry>,
     any_idx: i32,
@@ -160,28 +160,29 @@ impl MethodTable {
         return self.specific.is_empty() && self.any_idx < 0;
     }
 
-    /// The handler a request with `method` reaches, or -1.
-    fn dispatch(&self, method: &Method) -> i32 {
-        for let e of &self.specific {
-            if e.method == *method {
-                return e.handler_idx;
-            }
-        }
-        return self.any_idx;
-    }
-
-    /// The handler registered for exactly `method_opt`, `null` being `any`,
-    /// or -1.
-    fn slot(&self, method_opt: &Option<Method>) -> i32 {
-        let Some(method) = method_opt else {
-            return self.any_idx;
-        };
+    /// The handler registered for `method` itself, or -1.
+    fn find(&self, method: &Method) -> i32 {
         for let e of &self.specific {
             if e.method == *method {
                 return e.handler_idx;
             }
         }
         return -1;
+    }
+
+    /// The handler a request with `method` reaches, or -1.
+    fn dispatch(&self, method: &Method) -> i32 {
+        let h = self.find(method);
+        return if h >= 0 { h } else { self.any_idx };
+    }
+
+    /// The handler registered for exactly `method_opt`, `null` being `any`,
+    /// or -1.
+    fn slot(&self, method_opt: &Option<Method>) -> i32 {
+        return match method_opt {
+            Some(method) => self.find(method),
+            None => self.any_idx,
+        };
     }
 
     fn add(&mut self, method_opt: &Option<Method>, handler_idx: i32) {
@@ -204,14 +205,13 @@ struct DfaState {
     literals: HashMap<String, i32>,
     param_target: i32,
     param_name: String,
-    wildcard_name: String,
     wildcard: MethodTable,
     terminal: MethodTable,
     /// Captured param names from root to this state (in capture order).
     /// Shared by all routes that end at this terminal.
     terminal_names: List<String>,
     /// The names a wildcard match at this state captures: the names on the
-    /// way here, then `wildcard_name`.
+    /// way here, then the wildcard's own. Empty while it has no wildcard.
     wildcard_names: List<String>,
 }
 
@@ -226,7 +226,6 @@ fn new_state() -> DfaState {
         literals: HashMap::with_seed(ROUTER_SEED),
         param_target: -1,
         param_name: "",
-        wildcard_name: "",
         wildcard: MethodTable::new(),
         terminal: MethodTable::new(),
         terminal_names: [],
@@ -234,10 +233,10 @@ fn new_state() -> DfaState {
     };
 }
 
-/// One method's route on the static-route fast path.
-struct StaticEntry<H> {
-    method: Option<Method>,
-    rm: RouteMatch<H>,
+/// A static pattern's matches, built once, by method.
+struct StaticRoute<H> {
+    table: MethodTable,
+    matches: List<RouteMatch<H>>,
 }
 
 /// Shared singletons for `PathParams` with no captures.
@@ -255,8 +254,7 @@ fn empty_path_params() -> PathParams {
 
 /// An HTTP path router over handlers of type `H`.
 pub struct Router<H> {
-    /// A static pattern to its routes, one per method registered for it.
-    static_routes: HashMap<String, List<StaticEntry<H>>>,
+    static_routes: HashMap<String, StaticRoute<H>>,
     states: List<DfaState>,
     handlers: List<H>,
 }
@@ -329,16 +327,9 @@ impl<H> Router<H> {
     fn insert_static<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) {
         let rm = RouteMatch { handler, params: empty_path_params() };
         let key = pattern.to_string();
-        self.static_routes.try_insert(key, []);
-        let entries = &mut self.static_routes[key];
-        // One entry per HTTP method, so single digits to scan.
-        for let mut i = 0; i < entries.len(); i += 1 {
-            if entries[i].method == method_opt {
-                entries[i].rm = rm;
-                return;
-            }
-        }
-        entries.push(StaticEntry { method: method_opt, rm });
+        self.static_routes.try_insert(key, StaticRoute { table: MethodTable::new(), matches: [] });
+        let route = &mut self.static_routes[key];
+        store_in(&mut route.matches, &mut route.table, &method_opt, rm);
     }
 
     fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) {
@@ -347,15 +338,16 @@ impl<H> Router<H> {
         for let seg of segs {
             match seg {
                 Wildcard(name) => {
-                    let existing = self.states[cur].wildcard_name;
+                    let existing = &self.states[cur].wildcard_names;
                     if existing.is_empty() {
                         names.push(*name);
-                        self.states[cur].wildcard_name = *name;
                         self.states[cur].wildcard_names = names;
-                    } else if existing != *name {
-                        panic(`wildcard name conflict: '*${existing}' vs '*${*name}' at the same node`);
+                    } else if existing[existing.len() - 1] != *name {
+                        panic(
+                            `wildcard name conflict: '*${existing[existing.len() - 1]}' vs '*${*name}' at the same node`,
+                        );
                     }
-                    store_handler(&mut self.handlers, &mut self.states[cur].wildcard, method_opt, handler);
+                    store_in(&mut self.handlers, &mut self.states[cur].wildcard, method_opt, handler);
                     return;
                 },
                 Param(name) => {
@@ -387,7 +379,7 @@ impl<H> Router<H> {
         if self.states[cur].terminal_names.is_empty() {
             self.states[cur].terminal_names = names;
         }
-        store_handler(&mut self.handlers, &mut self.states[cur].terminal, method_opt, handler);
+        store_in(&mut self.handlers, &mut self.states[cur].terminal, method_opt, handler);
     }
 
     /// The route `path` matches under `method`, or `None`. `path` is the path
@@ -400,25 +392,14 @@ impl<H> Router<H> {
     }
 
     fn match_static<S: AsStrSlice>(&self, method: &Method, path: S) -> Option<&RouteMatch<H>> {
-        let Some(entries) = self.static_routes.get_ref_str(path) else {
+        let Some(route) = self.static_routes.get_ref_str(path) else {
             return null;
         };
-        // Prefer the specific method, then `any`.
-        let mut any_idx: i32 = -1;
-        for let mut i = 0; i < entries.len(); i += 1 {
-            match entries[i].method {
-                Some(m) => if m == *method {
-                    return Option::Some(&entries[i].rm);
-                },
-                None => {
-                    any_idx = i;
-                },
-            }
+        let idx = route.table.dispatch(method);
+        if idx < 0 {
+            return null;
         }
-        if any_idx >= 0 {
-            return Option::Some(&entries[any_idx].rm);
-        }
-        return null;
+        return Option::Some(&route.matches[idx]);
     }
 
     fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> {
@@ -501,12 +482,8 @@ impl<H> Router<H> {
     /// and where only `any` handlers match.
     pub fn allowed_methods<S: AsStrSlice>(&self, path: S) -> List<Method> {
         let mut methods: List<Method> = [];
-        if let Some(entries) = self.static_routes.get_ref_str(path) {
-            for let e of entries {
-                if let Some(m) = e.method {
-                    push_new(&mut methods, m);
-                }
-            }
+        if let Some(route) = self.static_routes.get_ref_str(path) {
+            route.table.add_methods_to(&mut methods);
         }
         let mut c = MethodCollector { wildcard_methods: [] };
         let end = self.walk(path, &mut c);
@@ -585,15 +562,16 @@ impl PathVisitor for MethodCollector {
     }
 }
 
-/// Puts `handler` in `table` for `method_opt`, replacing the one there.
-fn store_handler<H>(handlers: &mut List<H>, table: &mut MethodTable, method_opt: &Option<Method>, handler: H) {
+/// Puts `item` in `items` as `table`'s entry for `method_opt`, replacing the
+/// one there.
+fn store_in<T>(items: &mut List<T>, table: &mut MethodTable, method_opt: &Option<Method>, item: T) {
     let slot = table.slot(method_opt);
     if slot >= 0 {
-        handlers[slot] = handler;
+        items[slot] = item;
         return;
     }
-    table.add(method_opt, handlers.len());
-    handlers.push(handler);
+    table.add(method_opt, items.len());
+    items.push(item);
 }
 
 fn push_new(methods: &mut List<Method>, method: Method) {
