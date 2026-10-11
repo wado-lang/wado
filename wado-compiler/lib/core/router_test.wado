@@ -56,9 +56,9 @@ test "router: a dead end falls back to the deepest wildcard on the way" {
     assert r.match_path(Method::Get, &"/files/a/b") matches { Some(m) && m.handler == 2 && m.params["rest"] == "a/b" };
     assert r.match_path(Method::Get, &"/files/a/meta") matches { Some(m) && m.handler == 3 && m.params["id"] == "a" };
     assert r.match_path(Method::Get, &"/api") matches { Some(m) && m.handler == 1 && m.params["rest"] == "api" };
-    assert r.match_path(Method::Get, &"/api/v1/y") matches {
-        Some(m) && m.handler == 1 && m.params.len() == 1 && m.params["rest"] == "api/v1/y"
-    };
+    assert r.match_path(Method::Get, &"/api/v1/y") matches { Some(m) && m.handler == 1
+        && m.params.len() == 1
+        && m.params["rest"] == "api/v1/y" };
 }
 
 test "router: a method miss falls back to a wildcard that takes the method" {

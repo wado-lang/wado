@@ -2,26 +2,30 @@
 
 ## Context
 
-Wado programs that handle HTTP requests via `wasi:http/service` need to dispatch incoming requests to handlers based on `(method, path)`. Today every author rolls their own — a `match` ladder, a hand-written `if`/`else if` chain, or an inline trie. A standard router lets every Wado HTTP service ship with a fast, correct, parameterized matcher out of the box.
+A Wado program serving `wasi:http` dispatches each request to a handler by its
+method and path. Without a standard router, every author writes their own: a
+`match` ladder, an `if` chain, or a hand-rolled trie. Each gets parameters,
+405 responses, and precedence slightly differently. A standard router gives
+every Wado HTTP service one fast, correct matcher with parameters.
 
-### Scope
+## Decision
 
-In:
+### One router, generic over the handler
 
-- Static segments (`/api/v1/health`)
-- Single-segment parameters (`/users/:id`)
-- Trailing wildcard (`/static/*path`)
-- HTTP method dispatch with 404 vs. 405 distinction
-- `wasi:http::Request` adapter
+`core:router` provides `Router<H>`. `H` is whatever the program dispatches on:
+a handler id, a function, or a struct or variant of its own. The router never
+calls a handler, so it takes no position on sync versus async, or on effects.
 
-Out (deferred until a real Wado service hits the limit):
+A match is a `RouteMatch<H>`: the handler and the captured `PathParams`.
+`Method` is `wasi:http`'s type, re-exported, so a router feeds from a request
+with no conversion. `match_request` reads the method and path from a
+`wasi:http` request and strips the query and fragment.
 
-- Constrained / typed parameters (`:id<\d+>`, `:slug<[a-z0-9-]+>`)
-- Subdomain / hostname routing
-- Mid-segment splits (`/users-:id`)
-- Streaming / partial match
+### Pattern syntax
 
-### Prior Art
+Wado follows the syntax of Go's `httprouter` and Node's `find-my-way`: `:name`
+captures one segment, and `*name` captures the rest of the path. Authors coming
+from those routers, or from `gin`, already know it.
 
 | Router                 | Algorithm                      | Param style |
 | ---------------------- | ------------------------------ | ----------- |
@@ -30,337 +34,127 @@ Out (deferred until a real Wado service hits the limit):
 | Rust `actix-web`       | Compiled state machine + regex | `{name}`    |
 | Node `find-my-way`     | Radix tree                     | `:name`     |
 
-Wado follows the `httprouter` / `matchit` syntax (`:name`, `*name`).
-
-### Experimental Validation
-
-The algorithm choice is informed by `example/router-*.wado`, which implements three engines (Linear / Radix tree / segment-level tagged DFA) against an identical 100-route fixture (70 static, 25 parametric, 5 wildcard, clustered under `/api/v1/...`) and runs them through a 10-element access pattern (9 hits + 1 miss).
-
-Final numbers (debug `wasmtime`, Wado `-O2`, 50000 lookups):
-
-| Engine                   | Total time     | Per-lookup |
-| ------------------------ | -------------- | ---------- |
-| Linear (mixed)           | 34027 ms       | 681 µs     |
-| Linear (best, 1st route) | 571 ms / 50K   | 11 µs      |
-| Linear (worst, miss)     | 48649 ms / 50K | 973 µs     |
-| **Radix tree**           | **2376 ms**    | **48 µs**  |
-| **Segment DFA**          | **2293 ms**    | **46 µs**  |
-
-Radix and DFA are within measurement noise of each other.
-
-### Why Segment DFA
-
-Given speed parity, the choice is driven by capability and maintenance:
-
-| Aspect                           | Radix tree                        | Segment DFA                     |
-| -------------------------------- | --------------------------------- | ------------------------------- |
-| Build cost (100 routes, debug)   | 77 ms                             | 21 ms (~3.5× faster)            |
-| Code size                        | ~180 lines                        | ~150 lines                      |
-| Hot-path branches                | recursive, with backtracking      | iterative loop, no backtracking |
-| State-graph readability          | byte-level edges, hard to dump    | segment-level, dump-friendly    |
-| Future per-state instrumentation | awkward (edges may span segments) | natural (segment = transition)  |
-
-The segment-level model matches "how authors think about routes" (segment → segment → handler) and is the easier shape to extend (typed params, debug introspection, code-gen DFA).
-
-Radix tree is still recommended as a separate `core:collections::PrefixTree<V>` for general byte-prefix indexing, where its byte-level granularity is genuinely useful.
-
-## Decision
-
-### Module: `core:router`
-
-```wado
-use { Router, RouteMatch } from "core:router";
-use { Method } from "wasi:http";   // also re-exported as core:router::Method
-```
-
-The router is generic over the handler type `H`. Typical choices:
-
-- `i32` (handler id, user-managed dispatch table)
-- `fn(Request) -> Result<Response, ErrorCode>` (synchronous handler)
-- `async fn(Request) -> Result<Response, ErrorCode>` (CM-async handler)
-- A user-defined struct or variant
-
-### Pattern Syntax
-
-```
-"/api/v1/users"                  static
-"/api/v1/users/:id"              parameter
-"/api/v1/users/:id/posts/:pid"   multiple parameters (each captures one segment)
-"/static/*path"                  trailing wildcard (must be last)
-"/"                              the root / home route
-```
-
-Rules:
-
-- A leading `/` is required. Patterns without one panic at registration.
-- A `:` segment must contain a non-empty parameter name.
-- A `*` segment must contain a non-empty parameter name and be the last segment.
-- Empty segments are rejected: a trailing `/` (e.g. `/foo/`) or doubled `/` (e.g. `/a//b`) panics at registration. Path matching is correspondingly strict on trailing slashes — `/users` and `/users/` are different routes — and `/` is the canonical root, matching the empty-segment pattern `"/"`.
-- Param and wildcard names must agree across registrations that share the same node. `/users/:id` followed by `/users/:name/profile` panics; reuse the same name (`:id` in both) instead.
-
-### Types
-
-```wado
-/// Captured path parameters for a matched route. `PathParams` is a thin
-/// handle of three references: the request path, the parameter-name list
-/// shared with the matched terminal state, and a flat byte-range table
-/// (`[start0, end0, start1, end1, ...]`) into `path`. Empty for static
-/// routes; in that case all three fields point at shared empty singletons.
-pub struct PathParams {
-    path: &String,
-    names: &List<String>,
-    ranges: &List<i32>,
-}
-
-impl PathParams {
-    pub fn len(&self) -> i32;
-    pub fn is_empty(&self) -> bool;
-
-    /// Lookup by name (linear scan). The returned `String` is a freshly
-    /// allocated substring of the matched byte range. Returns `None` if
-    /// no parameter has the given name.
-    pub fn get(&self, name: String) -> Option<String>;
-
-    /// Deserialize into a typed struct via `core:serde`. Scalar fields
-    /// parse directly from path bytes; only `String` fields allocate a
-    /// substring.
-    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>;
-}
-
-/// `params["id"]` panics if `id` isn't a captured parameter. Use
-/// `params.get("id")` for fallible access.
-impl IndexValue<String> for PathParams {
-    type Output = String;
-    fn index_value(&self, name: String) -> String;
-}
-
-pub struct RouteMatch<H> {
-    pub handler: H,
-    pub params: PathParams,
-}
-
-/// Generic HTTP path router.
-pub struct Router<H> { /* private */ }
-```
-
-### Captured Params: Data Layout
-
-`RouteMatch.params` is a `PathParams` value, but every contained field is a
-reference, so copying the struct copies three pointers — there is no deep
-copy of the path string, names array, or range table when the user passes
-`m.params` around.
-
-A typical match allocates:
-
-- For a static-route hit (no `:param`, no `*wildcard`): **0 allocations**.
-  `match_request` returns a reference into a pre-built `RouteMatch` shell
-  living in the router. `Option<&RouteMatch<H>>` is encoded as a nullable
-  reference (niche optimization), so the `Option` itself does not box.
-- For a dynamic-route hit with N captured params: **1 allocation** for the
-  flat `List<i32>` of byte ranges (length `2N`). The `PathParams` and
-  `RouteMatch` are GC allocations the returned reference keeps alive.
-
-Compare to the previous `TreeMap<String, String>` design, which allocated
-one tree node, one key `String`, and one value `String` per parameter, plus
-the tree itself.
-
-### `core:serde` Integration
-
-A handler that wants typed parameters declares a struct and an
-`impl Deserialize for X;`. The compiler synthesizes the deserializer body
-per [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
-
-```wado
-struct GetUserParams { id: u64 }
-impl Deserialize for GetUserParams;
-
-if let Some(m) = ROUTER.match_request(&request) {
-    let p = m.params.deserialize::<GetUserParams>().unwrap();
-    // p.id is u64, parsed straight from path bytes (no substring alloc)
-}
-```
-
-Path parameter names are matched against the struct field names as written
-(the serde identity default): a pattern segment `:user_id` binds to a field
-`user_id`. `#[wire(name = "...")]` / `#[wire(name_policy = "...")]`
-override the matched name exactly as they do for any other serde format.
-
-Unsupported shapes (sequences, maps, variants, nested structs) return
-`DeserializeError::UnexpectedType`. Invalid scalar values (e.g. `:id` =
-`"abc"` deserialized to `u64`) return `DeserializeError::InvalidValue`
-with the path byte offset in `error.offset`.
-
-### `Router<H>` Methods
-
-```wado
-impl<H> Router<H> {
-    /// Constructs an empty router.
-    pub fn new() -> Router<H>
-
-    /// Registers a handler for the given (method, pattern).
-    /// Last-write-wins: re-registering the same (method, pattern) replaces
-    /// the previous handler. Panics on a malformed pattern (empty,
-    /// missing leading `/`, trailing-wildcard not last, empty param/wildcard
-    /// name).
-    pub fn route(&mut self, method: Method, pattern: String, handler: H)
-
-    /// Method-specific shorthands. Each delegates to `route(Method::X, ...)`.
-    /// Provided for `Get`, `Post`, `Put`, `Patch`, `Delete`, `Options`.
-    /// `Head`, `Connect`, `Trace`, and custom `Other(_)` methods go through
-    /// `route()`.
-    pub fn get(&mut self, pattern: String, handler: H)
-    pub fn post(&mut self, pattern: String, handler: H)
-    pub fn put(&mut self, pattern: String, handler: H)
-    pub fn patch(&mut self, pattern: String, handler: H)
-    pub fn delete(&mut self, pattern: String, handler: H)
-    pub fn options(&mut self, pattern: String, handler: H)
-
-    /// Registers a handler that matches any method (including `Method::Other(_)`)
-    /// at `pattern`. Specific-method handlers at the same pattern take
-    /// precedence; `any` is the fallback when no specific entry matched.
-    /// Same panic rules as `route()`.
-    pub fn any(&mut self, pattern: String, handler: H)
-
-    /// Matches a method/path pair. Returns `Some(&RouteMatch)` on a hit and
-    /// `None` on a miss. The path argument must be the URL path only (no
-    /// query string, no fragment). Static-route hits return a reference
-    /// into a pre-built table; dynamic-route hits return a reference to a
-    /// `RouteMatch` built for the call. Assumes `Option<&T>` niche
-    /// optimization at codegen, so the `Option` itself is not boxed.
-    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>
-
-    /// If `path` matches a registered route under any specific method, returns
-    /// the list of those methods. `any` handlers do not contribute (they are
-    /// uncountable). Useful for emitting the `Allow:` header on a 405
-    /// response. Returns an empty array on a genuine 404 or when only an
-    /// `any` handler is registered (in which case 405 is unreachable).
-    pub fn allowed_methods(&self, path: &String) -> List<Method>
-
-    /// Matches against a `wasi:http` `Request`, splitting the path from the
-    /// query string internally. Recommended entry point for HTTP services.
-    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>
-}
-```
-
-### Usage Examples
-
-#### Handler-id style
-
-```wado
-use { Router } from "core:router";
-use { Method, Request, Response, ErrorCode } from "wasi:http";
-
-global ROUTER: Router<i32> = build_router();
-
-fn build_router() -> Router<i32> {
-    let mut r = Router::<i32>::new();
-    r.route(Method::Get,    "/health",                 0);
-    r.route(Method::Get,    "/api/v1/users",           1);
-    r.route(Method::Post,   "/api/v1/users",           2);
-    r.route(Method::Get,    "/api/v1/users/:id",       3);
-    r.route(Method::Delete, "/api/v1/users/:id",       4);
-    r.route(Method::Get,    "/static/*path",           5);
-    return r;
-}
-
-export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    if let Some(m) = ROUTER.match_request(&request) {
-        return match m.handler {
-            0 => respond_health(),
-            1 => respond_users_list(),
-            2 => respond_user_create(&request),
-            3 => respond_user_get(m.params["id"]),
-            4 => respond_user_delete(m.params["id"]),
-            5 => respond_static(m.params["path"]),
-            _ => unreachable(),
-        };
-    }
-    let allowed = ROUTER.allowed_methods(&request.get_path_with_query().unwrap_or("/"));
-    if !allowed.is_empty() {
-        return Result::Ok(method_not_allowed(allowed));   // 405 with Allow:
-    }
-    return Result::Ok(not_found());                       // 404
-}
-```
-
-#### Closure-handler style
-
-```wado
-type Handler = fn(&Request, &TreeMap<String, String>) -> Response with Stdout;
-
-let mut r = Router::<Handler>::new();
-r.route(Method::Get, "/health",   |_req, _params| Response::ok("ok"));
-r.route(Method::Get, "/users/:id", |_req, params| Response::ok(`user ${params["id"]}`));
-```
-
-(For the CM-async case, the same shape works with `async fn(...) -> ...` once Wado closures support async — orthogonal to this WEP.)
-
-### Lookup Precedence
-
-At each state during traversal, transitions are tried in this fixed order; there is no backtracking:
-
-1. Literal — the segment exactly equals one of the registered literal edges
-2. Parameter — there is a `:name` child; the current segment is captured and traversal descends
-3. Wildcard — there is a `*name` child; the entire remainder of the path is captured
-
-Once a terminal or wildcard is reached, method dispatch follows this order:
-
-1. Specific method — the request's method is found in the terminal's specific-method list
-2. `any` — the terminal has an `any`-registered handler (registered via `Router::any`)
-3. Miss — return `None` (caller emits 405 if `allowed_methods(path)` is non-empty, otherwise 404)
-
-This means that `/users/list` registered alongside `/users/:id` will route exactly `/users/list` to the literal handler and any other single-segment value to the param handler. A path like `/users/list/extra` is **not** automatically re-tried against the param branch; it is a 404 unless `/users/:id/extra` is also registered.
-
-This is the same rule used by `httprouter`, `gin`, `echo`, and `matchit`. The alternative — backtracking from a literal dead-end into the param branch — produces surprising matches where a literal "wins" at one level but later fails and silently falls into a `:id` capture that swallows the literal name as the id.
-
-### Method Handling
-
-Each terminal stores a small list of `(Method, H)` entries. Registering `(Get, "/users", h1)` and `(Post, "/users", h2)` produces two entries at the same terminal; `match_path(Get, ...)` returns `h1`, `match_path(Post, ...)` returns `h2`, and `match_path(Put, ...)` returns `None` while `allowed_methods("/users")` returns `[Get, Post]`.
-
-In addition, each terminal carries a single optional `any` handler (likewise for wildcard nodes). `Router::any(pattern, h)` populates that slot. Specific-method entries are checked first; on a miss the `any` handler is dispatched. This lets services like a `httpbin`-style `/anything` accept every HTTP method, including non-standard ones (`Method::Other("PURGE")`), without enumerating them at registration time.
-
-### Implementation Notes
-
-The implementation lives in `wado-compiler/lib/core/router.wado` and is ported from `example/router_dfa.wado`, with the following changes:
-
-- `RouteMatch` is generic over `H`; the example uses a concrete `i32 handler_id`.
-- A `handlers: List<H>` arena is added to `Router<H>`; terminal states reference handlers by `i32` index. This keeps `DfaState` non-generic, which avoids the monomorphization blow-up of including `H` inside every state.
-- `route()` validates patterns and panics on malformed input.
-- Method dispatch supports multiple methods per terminal via an `List<MethodEntry>` per terminal, scanned linearly on lookup (per-terminal method count is in the single digits, so a sorted array + binary search is overkill). (The example assumes one method per terminal.)
-- Each terminal and wildcard node carries an extra `any_handler_idx: i32` (`-1` when absent) for `Router::any` dispatch.
-- A `match_request` adapter handles path/query split.
-- Patterns with no `:param`/`*wildcard` segments are routed through a side-table keyed by pattern, with pre-built `RouteMatch` shells. The DFA only stores dynamic patterns. Static-route hits return a reference into the side-table — zero allocations per match.
-- Each DFA terminal caches the captured parameter-name list (`terminal_names: List<String>`) so a match can construct `PathParams` without re-walking the path. Wildcard transitions similarly cache `wildcard_names = terminal_names + [wildcard_name]`.
-
-```
-wado-compiler/lib/core/router.wado        Implementation (~250 lines)
-wado-compiler/lib/core/router_test.wado   Unit tests (re-uses cases from the example)
-example/router-*.wado                     Retained as a competing-algorithm benchmark
-```
-
-## Consequences
-
-### Pros
-
-- A single canonical, fast HTTP router ships with the language.
-- Uniform pattern syntax across the Wado ecosystem (no third-party divergence on `:name` vs `{name}`).
-- The DFA structure is amenable to a future build-time codegen: a constant set of routes can be lowered into a generated `match` cascade with zero runtime construction. The runtime API stays the same.
-- Shared between `wasi:http` (server side) and HTTP client SPAs (e.g., reactive routers built on `core:url` + `core:router`).
-
-### Cons
-
-- Routes are not validated at compile time. A typo in a pattern string only surfaces at `Router::new` time. A future `#routes!` form could lift this to compile time.
-
-### Future Work
-
-- [ ] Constrained parameters: `:id<\d+>`, `:slug<[a-z0-9-]+>`
-- [ ] Build-time route compilation: `#![generated]` DFA tables produced from a TOML/Wado route manifest
-- [ ] `core:collections::PrefixTree<V>` for the byte-level radix algorithm, separated from HTTP routing
-- [ ] OpenAPI / Swagger introspection: dump the route table as JSON for documentation tooling
-- [ ] Static check that the typed parameter struct passed to `params.deserialize::<T>()` matches the captured names of the matched route. Requires either a route table that is fully visible at type-check time (a `#routes!` macro form) or a router-level type parameter for the typed-params schema.
+A malformed pattern panics at registration rather than matching nothing. A
+pattern is a constant in the program, so a malformed one is a bug in the
+program, and the panic reports it the first time the router is built. These
+are malformed:
+
+- a pattern that does not start with `/`
+- an empty segment: a doubled `/`, or a trailing `/`
+- a `:` or `*` with no name after it
+- a wildcard that is not the last segment
+- a name used twice in one pattern, since `params["id"]` could then mean
+  either segment
+- a parameter or wildcard named differently from one registered before at the
+  same place (`/users/:id`, then `/users/:name/posts`), since that place would
+  then capture under two names
+
+### Matching is strict about the path
+
+A path matches exactly as written. `/users` and `/users/` are different paths,
+and a path without a leading `/` matches nothing. Parameters hold the raw text
+of the path, with no percent-decoding. A router that normalizes or decodes
+makes a choice the service may disagree with, and that cannot be undone after
+the match. The strict form leaves those choices to the service.
+
+### Precedence: a literal wins, and does not give way
+
+Where a literal and a parameter could both take a segment, the literal takes
+it. A path that then finds no route does not go back to try the parameter.
+With `/users/list` and `/users/:id`, the path `/users/list/extra` matches
+neither. Going back would let `/users/:id/extra` capture `list` as an id: the
+literal wins at one level, then silently loses at the next.
+
+### A wildcard catches what finds no route
+
+A path that finds no route falls back to the deepest wildcard it passed that
+takes the request's method. So does a path that finds a route without a
+handler for its method. `/*rest` therefore catches everything no other route
+takes, and `/files/*rest` keeps matching `/files/a` after `/files/:id/meta` is
+registered.
+
+Without the fallback, adding a deeper route would silently disable a
+shallower wildcard. Rejecting the overlap at registration, as `httprouter`
+does, would forbid the most common wildcard there is: a catch-all beside other
+routes. The fallback is cheap: the walk keeps the last wildcard it passed and
+never goes back over the path.
+
+### Method dispatch, and 405
+
+A route keeps one handler per method, and optionally one `any` handler. A
+handler for the request's method wins over `any`. `any` takes every method,
+including `Method::Other(_)`, so an `httpbin`-style `/anything` needs no list
+of methods.
+
+`allowed_methods(path)` lists the methods `match_path` would match the path
+under. A `None` from `match_path` with a non-empty list is a 405, and the list
+is its `Allow:` header. An empty list is a 404. A method that only an `any`
+handler takes is not listed, since `any` has no finite list to give.
+
+### Parameters are views, typed through serde
+
+`PathParams` refers to the path and holds a byte range per parameter. Looking a
+value up copies it out, and a route with no parameters builds nothing.
+
+`params.deserialize::<T>()` reads the parameters into a struct, matching each
+parameter to the field of the same name. It goes through `core:serde`, so
+`#[wire]` renames work as they do for every other format. A scalar field parses
+from the path's bytes without an intermediate `String`. An invalid value
+fails with `InvalidValue` and its byte offset in the path. A field of a
+compound type fails with `UnexpectedType`, since a segment holds text alone.
+
+### Algorithm: segment-level DFA
+
+The router is a deterministic automaton over whole segments: each segment is
+one transition. A path with no parameters skips the automaton and is looked up
+in a hash table by its full text.
+
+`example/router_*.wado` implements three engines against one fixture of 100
+routes: 70 static, 25 parametric, and 5 wildcard, clustered under
+`/api/v1/...`. Each runs a 10-path access pattern of 9 hits and 1 miss. Run it
+with `cargo run --bin wado -- run example/router_bench.wado`. Times below are
+relative to the segment DFA.
+
+| Engine                   | Lookup time |
+| ------------------------ | ----------- |
+| Linear (mixed)           | 14.8×       |
+| Linear (best: 1st route) | 0.25×       |
+| Linear (worst: miss)     | 21.2×       |
+| Radix tree               | 1.04×       |
+| Segment DFA              | 1×          |
+
+Radix and DFA match on speed, so capability and upkeep decided:
+
+| Aspect                           | Radix tree                        | Segment DFA                    |
+| -------------------------------- | --------------------------------- | ------------------------------ |
+| Build cost (100 routes)          | 3.7×                              | 1×                             |
+| Hot path                         | recursive, with backtracking      | iterative, never revisits path |
+| State-graph readability          | byte-level edges, hard to dump    | segment-level, easy to dump    |
+| Future per-state instrumentation | awkward (edges may span segments) | natural (segment = transition) |
+
+The segment model is how authors think about routes, and it is the easier
+shape to extend with typed parameters, introspection, or a generated
+automaton.
+
+## Known gaps
+
+- Constrained or typed parameters: `:id<\d+>`, `:slug<[a-z0-9-]+>`.
+- A parameter inside a segment: `/users-:id`.
+- Routing by host name.
+- `HEAD` does not fall back to `GET`: a service serves `HEAD` only where it
+  registers it.
+- `allowed_methods` takes a path, while `match_request` takes a request, so a
+  service answering a 405 strips the query from the request's path itself.
+- Routes are checked when the router is built, not at compile time. A typo in
+  a pattern panics on the first run that builds the router.
+- Nothing checks that the struct given to `params.deserialize::<T>()` names
+  the parameters of the route that matched.
+- Routes cannot be built at compile time. Every program builds its router at
+  run time, though the routes are constants.
+- The route table cannot be dumped for documentation tooling such as OpenAPI.
 
 ## See Also
 
 - [WEP: URL Standard Library (`core:url`)](./wep-2026-04-10-url-stdlib.md)
 - [WEP: WASI HTTP Integration](./wep-2026-02-21-wasi-http.md)
-- `example/router-*.wado` — competing-algorithm benchmark
+- `example/router_*.wado`: the benchmark of competing algorithms

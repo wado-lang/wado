@@ -448,7 +448,10 @@ impl<H> Router<H> {
 
     /// A fresh match, which the returned reference keeps alive.
     fn hit(&self, h: i32, path: &String, names: &List<String>, ranges: &List<i32>) -> Option<&RouteMatch<H>> {
-        let rm = RouteMatch { handler: self.handlers[h], params: PathParams { path, names, ranges } };
+        let rm = RouteMatch {
+            handler: self.handlers[h],
+            params: PathParams { path, names, ranges },
+        };
         return Option::Some(&rm);
     }
 
@@ -601,7 +604,7 @@ fn push_new(methods: &mut List<Method>, method: Method) {
 
 fn is_static_pattern(segs: &List<Segment>) -> bool {
     for let seg of segs {
-        if !(seg matches { Literal(_) }) {
+        if !seg matches { Literal(_) } {
             return false;
         }
     }
@@ -649,7 +652,7 @@ fn parse_pattern<S: AsStrSlice>(path: S) -> List<Segment> {
             ':' => Segment::Param(capture_name(&seg, &mut names)),
             '*' => {
                 wildcard_seen = true;
-                Segment::Wildcard(capture_name(&seg, &mut names))
+                Segment::Wildcard(capture_name(&seg, &mut names));
             },
             _ => Segment::Literal(seg),
         };
