@@ -1977,7 +1977,7 @@ fn repeat_body_implied_by_guard(body: &ScanElement, admits: &Admits) -> bool {
 /// The condition one scan iteration tests: in bounds, admitted, and not
 /// yielded to the caller.
 fn scan_repeat_guard<S: AsStrSlice>(admits: &Admits, caller_follow_gate: S, ctx: &mut EmitContext) -> String {
-    return scan_repeat_guard_excluding(admits, &NO_EXCLUSION, caller_follow_gate, ctx);
+    return scan_repeat_guard_excluding(admits, &NO_KINDS, caller_follow_gate, ctx);
 }
 
 /// `scan_repeat_guard`, holding the iteration back from `excluded` as well.
@@ -1998,8 +1998,6 @@ fn scan_repeat_guard_excluding<S: AsStrSlice>(
     }
     return parts.join(" && ");
 }
-
-global NO_EXCLUSION: List<i32> = [];
 
 /// A loop with nothing to reserve for its alternative — every loop but the
 /// `X* X` shape `RepeatOp.reserve_scan` describes.
@@ -2028,7 +2026,7 @@ fn repeat_guard_cond<S: AsStrSlice>(admits: &Admits, excluded: &List<i32>, expr:
 
 /// `repeat_guard_cond` over the repeat's whole body at the next token.
 fn body_guard_cond(r: &RepeatOp, ctx: &mut EmitContext) -> String {
-    return repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx);
+    return repeat_guard_cond(&r.body_admits, &NO_KINDS, &PEEK_KIND, ctx);
 }
 
 /// What `admits` admits, less `excluded`. Taking a set out of `Everything`
@@ -4422,54 +4420,44 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         gen_repeat_non_greedy_body(w, r, ctx, nc);
         return;
     }
-    if repeat_is_scan_guarded(r, ctx) {
-        let is_opt = if let Optional = r.kind {
-            true;
-        } else {
-            false;
-        };
-        if !is_opt {
-            if let Plus = r.kind {
-                begin_plus_first_iteration(w, nc);
-                gen_op(w, &r.body, ctx, nc);
-                w.end();
-                gen_loop_back_sync(w, ctx, r);
-            }
-            w.begin("loop");
-            w.line("if p.recovering { break; }");
-            if ctx.current_rule_reads_follow() && r.gate_caller_follow {
-                w.line(
-                    `if ${follow_yields_call("&p.kinds", "p.pos")} { break; }`,
-                );
-            }
+    if r.kind matches { Star | Plus } && repeat_is_scan_guarded(r, ctx) {
+        if let Plus = r.kind {
+            begin_plus_first_iteration(w, nc);
+            gen_op(w, &r.body, ctx, nc);
+            w.end();
+            gen_loop_back_sync(w, ctx, r);
+        }
+        w.begin("loop");
+        w.line("if p.recovering { break; }");
+        if ctx.current_rule_reads_follow() {
+            gen_caller_follow_gate(w, r);
+        }
+        // The op-driven walker discharges no duty of its own: the guard below
+        // carries the reserve, and nothing here has ever been reached by a loop
+        // owing more. Asserted rather than discharged, because a discharge no
+        // grammar reaches is untested code that reads as coverage. If one
+        // fires, call `gen_iteration_duties` at that site and bring the grammar
+        // that fired it.
+        if let Group(g) = &r.body {
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
-            let body_admits = admits_kinds(&r.body_admits);
-            // The op-driven walker discharges no duty of its own: the guard
-            // below carries the reserve, and nothing here has ever been reached
-            // by a loop owing more. Asserted rather than discharged, because a
-            // discharge no grammar reaches is untested code that reads as
-            // coverage. If one fires, call `gen_iteration_duties` at that site
-            // and bring the grammar that fired it.
-            if let Group(g) = &r.body {
-                if let Some(branches) = op_group_alt_decision(g, ctx) {
-                    assert r.duties.is_empty(), "gen_repeat_body: a decided group body owes iteration duties, and this entry discharges none";
-                    let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
-                    w.line(`if ${best} <= p.pos { break; }`);
-                    gen_group_body(w, g, ctx, nc, Option::Some(winner));
-                    gen_loop_back_sync(w, ctx, r);
-                    w.end();
-                    return;
-                }
+            if let Some(branches) = op_group_alt_decision(g, ctx) {
+                assert r.duties.is_empty(), "gen_repeat_body: a decided group body owes iteration duties, and this entry discharges none";
+                let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
+                w.line(`if ${best} <= p.pos { break; }`);
+                gen_group_body(w, g, ctx, nc, Option::Some(winner));
+                gen_loop_back_sync(w, ctx, r);
+                w.end();
+                return;
             }
-            assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
-            let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
-            w.line(`if ${scan_pos} < 0 { break; }`);
-            gen_op(w, &r.body, ctx, nc);
-            gen_loop_back_sync(w, ctx, r);
-            w.end();
-            return;
         }
+        assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
+        let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &admits_kinds(&r.body_admits), ctx, nc);
+        w.line(`if ${scan_pos} < 0 { break; }`);
+        gen_op(w, &r.body, ctx, nc);
+        gen_loop_back_sync(w, ctx, r);
+        w.end();
+        return;
     }
     // A tail-greedy `Repeat` yields to the caller's continuation at runtime via
     // the FOLLOW gate (`follow` is threaded into the rule fn when emit_follow).
@@ -5444,13 +5432,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
             // The actions are the alternative's, not the skipped element's, so
             // every shape branch runs them; only the element is conditional.
             gen_alt_actions_at(w, &alt.actions, i, ctx);
-            let mut in_shape = false;
-            for let mut k = 0; k < entry.positions.len(); k += 1 {
-                if entry.positions[k] == i {
-                    in_shape = true;
-                }
-            }
-            if in_shape {
+            if entry.positions.contains(&i) {
                 gen_op_dispatch_element(w, &body.ops[i], &elements[i], ctx, &mut nc);
             }
         }
@@ -5739,14 +5721,8 @@ fn gen_op_repeat_with_follow_override(
     gen_op_repeat_star_plus_greedy(w, rep, rep_op, ctx, name_counts, follow);
 }
 
-/// Non-greedy `*?` / `+?`. Dispatches on `rep_op.body_shape`:
-/// leaf and `StorableGroup` bodies push every iteration's binding
-/// into a list; `TransparentGroup` walks the loop without a list
-/// (each iteration inlines the inner alt), since the group itself
-/// contributes no CST field. `compute_non_greedy_condition` is op-
-/// driven now: Wildcard / Not detection reads the body op shape, and
-/// the inner second-position first set is baked on
-/// `rep_op.body_second_position_first`.
+/// Non-greedy `*?` / `+?`: each iteration is entered only where the
+/// continuation does not claim the lookahead.
 fn gen_op_repeat_non_greedy(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -5755,125 +5731,78 @@ fn gen_op_repeat_non_greedy(
     name_counts: &mut List<[String, i32]>,
     follow: &List<i32>,
 ) {
-    let follow_second = &rep_op.caller_follow_second;
-    let while_cond = compute_non_greedy_condition(rep_op, follow, follow_second, ctx);
-    return match rep_op.body_shape {
-        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_non_greedy_storable(
-            w,
-            rep,
-            rep_op,
-            ctx,
-            name_counts,
-            &while_cond,
-        ),
-        TransparentGroup => gen_op_repeat_non_greedy_transparent(w, rep, rep_op, ctx, name_counts, &while_cond),
-    };
-}
-
-/// Storable-body arm of `gen_op_repeat_non_greedy`. The body
-/// produces a per-iteration value bound to `op.field`; we collect
-/// those into a list field of the surrounding alt's CST struct.
-fn gen_op_repeat_non_greedy_storable<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    rep_op: &RepeatOp,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    while_cond: S,
-) {
+    let while_cond = compute_non_greedy_condition(rep_op, follow, &rep_op.caller_follow_second, ctx);
+    let body = RepeatBody::of(rep_op, &NO_KINDS);
     let inner = &rep.element;
-    let is_plus = if let Plus = rep.kind {
-        true;
-    } else {
-        false;
-    };
-    let empty_iter_follow = [] as List<i32>;
-    let list_field = rep_op.field;
-    let _ = dedup_name(&list_field, name_counts);
-    // The body appends to the builder, so there is no `List<T>` to accumulate.
-    if is_plus {
-        // The mandatory first iteration is a required position: no loop guard
-        // has run, so a token no alternative admits is this group's to report.
-        begin_plus_first_iteration(w, name_counts);
-        let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(
-            w,
-            rep_op,
-            inner,
-            ctx,
-            &mut nc,
-            &empty_iter_follow,
-            GroupEntry::Required,
-        );
-        w.end();
-    }
-    if non_greedy_probe_decides(rep_op, ctx) {
-        begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
-        let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
-        w.end();
-        return;
-    }
-    if while_cond != "false" {
-        let guard = if is_plus { `!p.recovering && ${and_operand(while_cond)}` } else { while_cond.to_string() };
-        w.begin(`while ${guard}`);
-        let mut nc: List<[String, i32]> = [];
-        gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
-        w.end();
-    }
-}
-
-/// Non-greedy arm for a `TransparentGroup` body — the group has no
-/// own CST field, so each iteration inlines the inner alt without a
-/// surrounding list. Symmetric to
-/// `gen_op_repeat_star_plus_non_storable_group` but with the non-
-/// greedy `while` guard. Reachable for grammars like `(.)*?` or
-/// `(~';')*?` whose inner is a single-element Group that
-/// `lower_transparent_group` collapses to `Op::Group(Transparent)`;
-/// no committed grammar exercises it today, but encoding the case
-/// here makes the dispatch exhaustive on `RepeatBodyShape` and keeps
-/// emit a structural translation of the lowered classifier rather
-/// than relying on lower never producing the shape.
-fn gen_op_repeat_non_greedy_transparent<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    rep_op: &RepeatOp,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    while_cond: S,
-) {
-    let g_op = if let Group(g) = &rep_op.body {
-        g;
-    } else {
-        panic("gen_op_repeat_non_greedy_transparent: lower marked TransparentGroup but body op is not Op::Group");
-    };
-    let inner = &rep.element;
-    let is_plus = if let Plus = rep.kind {
-        true;
-    } else {
-        false;
-    };
+    let is_plus = rep.kind matches { Plus };
     let _ = dedup_name(&rep_op.field, name_counts);
     if is_plus {
         // The mandatory first iteration is a required position: no loop guard
         // has run, so a token no alternative admits is this group's to report.
         begin_plus_first_iteration(w, name_counts);
-        let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc, GroupEntry::Required);
+        gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Required);
         w.end();
     }
     if non_greedy_probe_decides(rep_op, ctx) {
         begin_non_greedy_probe_loop(w, rep_op, ctx, name_counts);
-        let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
-        w.end();
+    } else if while_cond != "false" {
+        let guard = if is_plus { `!p.recovering && ${and_operand(&while_cond)}` } else { while_cond };
+        w.begin(`while ${guard}`);
+    } else {
         return;
     }
-    if while_cond != "false" {
-        w.begin(`while ${while_cond}`);
-        let mut nc: List<[String, i32]> = [];
-        gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
-        w.end();
+    gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped());
+    w.end();
+}
+
+/// How a repeat emits one iteration of its body.
+variant RepeatBody {
+    /// Through the storable-body dispatch, with the follow the iteration hands
+    /// a nested non-greedy repeat.
+    Storable(List<i32>),
+    /// A transparent group, inlined.
+    Transparent,
+}
+
+impl RepeatBody {
+    fn of(rep_op: &RepeatOp, iter_follow: &List<i32>) -> RepeatBody {
+        return match rep_op.body_shape {
+            TransparentGroup => RepeatBody::Transparent,
+            LeafRuleCall | LeafOther | StorableGroup => RepeatBody::Storable(*iter_follow),
+        };
+    }
+}
+
+/// One iteration of `rep_op`'s body, entering it as `entry` says.
+fn gen_repeat_iteration(
+    w: &mut CodeWriter,
+    body: &RepeatBody,
+    rep_op: &RepeatOp,
+    inner: &Element,
+    ctx: &mut EmitContext,
+    entry: GroupEntry,
+    decided: Option<String> = null,
+    proven: &List<i32> = &NO_KINDS,
+) {
+    let mut nc: List<[String, i32]> = [];
+    match body {
+        Storable(iter_follow) => gen_op_inner_for_storable_repeat(
+            w,
+            rep_op,
+            inner,
+            ctx,
+            &mut nc,
+            iter_follow,
+            entry,
+            decided,
+            proven,
+        ),
+        Transparent => {
+            let Group(g_op) = &rep_op.body else {
+                unreachable();
+            };
+            gen_op_group(w, g_op, inner, ctx, &mut nc, entry, decided, proven);
+        },
     }
 }
 
@@ -5974,7 +5903,7 @@ fn gen_op_repeat_optional_rulecall(
                 // Nothing selects the optional here, so emit nothing.
                 return;
             }
-            repeat_guard_cond(&admits_kinds_of(&first), &NO_EXCLUSION, &PEEK_KIND, ctx);
+            repeat_guard_cond(&admits_kinds_of(&first), &NO_KINDS, &PEEK_KIND, ctx);
         },
     };
 
@@ -6241,11 +6170,10 @@ fn follow_open_set_expr(ctx: &mut EmitContext, first: Option<i32>) -> String {
     };
 }
 
-/// Greedy `*` / `+` Repeat dispatcher. Splits on `body_shape`:
-/// `TransparentGroup` walks the loop without a list (each iteration
-/// inlines the inner alt); the storable shapes (`LeafRuleCall`,
-/// `LeafOther`, `StorableGroup`) push every iteration's inner
-/// binding into a list field. Match is exhaustive.
+/// Greedy `*` / `+`: a scan-guarded `loop { … }` where the body scans, else a
+/// `while` on the body's admitted kinds. A `+`'s mandatory first iteration
+/// rides a `_plus_first` flag through the loop, except under an unguarded
+/// transparent body, which emits it ahead of the loop.
 fn gen_op_repeat_star_plus_greedy(
     w: &mut CodeWriter,
     rep: &RepeatElement,
@@ -6254,103 +6182,51 @@ fn gen_op_repeat_star_plus_greedy(
     name_counts: &mut List<[String, i32]>,
     follow: &List<i32>,
 ) {
-    return match rep_op.body_shape {
-        TransparentGroup => {
-            let g_op = if let Group(g) = &rep_op.body {
-                g;
-            } else {
-                panic("gen_op_repeat_star_plus_greedy: lower marked TransparentGroup but body op is not Op::Group");
-            };
-            gen_op_repeat_star_plus_non_storable_group(w, rep, rep_op, g_op, ctx, name_counts);
-        },
-        LeafRuleCall | LeafOther | StorableGroup => gen_op_repeat_star_plus_storable(
-            w,
-            rep,
-            rep_op,
-            ctx,
-            name_counts,
-            follow,
-        ),
+    // The follow a nested non-greedy repeat inside a single-alt body sees:
+    // `first(inner) ∪ follow`. What the walk enumerated, not what the guard
+    // narrows by: an open-ended body admits more than its set names and still
+    // contributes the set to the follow.
+    let iter_follow = if rep_op.body_is_single_alt_group {
+        union_kind_arrays(&admits_enumerated(&rep_op.body_admits), follow);
+    } else {
+        *follow;
     };
-}
-
-/// Star / Plus + non-storable `Op::Group` body (Transparent groups,
-/// `body_has_field == false`). Walks the loop without a list — each
-/// iteration's inner emit discards its binding (Transparent groups
-/// inline the single alt's elements). `rep_op.field` was deduped at
-/// lower time; bump emit's `name_counts` to stay in sync.
-fn gen_op_repeat_star_plus_non_storable_group(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    rep_op: &RepeatOp,
-    g_op: &GroupOp,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-) {
+    let body = RepeatBody::of(rep_op, &iter_follow);
     let inner = &rep.element;
+    let is_plus = rep.kind matches { Plus };
     let _ = dedup_name(&rep_op.field, name_counts);
-
-    if let Star = rep.kind {
-        if repeat_is_scan_guarded(rep_op, ctx) {
-            w.begin("loop");
-            w.line("if p.recovering { break; }");
-            let no_flag = String::new();
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &no_flag), decided);
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        } else {
-            w.begin(
-                `while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`,
-            );
-            gen_caller_follow_gate(w, rep_op);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, looped(), null, &admits_kinds(&rep_op.body_admits));
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        }
-        return;
-    }
-    if let Plus = rep.kind {
-        if repeat_is_scan_guarded(rep_op, ctx) {
-            let plus_flag = dedup_name("_plus_first", name_counts);
-            w.line(`let mut ${plus_flag} = true;`);
-            w.begin("loop");
-            w.line("if p.recovering { break; }");
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &plus_flag), decided);
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        } else {
-            // Plus + non-scannable + no-field: emit the first iteration
-            // explicitly (no `_plus_first` flag) and then a `while first`
-            // loop. The K-prefix gate goes inside the while loop (after
-            // the mandatory first iter ran above).
+    if repeat_is_scan_guarded(rep_op, ctx) {
+        let plus_flag = if is_plus { begin_plus_flag(w, name_counts) } else { String::new() };
+        w.begin("loop");
+        w.line("if p.recovering { break; }");
+        let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
+        gen_repeat_iteration(w, &body, rep_op, inner, ctx, decided_entry(&decided, &plus_flag), decided);
+    } else if is_plus && body matches { Storable(_) } {
+        let plus_flag = begin_plus_flag(w, name_counts);
+        w.begin(`while !p.recovering && (${plus_flag} || ${body_guard_cond(rep_op, ctx)})`);
+        gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
+        gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Looped(plus_flag));
+    } else {
+        if is_plus {
             begin_plus_first_iteration(w, name_counts);
-            gen_op_group(w, g_op, inner, ctx, name_counts, GroupEntry::Required);
+            gen_repeat_iteration(w, &body, rep_op, inner, ctx, GroupEntry::Required);
             w.end();
             gen_loop_back_sync(w, ctx, rep_op);
-            w.begin(
-                `while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`,
-            );
-            gen_caller_follow_gate(w, rep_op);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, looped(), null, &admits_kinds(&rep_op.body_admits));
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
         }
+        w.begin(`while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`);
+        gen_caller_follow_gate(w, rep_op);
+        gen_repeat_iteration(w, &body, rep_op, inner, ctx, looped(), null, &admits_kinds(&rep_op.body_admits));
     }
+    gen_loop_back_sync(w, ctx, rep_op);
+    w.end();
 }
 
-/// Star / Plus + storable body (every leaf, every storable
-/// `Op::Group` shape). Emits a `let <field>: List<T> = [];` then a
-/// scan-guarded `loop { … }` (when the body is scannable) or a
-/// `while peek ∈ loop_first { … }` (otherwise). The Plus first-
-/// iteration uses a `_plus_first` flag or, for the non-scannable case,
-/// folds the mandatory iteration into the while condition via
-/// `while plus_first || …`.
+fn begin_plus_flag(w: &mut CodeWriter, name_counts: &mut List<[String, i32]>) -> String {
+    let plus_flag = dedup_name("_plus_first", name_counts);
+    w.line(`let mut ${plus_flag} = true;`);
+    return plus_flag;
+}
+
 /// When a scan-gated repetition over a single RuleRef exits because the scan
 /// failed, the next token may still legitimately start the inner rule but be
 /// malformed deeper in. Returns the call expression (`_parse_R(p)` /
@@ -6415,114 +6291,6 @@ fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, r
         w.end();
     } else {
         w.line(`if ${scan_pos} < 0 { break; }`);
-    }
-}
-
-fn gen_op_repeat_star_plus_storable(
-    w: &mut CodeWriter,
-    rep: &RepeatElement,
-    rep_op: &RepeatOp,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    follow: &List<i32>,
-) {
-    let inner = &rep.element;
-    // Per-iteration follow propagated into a nested non-greedy Repeat
-    // inside a SingleAlt body — `first(inner) ∪ outer_follow`. What the walk
-    // enumerated, not what the guard narrows by: an open-ended body admits
-    // more than its set names and still contributes the set to the follow.
-    let iter_follow = if rep_op.body_is_single_alt_group {
-        union_kind_arrays(&admits_enumerated(&rep_op.body_admits), follow);
-    } else {
-        *follow;
-    };
-    let list_field = rep_op.field;
-    let _ = dedup_name(&list_field, name_counts);
-    // The iteration body appends to the builder, so there is no `List<T>` to
-    // accumulate (no list decl, no per-iteration `.push`); the loop keeps the
-    // scan-guard / caller-FOLLOW gate.
-
-    if let Star = rep.kind {
-        if repeat_is_scan_guarded(rep_op, ctx) {
-            w.begin("loop");
-            w.line("if p.recovering { break; }");
-            let no_flag = String::new();
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(
-                w,
-                rep_op,
-                inner,
-                ctx,
-                &mut nc,
-                &iter_follow,
-                decided_entry(&decided, &no_flag),
-                decided,
-            );
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        } else {
-            w.begin(
-                `while !p.recovering && ${and_operand(body_guard_cond(rep_op, ctx))}`,
-            );
-            // Same caller-FOLLOW gate for the non-scannable while loop.
-            gen_caller_follow_gate(w, rep_op);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(
-                w,
-                rep_op,
-                inner,
-                ctx,
-                &mut nc,
-                &iter_follow,
-                looped(),
-                null,
-                &admits_kinds(&rep_op.body_admits),
-            );
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        }
-        return;
-    }
-
-    if let Plus = rep.kind {
-        if repeat_is_scan_guarded(rep_op, ctx) {
-            let plus_flag = dedup_name("_plus_first", name_counts);
-            w.line(`let mut ${plus_flag} = true;`);
-            w.begin("loop");
-            w.line("if p.recovering { break; }");
-            let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(
-                w,
-                rep_op,
-                inner,
-                ctx,
-                &mut nc,
-                &iter_follow,
-                decided_entry(&decided, &plus_flag),
-                decided,
-            );
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        } else {
-            let plus_flag = dedup_name("_plus_first", name_counts);
-            w.line(`let mut ${plus_flag} = true;`);
-            w.begin(`while !p.recovering && (${plus_flag} || ${body_guard_cond(rep_op, ctx)})`);
-            gen_iter_caller_follow_gate(w, rep_op, &plus_flag);
-            let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(
-                w,
-                rep_op,
-                inner,
-                ctx,
-                &mut nc,
-                &iter_follow,
-                GroupEntry::Looped(plus_flag),
-            );
-            gen_loop_back_sync(w, ctx, rep_op);
-            w.end();
-        }
     }
 }
 
@@ -6633,18 +6401,6 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     w.end();
 }
 
-/// Discharge, at a position the entry has committed to, every duty the guard
-/// did not.
-///
-/// The one call an entry path that owes duties makes; the paths that owe none
-/// assert it instead of calling here, so no site enumerates duties. A duty
-/// added to `IterationDuties` reaches every discharge from here and trips every
-/// assert that stops being true.
-///
-/// `reserve_in_guard` says the path ran `gen_rep_scan_guard`, which builds the
-/// reserve into the guard's own scan. That is not a placement detail: failing
-/// there fails the guard, which is what lets the repeat-exit probe report where
-/// a starved iteration stopped.
 /// Which iterations an entry may refuse.
 ///
 /// A `+`'s first iteration is mandatory and takes what prediction picked. The
@@ -6659,6 +6415,18 @@ variant Refusable {
     UnlessFirst(String),
 }
 
+/// Discharge, at a position the entry has committed to, every duty the guard
+/// did not.
+///
+/// The one call an entry path that owes duties makes; the paths that owe none
+/// assert it instead of calling here, so no site enumerates duties. A duty
+/// added to `IterationDuties` reaches every discharge from here and trips every
+/// assert that stops being true.
+///
+/// `reserve_in_guard` says the path ran `gen_rep_scan_guard`, which builds the
+/// reserve into the guard's own scan. That is not a placement detail: failing
+/// there fails the guard, which is what lets the repeat-exit probe report where
+/// a starved iteration stopped.
 fn gen_iteration_duties<S: AsStrSlice>(
     w: &mut CodeWriter,
     duties: &IterationDuties,
@@ -6997,25 +6765,9 @@ fn compute_non_greedy_condition(
     return `${and_operand(peek0_cond)} && ${and_operand(peek1_cond)}`;
 }
 
-/// Emit an inline scan guard for an optional's inner element.
-///
-/// Emits code of the form:
-/// ```
-/// let mut opt_scan_pos_N: i32 = -1;
-/// opt_scan_N: {
-///     let tokens = &p.kinds;
-///     let mut pos: i32 = p.pos;
-///     /* inline scan of inner; on fail: break opt_scan_N; */
-///     opt_scan_pos_N = pos;
-/// }
-/// ```
-///
-/// Returns the name of the outer pos variable (`-1` on scan failure, end-pos on success).
-/// Caller emits `if ${pos_var} >= 0 { /* commit parse */ }`.
-/// Emit an inline scan guard for a repetition's inner element.
-/// Same shape as gen_rep_scan_guard but uses `rep_scan_*` naming. Requires
-/// the scan to advance at least one token; 0-advance is treated as failure
-/// so lenient scans of LR rules (which can no-op at EOF) don't loop forever.
+/// The scan guard of a repetition's inner element. It requires the scan to
+/// advance at least one token, so a lenient scan of an LR rule (which can no-op
+/// at EOF) does not loop forever.
 fn gen_rep_scan_guard(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
@@ -7038,7 +6790,6 @@ fn gen_rep_scan_guard(
     );
 }
 
-global NO_RESERVE_ADMITS: List<i32> = [];
 
 /// Walk `reserve` from the current position and leave `ok` telling whether it
 /// matched. The reserve only measures, so `slot` holds the position and gate to
@@ -7096,6 +6847,17 @@ fn gen_reserve_check<S: AsStrSlice, S1: AsStrSlice>(
     w.end();
 }
 
+/// Emit an inline scan of `scan_inner` from `p.pos`:
+/// ```
+/// let mut <pos_prefix>_N: i32 = -1;
+/// <label_prefix>_N: {
+///     let tokens = &p.kinds;
+///     let mut pos: i32 = p.pos;
+///     /* scan of inner; on fail: break <label_prefix>_N; */
+///     <pos_prefix>_N = pos;
+/// }
+/// ```
+/// Returns the name of the pos variable: `-1` on failure, the end on success.
 fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     scan_inner: &ScanElement,
@@ -7105,7 +6867,7 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     label_prefix: S1,
     require_advance: bool,
     reserve: &List<ScanElement> = &NO_RESERVE_SCAN,
-    body_admits: &List<i32> = &NO_RESERVE_ADMITS,
+    body_admits: &List<i32> = &NO_KINDS,
 ) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
