@@ -3978,17 +3978,22 @@ impl TypeTable {
     /// The generic definition of `assoc_name` on `base_decl`, together with
     /// the trait that declares it. `None` when no trait declares the name, or
     /// when two disagree — the same unambiguity rule
-    /// [`Self::resolve_assoc_type`] applies to resolved types.
+    /// [`Self::resolve_assoc_type`] applies to resolved types. With
+    /// `type_args`, only an impl whose target binds at them takes part.
     fn generic_assoc_type_def(
         &self,
         base_decl: AstId,
         assoc_name: &str,
+        type_args: Option<&[TypeId]>,
     ) -> Option<(DefId, AssocAnswer)> {
         let mut candidates: Vec<(DefId, &AssocAnswer)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
             .flat_map(|(key, answers)| answers.0.iter().map(move |entry| (key.trait_decl, entry)))
+            .filter(|(_, entry)| {
+                type_args.is_none_or(|args| self.entry_slots(entry, args).is_some())
+            })
             .collect();
         if candidates.iter().any(|(_, entry)| entry.written.is_empty()) {
             candidates.retain(|(_, entry)| entry.written.is_empty());
@@ -4124,8 +4129,11 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<TypeId> {
         let type_args = self.nominal_type_args(concrete_id)?;
-        let (_, entry) =
-            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
+        let (_, entry) = self.generic_assoc_type_def(
+            self.decl_of_type(concrete_id)?,
+            assoc_name,
+            Some(&type_args),
+        )?;
         let slots = self.entry_slots(&entry, &type_args)?;
         let def_type_id = entry.answer;
         match self.get(def_type_id).clone() {
@@ -4203,7 +4211,8 @@ impl TypeTable {
     /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
     /// declaring [`AstId`](crate::ast::AstId).
     pub fn has_generic_assoc_type_def_for_decl(&self, decl: AstId, assoc_name: &str) -> bool {
-        self.generic_assoc_type_def(decl, assoc_name).is_some()
+        self.generic_assoc_type_def(decl, assoc_name, None)
+            .is_some()
     }
 
     /// Resolve an associated type for whatever form the subject currently has:
@@ -4257,8 +4266,11 @@ impl TypeTable {
         assoc_name: &str,
     ) -> Option<(DefId, TypeId)> {
         let type_args = self.nominal_type_args(concrete_id)?;
-        let (owner, entry) =
-            self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
+        let (owner, entry) = self.generic_assoc_type_def(
+            self.decl_of_type(concrete_id)?,
+            assoc_name,
+            Some(&type_args),
+        )?;
         let slots = self.entry_slots_mut(&entry, &type_args);
         Some((owner, self.substitute_type_params(entry.answer, &slots)))
     }
