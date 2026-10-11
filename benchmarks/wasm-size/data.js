@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791642115618,
+  "lastUpdate": 1791680626928,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -65969,6 +65969,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/efb6cd03666ea7d2531ddf51dfc03e0a664d5e1d"
         },
         "date": 1791642114877,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72d6f886d3e9dec0b868f378d5b15741ef473156",
+          "message": "Merge pull request #2325 from wado-lang/loam-webgpu\n\nfeat(loam): GPT-2 (124M) runs on WebGPU and picks onnxruntime's tokens",
+          "timestamp": "2026-10-11T09:44:59+09:00",
+          "tree_id": "8102bcff7cf7f62952e1bf57252c622a0be5245f",
+          "url": "https://github.com/wado-lang/wado/commit/72d6f886d3e9dec0b868f378d5b15741ef473156"
+        },
+        "date": 1791680626310,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
