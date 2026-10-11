@@ -1,5 +1,5 @@
-// A literal inside another arm's range overlaps it, whichever arm comes first,
-// so the order of the arms never decides between them.
+// A literal inside a later arm's range overlaps it, so the order of the arms
+// never decides between them. After the range, the literal is unreachable.
 fn literal_first(n: i32) -> i32 {
     return match n {
         5 => 1,
@@ -22,5 +22,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":4:12: analysis error: invalid pattern: overlapping range patterns in match arms; 12:12: invalid pattern: overlapping range patterns in match arms"
+  "compile_error": ":4:12: analysis error: invalid pattern: overlapping range patterns in match arms; 14:9: invalid pattern: unreachable arm: the arms before it take every value it matches"
 }

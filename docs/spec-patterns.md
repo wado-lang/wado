@@ -328,9 +328,10 @@ before the program runs:
 
 - A reversed range pattern is an error, and so is an empty one (`5..<5`).
 - Two reachable guardless arms must not take a value in common, where either
-  is a range: two ranges, or a range and a literal inside it. So the order of
-  the arms never decides between them, as it does for `_` after a case. The
-  alternatives of one arm's or-pattern may overlap.
+  is a range: two ranges, or a literal and a later range holding it. So the
+  order of the arms never decides between them. A literal after a range holding
+  it is an unreachable arm instead. The alternatives of one arm's or-pattern may
+  overlap.
 - Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
   `1..=255 => …` together cover a `u8`. A `char` holds no surrogate, so
   `'\0'..='\u{D7FF}'` and `'\u{E000}'..='\u{10FFFF}'` together cover it.
