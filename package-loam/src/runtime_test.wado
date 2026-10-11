@@ -83,6 +83,74 @@ test "an expression reads any number of operands" {
     assert e.over(2, &[&x, &y, &z]) == [1100.0, 4400.0] as List<f32>;
 }
 
+test "a step two operators both read is computed once" {
+    let square = operand(0).binary(BinaryOp::Mul, &operand(0));
+    let e = square.binary(BinaryOp::Add, &square.unary(UnaryOp::Neg));
+    // x, x * x, -(x * x), and their sum: the square is not repeated.
+    assert e.steps.len() == 4;
+    let x: List<f32> = [3.0];
+    assert e.over(1, &[&x]) == [0.0] as List<f32>;
+    // A constant is one only by its bits: 0.0 and -0.0 stay two steps.
+    let zeros = constant(0.0).binary(BinaryOp::Add, &constant(-0.0));
+    assert zeros.steps.len() == 3;
+}
+
+test "a select picks the second operand where the first is not zero" {
+    let e = operand(0).select(&operand(1), &operand(2));
+    let c: List<f32> = [1.0, 0.0, 2.0];
+    let a: List<f32> = [10.0, 20.0, 30.0];
+    let b: List<f32> = [-1.0];
+    assert e.over(3, &[&c, &a, &b]) == [10.0, -1.0, 30.0] as List<f32>;
+}
+
+test "a row kernel folds each row, as reduce_mean and softmax do, bit for bit" {
+    let mut cpu = Cpu {};
+    let data: List<f32> = [0.1, 0.7, -0.3, 2.5, 1.0, -1.25, 0.5, 3.0];
+    let x = cpu.upload(&tensor::<[Row, Col]>([2, 4], data));
+    let mean = operand(0).row_sum(Option::Some(4.0));
+    let reduced = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &mean, 1, true);
+    assert reduced.extents == [2, 1] as List<i32>;
+    assert reduced.data == reduce_mean(&x, [1]).data;
+    let normalized = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_softmax(), 1, false);
+    assert normalized.data == softmax(&x, 1).data;
+}
+
+test "a row kernel over empty rows writes each row's fold of nothing" {
+    let mut cpu = Cpu {};
+    let x = cpu.upload(&tensor::<[Row, Col]>([3, 0], []));
+    let sum = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_sum(null), 1, true);
+    assert sum.extents == [3, 1] as List<i32>;
+    assert sum.data == reduce(&x, [1], 0.0, |a, b| a + b).data;
+    let mean = cpu.rows::<[Row, Col], [Row, Col]>([cpu.read(&x)], &operand(0).row_sum(Option::Some(0.0)), 1, true);
+    assert mean.data.len() == 3 && mean.data[0].is_nan();
+    // A value per row, read after the fold, is each row's own.
+    let per_row = cpu.upload(&tensor::<[Row, Col]>([3, 1], [1.0, 2.0, 3.0]));
+    let shifted = cpu.rows::<[Row, Col], [Row, Col]>(
+        [
+            cpu.read(&x),
+            cpu.read(&per_row),
+        ],
+        &operand(0).row_sum(null).binary(BinaryOp::Add, &operand(1)),
+        1,
+        true,
+    );
+    assert shifted.data == [1.0, 2.0, 3.0] as List<f32>;
+}
+
+test "the CPU backend reads a condition as 1.0 and 0.0" {
+    let mut cpu = Cpu {};
+    let cond = cpu.upload(&Tensor::<bool, [Row]> {
+        data: [true, false],
+        extents: [2],
+    });
+    let x = cpu.upload(&tensor::<[Row]>([2], [5.0, 6.0]));
+    let picked = cpu.fused::<[Row]>([
+        cpu.read_condition(&cond),
+        cpu.read(&x),
+    ], &operand(0).select(&operand(1), &constant(-1.0)));
+    assert picked.data == [5.0, -1.0] as List<f32>;
+}
+
 test "an expression over no elements gives none, whatever its constants" {
     let mut cpu = Cpu {};
     let empty = cpu.upload(&tensor::<[Row]>([0], []));

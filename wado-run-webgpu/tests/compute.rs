@@ -77,13 +77,45 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr: {stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 8, "stdout: {stdout}");
+    // Thirteen outputs, from a device's own binding limit and from one
+    // smaller than a weight, which splits the kernels reading it.
+    assert_eq!(lines.len(), 26, "stdout: {stdout}");
     for line in lines {
         let deviation: f32 = line
             .rsplit(' ')
             .next()
             .and_then(|d| d.parse().ok())
             .unwrap_or_else(|| panic!("no deviation in {line:?}"));
+        assert!(deviation <= LOAM_TOLERANCE, "{line}");
+    }
+}
+
+/// A whole model's pass stays on the device: each sequence length reads back
+/// once, for the logits `forward` returns, in as many dispatches as the plan
+/// leaves kernels.
+#[test]
+fn a_model_runs_on_the_device_reading_back_only_what_it_returns() {
+    let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../package-loam/conformance/webgpu_gpt2.wado");
+    let output = run(&[program.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 2, "stdout: {stdout}");
+    for line in lines {
+        let words: Vec<&str> = line.split(' ').collect();
+        assert_eq!(words[words.len() - 3..], ["read", "backs", "1"], "{line}");
+        // Ten a layer over five layers, and the embeddings, the last
+        // normalization and the head: `package-loam/webgpu.md` counts them.
+        assert_eq!(
+            words[words.len() - 5..words.len() - 3],
+            ["dispatches", "56"],
+            "{line}"
+        );
+        let deviation: f32 = words[words.len() - 6]
+            .parse()
+            .unwrap_or_else(|_| panic!("no deviation in {line:?}"));
         assert!(deviation <= LOAM_TOLERANCE, "{line}");
     }
 }

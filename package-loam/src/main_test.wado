@@ -173,22 +173,22 @@ weights
     W: f32 [In=2, Out=3]
     B: f32 [Out=3]
 nodes
-    fused  H = MatMul(X, W)
+    fused     H = MatMul(X, W)
         H: f32 [Batch=N, Out=3]
         into the kernel writing Y
-    kernel Y = Add(H, B)
+    kernel    Y = Add(H, B)
         Y: f32 [Batch=N, Out=3]
         written: the scope returns it
         takes in H, keeping 12 * N bytes out of memory
-    alias  Z = Identity(Y)
+    alias     Z = Identity(Y)
         Z: f32 [Batch=N, Out=3]
-    folded S = Shape(X)
+    folded    S = Shape(X)
         S: i64 [2] = [N, 2]
 outputs
     Y: f32 [Batch=N, Out=3]
     Z: f32 [Batch=N, Out=3]
 
-1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches
+1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches, 0 reshapes spread
 ", report;
 }
 
@@ -208,17 +208,17 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
     let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
     );
     assert report.contains("
-    branch Y, Z = If(C)
+    branch    Y, Z = If(C)
         Y: f32 [Total=\"Y[0]\", Embed=2]
         Z: f32 [Seq=N, Embed=2]
         then_branch
             nodes
-                kernel T = Concat(P, X)
+                kernel    T = Concat(P, X)
                     T: f32 [Total=M + N, Embed=2]
                     written: a regrouping takes in no operator after it
 "), report;
     assert report.contains("
-                kernel TZ = Mul(SK, W)
+                kernel    TZ = Mul(SK, W)
                     TZ: f32 [Seq=N, Embed=2]
                     written: the scope returns it
                     takes in S, SK, keeping 16 * N bytes out of memory
@@ -230,9 +230,9 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
     assert report.contains("
         else_branch
             nodes
-                kernel E = Relu(X)
+                kernel    E = Relu(X)
 "), report;
-    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches\n"), report;
+    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches, 0 reshapes spread\n"), report;
 }
 
 test "dump reports as JSON, every kernel with where its output goes" {

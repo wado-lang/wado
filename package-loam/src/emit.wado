@@ -19,7 +19,7 @@ use {
     trailing_axes,
 } from "./graph.wado";
 use { fill_of } from "./fold.wado";
-use { IfBranch, branches, is_alias, lowering_of, plan } from "./plan.wado";
+use { IfBranch, Spread, branches, is_alias, plan, reduces_rows, row_fold, selects_floats } from "./plan.wado";
 use { Expected } from "./runtime/checkpoint.wado";
 use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as operand_expr } from "./runtime/tensor.wado";
 use { expected } from "./safetensors.wado";
@@ -150,12 +150,13 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
     return Result::Ok(w.to_string());
 }
 
-/// The length of each axis that every input and output naming it fixes to one,
-/// which the caller then writes as the axis's `EXTENT` rather than a number.
+/// The length of each axis that every input, output and weight naming it fixes
+/// to one, which the caller then writes as the axis's `EXTENT` rather than a
+/// number. A weight's extents are its checkpoint header's, read at build time.
 fn boundary_extents(graph: &Graph, shapes: &TreeMap<String, Shape>) -> TreeMap<String, i32> {
     let mut fixed = TreeMap::<String, i32>::new();
     let mut open = TreeSet::<String>::new();
-    for let declared of [&graph.inputs, &graph.outputs] {
+    for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
         for let vi of *declared {
             for let axis of shapes.get(vi.name).unwrap().axes {
                 let Static(extent) = axis.extent else {
@@ -304,8 +305,8 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Backend", "BinaryOp", "Epilogue", "Expected", "LoadError", "Merged", "Tensor", "UnaryOp", "Window", "axis_mismatch",
-    "ceil_div", "constant", "extent_mismatch", "floor_div", "from_end", "input_mismatch", "narrow", "operand",
+    "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor", "UnaryOp",
+    "Window", "axis_mismatch", "ceil_div", "extent_mismatch", "floor_div", "from_end", "input_mismatch", "narrow",
     "read_checkpoint", "refuse", "to_extent", "unmet",
 ];
 
@@ -389,7 +390,7 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     w.begin(`return ${PREPARED}`);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
-        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`)},`);
+        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, true)},`);
     }
     w.end_with(";");
     w.end();
@@ -408,8 +409,15 @@ fn prepared_type(checked: &Checked, tensor: &String) -> String {
 
 /// The call making the host tensor `host`, a reference, the backend's: a
 /// half-precision one is converted once here, so `forward` converts none.
-fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String) -> String {
-    let verb = if converted(checked, held, tensor) { "prepare" } else { "upload" };
+/// Where `kept`, the backend holds it for every pass rather than this one.
+fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String, kept: bool) -> String {
+    let verb = if converted(checked, held, tensor) {
+        "prepare";
+    } else if kept {
+        "keep";
+    } else {
+        "upload";
+    };
     return `backend.${verb}(${host})`;
 }
 
@@ -457,7 +465,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names:
             None => checkpoint_payload(&e),
         };
         let host = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
-        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host)},`);
+        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, true)},`);
     }
     w.end_with(if loads { ");" } else { ";" });
     w.end();
@@ -647,7 +655,7 @@ fn emit_forward(
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
-        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident)};`);
+        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, false)};`);
         exprs.values[vi.name] = ident;
     }
     for let vi of &graph.initializers {
@@ -674,7 +682,9 @@ fn emit_forward(
         );
     }
     owed.extend(&owed_checks(checked, &mut symbols)?);
-    for let lines of [symbols.bindings(), owed, uploads, body] as List<List<String>> {
+    // What the pass before computed is dead once this one begins.
+    let begun = ["backend.begin();"] as List<String>;
+    for let lines of [symbols.bindings(), owed, begun, uploads, body] as List<List<String>> {
         for let line of lines {
             w.line(&line);
         }
@@ -732,17 +742,24 @@ fn scope_body(
         }
     }
     let decided = plan(graph, checked, fuse);
-    for let node of &graph.nodes {
-        match lowering_of(node, checked) {
-            Folded => {
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        match decided.lowering(at) {
+            Folded | Flattened => {
             },
-            Alias => {
-                exprs.values[node.outputs[0]] = exprs.values.get(node.inputs[0]).unwrap();
+            // A restored product is the product, computed over its axes.
+            Alias | Restored => {
+                // An alias of a value a later kernel computes stays pending.
+                if let Some(pending) = exprs.pending.get(node.inputs[0]) {
+                    exprs.pending[node.outputs[0]] = pending;
+                } else {
+                    exprs.values[node.outputs[0]] = exprs.values.get(node.inputs[0]).unwrap();
+                }
             },
-            Branch => body.extend(&branch_block(node, checked, names, exprs, symbols, fuse)?),
+            Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols, fuse)?),
             Kernel => {
-                let Some(term) = node_term(node, checked, exprs, symbols)? else {
-                    body.extend(&kernel_calls(node, checked, names, exprs, symbols, graph.opset)?);
+                let spread = decided.spread_of(&node.outputs[0]);
+                let Some(term) = node_term(&node, checked, exprs, symbols, graph.opset, &spread)? else {
+                    body.extend(&kernel_calls(&node, checked, names, exprs, symbols, graph.opset)?);
                     continue;
                 };
                 let output = node.outputs[0];
@@ -750,7 +767,8 @@ fn scope_body(
                     exprs.pending[output] = term;
                     continue;
                 }
-                body.push(bound_to(&output, term.call(&checked.shapes[output]), names, exprs));
+                let space = decided.space_of(checked, &output);
+                body.push(bound_to(&output, term.call(&space, &decided.rows_of(&output)), names, exprs));
             },
         }
     }
@@ -1161,13 +1179,38 @@ fn node_call(
     unreachable();
 }
 
-/// One node as the `Term` it computes, for an elementwise operator or a
-/// contraction, which a later elementwise kernel may take in. `None` for
-/// every other operator.
-fn node_term(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<Option<Term>, EmitError> {
+/// One node as the `Term` it computes, for an elementwise operator, a
+/// contraction or a fold along a row, which a later kernel may take in.
+/// `None` for every other operator.
+fn node_term(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    opset: Option<i64>,
+    spread: &Option<Spread>,
+) -> Result<Option<Term>, EmitError> {
     let shapes = &checked.shapes;
     let op = node.op;
     let out = shapes.get(node.outputs[0]).unwrap();
+    if let Some(s) = spread {
+        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs, Option::Some(spread_product(s, shapes, exprs)))));
+    }
+    if let Some(fold) = row_fold(node, checked, opset) {
+        let x = lane_of(node, 0, shapes, exprs, 0);
+        let expr = match fold {
+            Sum(count) => x.expr.row_sum(count),
+            Softmax => x.expr.row_softmax(),
+        };
+        return Result::Ok(Option::Some(Term { lanes: x.lanes, expr }));
+    }
+    if selects_floats(node, checked) {
+        let cond = node.inputs[0];
+        let condition = Term::condition(exprs.reference(&cond), shapes.get(cond).unwrap());
+        let then = lane_of(node, 1, shapes, exprs, 0);
+        let otherwise = lane_of(node, 2, shapes, exprs, 0);
+        return Result::Ok(Option::Some(condition.select(&then, &otherwise)));
+    }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
         return Result::Ok(Option::Some(Term::after(product_head(&a, &b, &left, &right, &out), out)));
@@ -1176,7 +1219,7 @@ fn node_term(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sym
         return Result::Ok(Option::Some(Term::after(conv_head(node, shapes, exprs, symbols)?, out)));
     }
     if op == "Gemm" {
-        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs)));
+        return Result::Ok(Option::Some(gemm_term(node, shapes, exprs, null)));
     }
     if is_binary_elementwise(&op) {
         return Result::Ok(Option::Some(binary_term(node, shapes, exprs)));
@@ -1493,6 +1536,8 @@ struct Lane {
 variant Source {
     /// The tensor this expression refers to.
     Tensor(String),
+    /// The `bool` tensor this expression refers to, read as 1.0 and 0.0.
+    Condition(String),
     /// What a contraction computes, as its call less `then`. The operators
     /// after it become its epilogue, so it never becomes a tensor of its own.
     Contraction(String),
@@ -1518,6 +1563,16 @@ impl Term {
         };
     }
 
+    /// The `bool` tensor `reference`, of axes `shape`, as 1.0 and 0.0.
+    fn condition(reference: String, shape: Shape) -> Term {
+        return Term {
+            lanes: [
+                Lane { source: Source::Condition(reference), shape, trailing: 0 },
+            ],
+            expr: operand_expr(0),
+        };
+    }
+
     fn constant(value: f32) -> Term {
         return Term { lanes: [], expr: constant_expr(value) };
     }
@@ -1529,25 +1584,32 @@ impl Term {
     /// `op` over this and `rhs`, an operand both read taken once.
     fn binary(&self, op: BinaryOp, rhs: &Term) -> Term {
         let mut lanes = self.lanes;
-        let mut renumbered: List<i32> = [];
-        for let lane of rhs.lanes {
-            let mut at = 0;
-            while at < lanes.len() && !(lanes[at].source == lane.source && lanes[at].trailing == lane.trailing) {
-                at += 1;
-            }
-            if at == lanes.len() {
-                lanes.push(lane);
-            }
-            renumbered.push(at);
-        }
-        return Term { lanes, expr: self.expr.binary(op, &operands_renumbered(&rhs.expr, &renumbered)) };
+        let b = merged_into(&mut lanes, rhs);
+        return Term { lanes, expr: self.expr.binary(op, &b) };
+    }
+
+    /// `then` where this is not zero, and `otherwise` where it is.
+    fn select(&self, then: &Term, otherwise: &Term) -> Term {
+        let mut lanes = self.lanes;
+        let a = merged_into(&mut lanes, then);
+        let b = merged_into(&mut lanes, otherwise);
+        return Term { lanes, expr: self.expr.select(&a, &b) };
     }
 
     /// The call computing this over `out`'s axes: the contraction it follows,
-    /// what comes after it its epilogue, or else one `fused` kernel.
-    fn call(&self, out: &Shape) -> String {
+    /// what comes after it its epilogue, a row kernel over the whole `rows`
+    /// where it folds along them, or else one `fused` kernel.
+    fn call(&self, out: &Shape, rows: &Option<Shape>) -> String {
         // Stage 0 folds a computation over constants alone.
         assert !self.lanes.is_empty();
+        if let Some(space) = rows {
+            let reads: List<String> = self.lanes.into_iter().map(|lane| lane_read(&lane, space)).collect();
+            // A row's one value is written once where the output holds one
+            // per row; a row of one element is written whole either way.
+            return `backend.rows::<[${axis_list(space)}], [${axis_list(out)}]>([${reads.join(", ")}], &${expr_source(
+                &self.expr,
+            )}, 1, ${reduces_rows(out, space)})`;
+        }
         let mut head: Option<[i32, String]> = null;
         for let [i, lane] of self.lanes.into_iter().enumerate() {
             if let Contraction(call) = lane.source {
@@ -1592,6 +1654,23 @@ impl Term {
     }
 }
 
+/// `term`'s lanes added to `lanes`, a lane already there taken once, and its
+/// `Expr` reading them where they now are.
+fn merged_into(lanes: &mut List<Lane>, term: &Term) -> Expr {
+    let mut renumbered: List<i32> = [];
+    for let lane of term.lanes {
+        let mut at = 0;
+        while at < lanes.len() && !(lanes[at].source == lane.source && lanes[at].trailing == lane.trailing) {
+            at += 1;
+        }
+        if at == lanes.len() {
+            lanes.push(lane);
+        }
+        renumbered.push(at);
+    }
+    return operands_renumbered(&term.expr, &renumbered);
+}
+
 /// `e` with each `operand(k)` reading `to[k]` instead.
 fn operands_renumbered(e: &Expr, to: &List<i32>) -> Expr {
     let mut steps: List<Step> = [];
@@ -1604,19 +1683,20 @@ fn operands_renumbered(e: &Expr, to: &List<i32>) -> Expr {
     return Expr { steps };
 }
 
-/// The source building `e` through the runtime's `operand`, `constant` and
-/// the `Expr` methods.
-fn expr_source(e: &Expr) -> String {
-    return step_source(e, e.steps.len() - 1);
+/// The source of `e` as its steps, so a step several read is spelled once.
+internal fn expr_source(e: &Expr) -> String {
+    let steps: List<String> = e.steps.into_iter().map(|s| step_source(&s)).collect();
+    return `Expr { steps: [${steps.join(", ")}] }`;
 }
 
-/// [`expr_source`] of step `i` alone.
-fn step_source(e: &Expr, i: i32) -> String {
-    return match e.steps[i] {
-        Operand(k) => `operand(${k})`,
-        Constant(c) => `constant(${float_literal(c)})`,
-        Unary([op, a]) => `${step_source(e, a)}.unary(UnaryOp::${op})`,
-        Binary([op, a, b]) => `${step_source(e, a)}.binary(BinaryOp::${op}, &${step_source(e, b)})`,
+fn step_source(step: &Step) -> String {
+    return match *step {
+        Operand(k) => `Step::Operand(${k})`,
+        Constant(c) => `Step::Constant(${float_literal(c)})`,
+        Unary([op, a]) => `Step::Unary([UnaryOp::${op}, ${a}])`,
+        Binary([op, a, b]) => `Step::Binary([BinaryOp::${op}, ${a}, ${b}])`,
+        Select([c, a, b]) => `Step::Select([${c}, ${a}, ${b}])`,
+        Fold([op, a]) => `Step::Fold([RowOp::${op}, ${a}])`,
     };
 }
 
@@ -1625,9 +1705,14 @@ fn step_source(e: &Expr, i: i32) -> String {
 /// trailing ones, met at an axis where it aligns there, and otherwise lifted to
 /// `out`'s rank under `out`'s names.
 fn lane_read(lane: &Lane, out: &Shape) -> String {
-    // `Term::call` gives a contraction no read: what follows it is its epilogue.
-    let Tensor(reference) = lane.source else {
-        unreachable();
+    let reference = match lane.source {
+        Tensor(r) => r,
+        Condition(c) => {
+            return `backend.read_condition(${under_axes_of(&c, &lane.shape, out, &"bool")})`;
+        },
+        // `Term::call` gives a contraction no read: what follows it is its
+        // epilogue.
+        Contraction(_) => unreachable(),
     };
     let own = &lane.shape;
     if lane.trailing > 0 {
@@ -1660,13 +1745,36 @@ fn under_axes_of(operand: &String, shape: &Shape, out: &Shape, element: &String)
     return `&backend.lift::<${element}, [${own}], [${theirs}]>(${operand}, ${out.rank()})`;
 }
 
+/// The first operand of a `Spread`'s product, read before its leading axes were
+/// flattened, and the axes the product computes over.
+struct SpreadOperand {
+    reference: String,
+    shape: Shape,
+    product: Shape,
+}
+
+fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> SpreadOperand {
+    return SpreadOperand {
+        reference: exprs.reference(&s.operand),
+        shape: shapes[s.operand],
+        product: shapes[s.restored],
+    };
+}
+
 /// `Gemm`'s `alpha * A' * B' + beta * C`, as a matrix product under optional
-/// `transpose2`s followed by its scalars and its bias.
-fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Term {
+/// `transpose2`s followed by its scalars and its bias. Where `spread`, the
+/// product reads the operand its first `Reshape` flattened, batched over the
+/// leading axes, and computes over the axes the second restores.
+fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spread: Option<SpreadOperand>) -> Term {
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
-    let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
     let [b, right] = transposed(&exprs.reference(&node.inputs[1]), &shapes.get(node.inputs[1]).unwrap(), trans_b);
-    let product_axes = gemm_product(node, shapes);
+    let [a, left, product_axes] = match spread {
+        Some(s) => [s.reference, s.shape, s.product],
+        None => {
+            let [a, left] = transposed(&exprs.reference(&node.inputs[0]), &shapes.get(node.inputs[0]).unwrap(), trans_a);
+            [a, left, gemm_product(node, shapes)];
+        },
+    };
     let mut term = Term::after(product_head(&a, &b, &left, &right, &product_axes), product_axes);
     if alpha != 1.0 {
         term = term.binary(BinaryOp::Mul, &Term::constant(alpha));

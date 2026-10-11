@@ -9,7 +9,7 @@ use { Serialize } from "core:serde";
 use { CodeWriter } from "lib:wadopoet";
 use { Graph, Known, Node, ValueInfo, element_of } from "./graph.wado";
 use { Checked } from "./infer.wado";
-use { Kind, Lowering, Plan, Reason, branches, lowering_of, plan } from "./plan.wado";
+use { Kind, Lowering, Plan, Reason, branches, plan } from "./plan.wado";
 use { Poly } from "./poly.wado";
 use { Shape } from "./shape.wado";
 
@@ -65,6 +65,8 @@ pub enum Lowered {
     Folded,
     Alias,
     Branch,
+    Flattened,
+    Restored,
 }
 
 /// A `Reason` without what it names, which `NodeReport.detail` carries.
@@ -77,6 +79,7 @@ pub enum Written {
     Reader,
     Stretched,
     SecondContraction,
+    ContractionAndFold,
 }
 
 /// One branch of an `If`, by the attribute holding it.
@@ -120,7 +123,7 @@ pub fn render_dump(graph: &Graph, checked: &Checked, fuse: bool) -> String {
     write_scope(&mut w, &r.scope, &mut tally);
     w.blank();
     w.line(
-        `${tally.kernels} kernels, ${tally.fused} fused, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches`,
+        `${tally.kernels} kernels, ${tally.fused} fused, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.spread} reshapes spread`,
     );
     return w.to_string();
 }
@@ -135,8 +138,8 @@ fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
     let decided = plan(graph, checked, fuse);
     let taken = taken_in(graph, &decided);
     let mut nodes: List<NodeReport> = [];
-    for let node of &graph.nodes {
-        nodes.push(node_report(node, checked, &decided, &taken, fuse));
+    for let [at, node] of graph.nodes.into_iter().enumerate() {
+        nodes.push(node_report(&node, decided.lowering(at), checked, &decided, &taken, fuse));
     }
     let mut owed: List<[String, String]> = [];
     for let c of &checked.owed {
@@ -153,6 +156,7 @@ fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
 
 fn node_report(
     node: &Node,
+    lowering: Lowering,
     checked: &Checked,
     decided: &Plan,
     taken: &TreeMap<String, List<String>>,
@@ -160,7 +164,6 @@ fn node_report(
 ) -> NodeReport {
     let outputs: List<TensorReport> = node.outputs.into_iter().map(|o| tensor(checked, &o)).collect();
     let inputs: List<String> = node.inputs.into_iter().map(|i| if i == "" { "_" } else { i }).collect();
-    let lowering = lowering_of(node, checked);
     let mut r = NodeReport { lowering: lowered(lowering), op: node.op, inputs, outputs };
     match lowering {
         Kernel => {
@@ -229,6 +232,7 @@ fn reason_fields(reason: &Reason) -> [Written, Option<String>] {
         Reader(kind) => [Written::Reader, Option::Some(kind_word(kind))],
         Stretched => [Written::Stretched, null],
         SecondContraction => [Written::SecondContraction, null],
+        ContractionAndFold => [Written::ContractionAndFold, null],
     };
 }
 
@@ -252,6 +256,8 @@ fn lowered(lowering: Lowering) -> Lowered {
         Alias => Lowered::Alias,
         Branch => Lowered::Branch,
         Kernel => Lowered::Kernel,
+        Flattened => Lowered::Flattened,
+        Restored => Lowered::Restored,
     };
 }
 
@@ -263,6 +269,8 @@ fn label(lowering: &Lowered) -> String {
         Folded => "folded",
         Alias => "alias",
         Branch => "branch",
+        Flattened => "flattened",
+        Restored => "restored",
     };
 }
 
@@ -322,6 +330,8 @@ struct Tally {
     folded: i32 = 0,
     aliases: i32 = 0,
     branches: i32 = 0,
+    /// The `Reshape`s a spread product reads and writes past, two each.
+    spread: i32 = 0,
 }
 
 fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
@@ -336,9 +346,11 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
             Folded => tally.folded += 1,
             Alias => tally.aliases += 1,
             Branch => tally.branches += 1,
+            Flattened | Restored => tally.spread += 1,
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
-        w.line(`${label(&node.lowering):<6} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
+        // As wide as `flattened`, the longest label.
+        w.line(`${label(&node.lowering):<9} ${outputs.join(", ")} = ${node.op}(${node.inputs.join(", ")})`);
         w.indent();
         for let t of &node.outputs {
             w.line(`${t.name}: ${tensor_text(t)}`);
@@ -386,10 +398,11 @@ fn reason_text(code: &Written, detail: &Option<String>) -> String {
         Unfused => "fuse is off",
         Computes => `a ${named} takes in no operator after it`,
         Returned => "the scope returns it",
-        ReadTimes => `read ${named} times`,
+        ReadTimes => `read by ${named} kernels`,
         Reader => `read by a ${named}, which takes in no operator before it`,
-        Stretched => "its reader stretches it",
-        SecondContraction => "its reader already follows a contraction",
+        Stretched => "its readers' kernel covers other elements",
+        SecondContraction => "its readers' kernel already follows a contraction",
+        ContractionAndFold => "a contraction and a fold along a row would share a kernel",
     };
 }
 

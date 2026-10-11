@@ -27,6 +27,14 @@ impl Opaque {
     fn new() -> Opaque {
         return Opaque { cpu: Cpu {}, uploads: 0, downloads: 0, prepared: 0 };
     }
+
+    fn reads<Axes>(&mut self, operands: &List<Handle<f32, Axes>>) -> List<Read<Axes>> {
+        let mut reads: List<Read<Axes>> = [];
+        for let o of *operands {
+            reads.push(self.cpu.read(&o.held));
+        }
+        return reads;
+    }
 }
 
 fn handle<E, Axes>(held: Tensor<E, Axes>) -> Handle<E, Axes> {
@@ -92,12 +100,26 @@ impl Backend for Opaque {
         return handle(Tensor { data: t.held.data, extents });
     }
 
-    fn fused<Axes>(&mut self, operands: List<Handle<f32, Axes>>, op: &Expr) -> Handle<f32, Axes> {
-        let mut reads: List<Read<Axes>> = [];
-        for let o of &operands {
-            reads.push(self.cpu.read(&o.held));
+    fn read_condition<Axes>(&mut self, t: &Handle<bool, Axes>) -> Handle<f32, Axes> {
+        let mut values = List::<f32>::with_capacity(t.held.data.len());
+        for let b of t.held.data {
+            values.push(if b { 1.0 } else { 0.0 });
         }
-        return handle(self.cpu.fused(reads, op));
+        return handle(Tensor { data: values, extents: t.held.extents });
+    }
+
+    fn fused<Axes>(&mut self, operands: List<Handle<f32, Axes>>, op: &Expr) -> Handle<f32, Axes> {
+        return handle(self.cpu.fused(self.reads(&operands), op));
+    }
+
+    fn rows<In, Out>(
+        &mut self,
+        operands: List<Handle<f32, In>>,
+        op: &Expr,
+        row_axes: i32,
+        reduced: bool,
+    ) -> Handle<f32, Out> {
+        return handle(self.cpu.rows::<In, Out>(self.reads(&operands), op, row_axes, reduced));
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Handle<A, Axes>) -> Handle<B, Axes> {
