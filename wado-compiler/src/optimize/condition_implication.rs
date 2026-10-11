@@ -1123,7 +1123,7 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
 /// Whether anything under `node` may change what one of `roots` holds for the
 /// code after it. A block that [`panics_before_any_exit`] never hands control
 /// on, so its writes do not count.
-fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
+pub(super) fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
     let body = &*engine.body;
     let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
     body.for_each_live_node_under(node, |n| {
