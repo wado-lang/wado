@@ -28,7 +28,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::synth::ArgClass;
-use super::typecheck::{TypeCheckResult, check_assignable};
+use super::typecheck::{SlotFrame, TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
@@ -3630,7 +3630,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return target_type;
         }
-        self.record_row_flows(source_type, target_type, cast.span);
+        self.record_row_flows(source_type, target_type, cast.span, SlotFrame::Own);
 
         // Reify rebuilds the `Cast` from `cast.expr` + the target
         // type recorded in `expression_types[cast.id]`; the char-cast

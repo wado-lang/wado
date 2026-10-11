@@ -1843,7 +1843,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 param_ty
             };
-            self.typecheck(arg, expected, arg_span);
+            self.typecheck_into_callee(arg, expected, arg_span);
             wrap_flags.push(wrap);
         }
 

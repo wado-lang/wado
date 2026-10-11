@@ -2753,10 +2753,13 @@ impl SemEffectWalker<'_> {
             pair_rows(&self.sem.types, declared, actual, &mut met);
         }
         for (param, vars) in met {
-            let Some(stands) = params.get(&param) else {
-                continue;
-            };
-            let stands: Vec<EffectRef> = stands.iter().cloned().collect();
+            // A parameter nothing at the call determines stands for no effect:
+            // the callee holds for every row it may take, the empty one among
+            // them, as its body's flows are bounded to.
+            let stands: Vec<EffectRef> = params
+                .get(&param)
+                .map(|stands| stands.iter().cloned().collect())
+                .unwrap_or_default();
             for var in vars {
                 self.rows.widen(&var, &stands);
             }
@@ -2830,10 +2833,12 @@ impl Rows {
     }
 
     /// Report each effect a value performs beyond the row of the slot a flow
-    /// moved it into, where that row names no parameter or variable to grow.
+    /// moved it into, where that row names no variable to grow. An effect
+    /// parameter there admits only itself: the function holds for every row
+    /// its caller may pick for it, the empty one among them.
     fn bound_flows(&self, index: &EffectIndex<'_>, out: &mut Vec<EffectError>) {
         for flow in index.flows_of(self) {
-            if flow.into.iter().any(|e| e.is_var() || e.is_param()) {
+            if flow.into.iter().any(EffectRef::is_var) {
                 continue;
             }
             let admitted =
@@ -2843,7 +2848,7 @@ impl Rows {
                     !effect.is_var(),
                     "a settled body's flows read only solved variables"
                 );
-                if effect.is_param() || admitted.contains(&effect) {
+                if admitted.contains(&effect) {
                     continue;
                 }
                 out.push(EffectError {

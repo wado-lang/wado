@@ -957,7 +957,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter().enumerate() {
             if let Some(&expected) = substituted_param_types.get(i) {
-                self.typecheck(*arg, expected, args_ast.get(i).map_or(span, Expr::span));
+                self.typecheck_into_callee(
+                    *arg,
+                    expected,
+                    args_ast.get(i).map_or(span, Expr::span),
+                );
             }
         }
 

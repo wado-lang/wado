@@ -1,0 +1,20 @@
+// A slot whose row is an effect parameter admits only that parameter: the
+// function holds for every row its caller may pick, the empty one among them,
+// so a value performing more escapes into a caller that declares nothing.
+use { println, Stdout } from "core:cli";
+
+fn make<effect E>() -> fn() with E {
+    return || { println("leak"); };
+}
+
+fn use_it() {
+    let f: fn() = make();
+    f();
+}
+
+export fn run() with Stdout {
+    use_it();
+}
+
+__DATA__
+{"compile_error": ":7:5: analysis error: this function value performs effect 'Stdout', which the function type it is expected to be does not declare", "compile_error_count": 1}

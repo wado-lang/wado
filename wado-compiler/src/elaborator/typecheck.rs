@@ -265,6 +265,16 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
+/// Whose frame a slot's type is written in, which says whose effect
+/// parameters its rows name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum SlotFrame {
+    /// The enclosing function's: a binding, a `return`, a cast's target.
+    Own,
+    /// A callee's parameter, whose effect parameters the call resolves.
+    Callee,
+}
+
 /// Two tuple types over the same packs are the same type only when their
 /// layouts line up. Each pack stands for the same arity on both sides, so every
 /// other element has a settled offset: `[..R, L]` is never `[..R]`, never
@@ -378,18 +388,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
-        self.typecheck_worded(actual, expected, span, |payload| TypeError::TypeMismatch {
-            expected: payload.expected,
-            found: payload.found,
-            span,
+        self.typecheck_worded(actual, expected, span, SlotFrame::Own, |payload| {
+            TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
+                span,
+            }
+        });
+    }
+
+    /// [`Self::typecheck`] on a value bound to a callee's parameter, whose type
+    /// is written in the callee's frame.
+    pub(super) fn typecheck_into_callee(&self, actual: TypeId, expected: TypeId, span: Span) {
+        self.typecheck_worded(actual, expected, span, SlotFrame::Callee, |payload| {
+            TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
+                span,
+            }
         });
     }
 
     /// [`Self::typecheck`] on a call argument, worded by [`ArgSite::mismatch`].
     pub(super) fn typecheck_arg(&self, actual: TypeId, expected: TypeId, site: ArgSite) {
-        self.typecheck_worded(actual, expected, site.span(), |payload| {
-            site.mismatch(payload.expected, payload.found)
-        });
+        self.typecheck_worded(
+            actual,
+            expected,
+            site.span(),
+            SlotFrame::Callee,
+            |payload| site.mismatch(payload.expected, payload.found),
+        );
     }
 
     fn typecheck_worded(
@@ -397,13 +425,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         actual: TypeId,
         expected: TypeId,
         span: Span,
+        frame: SlotFrame,
         mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError,
     ) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
             let _ = self.emit(mismatch(payload));
             return;
         }
-        self.record_row_flows(actual, expected, span);
+        self.record_row_flows(actual, expected, span, frame);
         self.reject_pack_layout_mismatch(actual, expected, span);
     }
 
@@ -417,7 +446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeCheckResult {
         let result = check_assignable(actual, expected, &self.tysys.type_table.borrow());
         if result != TypeCheckResult::Incompatible {
-            self.record_row_flows(actual, expected, span);
+            self.record_row_flows(actual, expected, span, SlotFrame::Own);
         }
         result
     }
@@ -425,13 +454,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Record each row of `actual` holding an effect variable beside the row
     /// of `expected` it moves into. The type check admits a variable
     /// unbounded, since only the effect check knows what it stands for; the
-    /// effect check bounds it there.
-    pub(super) fn record_row_flows(&self, actual: TypeId, expected: TypeId, span: Span) {
+    /// effect check bounds it there. A callee's slot names the callee's own
+    /// effect parameters, which the argument determines rather than meets, so
+    /// those rows are left to the call's resolution.
+    pub(super) fn record_row_flows(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+        frame: SlotFrame,
+    ) {
         let module = self.current_module_source.source_path();
         let mut table = self.tysys.type_table.borrow_mut();
         let mut flows = Vec::new();
         table.zip_rows(expected, actual, false, &mut |into, from| {
-            if from.iter().any(EffectRef::is_var) && from != into {
+            let determined_by_it =
+                frame == SlotFrame::Callee && into.iter().any(EffectRef::is_param);
+            if from.iter().any(EffectRef::is_var) && from != into && !determined_by_it {
                 flows.push(RowFlow {
                     from: from.to_vec(),
                     into: into.to_vec(),

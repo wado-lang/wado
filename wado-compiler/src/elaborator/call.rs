@@ -2826,7 +2826,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let expected = s.apply_infer_holes(default.expected);
                         let resolved = s.resolve_expr(&default.expr, ctx, Some(expected));
                         if let Some(span) = default.check_at {
-                            s.typecheck(resolved, expected, span);
+                            s.typecheck_into_callee(resolved, expected, span);
                         }
                         if let Some(name) = &default.binds {
                             bind(ctx, name, resolved);
