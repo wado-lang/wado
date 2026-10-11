@@ -3779,10 +3779,8 @@ fn compute_caller_follow_second(elements: &List<Element>, start: i32, ctx: &mut 
     return [];
 }
 
-/// True iff the surface `Element` contributes a CST field. Mirror of
-/// `gen_util::has_field`, kept in lower so the result can be baked
-/// into `RepeatOp.body_has_field` without forcing emit to keep the
-/// surface predicate alive.
+/// True iff the surface `Element` contributes a CST field. Baked into
+/// `RepeatOp.body_has_field` so emit never asks the surface IR.
 fn element_has_field(elem: &Element) -> bool {
     return match elem {
         TokenRef(_) | Literal(_) | RuleRef(_) | Wildcard(_) | Not(_) => true,
@@ -4492,8 +4490,8 @@ fn repeat_outer_base_name(elem: &Element, kind: RepeatKind, gc_speculative: i32)
     };
 }
 
-/// Inner element's base name, mirroring `gen_util::element_base_name`
-/// but inlined here so the lowering boundary stays self-contained.
+/// A repeat body's field base name. Unlike `ir_shape`'s `element_base_name`
+/// it names every element shape, groups by the shape `classify_group` gives.
 fn repeat_inner_base_name(elem: &Element, gc_speculative: i32) -> String {
     return match elem {
         TokenRef(t) => t.field_name,
@@ -4796,8 +4794,8 @@ fn group_field_decl(g: &GroupOp) -> Option<FieldDecl> {
 }
 
 /// Transparent groups have exactly one alt whose body is one op.
-/// The wrapper has no struct field of its own: `parser_gen`'s
-/// `has_field(Group)` returns `is_storable_group(...)`, which is
+/// The wrapper has no struct field of its own: `element_has_field`
+/// answers `is_storable_group(...)` for a group, which is
 /// false for transparent (1-alt, 1-element) groups. Matching that
 /// decision here ensures `body.fields` agrees with what emit's
 /// runtime construction actually assigns — a transparent `(X)` at

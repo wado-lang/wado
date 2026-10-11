@@ -2946,11 +2946,9 @@ test "lower Repeat with list-label inner uses label name as outer field" {
 
 test "lower Transparent Group does not contribute a CST field" {
     // `r : (INT) ;` — Transparent group with a single leaf inner.
-    // The wrapper has no CST struct slot of its own; `parser_gen`'s
-    // `has_field(Group)` returns `is_storable_group(...)` which is
-    // false for this 1-alt-1-element shape. lower's enumeration must
-    // match that decision so the GIR-driven struct emit produces the
-    // same fields parser_gen's runtime construction assigns.
+    // The wrapper has no CST struct slot of its own: `is_storable_group`
+    // is false for this 1-alt-1-element shape, and lower's enumeration
+    // must agree so the struct emit has the fields the parser assigns.
     let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(

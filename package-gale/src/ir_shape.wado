@@ -74,61 +74,30 @@ pub fn group_field_base_name(alts: &List<Alternative>) -> String {
     return result;
 }
 
+/// Only a `SimpleCst` group's alternatives reach here.
 pub fn group_case_name(alt: &Alternative) -> String {
-    if let RuleRef(r) = &alt.elements[0] {
-        return to_pascal_case(&r.name);
-    }
-    // Only ever called on SimpleCst-group alts, whose first element is a
-    // RuleRef by construction. Emitting a placeholder case name here would
-    // generate wrong code, so fail loudly instead.
-    panic(
-        "group_case_name: SimpleCst-group alt's first element is not a RuleRef — classifier/caller invariant violated",
-    );
+    let RuleRef(r) = &alt.elements[0] else {
+        unreachable();
+    };
+    return to_pascal_case(&r.name);
 }
 
-/// Whether each alternative is a single TokenRef or Literal, as in
-/// `(K_INSERT | K_REPLACE)`.
-fn is_token_only_group(alts: &List<Alternative>) -> bool {
-    for let alt of alts {
-        if alt.elements.len() != 1 || !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
-            return false;
-        }
-    }
-    return true;
-}
-
-/// A single-alternative multi-element group: exactly 1 alt with 2+ elements.
-/// Example: (',' pair), (';'+ sql_stmt)
+/// A single-alternative multi-element group, as in `(',' pair)`.
 pub fn is_single_alt_group(alts: &List<Alternative>) -> bool {
-    if alts.len() != 1 {
-        return false;
-    }
-    return alts[0].elements.len() >= 2;
+    return classify_group(alts) matches { SingleAlt };
 }
 
 /// True when every alternative carries a `# Label` (ANTLR4 requires
 /// all-or-none labeling). Drives the per-rule `<Rule>Alt` enum emission and
 /// the parser's `set_alt` stamping; unlabeled rules stay byte-identical.
 pub fn rule_alts_labeled(alts: &List<Alternative>) -> bool {
-    if alts.is_empty() {
-        return false;
-    }
-    for let a of alts {
-        if let Some(_) = &a.label {
-            continue;
-        }
-        return false;
-    }
-    return true;
+    return !alts.is_empty() && alts.iter_ref().all(|a: &Alternative| a.label matches { Some(_) });
 }
 
 /// Every group except a `GroupClass::Transparent` one is storable: multi-alt
 /// groups get a variant type, a single alt with 2+ elements gets a struct.
 pub fn is_storable_group(alts: &List<Alternative>) -> bool {
-    if alts.is_empty() {
-        return false;
-    }
-    return alts.len() > 1 || alts[0].elements.len() >= 2;
+    return !classify_group(alts) matches { Transparent };
 }
 
 pub enum GroupClass {
@@ -153,7 +122,7 @@ pub fn classify_group(alts: &List<Alternative>) -> GroupClass {
     if group_alts_have_actions(alts) {
         return GroupClass::General;
     }
-    if is_token_only_group(alts) {
+    if all_alts_are_single_token(alts) {
         return GroupClass::TokenOnly;
     }
     if is_simple_cst_group(alts) {
@@ -301,74 +270,25 @@ pub fn all_alts_are_single_token(alts: &List<Alternative>) -> bool {
     return true;
 }
 
-/// Build unique case names for labeled alternatives.
-/// When labels are unique, use them directly. When duplicated, append an index.
-fn build_case_names(alts: &List<Alternative>, all_labeled: bool) -> List<String> {
+/// One case name per alternative: `Alt<i>` unless every alternative is
+/// labeled, then the label, with a label several alternatives share
+/// numbered from 0 in order.
+pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
+    if !rule_alts_labeled(alts) {
+        return (0..<alts.len()).map(|i| `Alt${i}`).collect();
+    }
+    let labels: List<String> = alts.iter_ref().map(|a: &Alternative| a.label.unwrap()).collect();
     let mut names: List<String> = [];
-    if !all_labeled {
-        for let mut i = 0; i < alts.len(); i += 1 {
-            names.push(`Alt${i}`);
-        }
-        return names;
-    }
-    // Count occurrences of each label
-    let mut label_counts: List<[String, i32]> = [];
-    for let alt of alts {
-        let lab = alt.label.unwrap();
-        let mut found = false;
-        for let mut j = 0; j < label_counts.len(); j += 1 {
-            if label_counts[j].0 == lab {
-                label_counts[j] = [label_counts[j].0, label_counts[j].1 + 1];
-                found = true;
-            }
-        }
-        if !found {
-            label_counts.push([lab, 1]);
-        }
-    }
-    // Assign names: unique labels keep their name, duplicates get index
-    let mut label_indices: List<[String, i32]> = [];
-    for let alt of alts {
-        let lab = alt.label.unwrap();
-        let mut is_dup = false;
-        for let lc of &label_counts {
-            if lc.0 == lab && lc.1 > 1 {
-                is_dup = true;
-            }
-        }
-        if is_dup {
-            let mut idx: i32 = 0;
-            let mut found_idx = false;
-            for let mut j = 0; j < label_indices.len(); j += 1 {
-                if label_indices[j].0 == lab {
-                    idx = label_indices[j].1 + 1;
-                    label_indices[j] = [label_indices[j].0, idx];
-                    found_idx = true;
-                }
-            }
-            if !found_idx {
-                label_indices.push([lab, 0]);
-            }
-            names.push(`${lab}${idx}`);
-        } else {
+    for let mut i = 0; i < labels.len(); i += 1 {
+        let lab = labels[i];
+        if labels.iter_ref().filter(|l| *l == lab).count() == 1 {
             names.push(lab);
+        } else {
+            let before = labels.iter_ref().take(i).filter(|l| *l == lab).count();
+            names.push(`${lab}${before}`);
         }
     }
     return names;
-}
-
-fn all_alternatives_labeled(alts: &List<Alternative>) -> bool {
-    for let alt of alts {
-        if let None = alt.label {
-            return false;
-        }
-    }
-    return true;
-}
-
-pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
-    let all_labeled = all_alternatives_labeled(alts);
-    return build_case_names(alts, all_labeled);
 }
 
 /// Check if a consumed element matches the expected element at a given skip position.
