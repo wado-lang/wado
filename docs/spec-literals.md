@@ -251,6 +251,21 @@ assert with_separator == 1000000.5 && explicit_positive == 25000000000.0;
 assert scientific == 602200000000000000000000.0 && negative_exp < 1e-18;
 ```
 
+A decimal point has a digit on each side. `.5` and `5.` are not literals, so
+write `0.5` and `5.0`:
+
+<!-- {"fixture":"error_float_literal_leading_dot.wado"} -->
+
+```wado
+let half = .5;    // Error: write `0.5`
+```
+
+<!-- {"fixture":"error_float_literal_trailing_dot.wado"} -->
+
+```wado
+let five = 5.;    // Error: write `5.0`
+```
+
 A literal with a decimal point or an exponent falls back to `f64`. Where an
 integer type is expected, a literal with an exponent and no decimal point is
 that integer if its value is a whole number in the type's range:
@@ -423,8 +438,9 @@ let escaped = "Line 1\nLine 2\tTabbed";
 assert escaped.lines().count() == 2 && escaped.len() == 20;
 ```
 
-A string or template string may span lines. Each newline in the source is a
-newline in the value:
+A string or template string may span lines. Each line break in the source is
+one newline (LF) in the value, whichever
+[line ending](./spec-lexical.md#line-breaks) the file uses:
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
@@ -460,9 +476,10 @@ assert raw == [137, 80, 78, 71, 13, 10] && magic as List<u8> == raw;
 ```
 
 Each source character and each escape contributes one byte. The source
-characters must be ASCII. A `\xNN` escape (two hex digits) writes any byte, and
-the standard escapes `\n`, `\t`, `\\`, `\"`, `\0`, `\r` and `\'` are accepted
-too. A Unicode escape (`\u{...}` or `\uHHHH`) is an error, since it denotes a
+characters must be ASCII. A `\xNN` escape (two hex digits) writes any byte. The
+other escapes are a string's ([Escape Sequences](#escape-sequences)): `\'`,
+`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t` and `\0`, each writing its ASCII
+byte. A Unicode escape (`\u{...}` or `\uHHHH`) is an error, since it denotes a
 scalar, not a byte. [`#include_bytes`](#include_str-and-include_bytes) builds
 the same `ByteList` from a file.
 
@@ -513,6 +530,25 @@ A bare `{` or `}` in a template string needs no escape
 ([Template Strings](#template-strings)), but `\{` and `\}` are accepted. `\$`
 writes a literal `$` before a `{`: `` `\${x}` `` renders the text `${x}`.
 
+A backslash followed by anything else is an error. `\xNN` writes a byte, so only
+a [byte string or byte literal](#string-literals) takes it:
+
+<!-- {"fixture":"error_string_hex_escape.wado"} -->
+
+```wado
+let s = "\x41";    // Error: write `A`, or `b"\x41"` for a byte
+```
+
+A backslash before a line break is an error too. Wado has no line continuation,
+so the line break cannot be escaped away:
+
+<!-- {"fixture":"error_string_line_continuation.wado"} -->
+
+```wado
+let s = "one \
+         two";
+```
+
 A character outside the Basic Multilingual Plane (U+10000 and above) is written
 as a surrogate pair of `\uHHHH` escapes, or as one `\u{H+}`:
 
@@ -521,6 +557,31 @@ as a surrogate pair of `\uHHHH` escapes, or as one `\u{H+}`:
 ```wado
 assert "\uD83D\uDE00" == "😀";   // Surrogate pair
 assert "\u{1F600}" == "😀";      // Variable-length escape
+```
+
+A surrogate pair is one escape, so it writes one character in a character
+literal too:
+
+<!-- {"fixture":"char_surrogate_pair.wado"} -->
+
+```wado
+assert '\uD83D\uDE00' == '😀';
+```
+
+A surrogate on its own is not a Unicode scalar, so it is an error wherever it
+stands: a high surrogate with no low surrogate after it, a low surrogate with no
+high surrogate before it, and any surrogate written as `\u{H+}`:
+
+<!-- {"fixture":"error_char_lone_high_surrogate.wado"} -->
+
+```wado
+let c = '\uD83D';
+```
+
+<!-- {"fixture":"error_string_lone_low_surrogate.wado"} -->
+
+```wado
+let s = "\uDE00";
 ```
 
 ## Template Strings

@@ -486,13 +486,8 @@ pub(super) fn synthesize_adapter(
     };
 
     let plans = builder.plan_params();
-    let flat_param_count: usize = plans
-        .iter()
-        .map(|plan| {
-            flatten_param_type(plan.ty, cm_interface_registry, &builder.lower_ctx.names).len()
-        })
-        .sum();
-    builder.params_in_buffer = func_info.is_async && flat_param_count > MAX_FLAT_ASYNC_PARAMS;
+    builder.params_in_buffer = cm_interface_registry
+        .params_in_buffer(plans.iter().map(|plan| plan.ty), func_info.is_async);
     builder.emit_param_lowering(&plans);
 
     let async_outptr = if func_info.is_async {
@@ -500,6 +495,8 @@ pub(super) fn synthesize_adapter(
     } else {
         None
     };
+    let sync_params_buf = (!func_info.is_async && builder.params_in_buffer)
+        .then(|| builder.emit_indirect_params_buffer(&plans, None));
     let sync_outptr = if func_info.is_async {
         None
     } else {
@@ -507,11 +504,14 @@ pub(super) fn synthesize_adapter(
     };
 
     let raw_call_return_type = wasi_return_type_id(func_info, cm_interface_registry);
-    let raw_call = cm_raw_call(
+    let mut raw_call = cm_raw_call(
         &func_info.local_alias_name(),
         std::mem::take(&mut builder.flat_args),
         raw_call_return_type,
     );
+    if let Some(buf) = sync_params_buf {
+        raw_call = builder.released_after(raw_call, buf);
+    }
 
     let adapter_return_type = if func_info.is_async {
         builder.emit_async_result(raw_call, async_outptr)
@@ -632,9 +632,6 @@ fn classify_param<'t>(
     }
 }
 
-/// The flat params an async call passes directly; more go through one buffer.
-const MAX_FLAT_ASYNC_PARAMS: usize = 4;
-
 /// A realloc'd result buffer: the local holding its address plus the
 /// allocation's size/align (needed again to free it or to embed it in an
 /// `AsyncCall<T>`).
@@ -667,8 +664,7 @@ struct AdapterBuilder<'a> {
     body_stmts: Vec<TirStmt>,
     flat_args: Vec<TirExpr>,
     auxiliary: Vec<Rc<RefCell<TirFunction>>>,
-    /// An async call whose flat params exceed [`MAX_FLAT_ASYNC_PARAMS`] passes
-    /// them all through one linear-memory buffer instead.
+    /// See [`CmInterfaceRegistry::params_in_buffer`].
     params_in_buffer: bool,
 }
 
@@ -1048,8 +1044,8 @@ impl<'a> AdapterBuilder<'a> {
         Some(OutptrBuffer { local, size, align })
     }
 
-    /// Indirect async calling: write all params to one linear-memory buffer
-    /// and replace the flat args with (`params_ptr`[, `results_ptr`]).
+    /// Indirect calling: write all params to one linear-memory buffer and
+    /// replace the flat args with (`params_ptr`[, `results_ptr`]).
     ///
     /// The buffer layout follows the Component Model Canonical ABI spec,
     /// which uses component-level type sizes (e.g., flags with ≤8 labels =
@@ -1058,7 +1054,7 @@ impl<'a> AdapterBuilder<'a> {
         &mut self,
         plans: &[ParamPlan<'a>],
         async_outptr: Option<OutptrBuffer>,
-    ) {
+    ) -> OutptrBuffer {
         let registry = self.lower_ctx.cm_interface_registry;
 
         // A param sequence lays out exactly like a tuple of the param types, so
@@ -1126,6 +1122,38 @@ impl<'a> AdapterBuilder<'a> {
             self.flat_args
                 .push(local_ref(outptr.local, "$async_outptr", TypeTable::I32));
         }
+        OutptrBuffer {
+            local: params_buf_local,
+            size: buf_total_size,
+            align: buf_max_align,
+        }
+    }
+
+    /// `raw_call` made, then the params buffer it read released. A sync callee
+    /// has read every parameter by the time it returns. The call's value, if
+    /// any, is bound first, so what follows reads it from a local.
+    fn released_after(&mut self, raw_call: TirExpr, buf: OutptrBuffer) -> TirExpr {
+        let return_type = raw_call.type_id;
+        let value = if return_type == TypeTable::UNIT {
+            self.body_stmts.push(expr_stmt(raw_call));
+            None
+        } else {
+            let local = alloc_local(&mut self.next_local, &mut self.locals, return_type);
+            self.body_stmts
+                .push(let_stmt("$raw_result", local, return_type, raw_call));
+            Some(local_ref(local, "$raw_result", return_type))
+        };
+        self.body_stmts.push(expr_stmt(builtin_call(
+            "realloc",
+            vec![
+                local_ref(buf.local, "$params_buf", TypeTable::I32),
+                i32_const(buf.size as i32),
+                i32_const(buf.align as i32),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        )));
+        value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()))
     }
 
     /// Sync imports whose return needs an outptr: allocate the buffer and

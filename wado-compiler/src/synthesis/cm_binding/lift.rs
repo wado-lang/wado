@@ -3,9 +3,9 @@
 //! [`synthesize_lift`] produces TIR that materialises a Wado value at a given
 //! linear-memory address. Composite types (lists, options, results, tuples,
 //! WASI variants/enums/records) materialise into mutable locals; primitives
-//! stay as plain `*_load` builtins. The list and tuple paths free the
-//! underlying buffers as they read, so callers don't need to clean up after a
-//! lift.
+//! stay as plain `*_load` builtins. Every lift frees the buffer it reads
+//! from, a string's bytes and a list's elements alike, so callers don't need
+//! to clean up after a lift beyond the area they passed in.
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
@@ -17,13 +17,13 @@ use crate::tir::{
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, expr_stmt,
-    generic_method_call, generic_static_call, i32_const, if_stmt, internal_call, let_mut_stmt,
-    let_stmt, local_ref, loop_stmt, option_none, option_some, synth_span,
+    generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
+    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, synth_span,
 };
 
 use super::types::{
-    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
-    cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
+    CmStdlibNames, LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    cm_flags_byte_size, cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
@@ -54,6 +54,87 @@ pub fn synthesize_lift(
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
     synthesize_lift_inner(ty, addr, next_local, stmts, locals, ctx)
+}
+
+/// [`synthesize_lift`] into `target`, the Wado type the value is handed to: a
+/// list or map is built as that exact type, not one rebuilt from `ty` (a
+/// shared stdlib element type such as `InputFile` would resolve to a second GC
+/// `TypeId`), and an unrestricted handle is converted from its `f64`.
+pub(super) fn synthesize_lift_into(
+    ty: &Type,
+    addr: TirExpr,
+    target: TypeId,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LiftContext<'_>,
+) -> TirExpr {
+    let base = ctx.type_table.borrow().get_newtype_base(target);
+    if let Some(base) = base {
+        return synthesize_lift_into(ty, addr, base, next_local, stmts, locals, ctx);
+    }
+    let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
+    match ctx.cm_interface_registry.value_type(ty) {
+        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => synthesize_lift_list(
+            &g.args[0],
+            addr,
+            Some(target),
+            next_local,
+            stmts,
+            locals,
+            ctx,
+        ),
+        Type::Generic(g) if names.is_tree_map(&g) => synthesize_lift_map(
+            &g.args[0],
+            &g.args[1],
+            addr,
+            Some(target),
+            next_local,
+            stmts,
+            locals,
+            ctx,
+        ),
+        _ if ctx.type_table.borrow().is_unrestricted_handle(target) => {
+            let handle = synthesize_lift(ty, addr, next_local, stmts, locals, ctx);
+            handle_from_f64(handle, target)
+        }
+        _ => synthesize_lift(ty, addr, next_local, stmts, locals, ctx),
+    }
+}
+
+/// The string whose `len` bytes sit at `ptr`, copied onto the GC heap as
+/// `string_type_id`, and the bytes released: wherever a lifted string sits, it
+/// is the guest's to free. `ptr` and `len` are read more than once.
+pub(super) fn lift_string_and_free(
+    ptr: TirExpr,
+    len: TirExpr,
+    string_type_id: TypeId,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+) -> TirExpr {
+    let string_local = alloc_local(next_local, locals, string_type_id);
+    stmts.push(let_stmt(
+        "$lifted_string",
+        string_local,
+        string_type_id,
+        internal_call(
+            CompilerItem::MemoryToGcString.attr_name(),
+            vec![ptr.clone(), len.clone()],
+            string_type_id,
+        ),
+    ));
+    // The lowering side allocates nothing for an empty string.
+    stmts.push(if_stmt(
+        binary(TirBinaryOp::Gt, len.clone(), i32_const(0), TypeTable::BOOL),
+        block(vec![expr_stmt(builtin_call(
+            "realloc",
+            vec![ptr, len, i32_const(1), i32_const(0)],
+            TypeTable::I32,
+        ))]),
+        None,
+    ));
+    local_ref(string_local, "$lifted_string", string_type_id)
 }
 
 /// Ensure a lifted expression is evaluated before subsequent memory operations.
@@ -127,20 +208,35 @@ fn synthesize_lift_inner(
         Type::Named(named) => {
             let named_name = named.name.as_str();
             if named_name == string_name {
-                let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);
-                let len = builtin_call(
-                    "i32_load",
-                    vec![binary_add(addr, i32_const(4))],
+                let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
+                stmts.push(let_stmt(
+                    "$str_ptr",
+                    ptr_local,
                     TypeTable::I32,
-                );
+                    builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
+                ));
+                let len_local = alloc_local(next_local, locals, TypeTable::I32);
+                stmts.push(let_stmt(
+                    "$str_len",
+                    len_local,
+                    TypeTable::I32,
+                    builtin_call(
+                        "i32_load",
+                        vec![binary_add(addr, i32_const(4))],
+                        TypeTable::I32,
+                    ),
+                ));
                 let string_type_id = ctx
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String);
-                return internal_call(
-                    CompilerItem::MemoryToGcString.attr_name(),
-                    vec![ptr, len],
+                return lift_string_and_free(
+                    local_ref(ptr_local, "$str_ptr", TypeTable::I32),
+                    local_ref(len_local, "$str_len", TypeTable::I32),
                     string_type_id,
+                    next_local,
+                    stmts,
+                    locals,
                 );
             }
             match named_name {
@@ -675,7 +771,7 @@ impl CmBuffer {
 /// named WASI types (records / variants / enums / flags) walk the buffer
 /// at their true canonical-ABI size and align rather than the i32-handle
 /// fallback baked into `cm_abi::cm_size` / `cm_abi::cm_align`.
-pub(super) fn synthesize_lift_list(
+fn synthesize_lift_list(
     elem_ty: &Type,
     addr: TirExpr,
     override_list_ty: Option<TypeId>,
@@ -766,14 +862,6 @@ pub(super) fn synthesize_lift_list(
         TypeTable::UNIT,
     )));
 
-    // Free element's linear memory
-    loop_stmts.extend(synthesize_free_element(
-        elem_ty,
-        local_ref(elem_addr_local, "$elem_addr", TypeTable::I32),
-        &string_name_for_free(ctx),
-        ctx,
-    ));
-
     loop_stmts.push(CmBuffer::advance(i_local));
     stmts.push(loop_stmt(block(loop_stmts)));
     buffer.free(stmts);
@@ -783,7 +871,7 @@ pub(super) fn synthesize_lift_list(
 
 /// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `TreeMap`.
 /// `map[k] = v` keeps the last pair for a repeated key, as the CM requires.
-pub(super) fn synthesize_lift_map(
+fn synthesize_lift_map(
     key_ty: &Type,
     value_ty: &Type,
     addr: TirExpr,
@@ -858,7 +946,6 @@ pub(super) fn synthesize_lift_map(
     let mut loop_stmts: Vec<TirStmt> = vec![buffer.break_when_done(i_local)];
     let pair_addr_local = buffer.element_addr(i_local, next_local, &mut loop_stmts, locals);
 
-    let string_name = string_name_for_free(ctx);
     let mut lifted = Vec::new();
     for (slot, slot_ty) in pair.iter().enumerate() {
         let slot_addr = binary_add(
@@ -876,12 +963,6 @@ pub(super) fn synthesize_lift_map(
         );
         loop_stmts.extend(slot_stmts);
         let value = materialize_if_needed(value, next_local, &mut loop_stmts, locals);
-        loop_stmts.extend(synthesize_free_element(
-            slot_ty,
-            slot_addr,
-            &string_name,
-            ctx,
-        ));
         lifted.push(value);
     }
     let [key, value] = <[TirExpr; 2]>::try_from(lifted)
@@ -967,7 +1048,7 @@ fn synthesize_lift_option_inner(
     let payload_addr = binary_add(addr, i32_const(payload_offset as i32));
     let lifted = synthesize_lift_inner(
         inner_ty,
-        payload_addr.clone(),
+        payload_addr,
         next_local,
         &mut then_stmts,
         locals,
@@ -981,12 +1062,6 @@ fn synthesize_lift_option_inner(
         local_ref(result_local, "$option_result", option_type_id),
         some_expr,
     )));
-    then_stmts.extend(synthesize_free_element(
-        inner_ty,
-        payload_addr,
-        &string_name_for_free(ctx),
-        ctx,
-    ));
 
     stmts.push(if_stmt(
         binary(
@@ -1125,59 +1200,4 @@ fn synthesize_lift_tuple(
         tuple_type_id,
         synth_span(),
     )
-}
-
-/// Free a CM element's linear memory (within a list iteration).
-///
-/// For primitives: no-op.
-/// For String: frees the string data buffer.
-/// Look up the canonical stdlib `String` struct name via the
-/// compiler-item registry attached to `ctx`'s type table. Used to
-/// drive [`synthesize_free_element`]'s string match without
-/// hard-coding the literal `"String"`.
-fn string_name_for_free(ctx: &LiftContext<'_>) -> String {
-    ctx.type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::String)
-        .to_string()
-}
-
-fn synthesize_free_element(
-    ty: &Type,
-    addr: TirExpr,
-    string_name: &str,
-    ctx: &LiftContext<'_>,
-) -> Vec<TirStmt> {
-    match ty {
-        Type::Named(named) if named.name == string_name => {
-            let ptr = builtin_call("i32_load", vec![addr.clone()], TypeTable::I32);
-            let len = builtin_call(
-                "i32_load",
-                vec![binary_add(addr, i32_const(4))],
-                TypeTable::I32,
-            );
-            vec![expr_stmt(builtin_call(
-                "realloc",
-                vec![ptr, len, i32_const(1), i32_const(0)],
-                TypeTable::I32,
-            ))]
-        }
-        Type::Tuple(elems) if !elems.is_empty() => {
-            // Registry-aware offsets so a String following a named element
-            // (e.g. `[Point, String]`) is freed at its true offset.
-            let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
-            let mut free_stmts = Vec::new();
-            for (i, elem_ty) in elems.iter().enumerate() {
-                let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
-                free_stmts.extend(synthesize_free_element(
-                    elem_ty,
-                    elem_addr,
-                    string_name,
-                    ctx,
-                ));
-            }
-            free_stmts
-        }
-        _ => vec![],
-    }
 }

@@ -3787,6 +3787,17 @@ impl CmInterfaceRegistry {
         out
     }
 
+    /// Whether a call taking `params` passes them through one buffer rather
+    /// than as flat core values (`flatten_functype`).
+    pub fn params_in_buffer<'t>(
+        &self,
+        params: impl IntoIterator<Item = &'t Type>,
+        is_async: bool,
+    ) -> bool {
+        let flat_count = params.into_iter().map(|ty| self.cm_flatten(ty).len()).sum();
+        flat_params_in_buffer(flat_count, is_async)
+    }
+
     fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<CmValType>) {
         use crate::cm_abi::CmValType;
         let resolved = self.resolve_type(ty);
@@ -5036,6 +5047,26 @@ fn is_return_type_supported_with_types(
 
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
+
+/// Canonical ABI maximum flat params a sync call passes as Wasm params. Past
+/// it, the caller writes them to one buffer, laid out as a tuple of their
+/// types, and passes its address (`flatten_functype`).
+const MAX_FLAT_PARAMS: usize = 16;
+
+/// [`MAX_FLAT_PARAMS`] for an async lowering, which takes a params buffer
+/// sooner.
+const MAX_FLAT_ASYNC_PARAMS: usize = 4;
+
+/// [`CmInterfaceRegistry::params_in_buffer`] for params already flattened to
+/// `flat_count` core values.
+pub fn flat_params_in_buffer(flat_count: usize, is_async: bool) -> bool {
+    flat_count
+        > if is_async {
+            MAX_FLAT_ASYNC_PARAMS
+        } else {
+            MAX_FLAT_PARAMS
+        }
+}
 
 /// The Wado name every CM `error-code` is declared under. The registry is keyed
 /// by it, so it is what reaches the declaration.

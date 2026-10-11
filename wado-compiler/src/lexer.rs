@@ -7,6 +7,8 @@
 // best-effort token stream via [`LexResult`]. The entry points are the free
 // functions [`lex`] and [`lex_in`].
 
+use std::borrow::Cow;
+
 use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -25,10 +27,23 @@ pub fn is_ident_continue(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
 
-/// Whether `s` is a Wado identifier: `[a-zA-Z_][a-zA-Z0-9_]*`.
+/// Whether `s` is a Wado identifier: `[a-zA-Z_][a-zA-Z0-9_]*`, except `_`
+/// alone, which is the wildcard.
 pub fn is_valid_ident(s: &str) -> bool {
     let mut chars = s.chars();
-    chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
+    s != WILDCARD && chars.next().is_some_and(is_ident_start) && chars.all(is_ident_continue)
+}
+
+/// The wildcard's spelling.
+pub const WILDCARD: &str = "_";
+
+/// `text` with every CRLF read as the LF it stands for, as Rust reads source.
+pub(crate) fn normalize_line_breaks(text: &str) -> Cow<'_, str> {
+    if text.contains("\r\n") {
+        Cow::Owned(text.replace("\r\n", "\n"))
+    } else {
+        Cow::Borrowed(text)
+    }
 }
 
 /// Tokenise `source` as its own parse. See module docs for the recovery
@@ -252,9 +267,6 @@ pub enum LexErrorKind {
     UnterminatedTemplateString,
     /// Character literal lacking its closing `'`.
     UnterminatedChar,
-    /// Character literal with more than one character between the quotes
-    /// (e.g. `'abc'`).
-    CharLiteralTooLong,
     /// Empty character literal (`''`).
     EmptyCharLiteral,
     /// Block comment (`/* ... */`) lacking its closing `*/`.
@@ -280,6 +292,8 @@ pub enum LexErrorKind {
     /// A decimal digit the literal's radix lacks (`0b102`), with the kind of
     /// literal it sits in.
     InvalidRadixDigit { digit: char, literal: &'static str },
+    /// A CR inside a literal that no LF follows.
+    BareCarriageReturn,
 }
 
 impl std::fmt::Display for LexError {
@@ -289,9 +303,6 @@ impl std::fmt::Display for LexError {
             LexErrorKind::UnterminatedString => write!(f, "unterminated string literal"),
             LexErrorKind::UnterminatedTemplateString => write!(f, "unterminated template string"),
             LexErrorKind::UnterminatedChar => write!(f, "unterminated character literal"),
-            LexErrorKind::CharLiteralTooLong => {
-                write!(f, "character literal must contain a single character")
-            }
             LexErrorKind::EmptyCharLiteral => write!(f, "empty character literal"),
             LexErrorKind::UnterminatedBlockComment => write!(f, "unterminated block comment"),
             LexErrorKind::MissingHexDigits => write!(f, "expected hex digit after 0x"),
@@ -318,6 +329,9 @@ impl std::fmt::Display for LexError {
             }
             LexErrorKind::InvalidRadixDigit { digit, literal } => {
                 write!(f, "invalid digit `{digit}` in {literal}")
+            }
+            LexErrorKind::BareCarriageReturn => {
+                write!(f, "a bare CR in a literal is not a line break; write `\\r`")
             }
         }
     }
@@ -374,6 +388,13 @@ pub(crate) fn defaults_to_float(repr: &str) -> bool {
 /// an integer.
 pub(crate) fn has_decimal_point(repr: &str) -> bool {
     repr.contains('.')
+}
+
+/// Whether a number literal is a plain decimal integer, digits and `_` alone:
+/// the half a decimal point would join.
+pub(crate) fn is_decimal_integer(repr: &str) -> bool {
+    repr.starts_with(|c: char| c.is_ascii_digit())
+        && repr.chars().all(|c| c.is_ascii_digit() || c == '_')
 }
 
 /// Whether a number literal has an exponent. A hex literal has none: its `e`
@@ -907,7 +928,13 @@ impl<'a> Lexer<'a> {
         let text_start = self.pos;
         self.advance_while(|ch| ch != '\n');
 
-        let text = self.input[text_start..self.pos].to_string();
+        let line = &self.input[text_start..self.pos];
+        // Only the CR of a CRLF ends the line; a bare one is the comment's text.
+        let text = match self.peek_char() {
+            Some('\n') => line.strip_suffix('\r').unwrap_or(line),
+            _ => line,
+        }
+        .to_string();
 
         Comment {
             text,
@@ -936,7 +963,8 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedBlockComment,
                         span,
                     });
-                    let text = self.input[text_start..self.pos].to_string();
+                    let text =
+                        normalize_line_breaks(&self.input[text_start..self.pos]).into_owned();
                     return Comment {
                         text,
                         kind: CommentKind::Block,
@@ -948,7 +976,8 @@ impl<'a> Lexer<'a> {
                     if self.peek_char() == Some('/') {
                         let text_end = self.pos - 1; // before the *
                         self.advance(); // consume /
-                        let text = self.input[text_start..text_end].to_string();
+                        let text =
+                            normalize_line_breaks(&self.input[text_start..text_end]).into_owned();
                         return Comment {
                             text,
                             kind: CommentKind::Block,
@@ -975,14 +1004,13 @@ impl<'a> Lexer<'a> {
             return false;
         }
 
-        // Check that __DATA__ is followed by end of input or newline (must be on its own line)
         let after_marker = &remaining[DATA_MARKER.len()..];
-        if !after_marker.is_empty() {
-            let next_char = after_marker.chars().next().unwrap();
-            // Only allow newline (\n or \r) or EOF after __DATA__
-            if next_char != '\n' && next_char != '\r' {
-                return false;
-            }
+        // A bare CR is no line break, so it does not end the marker's line.
+        if !(after_marker.is_empty()
+            || after_marker.starts_with('\n')
+            || after_marker.starts_with("\r\n"))
+        {
+            return false;
         }
 
         // Found __DATA__ marker - consume it
@@ -1001,13 +1029,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        // Capture everything after __DATA__ as the data section
-        let data_content = &self.input[self.pos..];
-        self.data_section = if data_content.is_empty() {
-            Some(String::new())
-        } else {
-            Some(data_content.to_string())
-        };
+        self.data_section = Some(normalize_line_breaks(&self.input[self.pos..]).into_owned());
 
         // Move position to end of input
         while self.advance().is_some() {}
@@ -1023,6 +1045,9 @@ impl<'a> Lexer<'a> {
 
         let text = &self.input[start..self.pos];
 
+        if text == WILDCARD {
+            return TokenKind::Underscore;
+        }
         // The keyword set is generated from `crate::syntax::KEYWORDS`.
         // Contextual keywords ("test", "do", "resume") are intentionally absent
         // — the parser recognises them positionally, so they lex as identifiers.
@@ -1205,22 +1230,48 @@ impl<'a> Lexer<'a> {
                         kind: LexErrorKind::UnterminatedString,
                         span: self.span_from(start, start_line, start_column),
                     });
-                    return self.input[content_start..self.pos].to_string();
+                    return normalize_line_breaks(&self.input[content_start..self.pos])
+                        .into_owned();
                 }
                 Some((_, '"')) => {
                     let content_end = self.pos;
                     self.advance();
-                    return self.input[content_start..content_end].to_string();
+                    return normalize_line_breaks(&self.input[content_start..content_end])
+                        .into_owned();
                 }
                 Some((_, '\\')) => {
                     self.advance();
                     self.skip_escape();
+                }
+                Some((_, '\r')) => {
+                    self.advance_literal_cr();
                 }
                 Some(_) => {
                     self.advance();
                 }
             }
         }
+    }
+
+    /// Advance past a CR inside a literal and the LF after it, answering
+    /// whether there was one. A CR reads as the line break of a CRLF and is an
+    /// error anywhere else, as in Rust.
+    fn advance_literal_cr(&mut self) -> bool {
+        let Position {
+            offset,
+            line,
+            column,
+        } = self.position();
+        self.advance();
+        if self.peek_char() == Some('\n') {
+            self.advance();
+            return true;
+        }
+        self.errors.push(LexError {
+            kind: LexErrorKind::BareCarriageReturn,
+            span: self.span_from(offset, line, column),
+        });
+        false
     }
 
     /// Peek the character after the current one without consuming.
@@ -1252,6 +1303,10 @@ impl<'a> Lexer<'a> {
                 } else {
                     self.skip_hex_digits(4);
                 }
+            }
+            // A CRLF is one line break, which the unescaper reports.
+            Some('\r') => {
+                self.advance_literal_cr();
             }
             Some(_) => {
                 self.advance();
@@ -1299,7 +1354,8 @@ impl<'a> Lexer<'a> {
                     let escape_start = self.pos;
                     self.advance();
                     self.skip_escape();
-                    current_literal.push_str(&self.input[escape_start..self.pos]);
+                    current_literal
+                        .push_str(&normalize_line_breaks(&self.input[escape_start..self.pos]));
                 }
                 Some((_, '$')) => {
                     self.advance(); // consume `$`
@@ -1339,6 +1395,11 @@ impl<'a> Lexer<'a> {
                 Some((_, '`')) => {
                     self.advance();
                     break;
+                }
+                Some((_, '\r')) => {
+                    if self.advance_literal_cr() {
+                        current_literal.push('\n');
+                    }
                 }
                 Some((_, ch)) => {
                     self.advance();
@@ -1504,8 +1565,10 @@ impl<'a> Lexer<'a> {
 
     /// Scan a single-quoted literal (opening `'` current), returning the raw
     /// text between the quotes. Shared by char `'x'` and byte `b'x'` literals.
-    /// `open` is where the literal opens — the `b` of a byte literal, the
-    /// quote otherwise — and anchors every error span this recovers with.
+    /// How many characters the text denotes is the unescaper's to say, since
+    /// an escape may denote one character in several. `open` is where the
+    /// literal opens — the `b` of a byte literal, the quote otherwise — and
+    /// anchors every error span this recovers with.
     fn scan_char_raw(&mut self, open: Position) -> String {
         let Position {
             offset: start,
@@ -1516,65 +1579,46 @@ impl<'a> Lexer<'a> {
         self.advance(); // consume opening '
         let inner_start = self.pos;
 
-        match self.peek() {
-            None => {
-                // `'` at EOF: empty content, no closing quote.
-                self.errors.push(LexError {
-                    kind: LexErrorKind::UnterminatedChar,
-                    span: self.span_from(start, start_line, start_column),
-                });
-                return String::new();
-            }
-            Some((_, '\'')) => {
-                // `''` — empty char. Consume the closing quote so the lexer
-                // can continue past it cleanly.
-                self.advance();
-                self.errors.push(LexError {
-                    kind: LexErrorKind::EmptyCharLiteral,
-                    span: self.span_from(start, start_line, start_column),
-                });
-                return String::new();
-            }
-            Some((_, '\\')) => {
-                self.advance();
-                self.skip_escape();
-            }
-            Some(_) => {
-                self.advance();
-            }
-        }
-
         if self.peek_char() == Some('\'') {
-            let raw = self.input[inner_start..self.pos].to_string();
-            self.advance(); // consume closing '
-            return raw;
+            // `''` — empty char. Consume the closing quote so the lexer can
+            // continue past it cleanly.
+            self.advance();
+            self.errors.push(LexError {
+                kind: LexErrorKind::EmptyCharLiteral,
+                span: self.span_from(start, start_line, start_column),
+            });
+            return String::new();
         }
 
-        // Scan forward to the next `'`, newline, or EOF so the literal
-        // recovers as one CharLit + one diagnostic.
-        while let Some((_, ch)) = self.peek() {
-            if ch == '\'' || ch == '\n' {
-                break;
-            }
-            if ch == '\\' {
-                self.advance();
-                self.skip_escape();
-            } else {
-                self.advance();
+        // Up to the closing `'`. A line break ends an unterminated literal
+        // unless it is the literal's one character.
+        loop {
+            match self.peek() {
+                Some((_, '\'')) => {
+                    let raw =
+                        normalize_line_breaks(&self.input[inner_start..self.pos]).into_owned();
+                    self.advance(); // consume closing '
+                    return raw;
+                }
+                Some((_, '\n' | '\r')) if self.pos > inner_start => break,
+                Some((_, '\\')) => {
+                    self.advance();
+                    self.skip_escape();
+                }
+                Some((_, '\r')) => {
+                    self.advance_literal_cr();
+                }
+                Some(_) => {
+                    self.advance();
+                }
+                None => break,
             }
         }
-        let raw = self.input[inner_start..self.pos].to_string();
-        let kind = if self.peek_char() == Some('\'') {
-            self.advance(); // consume closing '
-            LexErrorKind::CharLiteralTooLong
-        } else {
-            LexErrorKind::UnterminatedChar
-        };
         self.errors.push(LexError {
-            kind,
+            kind: LexErrorKind::UnterminatedChar,
             span: self.span_from(start, start_line, start_column),
         });
-        raw
+        normalize_line_breaks(&self.input[inner_start..self.pos]).into_owned()
     }
 }
 
@@ -1599,11 +1643,11 @@ mod tests {
         assert!(is_valid_ident("_foo"));
         assert!(is_valid_ident("foo_bar"));
         assert!(is_valid_ident("foo123"));
-        assert!(is_valid_ident("_"));
         assert!(is_valid_ident("_123"));
 
         // Invalid identifiers
         assert!(!is_valid_ident("")); // empty
+        assert!(!is_valid_ident("_")); // the wildcard
         assert!(!is_valid_ident("123foo")); // starts with digit
         assert!(!is_valid_ident("foo::bar")); // contains ::
         assert!(!is_valid_ident("Foo^Bar::baz")); // contains ^ and ::
@@ -1721,6 +1765,35 @@ mod tests {
         assert!(comments[0].text.contains("multi-line"));
         assert!(comments[0].text.contains("comment"));
         assert_eq!(comments[0].kind, CommentKind::Block);
+    }
+
+    #[test]
+    fn comment_text_reads_crlf_as_lf() {
+        let r = lex("/// doc\r\n/* a\r\nb */\r\nfn");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        assert_eq!(r.comments[0].text, " doc");
+        assert_eq!(r.comments[1].text, " a\nb ");
+    }
+
+    #[test]
+    fn char_literal_reads_crlf_as_lf() {
+        let tokens = tokens("'\r\n'");
+        assert_matches!(&tokens[0].kind, TokenKind::CharLit(raw) if raw == "\n");
+    }
+
+    #[test]
+    fn bare_cr_after_a_backslash_is_a_bare_cr() {
+        for source in ["\"a\\\rb\"", "`a\\\rb`", "b\"a\\\rb\""] {
+            let r = lex(source);
+            assert_matches!(
+                r.errors.as_slice(),
+                [LexError {
+                    kind: LexErrorKind::BareCarriageReturn,
+                    ..
+                }],
+                "{source:?}"
+            );
+        }
     }
 
     #[test]
@@ -1852,6 +1925,26 @@ __DATA__
                 .any(|t| matches!(&t.kind, TokenKind::Ident(s) if s == "__DATA__"))
         );
         assert_eq!(r.data_section.as_deref(), None);
+    }
+
+    #[test]
+    fn test_data_section_after_bare_cr_is_not_a_marker() {
+        let r = lex("fn main() { }\n__DATA__\rjunk\n{}");
+        assert_eq!(r.data_section.as_deref(), None);
+    }
+
+    #[test]
+    fn test_data_section_after_crlf() {
+        let r = lex("fn main() { }\r\n__DATA__\r\na\r\nb");
+        assert!(r.errors.is_empty(), "unexpected lex errors: {:?}", r.errors);
+        assert_eq!(r.data_section.as_deref(), Some("a\nb"));
+    }
+
+    #[test]
+    fn test_line_comment_keeps_a_bare_cr() {
+        let r = lex("// a\r\n// b\r");
+        assert_eq!(r.comments[0].text, " a");
+        assert_eq!(r.comments[1].text, " b\r");
     }
 
     #[test]

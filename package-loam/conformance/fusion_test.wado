@@ -1,0 +1,53 @@
+//! A fused module computes what the same graph computes unfused, bit for bit:
+//! fusion moves no arithmetic. One program cannot hold both, since Kiln runs a
+//! graph under one set of options, so each is built as the generator would and
+//! run under `core:eval`.
+
+use { generated, program_over, ran, tensor_of } from "./oracle.wado";
+use { read } from "../src/onnx_proto.wado";
+use { LayoutRule, Schema } from "../src/schema.wado";
+
+fn rule(pattern: String, axes: List<String>) -> LayoutRule {
+    return LayoutRule { pattern, axes };
+}
+
+/// MNIST-12's layout, as `package-loam/example/mnist.wado` writes it.
+fn mnist_layout() -> List<LayoutRule> {
+    return [
+        rule("Input3", ["Batch", "Gray", "Row", "Col"]),
+        rule("Parameter5", ["Feat1", "Gray", "K1Row", "K1Col"]),
+        rule("Parameter6", ["Feat1", "Row", "Col"]),
+        rule("Convolution28_Output_0", ["Batch", "Feat1", "Row", "Col"]),
+        rule("Pooling66_Output_0", ["Batch", "Feat1", "Row2", "Col2"]),
+        rule("Parameter87", ["Feat2", "Feat1", "K2Row", "K2Col"]),
+        rule("Parameter88", ["Feat2", "Row2", "Col2"]),
+        rule("Convolution110_Output_0", ["Batch", "Feat2", "Row2", "Col2"]),
+        rule("Pooling160_Output_0", ["Batch", "Feat2", "Row3", "Col3"]),
+        rule("Parameter193", ["Feat2", "Row3", "Col3", "Digit"]),
+        rule("Parameter194", ["Batch", "Digit"]),
+    ];
+}
+
+/// The bits of every logit MNIST-12 computes from the shipped digit, built
+/// with `fuse` as given.
+fn mnist_logits(fuse: bool) -> String {
+    let graph = read(#include_bytes("../tests/models/mnist-12/model.onnx")).unwrap();
+    let source = generated(&graph, &Schema { layout: mnist_layout() }, fuse).unwrap();
+    let [x, extents] = tensor_of(#include_bytes("../tests/models/mnist-12/test_data_set_0/input_0.pb"));
+    let bits: List<String> = x.into_iter().map(|v| `f32::from_bits(${v.to_bits()})`).collect();
+    return ran(`${program_over(&source)}
+export fn run() with Stdout {
+    let mut cpu = Cpu {};
+    let weights = Prepared::embedded(&mut cpu);
+    let got = forward(&mut cpu, &Tensor { data: [${bits.join(", ")}], extents: ${extents} }, &weights);
+    let data: List<String> = got.data.into_iter().map(|v| \`\${v.to_bits()}\`).collect();
+    println(data.join(","));
+}
+`);
+}
+
+test "MNIST-12 fused computes what it computes unfused, bit for bit" {
+    let fused = mnist_logits(true);
+    assert fused.split(",").count() == 10, fused;
+    assert fused == mnist_logits(false);
+}

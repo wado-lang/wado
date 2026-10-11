@@ -135,7 +135,7 @@ paramList
 
 param
     : selfParam
-    | attribute* 'mut'? bindingName ':' typeRef ('=' expression)?
+    | attribute* 'mut'? ('_' | bindingName) ':' typeRef ('=' expression)?
     ;
 
 selfParam
@@ -776,7 +776,7 @@ BACKTICK
     ;
 
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n])+ '\''
     ;
 
 fragment HEX_ESCAPE
@@ -788,6 +788,7 @@ fragment UNICODE_ESCAPE
     | '\\' 'u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
     ;
 
+// `_` alone lexes as the wildcard token '_', defined ahead of this rule.
 IDENTIFIER
     : [a-zA-Z_] [a-zA-Z0-9_]*
     ;

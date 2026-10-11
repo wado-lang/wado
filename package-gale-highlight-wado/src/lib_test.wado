@@ -186,6 +186,10 @@ test "highlight turbofish wildcard type" {
     assert_highlights("fn f() { let x = pick::<_, bool>(1, true); }\n");
 }
 
+test "highlight a surrogate pair char literal" {
+    assert_highlights("fn f() -> char { return '\\uD83D\\uDE00'; }\n");
+}
+
 test "highlight array type in variant payload" {
     assert_highlights("variant V { Rect([f64, f64]), Pt }\ntype T = Foo<[i32, i32], bool>;\n");
 }

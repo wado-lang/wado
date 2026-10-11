@@ -9,7 +9,7 @@ use fs from "core:fs";
 use { FsError, FsErrorKind, Preopens } from "core:fs";
 use { DescriptorFlags, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
 use { Model, Options, check, generate_model, generate_tokenizer, read_header, spelling_of } from "./compile.wado";
-use { render_dump } from "./dump.wado";
+use { render_dump, render_dump_json } from "./dump.wado";
 
 // `--type` and `--options` are the `with` clause's words, so a use site reads
 // as the command line that reproduces it.
@@ -30,6 +30,8 @@ impl Deserialize for GenArgs;
 struct DumpArgs {
     type: Option<String> = null,
     options: Option<String> = null,
+    /// `text` for a reader, or `json` for a test.
+    format: String = "text",
     #[wire(positional)]
     files: List<String> = [],
 }
@@ -43,7 +45,7 @@ variant Command {
 impl Deserialize for Command;
 
 global USAGE: String = "Usage: loam gen --type <type> [--options <options.json>] [--checkpoint <file.safetensors>] [--runtime <spec>] [--output <file>] <file>
-       loam dump --type <type> [--options <options.json>] <file>
+       loam dump --type <type> [--options <options.json>] [--format <text|json>] <file>
        <type> is onnx, onnxtext or hf-tokenizer, as a use site's `type` says (dump reads a graph)";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
@@ -101,7 +103,11 @@ fn cmd_gen(g: GenArgs) -> Result<String, String> with Preopens {
 fn cmd_dump(d: DumpArgs) -> Result<String, String> with Preopens {
     let path = one_file("loam dump", &d.files)?;
     let model = checked_model("loam dump", &path, &d.type, &d.options)?;
-    return Result::Ok(render_dump(&model.graph, &model.checked));
+    return match d.format.as_str_slice() {
+        "text" => Result::Ok(render_dump(&model.graph, &model.checked, model.fuse)),
+        "json" => Result::Ok(`${render_dump_json(&model.graph, &model.checked, model.fuse)}\n`),
+        _ => Result::Err(`loam dump: --format is text or json\n${USAGE}`),
+    };
 }
 
 /// The one file a subcommand reads.

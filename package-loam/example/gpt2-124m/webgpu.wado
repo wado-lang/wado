@@ -1,0 +1,107 @@
+//! GPT-2 (124M) on a WebGPU device. It continues each prompt `generate.json`
+//! records with eight greedy tokens, on the device and then on `Cpu`, and
+//! says whether the device picks the tokens onnxruntime picks. It prints each
+//! backend's time per token, and the dispatches and read backs a token takes
+//! on the device. `README.md` says how to run it:
+//!
+//!     cd package-loam/example/gpt2-124m
+//!     wado run-webgpu webgpu.wado
+
+use { eprintln, println, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { from_string } from "core:json";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Backend, Cpu, WebGpuBackend } from "lib:loam";
+use { Model, Tokenizer } from "./model.wado";
+
+/// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
+/// writes them.
+struct Generated {
+    prompt: String,
+    ids: List<i32>,
+    generated: List<i32>,
+    ms_per_token: f64,
+}
+
+struct Oracle {
+    generate: List<Generated>,
+}
+
+/// `steps` greedy tokens after `ids`, and the milliseconds each took.
+fn continued<Bk: Backend>(
+    model: &mut Model<Bk>,
+    ids: &List<i32>,
+    steps: i32,
+) -> [List<i32>, f64] with (MonotonicClock, _) {
+    let mut all = *ids;
+    let started = MonotonicClock::now();
+    for let _ of 0..<steps {
+        all.push(model.next_token(&all));
+    }
+    let elapsed = (MonotonicClock::now() - started) as u64;
+    return [all[ids.len()..<all.len()].to_list(), elapsed as f64 / 1_000_000.0 / steps as f64];
+}
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let checkpoint = match fs::read("gpt2.safetensors") {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let Ok(text) = fs::read_to_string("generate.json") else {
+        eprintln("generate.json is missing; run generate.mjs");
+        return;
+    };
+    let oracle = from_string::<Oracle>(&text).unwrap();
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let mut on_device = Model::load(gpu, &checkpoint).unwrap();
+    let mut on_cpu = Model::load(Cpu {}, &checkpoint).unwrap();
+    for let g of oracle.generate {
+        let steps = g.generated.len();
+        let [read, dispatched] = [
+            on_device.backend().read_backs(),
+            on_device.backend().dispatches(),
+        ];
+        let [device, device_ms] = continued(&mut on_device, &g.ids, steps);
+        let reads = (on_device.backend().read_backs() - read) / steps;
+        let dispatches = (on_device.backend().dispatches() - dispatched) / steps;
+        let [cpu, cpu_ms] = continued(&mut on_cpu, &g.ids, steps);
+        let mut all = g.ids;
+        all.extend(&device);
+        let agrees = if device == g.generated {
+            "the tokens onnxruntime picks";
+        } else {
+            "NOT the tokens onnxruntime picks";
+        };
+        println(`${Tokenizer::decode(&all):?}: ${agrees}`);
+        if cpu != device {
+            println("the CPU picks other tokens");
+        }
+        println(
+            `device ${device_ms:.0} ms a token in ${dispatches} dispatches and ${reads} read backs, cpu ${cpu_ms:.0} ms, onnxruntime ${g.ms_per_token:.0} ms`,
+        );
+    }
+}

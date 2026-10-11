@@ -12,6 +12,7 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
+use crate::lexer::WILDCARD;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
@@ -759,7 +760,7 @@ impl Resolver<'_> {
     /// `for let … of` or tuple comprehension binds — whose names enter the
     /// innermost scope, reporting a redeclaration instead where one is.
     fn declare_name(&mut self, name: &str, span: Span) {
-        if name == "_" {
+        if name == WILDCARD {
             return;
         }
         match self.bindings.last().and_then(|frame| frame.get(name)) {

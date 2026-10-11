@@ -203,6 +203,20 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// `_` is a token of its own, and a CRLF inside a literal reads as LF.
+#[test]
+fn test_format_keeps_wildcard_binders_and_crlf_literals() {
+    let source = concat!(
+        "fn f(_: i32, g: fn(i32) -> i32) -> String with _ {\r\n",
+        "    let h = |_: i32| 1;\r\n",
+        "    return \"a\r\nb\" + `c\r\n${g(h(0))}`;\r\n",
+        "}\r\n",
+    );
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(!formatted.contains('\r'), "got:\n{formatted:?}");
+}
+
 #[test]
 fn test_format_idempotent_simple() {
     let source = r"
@@ -1608,6 +1622,53 @@ fn test_format_preserves_trait_assoc_type_leading_comment() {
     );
     let formatted2 = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, formatted2, "should be idempotent");
+}
+
+#[test]
+fn test_format_keeps_members_in_source_order() {
+    // Regression: a trait's or an impl's associated type written after a
+    // method was emitted ahead of every method, leaving the method's doc
+    // comment and the blank lines around both where the type had been.
+    let source = r"trait T {
+    type A;
+
+    /// Doc of f.
+    fn f(&self) -> i32;
+    /// Doc of B.
+    type B;
+}
+
+impl T for S {
+    type A = i32;
+
+    /// Doc of f.
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    /// Doc of B.
+    type B = i32;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "members should keep their order");
+}
+
+#[test]
+fn test_format_rest_clause_follows_the_last_member() {
+    // The blank line before `..trap` is a method's, so a member after the
+    // method takes it away.
+    let source = r"impl T for S {
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    type B = i32;
+    ..trap
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "no blank line after a non-method member");
 }
 
 #[test]
