@@ -543,7 +543,7 @@ pub(super) fn parse_var_offset(engine: &Engine, binds: &Binds, op: Operand) -> O
 /// Bind-chain / arithmetic depth cap, matching [`resolve`]'s bounded walk, so a
 /// pathological copy chain (`let a1 = a0; let a2 = a1; …`) cannot recurse
 /// without bound. Exceeding it only forgoes an optimization, never miscompiles.
-const VAR_OFFSET_MAX_DEPTH: u32 = 16;
+pub(super) const VAR_OFFSET_MAX_DEPTH: u32 = 16;
 
 fn parse_var_offset_depth(
     engine: &Engine,

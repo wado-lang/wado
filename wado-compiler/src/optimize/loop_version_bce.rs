@@ -31,10 +31,11 @@ use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::bounds;
 use super::condition_implication::{
-    Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
-    check_conjuncts, eliminate_condition, induction_entry, induction_step, modifies_any_root,
-    negated_operand, panic_guard_check, parse_break_guard_head, parse_cmp, parse_const_i64,
-    parse_var_offset, peel_capture_block, resolve, resolve_panic_ids, stmt_modifies,
+    Binds, BoundKey, Conjunct, InductionStep, VAR_OFFSET_MAX_DEPTH, build_copy_bindings,
+    capture_block_binding, check_conjuncts, eliminate_condition, induction_entry, induction_step,
+    modifies_any_root, negated_operand, panic_guard_check, parse_break_guard_head, parse_cmp,
+    parse_const_i64, parse_var_offset, peel_capture_block, resolve, resolve_panic_ids,
+    stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{DescriptorCache, callee_descriptor};
@@ -74,8 +75,9 @@ struct Plan {
     floor: Option<RuntimeFloor>,
 }
 
-/// What a check adds to the guard variable before comparing: `local + konst`,
-/// both non-negative, so `var + shift` never lies below `var`.
+/// What a check adds to the guard variable before comparing: `local + konst`.
+/// `konst` is non-negative and the residual tests `local` so, which keeps
+/// `var + shift` from lying below `var`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Shift {
     local: Option<u32>,
@@ -378,7 +380,7 @@ fn parse_versionable_check(
 /// Read `op` (through copy temps) as `var + shift`. A bare `var` is
 /// [`Shift::NONE`]; `+ const` and one `+ local` other than `var` accumulate.
 fn parse_shift(engine: &Engine, binds: &Binds, op: Operand, var: u32, depth: u32) -> Option<Shift> {
-    if depth >= MAX_SHIFT_DEPTH {
+    if depth >= VAR_OFFSET_MAX_DEPTH {
         return None;
     }
     if let Some((v, c)) = parse_var_offset(engine, binds, op) {
@@ -407,9 +409,6 @@ fn local_shift(engine: &Engine, binds: &Binds, l: u32, var: u32, depth: u32) -> 
     }
     parse_shift(engine, binds, *binds.get(&l)?, var, depth)
 }
-
-/// The copy-temp and arithmetic depth [`parse_shift`] follows before giving up.
-const MAX_SHIFT_DEPTH: u32 = 16;
 
 /// The most residual terms one loop is versioned on, each evaluated at every
 /// entry to the loop.
@@ -606,6 +605,16 @@ fn bound_read(engine: &mut Engine, plan: &Plan, bound: BoundKey, span: Span) -> 
     }
 }
 
+fn alloc_pred(
+    engine: &mut Engine,
+    left: Operand,
+    op: NirBinaryOp,
+    right: Operand,
+    span: Span,
+) -> Operand {
+    alloc_binary(engine, left, op, right, TypeTable::BOOL, span)
+}
+
 fn alloc_binary(
     engine: &mut Engine,
     left: Operand,
@@ -641,14 +650,7 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     let mut residual = limit_terms(engine, plan, plan.limits[0], span);
     for &limit in &plan.limits[1..] {
         let terms = limit_terms(engine, plan, limit, span);
-        residual = alloc_binary(
-            engine,
-            residual,
-            NirBinaryOp::And,
-            terms,
-            TypeTable::BOOL,
-            span,
-        );
+        residual = alloc_pred(engine, residual, NirBinaryOp::And, terms, span);
     }
     if let Some(floor) = &plan.floor {
         residual = and_floor_terms(engine, plan, floor, residual, span);
@@ -694,14 +696,7 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
     if limit.shift != Shift::NONE && !bound_clear {
         let b = bound(engine);
         let konst = int(engine, limit.shift.konst);
-        clear.push(alloc_binary(
-            engine,
-            b,
-            NirBinaryOp::GtEq,
-            konst,
-            TypeTable::BOOL,
-            span,
-        ));
+        clear.push(alloc_pred(engine, b, NirBinaryOp::GtEq, konst, span));
     }
     if limit.shift.konst != 0 {
         let konst = int(engine, limit.shift.konst);
@@ -710,14 +705,7 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
     if let Some(s) = limit.shift.local {
         let s_read = local_read(engine, s, span);
         let zero = int(engine, 0);
-        clear.push(alloc_binary(
-            engine,
-            s_read,
-            NirBinaryOp::GtEq,
-            zero,
-            TypeTable::BOOL,
-            span,
-        ));
+        clear.push(alloc_pred(engine, s_read, NirBinaryOp::GtEq, zero, span));
         let s_read = local_read(engine, s, span);
         room = alloc_binary(engine, room, NirBinaryOp::Sub, s_read, ty, span);
     }
@@ -727,9 +715,9 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
         NirBinaryOp::LtEq
     };
     let h_read = bound_read(engine, plan, plan.bound, span);
-    let fits = alloc_binary(engine, h_read, op, room, TypeTable::BOOL, span);
+    let fits = alloc_pred(engine, h_read, op, room, span);
     clear.into_iter().rev().fold(fits, |rest, term| {
-        alloc_binary(engine, term, NirBinaryOp::And, rest, TypeTable::BOOL, span)
+        alloc_pred(engine, term, NirBinaryOp::And, rest, span)
     })
 }
 
@@ -743,7 +731,7 @@ fn and_floor_terms(
     span: Span,
 ) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
-    let pred = |e: &mut Engine, l, op, r| alloc_binary(e, l, op, r, TypeTable::BOOL, span);
+    let pred = |e: &mut Engine, l, op, r| alloc_pred(e, l, op, r, span);
 
     let var_read = local_read(engine, plan.var, span);
     let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);
@@ -848,9 +836,8 @@ fn constify_check_temp(
 /// promoted-operand (`ValueKind::Binary`) form. The eliminated check's
 /// condition is exactly such a comparison, so this confirms the `let` being
 /// constified is that comparison and not an unrelated binding reusing the
-/// temp's local slot.
-/// `limit` is `None` where the temp holds the failing predicate, which the
-/// check's `<` never is.
+/// temp's local slot. `limit` is `None` where the temp holds the failing
+/// predicate, which the check's `<` never is.
 fn is_check_comparison(
     engine: &Engine,
     binds: &Binds,
