@@ -3995,12 +3995,23 @@ impl TypeTable {
         }
         // Several traits may declare one name over a single definition —
         // `IterFilter` answers `Item` as both `Iterator` and `IntoIterator` —
-        // so the definitions decide agreement.
+        // so the definitions decide agreement. One answer means one type only
+        // where both are written over the same parameters.
         let &(trait_decl, last) = candidates.last()?;
         candidates
             .iter()
-            .all(|(_, entry)| entry.answer == last.answer)
+            .all(|(_, entry)| entry.answer == last.answer && self.same_frame(entry, last))
             .then(|| (trait_decl, last.clone()))
+    }
+
+    /// Whether two entries are written over the same parameters: the
+    /// declaration's own, or impl targets that place them alike.
+    fn same_frame(&self, a: &AssocAnswer, b: &AssocAnswer) -> bool {
+        match (a.impl_def, b.impl_def) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a == b || self.impl_target_args(a) == self.impl_target_args(b),
+            (Some(_), None) | (None, Some(_)) => false,
+        }
     }
 
     /// The parameters a generic `entry` is written over, at an instance whose
