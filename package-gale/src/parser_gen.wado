@@ -961,7 +961,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
         let suffix_call = `${fn_name}_lr_${lr.alt_index}(tokens, pos${scan_trailing_args(ctx)})`;
-        open_chain_arm(w, i, `_atn_alt == ${i}`);
+        open_chain_arm(w, i > 0, `_atn_alt == ${i}`);
         if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
             w.line(`let _lr_end = ${suffix_call};`);
             w.line("if _lr_end < 0 { return -1; }");
@@ -1277,12 +1277,7 @@ global NO_PREBOUND: Option<String> = null;
 /// Open the arm for the leading tokens `kinds`, chaining onto any arm already
 /// open.
 fn begin_lr_arm(w: &mut CodeWriter, site: &LrOverlapSite, kinds: &List<i32>, chained: bool, ctx: &mut EmitContext) {
-    let cond = ctx.kind_check_str(kinds, &site.kind_expr);
-    if chained {
-        w.else_begin(`else if ${cond}`);
-    } else {
-        w.begin(`if ${cond}`);
-    }
+    open_chain_arm(w, chained, &ctx.kind_check_str(kinds, &site.kind_expr));
 }
 
 /// The suffix first sets of the valid LR alternatives, indexed the way
@@ -1308,16 +1303,10 @@ fn emit_lr_group_chain(
 ) {
     let suffix_first_sets = lr_suffix_first_sets(lr_alts, lr_dispatch);
     let mut nc: List<[String, i32]> = [];
-    let mut is_first = true;
-    for let group of &lr_dispatch.groups {
+    for let mut i = 0; i < lr_dispatch.groups.len(); i += 1 {
+        let group = &lr_dispatch.groups[i];
         let union_first = slot_first_union(group, &suffix_first_sets);
-        let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &site.kind_expr);
-        if is_first {
-            w.begin(`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
+        open_chain_arm(w, i > 0, &ctx.admits_check_str(&admits_or_everything(&union_first), &site.kind_expr));
         if group.len() == 1 {
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
             emit_lr_overlap_branch(w, site, lr, rule, ctx, &mut nc, mid_operand_gated, &NO_PREBOUND, &union_first);
@@ -1337,13 +1326,7 @@ fn emit_lr_group_chain(
             );
         }
     }
-    if is_first {
-        w.line("break;");
-    } else {
-        w.else_begin("else");
-        w.line("break;");
-        w.end();
-    }
+    close_chain_with_break(w, lr_dispatch.groups.len());
 }
 
 /// One overlap group (suffixes sharing a first token): a unique first token
@@ -1493,13 +1476,8 @@ fn emit_lr_overlap(
                 }
             } else {
                 let plan = &plans.iter_ref().find(|p: &[i32, LrSubPlan]| p.0 == k).unwrap().1;
-                let cond = lr_sub_plan_condition(plan);
-                if sub_first {
-                    w.begin(`if ${cond}`);
-                    sub_first = false;
-                } else {
-                    w.else_begin(`else if ${cond}`);
-                }
+                open_chain_arm(w, !sub_first, &lr_sub_plan_condition(plan));
+                sub_first = false;
                 emit_lr_overlap_branch(
                     w,
                     site,
@@ -1597,12 +1575,7 @@ fn emit_tested_arms<S: AsStrSlice>(
 ) {
     let [merged, merged_bodies] = merge_identical_branches(branches, bodies);
     for let mut i = 0; i < merged.len(); i += 1 {
-        let cond = render_branch_cond(&merged[i], &kind_expr, ctx);
-        if i == 0 {
-            w.begin(`if ${cond}`);
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
+        open_chain_arm(w, i > 0, &render_branch_cond(&merged[i], &kind_expr, ctx));
         w.append(&merged_bodies[i]);
     }
 }
@@ -3001,7 +2974,7 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
         // alt (cascade order), matching ANTLR4.
         for let mut i = 0; i < rule.alternatives.len(); i += 1 {
             let single: List<i32> = [ctx.analysis.terminal_kind(&rule.alternatives[i].elements[0])];
-            open_chain_arm(w, i, &ctx.kind_check_str(&single, &DISPATCH_KIND_LOCAL));
+            open_chain_arm(w, i > 0, &ctx.kind_check_str(&single, &DISPATCH_KIND_LOCAL));
             w.line(`p.b.set_alt(${i});`);
             w.line(`${PARSER_HANDLE}.take();`);
             w.line("return;");
@@ -3018,12 +2991,12 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     w.blank();
 }
 
-/// Open arm `i` of an `if` / `else if` chain testing `cond`.
-fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, i: i32, cond: S) {
-    if i == 0 {
-        w.begin(`if ${cond}`);
-    } else {
+/// Open an `if` arm, or chain it onto the arm already open.
+fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S) {
+    if chained {
         w.else_begin(`else if ${cond}`);
+    } else {
+        w.begin(`if ${cond}`);
     }
 }
 
@@ -3951,18 +3924,21 @@ fn gen_alt_commit<S: AsStrSlice>(
     nc: &mut List<[String, i32]>,
 ) {
     assert order.len() > 1, "gen_alt_commit: a dispatch decides between two alternatives or more";
-    let last = order.len() - 1;
     for let mut k = 0; k < order.len(); k += 1 {
-        if k == 0 {
-            w.begin(`if ${winner} == ${order[k]}`);
-        } else if k == last {
-            w.else_begin("else");
-        } else {
-            w.else_begin(`else if ${winner} == ${order[k]}`);
-        }
+        open_winner_arm(w, &winner, order, k);
         gen_ops(w, &alt_by_index(alts, order[k]).ops, ctx, nc);
     }
     w.end();
+}
+
+/// Open arm `k` of the chain committing to the alternative `winner` names, the
+/// last one unconditional: the decision is already taken.
+fn open_winner_arm<S: AsStrSlice>(w: &mut CodeWriter, winner: S, order: &List<i32>, k: i32) {
+    if k > 0 && k == order.len() - 1 {
+        w.else_begin("else");
+        return;
+    }
+    open_chain_arm(w, k > 0, `${winner} == ${order[k]}`);
 }
 
 /// Left-recursive rule under the emitter: precedence climbing via the
@@ -4111,7 +4087,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     w.line("let _lr_pos0 = p.pos;");
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr = &lr_alts[valid[i]];
-        open_chain_arm(w, i, `_atn_alt == ${i}`);
+        open_chain_arm(w, i > 0, `_atn_alt == ${i}`);
         if scan_body_can_match_empty(&lr.scan_suffix.elements, ctx) {
             gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
             w.line(
@@ -4608,21 +4584,13 @@ fn gen_op_optional_shape_lookahead(
         panic("gen_op_optional_shape_lookahead: shape lookahead is only valid on single-alt Group bodies");
     };
     let conditions = gen_shape_entry_conditions(w, s, ctx, nc);
-    let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
-        let entry = &s.shapes[ei];
-        let cond = gate_cond_with_caller_follow(&conditions[ei], follow_gate);
-        if is_first {
-            w.begin(`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-        for let idx of &entry.positions {
+        open_chain_arm(w, ei > 0, &gate_cond_with_caller_follow(&conditions[ei], follow_gate));
+        for let idx of &s.shapes[ei].positions {
             gen_op(w, unwrap_optional_op(&body_ops[*idx]), ctx, nc);
         }
     }
-    if !is_first {
+    if !s.shapes.is_empty() {
         w.end();
     }
 }
@@ -5242,21 +5210,11 @@ fn gen_op_optional_with_shape_lookahead_storable(
     // in every shape, so its gate joins each shape's own condition.
     let gate = alt_gate_and_suffix(alt, ctx);
     let outer_choice = ctx.cursor.enter_group_body(false);
-    let mut is_first = true;
     for let mut ei = 0; ei < s.shapes.len(); ei += 1 {
         let entry = &s.shapes[ei];
-        // K-prefix gate: every shape's entry condition must yield to
-        // the caller when the deterministic K-prefix matches, so wrap
-        // each entry's condition with `!K_match && cond`.
-        let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
-
-        if is_first {
-            w.begin(`if ${cond}`);
-            is_first = false;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-
+        // Every shape's entry yields to the caller when its continuation claims
+        // the lookahead.
+        open_chain_arm(w, ei > 0, `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`);
         let mut nc: List<[String, i32]> = [];
         let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
         for let mut i = 0; i < elements.len(); i += 1 {
@@ -5271,7 +5229,7 @@ fn gen_op_optional_with_shape_lookahead_storable(
         leave_group_alt_bindings(&outer, &alt.actions, ctx);
     }
     ctx.cursor.leave_group_body(outer_choice);
-    if !is_first {
+    if !s.shapes.is_empty() {
         w.end();
     }
 }
@@ -6996,12 +6954,7 @@ fn open_decision_branch<S: AsStrSlice>(
         w.else_begin("else");
         return;
     }
-    let cond = render_branch_cond(&branches[i], kind_expr, ctx);
-    if i == 0 {
-        w.begin(`if ${cond}`);
-    } else {
-        w.else_begin(`else if ${cond}`);
-    }
+    open_chain_arm(w, i > 0, &render_branch_cond(&branches[i], kind_expr, ctx));
 }
 
 fn close_decision_chain(w: &mut CodeWriter, branches: &List<DecisionBranch>) {
@@ -7042,19 +6995,9 @@ fn gen_group_scan_dispatch(
     } else {
         gen_scan_winner_tournament(w, sorted_group, scan_alts, ctx, name_counts);
     };
-    let last = sorted_group.len() - 1;
-
     for let mut k = 0; k < sorted_group.len(); k += 1 {
         let alt_index = sorted_group[k];
-        let is_last = k == last;
-
-        if k == 0 && !is_last {
-            w.begin(`if ${winner_var} == ${alt_index}`);
-        } else if is_last {
-            w.else_begin("else");
-        } else {
-            w.else_begin(`else if ${winner_var} == ${alt_index}`);
-        }
+        open_winner_arm(w, &winner_var, sorted_group, k);
         match kind {
             RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
             General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx, name_counts),
@@ -7691,12 +7634,8 @@ fn gen_predicate_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
             }
             return;
         }
-        if opened {
-            w.else_begin(`else if ${cond}`);
-        } else {
-            w.begin(`if ${cond}`);
-            opened = true;
-        }
+        open_chain_arm(w, opened, &cond);
+        opened = true;
         emit_gated_leaf(w, side, &fn_name, idx, ctx, &rule_display);
     }
     w.else_begin("else");
