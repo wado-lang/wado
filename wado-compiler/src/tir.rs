@@ -7299,7 +7299,7 @@ impl TemplateId {
     /// The template a call of `info` reaches, given that its method answers
     /// with this one: the `unchecked` twin where the call is marked.
     pub fn called_by(self, info: &LocalMethodName) -> Self {
-        if info.unchecked {
+        if info.is_unchecked() {
             self.unchecked_twin()
         } else {
             self

@@ -199,7 +199,6 @@ fn blanket_template_name(
         method.trait_name.clone(),
         method.method_name.clone(),
     )
-    .with_unchecked(method.unchecked)
     .to_mangled_name()
 }
 
@@ -215,7 +214,6 @@ fn ref_blanket_generic(
         Some(trait_name.clone()),
         method.method_name.clone(),
     )
-    .with_unchecked(method.unchecked)
 }
 
 /// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
@@ -1540,8 +1538,7 @@ impl Monomorphizer {
                                     new_info.fq_base_struct_name(),
                                     new_info.trait_name.clone(),
                                     new_info.method_name.clone(),
-                                )
-                                .with_unchecked(new_info.unchecked);
+                                );
                                 let generic_name = base_info.to_mangled_name();
                                 Some(MonomorphInfo {
                                     generic_name,

@@ -2543,7 +2543,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Unchecked => {
                 let mut call = self.reify_expr(&unary.expr, ctx, expected_type);
-                retarget_to_unchecked_twin(&mut call);
+                retarget_to_unchecked_twin(&mut call, unary.expr.span());
                 call
             }
             ast::Expr::Unary(unary) => {
@@ -10246,10 +10246,38 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
 
 /// Point the call `expr` reified to at its callee's `unchecked` twin, which
 /// the check of `unchecked`'s operand established it has.
-fn retarget_to_unchecked_twin(expr: &mut TirExpr) {
-    let TirExprKind::Call { func, .. } = &mut expr.kind else {
-        unreachable!("`unchecked` marks a call: {:?}", expr.kind);
+/// Retarget the call `unchecked` marks, spanning `call_span`, to its twin.
+/// Reify may wrap that call (a default argument naming another parameter
+/// hoists the arguments into a block around it), so the call is found by the
+/// span of the operand it was reified from.
+fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
+    struct Marked {
+        call_span: Span,
+        found: bool,
+    }
+    impl TirMutVisitor for Marked {
+        fn visit_expr(&mut self, expr: &mut TirExpr) {
+            if self.found {
+                return;
+            }
+            match &mut expr.kind {
+                TirExprKind::Call { func, .. } if expr.span == self.call_span => {
+                    retarget_call(func);
+                    self.found = true;
+                }
+                _ => self.walk_expr(expr),
+            }
+        }
+    }
+    let mut marked = Marked {
+        call_span,
+        found: false,
     };
+    marked.visit_expr(expr);
+    assert!(marked.found, "`unchecked` marks a call: {:?}", expr.kind);
+}
+
+fn retarget_call(func: &mut FunctionRef) {
     func.name = unchecked_twin_name(&func.name);
     if let Some(info) = &mut func.method_info {
         info.mark_unchecked();

@@ -925,10 +925,6 @@ pub struct LocalMethodName {
     /// When set, synthesis generates a CM binding function and rewrites
     /// the call site to use it instead of the original resource method.
     pub cm_name: Option<String>,
-    /// The method's `unchecked` twin rather than the method, which a call
-    /// marked `unchecked` reaches. [`Self::method_name`] then spells the twin's
-    /// function, and [`Self::declared_method_name`] the method it is of.
-    pub unchecked: bool,
 }
 
 /// The reference kind of a `&` / `&mut` method receiver.
@@ -1282,35 +1278,30 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: false,
             cm_name: None,
-            unchecked: false,
         }
     }
 
-    /// This name with `unchecked` carried over from the name its
-    /// [`Self::method_name`] was copied from.
+    /// Whether this names the method's `unchecked` twin, which a call marked
+    /// `unchecked` reaches. The suffix is the only record: no Wado identifier
+    /// can spell its `$`, so a copied [`Self::method_name`] carries it along.
     #[must_use]
-    pub fn with_unchecked(self, unchecked: bool) -> Self {
-        Self { unchecked, ..self }
+    pub fn is_unchecked(&self) -> bool {
+        self.method_name.ends_with(UNCHECKED_TWIN_SUFFIX)
     }
 
     /// Point this name at the method's `unchecked` twin.
     pub fn mark_unchecked(&mut self) {
-        assert!(!self.unchecked, "{self:?} already names a twin");
+        assert!(!self.is_unchecked(), "{self:?} already names a twin");
         self.method_name = unchecked_twin_name(&self.method_name);
-        self.unchecked = true;
     }
 
     /// The method as its declaration names it, where this name may name its
     /// `unchecked` twin.
     #[must_use]
     pub fn declared_method_name(&self) -> &str {
-        if self.unchecked {
-            self.method_name
-                .strip_suffix(UNCHECKED_TWIN_SUFFIX)
-                .expect("a twin's name spells the method it is of")
-        } else {
-            &self.method_name
-        }
+        self.method_name
+            .strip_suffix(UNCHECKED_TWIN_SUFFIX)
+            .unwrap_or(&self.method_name)
     }
 
     /// The trait's declaration name without type args (`"Display"`,
@@ -1352,7 +1343,6 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: false,
             cm_name: None,
-            unchecked: false,
         }
     }
 
@@ -1379,7 +1369,6 @@ impl LocalMethodName {
             is_type_param_receiver: self.is_type_param_receiver,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
-            unchecked: self.unchecked,
         }
     }
 
@@ -1431,7 +1420,6 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
-            unchecked: self.unchecked,
         }
     }
 
