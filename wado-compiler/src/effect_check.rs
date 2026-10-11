@@ -1638,20 +1638,20 @@ fn callee_name(callee: &Expr) -> &str {
 /// What a diagnostic calls a callee no name reaches.
 pub const INDIRECT_CALLEE: &str = "(indirect call)";
 
-/// Type of an indirect call's callee, preferring the enclosing function's
+/// Types of an indirect call's callee, preferring the enclosing function's
 /// parameter types: a function-typed parameter callee leaves no `references`
 /// edge or recorded expression type at the call, so nothing else names it.
-fn indirect_callee_type(
+fn indirect_callee_types(
     sem: &Semantics,
     param_types: &IndexMap<String, TypeId>,
     callee: &Expr,
-) -> Option<TypeId> {
+) -> Vec<TypeId> {
     if let Expr::Ident(ident) = callee
         && let Some(type_id) = param_types.get(&ident.name)
     {
-        return Some(*type_id);
+        return vec![*type_id];
     }
-    expr_type_of(callee, sem)
+    expr_types_of(callee, sem)
 }
 
 /// The static dispatches recorded at a call, with whether each spells its
@@ -1724,13 +1724,18 @@ fn call_site_effects(
     if dispatches.is_empty() {
         // The callee is a function-typed value (a closure or `fn(...)`
         // parameter). Its type carries the effects it performs when invoked.
-        let Some(callee_type) = indirect_callee_type(sem, param_types, callee) else {
+        let rows_of: Vec<&[EffectRef]> = indirect_callee_types(sem, param_types, callee)
+            .into_iter()
+            .filter_map(|callee_type| match sem.types.get(callee_type) {
+                ResolvedType::Function { effects, .. } => Some(effects.as_slice()),
+                _ => None,
+            })
+            .collect();
+        if rows_of.is_empty() {
             return Vec::new();
-        };
-        let ResolvedType::Function { effects, .. } = sem.types.get(callee_type) else {
-            return Vec::new();
-        };
-        return vec![bare(INDIRECT_CALLEE.to_string(), rows.row(effects))];
+        }
+        let performed: Vec<EffectRef> = rows.row(&rows_of.concat());
+        return vec![bare(INDIRECT_CALLEE.to_string(), performed)];
     }
     // Only a free function outside the bindings dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
@@ -2219,7 +2224,7 @@ fn resolve_effect_params(
             effects: formal, ..
         } = type_table.get(*param_type)
         else {
-            if let Some(arg_type) = sem.expression_type(arg.id()) {
+            for arg_type in sem.expression_types(arg.id()) {
                 pair_effects(type_table, *param_type, arg_type, rows, &mut concrete);
             }
             continue;
@@ -2230,12 +2235,14 @@ fn resolve_effect_params(
         {
             continue;
         }
-        let Some(ResolvedType::Function {
-            effects: actual, ..
-        }) = sem
-            .expression_type(arg.id())
-            .map(|arg_type| type_table.get(arg_type))
-        else {
+        let actual_rows: Vec<&[EffectRef]> = sem
+            .expression_types(arg.id())
+            .filter_map(|arg_type| match type_table.get(arg_type) {
+                ResolvedType::Function { effects, .. } => Some(effects.as_slice()),
+                _ => None,
+            })
+            .collect();
+        if actual_rows.is_empty() {
             unread.extend(
                 formal
                     .iter()
@@ -2243,11 +2250,11 @@ fn resolve_effect_params(
                     .map(|e| e.name().to_string()),
             );
             continue;
-        };
+        }
         // A function value performs what its row holds, less what the
         // parameter's type names outright, which the callee answers itself.
         let actual: Vec<EffectRef> = rows
-            .row(actual)
+            .row(&actual_rows.concat())
             .into_iter()
             .filter(|e| e.is_param() || !formal.contains(e))
             .collect();
@@ -2661,14 +2668,15 @@ impl SemEffectWalker<'_> {
         if let Some(performed) = self.closures.get(&closure.id) {
             return performed.clone();
         }
-        let closure_type = self.sem.expression_type(closure.id);
+        // One type per walk that reached the literal, each with its own row.
+        let closure_types: Vec<TypeId> = self.sem.expression_types(closure.id).collect();
         let scan = ResourceScan {
             tt: &self.sem.types,
             resolutions: self.index.resolutions,
             members: self.index.members,
         };
         let mut signature = IndexSet::default();
-        if let Some(closure_type) = closure_type {
+        for &closure_type in &closure_types {
             scan.collect(closure_type, &mut signature, &mut TypeSet::default());
         }
         let current = held_in_body(
@@ -2701,11 +2709,11 @@ impl SemEffectWalker<'_> {
         self.closures = std::mem::take(&mut body.closures);
         self.rows = std::mem::take(&mut body.rows);
         self.closures.insert(closure.id, performed.clone());
-        if let Some(closure_type) = closure_type
-            && let ResolvedType::Function { effects, .. } = self.sem.types.get(closure_type)
-        {
-            for var in effects.iter().filter(|e| e.is_var()) {
-                self.rows.widen(var.name(), &performed);
+        for closure_type in closure_types {
+            if let ResolvedType::Function { effects, .. } = self.sem.types.get(closure_type) {
+                for var in effects.iter().filter(|e| e.is_var()) {
+                    self.rows.widen(var.name(), &performed);
+                }
             }
         }
         performed
@@ -2740,11 +2748,13 @@ impl SemEffectWalker<'_> {
         call: AstId,
         params: &IndexMap<String, IndexSet<EffectRef>>,
     ) {
-        let (Some(declared), Some(actual)) = (returns, self.sem.expression_type(call)) else {
+        let Some(declared) = returns else {
             return;
         };
         let mut met: IndexMap<String, IndexSet<String>> = IndexMap::default();
-        pair_rows(&self.sem.types, declared, actual, &mut met);
+        for actual in self.sem.expression_types(call) {
+            pair_rows(&self.sem.types, declared, actual, &mut met);
+        }
         for (param, vars) in met {
             let Some(stands) = params.get(&param) else {
                 continue;
@@ -2874,16 +2884,19 @@ impl Rows {
     }
 }
 
-/// Type of `expr`, preferring the type of the binding an identifier names —
-/// where a parameter or a function-typed local has one and the use site does not.
-fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
+/// Types of `expr`, one per walk that reached it, preferring the type of the
+/// binding an identifier names — where a parameter or a function-typed local
+/// has one and the use site does not.
+fn expr_types_of(expr: &Expr, sem: &Semantics) -> Vec<TypeId> {
     if let Expr::Ident(ident) = expr
         && let Some(def) = sem.referenced_symbol(ident.id)
-        && let Some(ty) = sem.local_type(def)
     {
-        return Some(ty);
+        let bound: Vec<TypeId> = sem.local_types(def).collect();
+        if !bound.is_empty() {
+            return bound;
+        }
     }
-    sem.expression_type(expr.id())
+    sem.expression_types(expr.id()).collect()
 }
 
 // ---------------------------------------------------------------------------

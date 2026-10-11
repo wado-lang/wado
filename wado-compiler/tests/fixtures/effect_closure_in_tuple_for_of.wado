@@ -1,0 +1,32 @@
+// A tuple `for-of` walks its body once per element, so a closure literal in
+// it has a type, and a row to solve, per element: each is what its body
+// performs there.
+use { println, Stdout } from "core:cli";
+
+fn count_each() -> i32 {
+    let mut total = 0;
+    for let limit of [1, 2] {
+        let xs: List<i32> = [1, 2, 3];
+        total += xs.into_iter().filter(|x| x > limit).count();
+    }
+    return total;
+}
+
+fn shout_each() with Stdout {
+    for let tag of ["a", "b"] {
+        let xs: List<i32> = [1];
+        let ys: List<i32> = xs.into_iter().map(|x| {
+            println(tag);
+            return x;
+        }).collect();
+        assert ys.len() == 1;
+    }
+}
+
+export fn run() with Stdout {
+    println(`${count_each()}`);
+    shout_each();
+}
+
+__DATA__
+{"stdout": "3\na\nb\n"}

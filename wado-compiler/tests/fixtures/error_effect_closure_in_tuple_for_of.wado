@@ -1,0 +1,41 @@
+// A closure in a tuple `for-of` performs, at each element, what its body does
+// there: a loud element's closure demands its effect though a quiet one's
+// does not.
+use { println, Stdout } from "core:cli";
+
+trait Tick with _ {
+    fn tick(&self) -> i32;
+}
+
+struct Quiet {}
+
+struct Loud {}
+
+impl Tick for Quiet {
+    fn tick(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Tick for Loud {
+    fn tick(&self) -> i32 with Stdout {
+        println("loud");
+        return 2;
+    }
+}
+
+fn each() -> i32 {
+    let mut total = 0;
+    for let v of [Quiet {}, Loud {}] {
+        let f = || v.tick();
+        total += f();
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    println(`${each()}`);
+}
+
+__DATA__
+{"compile_error": ":31:18: analysis error: missing effect 'Stdout' required by '(indirect call)'", "compile_error_count": 1}

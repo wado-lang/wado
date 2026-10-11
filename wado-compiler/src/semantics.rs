@@ -442,6 +442,17 @@ impl Semantics {
         self.fact_at(ModuleSemantics::EXPRESSION_TYPES, id).copied()
     }
 
+    /// [`Self::expression_type`] from every walk that reached the expression:
+    /// a tuple `for-of`'s body is walked once per element.
+    pub fn expression_types(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
+        self.facts_at(ModuleSemantics::EXPRESSION_TYPES, id).copied()
+    }
+
+    /// [`Self::local_type`] from every walk that reached the binding.
+    pub fn local_types(&self, id: AstId) -> impl Iterator<Item = TypeId> + '_ {
+        self.facts_at(ModuleSemantics::LOCAL_TYPES, id).copied()
+    }
+
     /// Iterate every expression the body walk typed, as `(AstId, TypeId)`.
     /// Pair with [`Self::module_of_id`] to filter by module.
     pub fn iter_expression_types(&self) -> impl Iterator<Item = (AstId, TypeId)> + '_ {
