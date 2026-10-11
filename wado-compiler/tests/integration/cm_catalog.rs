@@ -688,6 +688,22 @@ fn run_round_trips(opt_level: OptLevel) {
             }
         }
 
+        // Seventeen flat params: the host writes them to memory through the
+        // component's `realloc` and passes one pointer, which the export lifts.
+        match lookup_func(&mut store, &instance, &iface, "past-flat-params") {
+            None => failures.push(format!("[{opt}] export `past-flat-params` not found")),
+            Some(func) => {
+                let mut args: Vec<Val> = (1..=16).map(Val::U8).collect();
+                args.push(Val::String("wide".into()));
+                let mut results = vec![Val::Bool(false)];
+                match func.call_async(&mut store, &args, &mut results).await {
+                    Ok(()) if results[0] == Val::String("wide:49:16110".into()) => {}
+                    Ok(()) => failures.push(format!("[{opt}] `past-flat-params`: got {:?}", results[0])),
+                    Err(e) => failures.push(format!("[{opt}] `past-flat-params`: call trapped: {e:#}")),
+                }
+            }
+        }
+
         macro_rules! check {
             ($call:expr) => {
                 if let Err(e) = $call.await {

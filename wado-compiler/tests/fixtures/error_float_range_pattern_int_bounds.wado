@@ -1,6 +1,6 @@
 // An integer literal on a float is a float value: alone it is a float literal
 // pattern, and as a range bound it takes the range check a float literal does.
-// A suffix or a limit keeps its own type.
+// A limit keeps its own type.
 
 fn single(x: f64) -> i32 {
     return match x {
@@ -12,13 +12,6 @@ fn single(x: f64) -> i32 {
 fn out_of_range(x: f32) -> i32 {
     return match x {
         0..<340282366920938463463374607431768211455 => 1,
-        _ => 0,
-    };
-}
-
-fn suffixed(x: f64) -> i32 {
-    return match x {
-        0_i32..<1.5 => 1,
         _ => 0,
     };
 }
@@ -38,10 +31,10 @@ fn equal(x: f64) -> i32 {
 }
 
 export fn run() {
-    let _ = single(0.0) + out_of_range(0.0) + suffixed(0.0) + limit(0.0) + equal(0.0);
+    let _ = single(0.0) + out_of_range(0.0) + limit(0.0) + equal(0.0);
 }
 
 __DATA__
 {
-  "compile_error": ":7:9: analysis error: invalid pattern: `1` is a float on `f64`, and a float literal is no pattern; compare it in a guard; 14:9: invalid pattern: literal out of range for `f32`: 340282366920938463463374607431768211455; 21:9: pattern mismatch: expected 'i32', found 'f64'; 28:9: pattern mismatch: expected 'u8', found 'f64'; 35:9: invalid pattern: a float range with equal bounds names one value, as a float literal pattern would"
+  "compile_error": ":7:9: analysis error: invalid pattern: `1` is a float on `f64`, and a float literal is no pattern; compare it in a guard; 14:9: invalid pattern: literal out of range for `f32`: 340282366920938463463374607431768211455; 21:9: pattern mismatch: expected 'u8', found 'f64'; 28:9: invalid pattern: a float range with equal bounds names one value, as a float literal pattern would"
 }

@@ -194,12 +194,14 @@
 - [Test Coverage](./wep-2026-09-28-test-coverage.md)
 - [A Function Without `with` Performs No Effects](./wep-2026-09-30-effect-free-functions.md)
 - [HashMap](./wep-2026-10-01-hash-map.md)
-- [Numeric Literal Suffixes](./wep-2026-10-01-numeric-literal-suffixes.md)
+- [Numeric Literal Suffixes — Withdrawn](./wep-2026-10-01-numeric-literal-suffixes.md)
 - [Builtin Storage and Side-Effect Attributes](./wep-2026-10-04-builtin-storage-side-effect.md)
 - [Behavior Classes](./wep-2026-10-05-behavior-classes.md)
 - [Contract Checks](./wep-2026-10-06-contract-checks.md)
 - [A Package's Default Interface Is Its Module](./wep-2026-10-07-default-interface-as-module.md)
 - [Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.md)
+- [Lexical Rules Left Open](./wep-2026-10-10-lexical-rules.md)
+- [Effects Through Closures and Iterators](./wep-2026-10-11-effects-through-closures.md)
 
 ## Standard Library
 

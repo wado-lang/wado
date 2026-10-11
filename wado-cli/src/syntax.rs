@@ -12,6 +12,7 @@ use lexopt::Arg::Value;
 use lexopt::Parser;
 use serde_json::json;
 
+use wado_compiler::lexer::WILDCARD;
 use wado_compiler::prelude_names;
 use wado_compiler::syntax::{
     CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, NAME_KEYWORDS, SyntaxDefinition,
@@ -159,7 +160,8 @@ pub fn run(opts: SyntaxOptions) -> Result<(), CliExit> {
 }
 
 /// The words a generator of Wado source must not declare unescaped: the
-/// keywords, and every name the prelude puts in scope with what it declares.
+/// keywords and the wildcard, and every name the prelude puts in scope with
+/// what it declares.
 fn generate_vocabulary() -> serde_json::Value {
     fn texts(words: &[(&'static str, KeywordCategory)]) -> Vec<&'static str> {
         words.iter().map(|(text, _)| *text).collect()
@@ -168,8 +170,10 @@ fn generate_vocabulary() -> serde_json::Value {
         .into_iter()
         .map(|(name, kind)| json!({ "name": name, "kind": kind.label() }))
         .collect();
+    let mut keywords = texts(KEYWORDS);
+    keywords.push(WILDCARD);
     json!({
-        "keywords": texts(KEYWORDS),
+        "keywords": keywords,
         "contextual_keywords": texts(CONTEXTUAL_KEYWORDS),
         "name_keywords": NAME_KEYWORDS,
         "prelude": prelude,
@@ -398,23 +402,23 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                 "patterns": [
                     {
                         "name": "constant.numeric.hex.wado",
-                        "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*(?:_[iu](?:8|16|32|64|128))?\\b"
+                        "match": "\\b0x[0-9a-fA-F][0-9a-fA-F_]*\\b"
                     },
                     {
                         "name": "constant.numeric.binary.wado",
-                        "match": "\\b0b[01][01_]*(?:_[iu](?:8|16|32|64|128))?\\b"
+                        "match": "\\b0b[01][01_]*\\b"
                     },
                     {
                         "name": "constant.numeric.octal.wado",
-                        "match": "\\b0o[0-7][0-7_]*(?:_[iu](?:8|16|32|64|128))?\\b"
+                        "match": "\\b0o[0-7][0-7_]*\\b"
                     },
                     {
                         "name": "constant.numeric.float.wado",
-                        "match": "\\b[0-9][0-9_]*(?:\\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?|[eE][+-]?[0-9][0-9_]*)(?:_(?:[iu](?:8|16|32|64|128)|f16|bf16|f32|f64))?\\b"
+                        "match": "\\b[0-9][0-9_]*(?:\\.[0-9][0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?|[eE][+-]?[0-9][0-9_]*)\\b"
                     },
                     {
                         "name": "constant.numeric.integer.wado",
-                        "match": "\\b[0-9][0-9_]*(?:_(?:[iu](?:8|16|32|64|128)|f16|bf16|f32|f64))?\\b"
+                        "match": "\\b[0-9][0-9_]*\\b"
                     }
                 ]
             },

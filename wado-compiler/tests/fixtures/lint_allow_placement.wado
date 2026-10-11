@@ -1,0 +1,110 @@
+// `#[allow(...)]` waives a lint over everything the node carrying it encloses:
+// a field, a parameter, an associated constant or type, a method, an `impl`, a
+// function, a `let`. Each waived name or expression is spelled once, and the
+// unwaived twin of each reports, so the waiver is what silences it.
+
+use { println, eprintln, print, eprint } from "core:cli";
+
+struct Config {
+    #[allow(arithmetic_overflow)]
+    waived: u8 = 250 as u8 + 16 as u8,
+    kept: u8 = 250 as u8 + 17 as u8,
+}
+
+impl Config {
+    #[allow(arithmetic_overflow)]
+    const WAIVED: u8 = 250 as u8 + 7 as u8;
+    const KEPT: u8 = 250 as u8 + 8 as u8;
+
+    #[allow(unconditional_trap)]
+    fn waived_method(y: i32) -> i32 {
+        return y / 0;
+    }
+}
+
+struct Holder<T> {
+    value: T,
+}
+
+#[allow(shadowed_name)]
+impl<eprint> Holder<eprint> {
+    fn get(&self) -> eprint {
+        return self.value;
+    }
+}
+
+trait Store {
+    type Buf<E>;
+}
+
+impl Store for Config {
+    #[allow(shadowed_name)]
+    type Buf<String> = List<String>;
+}
+
+#[allow(dead_code)]
+fn divides(x: i32) -> i32 {
+    #[allow(unconditional_trap)]
+    let waived = x % 0;
+    return waived + x / 0 + Config::waived_method(x);
+}
+
+fn scale(#[allow(arithmetic_overflow)] a: u8 = 250 as u8 + 18 as u8, b: u8 = 250 as u8 + 19 as u8) -> u8 {
+    return a + b;
+}
+
+#[allow(shadowed_name)]
+fn waived_body() -> i32 {
+    let println = 1;
+    return println;
+}
+
+fn kept_body() -> i32 {
+    #[allow(shadowed_name)]
+    let waived = |eprintln: i32| eprintln;
+    let print = 2;
+    return waived(print);
+}
+
+test {
+    #[allow(arithmetic_overflow)]
+    let c = 240 as u8 + 20 as u8;
+    let d = 240 as u8 + 21 as u8;
+    let x = builtin::black_box(1);
+    #[allow(self_comparison)]
+    let e = x == x;
+    let f = x <= x;
+    let config = Config {};
+    assert c == 4 && d == 5 && e && f;
+    assert config.waived + config.kept == 21 && scale() == 25;
+    assert Config::WAIVED == 1 && Config::KEPT == 2;
+    assert waived_body() == 1 && kept_body() == 2;
+    assert Holder { value: 3 }.get() == 3;
+}
+
+__DATA__
+{
+  "test": {},
+  "warnings_contains": [
+    "`250 as u8 + 17 as u8`",
+    "`250 as u8 + 8 as u8`",
+    "`250 as u8 + 19 as u8`",
+    "`240 as u8 + 21 as u8`",
+    "`x <= x`",
+    "`print` shadows",
+    "`x / 0`"
+  ],
+  "warnings_not_contains": [
+    "250 as u8 + 16 as u8",
+    "250 as u8 + 7 as u8",
+    "250 as u8 + 18 as u8",
+    "240 as u8 + 20 as u8",
+    "`x == x`",
+    "`println` shadows",
+    "`eprintln` shadows",
+    "`x % 0`",
+    "`y / 0`",
+    "`eprint` shadows",
+    "`String` shadows"
+  ]
+}

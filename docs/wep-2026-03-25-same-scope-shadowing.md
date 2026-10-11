@@ -149,9 +149,10 @@ A match arm is not exempt. Its scrutinee stays in scope across every arm, so
 `match x { Some(x) => … }` gives the name one meaning in one arm and another
 next to it. That is the confusion the lint names.
 
-`#[allow(shadowed_name)]` on the binder waives it, and
-`#![allow(shadowed_name)]` waives it for a module. A condition and a match arm
-take no attribute, so a rename is the only answer to a warning there.
+`#[allow(shadowed_name)]` on the binder, or on a node enclosing it, waives it
+([`#[allow(...)]`](./spec-attributes.md#allow)), and `#![allow(shadowed_name)]`
+waives it for a module. A condition and a match arm take no attribute, so
+there a rename or an attribute on the enclosing node is the answer.
 
 A bare identifier pattern is exempt where the name reaches a case or a
 `global`. Such a pattern matches by value rather than binding, and the

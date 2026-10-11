@@ -1,0 +1,90 @@
+//! Times MNIST-12's forward pass on the CPU, its kernels fused as the generator
+//! fuses them. Set `fuse: false` below for the time each kernel writing its
+//! output takes; WEP 2026-09-20 records both.
+//!
+//!     wado run package-loam/example/mnist_bench.wado
+
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { MonotonicClock } from "wasi:clocks";
+use { Cpu, Tensor } from "lib:loam";
+use mnist from "../tests/models/mnist-12/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                layout: [
+                    {
+                        pattern: "Input3",
+                        axes: ["Batch", "Gray", "Row", "Col"],
+                    },
+                    {
+                        pattern: "Parameter5",
+                        axes: ["Feat1", "Gray", "K1Row", "K1Col"],
+                    },
+                    {
+                        pattern: "Parameter6",
+                        axes: ["Feat1", "Row", "Col"],
+                    },
+                    {
+                        pattern: "Convolution28_Output_0",
+                        axes: ["Batch", "Feat1", "Row", "Col"],
+                    },
+                    {
+                        pattern: "Pooling66_Output_0",
+                        axes: ["Batch", "Feat1", "Row2", "Col2"],
+                    },
+                    {
+                        pattern: "Parameter87",
+                        axes: ["Feat2", "Feat1", "K2Row", "K2Col"],
+                    },
+                    {
+                        pattern: "Parameter88",
+                        axes: ["Feat2", "Row2", "Col2"],
+                    },
+                    {
+                        pattern: "Convolution110_Output_0",
+                        axes: ["Batch", "Feat2", "Row2", "Col2"],
+                    },
+                    {
+                        pattern: "Pooling160_Output_0",
+                        axes: ["Batch", "Feat2", "Row3", "Col3"],
+                    },
+                    {
+                        pattern: "Parameter193",
+                        axes: ["Feat2", "Row3", "Col3", "Digit"],
+                    },
+                    {
+                        pattern: "Parameter194",
+                        axes: ["Batch", "Digit"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// A digit-sized image of a fixed gradient: what the pass computes is not what
+/// it times.
+fn image() -> Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]> {
+    let mut data: List<f32> = [];
+    for let i of 0..<784 {
+        data.push((i % 7) as f32 / 7.0);
+    }
+    return Tensor {
+        data,
+        extents: [1, 1, 28, 28],
+    };
+}
+
+test "smoke" {
+    let logits = mnist::forward(&mut Cpu {}, &image(), &mnist::Prepared::embedded(&mut Cpu {}));
+    assert logits.extents == [1, 10] as List<i32>;
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let weights = mnist::Prepared::embedded(&mut Cpu {});
+    let x = image();
+    let mut b = Benchmark { name: "MNIST-12 forward on the CPU", work_per_iter: Option::Some(1.0), unit: "images" };
+    b.run("", || mnist::forward(&mut Cpu {}, &x, &weights).data[0]);
+}

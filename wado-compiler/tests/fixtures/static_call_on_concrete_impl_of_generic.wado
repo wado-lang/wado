@@ -1,0 +1,28 @@
+// A static declared only by a concrete impl of a generic type is reached by
+// the bare spelling and by a `_` in the receiver's turbofish, the impl's own
+// target answering the slot.
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl Wrap<i32> {
+    fn make(v: i32) -> Wrap<i32> {
+        return Wrap { v };
+    }
+}
+
+test "the bare spelling reaches the concrete impl" {
+    let w = Wrap::make(5);
+    assert w.v == 5;
+}
+
+test "a `_` is answered by the concrete impl's target" {
+    let w = Wrap::<_>::make(6);
+    assert w.v == 6;
+}
+
+test "the written argument reaches the concrete impl" {
+    let w = Wrap::<i32>::make(7);
+    assert w.v == 7;
+}

@@ -139,7 +139,7 @@ paramList
 
 param
     : selfParam
-    | attribute* 'mut'? bindingName ':' typeRef ('=' expression)?
+    | attribute* 'mut'? ('_' | bindingName) ':' typeRef ('=' expression)?
     ;
 
 selfParam
@@ -753,26 +753,15 @@ formatSpecAtom
     ;
 
 FLOAT
-    : [0-9] [0-9_]* '.' [0-9] [0-9_]* ([eE] [+-]? [0-9]+)? NUMBER_SUFFIX?
-    | [0-9] [0-9_]* [eE] [+-]? [0-9]+ NUMBER_SUFFIX?
+    : [0-9] [0-9_]* '.' [0-9] [0-9_]* ([eE] [+-]? [0-9] [0-9_]*)?
+    | [0-9] [0-9_]* [eE] [+-]? [0-9] [0-9_]*
     ;
 
-// In a hex literal `b` and `f` are digits, so a radix literal takes an
-// integer suffix only.
 INTEGER
-    : '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]* INTEGER_SUFFIX?
-    | '0' [bB] [01] [01_]* INTEGER_SUFFIX?
-    | '0' [oO] [0-7] [0-7_]* INTEGER_SUFFIX?
-    | [0-9] [0-9_]* NUMBER_SUFFIX?
-    ;
-
-fragment NUMBER_SUFFIX
-    : INTEGER_SUFFIX
-    | '_' ('f16' | 'bf16' | 'f32' | 'f64')
-    ;
-
-fragment INTEGER_SUFFIX
-    : '_' [iu] ('8' | '16' | '32' | '64' | '128')
+    : '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]*
+    | '0' [bB] [01] [01_]*
+    | '0' [oO] [0-7] [0-7_]*
+    | [0-9] [0-9_]*
     ;
 
 STRING_LITERAL
@@ -792,7 +781,7 @@ BACKTICK
     ;
 
 CHAR_LITERAL
-    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n]) '\''
+    : 'b'? '\'' (UNICODE_ESCAPE | HEX_ESCAPE | '\\' . | ~['\\\r\n])+ '\''
     ;
 
 fragment HEX_ESCAPE
@@ -804,6 +793,7 @@ fragment UNICODE_ESCAPE
     | '\\' 'u' [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
     ;
 
+// `_` alone lexes as the wildcard token '_', defined ahead of this rule.
 IDENTIFIER
     : [a-zA-Z_] [a-zA-Z0-9_]*
     ;

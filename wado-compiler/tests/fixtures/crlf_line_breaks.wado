@@ -1,0 +1,19 @@
+// Every line of this file ends in CRLF. Inside a literal and in the data
+// section a CRLF reads as LF, as in Rust.
+
+test {
+    let s = "a
+b";
+    assert s == "a\nb";
+    let t = `a
+b`;
+    assert t == "a\nb";
+    let bytes: ByteList = b"a
+b";
+    assert bytes == b"a\nb";
+    assert #data == "{}\n";
+    assert #line == 15;
+}
+
+__DATA__
+{}

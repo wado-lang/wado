@@ -6,8 +6,8 @@ use std::cell::OnceCell;
 use std::mem;
 
 use crate::ast::{
-    AstVisitor, BinaryOp, Expr, Function, Item, Literal, SelfKind, UnaryOp, attrs_allow,
-    inner_attrs_allow, lint, walk_expr, walk_function, walk_item,
+    AstVisitor, Attribute, BinaryOp, Expr, Literal, SelfKind, UnaryOp, attrs_allow,
+    inner_attrs_allow, lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::effect_check::EffectProbe;
@@ -76,7 +76,7 @@ impl SelfComparison {
     }
 }
 
-/// The comparisons of one module outside the items that waive the lint.
+/// The comparisons of one module outside the code that waives the lint.
 struct SelfComparisons<'a> {
     sem: &'a Semantics,
     /// Built at the first candidate, since most programs have none. `None`
@@ -131,15 +131,9 @@ impl SelfComparisons<'_> {
 }
 
 impl AstVisitor for SelfComparisons<'_> {
-    fn visit_item(&mut self, item: &Item) {
-        if !attrs_allow(item.attrs(), lint::SELF_COMPARISON) {
-            walk_item(self, item);
-        }
-    }
-
-    fn visit_function(&mut self, func: &Function) {
-        if !attrs_allow(&func.attrs, lint::SELF_COMPARISON) {
-            walk_function(self, func);
+    fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+        if !attrs_allow(attrs, lint::SELF_COMPARISON) {
+            body(self);
         }
     }
 

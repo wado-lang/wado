@@ -1,0 +1,12 @@
+// `t.0._1` is a tuple index followed by a field named `_1`, as in Rust: the
+// lexer reads `0`, not the literal `0._1`.
+
+struct S { _1: i32 }
+
+test {
+    let t = [S { _1: 3 }, 4];
+    assert t.0._1 == 3;
+}
+
+__DATA__
+{"test": {}}

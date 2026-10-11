@@ -1,0 +1,12 @@
+// Every `_` before the letters belongs to the suffix, so the suggested cast is
+// itself a valid literal.
+
+export fn run() {
+    let a = 1__u8;               // compile error: a numeric literal takes no suffix: write `1 as u8`
+}
+
+__DATA__
+{
+  "compile_error": ":5:13: lexer error: a numeric literal takes no suffix: write `1 as u8`",
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

@@ -629,8 +629,8 @@ test "every integer type reads a number by one rule" {
 }
 
 test "serialize i128 and u128 as a string whatever the value" {
-    assert to_string(&5_i128) matches { Ok(s) && s == `"5"` };
-    assert to_string(&5_u128) matches { Ok(s) && s == `"5"` };
+    assert to_string(&(5 as i128)) matches { Ok(s) && s == `"5"` };
+    assert to_string(&(5 as u128)) matches { Ok(s) && s == `"5"` };
 }
 
 test "deserialize i128 range limits" {
@@ -900,9 +900,9 @@ test "to_bytes_canonical writes numbers in the ECMAScript form" {
         assert canonical_text(&v) == text;
     }
     assert canonical_text(&f32::MAX) == "3.4028235e+38";
-    assert canonical_text(&1.0e-7_f32) == "1e-7";
-    assert canonical_text(&-0.0_f32) == "0";
-    assert canonical_text(&-2.5_f32) == "-2.5";
+    assert canonical_text(&(1.0e-7 as f32)) == "1e-7";
+    assert canonical_text(&(-0.0 as f32)) == "0";
+    assert canonical_text(&(-2.5 as f32)) == "-2.5";
     assert to_bytes_canonical(&f32::INFINITY).unwrap_err() == SerializeError::unsupported_value(
         "Infinity is not allowed in JSON",
     );
@@ -1675,9 +1675,9 @@ test "i64 and u64 read their string form" {
 test "a float reads its string form as an integer does" {
     assert from_string::<f64>(`"1.5"`) == Result::Ok(1.5);
     assert from_string::<f64>(`"-2e-3"`) == Result::Ok(-0.002);
-    assert from_string::<f32>(`"0.1"`) == Result::Ok(0.1_f32);
-    assert from_string::<f16>(`"1.5"`) == Result::Ok(1.5_f16);
-    assert from_string::<bf16>(`"1.5"`) == Result::Ok(1.5_bf16);
+    assert from_string::<f32>(`"0.1"`) == Result::Ok(0.1 as f32);
+    assert from_string::<f16>(`"1.5"`) == Result::Ok(1.5 as f16);
+    assert from_string::<bf16>(`"1.5"`) == Result::Ok(1.5 as bf16);
     assert de_err::<f64>(`"1e400"`) == DeserializeError::overflow("value out of range for f64", 0);
     assert de_err::<f64>(`"NaN"`) == DeserializeError::unexpected_type("expected number", 0);
     assert de_err::<f64>(`" 1.5"`) == DeserializeError::unexpected_type("expected number", 0);
@@ -1794,7 +1794,7 @@ test "JsonDeserializer reads a token stream by hand" {
     assert de.expect_char(b',') matches { Ok };
     assert de.parse_f64_direct() == Result::Ok(-1500.0);
     assert de.expect_char(b',') matches { Ok };
-    assert de.parse_f32_direct() == Result::Ok(0.1_f32);
+    assert de.parse_f32_direct() == Result::Ok(0.1 as f32);
     assert de.expect_char(b',') matches { Ok };
     assert de.skip_value(0) matches { Ok };
     assert de.expect_char(b']') matches { Ok };

@@ -1,0 +1,11 @@
+// A radix prefix is no digit, so an `_` cannot follow it.
+
+export fn run() {
+    let a = 0x_FF;               // compile error: an `_` in a numeric literal stands between two digits: `0x_FF`
+}
+
+__DATA__
+{
+  "compile_error": ":4:13: lexer error: an `_` in a numeric literal stands between two digits: `0x_FF`",
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

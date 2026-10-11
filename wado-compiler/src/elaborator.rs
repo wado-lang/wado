@@ -7,7 +7,7 @@ pub(crate) mod assert;
 mod call;
 mod callee;
 mod closure;
-mod coercion;
+pub(crate) mod coercion;
 mod control_flow;
 mod exhaustiveness;
 mod expr;

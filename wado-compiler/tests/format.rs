@@ -203,6 +203,20 @@ fn test_format_keeps_identifier_attribute_array() {
     assert_eq!(formatted, source);
 }
 
+/// `_` is a token of its own, and a CRLF inside a literal reads as LF.
+#[test]
+fn test_format_keeps_wildcard_binders_and_crlf_literals() {
+    let source = concat!(
+        "fn f(_: i32, g: fn(i32) -> i32) -> String with _ {\r\n",
+        "    let h = |_: i32| 1;\r\n",
+        "    return \"a\r\nb\" + `c\r\n${g(h(0))}`;\r\n",
+        "}\r\n",
+    );
+    assert_format_preserves_ast(source);
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(!formatted.contains('\r'), "got:\n{formatted:?}");
+}
+
 #[test]
 fn test_format_idempotent_simple() {
     let source = r"
@@ -1611,6 +1625,53 @@ fn test_format_preserves_trait_assoc_type_leading_comment() {
 }
 
 #[test]
+fn test_format_keeps_members_in_source_order() {
+    // Regression: a trait's or an impl's associated type written after a
+    // method was emitted ahead of every method, leaving the method's doc
+    // comment and the blank lines around both where the type had been.
+    let source = r"trait T {
+    type A;
+
+    /// Doc of f.
+    fn f(&self) -> i32;
+    /// Doc of B.
+    type B;
+}
+
+impl T for S {
+    type A = i32;
+
+    /// Doc of f.
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    /// Doc of B.
+    type B = i32;
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "members should keep their order");
+}
+
+#[test]
+fn test_format_rest_clause_follows_the_last_member() {
+    // The blank line before `..trap` is a method's, so a member after the
+    // method takes it away.
+    let source = r"impl T for S {
+    fn f(&self) -> i32 {
+        return 1;
+    }
+
+    type B = i32;
+    ..trap
+}
+";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source, "no blank line after a non-method member");
+}
+
+#[test]
 fn test_format_preserves_trait_doc_before_attributed_member() {
     // Regression (#1598): a doc comment immediately before a member carrying
     // an attribute must stay attached — no blank line inserted between the
@@ -2215,29 +2276,24 @@ fn test_format_underscore_literal_preserved() {
 }
 
 #[test]
-fn test_format_numeric_suffix_preserved() {
-    let source = r"fn run() {
-    let a = 1_000_u32;
-    let b = -128_i8;
-    let c = 1.5e3_f32;
-    let d = 0xFF_u8;
-    let e = match a {
-        7_u32 => 1,
-        _ => 0,
-    };
+fn test_format_literal_cast_keeps_needed_parens() {
+    let source = r"fn run(x: u8) {
+    let a = -128 as i8;
+    let b = 1 as i64 << 40;
+    let c = (2 as u8) < x;
+    let d = (1 as u64).to_string();
 }
 ";
     let formatted = wado_compiler::format(source).expect("format failed");
     for kept in [
-        "let a = 1_000_u32;",
-        "let b = -128_i8;",
-        "let c = 1.5e3_f32;",
-        "let d = 0xFF_u8;",
-        "7_u32 => 1,",
+        "let a = -128 as i8;",
+        "let b = 1 as i64 << 40;",
+        "let c = (2 as u8) < x;",
+        "let d = (1 as u64).to_string();",
     ] {
         assert!(
             formatted.contains(kept),
-            "suffix should be preserved in `{kept}`: {formatted}"
+            "`{kept}` should be preserved: {formatted}"
         );
     }
 }

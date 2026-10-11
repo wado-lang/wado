@@ -106,15 +106,15 @@ test "exp and nbf are checked against the time passed in" {
 }
 
 test "the window clamps at the i64 boundaries" {
-    let past = RegisteredClaims { nbf: Option::Some(0_i64) };
+    let past = RegisteredClaims { nbf: Option::Some(0 as i64) };
     assert past.validate_time(9223372036854775807, 1) matches { Ok(_) };
-    let future = RegisteredClaims { exp: Option::Some(0_i64) };
+    let future = RegisteredClaims { exp: Option::Some(0 as i64) };
     assert future.validate_time(-9223372036854775808, 1) matches { Ok(_) };
 }
 
 #[expect_trap]
 test "a negative leeway is refused" {
-    let claims = RegisteredClaims { exp: Option::Some(1000_i64) };
+    let claims = RegisteredClaims { exp: Option::Some(1000 as i64) };
     let _ = claims.validate_time(500, -60);
 }
 
@@ -135,7 +135,7 @@ test "registered claims deserialize from a verified payload" {
     };
     assert claims.iss == Option::Some("wado");
     assert claims.sub == Option::Some("joe");
-    assert claims.exp == Option::Some(1300819380_i64);
+    assert claims.exp == Option::Some(1300819380 as i64);
     assert claims.nbf == Option::<i64>::None;
 }
 

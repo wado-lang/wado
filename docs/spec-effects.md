@@ -576,7 +576,7 @@ fn pure_draw() -> i32 {                             // `Quiet`'s impl declares n
 
 A fixed head demands the same effects of every caller. An open one is resolved from the type each call names, so `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. Inside `draw`, `s.next()` names only the bound `S: Source`, which has no impl to read. Its effects stay unresolved, and `draw` forwards them with `with _`. A generic caller of `draw` that forwards them again writes its own `with _`.
 
-A head that writes nothing reads as `with _`, so a bare trait is open rather than effect-free. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
+A head that writes nothing reads as `with _`, so a bare trait is open rather than effect-free. The [`undecided_effects`](./spec-diagnostics.md#the-undecided_effects-lint) lint reports one.
 
 Every trait in the standard library says `with ()`. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
 

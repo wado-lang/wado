@@ -3,19 +3,19 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeDecl, AstId, AstVisitor, AttrArg,
-    AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
-    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr,
-    ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
-    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
-    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
-    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
-    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, spell_number,
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
+    AstVisitor, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block,
+    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
+    FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
+    Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
+    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
+    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr,
+    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
     written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
@@ -29,6 +29,58 @@ use crate::tir::{EffectRef, ResolvedType, TirCapture, TirTemplatePart};
 use crate::token::Span;
 
 const MAX_LINE_WIDTH: usize = 120;
+
+/// One member of a trait or an impl body.
+enum Member<'a> {
+    /// A trait's associated type.
+    Declared(&'a AssociatedTypeDecl),
+    /// An impl's associated type.
+    Bound(&'a AssociatedTypeBinding),
+    Const(&'a AssociatedConst),
+    Method(&'a Function),
+}
+
+impl Member<'_> {
+    fn id(&self) -> AstId {
+        match self {
+            Member::Declared(m) => m.id,
+            Member::Bound(m) => m.id,
+            Member::Const(m) => m.id,
+            Member::Method(m) => m.id,
+        }
+    }
+
+    fn span(&self) -> Span {
+        match self {
+            Member::Declared(m) => m.span,
+            Member::Bound(m) => m.span,
+            Member::Const(m) => m.span,
+            Member::Method(m) => m.span,
+        }
+    }
+
+    fn attrs(&self) -> &[Attribute] {
+        match self {
+            // A trait's associated type takes no attribute.
+            Member::Declared(_) => &[],
+            Member::Bound(m) => &m.attrs,
+            Member::Const(m) => &m.attrs,
+            Member::Method(m) => &m.attrs,
+        }
+    }
+
+    fn is_method(&self) -> bool {
+        matches!(self, Member::Method(_))
+    }
+}
+
+/// `members` in the order the source wrote them, so each keeps the comments
+/// and blank lines written before it.
+fn in_source_order<'a>(members: impl Iterator<Item = Member<'a>>) -> Vec<Member<'a>> {
+    let mut ordered: Vec<Member<'a>> = members.collect();
+    ordered.sort_by_key(|m| m.span().start);
+    ordered
+}
 
 fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
     attrs
@@ -1154,57 +1206,44 @@ impl<'a> Unparser<'a> {
             return;
         }
 
+        let members = in_source_order(
+            i.associated_types
+                .iter()
+                .map(Member::Bound)
+                .chain(i.constants.iter().map(Member::Const))
+                .chain(i.methods.iter().map(Member::Method)),
+        );
         self.with_braced_body(i.span, |this| {
-            for assoc in &i.associated_types {
-                this.emit_member(assoc.id, assoc.span, &assoc.attrs, |this| {
-                    this.output.push_str("type ");
-                    this.output.push_str(&assoc.name);
-                    this.unparse_generic_params(&assoc.type_params);
-                    this.output.push_str(" = ");
-                    this.unparse_type(&assoc.ty);
-                    this.output.push(';');
-                });
-            }
-
-            for constant in &i.constants {
-                this.emit_member(constant.id, constant.span, &constant.attrs, |this| {
-                    this.output.push_str(constant.visibility.keyword());
-                    this.output.push_str("const ");
-                    this.output.push_str(&constant.name);
-                    this.output.push_str(": ");
-                    this.unparse_type(&constant.ty);
-                    this.output.push_str(" = ");
-                    this.unparse_expr(&constant.value);
-                    this.output.push(';');
-                });
-            }
-
-            // One blank line separates declarations from the first method
-            // whatever the source did. Anchoring past it stops a second.
-            let has_declarations = !i.associated_types.is_empty() || !i.constants.is_empty();
-            if has_declarations && let Some(first) = i.methods.first() {
-                this.output.push('\n');
-                let first_effective_line = effective_start_line(&first.attrs, first.span.line);
-                this.last_source_line = this.leading_start_line(first.id, first_effective_line);
-            }
-
-            for (idx, method) in i.methods.iter().enumerate() {
-                // Methods are separated by at least one blank line whatever the
-                // source did, which `emit_blank_lines_to` alone cannot force.
-                let effective_line = effective_start_line(&method.attrs, method.span.line);
-                let effective_start = this.leading_start_line(method.id, effective_line);
-                if idx > 0 && blank_lines_between(this.last_source_line, effective_start) == 0 {
-                    this.output.push('\n');
-                    this.last_source_line = effective_start;
+            let mut previous: Option<&Member<'_>> = None;
+            for member in &members {
+                let effective_line = effective_start_line(member.attrs(), member.span().line);
+                let effective_start = this.leading_start_line(member.id(), effective_line);
+                match previous {
+                    // One blank line separates declarations from the method
+                    // after them whatever the source did. Anchoring past it
+                    // stops a second.
+                    Some(p) if !p.is_method() && member.is_method() => {
+                        this.output.push('\n');
+                        this.last_source_line = effective_start;
+                    }
+                    // A method is set apart from the member after it by at
+                    // least one blank line, which `emit_blank_lines_to` alone
+                    // cannot force.
+                    Some(p)
+                        if p.is_method()
+                            && blank_lines_between(this.last_source_line, effective_start) == 0 =>
+                    {
+                        this.output.push('\n');
+                        this.last_source_line = effective_start;
+                    }
+                    _ => {}
                 }
-                this.open_member(method.id, method.span.start);
-                this.emit_blank_lines_to(effective_line);
-                this.unparse_function(method);
-                this.last_source_line = method.span.end_line();
+                this.unparse_member(member);
+                previous = Some(member);
             }
 
             if let Some(rest) = i.rest {
-                if !i.methods.is_empty() {
+                if previous.is_some_and(Member::is_method) {
                     this.output.push('\n');
                 }
                 this.write_indent();
@@ -1229,7 +1268,14 @@ impl<'a> Unparser<'a> {
         }
         unparse_trait_head_into(&t.head, &mut self.output);
 
+        let members = in_source_order(
+            t.associated_types
+                .iter()
+                .map(Member::Declared)
+                .chain(t.methods.iter().map(Member::Method)),
+        );
         self.with_braced_body(t.span, |this| {
+<<<<<<< HEAD
             for assoc in &t.associated_types {
                 this.emit_member(assoc.id, assoc.span, &[], |this| {
                     this.output.push_str("type ");
@@ -1254,8 +1300,74 @@ impl<'a> Unparser<'a> {
                     .collect();
                 this.unparse_function_with_contracts(method, &contracts);
                 this.last_source_line = method.span.end_line();
+||||||| f3f76a82d
+            for assoc in &t.associated_types {
+                this.emit_member(assoc.id, assoc.span, &[], |this| {
+                    this.output.push_str("type ");
+                    this.output.push_str(&assoc.name);
+                    this.unparse_generic_params(&assoc.type_params);
+                    if !assoc.bounds.is_empty() {
+                        this.output.push_str(": ");
+                        this.unparse_trait_bounds(&assoc.bounds);
+                    }
+                    this.output.push(';');
+                });
+            }
+
+            for method in &t.methods {
+                let effective_line = effective_start_line(&method.attrs, method.span.line);
+                this.open_member(method.id, method.span.start);
+                this.emit_blank_lines_to(effective_line);
+                this.unparse_function(method);
+                this.last_source_line = method.span.end_line();
+=======
+            for member in &members {
+                this.unparse_member(member);
+>>>>>>> origin/main
             }
         });
+    }
+
+    /// One member of a trait or an impl body, its leading comments and blank
+    /// lines with it.
+    fn unparse_member(&mut self, member: &Member<'_>) {
+        let (id, span, attrs) = (member.id(), member.span(), member.attrs());
+        match member {
+            Member::Declared(assoc) => self.emit_member(id, span, attrs, |this| {
+                this.output.push_str("type ");
+                this.output.push_str(&assoc.name);
+                this.unparse_generic_params(&assoc.type_params);
+                if !assoc.bounds.is_empty() {
+                    this.output.push_str(": ");
+                    this.unparse_trait_bounds(&assoc.bounds);
+                }
+                this.output.push(';');
+            }),
+            Member::Bound(assoc) => self.emit_member(id, span, attrs, |this| {
+                this.output.push_str("type ");
+                this.output.push_str(&assoc.name);
+                this.unparse_generic_params(&assoc.type_params);
+                this.output.push_str(" = ");
+                this.unparse_type(&assoc.ty);
+                this.output.push(';');
+            }),
+            Member::Const(constant) => self.emit_member(id, span, attrs, |this| {
+                this.output.push_str(constant.visibility.keyword());
+                this.output.push_str("const ");
+                this.output.push_str(&constant.name);
+                this.output.push_str(": ");
+                this.unparse_type(&constant.ty);
+                this.output.push_str(" = ");
+                this.unparse_expr(&constant.value);
+                this.output.push(';');
+            }),
+            Member::Method(method) => {
+                self.open_member(id, span.start);
+                self.emit_blank_lines_to(effective_start_line(attrs, span.line));
+                self.unparse_function(method);
+                self.last_source_line = span.end_line();
+            }
+        }
     }
 
     fn unparse_interface(&mut self, e: &InterfaceDecl) {
@@ -1954,7 +2066,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_literal(&mut self, lit: &Literal) {
         match lit {
-            Literal::Number(repr, suffix) => self.output.push_str(&spell_number(repr, *suffix)),
+            Literal::Number(repr) => self.output.push_str(repr),
             Literal::String(raw) => {
                 self.output.push('"');
                 self.output.push_str(raw);
@@ -4042,7 +4154,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
 
 fn unparse_literal_into(lit: &Literal, output: &mut String) {
     match lit {
-        Literal::Number(repr, suffix) => output.push_str(&spell_number(repr, *suffix)),
+        Literal::Number(repr) => output.push_str(repr),
         Literal::String(raw) => {
             output.push('"');
             output.push_str(raw);
@@ -4507,10 +4619,10 @@ pub fn unparse_struct_field(struct_name: &str, field: &StructField) -> String {
 use crate::lexer::is_valid_ident;
 use crate::name::LocalMethodName;
 use crate::tir::{
-    FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock,
-    TirEnum, TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
-    TypeTable, receiver_value,
+    FloatBound, InstancePattern, PatternLiteral, RangeBound, TirBinaryOp, TirBlock, TirEnum,
+    TirExpr, TirExprKind, TirFlags, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirModule,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    receiver_value,
 };
 
 /// Unparses TIR back to pseudo-Wado source code.
@@ -5478,13 +5590,7 @@ fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
 
 fn emit_pattern_literal(value: &PatternLiteral, output: &mut String) {
     match value {
-        PatternLiteral::Int { shown, suffix, .. } => {
-            output.push_str(shown);
-            if let Some(suffix) = suffix {
-                output.push('_');
-                output.push_str(suffix.as_str());
-            }
-        }
+        PatternLiteral::Int { shown, .. } => output.push_str(shown),
         PatternLiteral::Char(c) => output.push_str(&quoted_char(*c)),
         PatternLiteral::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
     }
@@ -5516,17 +5622,7 @@ fn emit_instance_pattern(pattern: &InstancePattern, output: &mut String) {
 fn emit_range_bound(bound: &RangeBound, output: &mut String) {
     match bound {
         RangeBound::Discrete(value) => emit_pattern_literal(value, output),
-        RangeBound::Float(FloatBound { kind, shown }) => {
-            output.push_str(shown);
-            if let FloatBoundKind::Literal {
-                suffix: Some(suffix),
-                ..
-            } = kind
-            {
-                output.push('_');
-                output.push_str(suffix.as_str());
-            }
-        }
+        RangeBound::Float(FloatBound { shown, .. }) => output.push_str(shown),
     }
 }
 

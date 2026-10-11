@@ -18,7 +18,8 @@ use { Benchmark } from "core:benchmark";
 test "smoke" {
     // Round-trip a tiny in-memory buffer; no Preopens needed.
     let data: ByteList = [
-        72_u8, 101_u8, 108_u8, 108_u8, 111_u8, 44_u8, 32_u8, 87_u8, 111_u8, 114_u8, 108_u8, 100_u8, 33_u8,
+        72 as u8, 101 as u8, 108 as u8, 108 as u8, 111 as u8, 44 as u8, 32 as u8, 87 as u8, 111 as u8, 114 as u8,
+        108 as u8, 100 as u8, 33 as u8,
     ];
     let compressed = zlib_compress(&data);
     let decompressed = inflate_zlib(&compressed).unwrap();

@@ -1,0 +1,82 @@
+// `lit as T` types a numeric literal: `255 as u8` is a `u8` whatever its
+// context expects, checked as `let x: u8 = 255` would be.
+
+trait Named with () {
+    fn name() -> String;
+}
+
+impl Named for i8 {
+    fn name() -> String { return "i8"; }
+}
+impl Named for i16 {
+    fn name() -> String { return "i16"; }
+}
+impl Named for i32 {
+    fn name() -> String { return "i32"; }
+}
+impl Named for i64 {
+    fn name() -> String { return "i64"; }
+}
+impl Named for i128 {
+    fn name() -> String { return "i128"; }
+}
+impl Named for u8 {
+    fn name() -> String { return "u8"; }
+}
+impl Named for u32 {
+    fn name() -> String { return "u32"; }
+}
+impl Named for u128 {
+    fn name() -> String { return "u128"; }
+}
+impl Named for bf16 {
+    fn name() -> String { return "bf16"; }
+}
+impl Named for f32 {
+    fn name() -> String { return "f32"; }
+}
+impl Named for f64 {
+    fn name() -> String { return "f64"; }
+}
+
+fn name_of<T: Named>(x: T) -> String {
+    return T::name();
+}
+
+test "a cast names the literal's type" {
+    assert name_of(255 as u8) == "u8";
+    assert name_of(1_000_000 as i64) == "i64";
+    assert name_of(1.5 as f32) == "f32";
+    assert name_of(0xFF as u8) == "u8";
+    assert name_of(0b1010 as i16) == "i16";
+    assert name_of(0o17 as u32) == "u32";
+    assert name_of(1 as f64) == "f64";
+    assert name_of(1.5e3 as f32) == "f32";
+    assert name_of(2 as bf16) == "bf16";
+    assert name_of(-128 as i8) == "i8";
+    assert name_of(170141183460469231731687303715884105727 as i128) == "i128";
+    assert name_of(1 as u128) == "u128";
+}
+
+test "a cast literal holds the value it spells" {
+    let byte = 255 as u8;
+    assert byte as i32 == 255;
+    let low = -128 as i8;
+    assert low as i32 == -128;
+    let half = 1.5 as f32;
+    assert half as f64 == 1.5;
+    assert 1 as f64 == 1.0;
+    assert 2 as bf16 == bf16::from_f64(2.0);
+    assert 340282366920938463463374607431768211455 as u128 == u128::MAX;
+    assert -170141183460469231731687303715884105728 as i128 == i128::MIN;
+}
+
+test "an operand beside a cast literal takes its type" {
+    let wide = 1 as i64 << 40;   // an i64: `1 << 40` alone is an i32
+    assert wide == 1_099_511_627_776;
+    assert name_of(1 as u8 + 2) == "u8";
+    assert name_of(2 * 1.5 as f32) == "f32";
+}
+
+__DATA__
+{"test": {}}

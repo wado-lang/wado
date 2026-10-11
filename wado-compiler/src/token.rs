@@ -138,6 +138,8 @@ pub enum TokenKind {
     // not as TokenKinds. `do` is only treated as a keyword inside the trailing
     // position of a `with ... do { ... }` clause; `resume` is only treated as a
     // keyword in expression position inside an effect handler method body.
+    /// `_` alone: the wildcard, which no identifier can spell.
+    Underscore,
 
     // Literals
     Ident(String),
@@ -275,6 +277,7 @@ impl fmt::Display for TokenKind {
             Self::Semicolon => ";",
             Self::Dot => ".",
             Self::Hash => "#",
+            Self::Underscore => "_",
             Self::Use
             | Self::From
             | Self::As

@@ -1,10 +1,9 @@
-// A float suffix makes a literal a float, so it names no lane even where its
-// digits would.
+// A float literal names no lane, even one whose value is a whole number.
 use { i8x16 } from "core:simd";
 
 export fn run() {
     let v = i8x16::splat(3);
-    assert builtin::i8x16_extract_lane_u(1_f32, v as v128) == 3;
+    assert builtin::i8x16_extract_lane_u(1.0, v as v128) == 3;
 }
 
 __DATA__

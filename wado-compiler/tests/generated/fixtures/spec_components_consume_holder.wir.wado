@@ -138,16 +138,16 @@ fn "spec_components_consume_holder.wado/$cm_binding__Fields_copy_all"(self) with
     let $result_4: ref "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     let $i_5: i32;
     let $elem_addr_6: i32;
-    let $lifted_result_7: ref "core:prelude/string.wado//String";
-    let $count_9: i32;
-    let $result_10: ref "core:prelude//List<u8>";
-    let ptr_14: i32;
-    let len_15: i32;
-    let arr_19: ref Array<u8>;
+    let $str_ptr: i32;
+    let $str_len: i32;
+    let $lifted_string: ref "core:prelude/string.wado//String";
+    let $count_11: i32;
+    let $result_12: ref "core:prelude//List<u8>";
+    let arr_21: ref Array<u8>;
     let i: i32;
-    let value_25: u8;
-    let used_26: i32;
-    let value_32: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
+    let value_27: u8;
+    let used_28: i32;
+    let value_34: ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]";
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Fields::copy_all"(self, $outptr);
     self = builtin::load_i32($outptr);
@@ -156,46 +156,48 @@ fn "spec_components_consume_holder.wado/$cm_binding__Fields_copy_all"(self) with
     b0: block {
         l1: loop {
             break_if b0 $i_5 >= $count_3;
-            ptr_14 = builtin::load_i32(local.tee $elem_addr_6(self + ($i_5 * 16)));
-            arr_19 = builtin::array_new<u8>(local.tee len_15(builtin::load_i32($elem_addr_6 + 4)));
+            $str_ptr = builtin::load_i32(local.tee $elem_addr_6(self + ($i_5 * 16)));
+            arr_21 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($elem_addr_6 + 4)));
             i = 0;
             b2: block {
                 l3: loop {
-                    break_if b2 i >= len_15;
-                    builtin::array_set_u8(arr_19, i, builtin::load_u8(ptr_14 + i));
+                    break_if b2 i >= $str_len;
+                    builtin::array_set_u8(arr_21, i, builtin::load_u8($str_ptr + i));
                     i = i + 1;
                     continue l3;
                 };
             };
-            $lifted_result_7 = struct.new "core:prelude/string.wado//String" { repr: arr_19, used: len_15 };
-            len_15 = builtin::load_i32($elem_addr_6 + 8);
-            $result_10 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count_9(builtin::load_i32(($elem_addr_6 + 8) + 4))), used: 0 };
-            i = 0;
-            b4: block {
-                l5: loop {
-                    break_if b4 i >= $count_9;
-                    value_25 = builtin::load_u8(len_15 + i);
-                    if @unlikely(local.tee used_26($result_10.used) >= builtin::array_len($result_10.repr)) {
+            $lifted_string = struct.new "core:prelude/string.wado//String" { repr: arr_21, used: $str_len };
+            if $str_len > 0 {
+                drop("mem/realloc"($str_ptr, $str_len, 1, 0));
+            }
+            $str_len = builtin::load_i32($elem_addr_6 + 8);
+            $result_12 = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count_11(builtin::load_i32(($elem_addr_6 + 8) + 4))), used: 0 };
+            $str_ptr = 0;
+            b5: block {
+                l6: loop {
+                    break_if b5 $str_ptr >= $count_11;
+                    value_27 = builtin::load_u8($str_len + $str_ptr);
+                    if @unlikely(local.tee used_28($result_12.used) >= builtin::array_len($result_12.repr)) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($result_10);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"($result_12);
                     }
-                    builtin::array_set_u8($result_10.repr, used_26, value_25);
-                    $result_10.used = used_26 + 1;
-                    i = i + 1;
-                    continue l5;
+                    builtin::array_set_u8($result_12.repr, used_28, value_27);
+                    $result_12.used = used_28 + 1;
+                    $str_ptr = $str_ptr + 1;
+                    continue l6;
                 };
             };
-            if $count_9 > 0 {
-                drop("mem/realloc"(len_15, $count_9, 1, 0));
+            if $count_11 > 0 {
+                drop("mem/realloc"($str_len, $count_11, 1, 0));
             }
-            value_32 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: $lifted_result_7, 1: $result_10 };
-            if @unlikely(local.tee len_15($result_4.used) >= builtin::array_len($result_4.repr)) {
+            value_34 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: $lifted_string, 1: $result_12 };
+            if @unlikely(local.tee $str_len($result_4.used) >= builtin::array_len($result_4.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>::grow"($result_4);
             }
-            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($result_4.repr, len_15, value_32);
-            $result_4.used = len_15 + 1;
-            drop("mem/realloc"(builtin::load_i32($elem_addr_6), builtin::load_i32($elem_addr_6 + 4), 1, 0));
+            builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($result_4.repr, $str_len, value_34);
+            $result_4.used = $str_len + 1;
             $i_5 = $i_5 + 1;
             continue l1;
         };
@@ -277,16 +279,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b15: block {
-        l16: loop {
-            break_if b15 (digit_count - offset) < 2;
+    b16: block {
+        l17: loop {
+            break_if b16 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l16;
+            continue l17;
         };
     };
     if digit_count > offset {
@@ -385,17 +387,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b39: block {
-        l40: loop {
-            break_if b39 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b40: block {
+        l41: loop {
+            break_if b40 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l40;
+            continue l41;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l42: loop {
+        l43: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -425,7 +427,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l42;
+            continue l43;
         };
     };
 }

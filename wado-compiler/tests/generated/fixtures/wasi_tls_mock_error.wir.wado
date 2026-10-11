@@ -263,26 +263,29 @@ fn "wasi_tls_mock_error.wado/$cm_binding__Connector_connect"(this, server_name) 
 
 fn "wasi_tls_mock_error.wado/$cm_binding__Error_to_debug_string"(self) with Error {
     let $outptr: i32;
-    let $lifted_result_2: ref "core:prelude/string.wado//String";
-    let len_4: i32;
-    let arr_8: ref Array<u8>;
+    let $str_len: i32;
+    let $lifted_string: ref "core:prelude/string.wado//String";
+    let arr_10: ref Array<u8>;
     let i: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:tls/Error::to_debug_string"(self, $outptr);
     self = builtin::load_i32($outptr);
-    arr_8 = builtin::array_new<u8>(local.tee len_4(builtin::load_i32($outptr + 4)));
+    arr_10 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)));
     i = 0;
     b4: block {
         l5: loop {
-            break_if b4 i >= len_4;
-            builtin::array_set_u8(arr_8, i, builtin::load_u8(self + i));
+            break_if b4 i >= $str_len;
+            builtin::array_set_u8(arr_10, i, builtin::load_u8(self + i));
             i = i + 1;
             continue l5;
         };
     };
-    $lifted_result_2 = struct.new "core:prelude/string.wado//String" { repr: arr_8, used: len_4 };
+    $lifted_string = struct.new "core:prelude/string.wado//String" { repr: arr_10, used: $str_len };
+    if $str_len > 0 {
+        drop("mem/realloc"(self, $str_len, 1, 0));
+    }
     drop("mem/realloc"($outptr, 8, 4, 0));
-    return $lifted_result_2;
+    return $lifted_string;
 }
 
 fn "wasi_tls_mock_error.wado/$cm_lift__Connector_connect"($outptr) {
@@ -303,16 +306,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b7: block {
-        l8: loop {
-            break_if b7 (digit_count - offset) < 2;
+    b8: block {
+        l9: loop {
+            break_if b8 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l8;
+            continue l9;
         };
     };
     if digit_count > offset {
@@ -404,17 +407,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b30: block {
-        l31: loop {
-            break_if b30 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b31: block {
+        l32: loop {
+            break_if b31 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l31;
+            continue l32;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l33: loop {
+        l34: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -444,7 +447,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l33;
+            continue l34;
         };
     };
 }
@@ -517,8 +520,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if local.tee handle_1(self.__cm_packed >>u 4) != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b46: block {
-            l47: loop {
+        b47: block {
+            l48: loop {
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
@@ -529,8 +532,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
                     "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"(code);
                     unreachable;
                 }
-                break_if b46 payload >u 1;
-                continue l47;
+                break_if b47 payload >u 1;
+                continue l48;
             };
         };
         "wasi/subtask-drop"(handle_1);

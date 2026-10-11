@@ -10,19 +10,19 @@ test "divides by zero" {
 
 #[expect_trap]
 test "takes a remainder by zero" {
-    let x = builtin::black_box(10_u64);
+    let x = builtin::black_box(10 as u64);
     let _ = x % 0;
 }
 
 #[expect_trap]
 test "MIN / -1 overflows" {
-    let _ = -128_i8 / -1_i8;
+    let _ = -128 as i8 / -1;
 }
 
 test "a float divides by zero without trapping" {
     let x = builtin::black_box(1.0);
     assert x / 0.0 == f64::INFINITY;
-    assert -128_i8 % -1_i8 == 0;
+    assert -128 as i8 % -1 == 0;
 }
 
 #[allow(unconditional_trap)]
@@ -37,7 +37,7 @@ __DATA__
     "warnings_contains": [
         "`x / 0` divides by zero, so it always traps",
         "`x % 0` divides by zero, so it always traps",
-        "`-128_i8 / -1_i8` overflows `i8`, so it always traps"
+        "`-128 as i8 / -1` overflows `i8`, so it always traps"
     ],
-    "warnings_not_contains": ["x / 0.0", "`-128_i8 % -1_i8`", "black_box(7)"]
+    "warnings_not_contains": ["x / 0.0", "`-128 as i8 % -1`", "black_box(7)"]
 }

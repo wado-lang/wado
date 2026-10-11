@@ -52,6 +52,7 @@ use crate::elaborator::types::{
 };
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
+use crate::lexer::defaults_to_float;
 use crate::primitive::PrimitiveType;
 use crate::tir::{AnonStructId, StructDef};
 use std::cell::OnceCell;
@@ -91,7 +92,7 @@ enum FuncRefInference {
 /// is settled by defaulting to `i32` rather than by a coercion.
 pub(super) fn int_literal_repr(lit: &ast::LiteralExpr) -> Option<&str> {
     match &lit.value {
-        Literal::Number(repr, None) if !util::is_float_only_literal(repr) => Some(repr.as_str()),
+        Literal::Number(repr) => util::integer_digits(repr),
         _ => None,
     }
 }
@@ -657,10 +658,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        if let Some(suffixed) = self.resolve_suffixed_literal(expr) {
-            return suffixed;
-        }
-
         if let Some(target_type) = expected_type
             && let Some(coerced) = self
                 .defer_literal_at_var(expr, target_type)
@@ -843,10 +840,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Unary(unary) => negated_literal(unary)?,
             _ => return None,
         };
-        let Literal::Number(repr, None) = &lit.value else {
+        let Literal::Number(repr) = &lit.value else {
             return None;
         };
-        let integer = !util::is_float_only_literal(repr);
+        let integer = !defaults_to_float(repr);
         let tt = self.tysys.type_table.borrow();
         let head = tt.representation_head(target);
         if head == TypeTable::CHAR {
@@ -879,13 +876,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // diagnostics. The returned value is a placeholder, so this projects
         // only the type while preserving the validation side effects.
         match &lit.value {
-            Literal::Number(_, Some(_)) => {
-                unreachable!("resolve_expr types a suffixed literal by its suffix")
-            }
-            Literal::Number(repr, None) => {
-                // Default type: i32 if integer-compatible, f64 if float-only
-                if util::is_float_only_literal(repr) {
-                    // Must be float (has decimal point or negative exponent)
+            Literal::Number(repr) => {
+                if defaults_to_float(repr) {
                     if let Err(error) = float_literal_bits(repr, FloatFormat::F64) {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message: error.message(repr),
@@ -2021,10 +2013,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
-                value: ast::Literal::Number(repr, suffix),
+                value: ast::Literal::Number(repr),
                 ..
             }) = &index.index
-                && let Some(digits) = util::integer_digits(repr, *suffix)
+                && let Some(digits) = util::integer_digits(repr)
                 && let Ok(idx) = digits.parse::<usize>()
             {
                 match self.tysys.tuple_literal_index_type(elements, idx) {
@@ -5473,12 +5465,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn extract_literal_ord_value(&self, expr: &Expr) -> Option<LiteralOrdValue> {
         match expr {
             Expr::Literal(lit) => match &lit.value {
-                Literal::Number(s, suffix) if util::denotes_float(s, *suffix) => {
+                Literal::Number(s) if defaults_to_float(s) => {
                     float_literal_bits(s, FloatFormat::F64)
                         .ok()
                         .map(|bits| LiteralOrdValue::Float(f64::from_bits(bits)))
                 }
-                Literal::Number(s, _) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
+                Literal::Number(s) => util::parse_i128_literal(s).ok().map(LiteralOrdValue::Int),
                 Literal::Char(s) => unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),

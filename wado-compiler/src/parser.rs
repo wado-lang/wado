@@ -13,8 +13,8 @@ use crate::ast::{
     HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
     InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
     LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
-    NamespacedGenericType, Newtype, NumericSuffix, Param, PathSegment, Pattern, RangeExpr,
-    RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
+    NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
+    ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
     StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
     TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TryOpExpr,
@@ -26,8 +26,14 @@ use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
+<<<<<<< HEAD
 use crate::lexer::{LexResult, lex_interpolation};
 use crate::name::contract_holder_name;
+||||||| f3f76a82d
+use crate::lexer::{LexResult, lex_interpolation};
+=======
+use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
+>>>>>>> origin/main
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -1129,10 +1135,43 @@ impl Parser {
             self.advance();
             Ok((name, span))
         } else {
-            Err(ParseError {
-                message: format!("expected identifier, found {}", self.peek_kind()),
-                span: self.peek().span,
-            })
+            Err(self.expected_name_error("identifier"))
+        }
+    }
+
+    /// [`Self::consume_ident_with_span`], or the wildcard `_`.
+    fn consume_ident_or_wildcard_with_span(&mut self) -> ParseResult<(String, Span)> {
+        if self.check(&TokenKind::Underscore) {
+            let span = self.advance().span;
+            return Ok((WILDCARD.to_string(), span));
+        }
+        self.consume_ident_with_span()
+    }
+
+    /// "expected <what>" where a name goes, or why `_` is not one.
+    fn expected_name_error(&self, what: &str) -> ParseError {
+        if self.check(&TokenKind::Underscore) {
+            return self.wildcard_name_error();
+        }
+        ParseError {
+            message: format!("expected {what}, found {}", self.peek_kind()),
+            span: self.peek().span,
+        }
+    }
+
+    /// `.5` or `5.`: a `.` touching a decimal integer on one side only, which
+    /// Wado does not read as a float. `float` is the literal it meant.
+    fn bare_decimal_point_error(float: String, dot: Span) -> ParseError {
+        ParseError {
+            message: format!("a decimal point needs a digit on each side: write `{float}`"),
+            span: dot,
+        }
+    }
+
+    fn wildcard_name_error(&self) -> ParseError {
+        ParseError {
+            message: "`_` is the wildcard, not a name".to_string(),
+            span: self.peek().span,
         }
     }
 
@@ -1152,10 +1191,7 @@ impl Parser {
             return Ok(keyword.to_string());
         }
 
-        Err(ParseError {
-            message: format!("expected field name, found {}", self.peek_kind()),
-            span: self.peek().span,
-        })
+        Err(self.expected_name_error("field name"))
     }
 
     // Parsing
@@ -1489,7 +1525,6 @@ impl Parser {
                                 }
                             }
                             TokenKind::NumberLit(number) => {
-                                let number = self.unsuffixed_number(number)?;
                                 self.advance();
                                 AttrArg::KeyNumber(value, number)
                             }
@@ -1500,7 +1535,6 @@ impl Parser {
                                 let TokenKind::NumberLit(number) = self.peek_kind().clone() else {
                                     unreachable!("the lookahead saw a number");
                                 };
-                                let number = self.unsuffixed_number(number)?;
                                 self.advance();
                                 AttrArg::KeyNumber(value, format!("-{number}"))
                             }
@@ -1526,7 +1560,6 @@ impl Parser {
                     }
                 }
                 (None, TokenKind::NumberLit(value)) => {
-                    let value = self.unsuffixed_number(value)?;
                     self.advance();
                     AttrArg::Number(value)
                 }
@@ -1657,7 +1690,7 @@ impl Parser {
         // Check for wildcard import: `use _ from "..."`
         let mut items_span = None;
         let modifier = visibility.keyword().trim_end();
-        let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
+        let items = if self.check(&TokenKind::Underscore) {
             let span = self.advance().span;
             if visibility.reaches_beyond_file() {
                 self.errors.push(ParseError {
@@ -1888,7 +1921,6 @@ impl Parser {
                 Ok(AttrValue::String(s))
             }
             TokenKind::NumberLit(repr) => {
-                let repr = self.unsuffixed_number(repr)?;
                 self.advance();
                 parse_attr_number(&repr, negate, span)
             }
@@ -2337,7 +2369,7 @@ impl Parser {
             false
         };
 
-        let (name, name_span) = self.consume_ident_with_span()?;
+        let (name, name_span) = self.consume_ident_or_wildcard_with_span()?;
         self.expect(&TokenKind::Colon)?;
         let ty = self.parse_type()?;
 
@@ -2404,7 +2436,7 @@ impl Parser {
 
     /// Take one effect name of a `with` row, noting it if it is the hole.
     fn consume_effect_name(&mut self) -> ParseResult<EffectName> {
-        let (name, span) = self.consume_ident_with_span()?;
+        let (name, span) = self.consume_ident_or_wildcard_with_span()?;
         if name == EFFECT_HOLE {
             self.note_effect_hole(span)?;
         }
@@ -3403,6 +3435,9 @@ impl Parser {
         } else if self.check(&TokenKind::LBrace) {
             // Unnamed struct pattern: { x, y }
             self.parse_struct_pattern_fields(None)
+        } else if self.check(&TokenKind::Underscore) {
+            self.advance();
+            Ok(Pattern::Wildcard)
         } else if let Some(name) = self.peek_kind().as_ident_name() {
             // Accept identifiers and contextual keywords (flags, type) as pattern names.
             // Case does NOT affect parsing: disambiguation between variant cases and
@@ -3411,9 +3446,7 @@ impl Parser {
             let start_span = self.peek().span;
             self.mark_keyword_name();
             self.advance();
-            if name == "_" {
-                Ok(Pattern::Wildcard)
-            } else if self.check(&TokenKind::Lt) || self.check(&TokenKind::ColonColon) {
+            if self.check(&TokenKind::Lt) || self.check(&TokenKind::ColonColon) {
                 self.parse_pattern_qualified_case_from_first_segment(name, start_span)
             } else if self.check(&TokenKind::LParen) {
                 // Variant with bindings: Some(x), just(n), etc.
@@ -3434,7 +3467,7 @@ impl Parser {
         } else if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
             // Literal pattern: 42 or 3.14
             self.advance();
-            Ok(Pattern::Literal(number_literal(&repr, "")))
+            Ok(Pattern::Literal(Literal::Number(repr)))
         } else if let TokenKind::StringLit(raw) = self.peek_kind().clone() {
             // Literal pattern: "hello"
             self.advance();
@@ -3464,7 +3497,7 @@ impl Parser {
             self.advance();
             if let TokenKind::NumberLit(repr) = self.peek_kind().clone() {
                 self.advance();
-                Ok(Pattern::Literal(number_literal(&repr, "-")))
+                Ok(Pattern::Literal(Literal::Number(format!("-{repr}"))))
             } else {
                 Err(ParseError {
                     message: format!(
@@ -3525,21 +3558,13 @@ impl Parser {
                         self.advance();
                         name
                     } else {
-                        return Err(ParseError {
-                            message: format!(
-                                "expected field name in struct pattern, found {}",
-                                self.peek_kind()
-                            ),
-                            span: self.peek().span,
-                        });
+                        return Err(self.expected_name_error("field name in struct pattern"));
                     };
 
                     // Check for `: pattern` (rename/nested)
                     let pattern = if self.check(&TokenKind::Colon) {
                         self.advance();
                         self.parse_pattern()?
-                    } else if field_name == "_" {
-                        Pattern::Wildcard
                     } else {
                         // Shorthand: `{ x }` means `{ x: x }`
                         Pattern::Ident {
@@ -3673,21 +3698,6 @@ impl Parser {
         }
 
         Ok(left)
-    }
-
-    /// `text`, the number token at the cursor, where it carries no suffix: an
-    /// attribute argument or a tuple field is a number with no type.
-    fn unsuffixed_number(&self, text: String) -> ParseResult<String> {
-        if let (_, Some(suffix)) = NumericSuffix::split(&text) {
-            return Err(self.error_at_span(
-                self.peek().span,
-                &format!(
-                    "a numeric suffix (`_{}`) is not allowed here",
-                    suffix.as_str()
-                ),
-            ));
-        }
-        Ok(text)
     }
 
     /// Consume the current token and produce an `Expr::Literal` with the given
@@ -4188,13 +4198,27 @@ impl Parser {
                             }
                         } else {
                             // Simple integer literal for tuple field access
-                            let field_name = self.unsuffixed_number(s.clone())?;
+                            let field_name = s.clone();
                             self.advance();
                             (field_name, None)
                         }
                     } else {
                         // Allow keywords as field names (unambiguous after dot)
-                        (self.consume_field_name()?, None)
+                        let field = self.consume_field_name().map_err(|error| match &expr {
+                            Expr::Literal(LiteralExpr {
+                                value: Literal::Number(digits),
+                                ..
+                            }) if is_decimal_integer(digits)
+                                && receiver_span.end == self.previous().span.start =>
+                            {
+                                Self::bare_decimal_point_error(
+                                    format!("{digits}.0"),
+                                    self.previous().span,
+                                )
+                            }
+                            _ => error,
+                        })?;
+                        (field, None)
                     };
 
                     // Check for method call with turbofish: obj.method::<T>(x)
@@ -4623,7 +4647,7 @@ impl Parser {
 
         match self.peek_kind().clone() {
             TokenKind::NumberLit(repr) => {
-                Ok(self.consume_literal(number_literal(&repr, ""), start_span))
+                Ok(self.consume_literal(Literal::Number(repr), start_span))
             }
             TokenKind::StringLit(raw) => Ok(self.consume_literal(Literal::String(raw), start_span)),
             TokenKind::ByteStringLit(raw) => {
@@ -4669,6 +4693,17 @@ impl Parser {
                         .to_owned(),
                 span: start_span,
             }),
+            TokenKind::Underscore => Err(self.wildcard_name_error()),
+            TokenKind::Dot
+                if let TokenKind::NumberLit(digits) = &self.peek_nth(1).kind
+                    && is_decimal_integer(digits)
+                    && self.peek_nth(1).span.start == start_span.end =>
+            {
+                Err(Self::bare_decimal_point_error(
+                    format!("0.{digits}"),
+                    start_span,
+                ))
+            }
             _ => Err(ParseError {
                 message: format!("expected expression, found {}", self.peek_kind()),
                 span: start_span,
@@ -5327,7 +5362,7 @@ impl Parser {
         } else {
             false
         };
-        let (name, name_span) = self.consume_ident_with_span()?;
+        let (name, name_span) = self.consume_ident_or_wildcard_with_span()?;
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.parse_type()?)
@@ -5433,12 +5468,12 @@ impl Parser {
             return Ok(Type::Tuple(types));
         }
 
-        // Inference placeholder `_`. Bare `_` (not `_::x` / `_<T>`, which are
-        // never valid type heads) is a wildcard: inferred inside a turbofish,
-        // resolved to the unknown type elsewhere.
-        if matches!(self.peek_kind(), TokenKind::Ident(n) if n == "_")
-            && !matches!(self.peek_nth(1).kind, TokenKind::ColonColon | TokenKind::Lt)
-        {
+        // Inference placeholder `_`: inferred inside a turbofish, resolved to
+        // the unknown type elsewhere.
+        if self.check(&TokenKind::Underscore) {
+            if matches!(self.peek_nth(1).kind, TokenKind::ColonColon | TokenKind::Lt) {
+                return Err(self.wildcard_name_error());
+            }
             self.advance();
             return Ok(Type::Infer(start_span));
         }
@@ -5604,7 +5639,11 @@ impl Parser {
                 ));
             }
 
-            let (name, name_span) = self.consume_ident_with_span()?;
+            let (name, name_span) = if is_effect {
+                self.consume_ident_or_wildcard_with_span()?
+            } else {
+                self.consume_ident_with_span()?
+            };
 
             if is_effect && name == EFFECT_HOLE {
                 return Err(self.error_at_span(
@@ -6505,7 +6544,7 @@ impl Parser {
 
         let mut effects = Vec::new();
         loop {
-            let (name, span) = self.consume_ident_with_span()?;
+            let (name, span) = self.consume_ident_or_wildcard_with_span()?;
             effects.push(self.effect_name(name, span));
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
@@ -7086,20 +7125,10 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
     Ok(None)
 }
 
-/// The literal a number token spells, its digits after `sign`.
-fn number_literal(text: &str, sign: &str) -> Literal {
-    let (digits, suffix) = NumericSuffix::split(text);
-    Literal::Number(format!("{sign}{digits}"), suffix)
-}
-
 fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrValue> {
     // Strip numeric underscores for parsing; keep them in the original repr for errors.
     let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
-    // Float if it contains '.' or 'e'/'E' (but not hex prefix).
-    let is_hex = cleaned.starts_with("0x") || cleaned.starts_with("0X");
-    let is_float =
-        !is_hex && (cleaned.contains('.') || cleaned.contains('e') || cleaned.contains('E'));
-    if is_float {
+    if defaults_to_float(repr) {
         let f: f64 = cleaned.parse().map_err(|_| ParseError {
             message: format!("invalid numeric attribute value: {repr}"),
             span,

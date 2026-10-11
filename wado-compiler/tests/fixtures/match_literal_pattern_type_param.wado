@@ -38,20 +38,20 @@ fn is_minus_one<T>(x: T) -> i32 {
 }
 
 test "a negative literal matches each signed width" {
-    assert is_minus_one(builtin::black_box(-1_i8)) == 1;
-    assert is_minus_one(builtin::black_box(-1_i64)) == 1;
-    assert is_minus_one(builtin::black_box(1_i32)) == 0;
+    assert is_minus_one(builtin::black_box(-1 as i8)) == 1;
+    assert is_minus_one(builtin::black_box(-1 as i64)) == 1;
+    assert is_minus_one(builtin::black_box(1 as i32)) == 0;
 }
 
 test "an unsigned instance compares a range unsigned" {
-    assert is_high_half(builtin::black_box(0x9000_0000_u32)) == 1;
-    assert is_high_half(builtin::black_box(5_u32)) == 0;
-    assert is_high_half(builtin::black_box(0x9000_0000_i64)) == 1;
+    assert is_high_half(builtin::black_box(0x9000_0000 as u32)) == 1;
+    assert is_high_half(builtin::black_box(5 as u32)) == 0;
+    assert is_high_half(builtin::black_box(0x9000_0000 as i64)) == 1;
 }
 
 test "a literal past i128::MAX matches a u128 instance" {
     assert is_max(builtin::black_box(u128::MAX)) == 1;
-    assert is_max(builtin::black_box(1_u128)) == 0;
+    assert is_max(builtin::black_box(1 as u128)) == 0;
 }
 
 test "char and bool literals match their own instances" {

@@ -3,14 +3,18 @@
 //! `docs/spec-diagnostics.md`.
 
 use crate::ast::{
-    AstVisitor, Attribute, BinaryExpr, BinaryOp, Expr, Function, Item, Literal, UnaryOp,
-    attrs_allow, inner_attrs_allow, lint, walk_expr, walk_function, walk_item,
+    AstVisitor, Attribute, BinaryExpr, BinaryOp, Expr, UnaryOp, attrs_allow, inner_attrs_allow,
+    lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{int_bit_width, is_signed_int};
+use crate::elaborator::coercion::{
+    NumericLiteral, NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
+};
 use crate::elaborator::liveness::is_user_authored;
-use crate::elaborator::util::{parse_i128_literal, parse_u128_literal};
+use crate::elaborator::util::parse_u128_literal;
+use crate::escape::unescape_byte;
 use crate::semantics::Semantics;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -179,6 +183,18 @@ fn exact(op: BinaryOp, left: Value, right: Value) -> Option<Value> {
     Some(Value::from_i128(signed))
 }
 
+/// The value `literal` names, where it is an integer.
+fn literal_value(literal: &NumericLiteral) -> Option<Value> {
+    let magnitude = match literal.kind {
+        NumericLiteralKind::Number(repr) => parse_u128_literal(repr).ok()?,
+        NumericLiteralKind::Byte(raw) => unescape_byte(raw).ok()?.into(),
+    };
+    if literal.neg.is_none() {
+        return Some(Value::NonNegative(magnitude));
+    }
+    0_i128.checked_sub_unsigned(magnitude).map(Value::from_i128)
+}
+
 /// `left op right` wrapped to `ty`, by two's complement on the low bits.
 fn wrapping(op: BinaryOp, left: Value, right: Value, ty: IntType) -> Value {
     let (l, r) = (left.bits(), right.bits());
@@ -209,24 +225,14 @@ impl ConstantArithmetic<'_> {
     /// `expr`'s value where its literals alone decide it. Any other
     /// expression is walked for the operators inside it.
     fn value(&mut self, expr: &Expr) -> Option<Value> {
+        if let Some(literal) = classify_numeric_literal(expr) {
+            // `-128 as i8` casts one literal, never `-(128)`.
+            let ty = self.int_type(expr)?;
+            let value = literal_value(&literal)?;
+            return ty.holds(value).then_some(value);
+        }
         match expr {
-            Expr::Literal(literal) => {
-                let Literal::Number(repr, _) = &literal.value else {
-                    return None;
-                };
-                let ty = self.int_type(expr)?;
-                let value = parse_u128_literal(repr).ok().map(Value::NonNegative)?;
-                ty.holds(value).then_some(value)
-            }
             Expr::Unary(unary) if unary.op == UnaryOp::Neg => {
-                if let Expr::Literal(literal) = &unary.expr
-                    && let Literal::Number(repr, _) = &literal.value
-                {
-                    // `-128_i8` is one literal, never `-(128_i8)`.
-                    let ty = self.int_type(expr)?;
-                    let value = Value::from_i128(parse_i128_literal(&format!("-{repr}")).ok()?);
-                    return ty.holds(value).then_some(value);
-                }
                 let operand = self.value(&unary.expr);
                 let ty = self.int_type(expr)?;
                 let negated = exact(BinaryOp::Sub, Value::NonNegative(0), operand?)?;
@@ -237,6 +243,9 @@ impl ConstantArithmetic<'_> {
                 None
             }
             Expr::Binary(binary) => self.binary(expr, binary),
+            // `lit as T` types the literal, so it is the constant `lit` of type
+            // `T`; a cast of any other operand converts a value and is opaque.
+            Expr::Cast(cast) if is_numeric_literal_expr(&cast.expr) => self.value(&cast.expr),
             _ => {
                 walk_expr(self, expr);
                 None
@@ -346,9 +355,10 @@ impl ConstantArithmetic<'_> {
             });
         }
     }
+}
 
-    /// Run `body` with each lint the attributes `#[allow]` turned off.
-    fn waiving(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
+impl AstVisitor for ConstantArithmetic<'_> {
+    fn visit_attributed(&mut self, attrs: &[Attribute], body: impl FnOnce(&mut Self)) {
         let saved = (self.overflow, self.trap);
         self.overflow &= !attrs_allow(attrs, lint::ARITHMETIC_OVERFLOW);
         self.trap &= !attrs_allow(attrs, lint::UNCONDITIONAL_TRAP);
@@ -356,16 +366,6 @@ impl ConstantArithmetic<'_> {
             body(self);
         }
         (self.overflow, self.trap) = saved;
-    }
-}
-
-impl AstVisitor for ConstantArithmetic<'_> {
-    fn visit_item(&mut self, item: &Item) {
-        self.waiving(item.attrs(), |walk| walk_item(walk, item));
-    }
-
-    fn visit_function(&mut self, func: &Function) {
-        self.waiving(&func.attrs, |walk| walk_function(walk, func));
     }
 
     fn visit_expr(&mut self, expr: &Expr) {
