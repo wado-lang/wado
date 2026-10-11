@@ -1298,6 +1298,7 @@ fn check_function_effects_sem(
         let mut walked = walker.rows;
         walked.propagate_flows(index);
         if walked.read_final() {
+            walked.assert_solved(&func.name);
             walked.bound_flows(index, &mut found);
             out.extend(found);
             solved.extend(walked.solved);
@@ -2475,13 +2476,9 @@ impl SemEffectWalker<'_> {
         span: Span,
         fault: fn(EffectKind) -> EffectFault,
     ) {
-        // A variable the walk has not solved stands for no row it can read.
-        let effects: Vec<EffectRef> = self
-            .rows
-            .row(effects)
-            .into_iter()
-            .filter(|effect| !effect.is_var())
-            .collect();
+        // A variable left unsolved here is solved by the pass that keeps its
+        // findings: the body's walk asserts so once it settles.
+        let effects = self.rows.row(effects);
         let effects = effects.as_slice();
         if let Some(collected) = &mut self.collecting {
             collected.extend(
@@ -2835,7 +2832,11 @@ impl Rows {
             let admitted =
                 expand_through_closure(&flow.into.iter().cloned().collect(), index.closure);
             for effect in self.row(&flow.from) {
-                if effect.is_var() || effect.is_param() || admitted.contains(&effect) {
+                assert!(
+                    !effect.is_var(),
+                    "a settled body's flows read only solved variables"
+                );
+                if effect.is_param() || admitted.contains(&effect) {
                     continue;
                 }
                 out.push(EffectError {
@@ -2847,6 +2848,20 @@ impl Rows {
                 });
             }
         }
+    }
+
+    /// Every variable a settled body's walk read is solved: each is minted by a
+    /// call or a closure literal in the body, which the walk solves.
+    fn assert_solved(&self, function: &str) {
+        let reads = self.reads.borrow();
+        let unsolved: Vec<&String> = reads
+            .keys()
+            .filter(|var| !self.solved.contains_key(*var))
+            .collect();
+        assert!(
+            unsolved.is_empty(),
+            "in {function}: effect variables read but never solved: {unsolved:?}"
+        );
     }
 
     /// Whether every solution the walk read is the one it ends with, so a
