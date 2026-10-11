@@ -126,6 +126,11 @@ test "router: root pattern" {
     assert r.match_path(Method::Get, &"/").unwrap().handler == 7;
     assert r.match_path(Method::Get, &"/foo").unwrap().handler == 8;
     assert r.match_path(Method::Get, &"/bar") matches { None };
+    assert r.match_path(Method::Post, &"/") matches { None };
+    assert r.allowed_methods("/") == [Method::Get];
+    r.post("/*rest", 9);
+    assert r.match_path(Method::Post, &"/") matches { Some(m) && m.handler == 9 && m.params["rest"] == "" };
+    assert r.allowed_methods("/") == [Method::Get, Method::Post];
 }
 
 test "router: trailing slash differs from no slash" {
@@ -278,6 +283,8 @@ test "router: allowed_methods agrees with match_path" {
     assert r.allowed_methods("/users/7/x") == [Method::Delete];
     assert r.match_path(Method::Put, &"/s") matches { Some(m) && m.handler == 5 };
     assert r.allowed_methods("/s").is_empty();
+    r.get("/users/*rest", 7);
+    assert r.allowed_methods("/users/7") == [Method::Post, Method::Get, Method::Delete];
     assert r.allowed_methods("/t") == [Method::Put];
 }
 
