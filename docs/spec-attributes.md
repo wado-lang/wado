@@ -469,11 +469,8 @@ Marks a function in a `wasm_module` as the `realloc` implementation named `name`
 ```wado
 #[allocator("bump")]
 export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    // Free: rewind if this was the most recent allocation
     if newsize == 0 {
-        if (oldptr + oldsize) as u32 == frontier() {
-            set_frontier(oldptr as u32);
-        }
+        bump_free(oldptr as u32, oldptr as u32 + oldsize as u32);
         return 0;
     }
     return bump(align as u32, newsize as u32) as i32;
