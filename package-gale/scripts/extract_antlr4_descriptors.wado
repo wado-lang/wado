@@ -1377,14 +1377,14 @@ struct CliArgs {
 fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
     let mut want_all = false;
     let mut categories: List<String> = [];
-    let mut finalize_stage_b_oracle = false;
+    let mut finalize = false;
     for let a of arguments {
         match a {
             "all" => {
                 want_all = true;
             },
             "--finalize-stage-b-oracle" => {
-                finalize_stage_b_oracle = true;
+                finalize = true;
             },
             _ => {
                 // A leading `-` marks an option, not a category. Reject
@@ -1401,7 +1401,7 @@ fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
     if !want_all && categories.is_empty() {
         categories = default_categories();
     }
-    return Result::<CliArgs, String>::Ok(CliArgs { want_all, categories, finalize_stage_b_oracle });
+    return Result::<CliArgs, String>::Ok(CliArgs { want_all, categories, finalize_stage_b_oracle: finalize });
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {

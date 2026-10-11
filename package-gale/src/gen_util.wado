@@ -2,6 +2,16 @@ use { FOLLOW_PARAM, symbol_char_names, char_hex_name } from "./ident.wado";
 use { is_id_continue_char } from "./g4/scan.wado";
 use { collect_range } from "./text.wado";
 pub use { escape_ident, escape_case, to_pascal_case, to_snake_case, to_lower } from "./ident.wado";
+use { CodeWriter } from "lib:wadopoet";
+
+/// Open an `if` arm, or chain it onto the arm already open.
+pub fn open_chain_arm<S: AsStrSlice>(w: &mut CodeWriter, chained: bool, cond: S) {
+    if chained {
+        w.else_begin(`else if ${cond}`);
+    } else {
+        w.begin(`if ${cond}`);
+    }
+}
 
 pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {
     let mut result = to_pascal_case(name);
