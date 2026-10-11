@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791687992640,
+  "lastUpdate": 1791694981759,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66057,6 +66057,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/feef811e5d88668a5ed6a9e8c80587027aa40da8"
         },
         "date": 1791687992206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aaf4052abf621d7326758611276327914f8e0b5a",
+          "message": "Merge pull request #2328 from wado-lang/ccr-327c3cc4-bq13x1\n\nrefactor(gale): carry token kinds as integer ids from analysis to emit",
+          "timestamp": "2026-10-11T13:46:48+09:00",
+          "tree_id": "4700981de866b9f623cbc06e2680b04cd97d995f",
+          "url": "https://github.com/wado-lang/wado/commit/aaf4052abf621d7326758611276327914f8e0b5a"
+        },
+        "date": 1791694980853,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
