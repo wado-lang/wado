@@ -967,7 +967,7 @@ fn validate_export_mappings(
     project: &Package,
     selected_world: Option<&str>,
     entry_type_table: &RefCell<TypeTable>,
-) -> Result<(), String> {
+) -> Result<(), SynthesisError> {
     let entry_module = &project.tir_modules[&project.entry_module_source];
     for mapping in &project.export_mappings {
         if !project.world_registry.has_world(&mapping.world) {
@@ -975,7 +975,8 @@ fn validate_export_mappings(
                 "`export(…) fn {}` names the world `{}`, which no compilation can \
                  target; only a standard library world can be",
                 mapping.function_name, mapping.world
-            ));
+            )
+            .into());
         }
         let Some(export) = project
             .world_registry
@@ -984,7 +985,8 @@ fn validate_export_mappings(
             return Err(format!(
                 "world `{}` has no export `{}` for `fn {}` to provide",
                 mapping.world, mapping.export_name, mapping.function_name
-            ));
+            )
+            .into());
         };
         let func = find_export_user_func(project, entry_module, &mapping.world, export)?;
         if selected_world == Some(mapping.world.as_str()) {
@@ -1122,15 +1124,19 @@ fn validate_world_signature_compatibility(
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     registry: &CmInterfaceRegistry,
-) -> Result<(), String> {
+) -> Result<(), SynthesisError> {
+    let at = |span: Span| move |message: String| SynthesisError {
+        message,
+        span: Some(span),
+    };
     if user_func.params.len() != export.params.len() {
-        return Err(format!(
+        return Err(at(user_func.span)(format!(
             "export function `{}` has {} parameter(s), \
              but the world expects {} parameter(s)",
             export.name,
             user_func.params.len(),
             export.params.len()
-        ));
+        )));
     }
     for (user_param, (world_name, world_ty)) in user_func.params.iter().zip(&export.params) {
         validate_flat_shape_agrees(
@@ -1143,12 +1149,14 @@ fn validate_world_signature_compatibility(
             tt,
             tir_modules,
             registry,
-        )?;
+        )
+        .map_err(at(user_param.span))?;
     }
     let Some(world_return) = export.return_type.as_ref() else {
         return Ok(());
     };
-    validate_result_wrapper_agrees(user_func, export, world_return, tt)?;
+    validate_result_wrapper_agrees(user_func, export, world_return, tt)
+        .map_err(at(user_func.span))?;
     if matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
         // The unit the wrapper check let through is delivered as the world's
         // own `Ok(())`, so there is no user shape left to compare.
@@ -1162,6 +1170,7 @@ fn validate_world_signature_compatibility(
         tir_modules,
         registry,
     )
+    .map_err(at(user_func.span))
 }
 
 /// A `Result` world return needs a `Result` export, which flat shapes alone do

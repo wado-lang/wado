@@ -321,9 +321,10 @@ impl FlagsInfo {
     /// The most members a declaration holds: each one's bitmask is `1 << index`.
     pub(super) const MAX_MEMBERS: usize = u32::BITS as usize;
 
-    /// The members past [`Self::MAX_MEMBERS`] are left out. A declaration that
-    /// has any is reported (`FlagsTooManyMembers`), and declaring the rest
-    /// keeps the type's name resolving, so no use of it reports a second error.
+    /// Every member is declared, so no use of the type or of a member reports a
+    /// second error. One past [`Self::MAX_MEMBERS`] has no bit and gets mask 0:
+    /// its declaration is reported (`FlagsTooManyMembers`), so the program never
+    /// reaches codegen to read it.
     pub(super) fn of_decl(
         type_id: TypeId,
         module_source: ModuleSource,
@@ -332,11 +333,13 @@ impl FlagsInfo {
         let members = decl
             .flags
             .iter()
-            .take(Self::MAX_MEMBERS)
             .enumerate()
             .map(|(i, m)| FlagsMemberData {
                 name: m.name.clone(),
-                bitmask: 1u32 << i,
+                bitmask: u32::try_from(i)
+                    .ok()
+                    .and_then(|i| 1u32.checked_shl(i))
+                    .unwrap_or(0),
                 ast_id: m.id,
             })
             .collect();

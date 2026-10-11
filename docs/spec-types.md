@@ -982,6 +982,18 @@ let { start: { x, y }, end } = line;
 assert x == 1 && y == 2 && end.x == 10;
 ```
 
+Since it names no declaration, `Reflect::type_name()` answers `""` and its
+debug form is the literal that builds it:
+
+<!-- {"fixture":"spec_types_structs.wado"} -->
+
+```wado
+let p = { x: 1, y: 2 };
+assert `${p:?}` == "{ x: 1, y: 2 }";
+assert `${{}:?}` == "{}";
+assert type_name_of(&p) == "";
+```
+
 No `impl` can name an anonymous struct, so it takes derived traits
 ([Derivation Policy](./spec-traits.md#derivation-policy)) and blanket impls
 ([Candidates](./spec-traits.md#candidates)) only.

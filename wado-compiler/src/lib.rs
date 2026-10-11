@@ -232,11 +232,21 @@ pub(crate) fn report_without_span<H: CompilerHost>(
     code: Code,
     message: String,
 ) {
+    report_at(logger, code, message, None);
+}
+
+/// Report a compilation error, at `span` where the pipeline knows one.
+fn report_at<H: CompilerHost>(
+    logger: &Logger<'_, H>,
+    code: Code,
+    message: String,
+    span: Option<Span>,
+) {
     let _ = logger.error(Diagnostic {
         severity: Severity::Error,
         code,
         message,
-        span: None,
+        span: span.map(|span| DiagnosticSpan::from_span(&span, None)),
     });
 }
 
@@ -265,14 +275,7 @@ pub(crate) fn bail_with<H: CompilerHost>(
 
 /// Report a synthesis failure, at the declaration it concerns where it names one.
 fn bail_with_synthesis<H: CompilerHost>(logger: &Logger<'_, H>, error: SynthesisError) -> Bail {
-    let _ = logger.error(Diagnostic {
-        severity: Severity::Error,
-        code: Code::UnsupportedFeature,
-        message: error.message,
-        span: error
-            .span
-            .map(|span| DiagnosticSpan::from_span(&span, None)),
-    });
+    report_at(logger, Code::UnsupportedFeature, error.message, error.span);
     Bail
 }
 

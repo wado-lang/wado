@@ -52,7 +52,7 @@ boundary:
 - A reference, except as a borrowed resource handle on an import.
 
 A signature that names one of them, anywhere within it, is a compile error at
-that parameter or result. This holds for every `export fn`, not only a world's
+that parameter, or at the function's declaration for its result. This holds for every `export fn`, not only a world's
 entry point, because each one lands on the component's surface, and for every
 imported operation.
 

@@ -853,8 +853,8 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
             has_secret = true;
         } else {
             if !wrote_field {
-                f.write_str(&Reflect::<S>::type_name());
-                f.open_brace(" {");
+                write_struct_head::<S>(f);
+                f.open_brace("{");
                 wrote_field = true;
             }
             f.write_newline_indent();
@@ -872,12 +872,22 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
         f.close_brace("}");
         return;
     }
-    f.write_str(&Reflect::<S>::type_name());
+    write_struct_head::<S>(f);
     if has_secret {
-        f.write_str(" { .. }");
+        f.write_str("{ .. }");
         return;
     }
-    f.write_str(" {}");
+    f.write_str("{}");
+}
+
+/// The name a struct's debug form opens with, and the space after it. An
+/// anonymous struct has none, so it reads as the literal that built it.
+fn write_struct_head<S: Reflect>(f: &mut Formatter) {
+    let name = Reflect::<S>::type_name();
+    if !name.is_empty() {
+        f.write_str(&name);
+        f.write_str(" ");
+    }
 }
 
 impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
@@ -886,7 +896,7 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
             inspect_struct_alternate(self, f);
             return;
         }
-        f.write_str(&Reflect::<S>::type_name());
+        write_struct_head::<S>(f);
         let mut wrote_field = false;
         let mut has_secret = false;
         for let field of ReflectStruct::<S>::members() {
@@ -896,7 +906,7 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
                 if wrote_field {
                     f.write_str(", ");
                 } else {
-                    f.write_str(" { ");
+                    f.write_str("{ ");
                     wrote_field = true;
                 }
                 f.write_str(&field.name());
@@ -910,9 +920,9 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
             }
             f.write_str(" }");
         } else if has_secret {
-            f.write_str(" { .. }");
+            f.write_str("{ .. }");
         } else {
-            f.write_str(" {}");
+            f.write_str("{}");
         }
     }
 }

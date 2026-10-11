@@ -105,8 +105,9 @@ let f: EnumCase<Point> = EnumCase {  // ERROR: field `discriminant` of struct
 
 ### Type Names
 
-`Reflect::<T>::type_name()` returns the name of the declaration. A generic type
-answers without its type arguments:
+`Reflect::<T>::type_name()` returns the name of the declaration, and `""` for an
+[anonymous struct](./spec-types.md#anonymous-structs), which names none. A
+generic type answers without its type arguments:
 
 <!-- {"fixture":"spec_reflection_type_name.wado"} -->
 

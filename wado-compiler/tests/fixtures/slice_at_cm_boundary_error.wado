@@ -1,6 +1,8 @@
-// A view (a slice, a `StrSlice`, any struct borrowing storage it does not own)
-// has no Component Model representation, so it is rejected at the definition
-// site of anything crossing the CM boundary, under the name the program uses.
+// A view (a slice, a `StrSlice`, any struct borrowing storage it does not own,
+// generic or not, directly or through an `Option`) has no Component Model
+// representation, so it is rejected at the definition site of anything crossing
+// the CM boundary, under the name the program uses (`ByteSlice`, not the
+// `Slice<u8>` it wraps).
 //
 // Regression for a silent-degradation bug: the signature type-checked, and the
 // failure surfaced only in `wit_emit`, whose error made the CLI skip the
@@ -16,8 +18,33 @@ export fn takes_str_slice(s: StrSlice) -> i32 {
     return s.len();
 }
 
+export fn takes_byte_slice(b: ByteSlice) -> i32 {
+    return b.len();
+}
+
+pub struct Window<T> {
+    pub items: &List<T>,
+}
+
+export fn takes_window(w: Window<i32>) -> i32 {
+    return 0;
+}
+
+pub struct Maybe {
+    pub items: Option<&List<i32>>,
+}
+
+export fn takes_maybe(m: Maybe) -> i32 {
+    return 0;
+}
+
 __DATA__
 {
-  "compile_error": ":11:23: analysis error: `Slice<i32>` in parameter 'a' of `takes_slice` is not allowed: a view points into storage it does not own and has no Component Model representation; copy it into a `List<T>` or a `String`",
-  "compile_errors_contains": ["`StrSlice` in parameter 's' of `takes_str_slice` is not allowed"]
+  "compile_error": ":13:23: analysis error: `Slice<i32>` in parameter 'a' of `takes_slice` is not allowed: a view points into storage it does not own and has no Component Model representation; copy it into a `List<T>` or a `String`",
+  "compile_errors_contains": [
+    "`StrSlice` in parameter 's' of `takes_str_slice` is not allowed",
+    "`ByteSlice` in parameter 'b' of `takes_byte_slice` is not allowed",
+    "`Window<i32>` in parameter 'w' of `takes_window` is not allowed",
+    "`Maybe` in parameter 'm' of `takes_maybe` is not allowed"
+  ]
 }

@@ -569,7 +569,7 @@ fn generate_struct_reflect_methods(
 
     let type_name_fn = generate_type_name_fn(
         receiver,
-        &type_table.borrow().struct_head_decl_name(*def),
+        &type_table.borrow().struct_reflect_name(*def),
         env.string_type,
         &env.root_trait_name,
         &env.type_name_method,

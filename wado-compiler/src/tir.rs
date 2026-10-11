@@ -1890,6 +1890,7 @@ impl TypeTable {
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
         match &self.anon_structs[id.0 as usize].shape {
             AnonShape::Template(shape) => self.template_shape_name(shape),
+            AnonShape::Fields(fields) if fields.is_empty() => "{}".to_string(),
             AnonShape::Fields(fields) => {
                 let parts: Vec<String> = fields
                     .iter()
@@ -2037,6 +2038,21 @@ impl TypeTable {
         match head {
             StructDef::Decl(def) => self.def_name(def).to_string(),
             StructDef::Anon(id) => self.anon_struct_name(id),
+        }
+    }
+
+    /// What `Reflect::type_name()` answers for a struct: its declaration's name.
+    /// A struct literal's anonymous struct names no declaration, so it answers
+    /// `""`, and its `Inspect` writes `{ x: 1 }` as the literal does.
+    #[must_use]
+    pub fn struct_reflect_name(&self, head: StructDef) -> String {
+        match head {
+            StructDef::Anon(id)
+                if matches!(self.anon_structs[id.0 as usize].shape, AnonShape::Fields(_)) =>
+            {
+                String::new()
+            }
+            StructDef::Decl(_) | StructDef::Anon(_) => self.struct_head_decl_name(head),
         }
     }
 
