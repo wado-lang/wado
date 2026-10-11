@@ -4627,33 +4627,11 @@ fn gen_op_optional_shape_lookahead(
     }
 }
 
-/// Dispatch a `RepeatOp.body` whose shape is "storable" (a leaf op
-/// or a `Group(SingleAlt | TokenOnly | SimpleCst | General)` op) to
-/// the matching op-driven emit helper. Used by the Star / Plus and
-/// non-greedy arms of `gen_op_repeat_with_follow_override` so the
-/// loop body's per-iteration parse line can route through either
-/// `gen_op_leaf` (leaves), the SingleAlt / TokenOnly op-driven
-/// helpers, or the non-Option SimpleCst / General twins
-/// (`gen_consume_group_store_op` / `gen_general_group_store_op`)
-/// without duplicating the surrounding list / scan-guard / loop
-/// scaffolding.
-///
-/// Dispatch is on `rep_op.body_shape`; lower asserts at construction
-/// time that only the four reachable shapes appear, so emit's match
-/// is exhaustive without a fall-through panic. `elem` is the surface
-/// `Element` matching `op` — the Group arms thread it through the
-/// per-shape `gen_consume_*_group_op` helpers for their
-/// `&g_elem.alternatives` access. The leaf arm reads nothing from it
-/// (sync now drives off `op.dedup_base`). `outer_follow` carries the
-/// surrounding Repeat's iter-follow (`first(inner) ∪ outer_follow`)
-/// so nested non-greedy Repeats inside a `SingleAlt` body can union
-/// it onto their own `caller_follow_first`. `outer_follow` is unused
-/// for the other group shapes today (their inner walkers consume the
-/// baked `caller_follow_first` from lower).
-///
-/// The caller must have already verified storability —
-/// `TransparentGroup` bodies are handled by
-/// `gen_op_repeat_with_follow_override`'s non-storable Group arm.
+/// One pass of a storable `RepeatOp.body` (a leaf, or a group of any shape but
+/// `Transparent`, which `gen_repeat_iteration` routes through `gen_op_group`).
+/// `elem` is the surface element the group arms read alternatives from;
+/// `outer_follow` is the repeat's iter-follow, for a nested non-greedy repeat
+/// in a `SingleAlt` body.
 fn gen_op_inner_for_storable_repeat(
     w: &mut CodeWriter,
     rep_op: &RepeatOp,
@@ -4667,88 +4645,19 @@ fn gen_op_inner_for_storable_repeat(
 ) {
     let entry = open_group_entry(w, elem, ctx, entry);
     assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
-    let op = &rep_op.body;
-    let unwrapped_elem = peel_labels(elem);
-    return match rep_op.body_shape {
-        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, proven),
-        StorableGroup => gen_op_storable_group_inner(
-            w,
-            op,
-            unwrapped_elem,
-            ctx,
-            name_counts,
-            outer_follow,
-            entry,
-            decided,
-            proven,
-        ),
-        TransparentGroup => panic(
-            "gen_op_inner_for_storable_repeat: TransparentGroup body is not storable here — caller must dispatch via the non-storable arm",
-        ),
-    };
-}
-
-/// Inner dispatch for the `StorableGroup` arm of
-/// `gen_op_inner_for_storable_repeat`. Splits on `GroupShape`; lower
-/// guarantees the body op is `Op::Group(_)` with a non-Transparent
-/// shape, so the match below is exhaustive over the storable shapes.
-fn gen_op_storable_group_inner(
-    w: &mut CodeWriter,
-    op: &Op,
-    elem: &Element,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    outer_follow: &List<i32>,
-    entry: GroupEntry,
-    decided: Option<String> = null,
-    proven: &List<i32> = &NO_KINDS,
-) {
-    let g_op = if let Group(g) = op {
-        g;
-    } else {
-        panic("gen_op_storable_group_inner: lower marked StorableGroup but body is not Op::Group");
-    };
-    let g_elem = if let Group(g) = elem {
-        g;
-    } else {
-        panic("gen_op_storable_group_inner: surface element is not Group");
-    };
-    return match &g_op.shape {
-        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
-        SingleAlt(_) => gen_consume_single_alt_group_op(
-            w,
-            &g_op.alts[0],
-            &g_elem.alternatives[0],
-            ctx,
-            name_counts,
-            outer_follow,
-            proven,
-        ),
-        SimpleCst(_) => gen_rule_ref_group(
-            w,
-            &g_op.alts,
-            &g_op.scan_group.alts,
-            &g_elem.alternatives,
-            entry,
-            ctx,
-            name_counts,
-            &g_op.empty_alt_admits,
-            decided,
-        ),
-        General(gs) => gen_general_group(
-            w,
-            gs,
-            &g_op.alts,
-            &g_op.scan_group.alts,
-            &g_elem.alternatives,
-            entry,
-            ctx,
-            name_counts,
-            &g_op.empty_alt_admits,
-            decided,
-        ),
-        Transparent => panic("gen_op_storable_group_inner: lower marked StorableGroup but shape is Transparent"),
-    };
+    match rep_op.body_shape {
+        LeafRuleCall | LeafOther => gen_op_leaf(w, &rep_op.body, ctx, name_counts, proven),
+        StorableGroup => {
+            let Group(g_op) = &rep_op.body else {
+                unreachable();
+            };
+            let Group(g_elem) = peel_labels(elem) else {
+                unreachable();
+            };
+            gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, outer_follow, decided, proven, -1);
+        },
+        TransparentGroup => unreachable(),
+    }
 }
 
 /// Op-driven single-element dispatch. Routes a single `Op` + matching
@@ -5435,69 +5344,49 @@ fn gen_op_group(
         }
     }
     let entry = open_group_entry(w, elem, ctx, entry);
-    if let Group(g_elem) = peel_scalar_label(elem) {
-        return match &g_op.shape {
-            TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
-            SingleAlt(_) => gen_consume_single_alt_group_op(
-                w,
-                &g_op.alts[0],
-                &g_elem.alternatives[0],
-                ctx,
-                name_counts,
-                &NO_KINDS,
-                proven,
-            ),
-            SimpleCst(_) => gen_rule_ref_group(
-                w,
-                &g_op.alts,
-                &g_op.scan_group.alts,
-                &g_elem.alternatives,
-                entry,
-                ctx,
-                name_counts,
-                &g_op.empty_alt_admits,
-                decided,
-                ctx.plan.atn_decision_site(g_op.atn_site),
-            ),
-            General(gs) => gen_general_group(
-                w,
-                gs,
-                &g_op.alts,
-                &g_op.scan_group.alts,
-                &g_elem.alternatives,
-                entry,
-                ctx,
-                name_counts,
-                &g_op.empty_alt_admits,
-                decided,
-                ctx.plan.atn_decision_site(g_op.atn_site),
-            ),
-            Transparent => {
-                // Transparent groups inline their inner alt; walk
-                // `g_op.alts[0].ops` directly via the op-driven
-                // element walker rather than constructing a CST
-                // wrapper. Its actions are inlined with it, so inside a
-                // Repeat they run once per iteration.
-                let body = &g_op.alts[0];
-                let alt = &g_elem.alternatives[0];
-                let outer = ctx.cursor.enter_group_body(false);
-                gen_elements_with_non_greedy(
-                    w,
-                    &alt.elements,
-                    &body.ops,
-                    ctx,
-                    name_counts,
-                    &NO_KINDS,
-                    &alt.actions,
-                    proven,
-                );
-                ctx.cursor.leave_group_body(outer);
-            },
-        };
-    } else {
-        panic(
-            "gen_op_group: Group op mapped to non-Group element (even after peel_scalar_label) — lower produced an Op::Group whose surface element is neither Group nor Label-of-Group",
-        );
+    let Group(g_elem) = peel_scalar_label(elem) else {
+        unreachable();
+    };
+    let atn_dec = ctx.plan.atn_decision_site(g_op.atn_site);
+    gen_group_shape(w, g_op, g_elem, entry, ctx, name_counts, &NO_KINDS, decided, proven, atn_dec);
+}
+
+/// Emit `g_op` by its shape, past the entry. `outer_follow` reaches a nested
+/// non-greedy repeat in a `SingleAlt` body; `atn_dec` is the decision a
+/// tournament asks the simulator, or -1 for none.
+fn gen_group_shape(
+    w: &mut CodeWriter,
+    g_op: &GroupOp,
+    g_elem: &GroupElement,
+    entry: GroupEntry,
+    ctx: &mut EmitContext,
+    name_counts: &mut List<[String, i32]>,
+    outer_follow: &List<i32>,
+    decided: Option<String>,
+    proven: &List<i32>,
+    atn_dec: i32,
+) {
+    match &g_op.shape {
+        TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
+        SingleAlt(_) => gen_consume_single_alt_group_op(
+            w,
+            &g_op.alts[0],
+            &g_elem.alternatives[0],
+            ctx,
+            name_counts,
+            outer_follow,
+            proven,
+        ),
+        SimpleCst(_) | General(_) => gen_alt_group(w, g_op, &g_elem.alternatives, entry, ctx, name_counts, decided, atn_dec),
+        Transparent => {
+            // The inner alt is inlined, actions included, so inside a Repeat
+            // they run once per iteration.
+            let body = &g_op.alts[0];
+            let alt = &g_elem.alternatives[0];
+            let outer = ctx.cursor.enter_group_body(false);
+            gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, name_counts, &NO_KINDS, &alt.actions, proven);
+            ctx.cursor.leave_group_body(outer);
+        },
     }
 }
 
@@ -6778,24 +6667,6 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
     return scan_pos_var;
 }
 
-fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> bool {
-    for let idx_ref of sorted_group {
-        let alt = &alts[*idx_ref];
-        if alt.elements.len() != 1 {
-            return false;
-        }
-        if let RuleRef(r) = &alt.elements[0] {
-            let mut visiting: List<String> = [];
-            if !ctx.analysis.is_rule_scannable(&r.name, &mut visiting) {
-                return false;
-            }
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
-
 /// Take the longest candidate, where `best` holds a length: nothing runs a scan
 /// from it, so there is no gate to carry. The strict `>` keeps ties on the first.
 fn emit_argmax_update<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
@@ -7236,7 +7107,7 @@ fn gen_group_dispatch(
         let mut order: List<i32> = [];
         for let b of branches {
             let branch_order = branch_emit_order(&b.alts, alts, ctx);
-            assert b.alts.len() == 1 || group_all_scannable(&branch_order, alts, kind, ctx), UNSCANNABLE_ALT;
+            assert b.alts.len() == 1 || group_all_scannable(&branch_order, alts, ctx), UNSCANNABLE_ALT;
             for let idx of branch_order {
                 order.push(idx);
             }
@@ -7428,7 +7299,7 @@ fn gen_group_branch_body(
         ));
         return;
     }
-    assert group_all_scannable(&sorted_group, alts, kind, ctx), UNSCANNABLE_ALT;
+    assert group_all_scannable(&sorted_group, alts, ctx), UNSCANNABLE_ALT;
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
 }
 
@@ -7474,79 +7345,35 @@ fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(
 
 global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
 
-fn group_all_scannable(
-    sorted_group: &List<i32>,
+/// A group deciding between alternatives. Under `SimpleCst` each alternative is
+/// one rule call, whose `_parse_X` appends its own subtree; under `General` a
+/// branch parses the alternative's elements. A rule call can be nullable, so
+/// the group's follow set selects an alternative in both.
+fn gen_alt_group(
+    w: &mut CodeWriter,
+    g_op: &GroupOp,
     alts: &List<Alternative>,
-    kind: GroupBranchKind,
+    entry: GroupEntry,
     ctx: &mut EmitContext,
-) -> bool {
-    return match kind {
-        RuleRef => rule_ref_group_all_scannable(sorted_group, alts, ctx),
-        General => general_group_all_scannable(sorted_group, alts, ctx),
+    name_counts: &mut List<[String, i32]>,
+    decided: Option<String>,
+    atn_dec: i32,
+) {
+    let [kind, field_base] = match &g_op.shape {
+        SimpleCst(_) => [GroupBranchKind::RuleRef, group_field_base_name(alts)],
+        General(gs) => [GroupBranchKind::General, general_group_field_name(gs.group_index)],
+        TokenOnly(_) | SingleAlt(_) | Transparent => unreachable(),
     };
-}
-
-// Caller pre-dedups `acc_var`; its declaration is emitted here so the
-// name-counter order is preserved.
-/// General-shape group: the alternatives carry elements, so a branch parses
-/// one. `gs.field` is consumed for the dedup order lower assigned names in.
-fn gen_general_group(
-    w: &mut CodeWriter,
-    gs: &GeneralShape,
-    g_op_alts: &List<AltBody>,
-    g_op_scan_alts: &List<ScanBody>,
-    alts: &List<Alternative>,
-    entry: GroupEntry,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    empty_alt_admits: &Option<EmptyAltAdmits>,
-    decided: Option<String> = null,
-    atn_dec: i32 = -1,
-) {
-    let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
-    let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
+    let _ = dedup_name(&field_base, name_counts);
+    let [classes, groups] = group_partition(alts, &g_op.empty_alt_admits, ctx);
     gen_group_dispatch(
         w,
         &decision_branches(alts, &groups, &classes, ctx),
         &classes,
         alts,
-        g_op_alts,
-        g_op_scan_alts,
-        GroupBranchKind::General,
-        entry,
-        ctx,
-        name_counts,
-        decided,
-        atn_dec,
-    );
-}
-
-/// SimpleCst-shape group: every alternative is one rule call, whose `_parse_X`
-/// appends its own subtree.
-fn gen_rule_ref_group(
-    w: &mut CodeWriter,
-    g_op_alts: &List<AltBody>,
-    g_op_scan_alts: &List<ScanBody>,
-    alts: &List<Alternative>,
-    entry: GroupEntry,
-    ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
-    empty_alt_admits: &Option<EmptyAltAdmits>,
-    decided: Option<String> = null,
-    atn_dec: i32 = -1,
-) {
-    let _ = dedup_name(&group_field_base_name(alts), name_counts);
-    // One rule call per alternative, and that rule can be nullable, so the
-    // group's follow set selects an alternative here as in any other shape.
-    let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
-    gen_group_dispatch(
-        w,
-        &decision_branches(alts, &groups, &classes, ctx),
-        &classes,
-        alts,
-        g_op_alts,
-        g_op_scan_alts,
-        GroupBranchKind::RuleRef,
+        &g_op.alts,
+        &g_op.scan_group.alts,
+        kind,
         entry,
         ctx,
         name_counts,
@@ -7588,13 +7415,11 @@ fn gen_general_alt_parse_and_store(
     ctx.cursor.leave_group_body(outer);
 }
 
-/// Whether every alt in `sorted_group` can be measured by a scan. The
-/// precondition for `gen_general_group_dispatch` (non-RuleRef-only overlapping
-/// groups): a tournament ranks by scan length, so an alt it cannot scan has no
-/// length to rank.
-fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> bool {
-    for let mut k = 0; k < sorted_group.len(); k += 1 {
-        let alt = &alts[sorted_group[k]];
+/// Whether every alt in `sorted_group` can be measured by a scan: a tournament
+/// ranks by scan length, so an alt it cannot scan has no length to rank.
+fn group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative>, ctx: &mut EmitContext) -> bool {
+    for let idx of sorted_group {
+        let alt = &alts[*idx];
         // An empty alternative scans, to zero: `gen_scan_winner_round` measures
         // it as epsilon, so it wins only where nothing longer does.
         for let elem of &alt.elements {
