@@ -243,7 +243,7 @@ struct core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,co
     mut height: i32,
 }
 
-struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char> {  // TypeId(49)
+struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(49)
     mut inner: ref "core:prelude/string.wado//StrCharIter",
     mut f: ref struct,
 }
@@ -549,7 +549,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::cut_
 
 type "functype//core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>") -> ref null "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<core:value/Value>]";  // TypeId(182)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>") -> ref "core:prelude/string.wado//String";  // TypeId(183)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>") -> ref "core:prelude/string.wado//String";  // TypeId(183)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(184)
 
@@ -1343,7 +1343,7 @@ fn "httpbin.wado/route"(request) {
             i_334 = i_334 + 1;
             self_48 = global:httpbin.wado::$const_obj_58;
             f = struct.new "httpbin.wado//$Closure_0" {  };
-            other_49 = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: $array_clone_dst_10, used: $load_30, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/httpbin.wado/$closure_wrapper_0" } });
+            other_49 = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: $array_clone_dst_10, used: $load_30, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f, func: ref.func "closure/httpbin.wado/$closure_wrapper_0" } });
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(local.tee result(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(1 + other_49.used), used: 0 }), self_48);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result, other_49);
             if $inline_core_prelude_array_wado_seq_eq_u8__14: block -> bool {
@@ -7180,7 +7180,7 @@ fn "core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIte
     return struct.new "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<core:value/Value>]" { 0: builtin::array_get_value<ref "core:prelude/string.wado//String">($load_0.keys, i_4), 1: struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: builtin::array_get_value<ref "core:value//Value">($load_0.values, i_4) } };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(iter) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     let v_8: ref "core:prelude/string.wado//StrCharIter";
     let $sroa_slot_12: i32;
@@ -7193,13 +7193,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
         l791: loop {
             $sroa_slot_12 = 0;
             $sroa_slot_13 = 0;
-            $inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_sroa_return__4: block {
+            $inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4: block {
                 let $mv$$match_2$0: i32;
                 let $mv$$match_2$1: char;
                 multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(v_8);
                 if $mv$$match_2$0 == 1 {
                     $sroa_slot_12 = 1;
-                    break $inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_sroa_return__4: $sroa_slot_13 = block -> char {
+                    break $inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4: $sroa_slot_13 = block -> char {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_15)).env, $mv$$match_2$1);
                     };
@@ -7207,7 +7207,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
                 }
                 $sroa_slot_12 = 0;
                 $sroa_slot_13 = 0;
-                break $inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_sroa_return__4;
+                break $inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4;
             };
             if $sroa_slot_12 == 1 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $sroa_slot_13);

@@ -539,7 +539,7 @@ Returns None when iteration is complete.
 
 #### `fn count(&mut self) -> i32`
 
-#### `fn map<U>(&self, f: fn mut(Self::Item) -> U) -> IterMap<Self, U> with ()`
+#### `fn map<U, effect E, F: fn mut(Self::Item) -> U with E>(&self, f: F) -> IterMap<Self, F> with ()`
 
 #### `fn fold<Acc>(&mut self, init: Acc, mut f: fn mut(Acc, Self::Item) -> Acc with _) -> Acc with _`
 
@@ -577,7 +577,7 @@ Advances the entire iterator and returns the last element, or None if empty.
 Reduces elements to a single value without an initial accumulator.
 Returns None if the iterator is empty.
 
-#### `fn filter(&self, pred: fn mut(Self::Item) -> bool) -> IterFilter<Self> with ()`
+#### `fn filter<effect E, F: fn mut(Self::Item) -> bool with E>(&self, pred: F) -> IterFilter<Self, F> with ()`
 
 Returns an adapter that skips elements for which `pred` returns false.
 
@@ -3489,37 +3489,39 @@ The value of this field in `v`.
 
 ##### `fn inspect(&self, f: &mut Formatter)`
 
-### `pub struct IterMap<I: Iterator, U>`
+### `pub struct IterMap<I: Iterator, F>`
 
-Generic map iterator adapter that wraps any Iterator.
-
-#### `inner: I`
-
-#### `f: fn mut(I::Item) -> U`
-
-#### `impl Iterator for IterMap<I, U>`
-
-##### `fn next(&mut self) -> Option<Self::Item> with _`
-
-#### `impl IntoIterator for IterMap<I, U>`
-
-##### `fn into_iter(&self) -> IterMap<I, U>`
-
-### `pub struct IterFilter<I: Iterator>`
-
-Generic filter iterator adapter that wraps any Iterator.
+Generic map iterator adapter that wraps any Iterator. Its type carries the
+function's, so advancing it performs what the function does.
 
 #### `inner: I`
 
-#### `pred: fn mut(I::Item) -> bool`
+#### `f: F`
 
-#### `impl Iterator for IterFilter<I>`
+#### `impl Iterator for IterMap<I, F>`
 
-##### `fn next(&mut self) -> Option<Self::Item> with _`
+##### `fn next(&mut self) -> Option<Self::Item> with E`
 
-#### `impl IntoIterator for IterFilter<I>`
+#### `impl IntoIterator for IterMap<I, F>`
 
-##### `fn into_iter(&self) -> IterFilter<I>`
+##### `fn into_iter(&self) -> IterMap<I, F>`
+
+### `pub struct IterFilter<I: Iterator, F>`
+
+Generic filter iterator adapter that wraps any Iterator. Its type carries
+the predicate's, so advancing it performs what the predicate does.
+
+#### `inner: I`
+
+#### `pred: F`
+
+#### `impl Iterator for IterFilter<I, F>`
+
+##### `fn next(&mut self) -> Option<Self::Item> with E`
+
+#### `impl IntoIterator for IterFilter<I, F>`
+
+##### `fn into_iter(&self) -> IterFilter<I, F>`
 
 ### `pub struct IterEnumerate<I: Iterator>`
 
