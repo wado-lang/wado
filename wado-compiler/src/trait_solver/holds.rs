@@ -736,15 +736,17 @@ fn match_target(
     }
 }
 
-/// Whether `def`'s target meets `ty` on its shape alone, a projection it
-/// writes taken as met.
+/// Whether `def`'s target meets `ty` without a projection left to decide. A
+/// projection is decided only against the impl's bindings, which
+/// [`Query::impl_answers`] checks, so a target writing one reaches nothing here.
 fn reaches_target(def: &ImplDef, ty: &SolverType) -> bool {
+    let mut deferred = Vec::new();
     match_target(
         &def.target,
         ty,
         &mut vec![None; def.params.len()],
-        &mut Vec::new(),
-    )
+        &mut deferred,
+    ) && deferred.is_empty()
 }
 
 #[cfg(test)]
