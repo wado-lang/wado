@@ -565,8 +565,8 @@ pub fn range_local_name() -> String {
     format!("{INTERNAL_PREFIX}range")
 }
 
-/// The local a float pattern on a half holds the `f32` its scrutinee widens
-/// to, so its comparisons widen it once.
+/// Local holding the `f32` a half scrutinee of a float pattern widens to, so
+/// its comparisons widen it once.
 #[must_use]
 pub fn widened_half_local_name() -> String {
     format!("{INTERNAL_PREFIX}range_f32")

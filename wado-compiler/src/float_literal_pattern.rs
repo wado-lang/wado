@@ -9,7 +9,7 @@ use crate::ast::{
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::liveness::is_user_authored;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::Semantics;
 use crate::token::Span;
 
@@ -54,7 +54,7 @@ pub fn float_literal_pattern_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
 /// The arms and statements of one module holding the noted patterns, keyed by
 /// their spans, and the ones reported so far.
 struct Sites {
-    noted: IndexMap<Span, Vec<String>>,
+    noted: IndexMap<Span, IndexSet<String>>,
     waived: bool,
     found: Vec<(String, Span)>,
 }

@@ -2407,15 +2407,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Note a pattern, written `shown`, that names one float a rounding step
     /// can miss, for the `float_literal_pattern` lint to report at `site`.
     fn note_inexact_float_pattern(&mut self, site: Span, shown: String) {
-        let noted = self
-            .sem
+        self.sem
             .types
             .inexact_float_patterns
             .entry(site)
-            .or_default();
-        if !noted.contains(&shown) {
-            noted.push(shown);
-        }
+            .or_default()
+            .insert(shown);
     }
 
     fn emit_pattern_literal_error(

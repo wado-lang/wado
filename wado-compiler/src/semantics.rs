@@ -294,8 +294,8 @@ impl Semantics {
     /// walk's notes are gathered and routed by the span's id space.
     pub(crate) fn inexact_float_patterns(
         &self,
-    ) -> IndexMap<ModuleSource, IndexMap<Span, Vec<String>>> {
-        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, Vec<String>>> =
+    ) -> IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> {
+        let mut by_module: IndexMap<ModuleSource, IndexMap<Span, IndexSet<String>>> =
             IndexMap::default();
         let walks = self.state.iter().flat_map(|state| {
             state.module_semantics.values().flat_map(|sem| {
@@ -306,12 +306,12 @@ impl Semantics {
         for types in walks {
             for (site, shown) in &types.inexact_float_patterns {
                 let module = self.space_modules[&site.space].clone();
-                let noted = by_module.entry(module).or_default().entry(*site).or_default();
-                for shown in shown {
-                    if !noted.contains(shown) {
-                        noted.push(shown.clone());
-                    }
-                }
+                by_module
+                    .entry(module)
+                    .or_default()
+                    .entry(*site)
+                    .or_default()
+                    .extend(shown.iter().cloned());
             }
         }
         by_module

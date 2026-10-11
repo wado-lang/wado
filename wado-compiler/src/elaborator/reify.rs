@@ -10359,25 +10359,27 @@ pub(crate) fn lower_instance_pattern(
     add_local: impl FnMut(String, TypeId) -> u32,
     span: Span,
 ) -> Result<TirPattern, Vec<PatternLiteralError>> {
-    Ok(match settle_instance_pattern(pattern, scrutinee, type_table)? {
-        SettledPattern::Literal(value) => TirPattern::Literal(value),
-        SettledPattern::Range {
-            start,
-            end,
-            inclusive,
-            is_unsigned,
-        } => TirPattern::Range {
-            start,
-            end,
-            inclusive,
-            is_unsigned,
+    Ok(
+        match settle_instance_pattern(pattern, scrutinee, type_table)? {
+            SettledPattern::Literal(value) => TirPattern::Literal(value),
+            SettledPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            },
+            SettledPattern::Float(range) => {
+                let locals = reserve_float_pattern_locals(scrutinee, type_table, add_local);
+                let shown = unparse_instance_pattern(pattern);
+                float_range_narrow(&range, &locals, shown, type_table, span)
+            }
         },
-        SettledPattern::Float(range) => {
-            let locals = reserve_float_pattern_locals(scrutinee, type_table, add_local);
-            let shown = unparse_instance_pattern(pattern);
-            float_range_narrow(&range, &locals, shown, type_table, span)
-        }
-    })
+    )
 }
 
 /// The locals a float pattern compares its scrutinee through: the scrutinee,

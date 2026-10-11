@@ -953,7 +953,10 @@ mod tests {
         for format in [FloatFormat::F64, FloatFormat::F32, FloatFormat::F16] {
             let nan = float_order_key(format, format.limit("NAN").unwrap());
             for key in [-nan + 1, -1, 0, 1, nan - 1, nan] {
-                assert_eq!(float_order_key(format, float_of_order_key(format, key)), key);
+                assert_eq!(
+                    float_order_key(format, float_of_order_key(format, key)),
+                    key
+                );
             }
         }
     }

@@ -7,7 +7,7 @@
 use crate::ast::{self, AstId, Expr};
 use crate::defs::DefId;
 use crate::elaborator::sig;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, Receiver};
 use crate::tir;
@@ -403,7 +403,7 @@ pub(crate) struct TypeAnnotations {
     /// `float_literal_pattern` lint reports, where no `allow` waives it.
     /// Outside [`BodyFacts`] because a pattern names the same float whichever
     /// element a tuple `for-of` binds.
-    pub(crate) inexact_float_patterns: IndexMap<Span, Vec<String>>,
+    pub(crate) inexact_float_patterns: IndexMap<Span, IndexSet<String>>,
 }
 
 impl std::ops::Deref for TypeAnnotations {
