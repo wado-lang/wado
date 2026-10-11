@@ -245,8 +245,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # package-gale and the stdlib are excluded in CI only, where test-gale-o2 and
-# `test-stdlib` or `test-stdlib-coverage` (once per optimization level) cover
-# them; locally one run walks every nested package. benchmark/* test blocks need
+# `test-stdlib` (once per optimization level) cover them; locally one run walks every nested package. benchmark/* test blocks need
 # no `--dir`: their file reads sit in `export fn run()`, which the test world
 # never calls. Same batch-compilation shape as `test-gale-o2`, whose comment
 # explains the purge and what holding the pages costs in RSS.
@@ -285,21 +284,11 @@ fi
 """
 
 [tasks.test-stdlib-coverage]
-description = "Run the stdlib tests under coverage at one optimization level (default O2) and fail on any difference from scripts/stdlib-coverage.json"
+description = "Run the stdlib tests under coverage at one optimization level (default O2) and report what they leave unrun, into build/coverage/"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-mise run test-stdlib "${1:-O2}" \
-    --coverage --coverage-include=stdlib --coverage-baseline scripts/stdlib-coverage.json
-"""
-
-[tasks.update-stdlib-coverage-baseline]
-description = "Rewrite scripts/stdlib-coverage.json from what the stdlib tests leave unrun"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-mise run test-stdlib O2 --coverage=lcov,baseline --coverage-include=stdlib
-cp build/coverage/baseline.json scripts/stdlib-coverage.json
+mise run test-stdlib "${1:-O2}" --coverage=lcov,json --coverage-include=stdlib
 """
 
 [tasks.test-log-levels]

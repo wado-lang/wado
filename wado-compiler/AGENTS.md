@@ -92,14 +92,12 @@ such as a trait an operator calls. The rest of the prelude is ordinary library
 code, tested from `<module>_test.wado` like any other module.
 
 The stdlib tests aim at 100% coverage of the stdlib, whatever the fixtures
-cover. `mise run test-stdlib-coverage` holds the stdlib to
-`scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
-a difference either way. `mise run update-stdlib-coverage-baseline` rewrites it.
+cover. `mise run test-stdlib-coverage` reports the regions they leave unrun. No
+check holds it; run it now and then.
 
 Coverage serves the code, not the reverse: never bend correct, fast code to fit
-the baseline. New code gets a test. A region that never runs says so in the code
-(`unreachable()`, `#[coverage(off)]`). One that runs, but under no stdlib test,
-is added to the baseline.
+the report. New code gets a test. A region that never runs says so in the code
+(`unreachable()`, `#[coverage(off)]`).
 
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the

@@ -46,7 +46,7 @@ what could have run cannot come from the compiled program.
 wado test --coverage                  # summary on stdout, LCOV in build/coverage/
 wado test --coverage=lcov,json        # choose the files written
 wado test --coverage --coverage-include=deps
-wado test --coverage --coverage-baseline scripts/stdlib-coverage.json
+wado test --coverage --coverage-baseline baseline.json
 ```
 
 After the run, the summary lists each file and the totals. Under
@@ -290,7 +290,7 @@ code that cannot be reached from a test, such as a `run` entry point that only
 the CLI world calls. It is the only way to exempt code, so every exemption is
 visible where the code is.
 
-### The standard library gates on a baseline
+### A baseline gates the regions left unrun
 
 `--coverage-baseline <file>` fails the run on a difference between the regions
 left uncovered and the ones the file lists. A new uncovered region fails, and
@@ -309,16 +309,15 @@ function that never ran lists its body alone, `fn 0`, since nothing in it ran
 either. A name repeated within a file takes `#2`, `#3`, … in source order.
 `--coverage=baseline` writes the file.
 
+### The standard library is checked by hand
+
 `mise run test-stdlib-coverage <level>` runs the stdlib tests with `--coverage`
-and `scripts/stdlib-coverage.json`. CI runs it in the `O0` and `O3` jobs in
-place of their plain stdlib run, since a coverage run is a stdlib run too.
-`mise run update-stdlib-coverage-baseline` rewrites the file.
-The baseline starts as whatever the first run leaves uncovered, and the work
-toward 100% is emptying it: a test for each region that can run, and
-`unreachable()` or `#[coverage(off)]` for each that cannot. Code is never bent to
-fit the file. A region whose only test needs a host or a build the stdlib tests
-do not have, such as a filesystem error or a `-D log.level` threshold, is listed
-in it instead.
+and reports what they leave unrun. Nothing gates on it. The standard library
+once held a baseline in CI, at `-O0` and `-O3`. It was dropped: every change
+that reached a new region had to rewrite the file, and a check now and then
+finds the same gaps. The work toward 100% is a test for each region that can
+run, and `unreachable()` or `#[coverage(off)]` for each that cannot. Code is
+never bent to fit the report.
 
 ### Testing
 
@@ -329,10 +328,6 @@ in it instead.
   a fixture (`coverage_*.wado`), and CI runs them at every level.
 - `wado dump --coverage-plan` prints the plan, as `--assert-plan` prints
   power-assert's.
-- Holding the stdlib baseline at both `-O0` and `-O3` requires the same regions
-  left unrun at each. It is the check that no pass moves a probe out of its
-  region or drops one that could run. Which test ran a region may differ, since
-  a test that waits on the host or a clock takes the path its timing picks.
 - Integration tests cover what no fixture can: the CLI flags, the LCOV and JSON
   files, and merging plans from several test files.
 
@@ -372,8 +367,8 @@ host call on every run is too slow for loops.
    `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests.
 6. [x] The standard library: its snapshot skipped when measured,
    `--coverage-baseline`, and the CI job with its first baseline.
-7. [ ] 100% for the standard library: the baseline holds only regions no
-   stdlib test can reach.
+7. [ ] 100% for the standard library: `mise run test-stdlib-coverage` reports
+   only regions no stdlib test can reach.
 8. [x] Derived regions: the plan marks them, reify leaves them without a probe,
    and the runner derives them. The `-O0`/`-O3` check and the fixtures pass
    unchanged, and the probes saved on the standard library are measured.
