@@ -425,7 +425,13 @@ fn fn_step_refusal(
             return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
         }
     }
-    let missing = |a: &[EffectRef], b: &[EffectRef]| a.iter().find(|e| !b.contains(e)).cloned();
+    // A variable is a row the effect check solves and bounds there.
+    let missing = |a: &[EffectRef], b: &[EffectRef]| {
+        if a.iter().chain(b).any(EffectRef::is_var) {
+            return None;
+        }
+        a.iter().find(|e| !b.contains(e)).cloned()
+    };
     let unmatched = if widening {
         missing(from.effects, to.effects).map(|dropped| (dropped, "`as` cannot drop the effect"))
     } else {

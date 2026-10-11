@@ -5922,8 +5922,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let address_taken_locals = closure_ctx.address_taken_locals;
 
-        let declared_effects =
-            Some(cap_info.declared_effects.clone()).filter(|effects| !effects.is_empty());
+        let declared_effects = cap_info
+            .declared_effects
+            .clone()
+            .filter(|effects| !effects.is_empty());
 
         let closure_tir = TirExpr::new(
             TirExprKind::Closure {

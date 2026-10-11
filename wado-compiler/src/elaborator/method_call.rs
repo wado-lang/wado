@@ -988,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // impl's method name matches its definition (issue #1348). A
                 // tuple keeps the `[a,b]` spelling every other namespace gives it.
                 let type_arg_names: Vec<FqTypeName> =
-                    type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
+                    type_args.iter().map(|t| tt.fq_type_name_rowless(*t)).collect();
                 let base = if tt.is_tuple(method_impl_type_id) {
                     FqTypeName::tuple(Vec::new())
                 } else {
@@ -1020,7 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .fq_base_type_name(method_impl_type_id);
                 let type_arg_names: Vec<FqTypeName> = type_args
                     .iter()
-                    .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+                    .map(|t| self.tysys.type_table.borrow().fq_type_name_rowless(*t))
                     .collect();
                 let mangled = head.clone().with_args(type_arg_names.clone());
                 (mangled, head, type_arg_names, Some(type_args))
@@ -2333,7 +2333,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let impl_only_type_arg_names: Vec<FqTypeName> = struct_type_args
             .iter()
-            .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
+            .map(|t| self.tysys.type_table.borrow().fq_type_name_rowless(*t))
             .collect();
 
         // Build method_info with base struct name and trait name (if applicable)

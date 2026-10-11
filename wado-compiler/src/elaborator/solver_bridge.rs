@@ -345,15 +345,17 @@ impl Lowering {
     }
 
     /// A row of named effects as the solver spells it. One holding an effect
-    /// parameter or variable is [`SolverType::AnyRow`]: it stands for whatever
-    /// row meets it.
+    /// parameter is [`SolverType::AnyRow`]: it stands for whatever row meets
+    /// it. A variable is a row the effect check has yet to solve, so it
+    /// selects nothing here: an impl is chosen as if it performed nothing.
     fn effect_row(&self, effects: &[EffectRef]) -> SolverType {
-        if effects.iter().any(|e| e.is_param() || e.is_var()) {
+        if effects.iter().any(EffectRef::is_param) {
             return SolverType::AnyRow;
         }
         SolverType::Tuple(
             effects
                 .iter()
+                .filter(|e| !e.is_var())
                 .map(|e| SolverType::Decl(self.effect_head(e), Vec::new()))
                 .collect(),
         )

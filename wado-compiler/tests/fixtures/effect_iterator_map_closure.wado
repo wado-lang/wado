@@ -1,0 +1,32 @@
+// A closure literal's effects travel in the adapter `map` builds from it, and
+// the function advancing the adapter declares them.
+use { println, Stdout } from "core:cli";
+
+fn shout(xs: List<i32>) -> List<i32> with Stdout {
+    return xs.into_iter().map(|x| {
+        println(`${x}`);
+        return x * 2;
+    }).collect();
+}
+
+test {
+    assert shout([1, 2]) == [2, 4];
+}
+
+fn quiet(xs: List<i32>) -> i32 {
+    let mut t = 0;
+    for let y of xs.into_iter().map(|x| x + 1) {
+        t += y;
+    }
+    return t;
+}
+
+test "a pure closure demands nothing" {
+    assert quiet([1, 2]) == 5;
+}
+
+__DATA__
+{
+    "test": {},
+    "stdout": "1\n2\n"
+}

@@ -24,6 +24,18 @@ fn mapped<U, effect E, F: fn mut(i32) -> U with E>(f: F) -> Mapped<SliceValueIte
     return Mapped { inner: xs.iter_value(), f };
 }
 
+fn pure_total() -> i32 {
+    let mut t = 0;
+    for let y of mapped(|x: i32| x + 1) {
+        t += y;
+    }
+    return t;
+}
+
+test {
+    assert pure_total() == 5;
+}
+
 struct Src {
     n: i32,
 }
@@ -35,28 +47,25 @@ impl Src {
     }
 }
 
-fn pure_total() -> i32 {
+fn loud_total() -> i32 with Stdout {
+    let mut loud: fn mut(i32) -> i32 with Stdout = |x| {
+        println(`f ${x}`);
+        return x * 10;
+    };
     let mut t = 0;
-    for let y of mapped(|x: i32| x + 1) {
+    for let y of mapped(loud) {
+        t += y;
+    }
+    let src = Src { n: 3 };
+    for let y of src.mapped(loud) {
         t += y;
     }
     return t;
 }
 
-export fn run() with Stdout {
-    let mut loud: fn mut(i32) -> i32 with Stdout = |x| {
-        println(`f ${x}`);
-        return x * 10;
-    };
-    for let y of mapped(loud) {
-        println(`${y}`);
-    }
-    let src = Src { n: 3 };
-    for let y of src.mapped(loud) {
-        println(`${y}`);
-    }
-    println(`${pure_total()}`);
+test "a function value's row is carried" {
+    assert loud_total() == 100;
 }
 
 __DATA__
-{"stdout": "f 1\n10\nf 2\n20\nf 3\n30\nf 4\n40\n5\n"}
+{"test": {}, "stdout": "f 1\nf 2\nf 3\nf 4\n"}

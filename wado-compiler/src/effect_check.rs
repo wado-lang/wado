@@ -61,6 +61,9 @@ pub enum EffectFault {
     MissingOpen,
     /// A `#[benign]` argument names no effect in the function's module.
     UnknownBenign,
+    /// A closure performs an effect the `fn` type it was expected to be does
+    /// not declare.
+    BeyondExpectedType(EffectKind),
 }
 
 /// Error from effect checking
@@ -118,6 +121,14 @@ impl From<EffectError> for Diagnostic {
                 format!(
                     "`#[benign({})]` on '{}' names no effect in scope",
                     e.missing_effect, e.callee
+                ),
+            ),
+            EffectFault::BeyondExpectedType(kind) => (
+                Code::MissingEffect,
+                format!(
+                    "this closure performs {} '{}', which the function type it is expected to be does not declare",
+                    kind.noun(),
+                    e.missing_effect,
                 ),
             ),
         };
@@ -1214,21 +1225,7 @@ fn check_function_effects_sem(
     }
     current.extend(benign);
     current.extend(held.cloned());
-    if starts_async_call(annotations, &sem.types, |v| ast::walk_block(v, body)) {
-        current.extend(index.waiting.iter().cloned());
-    }
-    // A function holding `Stdout` may call operations that internally need
-    // `Stream`, etc.
-    let mut current = expand_through_closure(&current, index.closure);
-    if let Some(ann) = annotations {
-        add_narrowed_resources(
-            |v| ast::walk_block(v, body),
-            ann,
-            &scan,
-            index.closure,
-            &mut current,
-        );
-    }
+    let current = held_in_body(annotations, index, &scan, current, Body::Block(body));
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -1470,6 +1467,43 @@ impl AstVisitor for StartsAsyncCall<'_> {
     }
 }
 
+/// A function's or a closure's body, walked alike.
+#[derive(Clone, Copy)]
+enum Body<'a> {
+    Block(&'a ast::Block),
+    Expr(&'a Expr),
+}
+
+impl Body<'_> {
+    fn walk<V: AstVisitor>(self, v: &mut V) {
+        match self {
+            Body::Block(block) => ast::walk_block(v, block),
+            Body::Expr(expr) => v.visit_expr(expr),
+        }
+    }
+}
+
+/// What `body` holds, given `declared` from its signature: the waits on an
+/// async call it starts, what a held effect needs internally (a function
+/// holding `Stdout` may call operations that need `Stream`), and what its type
+/// patterns narrow to.
+fn held_in_body(
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex<'_>,
+    scan: &ResourceScan<'_>,
+    mut declared: IndexSet<EffectRef>,
+    body: Body<'_>,
+) -> IndexSet<EffectRef> {
+    if starts_async_call(annotations, scan.tt, |v| body.walk(v)) {
+        declared.extend(index.waiting.iter().cloned());
+    }
+    let mut held = expand_through_closure(&declared, index.closure);
+    if let Some(ann) = annotations {
+        add_narrowed_resources(|v| body.walk(v), ann, scan, index.closure, &mut held);
+    }
+    held
+}
+
 /// Whether the body `walk` visits starts an async call.
 fn starts_async_call(
     annotations: Option<&TypeAnnotations>,
@@ -1640,7 +1674,7 @@ fn call_site_effects(
     {
         let params = index.fn_params.get(&def).cloned().unwrap_or_default();
         let brought = if effects.iter().any(EffectRef::is_param) {
-            brought_by_call(index, annotations, def, id)
+            brought_by_call(index, annotations, def, id, rows)
         } else {
             Brought::default()
         };
@@ -1714,7 +1748,7 @@ fn dispatch_effects(
     };
     let effects = index.method_effects(func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
-        index.brought_by_dispatch(func_ref)
+        index.brought_by_dispatch(func_ref, rows)
     } else {
         Brought::default()
     };
@@ -1788,7 +1822,7 @@ impl EffectIndex<'_> {
     /// What a dispatch's type arguments bring to the callee's open effect
     /// parameter: the impl of a trait method's receiver, and each bounded
     /// parameter of the method's impl and of the method itself.
-    fn brought_by_dispatch(&self, func_ref: &FunctionRef) -> Brought {
+    fn brought_by_dispatch(&self, func_ref: &FunctionRef, rows: &EffectRows) -> Brought {
         let mut brought = Brought::default();
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return brought;
@@ -1815,20 +1849,22 @@ impl EffectIndex<'_> {
             // row an adapter's `F: fn() with E` binds. One the arguments leave
             // open is resolved from the method's bounds below. A trait's
             // default method has only the receiver's impl to read.
+            // The receiver's name spells no rows, so its arguments are read
+            // off the instantiation where there is one.
+            let receiver_args: Vec<FqTypeName> = match func_ref.monomorph_info.as_ref() {
+                Some(info) if !info.impl_type_args.is_empty() => info
+                    .impl_type_args
+                    .iter()
+                    .map(|&arg| self.spelled_solved(arg, rows))
+                    .collect(),
+                _ => method_info.struct_type_args.clone(),
+            };
             if let Some(method) = impl_method {
                 let declared = self
                     .fn_effects
                     .get(&method)
                     .map(Vec::as_slice)
                     .unwrap_or_default();
-                let receiver_args: Vec<FqTypeName> = match func_ref.monomorph_info.as_ref() {
-                    Some(info) if !info.impl_type_args.is_empty() => info
-                        .impl_type_args
-                        .iter()
-                        .map(|&arg| self.types.fq_type_name_with_rows(arg))
-                        .collect(),
-                    _ => method_info.struct_type_args.clone(),
-                };
                 brought.effects.extend(
                     self.close_over_args(declared, &key, &receiver_args, 0)
                         .into_iter()
@@ -1839,7 +1875,7 @@ impl EffectIndex<'_> {
                     Some(declared) => brought.effects.extend(self.close_over_args(
                         declared,
                         &key,
-                        &method_info.struct_type_args,
+                        &receiver_args,
                         0,
                     )),
                     None => brought.open = true,
@@ -1851,7 +1887,7 @@ impl EffectIndex<'_> {
         };
         let method = self.resolutions.defs().ast_id(*def);
         let spelled = |args: &[TypeId]| -> Vec<Vec<FqTypeName>> {
-            args.iter().map(|&arg| self.spellings(arg)).collect()
+            args.iter().map(|&arg| self.spellings(arg, rows)).collect()
         };
         let info = func_ref.monomorph_info.as_ref();
         let impl_args = info
@@ -1913,22 +1949,34 @@ impl EffectIndex<'_> {
     /// `id` as an impl may name it, with its arguments: itself, reference or
     /// not, then each base down its newtype chain, which it inherits impls
     /// from.
-    fn spellings(&self, id: TypeId) -> Vec<FqTypeName> {
+    fn spellings(&self, id: TypeId, rows: &EffectRows) -> Vec<FqTypeName> {
         let mut out = Vec::new();
         let mut current = id;
         loop {
             match self.types.get_unerased(current) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = *inner,
                 ResolvedType::Newtype { base_type, .. } => {
-                    out.push(self.types.fq_type_name_with_rows(current));
+                    out.push(self.spelled_solved(current, rows));
                     current = *base_type;
                 }
                 _ => {
-                    out.push(self.types.fq_type_name_with_rows(current));
+                    out.push(self.spelled_solved(current, rows));
                     return out;
                 }
             }
         }
+    }
+
+    /// `id` spelled with its rows, each effect variable in them replaced by
+    /// what `rows` solved it to: an impl names no variable. One left unsolved
+    /// stands for the empty row, as it does once the check is done.
+    fn spelled_solved(&self, id: TypeId, rows: &EffectRows) -> FqTypeName {
+        self.types.fq_type_name_with_rows(id).map_rows(&|row| {
+            solved_row(row, rows)
+                .into_iter()
+                .filter(|effect| !effect.is_var())
+                .collect()
+        })
     }
 
     /// Adds what the type argument `arg` of a parameter bounded by `traits`
@@ -2359,6 +2407,7 @@ fn brought_by_call(
     annotations: Option<&TypeAnnotations>,
     callee: AstId,
     site: AstId,
+    rows: &EffectRows,
 ) -> Brought {
     let mut brought = Brought::default();
     let Some(slots) = index.fn_bound_traits.get(&callee) else {
@@ -2376,7 +2425,7 @@ fn brought_by_call(
             let spellings = instantiation
                 .type_args
                 .get(slot)
-                .map(|&arg| index.spellings(arg))
+                .map(|&arg| index.spellings(arg, rows))
                 .unwrap_or_default();
             let arg: Vec<TypeArg<'_>> = spellings.iter().map(type_arg).collect();
             index.bring(traits, &arg, &mut brought);
@@ -2593,37 +2642,12 @@ impl AstVisitor for SemEffectWalker<'_> {
             // A closure written in a closure body is performed only where it is
             // called, which a call in the body says.
             Expr::Closure(_) if self.collecting.is_some() => return,
+            // A closure's body runs wherever the closure is called, not where it
+            // is written: what it performs is its type's row, demanded of each
+            // caller, and bounded by the `fn` type it was expected to be.
             Expr::Closure(closure) => {
-                // A closure's body performs what its type carries, not what the
-                // function it is written in holds: it runs wherever it is called.
-                let mut declared: IndexSet<EffectRef> = self
-                    .annotations
-                    .into_iter()
-                    .flat_map(|ann| ann.all(|facts| &facts.closure_captures, closure.id))
-                    .flat_map(|info| info.declared_effects.iter().cloned())
-                    .collect();
-                if starts_async_call(self.annotations, &self.sem.types, |v| {
-                    v.visit_expr(&closure.body);
-                }) {
-                    declared.extend(self.index.waiting.iter().cloned());
-                }
-                let mut carried = expand_through_closure(&declared, self.index.closure);
-                if let Some(ann) = self.annotations {
-                    let scan = ResourceScan {
-                        tt: &self.sem.types,
-                        resolutions: self.index.resolutions,
-                        members: self.index.members,
-                    };
-                    carried.extend(self.current.iter().cloned());
-                    add_narrowed_resources(
-                        |v| v.visit_expr(&closure.body),
-                        ann,
-                        &scan,
-                        self.index.closure,
-                        &mut carried,
-                    );
-                }
-                self.walk_granted(carried, |walker| ast::walk_expr(walker, expr));
+                let performed = self.closure_performs(closure);
+                self.bound_by_expected_type(closure, &performed);
                 return;
             }
             _ => {}
@@ -2657,35 +2681,103 @@ impl SemEffectWalker<'_> {
     /// discharging its own.
     fn infer_closure_args(&mut self, args: &[Expr]) {
         for arg in args {
-            let Expr::Closure(closure) = arg else {
-                continue;
-            };
-            if self.closures.contains_key(&closure.id) {
+            if let Expr::Closure(closure) = arg {
+                self.closure_performs(closure);
+            }
+        }
+    }
+
+    /// What a closure literal's body performs. The body is walked holding
+    /// nothing, so every effect it needs is one it performs, a handler it
+    /// installs discharging its own.
+    fn closure_performs(&mut self, closure: &ast::ClosureExpr) -> Vec<EffectRef> {
+        if let Some(performed) = self.closures.get(&closure.id) {
+            return performed.clone();
+        }
+        // The body holds what a function's would: the resources its
+        // signature names, and what the body itself grants.
+        let scan = ResourceScan {
+            tt: &self.sem.types,
+            resolutions: self.index.resolutions,
+            members: self.index.members,
+        };
+        let mut signature = IndexSet::default();
+        if let Some(closure_type) = self.sem.expression_type(closure.id) {
+            scan.collect(closure_type, &mut signature, &mut TypeSet::default());
+        }
+        let current = held_in_body(
+            self.annotations,
+            self.index,
+            &scan,
+            signature,
+            Body::Expr(&closure.body),
+        );
+        let mut scratch = Vec::new();
+        let mut body = SemEffectWalker {
+            sem: self.sem,
+            annotations: self.annotations,
+            index: self.index,
+            current,
+            param_types: self.param_types.clone(),
+            module: self.module.clone(),
+            out: &mut scratch,
+            closures: std::mem::take(&mut self.closures),
+            collecting: Some(IndexSet::default()),
+            rows: std::mem::take(&mut self.rows),
+        };
+        body.visit_expr(&closure.body);
+        let performed: Vec<EffectRef> = body
+            .collecting
+            .take()
+            .expect("the walk collects")
+            .into_iter()
+            .collect();
+        self.closures = std::mem::take(&mut body.closures);
+        self.rows = std::mem::take(&mut body.rows);
+        self.closures.insert(closure.id, performed.clone());
+        // What the body performs is the closure type's row.
+        if let Some(closure_type) = self.sem.expression_type(closure.id)
+            && let ResolvedType::Function { effects, .. } = self.sem.types.get(closure_type)
+        {
+            for var in effects.iter().filter(|e| e.is_var()) {
+                self.rows.insert(var.name().to_string(), performed.clone());
+            }
+        }
+        performed
+    }
+
+    /// Report each effect a closure performs that the `fn` type it was
+    /// expected to be does not declare. A row naming an effect parameter or a
+    /// variable is the call's to resolve, and bounds nothing here.
+    fn bound_by_expected_type(&mut self, closure: &ast::ClosureExpr, performed: &[EffectRef]) {
+        let Some(expected) = self
+            .annotations
+            .into_iter()
+            .flat_map(|ann| ann.all(|facts| &facts.closure_captures, closure.id))
+            .find_map(|info| info.declared_effects.clone())
+        else {
+            return;
+        };
+        if expected.iter().any(|e| e.is_param() || e.is_var()) {
+            return;
+        }
+        let admitted = expand_through_closure(&expected.into_iter().collect(), self.index.closure);
+        for effect in performed {
+            if effect.is_param() || admitted.contains(effect) {
                 continue;
             }
-            let mut scratch = Vec::new();
-            let mut body = SemEffectWalker {
-                sem: self.sem,
-                annotations: self.annotations,
-                index: self.index,
-                current: IndexSet::default(),
-                param_types: self.param_types.clone(),
-                module: self.module.clone(),
-                out: &mut scratch,
-                closures: std::mem::take(&mut self.closures),
-                collecting: Some(IndexSet::default()),
-                rows: std::mem::take(&mut self.rows),
+            let kind = if self.index.resources.contains(effect) {
+                EffectKind::Resource
+            } else {
+                EffectKind::Effect
             };
-            ast::walk_expr(&mut body, &closure.body);
-            let performed = body
-                .collecting
-                .take()
-                .expect("the walk collects")
-                .into_iter()
-                .collect();
-            self.closures = std::mem::take(&mut body.closures);
-            self.rows = std::mem::take(&mut body.rows);
-            self.closures.insert(closure.id, performed);
+            self.out.push(EffectError {
+                callee: String::new(),
+                missing_effect: effect.display_name(false),
+                fault: EffectFault::BeyondExpectedType(kind),
+                span: closure.span,
+                module: self.module.clone(),
+            });
         }
     }
 
@@ -2857,6 +2949,17 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
     }
 }
 
+/// Each closure literal among `args` as performing nothing for the callee to
+/// pass on: [`PurityWalker`] reads its body where it is written.
+fn read_in_place(args: &[Expr]) -> ClosureEffects {
+    args.iter()
+        .filter_map(|arg| match arg {
+            Expr::Closure(closure) => Some((closure.id, Vec::new())),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Walks an expression that must be pure, flagging every effect it performs
 /// that no enclosing `with … do` answers.
 struct PurityWalker<'a> {
@@ -2942,7 +3045,7 @@ impl<'a> PurityWalker<'a> {
             func_ref,
             self_in_args,
             args,
-            &ClosureEffects::default(),
+            &read_in_place(args),
             &EffectRows::default(),
         )
         .required;
@@ -2973,7 +3076,7 @@ impl<'a> PurityWalker<'a> {
             callee,
             id,
             args,
-            &ClosureEffects::default(),
+            &read_in_place(args),
             &EffectRows::default(),
         );
         // `dispatched` is left to `flag_if_operation`, which asks the owner

@@ -12,7 +12,7 @@ does I/O. The compiler holds neither.
   effects its expected type declares, plus every effect of the function it is
   written in.
 - So a closure passed where a `fn()` is expected performs what its writer holds,
-  and nobody declares it (`closure_escapes_effect_todo.wado`, #1087).
+  and nobody declares it (#1087).
 - An effect parameter is inferred from the function-typed arguments' effects
   (`resolve_effect_params`). A closure's type carries none, so `E` in
   `wrapper(|| println("hi"))` resolves to nothing. The call only works because
@@ -61,8 +61,10 @@ effect row is not yet known, and the effect check solves it.
   fill it. An effect parameter of the enclosing impl is the receiver's row at
   the place the impl's target writes it, as an impl's type parameter is the
   receiver's argument. A closure literal's type takes a fresh one for its row.
-- The type check, impl target matching and the trait solver all let a row
-  holding an effect parameter or a variable meet any row.
+- The type check and impl target matching let a row holding an effect
+  parameter or a variable meet any row. The trait solver does so for a
+  parameter, and reads a variable as the empty row, so a closure literal
+  selects one impl rather than every impl of its signature.
 - The effect check solves the variables, walking a body until no solution
   changes: an outer call's arguments are read before the inner call that
   minted their variable. A call's variable is what its parameter resolved to
@@ -98,13 +100,17 @@ effect row is not yet known, and the effect check solves it.
    produces, as a type parameter is. The lazy adapters are generic over their
    closure's type, so an adapter built from a function value carries its
    effects.
-6. [ ] A closure literal's type carries the effects inferred from its body. The
+6. [x] A closure literal's type carries the effects inferred from its body. The
    body is checked against them, and an expected type without `with` admits
    none. An effectful closure through `map` demands its effects of whoever
-   advances the adapter. `closure_escapes_effect_todo.wado` is rejected as it
-   states.
-7. [ ] The specification states the rules above.
+   advances the adapter. `error_closure_beyond_expected_fn_type.wado` is
+   rejected.
+7. [x] The specification states the rules above.
 
 ## Known gaps
 
-None yet.
+- The elaborator selects an impl for a closure literal's function type before
+  the effect check has solved its row, and takes the row to be empty. Where
+  impls exist for the same signature with and without an effect, a closure
+  performing that effect is dispatched to the pure one, while the effect check
+  reads the one its row names.

@@ -3552,6 +3552,18 @@ impl FqTypeName {
         }
     }
 
+    /// This name with every function type's row in it, nested ones included,
+    /// replaced by what `row` answers for it.
+    #[must_use]
+    pub fn map_rows(&self, row: &impl Fn(&[tir::EffectRef]) -> Vec<tir::EffectRef>) -> FqTypeName {
+        let mut out = self.descend(&|name| name.map_rows(row));
+        if let TypeHead::Function { effects, .. } = &mut out.head {
+            *effects = row(effects);
+        }
+        out.reference = self.reference.clone();
+        out
+    }
+
     /// The spelling a diagnostic prints: the type as source writes it, modules
     /// dropped from the head and, recursively, from every type in it.
     #[must_use]

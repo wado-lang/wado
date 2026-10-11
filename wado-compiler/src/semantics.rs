@@ -28,7 +28,7 @@ use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
@@ -126,6 +126,15 @@ pub enum SymbolResolveError {
 }
 
 impl Semantics {
+    /// Point every effect variable at the row the effect check solved it to,
+    /// in the snapshot and in the table the TIR reads alike.
+    pub fn redirect_effect_vars(&mut self, solved: &EffectRows) {
+        self.types.redirect_effect_vars(solved);
+        if let Some(state) = &self.state {
+            state.tysys.type_table.borrow_mut().redirect_effect_vars(solved);
+        }
+    }
+
     /// Power-assert capture plans across every module that annotate reached,
     /// for `wado dump --assert-plan`. `None` before annotate has run.
     pub fn assert_plan_text(&self) -> Option<String> {

@@ -5730,8 +5730,13 @@ impl TypeTable {
                 effects,
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
-                let effect_names: Vec<String> =
-                    effects.iter().map(|e| e.display_name(qualified)).collect();
+                // A variable is a row still to be worked out: nothing the
+                // source wrote, so nothing to show.
+                let effect_names: Vec<String> = effects
+                    .iter()
+                    .filter(|e| !e.is_var())
+                    .map(|e| e.display_name(qualified))
+                    .collect();
                 name::display_fn_type(
                     *is_mut,
                     &param_names,
@@ -5917,8 +5922,7 @@ impl TypeTable {
     /// a function value's row selects no representation: instances whose
     /// arguments differ only in rows are one type.
     pub fn mangle_type_arg_rowless(&self, id: TypeId) -> String {
-        self.fq_type_name_spelled_in(id, false, RowSpelling::Nowhere)
-            .to_mangled()
+        self.fq_type_name_rowless(id).to_mangled()
     }
 
     /// Module-qualifying analogue of
@@ -6154,6 +6158,12 @@ impl TypeTable {
     /// rows off.
     pub fn fq_type_name_with_rows(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled_in(id, false, RowSpelling::Everywhere)
+    }
+
+    /// [`Self::fq_type_name`] with no row spelled: a type's own argument,
+    /// where a row selects no representation.
+    pub fn fq_type_name_rowless(&self, id: TypeId) -> FqTypeName {
+        self.fq_type_name_spelled_in(id, false, RowSpelling::Nowhere)
     }
 
     /// [`Self::fq_type_name_spelled`], with function types' rows spelled where
