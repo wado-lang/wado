@@ -1736,7 +1736,7 @@ impl EffectIndex<'_> {
         };
         let impl_method =
             match &func_ref.template {
-                Some(TemplateId::Declared { def, .. })
+                Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. })
                     if self.resolutions.defs().parent(*def).is_some_and(|owner| {
                         self.resolutions.defs().kind(owner) == DefKind::Impl
                     }) =>
@@ -1750,29 +1750,6 @@ impl EffectIndex<'_> {
             && self.open_traits.contains(&key)
         {
             brought.determined = true;
-<<<<<<< HEAD
-            let reached = self.reached_impl_method_effects(func_ref);
-            match reached
-                .as_deref()
-                .or_else(|| self.impl_effects.get(&(receiver, key)).map(Vec::as_slice))
-            {
-                Some(declared) => brought.effects.extend(self.close_over_args(
-                    declared,
-                    &key,
-                    &method_info.struct_type_args,
-                    0,
-                )),
-                None => brought.open = true,
-||||||| feef811e5
-            match self.impl_effects.get(&(receiver, key)) {
-                Some(declared) => brought.effects.extend(self.close_over_args(
-                    declared,
-                    &key,
-                    &method_info.struct_type_args,
-                    0,
-                )),
-                None => brought.open = true,
-=======
             // The dispatch selected the impl's method, so what it declares is
             // what the impl brings; an open parameter of its own is resolved
             // from its bounds below. A trait's default method has only the
@@ -1796,7 +1773,6 @@ impl EffectIndex<'_> {
                     )),
                     None => brought.open = true,
                 }
->>>>>>> origin/main
             }
         }
         let Some(TemplateId::Declared { def, .. } | TemplateId::Unchecked { def, .. }) =
@@ -1865,52 +1841,6 @@ impl EffectIndex<'_> {
         brought
     }
 
-<<<<<<< HEAD
-    /// What the impl's own method a dispatch reaches performs, less the effect
-    /// parameter its function-typed parameters carry, which the arguments
-    /// determine. `None` where the dispatch reaches a trait default, whose body
-    /// performs what the impl's methods do.
-    fn reached_impl_method_effects(&self, func_ref: &FunctionRef) -> Option<Vec<EffectRef>> {
-        let Some(
-            TemplateId::Declared {
-                def,
-                block: Some(block),
-            }
-            | TemplateId::Unchecked {
-                def,
-                block: Some(block),
-            },
-        ) = &func_ref.template
-        else {
-            return None;
-        };
-        let defs = self.resolutions.defs();
-        if defs.parent(*def) != Some(*block) {
-            return None;
-        }
-        let method = defs.ast_id(*def);
-        let carried: IndexSet<&EffectRef> = self
-            .fn_params
-            .get(&method)
-            .into_iter()
-            .flatten()
-            .filter_map(|&param| match self.types.get(param) {
-                ResolvedType::Function { effects, .. } => Some(effects),
-                _ => None,
-            })
-            .flatten()
-            .filter(|effect| effect.is_param())
-            .collect();
-        Some(
-            self.fn_effects
-                .get(&method)?
-                .iter()
-                .filter(|effect| !carried.contains(effect))
-                .cloned()
-                .collect(),
-        )
-||||||| feef811e5
-=======
     /// `id` as an impl may name it: its head, reference or not, then each base
     /// down its newtype chain, which it inherits impls from.
     fn spellings(&self, id: TypeId) -> Vec<FqTypeName> {
@@ -1929,7 +1859,6 @@ impl EffectIndex<'_> {
                 }
             }
         }
->>>>>>> origin/main
     }
 
     /// Adds what the type argument `arg` of a parameter bounded by `traits`

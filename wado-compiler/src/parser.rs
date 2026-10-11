@@ -2123,18 +2123,12 @@ impl Parser {
             params_span,
             return_type,
             effects,
-<<<<<<< HEAD
-            effects_inherited: false,
-            holds_contracts_of: None,
-||||||| feef811e5
-            effects_inherited: false,
-=======
             effects_source: if pure_override {
                 EffectsSource::Pure
             } else {
                 EffectsSource::Written
             },
->>>>>>> origin/main
+            holds_contracts_of: None,
             body,
             span,
         };
@@ -2198,7 +2192,7 @@ impl Parser {
             params_span: lparen_span.merge(&rparen_span),
             return_type: None,
             effects: Vec::new(),
-            effects_inherited: false,
+            effects_source: EffectsSource::Written,
             holds_contracts_of: Some(method.id),
             body: Some(Block {
                 id: self.alloc_ast_id(),
@@ -6515,26 +6509,18 @@ impl Parser {
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
                 let id = self.alloc_ast_id();
-<<<<<<< HEAD
                 let fn_pos = self.pos;
-                let (mut method, contracts) = self.parse_function_and_contracts(
+                self.pure_override_allowed = !matches!(head, TraitHead::Pure { .. });
+                let parsed = self.parse_function_and_contracts(
                     id,
                     Visibility::Private,
                     false,
                     false,
                     attrs,
                     true,
-                )?;
-||||||| feef811e5
-                let mut method =
-                    self.parse_function(id, Visibility::Private, false, false, attrs, true)?;
-=======
-                self.pure_override_allowed = !matches!(head, TraitHead::Pure { .. });
-                let parsed =
-                    self.parse_function(id, Visibility::Private, false, false, attrs, true);
+                );
                 self.pure_override_allowed = false;
-                let mut method = parsed?;
->>>>>>> origin/main
+                let (mut method, contracts) = parsed?;
                 // A method that declares nothing takes what the head says, at
                 // sites of its own that the trait's scope answers.
                 if method.effects.is_empty() && method.effects_source == EffectsSource::Written {

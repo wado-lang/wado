@@ -331,14 +331,8 @@ impl Builder {
                 params_span: syn(),
                 return_type,
                 effects: Vec::new(),
-<<<<<<< HEAD
-                effects_inherited: false,
-                holds_contracts_of: None,
-||||||| feef811e5
-                effects_inherited: false,
-=======
                 effects_source: EffectsSource::Written,
->>>>>>> origin/main
+                holds_contracts_of: None,
                 body: None,
                 span: syn(),
             });
@@ -426,14 +420,8 @@ impl Builder {
             params_span: syn(),
             return_type,
             effects: Vec::new(),
-<<<<<<< HEAD
-            effects_inherited: false,
-            holds_contracts_of: None,
-||||||| feef811e5
-            effects_inherited: false,
-=======
             effects_source: EffectsSource::Written,
->>>>>>> origin/main
+            holds_contracts_of: None,
             body: None,
             span: syn(),
         }));
