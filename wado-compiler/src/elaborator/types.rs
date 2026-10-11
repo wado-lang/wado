@@ -321,18 +321,18 @@ impl FlagsInfo {
     /// The most members a declaration holds: each one's bitmask is `1 << index`.
     pub(super) const MAX_MEMBERS: usize = u32::BITS as usize;
 
+    /// The members past [`Self::MAX_MEMBERS`] are left out. A declaration that
+    /// has any is reported (`FlagsTooManyMembers`), and declaring the rest
+    /// keeps the type's name resolving, so no use of it reports a second error.
     pub(super) fn of_decl(
         type_id: TypeId,
         module_source: ModuleSource,
         decl: &ast::FlagsDecl,
     ) -> Self {
-        assert!(
-            decl.flags.len() <= Self::MAX_MEMBERS,
-            "a flags declaration wider than a word is rejected before this"
-        );
         let members = decl
             .flags
             .iter()
+            .take(Self::MAX_MEMBERS)
             .enumerate()
             .map(|(i, m)| FlagsMemberData {
                 name: m.name.clone(),
