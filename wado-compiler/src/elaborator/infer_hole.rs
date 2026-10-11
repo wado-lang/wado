@@ -411,8 +411,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             } else if self.awaits_pending_call(answer) {
                 // The enclosing call answers its variable once its arguments
-                // are read, and the hole with it.
-                self.chain_infer_var(hole, answer);
+                // are read, and the hole with it. A hole its own literals
+                // answer is the one that gets an answer, so a bare variable it
+                // met follows it instead (`Bx { v: 2 }.map(|x| { return x; })`).
+                if self.annotate_ctx.literals_wait_at(hole)
+                    && self.tysys.type_table.borrow().is_infer_var(answer)
+                {
+                    self.chain_infer_var(answer, hole);
+                } else {
+                    self.chain_infer_var(hole, answer);
+                }
             }
         }
     }

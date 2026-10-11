@@ -1,0 +1,34 @@
+// A closure's body determines a type parameter its expected type returns, in
+// a method's signature as in a free function's: `U` below is what the block
+// returns, written with `return` as with a tail expression.
+
+struct Bx<T> {
+    v: T,
+}
+
+impl<T> Bx<T> {
+    fn map<U>(self, mut f: fn mut(T) -> U) -> Bx<U> {
+        return Bx { v: f(self.v) };
+    }
+}
+
+fn ap<U>(x: i32, f: fn(i32) -> U) -> U {
+    return f(x);
+}
+
+test "a free function's parameter" {
+    assert ap(2, |x| { return x + 1; }) == 3;
+}
+
+test "a generic method's parameter" {
+    let b = Bx { v: 2 }.map(|x| { return x + 1; });
+    assert b.v == 3;
+}
+
+test "the prelude's Option::map" {
+    let o = Option::Some(2).map(|x| {
+        let y = x * 10;
+        return `${y}`;
+    });
+    assert o == Option::Some("20");
+}
