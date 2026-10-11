@@ -3967,6 +3967,7 @@ fn test_format_contract_clause_comments() {
         "    // why even\n",
         "    contract n % 2 == 0, \"n must be even\"  // trailing\n",
         "    contract n >= 0\n",
+        "    // before the body\n",
         "{\n",
         "    // body\n",
         "    return n / 2;\n",

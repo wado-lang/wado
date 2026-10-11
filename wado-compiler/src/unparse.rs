@@ -980,13 +980,18 @@ impl<'a> Unparser<'a> {
             }
             self.emit_trailing_for(clause.id);
         }
+        if let Some(body) = &f.body
+            && !contracts.is_empty()
+        {
+            self.output.push('\n');
+            self.flush_comments_before(body.span.start, Spacing::Tight);
+        }
         self.indent_level -= 1;
 
         if let Some(body) = &f.body {
             if contracts.is_empty() {
                 self.output.push(' ');
             } else {
-                self.output.push('\n');
                 self.write_indent();
             }
             self.output.push_str("{\n");
