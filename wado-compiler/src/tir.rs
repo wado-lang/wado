@@ -4612,37 +4612,18 @@ impl TypeTable {
     /// Every effect parameter named in a function type's row anywhere in
     /// `type_id`.
     pub fn effect_params_in(&self, type_id: TypeId, out: &mut IndexSet<String>) {
-        match self.get(type_id) {
-            ResolvedType::Function {
-                params,
-                return_type,
-                effects,
-                ..
-            } => {
-                out.extend(
-                    effects
-                        .iter()
-                        .filter(|e| e.is_param())
-                        .map(|e| e.name().to_string()),
-                );
-                for &p in params {
-                    self.effect_params_in(p, out);
-                }
-                self.effect_params_in(*return_type, out);
-            }
-            ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::BuiltinArray(inner) => {
-                self.effect_params_in(*inner, out);
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                for &a in type_args {
-                    self.effect_params_in(a, out);
-                }
-            }
-            _ => {}
+        if let ResolvedType::Function { effects, .. } = self.get(type_id) {
+            out.extend(
+                effects
+                    .iter()
+                    .filter(|e| e.is_param())
+                    .map(|e| e.name().to_string()),
+            );
         }
+        self.any_constituent(type_id, &mut |t| {
+            self.effect_params_in(t, out);
+            false
+        });
     }
 
     /// `owning_trait`'s generic associated type `assoc_name`, bound to
