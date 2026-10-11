@@ -287,11 +287,14 @@ in that impl, not a contract to add.
    walks the holder, as it walks every default body, once in the trait's own
    frame with `Self` abstract, so the effect and purity checks and the language
    service answer for a trait that no impl takes.
-4. The indexing traits declare `contains_index` and require it, so
+4. An `interface` operation's contract: written on the operation, checked in
+   its default body and in every handler of it, and held to the purity check.
+   Until then the parser rejects one.
+5. The indexing traits declare `contains_index` and require it, so
    `unchecked xs[i]` is an index read with no range check.
-5. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
+6. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
    `#[unavailable]` declaration where Rust has a method of the same name.
-6. The generated WIT carries an `export fn`'s contract as a comment.
+7. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps
 

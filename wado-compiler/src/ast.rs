@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{UNIT_TYPE_NAME, contract_holder_of};
+use crate::name::UNIT_TYPE_NAME;
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -2420,6 +2420,9 @@ pub struct Function {
     /// Whether `effects` came from the enclosing trait's head rather than from
     /// a `with` clause here. The formatter prints what the source wrote.
     pub effects_inherited: bool,
+    /// The trait method whose `contract` clauses this hidden default method
+    /// holds, where it is one. Each impl of that method calls it at its head.
+    pub holds_contracts_of: Option<AstId>,
     /// Function body. None indicates a compiler built-in (bodyless declaration
     /// like `pub fn foo();`). Its leading [`AssertStmt::contract`] statements
     /// are the `contract` clauses written ahead of it.
@@ -2451,10 +2454,9 @@ impl Function {
     }
 
     /// Whether this is the default method a trait declares, hidden, to hold
-    /// the `contract` clauses of one of its methods. Each impl of that method
-    /// calls it at its head.
+    /// the `contract` clauses of one of its methods.
     pub fn is_contract_holder(&self) -> bool {
-        contract_holder_of(&self.name).is_some()
+        self.holds_contracts_of.is_some()
     }
 
     /// Whether this is an `export fn` exported under its own name: an
@@ -4715,11 +4717,13 @@ pub struct TraitDecl {
 }
 
 impl TraitDecl {
-    /// The hidden default method holding the `contract` clauses of `method`.
+    /// The hidden default method holding the `contract` clauses of the method
+    /// named `method`, which is how an impl's method names the one it answers.
     pub fn contract_holder(&self, method: &str) -> Option<&Function> {
+        let held = self.methods.iter().find(|m| m.name == method)?;
         self.methods
             .iter()
-            .find(|m| contract_holder_of(&m.name) == Some(method))
+            .find(|m| m.holds_contracts_of == Some(held.id))
     }
 }
 

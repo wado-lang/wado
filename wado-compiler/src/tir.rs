@@ -7320,6 +7320,16 @@ impl TemplateId {
         }
     }
 
+    /// The template a call of `info` reaches, given that its method answers
+    /// with this one: the `unchecked` twin where the call is marked.
+    pub fn called_by(self, info: &LocalMethodName) -> Self {
+        if info.unchecked {
+            self.unchecked_twin()
+        } else {
+            self
+        }
+    }
+
     /// The body derivation mints in `module` for the trait method `info`,
     /// named by its receiver's head alone.
     pub fn derived(module: ModuleSource, info: &LocalMethodName) -> Self {

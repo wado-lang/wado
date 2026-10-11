@@ -377,7 +377,7 @@ impl Monomorphizer {
             .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
         let mangled_method =
-            MethodName::format_method_with_args(&method_info.method_name, &method_arg_names);
+            MethodName::format_method_with_args(&method_info.mangled_method_name(), &method_arg_names);
 
         MethodName::join_struct_method(&mangled_struct, &mangled_method)
     }

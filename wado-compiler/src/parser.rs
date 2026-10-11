@@ -2083,6 +2083,7 @@ impl Parser {
             return_type,
             effects,
             effects_inherited: false,
+            holds_contracts_of: None,
             body,
             span,
         };
@@ -2103,13 +2104,20 @@ impl Parser {
         self.pos = fn_pos;
         self.expect(&TokenKind::Fn)?;
         self.consume_ident()?;
-        let type_params = self.parse_generic_params()?;
+        let mut type_params = self.parse_generic_params()?;
+        let held_hole = std::mem::replace(&mut self.effect_hole, EffectHole::Unwritten);
         let lparen_span = self.expect(&TokenKind::LParen)?.span;
         let params = self.parse_param_list()?;
         let rparen_span = self.expect(&TokenKind::RParen)?.span;
+        self.effect_hole = held_hole;
         let next_ast_id = self.next_ast_id;
         self.restore(end);
         self.next_ast_id = next_ast_id;
+        // The method's `with _` may sit past its parameters, so the holder takes
+        // the parameter it minted rather than one its own read finds.
+        if let Some(hole) = method.type_params.iter().find(|p| p.name == EFFECT_HOLE) {
+            type_params.push(self.effect_hole_param(hole.span));
+        }
 
         let span = contracts
             .iter()
@@ -2131,6 +2139,7 @@ impl Parser {
             return_type: None,
             effects: Vec::new(),
             effects_inherited: false,
+            holds_contracts_of: Some(method.id),
             body: Some(Block {
                 id: self.alloc_ast_id(),
                 stmts: contracts,
@@ -2147,6 +2156,7 @@ impl Parser {
         let mut clauses = Vec::new();
         while matches!(self.peek_kind(), TokenKind::Ident(name) if name == "contract") {
             let start_span = self.peek().span;
+            self.mark_contextual_keyword(start_span);
             let id = self.alloc_ast_id();
             self.advance();
             let condition = self.parse_expr_no_struct_literal()?;
@@ -5540,7 +5550,15 @@ impl Parser {
         // Visibility comes from the interface itself, and an operation is
         // never exported at the CM boundary on its own.
         let id = self.alloc_ast_id();
-        self.parse_function(id, Visibility::Private, false, is_async, attrs, true)
+        let (func, contracts) =
+            self.parse_function_and_contracts(id, Visibility::Private, false, is_async, attrs, true)?;
+        if let Some(clause) = contracts.first() {
+            return Err(self.error_at_span(
+                clause.span(),
+                "an interface operation takes no `contract` clause yet",
+            ));
+        }
+        Ok(func)
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`

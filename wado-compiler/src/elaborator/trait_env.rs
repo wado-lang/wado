@@ -1570,14 +1570,8 @@ impl TraitEnv {
     }
 
     /// The template a call reaching `block` for `method` instantiates: the
-    /// block's own method, or the trait default it inherits, or the
-    /// `unchecked` twin of either.
+    /// block's own method, or the trait default it inherits.
     pub(crate) fn method_template(&self, block: DefId, method: &str) -> Option<TemplateId> {
-        if let Some(checked) = name::unchecked_twin_of(method) {
-            return self
-                .method_template(block, checked)
-                .map(|template| template.unchecked_twin());
-        }
         let header = &self.impl_headers[&block];
         let def = if let Some(written) = header.methods.iter().find(|m| m.name == method) {
             written.def
@@ -1590,6 +1584,16 @@ impl TraitEnv {
                 .def
         };
         Some(TemplateId::in_block(def, block))
+    }
+
+    /// [`Self::method_template`] as the call `info` reaches it.
+    pub(crate) fn call_template(
+        &self,
+        block: DefId,
+        info: &name::LocalMethodName,
+    ) -> Option<TemplateId> {
+        self.method_template(block, &info.method_name)
+            .map(|template| template.called_by(info))
     }
 
     /// The block on `receiver` whose body answers `method` of `trait_<wanted>`

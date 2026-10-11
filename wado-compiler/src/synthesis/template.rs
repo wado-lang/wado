@@ -1021,6 +1021,17 @@ pub(crate) fn ref_blanket_call(
 ) -> (LocalMethodName, MonomorphInfo) {
     let generic =
         LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
+    ref_blanket_instance(generic, pointee, method_type_args, tt)
+}
+
+/// [`ref_blanket_call`] for the call `generic` names, which may be marked
+/// `unchecked`.
+pub(crate) fn ref_blanket_instance(
+    generic: LocalMethodName,
+    pointee: TypeId,
+    method_type_args: Vec<TypeId>,
+    tt: &TypeTable,
+) -> (LocalMethodName, MonomorphInfo) {
     let generic_name = generic.to_mangled_name();
     let method_type_arg_names: Vec<FqTypeName> = method_type_args
         .iter()
@@ -1128,6 +1139,7 @@ pub(crate) fn trait_call_template(
         .and_then(|trait_name| {
             trait_method_template(trait_env, trait_name, &info.method_name, receiver, tt)
         })
+        .map(|template| template.called_by(info))
         .or_else(|| Some(TemplateId::derived(home.clone(), info)))
 }
 
@@ -1150,6 +1162,7 @@ pub(crate) fn method_template_at(
         }
         None => inherent_method_template(trait_env, &info.method_name, receiver, tt),
     }
+    .map(|template| template.called_by(info))
 }
 
 /// The inherent block answering `receiver.method()`, else the one a newtype

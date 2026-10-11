@@ -16,6 +16,7 @@ use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
 use heck::{ToKebabCase, ToSnakeCase};
+use std::borrow::Cow;
 use std::fmt;
 use std::hash::Hash;
 
@@ -103,30 +104,14 @@ pub fn cold_region_helper_name(enclosing_name: &str, ordinal: u32) -> String {
 /// The name of a function's `unchecked` twin, which an `unchecked` call
 /// reaches: the function's name with an `$unchecked` suffix.
 pub fn unchecked_twin_name(name: &str) -> String {
-    format!("{name}{UNCHECKED_TWIN_SUFFIX}")
+    format!("{name}$unchecked")
 }
-
-const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
-
-/// The function whose `unchecked` twin `name` names, if it names one. See
-/// [`unchecked_twin_name`].
-pub fn unchecked_twin_of(name: &str) -> Option<&str> {
-    name.strip_suffix(UNCHECKED_TWIN_SUFFIX)
-}
-
-const CONTRACT_HOLDER_PREFIX: &str = "$contract$";
 
 /// The name of the hidden default method a trait declares to hold the
 /// `contract` clauses of its method `method`, which every impl of the method
 /// calls at its head.
 pub fn contract_holder_name(method: &str) -> String {
-    format!("{CONTRACT_HOLDER_PREFIX}{method}")
-}
-
-/// The method whose `contract` clauses the hidden method `name` holds, if it
-/// is one. See [`contract_holder_name`].
-pub fn contract_holder_of(name: &str) -> Option<&str> {
-    name.strip_prefix(CONTRACT_HOLDER_PREFIX)
+    format!("$contract${method}")
 }
 
 /// The name of the function holding an effect operation's default
@@ -939,6 +924,10 @@ pub struct LocalMethodName {
     /// When set, synthesis generates a CM binding function and rewrites
     /// the call site to use it instead of the original resource method.
     pub cm_name: Option<String>,
+    /// The method's `unchecked` twin rather than the method, which a call
+    /// marked `unchecked` reaches. [`Self::method_name`] stays the method's, so
+    /// whatever is looked up by it finds the method the twin is of.
+    pub unchecked: bool,
 }
 
 /// The reference kind of a `&` / `&mut` method receiver.
@@ -1292,7 +1281,14 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: false,
             cm_name: None,
+            unchecked: false,
         }
+    }
+
+    /// This name, naming the method's `unchecked` twin where `unchecked` says.
+    #[must_use]
+    pub fn with_unchecked(self, unchecked: bool) -> Self {
+        Self { unchecked, ..self }
     }
 
     /// The trait's declaration name without type args (`"Display"`,
@@ -1334,6 +1330,7 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: false,
             cm_name: None,
+            unchecked: false,
         }
     }
 
@@ -1360,6 +1357,7 @@ impl LocalMethodName {
             is_type_param_receiver: self.is_type_param_receiver,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
+            unchecked: self.unchecked,
         }
     }
 
@@ -1411,6 +1409,7 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
+            unchecked: self.unchecked,
         }
     }
 
@@ -1437,7 +1436,18 @@ impl LocalMethodName {
             .iter()
             .map(FqTypeName::to_mangled)
             .collect();
-        MethodName::format_method_with_args(&self.method_name, &args)
+        MethodName::format_method_with_args(&self.mangled_method_name(), &args)
+    }
+
+    /// The method's name as its mangle spells it, its `unchecked` twin's
+    /// included, without the method's type arguments.
+    #[must_use]
+    pub fn mangled_method_name(&self) -> Cow<'_, str> {
+        if self.unchecked {
+            Cow::Owned(unchecked_twin_name(&self.method_name))
+        } else {
+            Cow::Borrowed(&self.method_name)
+        }
     }
 
     /// Generate the mangled name from the components.

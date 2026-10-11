@@ -24,7 +24,7 @@ use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscr
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, Receiver, contract_holder_of, global_init_function, global_name,
+    FqTypeName, Receiver, global_init_function, global_name,
     unchecked_twin_name,
 };
 use crate::symbol::SymbolTable;
@@ -726,6 +726,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     methods.extend(self.reify_impl_default_methods(impl_block));
                     let bound = bind_trait_contracts(
                         methods,
+                        &self.contract_bindings(impl_block),
                         &self.current_module_source,
                         &mut self.tysys.type_table.borrow_mut(),
                     );
@@ -1687,13 +1688,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         func.name = unchecked_twin_name(&func.name);
         if let Some(info) = &mut func.method_info {
-            info.method_name = unchecked_twin_name(&info.method_name);
+            info.unchecked = true;
         }
         if let Some(mono) = &mut func.monomorph_info {
             mono.generic_name = unchecked_twin_name(&mono.generic_name);
         }
         func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
         Ok(())
+    }
+
+    /// Each `contract` clause holder `impl_block`'s trait declares, paired
+    /// with the method of the block that answers the one it holds the clauses
+    /// of: the block's own, else the trait's default.
+    fn contract_bindings(&self, impl_block: &ast::ImplBlock) -> Vec<(DefId, DefId)> {
+        let Some(decl) = impl_block
+            .trait_type
+            .as_ref()
+            .and_then(|ty| self.tysys.resolutions.head_decl(ty))
+            .and_then(|decl| self.trait_decl(decl))
+        else {
+            return Vec::new();
+        };
+        let defs = self.tysys.resolutions.defs();
+        decl.methods
+            .iter()
+            .filter_map(|holder| {
+                let held_id = holder.holds_contracts_of?;
+                let held = decl
+                    .methods
+                    .iter()
+                    .find(|m| m.id == held_id)
+                    .expect("a holder follows the method it holds the clauses of");
+                let answering = impl_block
+                    .methods
+                    .iter()
+                    .find(|m| m.name == held.name)
+                    .map_or(held_id, |m| m.id);
+                Some((defs.def_at(holder.id), defs.def_at(answering)))
+            })
+            .collect()
     }
 
     /// Whether the function `def` declares is bound by a `contract` clause:
@@ -10327,7 +10360,7 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
     twin.export_name = None;
     twin.compiler_item = None;
     if let Some(info) = &mut twin.method_info {
-        info.method_name = unchecked_twin_name(&info.method_name);
+        info.unchecked = true;
     }
     let body = func
         .body
@@ -10347,15 +10380,21 @@ fn split_unchecked_twin(func: &mut TirFunction, clauses: &[Span]) -> TirFunction
 /// Each clause holder among them splits into the checked holder and its
 /// `unchecked` twin, and the method it holds the clauses of splits likewise,
 /// each half opening with a call to the matching half of the holder.
+/// `bindings` pairs each holder's declaration with the method's, as
+/// [`Reifier::contract_bindings`] answers them.
 fn bind_trait_contracts(
     mut methods: Vec<TirFunction>,
+    bindings: &[(DefId, DefId)],
     module: &ModuleSource,
     type_table: &mut TypeTable,
 ) -> Vec<TirFunction> {
-    let holders: Vec<usize> = (0..methods.len())
-        .filter(|&i| held_method(&methods[i]).is_some())
-        .collect();
-    for holder_at in holders {
+    let position = |methods: &[TirFunction], def: DefId| {
+        methods.iter().position(|m| m.def_id == Some(def))
+    };
+    for &(holder_def, held_def) in bindings {
+        let Some(holder_at) = position(&methods, holder_def) else {
+            continue;
+        };
         let holder = &mut methods[holder_at];
         // Linking stamps every function's module, but the calls below record
         // it now: a call to an instance resolves by name in that module.
@@ -10368,8 +10407,8 @@ fn bind_trait_contracts(
             .collect();
         let holder_twin = split_unchecked_twin(holder, &clauses);
         let holder = holder.clone();
-        let held = held_method(&holder).expect("filtered above").to_string();
-        if let Some(method) = methods.iter_mut().find(|m| method_name(m) == Some(&held)) {
+        if let Some(held_at) = position(&methods, held_def) {
+            let method = &mut methods[held_at];
             let mut method_twin = split_unchecked_twin(method, &[]);
             open_with_call(method, &holder, type_table);
             open_with_call(&mut method_twin, &holder_twin, type_table);
@@ -10378,17 +10417,6 @@ fn bind_trait_contracts(
         methods.push(holder_twin);
     }
     methods
-}
-
-fn method_name(func: &TirFunction) -> Option<&str> {
-    func.method_info
-        .as_ref()
-        .map(|info| info.method_name.as_str())
-}
-
-/// The method whose `contract` clauses `func` holds, if it is a holder.
-fn held_method(func: &TirFunction) -> Option<&str> {
-    method_name(func).and_then(contract_holder_of)
 }
 
 /// Open `func`'s body with a call to `callee`, passing it `func`'s parameters
