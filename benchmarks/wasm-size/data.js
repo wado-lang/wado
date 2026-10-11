@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791731697735,
+  "lastUpdate": 1791732676922,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66321,6 +66321,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7200061384890fbdec4d63692e9bb6878350a7f8"
         },
         "date": 1791731696824,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1873,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6250,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20669,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bab741d0d577a6388748343338a2fd7cdec85f3f",
+          "message": "Merge pull request #2332 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat(patterns): float literal and constant patterns, with a float_literal_pattern lint",
+          "timestamp": "2026-10-11T23:56:46+09:00",
+          "tree_id": "19a670436bcc5749742335579b859ec079bf1507",
+          "url": "https://github.com/wado-lang/wado/commit/bab741d0d577a6388748343338a2fd7cdec85f3f"
+        },
+        "date": 1791732676063,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
