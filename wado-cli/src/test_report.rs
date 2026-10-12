@@ -473,6 +473,8 @@ impl TestReporter for HeartbeatReporter {
         self.finish_file_if_done(&result.file_path);
     }
 
+    /// A cached file is no part of `total_files`, which counts the work the
+    /// estimate is made of.
     fn on_cached(&self, _path: &str, tally: Tally) {
         let state = &self.state;
         state
@@ -481,7 +483,6 @@ impl TestReporter for HeartbeatReporter {
         state
             .todo_pending
             .fetch_add(tally.todo_pending, Ordering::Relaxed);
-        state.mark_file_done();
     }
 
     fn on_package_done(&self, _args: PackageDoneArgs) {

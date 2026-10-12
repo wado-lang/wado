@@ -98,11 +98,31 @@ impl RunCache {
         self.record(path, None);
     }
 
-    /// Record that what was read depends on `path` holding `bytes` (`None`:
-    /// being absent). The run's watch is left out: it names moved sources, and
-    /// this is for files the compile reads around the host, such as a manifest.
-    pub fn depend_on(&self, path: &Path, bytes: Option<&[u8]>) {
-        self.record(path, bytes.map(|bytes| Sha256::digest(bytes).into()));
+    /// Record that what was read depends on what `path` holds now, for a file
+    /// the compile reads around the host, such as a manifest. The run's watch
+    /// is left out: it names moved sources. Only a scoped view reads the file,
+    /// since nothing asks any other what it depended on.
+    pub fn depend_on_file(&self, path: &Path) {
+        if self.reads.is_none() {
+            return;
+        }
+        match Input::on_disk(normalize_path(&absolutize(path))) {
+            Some(input) => self.record_input(input),
+            None => self.observe_untracked(),
+        }
+    }
+
+    /// Record that what was read depends on `path`, which the run's watch
+    /// already holds, as it does every stdlib file.
+    pub fn depend_on_watched(&self, path: &Path) {
+        if self.reads.is_none() {
+            return;
+        }
+        let hash = self
+            .inputs
+            .hash_of(path)
+            .unwrap_or_else(|| panic!("the run watches {}", path.display()));
+        self.record(path, Some(hash));
     }
 
     /// Record a read no file describes, such as an environment variable, so
@@ -114,11 +134,14 @@ impl RunCache {
     }
 
     fn record(&self, path: &Path, hash: Option<[u8; 32]>) {
+        if self.reads.is_some() {
+            self.record_input(Input::hashed(normalize_path(&absolutize(path)), hash));
+        }
+    }
+
+    fn record_input(&self, input: Input) {
         if let Some(log) = &self.reads {
-            let path = normalize_path(&absolutize(path));
-            lock(&log.inputs)
-                .entry(path.clone())
-                .or_insert_with(|| Input::hashed(path, hash));
+            lock(&log.inputs).entry(input.path.clone()).or_insert(input);
         }
     }
 
@@ -135,18 +158,15 @@ impl RunCache {
 
     /// Record `reads`, which another view made, as read through this one.
     fn replay(&self, reads: Option<&[Input]>) {
-        let Some(log) = &self.reads else {
+        if self.reads.is_none() {
             return;
-        };
+        }
         let Some(reads) = reads else {
             self.observe_untracked();
             return;
         };
-        let mut inputs = lock(&log.inputs);
         for input in reads {
-            inputs
-                .entry(input.path.clone())
-                .or_insert_with(|| input.clone());
+            self.record_input(input.clone());
         }
     }
 }
@@ -267,11 +287,17 @@ impl SourceWatch {
     #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
     fn observe_dev_stdlib(&self) {}
 
+    /// The hash of what `path` held when the run first read it.
+    #[must_use]
+    pub fn hash_of(&self, path: &Path) -> Option<[u8; 32]> {
+        lock(&self.seen).get(path).map(|stamp| stamp.hash)
+    }
+
     /// Whether this run has read `path`, so a later edit to it would be
     /// reported.
     #[must_use]
     pub fn is_watching(&self, path: &Path) -> bool {
-        lock(&self.seen).contains_key(path)
+        self.hash_of(path).is_some()
     }
 
     /// Declare `dir` a Kiln output directory, whose files this run writes.

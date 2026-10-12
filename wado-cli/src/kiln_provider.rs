@@ -689,6 +689,10 @@ impl CompilerHost for SilentHost {
     fn env_var(&self, name: &str) -> Option<String> {
         self.inner.env_var(name)
     }
+
+    fn stdlib_module_read(&self, import_path: &str) {
+        self.inner.stdlib_module_read(import_path);
+    }
 }
 
 /// Build a [`ResolvedGenerator`] from a prebuilt generator component: recover

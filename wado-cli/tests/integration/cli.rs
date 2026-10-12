@@ -891,6 +891,99 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
 }
 
 #[test]
+fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let greet = tmp.path().join("greet");
+    std::fs::create_dir_all(&greet).unwrap();
+    let manifest =
+        |lib: &str| format!("[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n");
+    std::fs::write(greet.join("wado.toml"), manifest("a.wado")).unwrap();
+    std::fs::write(greet.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
+    std::fs::write(greet.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("app_test.wado"),
+        "use { n } from \"greet\";\n\ntest \"one\" {\n    assert n() == 1;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(app.join("app_test.wado")).assert();
+
+    run().success();
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"));
+    std::fs::write(greet.join("wado.toml"), manifest("b.wado")).unwrap();
+    run()
+        .failure()
+        .stdout(predicate::str::contains("0 passed, 1 failed"));
+}
+
+#[test]
+fn test_test_keys_its_cache_by_the_compilers_environment() {
+    // The compiler reads `WADO_*` itself, and they change what it emits.
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("env_test.wado");
+    std::fs::write(&main, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
+    wado().arg("test").arg(&main).assert().success();
+    wado()
+        .env("WADO_SKIP_PASS", "inline")
+        .arg("test")
+        .arg(&main)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cached:").not());
+}
+
+#[test]
+fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
+    let tmp = tempfile::tempdir().unwrap();
+    let empty = tmp.path().join("empty_test.wado");
+    std::fs::write(&empty, "pub fn f() -> i32 {\n    return 1;\n}\n").unwrap();
+    let fuel = tmp.path().join("fuel_test.wado");
+    std::fs::write(&fuel, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
+    for _ in 0..2 {
+        // A file without tests is a skip, which says it holds none.
+        wado()
+            .arg("test")
+            .arg(&empty)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("skip:"))
+            .stdout(predicate::str::contains("cached:").not());
+        wado()
+            .args(["test", "--report-fuel"])
+            .arg(&fuel)
+            .assert()
+            .success()
+            .stdout(predicate::str::is_match(r"fuel \d+").unwrap());
+    }
+}
+
+#[test]
+fn test_test_runs_a_file_named_twice_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("twice_test.wado");
+    std::fs::write(
+        &main,
+        "test \"a\" {\n    assert 1 == 1;\n}\n\ntest \"b\" {\n    assert 2 == 2;\n}\n",
+    )
+    .unwrap();
+    wado()
+        .arg("test")
+        .arg(tmp.path())
+        .arg(&main)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
 fn test_test_never_caches_a_file_taking_input_at_run_time() {
     // What it receives at run time is no input its compile recorded.
     let tmp = tempfile::tempdir().unwrap();

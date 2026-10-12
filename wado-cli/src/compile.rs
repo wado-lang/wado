@@ -19,7 +19,7 @@ use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
-use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir};
+use crate::manifest::{DiscoveryError, absolute, manifest_in, openable_dir, resolution_inputs};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
@@ -356,11 +356,8 @@ pub async fn try_compile_with_run_cache(
     // otherwise miss the one file the caller named.
     base_host.run_cache().observe(path, source.as_bytes());
     if let Some(project) = &manifest_pair {
-        for file in ["wado.toml", "wado.lock"] {
-            let file = project.root.join(file);
-            base_host
-                .run_cache()
-                .depend_on(&file, fs::read(&file).ok().as_deref());
+        for file in resolution_inputs(project) {
+            base_host.run_cache().depend_on_file(&file);
         }
     }
     let host = attach_manifest_and_component_deps(

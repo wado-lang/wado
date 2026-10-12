@@ -2,6 +2,7 @@
 //! files it read. Shared by the `core:eval` outcome cache and the `wado test`
 //! result cache.
 
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
@@ -103,11 +104,14 @@ impl Input {
     }
 
     /// What `path` holds now; `None` where it cannot be read, which matches no
-    /// recorded input.
+    /// recorded input. A path through a file, such as `wado.toml` under a path
+    /// dependency naming a file, is as absent as a missing one.
     pub(crate) fn on_disk(path: PathBuf) -> Option<Self> {
         match std::fs::read(&path) {
             Ok(bytes) => Some(Self::of(path, Some(&bytes))),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(Self::of(path, None)),
+            Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory) => {
+                Some(Self::of(path, None))
+            }
             Err(_) => None,
         }
     }

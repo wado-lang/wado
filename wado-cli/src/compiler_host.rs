@@ -356,16 +356,12 @@ impl CompilerHost for FilesystemCompilerHost {
     fn stdlib_module_read(&self, import_path: &str) {
         #[cfg(debug_assertions)]
         {
-            use wado_compiler::stdlib::{DEV_STDLIB_ROOT, get_stdlib_module, module_file};
+            use wado_compiler::stdlib::{DEV_STDLIB_ROOT, module_file};
 
             let file = module_file(import_path)
                 .unwrap_or_else(|| panic!("{import_path} is a stdlib module"));
-            let source = get_stdlib_module(import_path)
-                .unwrap_or_else(|| panic!("{import_path} is a stdlib module"));
-            self.run.depend_on(
-                &Path::new(DEV_STDLIB_ROOT).join(file),
-                Some(source.as_bytes()),
-            );
+            self.run
+                .depend_on_watched(&Path::new(DEV_STDLIB_ROOT).join(file));
         }
         #[cfg(not(debug_assertions))]
         let _ = import_path;

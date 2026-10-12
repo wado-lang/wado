@@ -170,19 +170,21 @@ than a `#![TODO]` module, which counts as a pending TODO instead.
 
 A file whose tests all passed, or trapped as pending TODOs, is not compiled or
 run again while nothing that decided the outcome has changed. That is the
-`wado` binary, the stdlib it compiles against, the run's options, and every
-file the file's compile read, including Kiln generators and their inputs. The
+`wado` binary, the stdlib it compiles against, the run's options, the `WADO_*`
+environment, and every file the file's compile read. Those files include Kiln
+generators and their inputs, and the manifests that resolve its imports. The
 summary counts the file's tests as they went before and names the file on a
 `cached:` line.
 
 A result is cached only where those inputs decide it. A file is always run when
-its compile reads an environment variable, or when its tests perform an effect
-beyond writing to stdout or stderr: a clock, randomness, the filesystem, the
-network, or `core:eval` hands a test what no compile reads.
+it declares no `test` block, when its compile reads an environment variable, or
+when its tests perform an effect beyond writing to stdout or stderr: a clock,
+randomness, the filesystem, the network, or `core:eval` hands a test what no
+compile reads.
 
 `--no-cache` runs every file and still records the passes. `--coverage`,
-`--profile` and `--no-run` neither read nor record them. Results live in
-`build/test/` under the file's package root.
+`--profile`, `--report-fuel` and `--no-run` neither read nor record them.
+Results live in `build/test/` under the file's package root.
 
 ## Test Discovery
 

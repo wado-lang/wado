@@ -441,6 +441,10 @@ impl CompilerHost for DependencyHost {
     fn dependency_index(&self) -> DependencyIndex {
         self.deps.index.clone()
     }
+
+    /// An outcome is keyed by [`compiler_digest`], which covers the whole
+    /// stdlib.
+    fn stdlib_module_read(&self, _import_path: &str) {}
 }
 
 /// A cached outcome, valid while every file the compile read is unchanged.

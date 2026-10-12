@@ -559,8 +559,9 @@ pub trait CompilerHost: Send + Sync {
 
     /// The compile took the stdlib module `import_path` (`"core:json"`), which
     /// reaches no [`Self::load_source`], so a host recording what a compile
-    /// depends on hears of it here. Ignored by default.
-    fn stdlib_module_read(&self, _import_path: &str) {}
+    /// depends on hears of it here. Required, so a wrapping host cannot drop
+    /// it by leaving it out.
+    fn stdlib_module_read(&self, import_path: &str);
 }
 
 /// The project's `[dependencies]`, resolved for bare-name imports.
@@ -808,6 +809,9 @@ impl CompilerHost for InMemoryCompilerHost {
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         self.diagnostics.lock().unwrap().push(diagnostic);
     }
+
+    /// Nothing caches what an in-memory compile depended on.
+    fn stdlib_module_read(&self, _import_path: &str) {}
 }
 
 #[cfg(test)]

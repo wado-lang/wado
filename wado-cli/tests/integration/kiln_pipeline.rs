@@ -91,6 +91,8 @@ impl CompilerHost for StubHost {
         self.diagnostics.lock().unwrap().push(d);
     }
 
+    fn stdlib_module_read(&self, _import_path: &str) {}
+
     async fn run_generator(
         &self,
         _wasm: &[u8],

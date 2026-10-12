@@ -1,4 +1,5 @@
 use std::any::Any;
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -16,7 +17,7 @@ use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use wado_compiler::ast::TodoMark;
 use wado_compiler::coverage::{CoverageScope, Registered, read_from_component};
-use wado_compiler::hashmap::IndexMap;
+use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
@@ -335,7 +336,8 @@ fn relative_label(invocation_root: &Path, pkg_root: &Path) -> String {
 
 fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<String>, CliExit> {
     let excludes = discover::ExcludeSet::compile(extra_excludes).map_err(CliExit::error)?;
-    let mut resolved = Vec::new();
+    // A file named twice, or named and also under a named directory, runs once.
+    let mut resolved = IndexSet::default();
     for path in paths {
         let p = Path::new(&path);
         if p.is_dir() {
@@ -348,11 +350,11 @@ fn resolve_paths(paths: Vec<String>, extra_excludes: &[String]) -> Result<Vec<St
             // whose path matches".
             let canonical = discover::display_path(p);
             if !excludes.matches_str(&canonical) {
-                resolved.push(canonical);
+                resolved.insert(canonical);
             }
         }
     }
-    Ok(resolved)
+    Ok(resolved.into_iter().collect())
 }
 
 /// The ceiling on `--parallel`. A worker holds a stdlib snapshot and the memory
@@ -1360,9 +1362,9 @@ async fn run_load_stage(
             LoadOutcome::Loaded(mut module) => {
                 tally.ok += 1;
                 if module.tests.is_empty() {
+                    // Reported as `skip` on every run, never as `cached`.
                     tally.skip += 1;
-                }
-                if let Some(reads) = module.cache_reads.take() {
+                } else if let Some(reads) = module.cache_reads.take() {
                     tally
                         .cacheable
                         .push((module.path.clone(), reads, module.tests.len()));
@@ -2303,26 +2305,19 @@ async fn run_one_package(
     run_cache: Arc<RunCache>,
     coverage_run: Option<Arc<CoverageRun>>,
     test_cache: Option<&TestCache>,
+    cached: &[(String, Tally)],
 ) -> PackageTotals {
     reporter.on_package_start(pkg_run, show_banner);
 
-    let mut cached_files = 0_usize;
-    let mut cached = Tally::default();
-    let mut paths = Vec::with_capacity(pkg_run.paths.len());
-    for path in &pkg_run.paths {
-        match test_cache.and_then(|cache| cache.lookup(path)) {
-            Some(tally) => {
-                reporter.on_cached(path, tally);
-                cached_files += 1;
-                cached.passed += tally.passed;
-                cached.todo_pending += tally.todo_pending;
-            }
-            None => paths.push(path.clone()),
-        }
+    let mut cached_tests = Tally::default();
+    for (path, tally) in cached {
+        reporter.on_cached(path, *tally);
+        cached_tests.passed += tally.passed;
+        cached_tests.todo_pending += tally.todo_pending;
     }
 
     let outcome = run_pipeline(
-        &paths,
+        &pkg_run.paths,
         flags,
         cpu,
         compile_jobs,
@@ -2387,10 +2382,10 @@ async fn run_one_package(
             load_ok: load.ok,
             load_failed,
             skip_files: load.skip,
-            cached_files,
-            test_passed: test_passed + cached.passed,
+            cached_files: cached.len(),
+            test_passed: test_passed + cached_tests.passed,
             test_failed,
-            todo_pending: todo_pending + cached.todo_pending,
+            todo_pending: todo_pending + cached_tests.todo_pending,
             todo_resolved,
             timings,
         }
@@ -2524,6 +2519,17 @@ fn write_profile(
     Ok(())
 }
 
+/// The `WADO_*` environment, sorted. The compiler reads these itself
+/// (`WADO_SKIP_PASS`, `WADO_NO_PRELOWER_PRUNE`) rather than through its host,
+/// and they change what it emits.
+fn wado_env() -> Vec<(OsString, OsString)> {
+    let mut vars: Vec<_> = std::env::vars_os()
+        .filter(|(name, _)| name.as_encoded_bytes().starts_with(b"WADO_"))
+        .collect();
+    vars.sort();
+    vars
+}
+
 pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
@@ -2533,7 +2539,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let no_run = opts.no_run;
     let profile = opts.profile;
     let runtime_knobs = opts.runtime;
-    let package_runs = opts.package_runs;
+    let mut package_runs = opts.package_runs;
     let grants = Arc::new(opts.grants);
     let coverage_run = opts
         .coverage
@@ -2559,14 +2565,40 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let load_jobs = (jobs / 2).max(1);
     let execute_jobs = jobs;
 
+    // A cached file reports its tally and nothing else, so a run measuring the
+    // tests (a profile, coverage, fuel) runs them all, and `--no-run` has no
+    // pass to record.
+    let measures = coverage_run.is_some()
+        || !matches!(profile, ProfileMode::None)
+        || runtime_knobs.report_fuel;
+    let test_cache = (!no_run && !measures).then(|| {
+        let mut keyed = (*flags).clone();
+        // `--no-cache` only skips reading, so it is no part of the key.
+        keyed.knobs.no_cache = false;
+        TestCache::new(
+            &format!("{keyed:?} {runtime_knobs:?} {:?}", wado_env()),
+            !flags.knobs.no_cache,
+        )
+    });
+    // Settled before anything is sized by the work, which the hits are not.
+    let cached: Vec<Vec<(String, Tally)>> = package_runs
+        .iter_mut()
+        .map(|run| match &test_cache {
+            Some(cache) => cache.take_hits(&mut run.paths),
+            None => Vec::new(),
+        })
+        .collect();
+
     let total_files: usize = package_runs.iter().map(|r| r.paths.len()).sum();
+    let cached_files: usize = cached.iter().map(Vec::len).sum();
 
     prewarm_stdlib_snapshot_on_workers(prewarm_workers(compile_jobs, total_files)).await;
 
     let reporter: Arc<dyn TestReporter> = match format {
         TestFormat::Verbose => Arc::new(VerboseReporter::new(overall_start)),
         TestFormat::Heartbeat => Arc::new(HeartbeatReporter::new(overall_start, total_files)),
-        TestFormat::Tap => Arc::new(TapReporter::new(overall_start, total_files)),
+        // TAP plans a line for every file, a cached one included.
+        TestFormat::Tap => Arc::new(TapReporter::new(overall_start, total_files + cached_files)),
     };
 
     // One view of the source tree for the whole run, across packages.
@@ -2576,20 +2608,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
-    // A profile or a coverage report needs the tests to run, and `--no-run`
-    // has no pass to record.
-    let test_cache = (!no_run && coverage_run.is_none() && matches!(profile, ProfileMode::None))
-        .then(|| {
-            let mut keyed = (*flags).clone();
-            // `--no-cache` only skips reading, so it is no part of the key.
-            keyed.knobs.no_cache = false;
-            TestCache::new(
-                &format!("{keyed:?} {runtime_knobs:?}"),
-                !flags.knobs.no_cache,
-            )
-        });
     let mut grand = PackageTotals::default();
-    for pkg_run in &package_runs {
+    for (pkg_run, cached) in package_runs.iter().zip(&cached) {
         let totals = run_one_package(
             pkg_run,
             Arc::clone(&flags),
@@ -2608,6 +2628,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             Arc::clone(&run_cache),
             coverage_run.clone(),
             test_cache.as_ref(),
+            cached,
         )
         .await;
         grand.merge(&totals);

@@ -108,9 +108,21 @@ impl TestCache {
             .join(format!("{}.json", hex32(&key)))
     }
 
-    /// How `file`'s tests went when it last ran, if nothing it read has
-    /// changed since.
-    pub(crate) fn lookup(&self, file: &str) -> Option<Tally> {
+    /// Take out of `files` each one whose tests passed when it last ran and
+    /// that nothing it read has changed since, with how they went.
+    pub(crate) fn take_hits(&self, files: &mut Vec<String>) -> Vec<(String, Tally)> {
+        let mut hits = Vec::new();
+        files.retain(|file| match self.lookup(file) {
+            Some(tally) => {
+                hits.push((file.clone(), tally));
+                false
+            }
+            None => true,
+        });
+        hits
+    }
+
+    fn lookup(&self, file: &str) -> Option<Tally> {
         if !self.read {
             return None;
         }

@@ -69,6 +69,10 @@ impl CompilerHost for StubHost {
         self.stubs.env.get(name).cloned()
     }
 
+    fn stdlib_module_read(&self, import_path: &str) {
+        self.filesystem.stdlib_module_read(import_path);
+    }
+
     fn dependency_index(&self) -> DependencyIndex {
         let mut index = DependencyIndex::default();
         for (name, lib) in &self.stubs.dependencies {
