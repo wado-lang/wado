@@ -1065,6 +1065,11 @@ impl Analyzer<'_> {
         }
     }
 
+    fn mutates_receiver(&self, func: &FunctionRef) -> bool {
+        self.mut_receiver_methods
+            .contains(&func.module_source, &func.name)
+    }
+
     /// What `call`, a named call of `arity` arguments, keeps of them. A result
     /// that cannot hold a reference hands none back.
     fn retained_by(&self, callee: &FunctionRef, arity: usize, call: &TirExpr) -> Retained {
@@ -1585,11 +1590,8 @@ impl Analyzer<'_> {
             return None;
         };
         let retained = self.retained_by(func, args.len(), call);
-        let mutates_receiver = param == 0
-            && args.split().0.is_some()
-            && self
-                .mut_receiver_methods
-                .contains(&func.module_source, &func.name);
+        let mutates_receiver =
+            param == 0 && args.split().0.is_some() && self.mutates_receiver(func);
         if clean_root(lent) != Some(place.root)
             || retained.keeps(u32::try_from(param).unwrap())
             || mutates_receiver
@@ -1632,9 +1634,7 @@ impl Analyzer<'_> {
                 match clean_root(recv_place) {
                     Some(base) => {
                         let read_only = matches!(recv_ref, Some(TirUnaryOp::Ref))
-                            && !self
-                                .mut_receiver_methods
-                                .contains(&func.module_source, &func.name)
+                            && !self.mutates_receiver(func)
                             && !retained.keeps(0);
                         if !read_only {
                             conflict.insert(base);
@@ -2043,10 +2043,7 @@ impl Analyzer<'_> {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let (receiver, siblings) = args.split();
                 let receiver = receiver.map(|r| &r.expr);
-                let mutated_receiver = receiver.filter(|_| {
-                    self.mut_receiver_methods
-                        .contains(&func.module_source, &func.name)
-                });
+                let mutated_receiver = receiver.filter(|_| self.mutates_receiver(func));
                 if record {
                     // A `&mut self` receiver mutates for the whole call, so it is
                     // what the other arguments are checked against, not one of
