@@ -78,6 +78,25 @@ fn a_guest_profile_is_written_where_the_option_names() {
     assert!(profile.contains("\"threads\""), "{profile}");
 }
 
+#[test]
+fn a_guest_profile_stops_at_its_budget_and_is_still_written() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("profile.json");
+    let output = runner()
+        .env("WADO_PROFILE_MAX_SECS", "1")
+        .args([
+            &format!("--profile=guest,{},1", path.display()),
+            fixture("spins_forever.wado").to_str().unwrap(),
+        ])
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr: {stderr}");
+    assert!(stderr.contains("WADO_PROFILE_MAX_SECS"), "stderr: {stderr}");
+    let profile = std::fs::read_to_string(&path).expect("the profile was written");
+    assert!(profile.contains("\"threads\""), "{profile}");
+}
+
 /// How far Loam's WebGPU backend may sit from its CPU one: a product summed
 /// in another order, and `erf` as WGSL approximates it.
 const LOAM_TOLERANCE: f32 = 1e-4;

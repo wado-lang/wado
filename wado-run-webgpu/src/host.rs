@@ -5,7 +5,7 @@ use std::io::BufWriter;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 use tokio::task::spawn_blocking;
@@ -182,10 +182,14 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
         .as_ref()
         .map(|profile| Sampling::start(&engine, &component, &mut store, profile.interval))
         .transpose()?;
-    let command = Command::instantiate_async(&mut store, &component, &linker).await?;
-    let ran = store
-        .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-        .await;
+    let ran = match Command::instantiate_async(&mut store, &component, &linker).await {
+        Ok(command) => {
+            store
+                .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
+                .await
+        }
+        Err(e) => Err(e),
+    };
     if let (Some(sampling), Some(profile)) = (sampling, &args.profile) {
         sampling.finish(&profile.path)?;
     }
@@ -197,6 +201,7 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
 
 /// `--profile guest`, as `wado run` samples: a thread advances the epoch every
 /// interval, and the store's deadline callback records where the guest is.
+/// `WADO_PROFILE_MAX_SECS` stops the guest once that many seconds have passed.
 struct Sampling {
     profiler: Arc<Mutex<Option<GuestProfiler>>>,
     stop: Arc<AtomicBool>,
@@ -218,19 +223,34 @@ impl Sampling {
         )?;
         let profiler = Arc::new(Mutex::new(Some(profiler)));
         let sampled = Arc::clone(&profiler);
+        let over_budget = Arc::new(AtomicBool::new(false));
+        let budget_reached = Arc::clone(&over_budget);
         store.epoch_deadline_callback(move |store| {
             if let Some(p) = sampled.lock().expect("the profiler lock").as_mut() {
                 p.sample(&store, interval);
             }
+            if budget_reached.load(Ordering::Relaxed) {
+                return Err(wasmtime::Error::msg(
+                    "profile time budget reached (WADO_PROFILE_MAX_SECS)",
+                ));
+            }
             Ok(UpdateDeadline::Continue(1))
         });
         store.set_epoch_deadline(1);
+        let budget = std::env::var("WADO_PROFILE_MAX_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(Duration::from_secs);
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
         let ticking = engine.clone();
         std::thread::spawn(move || {
+            let started = Instant::now();
             while !stopped.load(Ordering::Relaxed) {
                 std::thread::sleep(interval);
+                if budget.is_some_and(|budget| started.elapsed() >= budget) {
+                    over_budget.store(true, Ordering::Relaxed);
+                }
                 ticking.increment_epoch();
             }
         });
