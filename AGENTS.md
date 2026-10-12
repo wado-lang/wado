@@ -39,9 +39,11 @@ is the last of the editing rather than a phase after it, so one full test run at
 the end answers for the change and for what `/distill` edited. A run on either
 side of it is the same full run spent twice.
 
-The full run is `mise run test`, `mise run test-wado`, then
-`mise run update-stdlib-coverage-baseline`. CI fails on any difference from the
-baseline, a region a test now reaches included, so commit the update;
+The full run is `mise run test`, then `mise run test-wado`.
+
+Run `mise run update-stdlib-coverage-baseline` once, just before opening the
+pull request, not in every cycle. CI fails on any difference from the baseline,
+a region a test now reaches included, so commit the update;
 `wado-compiler/AGENTS.md` says what it may change.
 
 Having invoked `/distill` on this branch earlier is not a reason to skip the
