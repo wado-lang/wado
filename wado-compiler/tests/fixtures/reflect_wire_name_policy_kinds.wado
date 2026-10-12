@@ -1,6 +1,8 @@
 // `#[wire(name_policy)]` says the same thing on every kind, so the root states
 // it once. `Reflect::<T>::wire_name_policy()` answers for whatever kind `T` is,
 // and a library derivation reads the policy without knowing which it holds.
+// A newtype declares none: it answers with the members it inherits, so with
+// the policy of the declaration it wraps.
 
 #[wire(name_policy = "camelCase")]
 variant Shape {
@@ -37,8 +39,12 @@ struct Boxed {
     inner: i32,
 }
 
-#[wire(name_policy = "snake_case")]
-type Wrapped = i32;
+type Wrapped = Boxed;
+type Meters = f64;
+
+fn policy_of<T: ReflectStruct>() -> CaseStyle {
+    return Reflect::<T>::wire_name_policy();
+}
 
 test "the root answers the wire-name policy for every kind" {
     assert Reflect::<Shape>::wire_name_policy() == CaseStyle::Camel;
@@ -51,7 +57,12 @@ test "the root answers the wire-name policy for every kind" {
     assert Reflect::<Plainflags>::wire_name_policy() == CaseStyle::Identity;
 
     assert Reflect::<Boxed>::wire_name_policy() == CaseStyle::Pascal;
-    assert Reflect::<Wrapped>::wire_name_policy() == CaseStyle::Snake;
+}
+
+test "a newtype answers the policy of what it wraps" {
+    assert Reflect::<Wrapped>::wire_name_policy() == CaseStyle::Pascal;
+    assert policy_of::<Wrapped>() == CaseStyle::Pascal;
+    assert Reflect::<Meters>::wire_name_policy() == CaseStyle::Identity;
 }
 
 __DATA__

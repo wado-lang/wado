@@ -310,15 +310,19 @@ Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 Each declaration reads its own keys:
 
-| Declaration                                   | Keys                 |
-| --------------------------------------------- | -------------------- |
-| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`        |
-| Struct field                                  | `name`, `positional` |
-| Enum case, variant case                       | `name`               |
+| Declaration                          | Keys                 |
+| ------------------------------------ | -------------------- |
+| `struct`, `enum`, `variant`, `flags` | `name_policy`        |
+| Struct field                         | `name`, `positional` |
+| Enum case, variant case              | `name`               |
 
 A key the declaration does not read is an error, and so is `#[wire]` anywhere
 else, a flags member included. The keys may be split across several `#[wire]`
 attributes on one declaration, but each key is written once.
+
+A newtype takes no `#[wire]`. It has no members of its own, and it is written
+and read as the declaration it wraps, under that declaration's wire names
+([Serialized Shapes](./spec-serialization.md#serialized-shapes)).
 
 #### Wire Names
 
@@ -328,8 +332,7 @@ A name is written as in the source unless one of these keys changes it (see
 - `#[wire(name = "...")]` sets the wire name of one field or case, exactly as
   written.
 - `#[wire(name_policy = "...")]` on a type converts the source name of every
-  field, case or member that has no `name` of its own. On a newtype, which has
-  no members, it applies to the type's own name. The policies are
+  field, case or member that has no `name` of its own. The policies are
   `"camelCase"`, `"snake_case"`, `"SCREAMING_SNAKE_CASE"`, `"PascalCase"`,
   `"kebab-case"` and `"SCREAMING-KEBAB-CASE"`, and any other string is an error.
   A policy reads any source casing, so a `PascalCase` case and a `snake_case`

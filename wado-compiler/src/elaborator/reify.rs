@@ -932,7 +932,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             def,
             type_params: Self::declared_type_params(&newtype_decl.type_params),
             type_id: type_id.filter(|_| !generic),
-            wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
             span: newtype_decl.span,
         })
     }
@@ -1065,7 +1064,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 def,
                 type_params: Self::declared_type_params(&newtype_decl.type_params),
                 type_id: type_id.filter(|_| !generic),
-                wire_name_policy: wire_name_policy_of(&newtype_decl.attrs),
                 span: newtype_decl.span,
             },
         );
@@ -7552,10 +7550,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
             {
-                let member_count = flags_info.members.len() as u32;
                 let value: u64 = match suffix {
                     "none" => 0,
-                    "all" => u64::from((1u32 << member_count) - 1),
+                    "all" => u64::from(flags_info.members.iter().fold(0, |all, m| all | m.bitmask)),
                     _ => unreachable!(),
                 };
                 return TirExpr::new(

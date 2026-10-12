@@ -14,6 +14,10 @@
 // And a base with an impl of its own keeps it: `String` and `List` are struct
 // declarations, so the struct derive claims them structurally, but their own
 // `Deserialize` outranks it — for the newtype as much as for the base.
+//
+// A base's `#[wire(name_policy)]` names its members, so the newtype writes and
+// reads them under the base's names. Serializing once asked the newtype for a
+// policy of its own, so it wrote names it could not read back.
 use { to_string, from_string } from "core:json";
 
 struct Point {
@@ -42,6 +46,19 @@ struct User {
     age: Age,
     tags: Tags,
 }
+
+#[wire(name_policy = "camelCase")]
+struct Account {
+    user_name: String,
+}
+
+#[wire(name_policy = "kebab-case")]
+enum Tone {
+    DarkRed,
+}
+
+type Acct = Account;
+type Shade = Tone;
 
 test "the base serializes" {
     let q = Point { x: 1, y: 2 };
@@ -117,6 +134,14 @@ test "a newtype over a base with its own impl takes that impl, not the derive" {
     } else {
         panic("deserializing the string newtype failed");
     }
+}
+
+test "a newtype writes and reads its base's members under the base's policy" {
+    let a = Account { user_name: "ann" } as Acct;
+    assert to_string::<Acct>(&a).unwrap() == `\{"userName":"ann"\}`;
+    assert (from_string::<Acct>(`\{"userName":"bo"\}`).unwrap() as Account).user_name == "bo";
+    assert to_string::<Shade>(&(Tone::DarkRed as Shade)).unwrap() == `"dark-red"`;
+    assert from_string::<Shade>(`"dark-red"`).unwrap() as Tone == Tone::DarkRed;
 }
 
 test "newtypes over a primitive and a container, as struct fields" {

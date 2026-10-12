@@ -65,8 +65,9 @@ a type must be there. So a `()` parameter and `Option<()>` are both errors, on
 an import and on an export alike (`cm_import_user_unit_param_rejected.wado`,
 `cm_export_unit_param_rejected.wado`, `cm_export_option_of_unit_rejected.wado`).
 
-A reference crosses an import only as a borrowed resource handle
-(`cm_import_user_ref_string_rejected.wado`). A `map` key is restricted as
+A reference crosses only as a borrowed resource handle, on an import
+(`cm_import_user_ref_string_rejected.wado`) and on an export
+(`slice_at_cm_boundary_error.wado`), nested inside a type or not. A `map` key is restricted as
 [the CM `map` type](./wep-2026-08-25-cm-map-type.md) says.
 
 ### Import adapters

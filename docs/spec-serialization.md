@@ -73,13 +73,15 @@ states how `#[wire(...)]` renames one.
 
 A derived impl writes each kind of type in one shape:
 
-| Type      | Written as                                                                             |
-| --------- | -------------------------------------------------------------------------------------- |
-| `struct`  | a struct with its type name and each field's wire name and value, in declaration order |
-| `enum`    | a unit variant case: the live case's wire name and discriminant                        |
-| `variant` | a unit case as `enum` writes one; a payload case with its one payload                  |
-| `flags`   | a sequence of the set members' wire names, in declaration order                        |
-| tuple     | a sequence of its elements                                                             |
+| Type             | Written as                                                                             |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `struct`         | a struct with its type name and each field's wire name and value, in declaration order |
+| anonymous struct | as a `struct`, its fields in the order the literal writes them                         |
+| `enum`           | a unit variant case: the live case's wire name and discriminant                        |
+| `variant`        | a unit case as `enum` writes one; a payload case with its one payload                  |
+| `flags`          | a sequence of the set members' wire names, in declaration order                        |
+| tuple            | a sequence of its elements                                                             |
+| newtype          | as the type it wraps, under that type's wire names                                     |
 
 Reading back is the mirror. A variant is read by its discriminant where the
 format reports one, as an NSD format does, and by its wire name otherwise.

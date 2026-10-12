@@ -569,7 +569,7 @@ fn generate_struct_reflect_methods(
 
     let type_name_fn = generate_type_name_fn(
         receiver,
-        &type_table.borrow().struct_head_decl_name(*def),
+        &type_table.borrow().struct_reflect_name(*def),
         env.string_type,
         &env.root_trait_name,
         &env.type_name_method,
@@ -2814,7 +2814,6 @@ fn generate_newtype_reflect_impls(
                 receiver: FqTypeName::declared(tt.defs(), nt.def),
                 display_name: tt.def_name(nt.def).to_string(),
                 type_params: nt.type_params.clone(),
-                wire_name_policy: nt.wire_name_policy,
                 span: nt.span,
             })
             .collect()
@@ -2862,10 +2861,12 @@ fn generate_newtype_reflect_impls(
         type_name.impl_type_params.clone_from(&target.type_params);
         generated.push(Rc::new(RefCell::new(type_name)));
 
+        // Reached only over a base with no `Reflect` kind: over one with a kind,
+        // dispatch answers with the base's policy (`TypeTable::wire_policy_subject`).
         let mut policy = generate_wire_name_policy_fn(
             &target.receiver,
             case_style_type,
-            target.wire_name_policy,
+            None,
             module.type_table.borrow().compiler_items(),
             &root_trait_name,
             &policy_method,
@@ -2892,8 +2893,6 @@ struct ReflectNewtypeTarget {
     /// Empty for `type N = T`; the parameters the impl is written over for
     /// `type N<T> = …`.
     type_params: Vec<TirTypeParam>,
-    /// The declaration's own `#[wire(name_policy)]`.
-    wire_name_policy: Option<NamePolicy>,
     span: Span,
 }
 

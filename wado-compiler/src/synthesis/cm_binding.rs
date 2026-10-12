@@ -35,10 +35,13 @@ use crate::name::{
     to_cm_name,
 };
 use crate::package::{Package, test_selected};
+use crate::synthesis::SynthesisError;
 use crate::tir::{
-    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
+    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TypeId,
+    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
@@ -448,7 +451,7 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 ///
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
-pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
+pub fn generate_adapters(mut project: Package) -> Result<Package, SynthesisError> {
     validate_imports_representable(&project)?;
     let callbacks = generate_import_adapters(&mut project);
     synthesize_callback_exports(&mut project, &callbacks);
@@ -568,7 +571,7 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
 /// Synthesize an export binding for each world export (signature-driven) and
 /// record it in `export_binding_names`. Prefers the synthesized library world
 /// (`--lib`) over the static registry.
-fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
+fn synthesize_export_adapters(project: &mut Package) -> Result<(), SynthesisError> {
     let entry_type_table = entry_type_table(project);
     let selected_world = project.active_world_info().map(|w| w.fq_name.as_str());
     validate_export_mappings(project, selected_world, &entry_type_table)?;
@@ -964,7 +967,7 @@ fn validate_export_mappings(
     project: &Package,
     selected_world: Option<&str>,
     entry_type_table: &RefCell<TypeTable>,
-) -> Result<(), String> {
+) -> Result<(), SynthesisError> {
     let entry_module = &project.tir_modules[&project.entry_module_source];
     for mapping in &project.export_mappings {
         if !project.world_registry.has_world(&mapping.world) {
@@ -972,7 +975,8 @@ fn validate_export_mappings(
                 "`export(…) fn {}` names the world `{}`, which no compilation can \
                  target; only a standard library world can be",
                 mapping.function_name, mapping.world
-            ));
+            )
+            .into());
         }
         let Some(export) = project
             .world_registry
@@ -981,7 +985,8 @@ fn validate_export_mappings(
             return Err(format!(
                 "world `{}` has no export `{}` for `fn {}` to provide",
                 mapping.world, mapping.export_name, mapping.function_name
-            ));
+            )
+            .into());
         };
         let func = find_export_user_func(project, entry_module, &mapping.world, export)?;
         if selected_world == Some(mapping.world.as_str()) {
@@ -1004,7 +1009,7 @@ fn validate_export_mappings(
 fn validate_exports_representable(
     project: &Package,
     entry_type_table: &RefCell<TypeTable>,
-) -> Result<(), String> {
+) -> Result<(), SynthesisError> {
     let tt = entry_type_table.borrow();
     for (source, module) in &project.tir_modules {
         if !source.is_program() {
@@ -1022,7 +1027,7 @@ fn validate_exports_representable(
 
 /// A `#[cm]` operation a user module declares crosses the boundary in the
 /// other direction, so its signature needs a representation as an export's does.
-fn validate_imports_representable(project: &Package) -> Result<(), String> {
+fn validate_imports_representable(project: &Package) -> Result<(), SynthesisError> {
     let tt = entry_type_table(project);
     let tt = tt.borrow();
     for (source, module) in &project.tir_modules {
@@ -1047,10 +1052,18 @@ fn validate_imports_representable(project: &Package) -> Result<(), String> {
             let values = op
                 .params
                 .iter()
-                .map(|p| p.type_id)
-                .filter(|&ty| !matches!(tt.get(ty), ResolvedType::Function { .. }));
-            signature_representable(values, result, Boundary::Import, &tt, &project.tir_modules)
-                .map_err(|reason| format!("import function `{}`: {reason}", op.name))?;
+                .filter(|p| !matches!(tt.get(p.type_id), ResolvedType::Function { .. }));
+            signature_representable(
+                values,
+                (result, op.span),
+                Boundary::Import,
+                &tt,
+                &project.tir_modules,
+            )
+            .map_err(|(reason, span)| SynthesisError {
+                message: format!("import function `{}`: {reason}", op.name),
+                span: Some(span),
+            })?;
         }
     }
     Ok(())
@@ -1061,30 +1074,34 @@ fn validate_boundary_representable(
     export_name: &str,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Result<(), String> {
+) -> Result<(), SynthesisError> {
     signature_representable(
-        user_func.params.iter().map(|p| p.type_id),
-        user_func.return_type,
+        user_func.params.iter(),
+        (user_func.return_type, user_func.span),
         Boundary::Export,
         tt,
         tir_modules,
     )
-    .map_err(|reason| format!("export function `{export_name}`: {reason}"))
+    .map_err(|(reason, span)| SynthesisError {
+        message: format!("export function `{export_name}`: {reason}"),
+        span: Some(span),
+    })
 }
 
 /// Reject a param or return type with no Component Model value representation
-/// in any world: an empty record, a `()` param, or a 128-bit, `v128` or half scalar.
-fn signature_representable(
-    params: impl Iterator<Item = TypeId>,
-    result: TypeId,
+/// in any world: an empty record, a `()` param, or a 128-bit, `v128` or half
+/// scalar. The error carries the span of the parameter, or the result's.
+fn signature_representable<'a>(
+    params: impl Iterator<Item = &'a TirParam>,
+    result: (TypeId, Span),
     boundary: Boundary,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Result<(), String> {
+) -> Result<(), (String, Span)> {
     params
-        .map(|tid| (tid, Slot::Value))
-        .chain(std::iter::once((result, Slot::Optional)))
-        .try_for_each(|(tid, slot)| {
+        .map(|p| (p.type_id, Slot::Value, p.span))
+        .chain(std::iter::once((result.0, Slot::Optional, result.1)))
+        .try_for_each(|(tid, slot, span)| {
             types::check_cm_boundary_representable(
                 tid,
                 slot,
@@ -1093,6 +1110,7 @@ fn signature_representable(
                 tir_modules,
                 &mut Vec::new(),
             )
+            .map_err(|reason| (reason, span))
         })
 }
 
@@ -1106,15 +1124,21 @@ fn validate_world_signature_compatibility(
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     registry: &CmInterfaceRegistry,
-) -> Result<(), String> {
+) -> Result<(), SynthesisError> {
+    let at = |span: Span| {
+        move |message: String| SynthesisError {
+            message,
+            span: Some(span),
+        }
+    };
     if user_func.params.len() != export.params.len() {
-        return Err(format!(
+        return Err(at(user_func.span)(format!(
             "export function `{}` has {} parameter(s), \
              but the world expects {} parameter(s)",
             export.name,
             user_func.params.len(),
             export.params.len()
-        ));
+        )));
     }
     for (user_param, (world_name, world_ty)) in user_func.params.iter().zip(&export.params) {
         validate_flat_shape_agrees(
@@ -1127,12 +1151,14 @@ fn validate_world_signature_compatibility(
             tt,
             tir_modules,
             registry,
-        )?;
+        )
+        .map_err(at(user_param.span))?;
     }
     let Some(world_return) = export.return_type.as_ref() else {
         return Ok(());
     };
-    validate_result_wrapper_agrees(user_func, export, world_return, tt)?;
+    validate_result_wrapper_agrees(user_func, export, world_return, tt)
+        .map_err(at(user_func.span))?;
     if matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
         // The unit the wrapper check let through is delivered as the world's
         // own `Ok(())`, so there is no user shape left to compare.
@@ -1146,6 +1172,7 @@ fn validate_world_signature_compatibility(
         tir_modules,
         registry,
     )
+    .map_err(at(user_func.span))
 }
 
 /// A `Result` world return needs a `Result` export, which flat shapes alone do

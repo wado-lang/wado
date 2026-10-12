@@ -118,7 +118,8 @@ compiler-synthesized like the kinds. See WEP 2026-06-13.
 
 `#[compiler_item("reflect_type_name")]`
 
-Returns the declaration's name.
+Returns the declaration's name, or `""` for an anonymous struct, which
+names none.
 
 #### `fn wire_name_policy() -> CaseStyle`
 
@@ -126,7 +127,8 @@ Returns the declaration's name.
 
 The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
 kind carries the attribute, and it says the same thing on each: the
-root answers so a caller need not know which kind it holds.
+root answers so a caller need not know which kind it holds. A newtype
+answers with the policy of the declaration it wraps.
 
 ### `pub trait ReflectStruct: Reflect with ()`
 

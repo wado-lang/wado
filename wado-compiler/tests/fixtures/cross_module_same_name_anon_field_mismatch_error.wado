@@ -1,0 +1,15 @@
+// A mismatch between two anonymous structs over same-named field types reads the
+// same unqualified, so the message qualifies the field types to tell them apart.
+
+use { make as make_a } from "./sub/cross_module_same_name_anon_field_a.wado";
+use { make as make_b } from "./sub/cross_module_same_name_anon_field_b.wado";
+
+export fn run() {
+    let mut s = { v: make_a() };
+    s = { v: make_b() };
+}
+
+__DATA__
+{
+  "compile_error": ":9:9: analysis error: type mismatch: expected '{ v: ./sub/cross_module_same_name_anon_field_a.wado#Foo }', found '{ v: ./sub/cross_module_same_name_anon_field_b.wado#Foo }'"
+}
