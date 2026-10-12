@@ -80,7 +80,7 @@ wado check --world test file.wado    # type-check against the test world
 Two allocators are available via `--allocator <mode>`:
 
 - `freelist` (default for every world but the test world): reclaims freed memory via a free list.
-- `debug` (default for the test world): never reuses freed memory; poisons freed memory with `0xFF`. For use-after-free detection.
+- `debug` (default for the test world): never reuses freed memory; poisons freed memory with `0xFF`; traps on a double free. For use-after-free detection.
 
 ```sh
 wado compile --allocator freelist file.wado  # free-list allocator

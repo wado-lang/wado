@@ -462,21 +462,32 @@ The Component Model requires a component to provide a linear memory and a `reall
 
 ### `#[allocator("name")]`
 
-Marks a function in a `wasm_module` as the `realloc` implementation named `name`. The world selects which one the component uses: `debug` for the test world and `freelist` for every other. `debug` never reuses freed memory and fills it with `0xFF`.
+Marks a function in a `wasm_module` as the `realloc` implementation named `name`. The world selects which one the component uses: `debug` for the test world and `freelist` for every other. `debug` never reuses freed memory, fills it with `0xFF`, and traps on a double free as `freelist` does.
 
 <!-- {"source":"wado-compiler/lib/core/allocator.wado"} -->
 
 ```wado
 #[allocator("debug")]
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {
-        if oldsize != 0 {
-            builtin::memory_fill(oldptr, 0xFF, oldsize);
+        if oldptr != 0 {
+            let tag = oldptr as u32 - 4;
+            if load(tag) != DEBUG_LIVE {
+                builtin::unreachable();
+            }
+            store(tag, 0xFFFF_FFFF);
+            if oldsize != 0 {
+                builtin::memory_fill(oldptr, 0xFF, oldsize);
+            }
         }
         return 0;
     }
-    return bump(align as u32, newsize as u32) as i32;
+    // The tag sits in the `max(align, 4)` bytes in front of the block, which
+    // keep the block aligned.
+    let gap = if align < 4 { 4 } else { align as u32 };
+    let block = bump(align as u32, gap + newsize as u32) + gap;
+    store(block - 4, DEBUG_LIVE);
+    return block as i32;
 }
 ```
 
