@@ -7,7 +7,7 @@ use wado_lsp::{Diagnostic, Engine, FilesystemCompilerHost, Severity};
 
 const GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 

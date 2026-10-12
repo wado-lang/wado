@@ -60,3 +60,42 @@ fn reexported_component_type_compiles_and_decodes() {
     // A malformed structural duplication would fail validation; `compile_reexport`
     // compiles with validation on, and the decode above re-parses the type.
 }
+
+/// A stdlib type that `export use` adopts is published in the library's own
+/// interface, as a type the library declares would be.
+#[test]
+fn adopted_stdlib_type_is_published_by_the_library() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/adopt.wado");
+    let source = r#"
+export use { FileType } from "core:fs";
+export fn kind(t: FileType) -> FileType {
+    return t;
+}
+"#;
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        ..Default::default()
+    };
+    let wasm = compile_source_with_compiler_options(Path::new(path), source, options)
+        .expect("a library publishing an adopted type compiles")
+        .wasm;
+    let wit_component::DecodedWasm::Component(resolve, world) =
+        wit_component::decode(&wasm).expect("decode the library component")
+    else {
+        panic!("expected a component");
+    };
+    let published = resolve.worlds[world]
+        .exports
+        .iter()
+        .find_map(|(_, item)| match item {
+            wit_parser::WorldItem::Interface { id, .. } => {
+                resolve.interfaces[*id].types.get("file-type")
+            }
+            _ => None,
+        });
+    assert!(
+        published.is_some(),
+        "the library interface publishes file-type"
+    );
+}

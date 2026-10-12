@@ -33,11 +33,16 @@ resolved against the declaring file, like a local module import. The
 | `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                   |
 | `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                        |
 | `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                       |
-| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                                                   |
+| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                         |
 | `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path, or `{ path, type }`. A schema that refers to other files lists every one of them here. |
 | `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                             |
 
 Each field has one type, and any other key or type is an error at the use site.
+
+The package root is the directory of the `wado.toml` that governs the
+declaring file. A file outside any package has none, and the directory of the
+file being compiled stands in for it. Every path a generator receives is
+relative to the package root, and so is the default output directory.
 
 A file's `type` says how the generator reads it, since no generator looks at
 an extension. The primary input's is the `type` beside `generator`, the only
@@ -117,15 +122,20 @@ primary input but disagree on any of those are an error naming both.
 
 ## Options
 
-A generator's options are the `pub struct Options` its entry module names. The
+A generator's options are the `Options` struct its entry module names. The
 entry module declares it or re-exports it with `pub use`, so another entry
 point of the same package, such as a command line, can read the same struct.
-Gale declares two:
+
+`generate` is an `export fn`, so `Options` crosses the component boundary and
+is published like any type an export reaches
+([Published Types](./spec-components.md#published-types)): it is declared
+`export`, and so is every type its fields name. Every field is `pub`, since a
+WIT record shows them all. Gale declares two:
 
 <!-- {"source": "package-gale/src/generator.wado"} -->
 
 ```wado
-pub struct Options {
+export struct Options {
     /// Emit trace logging to stderr in the generated parser: rule
     /// enter/ok/fail frames plus multi-alt scan/pick/try decisions. Off by
     /// default; set `trace: true` to debug why a grammar rejects an input.
@@ -140,19 +150,36 @@ pub struct Options {
 Every use site's `options` is checked against the struct before the generator
 runs, so a typo or a type mismatch is reported on the offending key.
 
-- Omitting `options` means every field takes its default. A field with a
-  default may be omitted on its own. A default is a literal, and a list or map
-  field takes a `[…]` or `{ k: v, … }` one.
-- A field of type `Option<T>`, `List<T>`, or `TreeMap<String, V>` may always
-  be omitted. It is then `None`, the empty list, or the empty map.
-- Any other field without a default must be supplied. An unknown key is an
+- A field the use site leaves out takes the value the table below gives it.
+  Omitting `options` leaves out every field.
+- A field the table gives no value must be supplied. An unknown key is an
   error.
+- A default is a literal, and a list or map field takes a `[…]` or
+  `{ k: v, … }` one.
 - An `enum` option is written as its case name in a string.
 - A `TreeMap<String, V>` option is written as an object whose keys are the
   author's own. The generator receives it sorted by key.
-- A generator resolved as a prebuilt component carries no field defaults, so
-  at its use sites every field is required unless its type is an `Option`, a
-  `List`, or a `TreeMap`.
+
+What an omitted field takes depends on how the generator is resolved. A
+generator named by a relative path, or by a `[build-dependencies]` entry with a
+`path`, is built from source and keeps its field defaults. Any other coordinate
+resolves to a prebuilt component, which carries no defaults, since a WIT record
+has none:
+
+| Omitted field, without a default | Built from source     | Prebuilt component    |
+| -------------------------------- | --------------------- | --------------------- |
+| `Option<T>`                      | `None`                | `None`                |
+| `List<T>`, `TreeMap<String, V>`  | the empty list or map | the empty list or map |
+| Any other type                   | required              | required              |
+
+| Omitted field, with a default   | Built from source | Prebuilt component    |
+| ------------------------------- | ----------------- | --------------------- |
+| `Option<T>`                     | the default       | `None`                |
+| `List<T>`, `TreeMap<String, V>` | the default       | the empty list or map |
+| Any other type                  | the default       | required              |
+
+So a use site that must work with both writes every field that is not an
+`Option`, a `List`, or a `TreeMap`.
 
 Loam's options hold a list of structs, a map, a list of strings, and a flag.
 They are declared in `compile.wado`, which the `loam` command reads too, and
@@ -161,7 +188,7 @@ the entry module re-exports them:
 <!-- {"source": "package-loam/src/compile.wado"} -->
 
 ```wado
-pub struct Options {
+export struct Options {
     /// Patterns naming the axes of the graph's inputs and initializers.
     pub layout: List<LayoutRule> = [],
     /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
@@ -175,9 +202,10 @@ pub struct Options {
 }
 ```
 
-The defaults change nothing at a use site, where these fields may be left out
-anyway. They are for the `loam` command, which reads the struct from JSON
-through `core:serde`, where a field without a default is required.
+Only `fuse`'s default changes what a use site of the source generator may leave
+out; the list and map fields may be left out without one. The rest are for the
+`loam` command, which reads the struct from JSON through `core:serde`, where a
+field without a default is required. From a prebuilt Loam, `fuse` is required.
 
 Each struct in `layout` is written as a record literal, and the `dims` map as an
 object:
@@ -211,7 +239,7 @@ A map reaches the generator in key order. Given
 <!-- {"source": "wado-cli/tests/integration/kiln_options.rs"} -->
 
 ```wado
-pub struct Options {
+export struct Options {
     pub sizes: TreeMap<String, i32>,
 }
 
@@ -286,9 +314,9 @@ a `Response` or an `Error`:
 ```wado
 use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
-pub struct Options {
-    namespace: String,
-    emit_comments: bool = true,
+export struct Options {
+    pub namespace: String,
+    pub emit_comments: bool = true,
 }
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
@@ -358,7 +386,7 @@ pub struct Request<T = NoOptions> {
     pub primary: InputFile,
     pub inputs: List<InputFile>,
     /// How the use site named this generator: its `module:` specifier as
-    /// written, or for a path, that path from the project root.
+    /// written, or for a path, that path from the package root.
     pub module: String,
     pub options: T,
 }
@@ -367,10 +395,10 @@ pub struct Request<T = NoOptions> {
 - `primary` is the input after `from`. `inputs` are the `inputs` of the clause,
   in the order written.
 - `module` is how the use site named the generator: the `module:` specifier as
-  written, or for a relative path, that path from the project root.
+  written, or for a relative path, that path from the package root.
 - `options` is the use site's options, with defaults filled in.
 
-An input file carries its path from the project root, normalized, the content
+An input file carries its path from the package root, normalized, the content
 as a byte stream, and the `type` the use site gave it. So `./sub/../sub/v.txt`
 written in `src/main.wado` arrives as `src/sub/v.txt`:
 

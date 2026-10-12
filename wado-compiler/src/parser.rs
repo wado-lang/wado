@@ -1215,7 +1215,6 @@ impl Parser {
         };
 
         // `export` implies `pub` (a CM export is part of the public API).
-        let export_span = self.peek().span;
         let has_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
@@ -1228,15 +1227,6 @@ impl Parser {
         } else {
             (None, Vec::new())
         };
-        if has_export && self.check(&TokenKind::Use) {
-            self.errors.push(ParseError {
-                message: "a re-export is not lowered at the component boundary, so a `use` \
-                    cannot be `export`; write `pub use`"
-                    .to_string(),
-                span: export_span,
-            });
-        }
-
         if has_internal && (has_pub || has_export) {
             return Err(ParseError {
                 message: "`internal` cannot combine with `pub` or `export` \
@@ -1283,7 +1273,9 @@ impl Parser {
         }
 
         match self.peek_kind() {
-            TokenKind::Use => self.parse_use_decl(visibility, attrs).map(Item::Use),
+            TokenKind::Use => self
+                .parse_use_decl(visibility, has_export, attrs)
+                .map(Item::Use),
             TokenKind::Fn => {
                 let id = export_fn_id.unwrap_or_else(|| self.alloc_ast_id());
                 self.parse_function(id, visibility, has_export, is_async, attrs, false)
@@ -1297,13 +1289,19 @@ impl Parser {
             TokenKind::Interface => self
                 .parse_interface_decl(visibility, attrs)
                 .map(Item::Interface),
-            TokenKind::Struct => self.parse_struct_decl(visibility, attrs).map(Item::Struct),
-            TokenKind::Enum => self.parse_enum_decl(visibility, attrs).map(Item::Enum),
+            TokenKind::Struct => self
+                .parse_struct_decl(visibility, has_export, attrs)
+                .map(Item::Struct),
+            TokenKind::Enum => self
+                .parse_enum_decl(visibility, has_export, attrs)
+                .map(Item::Enum),
             TokenKind::Variant => self
-                .parse_variant_decl(visibility, attrs)
+                .parse_variant_decl(visibility, has_export, attrs)
                 .map(Item::Variant),
-            TokenKind::Flags => self.parse_flags_decl(visibility, attrs).map(Item::Flags),
-            TokenKind::Type => self.parse_type_decl(visibility, attrs),
+            TokenKind::Flags => self
+                .parse_flags_decl(visibility, has_export, attrs)
+                .map(Item::Flags),
+            TokenKind::Type => self.parse_type_decl(visibility, has_export, attrs),
             TokenKind::Impl => self.parse_impl_block(attrs).map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(visibility, attrs).map(Item::Trait),
             TokenKind::Resource => self
@@ -1679,6 +1677,7 @@ impl Parser {
     fn parse_use_decl(
         &mut self,
         visibility: Visibility,
+        is_export: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<UseDecl> {
         let id = self.alloc_ast_id();
@@ -1687,7 +1686,11 @@ impl Parser {
 
         // Check for wildcard import: `use _ from "..."`
         let mut items_span = None;
-        let modifier = visibility.keyword().trim_end();
+        let modifier = if is_export {
+            "export"
+        } else {
+            visibility.keyword().trim_end()
+        };
         let items = if self.check(&TokenKind::Underscore) {
             let span = self.advance().span;
             if visibility.reaches_beyond_file() {
@@ -1748,6 +1751,7 @@ impl Parser {
             id,
             attrs,
             visibility,
+            is_export,
             source,
             source_span,
             source_id,
@@ -5829,6 +5833,7 @@ impl Parser {
     fn parse_struct_decl(
         &mut self,
         visibility: Visibility,
+        is_export: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<StructDecl> {
         let id = self.alloc_ast_id();
@@ -5850,6 +5855,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_export,
             type_params,
             fields,
             attrs,
@@ -5914,6 +5920,7 @@ impl Parser {
     fn parse_enum_decl(
         &mut self,
         visibility: Visibility,
+        is_export: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<EnumDecl> {
         let id = self.alloc_ast_id();
@@ -5942,6 +5949,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_export,
             type_params,
             cases,
             attrs,
@@ -5975,6 +5983,7 @@ impl Parser {
     fn parse_flags_decl(
         &mut self,
         visibility: Visibility,
+        is_export: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<FlagsDecl> {
         let id = self.alloc_ast_id();
@@ -6011,6 +6020,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_export,
             attributes: if attrs.is_empty() { None } else { Some(attrs) },
             flags,
             span: start_span.merge(&end_span),
@@ -6027,6 +6037,7 @@ impl Parser {
     fn parse_variant_decl(
         &mut self,
         visibility: Visibility,
+        is_export: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<VariantDecl> {
         let id = self.alloc_ast_id();
@@ -6055,6 +6066,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_export,
             type_params,
             cases,
             attrs,
@@ -6111,6 +6123,7 @@ impl Parser {
     fn parse_type_decl(
         &mut self,
         visibility: Visibility,
+        is_export: bool,
         attrs: Vec<Attribute>,
     ) -> ParseResult<Item> {
         let start_span = self.peek().span;
@@ -6172,6 +6185,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            is_export,
             type_params,
             ty,
             attrs,

@@ -13,7 +13,7 @@ fn entry(sem: &Semantics) -> ModuleSource {
 #[test]
 fn descriptor_primitive_fields_and_defaults() {
     let source = r"
-pub struct Options {
+export struct Options {
     pub highlight: bool = false,
     pub depth: i32 = 3,
     pub name: String,
@@ -42,7 +42,7 @@ pub fn generate() {}
 #[test]
 fn descriptor_option_string_accepts_null_default() {
     let source = r"
-pub struct Options {
+export struct Options {
     pub rule: Option<String> = null,
 }
 
@@ -62,12 +62,12 @@ pub fn generate() {}
 #[test]
 fn descriptor_enum_field_extracts_variants() {
     let source = r"
-pub enum Style {
+export enum Style {
     Rpc,
     Oneway,
 }
 
-pub struct Options {
+export struct Options {
     pub style: Style = Style::Rpc,
 }
 
@@ -93,12 +93,12 @@ pub fn generate() {}
 #[test]
 fn descriptor_nested_struct_descends_and_cycles_reject() {
     let source = r"
-pub struct Inner {
+export struct Inner {
     pub flag: bool = true,
     pub count: i64 = 7,
 }
 
-pub struct Options {
+export struct Options {
     pub inner: Inner,
 }
 
@@ -128,7 +128,7 @@ fn descriptor_string_keyed_map_is_a_map() {
     let source = r#"
 use { TreeMap } from "core:collections";
 
-pub struct Options {
+export struct Options {
     pub dims: TreeMap<String, i32>,
 }
 
@@ -148,7 +148,7 @@ fn descriptor_map_keyed_by_other_than_string_errors() {
     let source = r#"
 use { TreeMap } from "core:collections";
 
-pub struct Options {
+export struct Options {
     pub dims: TreeMap<i32, i32>,
 }
 
@@ -181,7 +181,7 @@ pub fn generate() {}
 #[test]
 fn descriptor_missing_generate_fn_errors() {
     let source = r"
-pub struct Options {
+export struct Options {
     pub foo: bool = false,
 }
 ";

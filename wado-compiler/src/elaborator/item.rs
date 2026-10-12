@@ -1469,6 +1469,57 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
+    /// The first named type within `type_id` that an `export fn` in `module`
+    /// cannot name, since its package does not publish it: WIT copies every
+    /// type such a signature reaches into the package's interface.
+    pub(super) fn unpublished_within(
+        &self,
+        type_id: TypeId,
+        module: &ModuleSource,
+    ) -> Option<TypeId> {
+        self.first_type_within(type_id, true, &|scope: &Self, t| {
+            let tt = scope.tysys.type_table.borrow();
+            if !matches!(
+                tt.get(t),
+                ResolvedType::Struct { .. }
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Variant { .. }
+                    | ResolvedType::Flags { .. }
+                    | ResolvedType::Newtype { .. }
+            ) {
+                return false;
+            }
+            tt.nominal_def(t).is_some_and(|def| {
+                tt.compiler_type_item(def).is_none()
+                    && !scope
+                        .tysys
+                        .resolutions
+                        .defs()
+                        .crosses_cm_boundary_from(def, module)
+            })
+        })
+    }
+
+    /// Diagnose the first type in `position` of the `export fn` `function`
+    /// that [`Self::unpublished_within`] finds.
+    fn check_published(
+        &mut self,
+        function: &str,
+        position: &str,
+        type_id: TypeId,
+        module: &ModuleSource,
+        span: Span,
+    ) {
+        if let Some(ty) = self.unpublished_within(type_id, module) {
+            let _ = self.emit(TypeError::UnpublishedAtCmBoundary {
+                function: function.to_string(),
+                position: position.to_string(),
+                ty: self.tysys.type_table.borrow().type_name(ty),
+                span,
+            });
+        }
+    }
+
     /// `Slice<T>`, or a struct with a field that holds a reference, through
     /// anything but another struct (`StrSlice`, `Option<&T>`).
     fn is_cm_view(&self, type_id: TypeId) -> bool {
@@ -2595,9 +2646,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
+        let module = scope
+            .tysys
+            .resolutions
+            .defs()
+            .module(scope.tysys.def_at(func.id))
+            .clone();
         let mut param_types = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
+            if func.is_export {
+                scope.check_published(
+                    &func.name,
+                    &format!("parameter '{}'", param.name),
+                    type_id,
+                    &module,
+                    param.span,
+                );
+            }
             if func.is_cm_import() {
                 scope.check_import_param_closure(&func.name, &param.name, type_id, param.span);
             } else if func.is_export && scope.type_contains_closure(type_id) {
@@ -2638,6 +2704,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 position: "return type".to_string(),
                 span: func.span,
             });
+        }
+        if func.is_export {
+            scope.check_published(
+                &func.name,
+                "return type",
+                declared_return_type,
+                &module,
+                func.span,
+            );
         }
         if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
             let _ = scope.emit(TypeError::BorrowAtCmBoundary {

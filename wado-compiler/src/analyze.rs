@@ -232,6 +232,16 @@ pub enum AnalyzeError {
         reexport_visibility: Visibility,
         span: Span,
     },
+    /// A struct a package publishes, by `export` or by `export use`, with a
+    /// field that is not `pub`: WIT has no private field.
+    PrivateFieldPublished {
+        owner: String,
+        field: String,
+        adopted: bool,
+        span: Span,
+    },
+    /// An `export use` naming something other than a type.
+    ExportUseNotType { name: String, span: Span },
 }
 
 /// What is wrong with an `#[unavailable]` declaration.
@@ -380,6 +390,28 @@ impl AnalyzeError {
                     *source_visibility,
                     *reexport_visibility,
                 ),
+                *span,
+            ),
+            AnalyzeError::PrivateFieldPublished {
+                owner,
+                field,
+                adopted,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "`{owner}` is {}, so its field `{field}` must be `pub`: WIT shows every field of a record",
+                    if *adopted {
+                        "published by `export use`"
+                    } else {
+                        "`export`"
+                    }
+                ),
+                *span,
+            ),
+            AnalyzeError::ExportUseNotType { name, span } => (
+                Code::CmBoundaryType,
+                format!("`export use` publishes a type, and `{name}` is not one"),
                 *span,
             ),
         }
@@ -599,6 +631,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Struct(struct_decl) => {
+                    if struct_decl.is_export
+                        && let Some(field) = struct_decl.first_private_field()
+                    {
+                        let _ = self.logger.error_in(
+                            module_source,
+                            AnalyzeError::PrivateFieldPublished {
+                                owner: struct_decl.name.clone(),
+                                field: field.name.clone(),
+                                adopted: false,
+                                span: field.span,
+                            },
+                        );
+                    }
                     let kind = SymbolKind::Struct(StructSymbol {
                         fields: struct_decl.fields.iter().map(|f| f.name.clone()).collect(),
                     });
@@ -1366,6 +1411,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 *local_span,
                                 use_decl.visibility,
                             )?;
+                            if use_decl.is_export {
+                                self.check_adoption(
+                                    from_module_source,
+                                    &module_source,
+                                    name,
+                                    *name_span,
+                                    all_modules,
+                                );
+                            }
                         }
                         UseItem::InterfaceFunctions {
                             interface_name,
@@ -1382,6 +1436,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     func_item.local_span,
                                     use_decl.visibility,
                                 )?;
+                                if use_decl.is_export {
+                                    let _ = self.logger.error_in(
+                                        from_module_source,
+                                        AnalyzeError::ExportUseNotType {
+                                            name: func_item.name.clone(),
+                                            span: func_item.name_span,
+                                        },
+                                    );
+                                }
                             }
                         }
                         UseItem::Wildcard => {
@@ -1414,6 +1477,59 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             }
         }
         Ok(())
+    }
+
+    /// Diagnose an `export use` of `name` from `target` that cannot publish it:
+    /// it names no type, or a struct with a field WIT could not show.
+    fn check_adoption(
+        &self,
+        from: &ModuleSource,
+        target: &ModuleSource,
+        name: &str,
+        span: Span,
+        all_modules: &hashmap::IndexMap<ModuleSource, Module>,
+    ) {
+        let Some(symbol) = self.symbols.lookup_in_module(target, name) else {
+            return; // `import_symbol` reported it.
+        };
+        let error =
+            match &symbol.kind {
+                SymbolKind::Struct(_) => {
+                    let private_field = all_modules[symbol.module_source()].items.iter().find_map(
+                        |item| match item {
+                            Item::Struct(decl) if decl.id == symbol.defined_at => {
+                                decl.first_private_field()
+                            }
+                            _ => None,
+                        },
+                    );
+                    let Some(field) = private_field else {
+                        return;
+                    };
+                    AnalyzeError::PrivateFieldPublished {
+                        owner: name.to_string(),
+                        field: field.name.clone(),
+                        adopted: true,
+                        span,
+                    }
+                }
+                SymbolKind::Enum(_)
+                | SymbolKind::Variant(_)
+                | SymbolKind::Flags(_)
+                | SymbolKind::Newtype(_) => return,
+                SymbolKind::Function(_)
+                | SymbolKind::Effect(_)
+                | SymbolKind::Trait(_)
+                | SymbolKind::BuiltinType
+                | SymbolKind::Variable(_)
+                | SymbolKind::Resource(_)
+                | SymbolKind::World(_)
+                | SymbolKind::Global(_) => AnalyzeError::ExportUseNotType {
+                    name: name.to_string(),
+                    span,
+                },
+            };
+        let _ = self.logger.error_in(from, error);
     }
 
     /// Get a copy of the implicit modules set

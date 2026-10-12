@@ -693,7 +693,7 @@ mod tests {
         const SRC: &str = r#"
 use { Request, Response, Error, OutputFile } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -767,12 +767,12 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         const SRC: &str = r#"
 use { Request, Response, Error, OutputFile } from "core:kiln";
 
-pub enum Mode {
+export enum Mode {
     Fast,
     HighContrast,
 }
 
-pub struct Options {
+export struct Options {
     pub max_depth: i32,
     pub ratio: f32,
     pub mode: Mode,

@@ -217,7 +217,7 @@ pub struct CompileResult {
     /// [`CompilerOptions::embed_wit_contract`] is set (issue #1654); `None`
     /// otherwise.
     pub wit_emit_snapshot: Option<wit_emit::WitEmitSnapshot>,
-    /// Structural description of the generator's `pub struct Options`,
+    /// Structural description of the generator's `export struct Options`,
     /// populated only when `target_world == "core:kiln/generator"` and
     /// the Options struct extracts cleanly. Consumed by the CLI's kiln
     /// provider to skip a second compile when the driver asks for the
@@ -677,22 +677,21 @@ struct LibSurface {
     submodule_exports: Vec<world_registry::WorldExportInfo>,
     submodule_type_decls: Vec<(ModuleSource, ast::Item)>,
     submodule_interfaces: Vec<ast::InterfaceDecl>,
-    /// Published beside the package's types, but no API the package declares.
-    stdlib_newtypes: Vec<(ModuleSource, ast::Item)>,
+    /// Published beside the package's types, but declared elsewhere: what its
+    /// `export use` adopts, and each stdlib newtype the surface reaches.
+    foreign_types: Vec<(ModuleSource, ast::Item)>,
 }
 
 impl LibSurface {
     /// Every type the component publishes beyond the entry module's own.
     fn published_type_decls(&self) -> impl Iterator<Item = &(ModuleSource, ast::Item)> {
-        self.submodule_type_decls
-            .iter()
-            .chain(&self.stdlib_newtypes)
+        self.submodule_type_decls.iter().chain(&self.foreign_types)
     }
 
     fn published_type_decls_mut(&mut self) -> impl Iterator<Item = &mut (ModuleSource, ast::Item)> {
         self.submodule_type_decls
             .iter_mut()
-            .chain(&mut self.stdlib_newtypes)
+            .chain(&mut self.foreign_types)
     }
 }
 
@@ -750,8 +749,28 @@ fn collect_lib_surface(
         submodule_exports,
         submodule_type_decls,
         submodule_interfaces,
-        stdlib_newtypes: Vec::new(),
+        foreign_types: Vec::new(),
     }
+}
+
+/// The declarations of the types the package's `export use` adopts.
+fn adopted_type_decls(
+    resolutions: &resolve::Resolutions,
+    modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
+    entry_source: &ModuleSource,
+) -> Vec<(ModuleSource, ast::Item)> {
+    let defs = resolutions.defs();
+    defs.adopted_by(entry_source)
+        .map(|def| {
+            let source = defs.module(def);
+            let item = modules[source]
+                .items
+                .iter()
+                .find(|item| item.id() == defs.ast_id(def))
+                .expect("`export use` adopts a module-level declaration");
+            (source.clone(), item.clone())
+        })
+        .collect()
 }
 
 /// The stdlib newtypes a library's surface names, at any depth. The library
@@ -782,7 +801,7 @@ fn stdlib_newtypes_in_lib_surface(
     }
     let entry_items = entry.into_iter().flat_map(|module| &module.items);
     let mut pending: Vec<&ast::Type> = entry_items
-        .chain(surface.submodule_type_decls.iter().map(|(_, item)| item))
+        .chain(surface.published_type_decls().map(|(_, item)| item))
         .flat_map(|item| match item {
             Item::Function(f) if f.exports_own_name() => signature(f),
             Item::Interface(decl) => decl.methods.iter().flat_map(signature).collect(),
@@ -802,12 +821,17 @@ fn stdlib_newtypes_in_lib_surface(
         )
         .collect();
 
+    let published: hashmap::IndexSet<DefId> = surface
+        .published_type_decls()
+        .map(|(_, item)| defs.def_at(item.id()))
+        .collect();
     let mut reached: hashmap::IndexMap<DefId, (ModuleSource, Item)> = hashmap::IndexMap::default();
     while let Some(ty) = pending.pop() {
         ty.for_each(&mut |ty| {
             if let ast::Type::Named(named) = ty
                 && let Some(def) = resolutions.declared_if_walked(named.id)
                 && let Some(&(source, item)) = stdlib_newtypes.get(&def)
+                && !published.contains(&def)
                 && !reached.contains_key(&def)
             {
                 reached.insert(def, (source.clone(), item.clone()));
@@ -1397,12 +1421,15 @@ fn compile_after_load<H: CompilerHost>(
         let resolutions = sem
             .resolutions()
             .expect("a complete analysis has resolutions");
-        lib_surface.stdlib_newtypes = stdlib_newtypes_in_lib_surface(
+        lib_surface.foreign_types =
+            adopted_type_decls(resolutions, &sem.modules, &sem.entry_module_source);
+        let stdlib_newtypes = stdlib_newtypes_in_lib_surface(
             resolutions,
             &sem.modules,
             sem.modules.get(&sem.entry_module_source),
             &lib_surface,
         );
+        lib_surface.foreign_types.extend(stdlib_newtypes);
     }
 
     let entry_type_names: Vec<String> = sem

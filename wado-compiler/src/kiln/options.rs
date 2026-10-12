@@ -20,7 +20,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 
-/// Structural description of a generator's `pub struct Options`.
+/// Structural description of a generator's `export struct Options`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct OptionsDescriptor {
     pub fields: Vec<OptionsField>,
@@ -125,7 +125,7 @@ pub enum CanonicalValue {
     Map(Vec<(String, CanonicalValue)>),
 }
 
-/// Locate the `pub struct Options` the generator's entry module names, declared
+/// Locate the `export struct Options` the generator's entry module names, declared
 /// there or re-exported, and describe it as an [`OptionsDescriptor`]. `Options`
 /// is optional — a generator with no configuration gets an empty descriptor —
 /// while `generate` is required.

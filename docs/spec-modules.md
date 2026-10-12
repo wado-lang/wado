@@ -633,7 +633,10 @@ Re-export rules:
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
 - Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a nameless import (`pub use _ from "..."`) are compile errors.
-- A re-export stays at module level, so `export use` is a compile error
+- `export use` names types only, and publishes each one in the importing
+  package's Component Model interface
+  ([Published Types](./spec-components.md#published-types)). Naming anything
+  else is a compile error
 
 Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
 

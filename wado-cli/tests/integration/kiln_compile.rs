@@ -26,7 +26,7 @@ use crate::common::runtime;
 const MINIMAL_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -44,7 +44,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 const ADAPTER_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -450,7 +450,7 @@ fn transitive_dep_edit_invalidates_cache() {
 use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -533,7 +533,7 @@ fn fresh_recompile_produces_identical_source_hash() {
 use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -600,7 +600,7 @@ fn a_comment_edit_moves_the_source_hash() {
     let entry_src = r#"
 use { Request, Response, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -652,7 +652,7 @@ fn transitive_edit_then_revert_restores_source_hash() {
 use { Request, Response, Error } from "core:kiln";
 use { answer } from "./helper.wado";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 

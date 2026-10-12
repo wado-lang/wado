@@ -30,30 +30,30 @@ use { TreeMap } from "core:collections";
 
 // --- Named types referenced by the identity exports below ---
 
-pub struct Point {
-    x: f64,
-    y: f64,
+export struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 
 // A record that flattens to a single core value (`[i64]`), so the canonical
 // ABI returns it flat rather than through an outptr — unlike `Point`.
-pub struct Single {
-    value: u64,
+export struct Single {
+    pub value: u64,
 }
 
-pub enum Color {
+export enum Color {
     Red,
     Green,
     Blue,
 }
 
-pub variant Shape {
+export variant Shape {
     Circle(f64),
     Rect([f64, f64]),
     Nothing,
 }
 
-pub flags Perms {
+export flags Perms {
     Read,
     Write,
     Execute,
@@ -61,23 +61,23 @@ pub flags Perms {
 
 // A variant with no payload-bearing case lays out as its bare discriminant,
 // one byte here, not the handle width an unknown name defaults to.
-pub variant Status {
+export variant Status {
     Active,
     Inactive,
 }
 
-pub type Meters = f64;
+export type Meters = f64;
 
 // A variant whose cases flatten to the same slot size but different core
 // classes (`u32`→i32 vs `f32`→f32). The CM flat-ABI join widens the shared
 // slot to one class, so the other case's payload is bit-reinterpreted.
-pub variant Mixed {
+export variant Mixed {
     AsInt(u32),
     AsFloat(f32),
 }
 
-pub struct FutureCell {
-    value: Future<u32>,
+export struct FutureCell {
+    pub value: Future<u32>,
 }
 
 // --- Primitives ---

@@ -86,7 +86,7 @@ fn kiln_generator_world_emits_typed_params_not_generic_request() {
     const GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -168,7 +168,7 @@ fn library_functions_only_group_into_default_interface() {
 #[test]
 fn record_export_groups_into_default_interface() {
     check(
-        "pub struct Point { x: f64, y: f64 }\n\
+        "export struct Point { pub x: f64, pub y: f64 }\n\
          export fn midpoint(a: Point, b: Point) -> Point { return a; }",
         "package root:component;\n\n\
          interface entry {\n  \
@@ -190,6 +190,22 @@ fn wide_int_export_emits_its_prelude_record() {
          interface entry {\n  \
            record i128 {\n    low: u64,\n    high: s64,\n  }\n  \
            widen: func(v: i128) -> i128;\n\
+         }\n\n\
+         world command {\n  export entry;\n}",
+    );
+}
+
+/// A type another package declares crosses once `export use` adopts it, and
+/// takes its place in this package's interface as a declared one does.
+#[test]
+fn adopted_type_emits_into_default_interface() {
+    check(
+        "export use { FileType } from \"core:fs\";\n\
+         export fn kind(t: FileType) -> FileType { return t; }",
+        "package root:component;\n\n\
+         interface entry {\n  \
+           variant file-type {\n    file,\n    directory,\n    other,\n  }\n  \
+           kind: func(t: file-type) -> file-type;\n\
          }\n\n\
          world command {\n  export entry;\n}",
     );
@@ -447,7 +463,7 @@ fn string_and_list_and_option_map_to_wit() {
 fn newtype_emits_alias_to_base_not_itself() {
     // Regression: a newtype must alias its base type, never `type x = x`.
     let text = emit(
-        "pub type Meters = f64;\n\
+        "export type Meters = f64;\n\
          export fn id(v: Meters) -> Meters { return v; }",
     );
     assert!(text.contains("type meters = f64;"), "\n{text}");

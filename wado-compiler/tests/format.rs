@@ -433,12 +433,25 @@ fn test_format_folded_params_keep_a_trailing_comma() {
 /// so the canonical form drops the redundant `pub` (never `pub export`).
 #[test]
 fn test_format_visibility_modifiers_roundtrip() {
-    let source = "internal fn a() {}\npub fn b() {}\nfn c() {}\nexport fn d() {}\n";
+    let source = "internal fn a() {}\npub fn b() {}\nfn c() {}\nexport fn d() {}\n\
+        export use { Uuid } from \"core:uuid\";\nexport struct S { pub x: i32 }\n\
+        export enum E { A }\nexport variant V { A }\nexport flags F { A }\n\
+        export type T = i32;\n";
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(formatted.contains("internal fn a"), "got:\n{formatted}");
     assert!(formatted.contains("pub fn b"), "got:\n{formatted}");
     assert!(formatted.contains("\nfn c"), "got:\n{formatted}");
     assert!(formatted.contains("export fn d"), "got:\n{formatted}");
+    for decl in [
+        "export use",
+        "export struct S",
+        "export enum E",
+        "export variant V",
+        "export flags F",
+        "export type T",
+    ] {
+        assert!(formatted.contains(decl), "{decl}, got:\n{formatted}");
+    }
     assert!(
         !formatted.contains("pub export"),
         "`export` already implies `pub`, got:\n{formatted}"

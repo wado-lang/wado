@@ -100,6 +100,26 @@ Were widening allowed, `internal` would guarantee nothing — any module could
 publish another's internal item, and a declaration's modifier would stop
 describing its own reach.
 
+### Published types
+
+A type an `export fn` reaches lands in the package's WIT whether or not it is
+marked, so a `pub struct` became CM surface by being named, and its private
+fields showed up as record fields. `export` on a type now says it is surface,
+and a type is published only that way:
+
+- A package publishes each named type its `export fn`s reach. It declares the
+  type `export`, or adopts one another package declares with
+  `export use { T } from "…";`.
+- Every field of a published struct is `pub`. WIT shows every field of a
+  record, so a private one would leak.
+- `#[cm]` types are exempt, their own interface publishing them. So are the
+  standard library's newtypes (`ByteList`), which cross as aliases and which
+  packages already published without saying so.
+
+A Kiln generator's `Options` follows: `generate` is an `export fn`, so
+`Options` is `export` with `pub` fields, and a registry consumer reads the same
+record from the component's WIT.
+
 ## Consequences
 
 - Generic / higher-order / trait libraries are publishable across packages
@@ -162,6 +182,11 @@ describing its own reach.
   pattern position alike, and `export` on one is a compile error with a
   targeted diagnostic. Only _inherent_ members carry a ladder; a trait
   impl's members reach as far as the trait, so theirs is not consulted.
+- [x] Published types: `export` on `struct` / `enum` / `variant` / `flags` /
+  `type`, `export use` of types, and `CM_BOUNDARY_TYPE` for an unpublished
+  reached type and for a published struct's private field
+  (`cm_export_unpublished_type_rejected.wado`,
+  `cm_export_published_struct_private_field_rejected.wado`).
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
 
@@ -175,6 +200,12 @@ describing its own reach.
   implementation module, demoting what only its siblings use, and leaving `pub`
   on whatever `core:prelude` re-exports. It narrows a published API, so it is
   the human's call.
+- A library (`--lib`) still publishes every `pub` and `internal` type of its
+  submodules in its default interface, `export` or not. So two submodule types
+  sharing a name collide though neither is surface.
+- The standard library newtype exemption means a stdlib `struct` such as
+  `DirEntry` needs `export use` to cross while a stdlib newtype such as
+  `ByteList` does not.
 
 ## References
 

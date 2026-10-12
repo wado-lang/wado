@@ -325,6 +325,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
         id: module.alloc_ast_id(),
         attrs: Vec::new(),
         visibility: Visibility::Private,
+        is_export: false,
         source: "core:kiln".to_string(),
         source_span: span,
         source_id: module.alloc_ast_id(),

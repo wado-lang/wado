@@ -198,6 +198,16 @@ fn emit_visibility_into(visibility: Visibility, output: &mut String) {
     output.push_str(visibility.keyword());
 }
 
+/// The leading keyword of a type or `use` declaration; `export` implies `pub`
+/// and is written alone.
+fn type_decl_keyword(visibility: Visibility, is_export: bool) -> &'static str {
+    if is_export {
+        "export "
+    } else {
+        visibility.keyword()
+    }
+}
+
 /// Leading keyword for a function declaration; `export` implies `pub` and is
 /// emitted alone, with the world exports it names.
 fn function_decl_keyword_into(f: &Function, output: &mut String) {
@@ -615,7 +625,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_use(&mut self, u: &UseDecl) {
         self.emit_outer_attrs(&u.attrs);
-        self.emit_visibility(u.visibility);
+        self.output
+            .push_str(type_decl_keyword(u.visibility, u.is_export));
 
         // The line is rendered as a `(imports_wrapped, with_multiline)` choice.
         // We try candidates in preference order and keep the first whose every
@@ -1030,7 +1041,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_struct(&mut self, s: &StructDecl) {
         self.emit_outer_attrs(&s.attrs);
-        self.emit_visibility(s.visibility);
+        self.output
+            .push_str(type_decl_keyword(s.visibility, s.is_export));
 
         self.output.push_str("struct ");
         self.output.push_str(&s.name);
@@ -1096,7 +1108,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_enum(&mut self, e: &EnumDecl) {
         self.emit_outer_attrs(&e.attrs);
-        self.emit_visibility(e.visibility);
+        self.output
+            .push_str(type_decl_keyword(e.visibility, e.is_export));
 
         self.output.push_str("enum ");
         self.output.push_str(&e.name);
@@ -1118,7 +1131,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_variant(&mut self, v: &VariantDecl) {
         self.emit_outer_attrs(&v.attrs);
-        self.emit_visibility(v.visibility);
+        self.output
+            .push_str(type_decl_keyword(v.visibility, v.is_export));
 
         self.output.push_str("variant ");
         self.output.push_str(&v.name);
@@ -1145,7 +1159,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_flags(&mut self, f: &FlagsDecl) {
         self.emit_outer_attrs(f.attributes.as_deref().unwrap_or(&[]));
-        self.emit_visibility(f.visibility);
+        self.output
+            .push_str(type_decl_keyword(f.visibility, f.is_export));
 
         self.output.push_str("flags ");
         self.output.push_str(&f.name);
@@ -1179,7 +1194,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_newtype(&mut self, t: &Newtype) {
         self.emit_outer_attrs(&t.attrs);
-        self.emit_visibility(t.visibility);
+        self.output
+            .push_str(type_decl_keyword(t.visibility, t.is_export));
         self.output.push_str("type ");
         self.output.push_str(&t.name);
         self.unparse_generic_params(&t.type_params);
@@ -4276,15 +4292,15 @@ fn unparse_effects_clause_into(f: &Function, output: &mut String) {
     unparse_with_row_into(f.written_effects(), output);
 }
 
-/// Emit `[pub ]<keyword> <name>[<generics>]` into `out`.
+/// Emit `[modifier ]<keyword> <name>[<generics>]` into `out`.
 fn emit_decl_header(
-    visibility: Visibility,
+    modifier: &str,
     keyword: &str,
     name: &str,
     type_params: &[GenericParam],
     out: &mut String,
 ) {
-    emit_visibility_into(visibility, out);
+    out.push_str(modifier);
     out.push_str(keyword);
     out.push_str(name);
     unparse_generic_params_into(type_params, out);
@@ -4292,19 +4308,37 @@ fn emit_decl_header(
 
 pub fn unparse_variant_header(v: &VariantDecl) -> String {
     let mut out = String::new();
-    emit_decl_header(v.visibility, "variant ", &v.name, &v.type_params, &mut out);
+    emit_decl_header(
+        type_decl_keyword(v.visibility, v.is_export),
+        "variant ",
+        &v.name,
+        &v.type_params,
+        &mut out,
+    );
     out
 }
 
 pub fn unparse_flags_header(fl: &FlagsDecl) -> String {
     let mut out = String::new();
-    emit_decl_header(fl.visibility, "flags ", &fl.name, &[], &mut out);
+    emit_decl_header(
+        type_decl_keyword(fl.visibility, fl.is_export),
+        "flags ",
+        &fl.name,
+        &[],
+        &mut out,
+    );
     out
 }
 
 pub fn unparse_trait_header(t: &TraitDecl) -> String {
     let mut out = String::new();
-    emit_decl_header(t.visibility, "trait ", &t.name, &t.type_params, &mut out);
+    emit_decl_header(
+        t.visibility.keyword(),
+        "trait ",
+        &t.name,
+        &t.type_params,
+        &mut out,
+    );
     if !t.supertraits.is_empty() {
         out.push_str(": ");
         unparse_trait_bounds_into(&t.supertraits, &mut out);
@@ -4331,7 +4365,13 @@ pub fn unparse_assoc_type_decl(decl: &AssociatedTypeDecl) -> String {
 /// otherwise every field is shown as written (for editor hover).
 pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
     let mut out = String::new();
-    emit_decl_header(s.visibility, "struct ", &s.name, &s.type_params, &mut out);
+    emit_decl_header(
+        type_decl_keyword(s.visibility, s.is_export),
+        "struct ",
+        &s.name,
+        &s.type_params,
+        &mut out,
+    );
     out.push_str(" { ");
     let hidden =
         |f: &StructField| public_only && (!f.visibility.is_public() || f.name.starts_with("__"));
@@ -4412,7 +4452,13 @@ pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String 
 /// `enum Color { Red, Green, Blue }`.
 pub fn unparse_enum_signature(e: &EnumDecl) -> String {
     let mut out = String::new();
-    emit_decl_header(e.visibility, "enum ", &e.name, &e.type_params, &mut out);
+    emit_decl_header(
+        type_decl_keyword(e.visibility, e.is_export),
+        "enum ",
+        &e.name,
+        &e.type_params,
+        &mut out,
+    );
     out.push_str(" { ");
     for (i, case) in e.cases.iter().enumerate() {
         if i > 0 {
@@ -4426,7 +4472,13 @@ pub fn unparse_enum_signature(e: &EnumDecl) -> String {
 
 pub fn unparse_newtype_signature(n: &Newtype) -> String {
     let mut out = String::new();
-    emit_decl_header(n.visibility, "type ", &n.name, &n.type_params, &mut out);
+    emit_decl_header(
+        type_decl_keyword(n.visibility, n.is_export),
+        "type ",
+        &n.name,
+        &n.type_params,
+        &mut out,
+    );
     out.push_str(" = ");
     unparse_type_into(&n.ty, &mut out);
     out
@@ -4434,7 +4486,13 @@ pub fn unparse_newtype_signature(n: &Newtype) -> String {
 
 pub fn unparse_builtin_type_decl_signature(d: &BuiltinTypeDecl) -> String {
     let mut out = String::new();
-    emit_decl_header(d.visibility, "type ", &d.name, &d.type_params, &mut out);
+    emit_decl_header(
+        d.visibility.keyword(),
+        "type ",
+        &d.name,
+        &d.type_params,
+        &mut out,
+    );
     out
 }
 
