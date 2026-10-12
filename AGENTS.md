@@ -41,12 +41,12 @@ of it is the same run spent twice.
 
 Each commit runs the tests of what it changed:
 
-| The change touches                         | Run                         |
-| ------------------------------------------ | --------------------------- |
-| The compiler (`wado-compiler/src/`)        | `mise run test-e2e`         |
-| The stdlib (`wado-compiler/lib/`)          | `mise run test-stdlib`      |
-| A package (`package-*/`)                   | `wado test <package>`       |
-| Any other Rust crate                       | `cargo test -p <crate>`     |
+| The change touches                  | Run                     |
+| ----------------------------------- | ----------------------- |
+| The compiler (`wado-compiler/src/`) | `mise run test-e2e`     |
+| The stdlib (`wado-compiler/lib/`)   | `mise run test-stdlib`  |
+| A package (`package-*/`)            | `wado test <package>`   |
+| Any other Rust crate                | `cargo test -p <crate>` |
 
 `wado test` skips a file that passed while nothing it read has changed, so a
 rerun after a Wado edit tests only what the edit reached. A rebuilt `wado`

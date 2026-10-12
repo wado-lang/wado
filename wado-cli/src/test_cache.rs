@@ -9,6 +9,7 @@
 //! recorded, and runs every time.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
@@ -73,7 +74,7 @@ pub(crate) struct TestCache {
     read: bool,
     /// What each input holds now, read once per run however many entries list
     /// it.
-    on_disk: std::sync::Mutex<IndexMap<PathBuf, Option<Input>>>,
+    on_disk: Mutex<IndexMap<PathBuf, Option<Input>>>,
 }
 
 impl TestCache {
@@ -85,7 +86,7 @@ impl TestCache {
         Self {
             digest: hasher.finalize().into(),
             read,
-            on_disk: std::sync::Mutex::default(),
+            on_disk: Mutex::default(),
         }
     }
 
@@ -120,13 +121,11 @@ impl TestCache {
     }
 
     fn unchanged(&self, input: &Input) -> bool {
-        let current = lock(&self.on_disk).get(&input.path).cloned();
-        let current = current.unwrap_or_else(|| {
-            let read = Input::on_disk(input.path.clone());
-            lock(&self.on_disk).insert(input.path.clone(), read.clone());
-            read
-        });
-        current.as_ref() == Some(input)
+        lock(&self.on_disk)
+            .entry(input.path.clone())
+            .or_insert_with(|| Input::on_disk(input.path.clone()))
+            .as_ref()
+            == Some(input)
     }
 
     /// Record that `file`, having read `inputs`, passed as `tally` says.
