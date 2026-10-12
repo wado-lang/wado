@@ -39,6 +39,7 @@ is the last of the editing rather than a phase after it, so one test run at the
 end answers for the change and for what `/distill` edited. A run on either side
 of it is the same run spent twice.
 
+<<<<<<< HEAD
 Each commit runs the tests of what it changed:
 
 | The change touches                  | Run                     |
@@ -54,6 +55,19 @@ binary reruns everything.
 
 The full run is `mise run test`, then `mise run test-wado`. It runs once,
 before the branch goes up for review, and CI runs it on every push.
+||||||| 7432ea442
+The full run is `mise run test`, `mise run test-wado`, then
+`mise run update-stdlib-coverage-baseline`. CI fails on any difference from the
+baseline, a region a test now reaches included, so commit the update;
+`wado-compiler/AGENTS.md` says what it may change.
+=======
+The full run is `mise run test`, then `mise run test-wado`.
+
+Run `mise run update-stdlib-coverage-baseline` once, just before opening the
+pull request, not in every cycle. CI fails on any difference from the baseline,
+a region a test now reaches included, so commit the update;
+`wado-compiler/AGENTS.md` says what it may change.
+>>>>>>> origin/main
 
 Having invoked `/distill` on this branch earlier is not a reason to skip the
 next one, and answering review findings calls for another. The scope is the
@@ -181,7 +195,7 @@ The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`,
 Behavior that no `--help` will remind you of:
 
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
-- The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
+- The world selects the allocator: `freelist` for every world but the test world, which gets `debug` (never reuses freed memory, poisons it with `0xFF`, traps on a double free). E2E tests rely on the test world picking `debug`.
 - `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
 - The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. A directory argument is walked from the package enclosing it, so naming a subdirectory honours the exclusion. Naming a file bypasses it, so never `wado format -w` a fixture file directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 

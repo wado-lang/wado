@@ -1,0 +1,29 @@
+// Loop-versioned BCE over a check shifted by an unsigned local past the
+// length: `len - ob` wraps to a large value, so `n <= len - ob` holds, and only
+// the residual's `ob <= len` refuses the fast arm, whose bare read would trap
+// with no message. The checked loop panics with the program's own message.
+
+use { Stdout } from "core:cli";
+
+fn sum(xs: &Array<i32>, len: u32, ob: u32, n: u32) -> i32 {
+    let mut total = 0;
+    for let mut c: u32 = 0; c < n; c += 1 {
+        let i = ob + c;
+        if !(i < len) {
+            panic("out of range");
+        }
+        total += xs[i as i32];
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let xs: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8];
+    sum(&xs, builtin::black_box(8), builtin::black_box(4294967295), builtin::black_box(1));
+}
+
+__DATA__
+{
+    "stderr_contains": ["out of range"],
+    "trapped": true
+}

@@ -1,0 +1,27 @@
+// Loop-versioned BCE over a check shifted by a constant, beside an unshifted
+// one on the same list: a prefix sum reads `xs[i]` and writes `xs[i + 1]`.
+// The residual bounds the guard by the length for the first and by the length
+// less one for the second, which also asks the length to cover that one.
+
+use { println, Stdout } from "core:cli";
+
+fn prefix_sum(xs: &mut List<i32>, n: i32) {
+    for let mut i = 0; i < n; i += 1 {
+        xs[i + 1] += xs[i];
+    }
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(builtin::black_box(6), 1);
+    prefix_sum(&mut xs, builtin::black_box(5));
+    println(`${xs:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 2, 3, 4, 5, 6]\n",
+    "wir_scope": ".wado/run",
+    "wir_expect:O2": [
+        "(n_{} >= 1) & (n_{} <= (n_{} - 1))"
+    ]
+}

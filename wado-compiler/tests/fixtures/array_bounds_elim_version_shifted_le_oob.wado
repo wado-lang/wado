@@ -1,0 +1,27 @@
+// Loop-versioned BCE over a shifted check under a `<=` guard, one past what
+// the residual admits: `i <= h` with `h == n - 1` reads `xs[n]` on the last
+// iteration. A residual comparing `<=` where `<` is due takes the fast arm and
+// traps with no message, so the standard panic is what shows it refused.
+
+use { Stdout } from "core:cli";
+
+fn shift_left(xs: &mut List<i32>, h: i32) {
+    for let mut i = 0; i <= h; i += 1 {
+        xs[i] = xs[i + 1];
+    }
+}
+
+export fn run() with Stdout {
+    let mut xs: List<i32> = builtin::black_box([1, 2, 3, 4, 5]);
+    shift_left(&mut xs, builtin::black_box(4));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_value",
+        "index: 5",
+        "self.used: 5"
+    ],
+    "trapped": true
+}

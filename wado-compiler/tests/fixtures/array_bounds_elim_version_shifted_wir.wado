@@ -1,0 +1,30 @@
+// Loop-versioned BCE over checks shifted by a loop-invariant local, against
+// two different bounds: `out[ob + c] += x * b[bb + c]`, the inner loop of a
+// matrix multiply. The residual takes one term per shifted check, each saying
+// the last index stays under its list's length, and the fast arm carries no
+// check at all.
+
+use { println, Stdout } from "core:cli";
+
+fn axpy(out: &mut List<f32>, b: &List<f32>, ob: i32, bb: i32, n: i32, x: f32) {
+    for let mut c = 0; c < n; c += 1 {
+        out[ob + c] += x * b[bb + c];
+    }
+}
+
+export fn run() with Stdout {
+    let mut out = List::<f32>::filled(8, 1.0);
+    let b = List::<f32>::filled(builtin::black_box(8), 2.0);
+    axpy(&mut out, &b, builtin::black_box(2), builtin::black_box(1), builtin::black_box(5), 3.0);
+    println(`${out[0]} ${out[1]} ${out[2]} ${out[6]} ${out[7]}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1 7 7 1\n",
+    "wir_scope": ".wado/run",
+    "wir_expect:O2": [
+        "(ob >= 0) & (n_{} <= (8 - ob))",
+        "(bb >= 0) & (n_{} <= (n_{} - bb))"
+    ]
+}

@@ -130,7 +130,7 @@ impl CompileKnobOpt {
                 long: Some("allocator"),
                 short: None,
                 value: Some("<mode>"),
-                desc: "Allocator mode (default depends on target world):\nbump (CLI), freelist (HTTP), debug (test; no-reuse + 0xFF poison)",
+                desc: "Allocator mode (default depends on target world):\nfreelist, debug (test; no-reuse + 0xFF poison)",
             },
             // Repeatable; prefix a flag with `no-` to disable it. The compiler
             // validates the names.
@@ -158,9 +158,8 @@ impl CompileKnobOpt {
 
 /// Every knob a compiling subcommand parses and forwards to the compile core.
 ///
-/// `allocator` stays `Option` so each subcommand keeps its own default
-/// (`run` → bump, `serve` → freelist, `test` → debug) while `--allocator`
-/// overrides.
+/// `allocator` stays `Option` so the target world picks the default
+/// (`test` → debug, every other → freelist) while `--allocator` overrides.
 #[derive(Clone, Debug)]
 pub struct CompileKnobs {
     pub opt_level: OptLevel,
