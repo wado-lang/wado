@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791809559036,
+  "lastUpdate": 1791830053020,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66605,6 +66605,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 341418,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a8cdf70f15555aad6630abaab81b3ba528c22b4",
+          "message": "Merge pull request #2341 from wado-lang/ccr-6a7160a7-ois7bx\n\nfeat(stdlib): UTF-8 String constructors take AsByteSlice and copy once",
+          "timestamp": "2026-10-13T03:14:42+09:00",
+          "tree_id": "8a15b5e48d72bf59e826f024081b94e7d4087e99",
+          "url": "https://github.com/wado-lang/wado/commit/6a8cdf70f15555aad6630abaab81b3ba528c22b4"
+        },
+        "date": 1791830052354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2943,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7320,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21814,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 342404,
             "unit": "bytes"
           }
         ]
