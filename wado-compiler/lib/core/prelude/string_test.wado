@@ -695,6 +695,32 @@ fn utf8_err(bytes: ByteList) -> Utf8Error {
     return String::try_from_utf8(bytes).unwrap_err();
 }
 
+test "String::try_from_utf8 finds a bad byte in every lane of an ASCII run" {
+    // The scan reads an ASCII run four bytes per test, so place the bad byte
+    // and the cut-short sequence at each offset a block can hold them, and end
+    // runs on every length a block leaves over.
+    for let at of 1..<10 {
+        let mut bytes: ByteList = [];
+        for let _ of 0..<at {
+            bytes.push(0x61);
+        }
+        let mut bad = bytes;
+        bad.push(0xFF);
+        bad.push(0x61);
+        assert utf8_err(bad) == Utf8Error::invalid(at, 1);
+        let mut cut = bytes;
+        cut.push(0xE6);
+        cut.push(0x97);
+        assert utf8_err(cut) == Utf8Error::incomplete(at);
+        let mut ok = bytes;
+        ok.push(0xE6);
+        ok.push(0x97);
+        ok.push(0xA5);
+        assert String::try_from_utf8(ok) matches { Ok(s) && s.len() == at + 3 };
+        assert String::try_from_utf8(bytes) matches { Ok(s) && s.len() == at };
+    }
+}
+
 test "String::try_from_utf8 lonely continuation byte" {
     assert utf8_err([0x80] as ByteList) == Utf8Error::invalid(0, 1);
 }

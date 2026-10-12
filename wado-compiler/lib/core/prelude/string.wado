@@ -1104,19 +1104,29 @@ impl String {
     /// Length of the longest prefix of `bytes` that is complete, valid UTF-8,
     /// or `-1 - i` where `i` is the offset of a sequence no further byte could
     /// complete. ASCII is tested here, `utf8_sequence_len` being a call.
+    ///
+    /// After an ASCII byte the run goes on four bytes per test: the four
+    /// `array.get`s of one block share their bounds checks, the cost of a byte
+    /// here. Only an ASCII byte enters a block, so text of multibyte
+    /// characters reads no byte twice.
     internal fn utf8_valid_prefix(bytes: &ByteSlice) -> i32 {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
-            let mut advance = 1;
-            if bytes.get_unchecked(i) >= 0x80 {
-                advance = String::utf8_sequence_len(bytes, i, len);
-                if advance <= 0 {
-                    builtin::cold_path();
-                    // A short sequence ends the prefix; a malformed one is an
-                    // offset only the sign distinguishes.
-                    return if advance < 0 { i } else { -1 - i };
+            if bytes.get_unchecked(i) < 0x80 {
+                i += 1;
+                while i + 4 <= len
+                    && (bytes.get_unchecked(i) | bytes.get_unchecked(i + 1) | bytes.get_unchecked(i + 2) | bytes.get_unchecked(i + 3)) < 0x80 {
+                    i += 4;
                 }
+                continue;
+            }
+            let advance = String::utf8_sequence_len(bytes, i, len);
+            if advance <= 0 {
+                builtin::cold_path();
+                // A short sequence ends the prefix; a malformed one is an
+                // offset only the sign distinguishes.
+                return if advance < 0 { i } else { -1 - i };
             }
             i += advance;
         }
