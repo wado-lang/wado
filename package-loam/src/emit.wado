@@ -323,7 +323,10 @@ fn module_idents() -> TreeSet<String> {
         reserved.insert(name);
     }
     reserved.insert("forward");
+    reserved.insert("pass");
+    reserved.insert("out");
     reserved.insert("Outputs");
+    reserved.insert(PASSED);
     reserved.insert("weights");
     reserved.insert("Weights");
     reserved.insert(PREPARED);
@@ -341,6 +344,9 @@ global BACKEND_PARAM: String = "Bk";
 
 /// That parameter declared with its bound.
 global BACKEND_BOUND: String = `${BACKEND_PARAM}: Backend`;
+
+/// The struct `pass` returns several outputs in, as the backend holds them.
+global PASSED: String = "Passed";
 
 /// The struct `forward` reads the weights from, and its type over the backend.
 global PREPARED: String = "Prepared";
@@ -741,18 +747,25 @@ fn emit_forward(
         values: TreeMap::<String, String>::new(),
         scalars,
     };
+    let mut pass = FnSpec::new("pass", Vis::Pub);
+    pass.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut forward = FnSpec::new("forward", Vis::Pub);
     forward.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // Each input on the host, as the backend then holds it. The checks and the
     // symbols read the host's, so the upload comes after them. The weights are
     // the backend's already.
     let mut uploads: List<String> = [];
+    let mut arguments: List<String> = ["backend"];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
-        forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
+        let param_type = `&${tensor_type(checked, held, &vi.name)}`;
+        pass.add_param(ident, param_type);
+        forward.add_param(ident, param_type);
         uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, Holding::Pass)};`);
         exprs.values[vi.name] = ident;
+        arguments.push(ident);
     }
+    arguments.push("weights");
     for let vi of &graph.initializers {
         exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
     }
@@ -762,13 +775,18 @@ fn emit_forward(
     let several = graph.outputs.len() > 1;
     let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
     forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
+    let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &graph.outputs[0].name) };
+    pass.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(passed_type).add_effect("_");
 
     if several {
         emit_outputs(w, graph, checked, names, held);
+        emit_passed(w, graph, checked, names);
     }
     w.blank();
-    w.line("/// The graph's forward pass, one kernel call per kernel `loam dump` reports.");
-    forward.emit_begin(w);
+    w.line("/// The graph's forward pass, one kernel call per kernel `loam dump` reports,");
+    w.line("/// its outputs left where the backend computed them, for a caller to read");
+    w.line("/// only the part it needs.");
+    pass.emit_begin(w);
     let spelled_axes = emit_input_checks(w, graph, shapes, names);
     // A symbol is bound once something spells it, which the body decides.
     let body = scope_body(graph, checked, names, &mut exprs, literals, &mut symbols, fuse)?;
@@ -787,21 +805,48 @@ fn emit_forward(
             w.line(&line);
         }
     }
-    let returned: List<String> = graph.outputs.into_iter().map(|vi| {
-        let downloaded = `backend.download(${exprs.reference(&vi.name)})`;
-        return if converted(checked, held, &vi.name) { `narrow(&${downloaded})` } else { downloaded };
-    }).collect();
     if !several {
-        w.line(`return ${returned[0]};`);
+        w.line(`return ${exprs.value(&graph.outputs[0].name)};`);
     } else {
-        let mut fields: List<String> = [];
-        for let [i, value] of returned.into_iter().enumerate() {
-            fields.push(`${names.get(&graph.outputs[i].name)}: ${value}`);
-        }
+        let fields: List<String> = graph.outputs.into_iter().map(|vi| {
+            return `${names.get(&vi.name)}: ${exprs.value(&vi.name)}`;
+        }).collect();
+        w.line(`return ${PASSED} { ${fields.join(", ")} };`);
+    }
+    w.end();
+
+    w.blank();
+    w.line("/// [`pass`], its outputs read back to the host.");
+    forward.emit_begin(w);
+    w.line(`let out = pass(${arguments.join(", ")});`);
+    let downloaded = |tensor: &String, place: String| {
+        let read = `backend.download(&${place})`;
+        return if converted(checked, held, tensor) { `narrow(&${read})` } else { read };
+    };
+    if !several {
+        w.line(`return ${downloaded(&graph.outputs[0].name, "out")};`);
+    } else {
+        let fields: List<String> = graph.outputs.into_iter().map(|vi| {
+            let field = names.get(&vi.name);
+            return `${field}: ${downloaded(&vi.name, `out.${field}`)}`;
+        }).collect();
         w.line(`return Outputs { ${fields.join(", ")} };`);
     }
     w.end();
     return Result::Ok(());
+}
+
+/// The struct `pass` returns a graph's several outputs in, each as the
+/// backend holds it.
+fn emit_passed(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names) {
+    let mut passed = StructSpec::new(PASSED, Vis::Pub);
+    passed.add_generic(BACKEND_BOUND);
+    for let vi of &graph.outputs {
+        passed.add_pub_field(names.get(&vi.name), prepared_type(checked, &vi.name));
+    }
+    w.blank();
+    w.line("/// The graph's outputs as the backend holds them, in the order it declares them.");
+    passed.emit(w);
 }
 
 /// The checks of what a scope owes, which run before any kernel in it.

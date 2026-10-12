@@ -179,19 +179,31 @@ impl<Bk: Backend> Model<Bk> {
         }
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
         let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
-        let logits = gpt2::forward(
+        let logits = gpt2::pass(
             &mut self.backend,
             &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
             &Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             &self.weights,
         );
-        let row = (ids.len() - 1) * vocab;
+        // Only the last position ranks the next token, so only its row is read
+        // back: a 1/len share of the logits.
+        let last = self.backend.slice_axis::<f32, [gpt2::Batch], gpt2::Seq, Last, [gpt2::Vocab]>(
+            &logits,
+            1,
+            (ids.len() - 1) as i64,
+            1,
+            1,
+        );
+        let row = self.backend.download(&last);
         let mut best = 0;
         for let v of 1..<vocab {
-            if logits.data[row + v] > logits.data[row + best] {
+            if row.data[v] > row.data[best] {
                 best = v;
             }
         }
         return best;
     }
 }
+
+/// The one position of the logits [`Model::next_token`] reads back.
+struct Last {}

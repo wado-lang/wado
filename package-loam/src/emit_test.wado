@@ -92,7 +92,12 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     );
     assert out.contains(`let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
     assert out.contains("let T = backend.matmul(&A, &weights.W2, null);");
-    assert out.contains("return backend.download(&Y);");
+    // `pass` leaves the output on the backend, and `forward` reads it back.
+    assert out.contains(
+        "pub fn pass<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
+    );
+    assert out.contains("    return Y;\n");
+    assert out.contains("    let out = pass(backend, X, weights);\n    return backend.download(&out);\n");
 }
 
 test "a product takes the elementwise operators after it as its epilogue" {
@@ -255,7 +260,11 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
     assert out.contains(
         "pub fn forward<Bk: Backend>(backend: &mut Bk, A: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Outputs with _ {",
     );
-    assert out.contains("return Outputs { Z: backend.download(&Z), Y: backend.download(&Y) };");
+    assert out.contains(
+        "pub struct Passed<Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [Batch, In]>,\n    pub Y: Bk::Tensor<f32, [Batch, In]>,\n}",
+    );
+    assert out.contains("return Passed { Z: Z, Y: Y };");
+    assert out.contains("return Outputs { Z: backend.download(&out.Z), Y: backend.download(&out.Y) };");
 }
 
 test "an output that is a graph input is downloaded into the outputs" {
@@ -267,7 +276,8 @@ pass (float[N, 2] A) => (float[N, 2] A, float[N, 2] Y)
 `;
     let out = generate(source, [rule("*", ["Batch", "In"])]).unwrap();
 
-    assert out.contains("return Outputs { A: backend.download(&A), Y: backend.download(&Y) };");
+    assert out.contains("return Passed { A: A, Y: Y };");
+    assert out.contains("return Outputs { A: backend.download(&out.A), Y: backend.download(&out.Y) };");
 }
 
 test "the initializers become the weights struct" {
@@ -366,7 +376,8 @@ g (float[N, 2] "/model/input.0") => (float[N, 2] out)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains("backend: &mut Bk, _model_input_0: &Tensor<f32, [Batch, Unit]>");
-    assert out.contains(`let out = backend.fused::<[Batch, Unit]>([backend.read(&_model_input_0)], &${unary(
+    // `out` is the name `forward` binds `pass`'s result to, so the tensor is renamed.
+    assert out.contains(`let out_ = backend.fused::<[Batch, Unit]>([backend.read(&_model_input_0)], &${unary(
         UnaryOp::Relu,
     )});`);
 }
@@ -380,7 +391,8 @@ g (float[N, 2] X) => (float[N, 2] X)
 `;
     let out = generate(source, [rule("X", ["Batch", "Unit"])]).unwrap();
 
-    assert out.contains("return backend.download(&X);");
+    assert out.contains("    return X;\n");
+    assert out.contains("return backend.download(&out);");
 }
 
 test "folded tensors of one source keep their own elements, a Cast between them" {
@@ -975,7 +987,7 @@ g (float[N, 2] weights, float[N, 2] narrow) => (float[N, 2] Tensor)
     assert out.contains(
         "let Tensor_ = backend.fused::<[Batch, Unit]>([backend.read(&weights_), backend.read(&narrow_)],",
     );
-    assert out.contains("return backend.download(&Tensor_);");
+    assert out.contains("    return Tensor_;\n");
 }
 
 test "a weight named as a method of the weights is renamed" {
@@ -1175,7 +1187,7 @@ test "a half precision boundary is prepared into the f32 the kernels compute in"
     assert out.contains("W1: backend.prepare(&self.W1),");
     assert out.contains("let X = backend.prepare(X);");
     assert out.contains("let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue {");
-    assert out.contains("return narrow(&backend.download(&Y));");
+    assert out.contains("return narrow(&backend.download(&out));");
 }
 
 test "bfloat16 is the same boundary with the other primitive" {
@@ -1183,7 +1195,7 @@ test "bfloat16 is the same boundary with the other primitive" {
 
     assert out.contains("backend: &mut Bk, X: &Tensor<bf16, [Batch, In]>");
     assert out.contains("let X = backend.prepare(X);");
-    assert out.contains("return narrow(&backend.download(&Y));");
+    assert out.contains("return narrow(&backend.download(&out));");
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is
@@ -1511,7 +1523,7 @@ test "a folded scalar output is returned as its literal" {
     }).unwrap();
 
     assert out.contains("C: backend.keep(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] }),");
-    assert out.contains("return backend.download(&weights.C);");
+    assert out.contains("    return weights.C;\n");
 }
 
 test "a folded output of several elements is returned as its literal" {
@@ -1525,7 +1537,7 @@ test "a folded output of several elements is returned as its literal" {
     let out = generate(source, layout).unwrap();
 
     assert out.contains("Y: backend.keep(&Tensor::<i64, [Dim]> { data: [2, 3], extents: [2] }),");
-    assert out.contains("return backend.download(&weights.Y);");
+    assert out.contains("    return weights.Y;\n");
 }
 
 test "a folded tensor a Cast names again under its own type is spelled once" {
