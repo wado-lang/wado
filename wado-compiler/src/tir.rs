@@ -4571,6 +4571,26 @@ impl TypeTable {
                 self.zip_rows(d, a, through_params, each);
             }
         };
+        // Two instances of one newtype meet at their own arguments, which a
+        // row may sit in that the base never mentions.
+        if let (
+            ResolvedType::Newtype {
+                def: dd,
+                type_args: da,
+                ..
+            },
+            ResolvedType::Newtype {
+                def: ad,
+                type_args: aa,
+                ..
+            },
+        ) = (self.get(declared), self.get(actual))
+            && dd == ad
+            && !da.is_empty()
+        {
+            all(da, aa, each);
+            return;
+        }
         let declared = self.representation_head(declared);
         let actual = self.representation_head(actual);
         match (self.get(declared), self.get(actual)) {
@@ -4609,20 +4629,16 @@ impl TypeTable {
         }
     }
 
-    /// Every effect parameter named in a function type's row anywhere in
-    /// `type_id`.
+    /// Every effect parameter named in a row of `type_id` that
+    /// [`Self::zip_rows`] reaches: those an argument's type can determine, and
+    /// no other.
     pub fn effect_params_in(&self, type_id: TypeId, out: &mut IndexSet<String>) {
-        if let ResolvedType::Function { effects, .. } = self.get(type_id) {
+        self.zip_rows(type_id, type_id, true, &mut |row, _| {
             out.extend(
-                effects
-                    .iter()
+                row.iter()
                     .filter(|e| e.is_param())
                     .map(|e| e.name().to_string()),
             );
-        }
-        self.any_constituent(type_id, &mut |t| {
-            self.effect_params_in(t, out);
-            false
         });
     }
 

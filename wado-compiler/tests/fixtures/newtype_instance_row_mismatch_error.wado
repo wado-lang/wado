@@ -1,0 +1,24 @@
+// A newtype's argument is invariant, so an instance whose function argument
+// has an effect the expected one lacks is refused, as a nested function type
+// would be.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder<F> {
+    f: F,
+}
+
+type Hold<F> = Holder<F>;
+
+fn pure_hold(h: Hold<fn()>) {
+}
+
+export fn run() with Stdout {
+    let loud: fn() with Stdout = || println("loud");
+    pure_hold(Holder { f: loud } as Hold<fn() with Stdout>);
+}
+
+__DATA__
+{
+    "compile_error": ":18:15: analysis error: type mismatch: expected 'Hold<fn() -> ()>', found 'Hold<fn() -> () with Stdout>'"
+}
