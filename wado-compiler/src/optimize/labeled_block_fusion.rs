@@ -22,8 +22,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{
-    block_yields_value, has_break_to, is_local, is_local_operand, promoted_read_count_at,
-    single_payload_binding,
+    block_yields_value, has_break_to, is_local, is_local_operand,
+    is_pure_nontrapping_operand_typed, promoted_read_count_at, single_payload_binding,
 };
 use super::sroa_variant_return::{OptionCases, Pad, zero_pad};
 
@@ -86,11 +86,14 @@ impl Rule for LabeledBlockFusionRule {
             if body_uses(engine, info.temp_local) != consumer_uses {
                 continue;
             }
-            if yields && i + 2 == stmts.len() {
+            // As the block's tail, a `match` hands its value on: each exit
+            // breaks out of the fused block with the value of its arm.
+            let tail = yields && i + 2 == stmts.len();
+            if tail && !yields_match_value(engine.body, stmts[i + 1]) {
                 continue;
             }
             let temp = info.temp_local;
-            perform_fusion(engine, block, &stmts, i, info);
+            perform_fusion(engine, block, &stmts, i, info, tail);
             // `perform_fusion` deleted the binding that defined `temp`; the
             // session end audits that no read of it survived. See
             // `Engine::note_elided_local`.
@@ -99,6 +102,15 @@ impl Rule for LabeledBlockFusionRule {
         }
         false
     }
+}
+
+/// Whether `consumer` is a `match` with a value of its own. A unit one, or an
+/// `if`, leaves the block's value to the block.
+fn yields_match_value(body: &Body, consumer: StmtId) -> bool {
+    let StmtKind::Expr(Operand::Expr(e)) = body.stmts[consumer].kind else {
+        return false;
+    };
+    matches!(body.exprs[e].kind, ExprKind::Match { .. }) && body.exprs[e].type_id != TypeTable::UNIT
 }
 
 // ---------------------------------------------------------------------------
@@ -124,13 +136,16 @@ enum FusedValue {
     },
     /// `break L: [tag, …]` — the shape `sroa_variant_return` leaves behind —
     /// read back as `temp.k`, discriminated by the constant in slot 0.
+    /// `slots` is every slot some arm reads; `arm_reads` what each arm reads.
     Slots {
-        tag_value: i128,
+        tags: Vec<Option<i128>>,
+        arm_reads: Vec<IndexSet<u32>>,
         slots: Vec<SlotRead>,
     },
 }
 
 /// One tuple slot the consumer reads, as `temp.field_index`.
+#[derive(Clone, Copy)]
 struct SlotRead {
     field_index: u32,
     type_id: TypeId,
@@ -231,9 +246,8 @@ fn check_fusion_preconditions_if_variant_test(
     if !arms_stay_free(
         body,
         &exits,
-        FirstArm::Case(case_index),
-        &Escapes::of(body, NodeRef::Block(then_block)),
-        &else_escapes,
+        ArmSelector::Case(case_index),
+        &[Escapes::of(body, NodeRef::Block(then_block)), else_escapes],
     ) {
         return None;
     }
@@ -350,9 +364,11 @@ fn check_fusion_preconditions_match(
     if !arms_stay_free(
         body,
         &exits,
-        FirstArm::Case(case_index),
-        &Escapes::of_operand(body, variant_arm_body),
-        &Escapes::of_operand(body, else_arm_body),
+        ArmSelector::Case(case_index),
+        &[
+            Escapes::of_operand(body, variant_arm_body),
+            Escapes::of_operand(body, else_arm_body),
+        ],
     ) {
         return None;
     }
@@ -369,10 +385,11 @@ fn check_fusion_preconditions_match(
     })
 }
 
-/// `let t = L: { … break L: [tag, …] … }; match t.0 { K => A, _ => B }` — the
+/// `let t = L: { … break L: [tag, …] … }; match t.0 { K => A, … }` — the
 /// consumer `sroa_variant_return` leaves once the helper returns its variant as
-/// a tuple. Structurally the variant recogniser above with the tag in slot 0
-/// and the payloads in slots 1…N.
+/// a tuple: the variant recogniser above with the tag in slot 0 and the
+/// payloads in slots 1…N. Each arm is a tag or a wildcard, and any of them may
+/// read the payloads, as the `Err` arm of a `?` does.
 fn check_fusion_preconditions_slot_match(
     body: &Body,
     let_s: StmtId,
@@ -406,52 +423,54 @@ fn check_fusion_preconditions_slot_match(
     let ExprKind::Match { expr: scrut, arms } = &body.exprs[*match_expr].kind else {
         return None;
     };
-    if arms.len() != 2 {
-        return None;
-    }
     if tag_slot_of(body, scrut.as_expr()?) != Some((temp_local, TAG_SLOT)) {
         return None;
     }
 
-    let (tag_arm, else_arm) = (&arms[0], &arms[1]);
-    if tag_arm.guard.is_some() || else_arm.guard.is_some() {
-        return None;
+    let mut tags = Vec::with_capacity(arms.len());
+    let mut arm_reads = Vec::with_capacity(arms.len());
+    let mut slots: Vec<SlotRead> = Vec::new();
+    for arm in arms {
+        if arm.guard.is_some() {
+            return None;
+        }
+        tags.push(match &body.pats[arm.pattern].kind {
+            PatKind::Literal(NirLiteralPattern::I128(tag)) => Some(*tag),
+            PatKind::Wildcard => None,
+            _ => return None,
+        });
+        // Each arm reads the temp only as `temp.k`.
+        let reads = slot_reads_in_operand(body, arm.body, temp_local)?;
+        arm_reads.push(reads.iter().map(|s| s.field_index).collect());
+        for read in reads {
+            if !slots.iter().any(|s| s.field_index == read.field_index) {
+                slots.push(read);
+            }
+        }
     }
-    if !matches!(&body.pats[else_arm.pattern].kind, PatKind::Wildcard) {
-        return None;
-    }
-    let PatKind::Literal(NirLiteralPattern::I128(tag_value)) = &body.pats[tag_arm.pattern].kind
-    else {
-        return None;
-    };
-    let tag_value = *tag_value;
+    slots.sort_by_key(|s| s.field_index);
 
-    // The tag arm reads the temp only as `temp.k`; the wildcard arm not at all.
-    let slots = slot_reads_in_operand(body, tag_arm.body, temp_local)?;
-    if count_local_uses_in_operand(body, else_arm.body, temp_local) > 0 {
-        return None;
-    }
+    // Every exit must carry a tuple literal whose tag slot is a constant some
+    // arm takes, so each one selects an arm at fusion time, and whose elements
+    // that arm does not read are pure — fusion drops those.
+    let exits = check_lb_breaks_are_tagged_tuples(body, lb_block, &label, &tags, &arm_reads)?;
 
-    // Every exit must carry a tuple literal whose tag slot is a constant, so
-    // each one selects an arm at fusion time, and whose unread elements are
-    // pure — fusion drops those.
-    let read: IndexSet<u32> = slots.iter().map(|s| s.field_index).collect();
-    let exits = check_lb_breaks_are_tagged_tuples(body, lb_block, &label, tag_value, &read)?;
-
-    if !arms_stay_free(
-        body,
-        &exits,
-        FirstArm::Tag(tag_value),
-        &Escapes::of_operand(body, tag_arm.body),
-        &Escapes::of_operand(body, else_arm.body),
-    ) {
+    let escapes: Vec<Escapes> = arms
+        .iter()
+        .map(|arm| Escapes::of_operand(body, arm.body))
+        .collect();
+    if !arms_stay_free(body, &exits, ArmSelector::Tags(&tags), &escapes) {
         return None;
     }
 
     Some(FusionInfo {
         temp_local,
         label,
-        value: FusedValue::Slots { tag_value, slots },
+        value: FusedValue::Slots {
+            tags,
+            arm_reads,
+            slots,
+        },
         exits,
     })
 }
@@ -470,25 +489,33 @@ fn tag_slot_of(body: &Body, e: ExprId) -> Option<(u32, u32)> {
     Some((*index, *field_index))
 }
 
-/// What sends an exit to the consumer's first arm rather than its other one.
+/// Which of the consumer's arms an exit's value sends it to.
 #[derive(Clone, Copy)]
-enum FirstArm {
-    /// The case the exit's variant constructs.
+enum ArmSelector<'a> {
+    /// The first arm when the exit's variant constructs this case, the second
+    /// otherwise.
     Case(u32),
-    /// The constant in the tag slot of the exit's tuple.
-    Tag(i128),
+    /// The first arm whose tag is the constant in the tag slot of the exit's
+    /// tuple, a `None` tag being a wildcard.
+    Tags(&'a [Option<i128>]),
 }
 
-impl FirstArm {
-    fn takes(self, body: &Body, value: Option<Operand>) -> bool {
-        let Some(e) = value.and_then(Operand::as_expr) else {
-            return false;
-        };
+impl ArmSelector<'_> {
+    fn select(self, body: &Body, value: Option<Operand>) -> Option<usize> {
+        let e = value.and_then(Operand::as_expr);
         match self {
-            Self::Case(case) => matches!(&body.exprs[e].kind,
-                ExprKind::VariantConstruct { case_index, .. } if *case_index == case),
-            Self::Tag(tag) => matches!(&body.exprs[e].kind,
-                ExprKind::TupleLiteral { elements } if break_tag_value(body, elements) == Some(tag)),
+            Self::Case(case) => {
+                let takes = e.is_some_and(|e| matches!(&body.exprs[e].kind,
+                    ExprKind::VariantConstruct { case_index, .. } if *case_index == case));
+                Some(usize::from(!takes))
+            }
+            Self::Tags(tags) => {
+                let ExprKind::TupleLiteral { elements } = &body.exprs[e?].kind else {
+                    return None;
+                };
+                let tag = break_tag_value(body, elements)?;
+                tags.iter().position(|t| t.is_none_or(|t| t == tag))
+            }
         }
     }
 }
@@ -503,20 +530,11 @@ fn exit_value(body: &Body, exit: StmtId) -> Option<Operand> {
 
 /// Whether the arm each exit selects, cloned in place of the exit, keeps every
 /// jump out of it.
-fn arms_stay_free(
-    body: &Body,
-    exits: &[Exit],
-    first_arm: FirstArm,
-    first: &Escapes,
-    other: &Escapes,
-) -> bool {
+fn arms_stay_free(body: &Body, exits: &[Exit], selector: ArmSelector, arms: &[Escapes]) -> bool {
     exits.iter().all(|exit| {
-        let arm = if first_arm.takes(body, exit_value(body, exit.stmt)) {
-            first
-        } else {
-            other
-        };
-        !arm.captured_at(&exit.scope)
+        selector
+            .select(body, exit_value(body, exit.stmt))
+            .is_some_and(|arm| !arms[arm].captured_at(&exit.scope))
     })
 }
 
@@ -861,14 +879,13 @@ fn check_lb_breaks_and_get_payload(
 }
 
 /// [`ExitSink`] for [`check_lb_breaks_are_tagged_tuples`]: every `break L:`
-/// must carry a tuple literal whose tag slot is a constant integer, so fusion
-/// can pick the arm for it, and whose dropped elements are pure. An exit that
-/// selects the wildcard arm drops all of them; one that selects the tag arm
-/// keeps exactly the slots the arm reads.
+/// must carry a tuple literal whose tag slot is a constant integer an arm
+/// takes, so fusion can pick the arm for it, and whose dropped elements are
+/// pure. An exit keeps exactly the slots the arm it selects reads.
 struct TaggedTupleChecker<'a> {
     label: &'a str,
-    tag_value: i128,
-    read: &'a IndexSet<u32>,
+    tags: &'a [Option<i128>],
+    arm_reads: &'a [IndexSet<u32>],
 }
 
 impl ExitSink for TaggedTupleChecker<'_> {
@@ -879,11 +896,11 @@ impl ExitSink for TaggedTupleChecker<'_> {
         let ExprKind::TupleLiteral { elements } = &body.exprs[e].kind else {
             return false;
         };
-        let Some(tag) = break_tag_value(body, elements) else {
+        let Some(arm) = ArmSelector::Tags(self.tags).select(body, value) else {
             return false;
         };
-        let keeps_reads = tag == self.tag_value;
-        if keeps_reads && self.read.iter().any(|k| *k as usize >= elements.len()) {
+        let read = &self.arm_reads[arm];
+        if read.iter().any(|k| *k as usize >= elements.len()) {
             return false;
         }
         elements.iter().enumerate().all(|(i, op)| {
@@ -891,12 +908,12 @@ impl ExitSink for TaggedTupleChecker<'_> {
                 // A promoted value is pure and carries no exit.
                 return true;
             };
-            // A skeleton element survives only where the arm reads it: fusion
-            // relocates it into a `let`, and dropping it would drop its
-            // effects. Either way it must not carry its own exit, which would
-            // move with it.
-            keeps_reads
-                && self.read.contains(&u32::try_from(i).expect("tuple arity"))
+            // A skeleton element the arm reads is relocated into a `let`; one
+            // it does not read is dropped, which only a pure one survives
+            // unchanged (the `None` an `Ok` exit carries). Either way it must
+            // not carry its own exit, which would move with it.
+            (read.contains(&u32::try_from(i).expect("tuple arity"))
+                || is_pure_nontrapping_operand_typed(body, *op, None))
                 && !has_break_to(body, NodeRef::Expr(oe), self.label)
         })
     }
@@ -909,13 +926,13 @@ fn check_lb_breaks_are_tagged_tuples(
     body: &Body,
     block: BlockId,
     label: &str,
-    tag_value: i128,
-    read: &IndexSet<u32>,
+    tags: &[Option<i128>],
+    arm_reads: &[IndexSet<u32>],
 ) -> Option<Vec<Exit>> {
     let mut sink = TaggedTupleChecker {
         label,
-        tag_value,
-        read,
+        tags,
+        arm_reads,
     };
     walk_exits(body, block, label, &mut sink)
 }
@@ -1152,10 +1169,22 @@ fn count_variant_payload_uses_in_block(
 struct Fusion<'a> {
     fused_label: &'a str,
     temp_local: u32,
-    then_block: BlockId,
-    else_block: Option<BlockId>,
+    /// The consumer's arms in order, `None` for one that does nothing.
+    arms: Vec<Option<BlockId>>,
+    /// Whether the consumer's value is the enclosing block's, so each exit
+    /// leaves the fused block with the value of the arm it selects.
+    yields: bool,
     span: Span,
     value: BoundValue,
+}
+
+impl Fusion<'_> {
+    fn selector(&self) -> ArmSelector<'_> {
+        match &self.value {
+            BoundValue::Variant { case_index, .. } => ArmSelector::Case(*case_index),
+            BoundValue::Slots { tags, .. } => ArmSelector::Tags(tags),
+        }
+    }
 }
 
 /// [`FusedValue`] with the locals the relocated arm bodies read allocated.
@@ -1166,7 +1195,8 @@ enum BoundValue {
         payload_type: TypeId,
     },
     Slots {
-        tag_value: i128,
+        tags: Vec<Option<i128>>,
+        arm_reads: Vec<IndexSet<u32>>,
         slots: Vec<BoundSlot>,
     },
 }
@@ -1183,6 +1213,7 @@ fn perform_fusion(
     stmts: &[StmtId],
     i: usize,
     info: FusionInfo,
+    yields: bool,
 ) {
     let let_s = stmts[i];
     let if_s = stmts[i + 1];
@@ -1208,13 +1239,13 @@ fn perform_fusion(
     };
     let (lb_block, role) = (*lb_block, *role);
 
-    // Extract the then/else blocks from the consumer statement.
-    let (then_block, else_block) = match &engine.body.stmts[if_s].kind {
+    // Extract the arm blocks from the consumer statement.
+    let (arms, result_type) = match &engine.body.stmts[if_s].kind {
         StmtKind::If {
             then_block,
             else_block,
             ..
-        } => (*then_block, *else_block),
+        } => (vec![Some(*then_block), *else_block], TypeTable::UNIT),
         StmtKind::Expr(match_expr) => {
             let match_expr = match_expr
                 .as_expr()
@@ -1222,33 +1253,34 @@ fn perform_fusion(
             let ExprKind::Match { arms, .. } = &engine.body.exprs[match_expr].kind else {
                 unreachable!()
             };
-            let variant_body = arms[0].body;
-            let else_body = arms[1].body;
-            let then_block = arm_body_operand_into_block(engine, variant_body, span);
-            // A unit-valued else arm (the `None` case) contributes no block.
-            let else_block = if else_body
-                .as_value()
-                .is_some_and(|v| matches!(engine.body.values.kind(v), ValueKind::Unit))
-            {
-                None
-            } else {
-                Some(arm_body_operand_into_block(engine, else_body, span))
-            };
-            (then_block, else_block)
+            let bodies: Vec<Operand> = arms.iter().map(|arm| arm.body).collect();
+            let result_type = engine.body.exprs[match_expr].type_id;
+            let arms = bodies
+                .into_iter()
+                .map(|arm_body| {
+                    // A unit-valued arm whose value nothing reads (the `None`
+                    // case) contributes no block.
+                    let unit = arm_body
+                        .as_value()
+                        .is_some_and(|v| matches!(engine.body.values.kind(v), ValueKind::Unit));
+                    (yields || !unit).then(|| arm_body_operand_into_block(engine, arm_body, span))
+                })
+                .collect();
+            (arms, result_type)
         }
         _ => unreachable!(),
     };
 
     let value = bind_value(engine, info.value);
     // The fused block encloses the labeled block's body and the arms cloned into it.
-    let mut enclosed = vec![NodeRef::Block(lb_block), NodeRef::Block(then_block)];
-    enclosed.extend(else_block.map(NodeRef::Block));
+    let mut enclosed = vec![NodeRef::Block(lb_block)];
+    enclosed.extend(arms.iter().flatten().map(|b| NodeRef::Block(*b)));
     let fused_label = fresh_label(engine.body, fused_block_label(&info.label), &enclosed);
     let fusion = Fusion {
         fused_label: &fused_label,
         temp_local: info.temp_local,
-        then_block,
-        else_block,
+        arms,
+        yields,
         span,
         value,
     };
@@ -1260,14 +1292,28 @@ fn perform_fusion(
     // taking its list moves the stmts rather than sharing them.
     let fused_stmts = std::mem::take(&mut engine.body.blocks[lb_block].stmts);
     let fused_body = engine.alloc_block(fused_stmts, span);
-    let fused_stmt = engine.alloc_stmt(
-        StmtKind::LabeledBlock {
-            label: fused_label,
-            block: fused_body,
-            role,
-        },
-        span,
-    );
+    let fused_stmt = if yields {
+        let fused = engine.alloc_expr(
+            ExprKind::LabeledBlock {
+                label: fused_label,
+                block: fused_body,
+                result_type,
+                role,
+            },
+            result_type,
+            span,
+        );
+        engine.alloc_stmt(StmtKind::Expr(Operand::Expr(fused)), span)
+    } else {
+        engine.alloc_stmt(
+            StmtKind::LabeledBlock {
+                label: fused_label,
+                block: fused_body,
+                role,
+            },
+            span,
+        )
+    };
 
     // Replace the (let, if/match) pair with the single fused LabeledBlock stmt.
     let mut kept = Vec::with_capacity(stmts.len() - 1);
@@ -1296,8 +1342,13 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
                 payload_type,
             }
         }
-        FusedValue::Slots { tag_value, slots } => BoundValue::Slots {
-            tag_value,
+        FusedValue::Slots {
+            tags,
+            arm_reads,
+            slots,
+        } => BoundValue::Slots {
+            tags,
+            arm_reads,
             slots: slots
                 .into_iter()
                 .map(|slot| {
@@ -1361,14 +1412,26 @@ fn emit_untaken_payload(
     out.push(engine.alloc_stmt(StmtKind::Expr(payload), span));
 }
 
-/// `let $fused_slot_k = <element k>;` for each slot the arm reads. The
-/// elements it does not read are dropped, which the precondition allows only
-/// for pure ones.
-fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &mut Vec<StmtId>) {
-    let BoundValue::Slots { slots, .. } = &f.value else {
+/// `let $fused_slot_k = <element k>;` for each slot `arm` reads. The elements
+/// it does not read are dropped, which the precondition allows only for pure
+/// ones.
+fn emit_slot_lets(
+    engine: &mut Engine,
+    elements: &[Operand],
+    arm: usize,
+    f: &Fusion,
+    out: &mut Vec<StmtId>,
+) {
+    let BoundValue::Slots {
+        slots, arm_reads, ..
+    } = &f.value
+    else {
         unreachable!("slot break under a variant fusion")
     };
-    for slot in slots {
+    for slot in slots
+        .iter()
+        .filter(|slot| arm_reads[arm].contains(&slot.field_index))
+    {
         let value = elements[slot.field_index as usize];
         let stmt = engine.alloc_stmt(
             StmtKind::Let {
@@ -1389,34 +1452,35 @@ fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &m
 /// `break` out of the fused block.
 fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
     let value = exit_value(engine.body, s);
-    let first_arm = match f.value {
-        BoundValue::Variant { case_index, .. } => FirstArm::Case(case_index),
-        BoundValue::Slots { tag_value, .. } => FirstArm::Tag(tag_value),
-    };
-    let selected = first_arm.takes(engine.body, value);
+    let arm = f
+        .selector()
+        .select(engine.body, value)
+        .expect("guarded by the fusion preconditions");
     let mut out = Vec::new();
     match (&f.value, value.and_then(Operand::as_expr)) {
-        (BoundValue::Variant { .. }, Some(vc)) if selected => {
+        (BoundValue::Variant { .. }, Some(vc)) if arm == 0 => {
             emit_variant_payload_let(engine, vc, f, &mut out);
         }
         (BoundValue::Variant { .. }, _) => emit_untaken_payload(engine, value, f.span, &mut out),
-        (BoundValue::Slots { .. }, Some(tuple)) if selected => {
+        (BoundValue::Slots { .. }, Some(tuple)) => {
             let ExprKind::TupleLiteral { elements } = &engine.body.exprs[tuple].kind else {
                 unreachable!("guarded by check_lb_breaks_are_tagged_tuples")
             };
             let elements = elements.clone();
-            emit_slot_lets(engine, &elements, f, &mut out);
+            emit_slot_lets(engine, &elements, arm, f, &mut out);
         }
-        (BoundValue::Slots { .. }, _) => {}
+        (BoundValue::Slots { .. }, None) => unreachable!("guarded by the slot preconditions"),
     }
 
-    if selected {
-        let subst_then = engine.clone_block(f.then_block);
-        subst_temp_reads_in_block(engine, subst_then, f);
-        out.extend(take_stmts(engine, subst_then));
-    } else if let Some(eb) = f.else_block {
-        let cloned = engine.clone_block(eb);
-        out.extend(take_stmts(engine, cloned));
+    let mut tail = None;
+    if let Some(block) = f.arms[arm] {
+        let cloned = engine.clone_block(block);
+        subst_temp_reads_in_block(engine, cloned, f);
+        let mut stmts = take_stmts(engine, cloned);
+        if f.yields {
+            tail = split_tail(engine, &mut stmts);
+        }
+        out.extend(stmts);
     }
 
     // Emit `break fused_label;` unless the last emitted statement already
@@ -1425,13 +1489,41 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
         let brk = engine.alloc_stmt(
             StmtKind::Break {
                 label: Some(f.fused_label.to_owned()),
-                value: None,
+                value: tail,
             },
             f.span,
         );
         out.push(brk);
     }
     out
+}
+
+/// The value `stmts` end in, popped off them, looking through the blocks
+/// nothing breaks to so their statements join the arm's; `None` once they end
+/// in a jump.
+fn split_tail(engine: &mut Engine, stmts: &mut Vec<StmtId>) -> Option<Operand> {
+    loop {
+        let last = *stmts.last().expect("an arm block holds its body");
+        if engine.body.terminates(last) {
+            return None;
+        }
+        let StmtKind::Expr(op) = engine.body.stmts[last].kind else {
+            unreachable!("an arm block ends in its body")
+        };
+        let Some(inner) = op.as_expr().and_then(|e| engine.body.unbroken_block(e)) else {
+            stmts.pop();
+            return Some(op);
+        };
+        let ends_in_value = engine.body.blocks[inner].stmts.last().is_some_and(|s| {
+            engine.body.terminates(*s) || matches!(engine.body.stmts[*s].kind, StmtKind::Expr(_))
+        });
+        if !ends_in_value {
+            stmts.pop();
+            return Some(op);
+        }
+        stmts.pop();
+        stmts.extend(take_stmts(engine, inner));
+    }
 }
 
 /// Redirect the consumer's reads of the fused temp — `VariantPayload(temp,
