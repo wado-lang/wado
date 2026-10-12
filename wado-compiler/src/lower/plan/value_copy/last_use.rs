@@ -1527,7 +1527,9 @@ impl Analyzer<'_> {
         let mut conflict: IndexSet<u32> = IndexSet::default();
         for child in children {
             let child = strip_casts(child);
-            if let Some((base, top)) = as_materialize(child) {
+            if let Some((base, top)) =
+                as_materialize(child).or_else(|| self.accessor_materialize(child, &mut conflict))
+            {
                 mats.entry(base).or_default().push((top, child.span));
             } else {
                 self.scan_place_uses(child, &mut conflict);
@@ -1555,6 +1557,54 @@ impl Analyzer<'_> {
                 });
             }
         }
+    }
+
+    /// A call handing back a field of a local it only reads through `&`, as
+    /// `fn raw(&self) -> Array<T> { return self.repr; }` does: it materializes
+    /// that field as `local.repr` would. Its other arguments go to `conflict`.
+    fn accessor_materialize(
+        &self,
+        call: &TirExpr,
+        conflict: &mut IndexSet<u32>,
+    ) -> Option<(u32, Option<u32>)> {
+        let TirExprKind::Call { func, args, .. } = &call.kind else {
+            return None;
+        };
+        let Names::Place(place) = self.resolver.names(call) else {
+            return None;
+        };
+        if place.through_borrow || !place.field_addressable() {
+            return None;
+        }
+        let param = self.resolver.return_path(func)?.param;
+        let TirExprKind::Unary {
+            op: TirUnaryOp::Ref,
+            expr: lent,
+        } = &place::arg_at(func, args, param).kind
+        else {
+            return None;
+        };
+        let retained = self.retained_by(func, args.len(), call);
+        let mutates_receiver = param == 0
+            && args.split().0.is_some()
+            && self
+                .mut_receiver_methods
+                .contains(&func.module_source, &func.name);
+        if clean_root(lent) != Some(place.root)
+            || retained.keeps(u32::try_from(param).unwrap())
+            || mutates_receiver
+        {
+            return None;
+        }
+        for (pos, a) in args.iter().enumerate() {
+            if pos != param {
+                self.scan_call_arg_place_use(&a.expr, Some(&retained), pos, conflict);
+            }
+        }
+        Some((
+            place.root,
+            place.selectors.first().and_then(|s| s.field_index()),
+        ))
     }
 
     /// Mark `conflict` for any use of an aggregate root that mutates or moves its
