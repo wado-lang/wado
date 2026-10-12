@@ -775,7 +775,11 @@ fn emit_forward(
     let several = graph.outputs.len() > 1;
     let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
     forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
-    let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &graph.outputs[0].name) };
+    let passed_type = if several {
+        `${PASSED}<${BACKEND_PARAM}>`;
+    } else {
+        prepared_type(checked, &graph.outputs[0].name);
+    };
     pass.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(passed_type).add_effect("_");
 
     if several {
