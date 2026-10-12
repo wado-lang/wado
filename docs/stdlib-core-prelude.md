@@ -5444,7 +5444,6 @@ Copy the live `0..<len()` elements into a fresh fixed `Array<T>` of exactly
 indexes it: `Array`'s `[]` is bounds-checked by Wasm (traps on OOB)
 without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
 generated parser over a fixed token stream) avoid that per-access cost.
-Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
 
 #### `pub fn insert(&mut self, index: i32, value: T)`
 
