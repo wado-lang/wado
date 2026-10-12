@@ -81,9 +81,10 @@ buffer of its own, so none is overwritten before the encoder runs.
 A resource is move-only in Wado, so views cannot share a `GpuBuffer` by value.
 The backend owns its buffers and a view names one by its place. `keep`, which
 `Prepared` calls for every weight, writes a buffer that lives as long as the
-backend. Every other buffer belongs to the pass, and `begin`, which `forward`
-calls first, releases those of the pass before: `forward` returns only what it
-downloaded, so nothing still names them.
+backend. Every other buffer belongs to the pass, and `begin`, which `pass`
+calls first, releases those of the pass before. A caller of `pass` reads its
+outputs before the next pass, and `forward` has downloaded them, so nothing
+still names those buffers.
 
 ### Fusion is chosen for dispatches
 

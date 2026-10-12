@@ -34,10 +34,11 @@ node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.js
 `--under NAME` keeps the samples whose stack passes through a function whose
 name contains NAME, so a timed phase reads apart from its setup.
 
-The sampler only sees guest code: time the host spends in a call (a GPU wait,
-a copy across the boundary) is charged to the guest frame that returns from
-it. A guest profile whose samples add up to the run's wall time says the time
-is in the guest, not in the host.
+The sampler only sees guest code. It samples at an epoch check, which only
+guest code reaches, so a host call (a GPU wait, a copy across the boundary)
+yields at most one sample, charged to the guest frame it returns to, however
+long it took. A guest profile whose samples times the interval add up to the
+run's wall time therefore says the time is in the guest, not in the host.
 
 The script reports self (leaf) and inclusive counts per function; names keep
 monomorphization detail, so each instantiation is separate. Loop a one-shot hot

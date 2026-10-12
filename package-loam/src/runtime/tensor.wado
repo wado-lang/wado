@@ -1794,9 +1794,9 @@ pub trait Backend with _ {
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
         return self.keep(&widen(t));
     }
-    /// The start of a forward pass. What the pass before computed is dead,
-    /// since `forward` returns only what it downloaded, so a backend may
-    /// release it.
+    /// The start of a forward pass. What the pass before computed is dead: a
+    /// caller of `pass` reads its outputs before the next pass, and `forward`
+    /// has downloaded them, so a backend may release it.
     fn begin(&mut self) {
     }
 

@@ -113,7 +113,10 @@ fn the_runs_own_outcome_comes_before_a_profile_it_could_not_write() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(!output.status.success(), "stderr: {stderr}");
     assert!(stderr.contains("WADO_PROFILE_MAX_SECS"), "stderr: {stderr}");
-    assert!(stderr.contains("No space left on device"), "stderr: {stderr}");
+    assert!(
+        stderr.contains("No space left on device"),
+        "stderr: {stderr}"
+    );
 }
 
 #[test]
