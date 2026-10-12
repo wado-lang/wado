@@ -2,7 +2,7 @@
 
 use std::fs::File;
 use std::io::BufWriter;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -26,7 +26,7 @@ use wgpu_core::id::AdapterId;
 use wgpu_core::instance::RequestAdapterOptions;
 use wgpu_types::{AdapterInfo, Backends, InstanceDescriptor, PowerPreference, RequestAdapterError};
 
-use crate::args::{AdapterSelector, Args, LogLevel, OptLevel};
+use crate::args::{AdapterSelector, Args, GuestProfile, LogLevel, OptLevel};
 
 /// The wgpu instance every `wasi:webgpu` call draws on, and the adapter
 /// `--gpu-adapter` hands every `request-adapter`.
@@ -180,7 +180,7 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
     let sampling = args
         .profile
         .as_ref()
-        .map(|profile| Sampling::start(&engine, &component, &mut store, profile.interval))
+        .map(|profile| Sampling::start(&engine, &component, &mut store, profile))
         .transpose()?;
     let ran = match Command::instantiate_async(&mut store, &component, &linker).await {
         Ok(command) => {
@@ -190,8 +190,8 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
         }
         Err(e) => Err(e),
     };
-    if let (Some(sampling), Some(profile)) = (sampling, &args.profile) {
-        sampling.finish(&profile.path)?;
+    if let Some(sampling) = sampling {
+        sampling.finish()?;
     }
     match ran?? {
         Ok(()) => Ok(()),
@@ -205,6 +205,7 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
 struct Sampling {
     profiler: Arc<Mutex<Option<GuestProfiler>>>,
     stop: Arc<AtomicBool>,
+    path: PathBuf,
 }
 
 impl Sampling {
@@ -212,8 +213,9 @@ impl Sampling {
         engine: &Engine,
         component: &Component,
         store: &mut Store<Host>,
-        interval: Duration,
+        profile: &GuestProfile,
     ) -> Result<Self> {
+        let interval = profile.interval;
         let profiler = GuestProfiler::new_component(
             engine,
             "wado-run-webgpu",
@@ -254,10 +256,15 @@ impl Sampling {
                 ticking.increment_epoch();
             }
         });
-        Ok(Self { profiler, stop })
+        Ok(Self {
+            profiler,
+            stop,
+            path: profile.path.clone(),
+        })
     }
 
-    fn finish(self, path: &Path) -> Result<()> {
+    fn finish(self) -> Result<()> {
+        let path = &self.path;
         self.stop.store(true, Ordering::Relaxed);
         let profiler = self
             .profiler

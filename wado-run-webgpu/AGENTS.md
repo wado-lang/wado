@@ -37,8 +37,8 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 - `compile.rs` — the input as a component: a `.wasm` is taken as given, a
   `.wado` goes through `WADO compile` into a temporary directory.
 - `host.rs` — the wasmtime engine, the WASI P3 and `wasi:webgpu` linkers, the
-  guest profiler `--profile` starts, and the wgpu instance the latter draws on, whose adapters `--help` lists under
-  the indices `--gpu-adapter` takes. It replaces two of the host crate's
+  guest profiler `--profile` starts, and the wgpu instance `wasi:webgpu` draws
+  on, whose adapters `--help` lists under the indices `--gpu-adapter` takes. It replaces two of the host crate's
   functions. `request-adapter` has no hook for `--gpu-adapter` to pin an adapter
   or for `--log-level info` to name the one returned.
   `on-submitted-work-done` awaits a callback no device poll ever fires,

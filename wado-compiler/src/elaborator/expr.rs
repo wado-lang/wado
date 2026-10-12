@@ -803,9 +803,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Give the numeric-literal branches of a labeled block the type a sibling
     /// fixed, as [`Self::if_branch_types`] does for an `if`. A `break` with no
-    /// value yields `()`, which fixes no numeric type. `breaks` is what the
-    /// resolved breaks recorded, each under its value's id, so a retargeted
-    /// value updates every record of it. Returns the tail's type.
+    /// value yields `()`, which fixes no numeric type. A retargeted value
+    /// updates every record of it in `breaks`. Returns the tail's type.
     fn retarget_labeled_literals(
         &mut self,
         lb: &LabeledBlockExpr,
@@ -825,11 +824,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !tails.literals.is_empty();
         let fixed = values
             .iter()
-            .filter(|v| {
-                let ty = self.ast_expr_type(v).unwrap_or(TypeTable::UNKNOWN);
-                !self.is_numeric_literal_arm(v, ty)
+            .filter_map(|v| {
+                self.ast_expr_type(v)
+                    .filter(|&ty| !self.is_numeric_literal_arm(v, ty))
             })
-            .filter_map(|v| self.ast_expr_type(v))
             .chain((!tail_is_literal).then_some(tail_type))
             .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t));
         let Some(target) = fixed else {

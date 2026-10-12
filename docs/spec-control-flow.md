@@ -402,8 +402,8 @@ and through its trailing statement on the path that reaches the end. Both are
 branches, so every path must agree on one type. They unify against the type
 expected where the block sits, so a literal coerces to that rather than to its
 own default. Where nothing is expected, a numeric literal takes the type a
-sibling branch fixes, as an `if`'s branches do. Any expression position takes one, not only the right-hand side of
-a `let`.
+sibling branch fixes, as an `if`'s branches do. Any expression position takes
+one, not only the right-hand side of a `let`.
 
 <!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
 
