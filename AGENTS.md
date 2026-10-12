@@ -35,14 +35,25 @@ pull request's activity.
 ### The Cycle
 
 Write the change, commit it, invoke the `/distill` skill, then test. `/distill`
-is the last of the editing rather than a phase after it, so one full test run at
-the end answers for the change and for what `/distill` edited. A run on either
-side of it is the same full run spent twice.
+is the last of the editing rather than a phase after it, so one test run at the
+end answers for the change and for what `/distill` edited. A run on either side
+of it is the same run spent twice.
 
-The full run is `mise run test`, `mise run test-wado`, then
-`mise run update-stdlib-coverage-baseline`. CI fails on any difference from the
-baseline, a region a test now reaches included, so commit the update;
-`wado-compiler/AGENTS.md` says what it may change.
+Each commit runs the tests of what it changed:
+
+| The change touches                  | Run                     |
+| ----------------------------------- | ----------------------- |
+| The compiler (`wado-compiler/src/`) | `mise run test-e2e`     |
+| The stdlib (`wado-compiler/lib/`)   | `mise run test-stdlib`  |
+| A package (`package-*/`)            | `wado test <package>`   |
+| Any other Rust crate                | `cargo test -p <crate>` |
+
+`wado test` skips a file that passed while nothing it read has changed, so a
+rerun after a Wado edit tests only what the edit reached. A rebuilt `wado`
+binary reruns everything.
+
+The full run is `mise run test`, then `mise run test-wado`. It runs once,
+before the branch goes up for review, and CI runs it on every push.
 
 Having invoked `/distill` on this branch earlier is not a reason to skip the
 next one, and answering review findings calls for another. The scope is the
@@ -54,8 +65,10 @@ moment you wonder whether you should.
 
 ```sh
 mise run test            # check the spec examples, then test Rust crates
-mise run test-wado       # test Wado modules
+mise run test-e2e        # run the compiler's e2e fixtures
+mise run test-wado       # test the Wado packages, except the stdlib and Gale
 mise run test-stdlib O3  # test the stdlib at one optimization level (CI runs each)
+mise run test-gale-o2    # test Gale
 mise run check           # run the corpus checks that finish in seconds
 mise run format          # format Rust, Markdown, and Wado files
 
@@ -67,7 +80,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 - Make every edit with the editing tools, never a shell rewrite (`sed`, `awk`, a script), however bulk the change.
 - Run a long job (`mise run test`, `test-wado`, `update-golden-fixtures`) in the background, one per invocation. Run one heavy job at a time; two starve each other.
-- `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
+- `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running (`test-e2e` counts as `test`), naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there. Scratch files go in `scratchpad/`: it is git-ignored, so `git add -A` leaves them out, and per worktree, so concurrent sessions do not overwrite each other's. A fixed path under `/tmp` is shared by every session.
 - On an internal pull request, CI's `tidy` job regenerates the generated files, applies clippy and format, and pushes `chore: tidy` onto the branch. Pull before pushing.
 - A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
@@ -168,7 +181,7 @@ The rest (`init`, `update`, `fetch`, `build`, `publish`, `doc`, `wit`, `syntax`,
 Behavior that no `--help` will remind you of:
 
 - A program targets a Wasm _world_: `wasi:cli/command` (default), `wasi:http/service`, or the synthetic `test` world. `--world test` exports the entry module's `test` blocks and drops everything else; `serve` and `test` pick their world automatically.
-- The world selects the allocator: `bump` for CLI (never frees), `freelist` for HTTP (long-running), `debug` for the test world (never reuses freed memory, poisons it with `0xFF`). E2E tests rely on the test world picking `debug`.
+- The world selects the allocator: `freelist` for every world but the test world, which gets `debug` (never reuses freed memory, poisons it with `0xFF`, traps on a double free). E2E tests rely on the test world picking `debug`.
 - `wado run` reaches only the directories granted to it: the current one, or exactly the `--dir` grants once any is given. Paths open relative to a grant, so an absolute path never opens.
 - The Wado formatter skips `wado-compiler/tests/**` (`[format] exclude` in its `wado.toml`), so an e2e fixture keeps its hand-authored layout. A directory argument is walked from the package enclosing it, so naming a subdirectory honours the exclusion. Naming a file bypasses it, so never `wado format -w` a fixture file directly. When the syntax changes, add tests to `wado-compiler/tests/format.rs`.
 

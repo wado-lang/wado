@@ -1907,22 +1907,42 @@ impl TypeTable {
         &self.anon_structs[id.0 as usize].module
     }
 
-    /// The spelling an anonymous struct shows a reader —
-    /// `$anon_{x:i32,y:i32}`, or a template's text. The declaration namespace;
+    /// The spelling an anonymous struct shows a reader — `{ x: i32, y: i32 }`
+    /// as a literal writes it, or a template's text. The declaration namespace;
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
+        self.render_anon_struct(id, &|t| self.type_name(t))
+    }
+
+    /// [`Self::anon_struct_name`] with each field or hole type spelled by
+    /// `field_type`, so a qualified rendering stays qualified inside the shape.
+    fn render_anon_struct(
+        &self,
+        id: AnonStructId,
+        field_type: &dyn Fn(TypeId) -> String,
+    ) -> String {
         match &self.anon_structs[id.0 as usize].shape {
-            AnonShape::Template(shape) => self.template_shape_name(shape),
-            shape @ (AnonShape::Fields(_) | AnonShape::Synthetic(_)) => {
-                self.render_shape(shape, &|tt, ty| tt.type_name(ty))
+            AnonShape::Template(shape) => self.template_shape_name(shape, field_type),
+            AnonShape::Fields(fields) if fields.is_empty() => "{}".to_string(),
+            AnonShape::Fields(fields) => {
+                let parts: Vec<String> = fields
+                    .iter()
+                    .map(|(n, ty)| format!("{n}: {}", field_type(*ty)))
+                    .collect();
+                format!("{{ {} }}", parts.join(", "))
             }
+            AnonShape::Synthetic(name) => name.clone(),
         }
     }
 
     /// A template shape as its text, each hole spelled as its type and
     /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
-    fn template_shape_name(&self, shape: &TemplateShape) -> String {
+    fn template_shape_name(
+        &self,
+        shape: &TemplateShape,
+        hole_type: &dyn Fn(TypeId) -> String,
+    ) -> String {
         let mut name = String::from("`");
         let mut room = TEMPLATE_NAME_MAX_CHARS;
         let mut push = |text: &str| {
@@ -1948,7 +1968,7 @@ impl TypeTable {
                         .spec
                         .as_ref()
                         .map_or(String::new(), |s| format!(":{s}"));
-                    push(&format!("${{{}{spec}}}", self.type_name(hole.ty)))
+                    push(&format!("${{{}{spec}}}", hole_type(hole.ty)))
                 })
         });
         if !complete {
@@ -2056,6 +2076,21 @@ impl TypeTable {
         match head {
             StructDef::Decl(def) => self.def_name(def).to_string(),
             StructDef::Anon(id) => self.anon_struct_name(id),
+        }
+    }
+
+    /// What `Reflect::type_name()` answers for a struct: its declaration's name.
+    /// A struct literal's anonymous struct names no declaration, so it answers
+    /// `""`, and its `Inspect` writes `{ x: 1 }` as the literal does.
+    #[must_use]
+    pub fn struct_reflect_name(&self, head: StructDef) -> String {
+        match head {
+            StructDef::Anon(id)
+                if matches!(self.anon_structs[id.0 as usize].shape, AnonShape::Fields(_)) =>
+            {
+                String::new()
+            }
+            StructDef::Decl(_) | StructDef::Anon(_) => self.struct_head_decl_name(head),
         }
     }
 
@@ -5141,6 +5176,19 @@ impl TypeTable {
             .expect("a chain holds the type it starts at")
     }
 
+    /// The type whose declaration answers `Reflect::wire_name_policy` for `id`.
+    /// The policy names members, and a newtype inherits its members, so it
+    /// answers with the declaration it wraps. A newtype over a type with no
+    /// `Reflect` kind (a primitive) answers for itself.
+    pub fn wire_policy_subject(&self, id: TypeId) -> TypeId {
+        let head = self.reflect_structure_head(id);
+        if self.reflect_kind(head).is_some() {
+            head
+        } else {
+            id
+        }
+    }
+
     /// `id` and every type its newtype chain wraps, nearest first.
     fn newtype_chain(&self, id: TypeId) -> impl Iterator<Item = TypeId> {
         std::iter::successors(Some(id), |&current| match self.get_unerased(current) {
@@ -5744,6 +5792,10 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", type_name(*elem))
             }
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.render_anon_struct(*id, &type_name),
             ResolvedType::Struct { def, type_args } => {
                 // The declared head, not the rendered one: a message shows
                 // `Box<i32>`, never the `Box@<local>` a local declaration is
@@ -8615,7 +8667,7 @@ pub struct TirFunction {
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
 
-    /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
+    /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"freelist"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
     /// Categorizes the function for kind-specific optimizations. Most functions
@@ -9611,10 +9663,6 @@ pub struct TirNewtype {
     /// instantiation is its own. Its impls are synthesized over the declaration
     /// and instantiated per use, the way a generic struct's are.
     pub type_id: Option<TypeId>,
-    /// The declaration's own `#[wire(name_policy)]`. A newtype has no members
-    /// to rename, so this spells the *type's* name on the wire — what a schema
-    /// keys its `$defs` entry by.
-    pub wire_name_policy: Option<NamePolicy>,
     pub span: Span,
 }
 

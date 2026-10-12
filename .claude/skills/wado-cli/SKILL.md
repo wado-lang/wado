@@ -77,14 +77,12 @@ wado check --world test file.wado    # type-check against the test world
 
 ## Allocators
 
-Three allocators are available via `--allocator <mode>`:
+Two allocators are available via `--allocator <mode>`:
 
-- `bump` (default for CLI): bump pointer; never frees. Fast, minimal code.
-- `freelist` (default for the HTTP world): reclaims freed memory via a free list. For long-running processes.
-- `debug` (default for the test world): never reuses freed memory; poisons freed memory with `0xFF`. For use-after-free detection.
+- `freelist` (default for every world but the test world): reclaims freed memory via a free list.
+- `debug` (default for the test world): never reuses freed memory; poisons freed memory with `0xFF`; traps on a double free. For use-after-free detection.
 
 ```sh
-wado compile --allocator bump file.wado      # bump allocator
 wado compile --allocator freelist file.wado  # free-list allocator
 wado compile --allocator debug file.wado     # debug allocator
 ```
@@ -150,7 +148,12 @@ wado test file.wado                 # run tests in one file
 wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
 wado test --profile guest file.wado # guest profile over that file's tests
 wado test --coverage=lcov,json      # also report what ran, into build/coverage/
+wado test --no-cache                # also rerun the files that passed before
 ```
+
+A file that passed is skipped while nothing it read has changed: the summary
+names it on a `cached:` line. A file whose tests perform an effect beyond
+writing to stdout or stderr (a clock, randomness, a file) always runs.
 
 `--coverage` prints a per-file summary after the run. `coverage.json` names,
 for each region, the tests that ran it. `wado dump --coverage-plan file.wado`

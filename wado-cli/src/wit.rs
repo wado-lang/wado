@@ -248,12 +248,11 @@ async fn lib_snapshot_and_surface(
     let invocations = run_generators(&target.entry, &host, Some(project)).await?;
 
     let contract = wit_emit::wit_contract(None, Some(&target.interface_fq), None);
-    // Same `--lib` world + allocator as `wado compile --lib`, so the import set
-    // and subset match what that build embeds.
+    // Same `--lib` world as `wado compile --lib`, so the import set and subset
+    // match what that build embeds.
     let options = CompilerOptions {
         opt_level: wado_compiler::OptLevel::O2,
         lib_world: Some(target.interface_fq.clone()),
-        allocator: Some("freelist".to_string()),
         invocations,
         retain_wir: true,
         unused_diagnostics: false,

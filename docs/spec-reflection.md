@@ -105,8 +105,9 @@ let f: EnumCase<Point> = EnumCase {  // ERROR: field `discriminant` of struct
 
 ### Type Names
 
-`Reflect::<T>::type_name()` returns the name of the declaration. A generic type
-answers without its type arguments:
+`Reflect::<T>::type_name()` returns the name of the declaration, and `""` for an
+[anonymous struct](./spec-types.md#anonymous-structs), which names none. A
+generic type answers without its type arguments:
 
 <!-- {"fixture":"spec_reflection_type_name.wado"} -->
 
@@ -137,9 +138,11 @@ test "a newtype names its own link of the chain" {
 
 `Reflect::<T>::wire_name_policy()` returns the type's
 [`#[wire(name_policy)]`](./spec-attributes.md#wire) as a `CaseStyle`, and
-`CaseStyle::Identity` when the type declares none. A member's
-`wire_name_override()` returns its `#[wire(name)]` as written, or `None`.
-Reflection reports these facts and applies neither:
+`CaseStyle::Identity` when the type declares none. A newtype declares none: the
+policy names members, and a newtype has its base's, so it answers with the
+policy of the declaration it wraps. A member's `wire_name_override()` returns
+its `#[wire(name)]` as written, or `None`. Reflection reports these facts and
+applies neither:
 
 <!-- {"fixture":"spec_reflection_wire.wado"} -->
 

@@ -83,7 +83,7 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
-use crate::world_registry::{TEST_WORLD, WorldInfo};
+use crate::world_registry::TEST_WORLD;
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
@@ -148,6 +148,7 @@ pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
+use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
 
@@ -231,11 +232,21 @@ pub(crate) fn report_without_span<H: CompilerHost>(
     code: Code,
     message: String,
 ) {
+    report_at(logger, code, message, None);
+}
+
+/// Report a compilation error, at `span` where the pipeline knows one.
+fn report_at<H: CompilerHost>(
+    logger: &Logger<'_, H>,
+    code: Code,
+    message: String,
+    span: Option<Span>,
+) {
     let _ = logger.error(Diagnostic {
         severity: Severity::Error,
         code,
         message,
-        span: None,
+        span: span.map(|span| DiagnosticSpan::from_span(&span, None)),
     });
 }
 
@@ -259,6 +270,12 @@ pub(crate) fn bail_with<H: CompilerHost>(
     message: String,
 ) -> Bail {
     report_without_span(logger, code, message);
+    Bail
+}
+
+/// Report a synthesis failure, at the declaration it concerns where it names one.
+fn bail_with_synthesis<H: CompilerHost>(logger: &Logger<'_, H>, error: SynthesisError) -> Bail {
+    report_at(logger, Code::UnsupportedFeature, error.message, error.span);
     Bail
 }
 
@@ -377,9 +394,9 @@ pub struct CompilerOptions {
     /// Log level for compiler diagnostics.
     /// When `None`, uses the default (`Info`).
     pub log_level: Option<LogLevel>,
-    /// Which allocator to use (e.g., `"bump"`, `"debug"`).
+    /// Which allocator to use (e.g., `"freelist"`, `"debug"`).
     /// Matches `#[allocator("...")]` attributes in `core:allocator`.
-    /// When `None`, the compiler auto-selects: `"debug"` for test world, `"bump"` otherwise.
+    /// When `None`, the compiler auto-selects: `"debug"` for test world, `"freelist"` otherwise.
     pub allocator: Option<String>,
     /// Kiln invocation redirects consulted by the module loader. Callers
     /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
@@ -985,29 +1002,18 @@ fn resource_in_lib_sig<'a>(
 
 /// Select the allocator: tag the `#[allocator("<mode>")]` function matching the
 /// chosen mode as the `realloc` export and clear the export from the others.
-/// `None` picks the world's default (debug for test, freelist for HTTP/library,
-/// bump otherwise). Shared by the compile and dump pipelines.
+/// `None` picks the world's default (debug for test, freelist otherwise).
+/// Shared by the compile and dump pipelines.
 fn select_allocator<H: CompilerHost>(
     package: &mut Package,
     allocator: Option<String>,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
     let allocator_tag = allocator.unwrap_or_else(|| {
-        // HTTP service worlds default to `freelist` (long-running process,
-        // benefits from reclamation). Detection routes through
-        // `WorldInfo::has_http_handler_export` so the "is this the HTTP
-        // service world?" rule stays in one place.
-        let is_http_service = package
-            .world_registry
-            .get(&package.target_world)
-            .is_some_and(WorldInfo::has_http_handler_export);
         if package.is_test_world() {
             "debug".to_string()
-        } else if is_http_service || package.is_lib_world() {
-            // A library is consumed by a long-running host; reclaim memory.
-            "freelist".to_string()
         } else {
-            "bump".to_string()
+            "freelist".to_string()
         }
     });
     if let Some(alloc_module) = package.tir_modules.get_mut(&ModuleSource::allocator()) {
@@ -1760,8 +1766,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(package)
-            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
+        synthesis::synthesize(package).map_err(|error| bail_with_synthesis(logger, error))?
     };
 
     // === Phase 8c: Effect Dispatch Synthesis ===
@@ -2259,7 +2264,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let package = {
                 let _span = logger.span("synthesis");
                 synthesis::synthesize(package)
-                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
+                    .map_err(|error| bail_with_synthesis(&logger, error))?
             };
 
             // Effect dispatch synthesis (lowers WithHandler / Resume).

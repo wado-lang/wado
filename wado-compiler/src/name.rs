@@ -3605,7 +3605,7 @@ impl FqTypeName {
         if let TypeHead::Function { effects, .. } = &mut out.head {
             *effects = row(effects);
         }
-        out.reference = self.reference.clone();
+        out.reference.clone_from(&self.reference);
         out
     }
 

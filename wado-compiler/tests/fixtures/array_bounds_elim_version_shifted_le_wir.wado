@@ -1,0 +1,26 @@
+// Loop-versioned BCE over a shifted check under a `<=` guard: `i <= h` reads
+// `xs[i + 1]`, so the last index is `h + 1` and the residual must compare
+// strictly, `h < n - 1`. Here `h` is the last value it admits.
+
+use { println, Stdout } from "core:cli";
+
+fn shift_left(xs: &mut List<i32>, h: i32) {
+    for let mut i = 0; i <= h; i += 1 {
+        xs[i] = xs[i + 1];
+    }
+}
+
+export fn run() with Stdout {
+    let mut xs: List<i32> = builtin::black_box([1, 2, 3, 4, 5]);
+    shift_left(&mut xs, builtin::black_box(3));
+    println(`${xs:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[2, 3, 4, 5, 5]\n",
+    "wir_scope": ".wado/run",
+    "wir_expect:O2": [
+        "(h < ($licm_used_{} - 1))"
+    ]
+}

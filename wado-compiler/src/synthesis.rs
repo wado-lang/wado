@@ -20,6 +20,23 @@ use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir;
 use crate::tir::{ResolvedType, TypeTable};
+use crate::token::Span;
+
+/// A synthesis failure, at the declaration it concerns where one is known.
+#[derive(Debug)]
+pub struct SynthesisError {
+    pub message: String,
+    pub span: Option<Span>,
+}
+
+impl From<String> for SynthesisError {
+    fn from(message: String) -> Self {
+        Self {
+            message,
+            span: None,
+        }
+    }
+}
 
 /// The five reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
 /// the declarations themselves, not by demand, so it runs exactly once: a
@@ -41,7 +58,7 @@ fn synthesize_reflect_metadata(project: &mut Package) {
 /// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
 /// 3. Template expansion — expands `TemplateString` nodes into trait method calls
 /// 4. CM bindings — generates Component Model boundary adapters
-pub fn synthesize(project: Package) -> Result<Package, String> {
+pub fn synthesize(project: Package) -> Result<Package, SynthesisError> {
     let mut project = project;
 
     // Reflection metadata first: an auto-derived body dispatches through the

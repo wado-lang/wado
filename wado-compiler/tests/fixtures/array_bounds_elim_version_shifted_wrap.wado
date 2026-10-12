@@ -1,0 +1,26 @@
+// Loop-versioned BCE over a shifted check, where the shift is the type's
+// maximum and `ob + c` wraps negative at `c = 1`. The residual must refuse the
+// fast arm, so the checked loop panics on the first index, `i32::MAX`, which
+// is not under the length.
+
+use { Stdout } from "core:cli";
+
+fn bump(out: &mut List<i32>, ob: i32, n: i32) {
+    for let mut c = 0; c < n; c += 1 {
+        out[ob + c] += 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut out = List::<i32>::filled(8, 0);
+    bump(&mut out, builtin::black_box(2147483647), builtin::black_box(2));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_value",
+        "index: 2147483647"
+    ],
+    "trapped": true
+}

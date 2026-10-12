@@ -148,6 +148,9 @@ impl CompilerHost for FilesystemCompilerHost {
     fn serves_core(&self) -> bool {
         is_in_dev_stdlib_core(&self.base_path)
     }
+
+    /// The language service recompiles on every edit and caches no outcome.
+    fn stdlib_module_read(&self, _import_path: &str) {}
 }
 
 /// Whether `dir` lies in the `core` tree of the stdlib this dev build reads,

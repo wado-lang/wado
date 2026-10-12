@@ -1,0 +1,26 @@
+// Loop-versioned BCE over a check shifted by a negative local. Every index the
+// loop writes stays under the length, so only the residual's `ob >= 0` refuses
+// the fast arm, whose bare `array.set` would trap with no message. The checked
+// loop panics on the first index, -1, with the standard message.
+
+use { Stdout } from "core:cli";
+
+fn fill(out: &mut List<i32>, ob: i32, n: i32) {
+    for let mut c = 0; c < n; c += 1 {
+        out[ob + c] = 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut out = List::<i32>::filled(8, 0);
+    fill(&mut out, builtin::black_box(-1), builtin::black_box(3));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_assign",
+        "index: -1"
+    ],
+    "trapped": true
+}

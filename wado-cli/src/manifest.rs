@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
 use wado_lsp::host::discovery::{absolutize, governing_workspace, normalize_path};
-use wado_manifest::{Manifest, ManifestError};
+use wado_manifest::{DependencySource, Manifest, ManifestError};
 
 use crate::args::CliExit;
 
@@ -60,6 +60,25 @@ pub(crate) fn package_root(start_dir: &Path) -> Option<PathBuf> {
         }
         dir = parent_dir(&dir)?;
     }
+}
+
+/// The files besides sources that decide how `project` resolves its imports:
+/// its own manifest and lock, the manifest of the workspace governing it, and
+/// each path dependency's manifest, which names that dependency's entry.
+pub(crate) fn resolution_inputs(project: &ProjectManifest) -> Vec<PathBuf> {
+    let mut files = vec![
+        project.root.join(MANIFEST_FILENAME),
+        project.root.join("wado.lock"),
+    ];
+    if let Ok(Some(workspace)) = governing_workspace_root_dir(&project.root) {
+        files.push(workspace.join(MANIFEST_FILENAME));
+    }
+    for dependency in project.manifest.dependencies.values() {
+        if let DependencySource::Path { path, .. } = &dependency.source {
+            files.push(project.root.join(path).join(MANIFEST_FILENAME));
+        }
+    }
+    files
 }
 
 /// The `wado.toml` in `dir` itself, parsed: `None` when `dir` has none, an

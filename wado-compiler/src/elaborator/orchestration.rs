@@ -858,7 +858,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     span: flags_decl.name_span,
                                 },
                             )?;
-                            continue;
                         }
                         let def = resolutions.defs().def_at(flags_decl.id);
                         data.declare_flags(&type_table, def, module_source.clone(), flags_decl);

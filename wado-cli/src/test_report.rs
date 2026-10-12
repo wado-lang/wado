@@ -26,6 +26,7 @@ use crate::test::{
     self, CompileFailure, LoadFailure, PackageRun, PackageTotals, TestOutcome, TestResult,
     TodoCompileError,
 };
+use crate::test_cache::Tally;
 
 /// How often the heartbeat reporter re-prints progress while
 /// otherwise quiet. A failure/resolved-TODO notice resets this window
@@ -106,6 +107,9 @@ pub(crate) trait TestReporter: Send + Sync {
     fn on_compile(&self, path: &str, event: CompileEvent, duration: Duration);
     fn on_load(&self, path: &str, event: LoadEvent, duration: Duration);
     fn on_test_result(&self, result: &TestResult);
+    /// `path` went as `tally` says before, and nothing it read has changed, so
+    /// it neither compiles nor runs.
+    fn on_cached(&self, path: &str, tally: Tally);
     fn on_package_done(&self, args: PackageDoneArgs);
     fn on_run_done(&self, grand: &PackageTotals, multi_pkg: bool, wall: Duration);
     /// The `--coverage` summary, after the run is done.
@@ -175,6 +179,10 @@ impl TestReporter for VerboseReporter {
     fn on_test_result(&self, _result: &TestResult) {
         // Verbose prints test results in one batch per package, in
         // `on_package_done` — see the module doc for why.
+    }
+
+    fn on_cached(&self, path: &str, tally: Tally) {
+        println!("[{}] Cached {path} ({})", self.elapsed(), tally.describe());
     }
 
     fn on_package_done(&self, args: PackageDoneArgs) {
@@ -463,6 +471,18 @@ impl TestReporter for HeartbeatReporter {
             }
         }
         self.finish_file_if_done(&result.file_path);
+    }
+
+    /// A cached file is no part of `total_files`, which counts the work the
+    /// estimate is made of.
+    fn on_cached(&self, _path: &str, tally: Tally) {
+        let state = &self.state;
+        state
+            .tests_seen
+            .fetch_add(tally.passed + tally.todo_pending, Ordering::Relaxed);
+        state
+            .todo_pending
+            .fetch_add(tally.todo_pending, Ordering::Relaxed);
     }
 
     fn on_package_done(&self, _args: PackageDoneArgs) {
@@ -787,6 +807,11 @@ impl TestReporter for TapReporter {
             *line = format!("    {line}");
         }
         self.doc().record_result(&result.file_path, failed, lines);
+    }
+
+    fn on_cached(&self, path: &str, tally: Tally) {
+        self.doc()
+            .register_standalone(format!("ok - {path} # SKIP cached: {}", tally.describe()));
     }
 
     fn on_package_done(&self, _args: PackageDoneArgs) {

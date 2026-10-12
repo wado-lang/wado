@@ -91,11 +91,9 @@ An export whose result fits in a core value is unaffected: its component is
 unchanged, and no code size is spent where nothing was allocated. An export
 returning indirectly pays one extra core function and one call per invocation.
 
-Under `bump` the emitted frees are no-ops, since that allocator never reclaims, so
-a `--lib --allocator bump` build pays the call cost for no benefit. Making the
-option conditional on the allocator was rejected: `canon lift` states the
-component's contract with its host, and that contract should not depend on an
-allocation strategy.
+The option is emitted under every allocator. Making it conditional on the
+allocator was rejected: `canon lift` states the component's contract with its
+host, and that contract should not depend on an allocation strategy.
 
 The lift path keeps its own, different discipline — each lift site frees what it
 just read. Reclamation here is standalone, freeing a value nothing has consumed,

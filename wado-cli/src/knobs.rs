@@ -130,7 +130,7 @@ impl CompileKnobOpt {
                 long: Some("allocator"),
                 short: None,
                 value: Some("<mode>"),
-                desc: "Allocator mode (default depends on target world):\nbump (CLI), freelist (HTTP), debug (test; no-reuse + 0xFF poison)",
+                desc: "Allocator mode (default depends on target world):\nfreelist, debug (test; no-reuse + 0xFF poison)",
             },
             // Repeatable; prefix a flag with `no-` to disable it. The compiler
             // validates the names.
@@ -144,7 +144,7 @@ impl CompileKnobOpt {
                 long: Some("no-cache"),
                 short: None,
                 value: None,
-                desc: "Bypass all build caches: re-run Kiln generators on every invocation,\nrecompile generator wasm components from source, and re-evaluate\nevery `core:eval` program. The cache refreshes automatically, so this is\nnormally unnecessary — it exists for benchmarking and cache-bug debugging.",
+                desc: "Bypass all build caches: re-run Kiln generators on every invocation,\nrecompile generator wasm components from source, re-evaluate\nevery `core:eval` program, and rerun every test file that passed before.\nThe cache refreshes automatically, so this is normally unnecessary —\nit exists for benchmarking and cache-bug debugging.",
             },
             Self::NoValidate => OptSpec {
                 long: Some("no-validate"),
@@ -158,9 +158,8 @@ impl CompileKnobOpt {
 
 /// Every knob a compiling subcommand parses and forwards to the compile core.
 ///
-/// `allocator` stays `Option` so each subcommand keeps its own default
-/// (`run` → bump, `serve` → freelist, `test` → debug) while `--allocator`
-/// overrides.
+/// `allocator` stays `Option` so the target world picks the default
+/// (`test` → debug, every other → freelist) while `--allocator` overrides.
 #[derive(Clone, Debug)]
 pub struct CompileKnobs {
     pub opt_level: OptLevel,
@@ -168,8 +167,9 @@ pub struct CompileKnobs {
     pub skip_validation: bool,
     /// Ignore all build caches: every Kiln invocation re-runs its generator,
     /// the generator wasm itself is recompiled from source instead of reused
-    /// from `build/kiln/generators/`, and every `core:eval` call evaluates
-    /// instead of reading `build/eval/`. Cache *writes* still happen, so a
+    /// from `build/kiln/generators/`, every `core:eval` call evaluates
+    /// instead of reading `build/eval/`, and `wado test` reruns the files
+    /// `build/test/` holds as passed. Cache *writes* still happen, so a
     /// follow-up run without `--no-cache` benefits from a warm cache again.
     pub no_cache: bool,
     pub opt: wado_compiler::OptOverrides,
