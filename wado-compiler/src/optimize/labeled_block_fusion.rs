@@ -505,8 +505,10 @@ impl ArmSelector<'_> {
         let e = value.and_then(Operand::as_expr);
         match self {
             Self::Case(case) => {
-                let takes = e.is_some_and(|e| matches!(&body.exprs[e].kind,
-                    ExprKind::VariantConstruct { case_index, .. } if *case_index == case));
+                let takes = e.is_some_and(|e| {
+                    matches!(&body.exprs[e].kind,
+                    ExprKind::VariantConstruct { case_index, .. } if *case_index == case)
+                });
                 Some(usize::from(!takes))
             }
             Self::Tags(tags) => {
@@ -1478,7 +1480,11 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
         subst_temp_reads_in_block(engine, cloned, f);
         let mut stmts = take_stmts(engine, cloned);
         if f.yields {
-            tail = split_tail(engine, &mut stmts);
+            let Some(StmtKind::Expr(value)) = stmts.pop().map(|s| &engine.body.stmts[s].kind)
+            else {
+                unreachable!("an arm block holds its body as its one statement")
+            };
+            tail = split_tail(engine, *value, &mut stmts);
         }
         out.extend(stmts);
     }
@@ -1498,31 +1504,28 @@ fn fuse_exit(engine: &mut Engine, s: StmtId, f: &Fusion) -> Vec<StmtId> {
     out
 }
 
-/// The value `stmts` end in, popped off them, looking through the blocks
-/// nothing breaks to so their statements join the arm's; `None` once they end
-/// in a jump.
-fn split_tail(engine: &mut Engine, stmts: &mut Vec<StmtId>) -> Option<Operand> {
+/// The value an arm's `value` comes to, its statements appended to `stmts`,
+/// looking through the blocks nothing breaks to; `None` once they end in a
+/// jump. A block ending in anything else is its own value.
+fn split_tail(engine: &mut Engine, mut value: Operand, stmts: &mut Vec<StmtId>) -> Option<Operand> {
     loop {
-        let last = *stmts.last().expect("an arm block holds its body");
+        let Some(inner) = value.as_expr().and_then(|e| engine.body.unbroken_block(e)) else {
+            return Some(value);
+        };
+        let Some(&last) = engine.body.blocks[inner].stmts.last() else {
+            return Some(value);
+        };
         if engine.body.terminates(last) {
+            stmts.extend(take_stmts(engine, inner));
             return None;
         }
-        let StmtKind::Expr(op) = engine.body.stmts[last].kind else {
-            unreachable!("an arm block ends in its body")
+        let StmtKind::Expr(next) = engine.body.stmts[last].kind else {
+            return Some(value);
         };
-        let Some(inner) = op.as_expr().and_then(|e| engine.body.unbroken_block(e)) else {
-            stmts.pop();
-            return Some(op);
-        };
-        let ends_in_value = engine.body.blocks[inner].stmts.last().is_some_and(|s| {
-            engine.body.terminates(*s) || matches!(engine.body.stmts[*s].kind, StmtKind::Expr(_))
-        });
-        if !ends_in_value {
-            stmts.pop();
-            return Some(op);
-        }
-        stmts.pop();
-        stmts.extend(take_stmts(engine, inner));
+        let mut inner_stmts = take_stmts(engine, inner);
+        inner_stmts.pop();
+        stmts.extend(inner_stmts);
+        value = next;
     }
 }
 
@@ -1796,9 +1799,7 @@ fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<Thread
     let result_type = body.exprs[id].type_id;
     let unit_result = result_type == TypeTable::UNIT;
 
-    // Validate every `break L:` exit and record which arms it selects.
-    let mut selected = vec![false; arm_infos.len()];
-    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, locals, &mut selected)?;
+    let exits = validate_exits_in_block(body, lb_block, &label, &arm_infos, locals)?;
 
     let escapes: Vec<Escapes> = arm_infos
         .iter()
@@ -1810,19 +1811,6 @@ fn plan_threading(body: &Body, id: ExprId, locals: &[NirLocal]) -> Option<Thread
     {
         return None;
     }
-    // A non-unit match needs a tail value from every threaded arm.
-    if !unit_result
-        && arm_infos.iter().zip(&selected).any(|(arm, used)| {
-            *used
-                && arm
-                    .body
-                    .as_expr()
-                    .is_some_and(|e| !arm_body_decomposable(body, e))
-        })
-    {
-        return None;
-    }
-
     Some(ThreadPlan {
         scrut,
         label,
@@ -1879,27 +1867,14 @@ fn selected_arm(body: &Body, exit: StmtId, arms: &[ArmInfo]) -> usize {
     select_arm(arms, *case_index).expect("guarded by plan_threading")
 }
 
-/// Whether a non-unit arm body splits into `stmts + tail value`: a plain
-/// operand is its own tail; a block must end in an `Expr` or a terminator.
-fn arm_body_decomposable(body: &Body, e: ExprId) -> bool {
-    let Some(b) = body.unbroken_block(e) else {
-        return true;
-    };
-    let Some(last) = body.blocks[b].stmts.last() else {
-        return false;
-    };
-    matches!(body.stmts[*last].kind, StmtKind::Expr(_)) || body.terminates(*last)
-}
-
 /// [`ExitSink`] for threading: resolves each `break L:` exit to the arm it
-/// selects (marking `selected`) and checks the arm's payload binding type.
-/// Descends `Match` / `Switch` arms (the threading transform rewrites them) and
-/// rejects any hidden break.
+/// selects and checks the arm's payload binding type. Descends `Match` /
+/// `Switch` arms (the threading transform rewrites them) and rejects any hidden
+/// break.
 struct ExitValidator<'a> {
     label: &'a str,
     arms: &'a [ArmInfo],
     locals: &'a [NirLocal],
-    selected: &'a mut [bool],
 }
 
 impl ExitSink for ExitValidator<'_> {
@@ -1938,7 +1913,6 @@ impl ExitSink for ExitValidator<'_> {
                 return false;
             }
         }
-        self.selected[idx] = true;
         true
     }
     fn descend_branches(&self) -> bool {
@@ -1946,22 +1920,20 @@ impl ExitSink for ExitValidator<'_> {
     }
 }
 
-/// Validate every `break L:` exit and mark which arm each selects, mirroring
-/// the value-discarding [`check_lb_breaks_and_get_payload`] but resolving to
-/// arms rather than a single payload type.
+/// Validate every `break L:` exit, mirroring the value-discarding
+/// [`check_lb_breaks_and_get_payload`] but resolving to arms rather than a
+/// single payload type.
 fn validate_exits_in_block(
     body: &Body,
     block: BlockId,
     label: &str,
     arms: &[ArmInfo],
     locals: &[NirLocal],
-    selected: &mut [bool],
 ) -> Option<Vec<Exit>> {
     let mut sink = ExitValidator {
         label,
         arms,
         locals,
-        selected,
     };
     walk_exits(body, block, label, &mut sink)
 }
@@ -2048,30 +2020,11 @@ fn thread_exit(
 
     // Clone the arm body and split it into leading statements plus the tail
     // value the fused break carries.
-    let (body_stmts, tail): (Vec<StmtId>, Option<Operand>) = match arm_body {
-        Operand::Value(v) => (vec![], Some(Operand::Value(v))),
-        Operand::Expr(e) => {
-            if let Some(b) = engine.body.unbroken_block(e) {
-                let cloned = engine.clone_block(b);
-                let mut stmts = take_stmts(engine, cloned);
-                let tail = match stmts.last().map(|s| &engine.body.stmts[*s].kind) {
-                    Some(StmtKind::Expr(op)) => {
-                        let op = *op;
-                        stmts.pop();
-                        Some(op)
-                    }
-                    Some(StmtKind::Break { .. } | StmtKind::Return { .. } | StmtKind::Continue) => {
-                        None
-                    }
-                    _ => Some(engine.const_operand(ValueKind::Unit, TypeTable::UNIT)),
-                };
-                (stmts, tail)
-            } else {
-                (vec![], Some(Operand::Expr(engine.clone_expr(e))))
-            }
-        }
+    let cloned = match arm_body {
+        Operand::Value(v) => Operand::Value(v),
+        Operand::Expr(e) => Operand::Expr(engine.clone_expr(e)),
     };
-    out.extend(body_stmts);
+    let tail = split_tail(engine, cloned, &mut out);
 
     match tail {
         Some(t) if !plan.unit_result => {
