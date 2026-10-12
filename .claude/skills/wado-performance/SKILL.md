@@ -27,8 +27,17 @@ exception. §2 and §4 say where the fix goes instead.
 ```sh
 wado run --profile guest,profile.json,1 prog.wado   # interval 1 short runs, 0 exhaustive
 wado test --profile guest,profile.json,1 file.wado  # same, over one file's test blocks
-node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.json [--top N]
+wado run-webgpu --profile guest,profile.json,1 prog.wado  # same, on a wasi:webgpu host
+node .claude/skills/wado-performance/scripts/analyze_guest_profile.ts profile.json [--top N] [--under NAME]
 ```
+
+`--under NAME` keeps the samples whose stack passes through a function whose
+name contains NAME, so a timed phase reads apart from its setup.
+
+The sampler only sees guest code: time the host spends in a call (a GPU wait,
+a copy across the boundary) is charged to the guest frame that returns from
+it. A guest profile whose samples add up to the run's wall time says the time
+is in the guest, not in the host.
 
 The script reports self (leaf) and inclusive counts per function; names keep
 monomorphization detail, so each instantiation is separate. Loop a one-shot hot

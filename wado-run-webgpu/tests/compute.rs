@@ -64,6 +64,20 @@ fn a_compute_shader_writes_what_the_guest_reads_back() {
     assert!(!stderr.contains("request-adapter"), "stderr: {stderr}");
 }
 
+#[test]
+fn a_guest_profile_is_written_where_the_option_names() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("profile.json");
+    let output = run(&[
+        &format!("--profile=guest,{},1", path.display()),
+        fixture("compute_double.wado").to_str().unwrap(),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    let profile = std::fs::read_to_string(&path).expect("the profile was written");
+    assert!(profile.contains("\"threads\""), "{profile}");
+}
+
 /// How far Loam's WebGPU backend may sit from its CPU one: a product summed
 /// in another order, and `erf` as WGSL approximates it.
 const LOAM_TOLERANCE: f32 = 1e-4;

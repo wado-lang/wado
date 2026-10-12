@@ -32,12 +32,12 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 ## Module Map
 
 - `args.rs` — the command line: `-O<level>`, `--dir`, `--no-dir`,
-  `--gpu-adapter`, `--log-level`, and the program's own arguments after the
-  input file.
+  `--gpu-adapter`, `--log-level`, `--profile guest[,path[,interval_ms]]`, and
+  the program's own arguments after the input file.
 - `compile.rs` — the input as a component: a `.wasm` is taken as given, a
   `.wado` goes through `WADO compile` into a temporary directory.
-- `host.rs` — the wasmtime engine, the WASI P3 and `wasi:webgpu` linkers, and
-  the wgpu instance the latter draws on, whose adapters `--help` lists under
+- `host.rs` — the wasmtime engine, the WASI P3 and `wasi:webgpu` linkers, the
+  guest profiler `--profile` starts, and the wgpu instance the latter draws on, whose adapters `--help` lists under
   the indices `--gpu-adapter` takes. It replaces two of the host crate's
   functions. `request-adapter` has no hook for `--gpu-adapter` to pin an adapter
   or for `--log-level info` to name the one returned.

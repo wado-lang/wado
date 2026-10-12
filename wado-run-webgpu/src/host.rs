@@ -203,7 +203,12 @@ struct Sampling {
 }
 
 impl Sampling {
-    fn start(engine: &Engine, component: &Component, store: &mut Store<Host>, interval: Duration) -> Result<Self> {
+    fn start(
+        engine: &Engine,
+        component: &Component,
+        store: &mut Store<Host>,
+        interval: Duration,
+    ) -> Result<Self> {
         let profiler = GuestProfiler::new_component(
             engine,
             "wado-run-webgpu",
