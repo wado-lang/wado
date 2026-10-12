@@ -40,12 +40,11 @@ The Wado compiler crate.
   is never a trade for speed. A conservatism is not caution but a defect:
   measure what it buys, and delete it when that is nothing.
 - `cargo check --all-targets` while iterating, or a type the crate changes
-  breaks the uncompiled unit tests where nothing looks. Run
-  `cargo test -p wado-compiler-tests --test e2e` for anything the language touches: it
-  covers O0 and O2 and leaves the rest to CI, whose `ignored` lines are that
-  split and not a gap, so never set `WADO_FULL_TEST` unless asked by name.
-  `mise run test` and `mise run test-wado` are the slowest runs there are: run
-  them at the end.
+  breaks the uncompiled unit tests where nothing looks. Run `mise run test-e2e`
+  for anything the language touches: it covers O0 and O2 and leaves the rest to
+  CI, whose `ignored` lines are that split and not a gap, so never set
+  `WADO_FULL_TEST` unless asked by name. `mise run test` and
+  `mise run test-wado` are the slowest runs there are: run them at the end.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
 
