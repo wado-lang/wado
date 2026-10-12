@@ -269,8 +269,9 @@ local `type Bag = List<T>;` inside `fn f<T>` is `List` of that call's `T`. A
 local item's own parameter of the same name shadows the outer one, as `Box<T>`
 does above.
 
-> Not yet implemented: a local `struct` naming an outer type parameter is
-> rejected as `unknown type`. A local newtype already works.
+> Not yet implemented: only a local newtype without parameters of its own sees
+> an outer type parameter. A local `struct` naming one is rejected as
+> `unknown type`, and a generic local newtype does not resolve it either.
 
 A function body may also declare `enum`, `variant` and `flags` items, and
 `impl`/`trait` blocks that give a local type methods.
