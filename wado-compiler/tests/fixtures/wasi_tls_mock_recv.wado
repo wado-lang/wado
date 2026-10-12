@@ -30,7 +30,7 @@ export fn run() with (Stdout, Connector, Error) {
         Err(e) => panic(`unexpected handshake failure: ${e.to_debug_string()}`),
     }
 
-    let received = tls_rx.read_to_end();
+    let received = tls_rx.read_to_end_bytes();
     tls_rx.drop();
 
     match String::try_from_utf8(received) {

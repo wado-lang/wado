@@ -116,12 +116,12 @@ test {
 /// that consumes randomness; its block lives in guest memory until consumed.
 pub struct BufferedRandom {
     pool_bytes: i32 = POOL_BYTES,
-    buf: List<u8> = [],
+    buf: ByteList = [],
     pos: i32 = 0,
 }
 
 impl Random for BufferedRandom {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> with Random {
+    fn get_random_bytes(&mut self, max_len: u64) -> ByteList with Random {
         if max_len > self.pool_bytes as u64 {
             resume Random::get_random_bytes(max_len);
         }
@@ -162,8 +162,8 @@ impl BufferedRandom {
         assert self.buf.len() > 0, "the installed Random returned no data";
     }
 
-    fn take(&mut self, n: i32) -> List<u8> {
-        let out = self.buf[self.pos..<self.pos + n].to_list();
+    fn take(&mut self, n: i32) -> ByteList {
+        let out = self.buf[self.pos..<self.pos + n].to_list() as ByteList;
         self.pos += n;
         return out;
     }

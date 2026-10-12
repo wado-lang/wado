@@ -281,6 +281,14 @@ pub fn cm_type_to_type_id(
         Type::Named(named) if named.name.as_str() == string_struct_name => {
             type_table.make_compiler_struct(CompilerItem::String)
         }
+        Type::Named(named)
+            if named.name.as_str()
+                == type_table
+                    .compiler_items()
+                    .newtype_name(CompilerItem::ByteList) =>
+        {
+            type_table.make_byte_list()
+        }
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
             "i16" => TypeTable::I16,

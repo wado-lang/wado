@@ -6,7 +6,7 @@ use { Random } from "wasi:random";
 struct Passthrough {}
 
 impl Random for Passthrough {
-    fn get_random_bytes(&self, len: u64) -> List<u8> {
+    fn get_random_bytes(&self, len: u64) -> ByteList {
         resume Random::get_random_bytes(len);
     }
     fn get_random_u64(&self) -> u64 {

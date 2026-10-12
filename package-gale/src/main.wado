@@ -307,7 +307,7 @@ fn absolute_path_hint<S: AsStrSlice>(path: S) -> String {
 /// EOF (truncated input).
 fn read_all(file: &Descriptor) -> Result<ByteList, ErrorCode> {
     let [read_stream, done] = file.read_via_stream(0 as Filesize);
-    let result = read_stream.read_to_end() as ByteList;
+    let result = read_stream.read_to_end_bytes();
     read_stream.drop();
     let read_result = done.read();
     done.drop();

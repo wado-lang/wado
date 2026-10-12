@@ -64,7 +64,7 @@ fn method_name(m: Method) -> String {
 fn read_body(request: Request) -> String {
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
-    let body = String::from_utf8_lossy(body_stream.read_to_end());
+    let body = String::from_utf8_lossy(body_stream.read_to_end_bytes());
     body_stream.drop();
     return body;
 }

@@ -86,9 +86,13 @@ test "String::from a char" {
     assert String::from('\n').len() == 1;
 }
 
-test "String::from_utf8_lossy accepts a newtype over List<u8>" {
+fn count_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> i32 with _ {
+    return bytes.into_iter().count();
+}
+
+test "an IntoIterator bound accepts a newtype over List<u8>" {
     // The monomorphizer once failed to resolve `I::Iter` when `I` is a newtype,
     // leaving an unresolved WIR Call and an invalid Wasm module.
     let bytes: MyBytes = [72, 101, 108, 108, 111] as List<u8> as MyBytes;
-    assert String::from_utf8_lossy(bytes) == "Hello";
+    assert count_bytes(bytes) == 5;
 }

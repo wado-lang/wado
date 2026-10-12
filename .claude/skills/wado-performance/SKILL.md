@@ -227,8 +227,9 @@ paid on a benchmark `fts` never touched.
   throwaway `String` and copies it in, per value; `buf.push_display(&v)` skips
   both. A run of adjacent `push` / `push_str` calls is fused into one capacity
   check by `nir/string_push`, so write the appends plainly and let it batch them.
-- **`internal_raw_data()` / returning `Array<T>` by value is a copy API** — for a
-  single read use `get_unchecked` / `set_byte_unchecked`.
+- **Returning `Array<T>` by value copies it while its source stays live** — for
+  one element, read with `get_unchecked` or write with
+  `internal_set_byte_unchecked`.
 - **An `assert` of a caller-guaranteed precondition is free; the same test as a
   guard is not.** `is_json_ws` in `core:json` needs `b < 64` (Wasm masks a shift
   count mod 64) and every call site short-circuits on `b > b' '` first. Writing

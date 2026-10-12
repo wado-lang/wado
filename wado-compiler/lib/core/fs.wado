@@ -170,10 +170,10 @@ pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens {
         },
     }
     let [stream, done] = file.read_via_stream(0 as Filesize);
-    let bytes = stream.read_to_end();
+    let bytes = stream.read_to_end_bytes();
     stream.drop();
     finish(path, done)?;
-    return Result::Ok(bytes as ByteList);
+    return Result::Ok(bytes);
 }
 
 /// The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.

@@ -1046,20 +1046,16 @@ impl String {
         return s;
     }
 
-    /// Build a `String` from an iterable of bytes, validating UTF-8.
-    ///
-    /// An iterator may read its bytes from outside the program, so no caller
-    /// can vouch for them: there is no marked form. Bytes the caller holds go
-    /// to `from_utf8`.
-    pub fn try_from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _ {
-        let collected: List<u8> = bytes.into_iter().collect();
-        String::validate_utf8(&(collected.as_slice() as ByteSlice))?;
-        return Result::Ok(String::adopt_validated(collected));
-    }
-
-    fn adopt_validated(bytes: List<u8>) -> String {
-        let used = bytes.len();
-        return String { repr: bytes.internal_raw_data() as ByteArray, used };
+    /// Copy bytes into a `String`, or report where they stop being valid UTF-8.
+    /// A sequence cut short at the end fails too, with `error_len() == None`.
+    pub fn try_from_utf8<S: AsByteSlice>(bytes: S) -> Result<String, Utf8Error> {
+        let slice = bytes.as_byte_slice();
+        let prefix = String::utf8_valid_prefix(&slice);
+        if prefix != slice.len() {
+            builtin::cold_path();
+            return Result::Err(String::utf8_error_at(&slice, prefix));
+        }
+        return Result::Ok(String::copy_validated(&slice));
     }
 
     /// Copy bytes that must be valid UTF-8 into a `String`.
@@ -1080,24 +1076,11 @@ impl String {
         };
     }
 
-    #[unavailable("write `unchecked String::from_utf8(bytes)`; an iterator goes through `try_from_utf8`")]
+    #[unavailable("write `unchecked String::from_utf8(bytes)`")]
     pub fn from_utf8_unchecked();
 
-    /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
-    /// sequence cut short at the end fails too, with `error_len() == None`.
-    pub fn try_from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error> {
-        String::validate_utf8(&bytes)?;
-        return Result::Ok(String::copy_validated(&bytes));
-    }
-
-    fn validate_utf8(bytes: &ByteSlice) -> Result<(), Utf8Error> {
-        let prefix = String::utf8_valid_prefix(bytes);
-        if prefix != bytes.len() {
-            builtin::cold_path();
-            return Result::Err(String::utf8_error_at(bytes, prefix));
-        }
-        return Result::Ok(());
-    }
+    #[unavailable("write `String::try_from_utf8(bytes)`, which takes any `AsByteSlice`")]
+    pub fn from_utf8_slice();
 
     /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and
     /// answer how many bytes that was. A trailing sequence cut short is left
@@ -1239,12 +1222,11 @@ impl String {
         return String::utf8_valid_prefix(&bytes) == bytes.len();
     }
 
-    /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
-    pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String with _ {
-        let collected: List<u8> = bytes.into_iter().collect();
-        let slice = collected.as_slice() as ByteSlice;
-        if String::validate_utf8(&slice) matches { Ok(_) } {
-            return String::adopt_validated(collected);
+    /// Copy bytes into a `String`, replacing invalid UTF-8 with U+FFFD.
+    pub fn from_utf8_lossy<S: AsByteSlice>(bytes: S) -> String {
+        let slice = bytes.as_byte_slice();
+        if String::is_valid_utf8(slice) {
+            return String::copy_validated(&slice);
         }
         builtin::cold_path();
         let len = slice.len();

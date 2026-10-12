@@ -2643,7 +2643,7 @@ fn read_header_string(input: &ByteList, pos: i32) -> [String, i32] {
         end += 1;
     }
     return [
-        String::from_utf8_lossy(input[pos..<end].to_list()),
+        String::from_utf8_lossy(input[pos..<end] as ByteSlice),
         i32::min(end + 1, input.len()),
     ];
 }

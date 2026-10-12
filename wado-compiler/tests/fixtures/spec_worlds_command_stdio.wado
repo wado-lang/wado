@@ -5,7 +5,7 @@ use { Stdin } from "wasi:cli";
 
 export fn run() with (Stdin, Stdout, Stderr) {
     let [input, _done] = Stdin::read_via_stream();
-    let bytes = input.read_to_end();
+    let bytes = input.read_to_end_bytes();
     input.drop();
     let text = String::from_utf8_lossy(bytes);
     assert text.lines().count() == 2;

@@ -263,7 +263,7 @@ impl WebGpuBackend {
         let per_write = WRITE_BYTES / 4;
         for let mut at = 0; at < count; at += per_write {
             let end = i32::min(at + per_write, count);
-            let mut bytes = List::<u8>::with_capacity((end - at) * 4);
+            let mut bytes = ByteList::with_capacity((end - at) * 4);
             for let i of at..<end {
                 let bits = word(i);
                 bytes.push(bits as u8);

@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
+use std::sync::LazyLock;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -640,6 +641,29 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
             Some(CmBoundary::Canonical { .. } | CmBoundary::WorldImport(_)) | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
+}
+
+/// The prelude's `type ByteList = List<u8>`, which a binding names for a WIT
+/// `list<u8>`. No CM interface declares it, so the registry carries its base.
+const BYTE_LIST: &str = "ByteList";
+
+static BYTE_LIST_BASE: LazyLock<Type> = LazyLock::new(|| {
+    Type::Generic(GenericType {
+        id: AstId::fresh(),
+        name: "List".to_string(),
+        args: vec![Type::Named(NamedType::new(
+            AstId::fresh(),
+            "u8".to_string(),
+            Span::default(),
+        ))],
+        span: Span::default(),
+    })
+});
+
+/// The base of a prelude newtype a binding names, which no CM interface
+/// declares.
+pub fn prelude_newtype_base(named: &NamedType) -> Option<&'static Type> {
+    (named.name == BYTE_LIST).then(|| &*BYTE_LIST_BASE)
 }
 
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
@@ -3255,8 +3279,9 @@ impl CmInterfaceRegistry {
     /// same-named newtype resolve to their own base — never a bare-name guess.
     /// A source-less reference is not a known newtype here.
     fn resolve_newtype_ref(&self, named: &NamedType) -> Option<&Type> {
-        let source = self.source_interface(named)?;
-        self.get_newtype_by_source(&source, &DeclName::new(&named.name))
+        self.source_interface(named)
+            .and_then(|source| self.get_newtype_by_source(&source, &DeclName::new(&named.name)))
+            .or_else(|| prelude_newtype_base(named))
     }
 
     /// The registration source and base type of a newtype the compiled package

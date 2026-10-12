@@ -10,8 +10,8 @@ struct FixedRandom {
 }
 
 impl Random for FixedRandom {
-    fn get_random_bytes(&self, max_len: u64) -> List<u8> {
-        let mut out: List<u8> = [];
+    fn get_random_bytes(&self, max_len: u64) -> ByteList {
+        let mut out: ByteList = [];
         for let mut i = 0; i < max_len as i32; i += 1 {
             out.push(self.byte);
         }
@@ -25,7 +25,7 @@ struct DoublingRandom {
 }
 
 impl Random for DoublingRandom {
-    fn get_random_bytes(&self, max_len: u64) -> List<u8> with Random {
+    fn get_random_bytes(&self, max_len: u64) -> ByteList with Random {
         resume Random::get_random_bytes(max_len * 2);
     }
 

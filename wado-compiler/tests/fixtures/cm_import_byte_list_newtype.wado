@@ -1,0 +1,19 @@
+// A WIT `list<u8>` binds as the prelude newtype `ByteList`, which the import
+// adapter must lower and lift as the `List<u8>` it wraps, through a binding's
+// own newtype (`FieldValue = ByteList`) as well.
+
+use { println, Stdout } from "core:cli";
+use { Fields, FieldValue } from "wasi:http";
+
+export fn run() with (Stdout, Fields) {
+    let fields = Fields::new();
+    let value = "v1".bytes().collect() as FieldValue;
+    assert fields.append("k", value) matches { Ok(_) };
+    let got = fields.get("k");
+    println(String::try_from_utf8(got[0]).unwrap());
+}
+
+__DATA__
+{
+    "stdout": "v1\n"
+}

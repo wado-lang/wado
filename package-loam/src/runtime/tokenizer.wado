@@ -105,10 +105,10 @@ impl BpeTokenizer {
     /// that is not UTF-8 decodes with U+FFFD in its place, as a token boundary
     /// can split a character.
     pub fn decode(&self, ids: &List<i32>) -> String {
-        let mut bytes: List<u8> = [];
+        let mut bytes: ByteList = [];
         for let id of *ids {
             if self.special_ids[id] {
-                bytes.extend(&(self.tokens[id].bytes().collect() as List<u8>));
+                bytes.extend(&(self.tokens[id].bytes().collect() as ByteList));
                 continue;
             }
             for let c of self.tokens[id].chars() {

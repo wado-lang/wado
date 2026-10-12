@@ -7,6 +7,7 @@
 use { String } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
 use { Slice } from "core:prelude/slice.wado";
+use { ByteList } from "core:prelude/bytes.wado";
 
 
 /// Tuple type family declaration — establishes `core:prelude` as the owner of all tuple types.
@@ -286,6 +287,13 @@ impl<T> Stream<T> {
                 return all;
             }
         }
+    }
+}
+
+impl Stream<u8> {
+    /// `read_to_end`, as the byte buffer a byte stream carries.
+    pub fn read_to_end_bytes(&self) -> ByteList {
+        return self.read_to_end() as ByteList;
     }
 }
 
