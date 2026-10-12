@@ -642,7 +642,7 @@ fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len) wit
     let $i: i32;
     let value_9: u8;
     let used: i32;
-    $outptr = "mem/realloc"(0, 0, 4, 4);
+    $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:random/Random::get_random_bytes"(max_len, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
@@ -664,7 +664,7 @@ fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes"(max_len) wit
     if $count > 0 {
         drop("mem/realloc"($base, $count, 1, 0));
     }
-    drop("mem/realloc"($outptr, 4, 4, 0));
+    drop("mem/realloc"($outptr, 8, 4, 0));
     return $result;
 }
 
@@ -748,7 +748,7 @@ fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(max_le
     let $i: i32;
     let value_9: u8;
     let used: i32;
-    $outptr = "mem/realloc"(0, 0, 4, 4);
+    $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:random/Random::get_random_bytes"(16_i64, $outptr);
     $base = builtin::load_i32($outptr);
     $result = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(local.tee $count(builtin::load_i32($outptr + 4))), used: 0 };
@@ -770,7 +770,7 @@ fn "spec_effects_install.wado/$cm_binding__Random_get_random_bytes$spec0"(max_le
     if $count > 0 {
         drop("mem/realloc"($base, $count, 1, 0));
     }
-    drop("mem/realloc"($outptr, 4, 4, 0));
+    drop("mem/realloc"($outptr, 8, 4, 0));
     return $result;
 }
 
