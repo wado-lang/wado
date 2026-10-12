@@ -544,17 +544,18 @@ fn weight_type(checked: &Checked, rhs: &TreeMap<String, bool>, tensor: &String) 
 /// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
 /// in the layout the product reads, which no other kernel reads.
 fn rhs_weights(graph: &Graph, checked: &Checked) -> TreeMap<String, bool> {
-    let mut uses = OperandUses { right: TreeMap::new(), elsewhere: TreeSet::new() };
+    let mut uses = OperandUses {
+        right: TreeMap::new(),
+        elsewhere: TreeSet::new(),
+    };
     uses.note(graph, checked);
     for let vi of &graph.outputs {
         uses.elsewhere.insert(vi.name);
     }
     let mut out = TreeMap::<String, bool>::new();
     for let vi of &graph.initializers {
-        if let Some(transposed) = uses.right.get(vi.name)
-            && !uses.elsewhere.contains(vi.name)
-            && checked.shapes[vi.name].rank() == 2
-        {
+        if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
+        ) == 2 {
             out[vi.name] = transposed;
         }
     }

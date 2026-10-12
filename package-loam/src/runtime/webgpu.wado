@@ -999,7 +999,10 @@ impl Backend for WebGpuBackend {
         return self.stored(t, true);
     }
 
-    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+    fn keep_rhs_transposed<K, N>(
+        &mut self,
+        t: &Tensor<f32, [N, K]>,
+    ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(&self.cpu.transpose2(t), true);
     }
 
