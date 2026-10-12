@@ -78,8 +78,8 @@ struct Plan {
 }
 
 /// What a check adds to the guard variable before comparing: `local + konst`.
-/// `konst` is non-negative and the residual tests `local` so, which keeps
-/// `var + shift` from lying below `var`.
+/// `konst` is non-negative, and the residual's term on `local` makes it so too
+/// (see [`limit_terms`]), which keeps `var + shift` from lying below `var`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Shift {
     local: Option<u32>,
@@ -404,11 +404,11 @@ struct Terms {
 
 impl Terms {
     fn shift(self) -> Option<Shift> {
-        let shift = Shift {
+        let local = Shift {
             local: self.local,
             konst: 0,
         };
-        self.var.then_some(shift)?.plus(self.konst)
+        self.var.then_some(local)?.plus(self.konst)
     }
 
     fn add_operand(
@@ -429,7 +429,8 @@ impl Terms {
         if let Some(l) = operand_local(engine.body, op) {
             return self.add_local(engine, binds, l, var, depth);
         }
-        let (left, NirBinaryOp::Add, right) = binary_parts(engine.body, resolve(engine, binds, op))?
+        let (left, NirBinaryOp::Add, right) =
+            binary_parts(engine.body, resolve(engine, binds, op))?
         else {
             return None;
         };
@@ -449,11 +450,19 @@ impl Terms {
         depth: u32,
     ) -> Option<()> {
         if l == var {
-            return (!std::mem::replace(&mut self.var, true)).then_some(());
+            return self.merge(Terms {
+                var: true,
+                local: None,
+                konst: 0,
+            });
         }
         if let Some(&bound) = binds.get(&l) {
             let mut inner = Terms::default();
-            if inner.add_operand(engine, binds, bound, var, depth + 1).is_some() && inner.var {
+            if inner
+                .add_operand(engine, binds, bound, var, depth + 1)
+                .is_some()
+                && inner.var
+            {
                 return self.merge(inner);
             }
         }

@@ -565,7 +565,6 @@ mod tests {
         })
     }
 
-
     #[test]
     fn test_fq_name_accessors_wasi() {
         let w = world_info("wasi:http/service");
