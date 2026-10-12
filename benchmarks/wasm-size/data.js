@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791782373692,
+  "lastUpdate": 1791785695923,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66497,6 +66497,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/66df566a21d3d98d18a1f6ec6597c5d501490211"
         },
         "date": 1791782373222,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2944,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7321,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22317,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 341419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3b6133c146b866504a4edf3e57f082173938ad25",
+          "message": "Merge pull request #2337 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat(cm): reject every type with no Component Model representation at its signature",
+          "timestamp": "2026-10-12T14:55:34+09:00",
+          "tree_id": "e4d3e94b28b87034a8d8f3151e936ae42cb14cf7",
+          "url": "https://github.com/wado-lang/wado/commit/3b6133c146b866504a4edf3e57f082173938ad25"
+        },
+        "date": 1791785694925,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
