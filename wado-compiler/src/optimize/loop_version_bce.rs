@@ -68,6 +68,8 @@ struct Plan {
     /// `true` for `i <= H` (residual `H < B`), `false` for `i < H`
     /// (residual `H <= B`).
     guard_le: bool,
+    /// Whether `var`'s type is unsigned, which the residual compares as.
+    unsigned: bool,
     /// The distinct limits the deleted checks put on `var`, one residual term
     /// apiece.
     limits: Vec<Limit>,
@@ -352,12 +354,12 @@ fn parse_versionable_check(
                     return None;
                 }
                 limit = Some(Limit {
-                    shift: parse_shift(engine, binds, left, var, 0)?,
+                    shift: parse_shift(engine, binds, left, var)?,
                     bound: parse_check_bound(engine, binds, right)?,
                 });
             }
             Conjunct::AtLeast(fvar, foff, f) => {
-                floors.push((local_shift(engine, binds, fvar, var, 0)?.plus(foff)?, f));
+                floors.push((local_shift(engine, binds, fvar, var)?.plus(foff)?, f));
             }
         }
     }
@@ -377,37 +379,100 @@ fn parse_versionable_check(
     })
 }
 
-/// Read `op` (through copy temps) as `var + shift`. A bare `var` is
-/// [`Shift::NONE`]; `+ const` and one `+ local` other than `var` accumulate.
-fn parse_shift(engine: &Engine, binds: &Binds, op: Operand, var: u32, depth: u32) -> Option<Shift> {
-    if depth >= VAR_OFFSET_MAX_DEPTH {
-        return None;
-    }
-    if let Some((v, c)) = parse_var_offset(engine, binds, op) {
-        return local_shift(engine, binds, v, var, depth + 1)?.plus(c);
-    }
-    let (left, NirBinaryOp::Add, right) = binary_parts(engine.body, resolve(engine, binds, op))?
-    else {
-        return None;
-    };
-    let added = |shifted: Operand, other: Operand| {
-        let shift = parse_shift(engine, binds, shifted, var, depth + 1)?;
-        let local = operand_local(engine.body, other).filter(|&l| l != var)?;
-        shift.local.is_none().then_some(Shift {
-            local: Some(local),
-            ..shift
-        })
-    };
-    added(left, right).or_else(|| added(right, left))
+/// Read `op` (through copy temps) as `var + shift`: a `+` tree, in any
+/// association, of `var` once, at most one other local, and constants.
+fn parse_shift(engine: &Engine, binds: &Binds, op: Operand, var: u32) -> Option<Shift> {
+    let mut terms = Terms::default();
+    terms.add_operand(engine, binds, op, var, 0)?;
+    terms.shift()
 }
 
-/// [`parse_shift`] of the local `l`: `var` itself, or the value its copy temp
-/// binds.
-fn local_shift(engine: &Engine, binds: &Binds, l: u32, var: u32, depth: u32) -> Option<Shift> {
-    if l == var {
-        return Some(Shift::NONE);
+/// [`parse_shift`] of the local `l`.
+fn local_shift(engine: &Engine, binds: &Binds, l: u32, var: u32) -> Option<Shift> {
+    let mut terms = Terms::default();
+    terms.add_local(engine, binds, l, var, 0)?;
+    terms.shift()
+}
+
+/// The terms of a `+` tree [`parse_shift`] has read so far.
+#[derive(Default)]
+struct Terms {
+    var: bool,
+    local: Option<u32>,
+    konst: i64,
+}
+
+impl Terms {
+    fn shift(self) -> Option<Shift> {
+        let shift = Shift {
+            local: self.local,
+            konst: 0,
+        };
+        self.var.then_some(shift)?.plus(self.konst)
     }
-    parse_shift(engine, binds, *binds.get(&l)?, var, depth)
+
+    fn add_operand(
+        &mut self,
+        engine: &Engine,
+        binds: &Binds,
+        op: Operand,
+        var: u32,
+        depth: u32,
+    ) -> Option<()> {
+        if depth >= VAR_OFFSET_MAX_DEPTH {
+            return None;
+        }
+        if let Some(c) = parse_const_i64(engine, binds, op) {
+            self.konst = self.konst.checked_add(c)?;
+            return Some(());
+        }
+        if let Some(l) = operand_local(engine.body, op) {
+            return self.add_local(engine, binds, l, var, depth);
+        }
+        let (left, NirBinaryOp::Add, right) = binary_parts(engine.body, resolve(engine, binds, op))?
+        else {
+            return None;
+        };
+        self.add_operand(engine, binds, left, var, depth + 1)?;
+        self.add_operand(engine, binds, right, var, depth + 1)
+    }
+
+    /// A copy temp whose value holds `var` is read through. Any other local is
+    /// a term of its own, read where the residual is evaluated, so the caller
+    /// checks that it holds still across the loop.
+    fn add_local(
+        &mut self,
+        engine: &Engine,
+        binds: &Binds,
+        l: u32,
+        var: u32,
+        depth: u32,
+    ) -> Option<()> {
+        if l == var {
+            return (!std::mem::replace(&mut self.var, true)).then_some(());
+        }
+        if let Some(&bound) = binds.get(&l) {
+            let mut inner = Terms::default();
+            if inner.add_operand(engine, binds, bound, var, depth + 1).is_some() && inner.var {
+                return self.merge(inner);
+            }
+        }
+        self.merge(Terms {
+            var: false,
+            local: Some(l),
+            konst: 0,
+        })
+    }
+
+    fn merge(&mut self, other: Terms) -> Option<()> {
+        if (self.var && other.var) || (self.local.is_some() && other.local.is_some()) {
+            return None;
+        }
+        self.var |= other.var;
+        self.local = self.local.or(other.local);
+        self.konst = self.konst.checked_add(other.konst)?;
+        Some(())
+    }
 }
 
 /// The most residual terms one loop is versioned on, each evaluated at every
@@ -480,11 +545,17 @@ fn analyze_loop(
     if !type_table.is_integer(ty) {
         return None;
     }
+    let key = type_table.type_key(ty);
+    let of_ty = |l: u32| {
+        locals
+            .get(l as usize)
+            .is_some_and(|d| type_table.type_key(d.type_id) == key)
+    };
     // Every local the residual reads, which must hold still across the loop.
     let mut invariant: Vec<u32> = Vec::new();
     // The local a bound reads, `Some(None)` for a constant, `None` for neither.
     let bound_local = |b: BoundKey| match b {
-        BoundKey::Local(l) if locals.get(l as usize)?.type_id == ty => Some(Some(l)),
+        BoundKey::Local(l) if of_ty(l) => Some(Some(l)),
         BoundKey::Const(c) if spells_same(type_table, ty, c)? => Some(None),
         BoundKey::Local(_) | BoundKey::Const(_) | BoundKey::Field(..) => None,
     };
@@ -495,9 +566,7 @@ fn analyze_loop(
             return None;
         }
         if let Some(s) = limit.shift.local {
-            // `B - konst - local` is clear of the wrap only where a negative
-            // local can be refused.
-            if locals.get(s as usize)?.type_id != ty || type_table.is_unsigned_int(ty) {
+            if !of_ty(s) {
                 return None;
             }
             invariant.push(s);
@@ -518,7 +587,7 @@ fn analyze_loop(
         InductionStep::Local(s) => Some(s),
         InductionStep::Const(..) => None,
     });
-    if step_local.is_some_and(|s| locals.get(s as usize).map(|l| l.type_id) != Some(ty)) {
+    if step_local.is_some_and(|s| !of_ty(s)) {
         return None;
     }
     // `H`, every `B` and shift, and the step must be loop-invariant: the
@@ -543,6 +612,7 @@ fn analyze_loop(
         var,
         bound: h,
         guard_le,
+        unsigned: type_table.is_unsigned_int(ty),
         limits,
         floor,
     })
@@ -680,32 +750,43 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 
 /// The residual terms under which every `var` the guard admits keeps
 /// `var + shift < B`: `H` at or under `B - konst - local` (strictly under for
-/// `<=`), with `B >= konst` and `local >= 0` keeping that subtraction and the
-/// check's own addition clear of the wrap. An unshifted check needs only the
-/// comparison.
+/// `<=`), with `B >= konst` and a term on `local` keeping that subtraction and
+/// the check's own addition clear of the wrap. The term is `local >= 0` for a
+/// signed type and `local <= B - konst` for an unsigned one. An unshifted
+/// check needs only the comparison.
 fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
     let int = |e: &mut Engine, c: i64| e.const_operand(ValueKind::Int(c as u64, ty), ty);
     let bound = |e: &mut Engine| bound_read(e, plan, limit.bound, span);
-    let mut room = bound(engine);
+    let less_konst = |e: &mut Engine| {
+        let b = bound(e);
+        if limit.shift.konst == 0 {
+            return b;
+        }
+        let konst = int(e, limit.shift.konst);
+        alloc_binary(e, b, NirBinaryOp::Sub, konst, ty, span)
+    };
+    let mut room = less_konst(engine);
     let mut clear = Vec::new();
     let bound_clear = match limit.bound {
         BoundKey::Const(c) => c >= limit.shift.konst,
-        BoundKey::Local(_) | BoundKey::Field(..) => false,
+        BoundKey::Local(_) => plan.unsigned && limit.shift.konst == 0,
+        BoundKey::Field(..) => false,
     };
     if limit.shift != Shift::NONE && !bound_clear {
         let b = bound(engine);
         let konst = int(engine, limit.shift.konst);
         clear.push(alloc_pred(engine, b, NirBinaryOp::GtEq, konst, span));
     }
-    if limit.shift.konst != 0 {
-        let konst = int(engine, limit.shift.konst);
-        room = alloc_binary(engine, room, NirBinaryOp::Sub, konst, ty, span);
-    }
     if let Some(s) = limit.shift.local {
         let s_read = local_read(engine, s, span);
-        let zero = int(engine, 0);
-        clear.push(alloc_pred(engine, s_read, NirBinaryOp::GtEq, zero, span));
+        clear.push(if plan.unsigned {
+            let most = less_konst(engine);
+            alloc_pred(engine, s_read, NirBinaryOp::LtEq, most, span)
+        } else {
+            let zero = int(engine, 0);
+            alloc_pred(engine, s_read, NirBinaryOp::GtEq, zero, span)
+        });
         let s_read = local_read(engine, s, span);
         room = alloc_binary(engine, room, NirBinaryOp::Sub, s_read, ty, span);
     }
@@ -855,7 +936,7 @@ fn is_check_comparison(
     );
     let is_limit = limit.is_some_and(|limit| {
         op == NirBinaryOp::Lt
-            && parse_shift(engine, binds, left, var, 0) == Some(limit.shift)
+            && parse_shift(engine, binds, left, var) == Some(limit.shift)
             && parse_check_bound(engine, binds, right) == Some(limit.bound)
     });
     (relational && (reads_var(left) || reads_var(right))) || is_limit
