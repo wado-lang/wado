@@ -20,13 +20,13 @@ pub struct Packed {
 }
 
 /// `data`, a `rows` by `cols` matrix, as [`Packed`] rows.
-fn packed_matrix(data: &List<f32>, rows: i32, cols: i32) -> Packed {
+fn packed_matrix<E: Element>(data: &List<E>, rows: i32, cols: i32) -> Packed {
     let per_row = (cols + 3) / 4;
     let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
     for let r of 0..<rows {
         for let v of 0..<per_row {
             let c = v * 4;
-            let lane = |i: i32| if c + i < cols { data[r * cols + c + i] } else { 0.0 as f32 };
+            let lane = |i: i32| if c + i < cols { data[r * cols + c + i].cast_to::<f32>() } else { 0.0 as f32 };
             let lanes: Array<f32> = [
                 lane(0),
                 lane(1),
@@ -1922,11 +1922,7 @@ impl Backend for Cpu {
         if !E::is_f32() {
             return *t;
         }
-        let mut values = List::<f32>::with_capacity(t.data.len());
-        for let x of t.data {
-            values.push(x.cast_to::<f32>());
-        }
-        let packed = packed_matrix(&values, t.extents[0], t.extents[1]);
+        let packed = packed_matrix(&t.data, t.extents[0], t.extents[1]);
         return Tensor { data: [], extents: t.extents, packed: Option::Some(packed) };
     }
 
