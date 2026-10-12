@@ -656,15 +656,19 @@ impl Semantics {
         self.function_and_item_at(id).map(|(f, _)| f)
     }
 
-    /// The `contract` clauses of the function [`Semantics::function_at`]
-    /// answers for `id`. A trait method's live in its trait's hidden holder.
+    /// The function [`Semantics::function_at`] answers for `id`, with its
+    /// `contract` clauses. A trait method's live in its trait's hidden holder.
     #[must_use]
-    pub fn contracts_at(&self, id: AstId) -> Vec<&ast::AssertStmt> {
-        match self.function_and_item_at(id) {
-            Some((f, Item::Trait(t))) => t.method_contracts(&f.name).collect(),
-            Some((f, _)) => f.contracts().collect(),
-            None => Vec::new(),
-        }
+    pub fn function_with_contracts_at(
+        &self,
+        id: AstId,
+    ) -> Option<(&ast::Function, Vec<&ast::AssertStmt>)> {
+        let (f, item) = self.function_and_item_at(id)?;
+        let contracts = match item {
+            Item::Trait(t) => t.method_contracts(&f.name).collect(),
+            _ => f.contracts().collect(),
+        };
+        Some((f, contracts))
     }
 
     /// The function [`Semantics::function_at`] answers, with the item holding it.

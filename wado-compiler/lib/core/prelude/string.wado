@@ -537,12 +537,15 @@ impl String {
         return self.repr[index];
     }
 
-    /// Internal: write the byte at `index < len()` with no check (stdlib use
+    /// Internal: write the byte at `index` with no UTF-8 check (stdlib use
     /// only). A character written a byte at a time is invalid UTF-8 between the
     /// writes, so no contract on one write can state the invariant; the caller
     /// restores it before anything reads the string.
     #[compiler_item("string_set_byte_unchecked")]
     internal fn internal_set_byte_unchecked(&mut self, index: i32, value: u8) {
+        if builtin::contract_checks() {
+            assert 0 <= index < self.used, "index out of bounds";
+        }
         self.repr[index] = value;
     }
 
@@ -1061,10 +1064,13 @@ impl String {
     pub fn from_utf8<S: AsByteSlice>(bytes: S) -> String
         contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"
     {
-        let slice = bytes.as_byte_slice();
+        return String::copy_validated(&bytes.as_byte_slice());
+    }
+
+    fn copy_validated(bytes: &ByteSlice) -> String {
         return String {
-            repr: slice.to_array() as ByteArray,
-            used: slice.len(),
+            repr: bytes.to_array() as ByteArray,
+            used: bytes.len(),
         };
     }
 
@@ -1079,7 +1085,7 @@ impl String {
             builtin::cold_path();
             return Result::Err(String::utf8_error_at(&bytes, prefix));
         }
-        return Result::Ok(unchecked String::from_utf8(bytes));
+        return Result::Ok(String::copy_validated(&bytes));
     }
 
     /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and

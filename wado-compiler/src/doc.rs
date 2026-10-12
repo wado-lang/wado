@@ -559,12 +559,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
     let methods: Vec<DocFunction> = e
         .methods
         .iter()
-        .map(|m| DocFunction {
-            signature: render_interface_method_signature(m),
-            attrs: unparse_attributes(&m.attrs),
-            contracts: m.contracts().map(unparse_contract_clause).collect(),
-            doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
-        })
+        .map(|m| build_doc_operation(m, trivia))
         .collect();
 
     DocEffect {
@@ -594,12 +589,7 @@ fn build_doc_resource(
     let mut methods: Vec<DocFunction> = r
         .methods
         .iter()
-        .map(|m| DocFunction {
-            signature: render_interface_method_signature(m),
-            attrs: unparse_attributes(&m.attrs),
-            contracts: m.contracts().map(unparse_contract_clause).collect(),
-            doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
-        })
+        .map(|m| build_doc_operation(m, trivia))
         .collect();
     let (inherent, _) = collect_impl_methods_for_type(&r.name, impls, trivia, include_private);
     methods.extend(inherent);
@@ -609,6 +599,17 @@ fn build_doc_resource(
         signature: sig,
         methods,
         doc: extract_doc_comment_with_attrs(trivia, r.id, &r.span, &r.attrs),
+    }
+}
+
+/// An interface operation or a resource method, neither of which the parser
+/// lets carry a `contract` clause.
+fn build_doc_operation(m: &Function, trivia: &TriviaMap) -> DocFunction {
+    DocFunction {
+        signature: render_interface_method_signature(m),
+        attrs: unparse_attributes(&m.attrs),
+        contracts: Vec::new(),
+        doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
     }
 }
 

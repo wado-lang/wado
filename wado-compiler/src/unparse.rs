@@ -972,12 +972,7 @@ impl<'a> Unparser<'a> {
             );
             self.emit_leading_for(clause.id);
             self.write_indent();
-            self.output.push_str("contract ");
-            self.unparse_expr(&clause.condition);
-            if let Some(message) = &clause.message {
-                self.output.push_str(", ");
-                self.unparse_expr(message);
-            }
+            self.unparse_contract_clause(clause);
             self.emit_trailing_for(clause.id);
         }
         if !contracts.is_empty()
@@ -1002,6 +997,15 @@ impl<'a> Unparser<'a> {
             self.output.push_str("}\n");
         } else {
             self.output.push_str(";\n");
+        }
+    }
+
+    fn unparse_contract_clause(&mut self, clause: &AssertStmt) {
+        self.output.push_str("contract ");
+        self.unparse_expr(&clause.condition);
+        if let Some(message) = &clause.message {
+            self.output.push_str(", ");
+            self.unparse_expr(message);
         }
     }
 
@@ -3533,8 +3537,18 @@ fn format_field_name(name: &str) -> String {
 /// the parse needs. Quotes the condition on an `assert` failure, where
 /// [`unparse_expr_simple`] would print a different expression.
 pub fn unparse_expr_source(expr: &Expr) -> String {
+    unparse_one_line(|u| u.unparse_expr(expr))
+}
+
+/// A `contract` clause as one line of source.
+#[must_use]
+pub fn unparse_contract_clause(clause: &AssertStmt) -> String {
+    unparse_one_line(|u| u.unparse_contract_clause(clause))
+}
+
+fn unparse_one_line(emit: impl FnOnce(&mut Unparser)) -> String {
     let mut unparser = Unparser::new();
-    unparser.unparse_expr(expr);
+    emit(&mut unparser);
     let mut out = String::with_capacity(unparser.output.len());
     let mut lines = unparser
         .output
@@ -3547,17 +3561,6 @@ pub fn unparse_expr_source(expr: &Expr) -> String {
             out.push(' ');
             out.push_str(line);
         }
-    }
-    out
-}
-
-/// A `contract` clause as one line of source.
-#[must_use]
-pub fn unparse_contract_clause(clause: &AssertStmt) -> String {
-    let mut out = format!("contract {}", unparse_expr_source(&clause.condition));
-    if let Some(message) = &clause.message {
-        out.push_str(", ");
-        out.push_str(&unparse_expr_source(message));
     }
     out
 }
