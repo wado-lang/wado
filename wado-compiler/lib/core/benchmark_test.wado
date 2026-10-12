@@ -1,5 +1,5 @@
 use { Benchmark, format_rate } from "core:benchmark";
-use { MonotonicClock } from "wasi:clocks";
+use { Mark, MonotonicClock } from "wasi:clocks";
 
 interface Tally {
     fn add();
@@ -148,8 +148,8 @@ struct CallClock {
 }
 
 impl MonotonicClock for CallClock {
-    fn now(&self) -> u64 {
-        resume CALLS * 300_000;
+    fn now(&self) -> Mark {
+        resume (CALLS * 300_000) as Mark;
     }
 
     ..trap

@@ -1,0 +1,24 @@
+// A handler method takes the operation's parameters, after the handler's own
+// receiver and, for a resource's instance method, the handle.
+
+interface Sink {
+    fn put(value: i32);
+}
+
+struct H {}
+
+impl Sink for H {
+    fn put(&mut self, value: i64) {
+        resume ();
+    }
+}
+
+export fn run() {
+    let mut h = H {};
+    with Sink => &mut h do {
+        Sink::put(1);
+    };
+}
+
+__DATA__
+{"compile_error": ":11:8: analysis error: method `put` takes `i64` for parameter `value`, but `Sink` declares `i32`", "compile_error_codes": ["TYPE_MISMATCH"]}
