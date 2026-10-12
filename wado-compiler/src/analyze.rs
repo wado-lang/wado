@@ -242,6 +242,12 @@ pub enum AnalyzeError {
     },
     /// An `export use` naming something other than a type.
     ExportUseNotType { name: String, span: Span },
+    /// An `export use` naming a type of its own package, which `export` on the
+    /// declaration publishes.
+    ExportUseOwnType { name: String, span: Span },
+    /// An `export use` renaming the type it adopts: WIT would still name it as
+    /// declared.
+    ExportUseRenamed { name: String, span: Span },
 }
 
 /// What is wrong with an `#[unavailable]` declaration.
@@ -412,6 +418,20 @@ impl AnalyzeError {
             AnalyzeError::ExportUseNotType { name, span } => (
                 Code::CmBoundaryType,
                 format!("`export use` publishes a type, and `{name}` is not one"),
+                *span,
+            ),
+            AnalyzeError::ExportUseOwnType { name, span } => (
+                Code::CmBoundaryType,
+                format!(
+                    "`{name}` is declared in this package, so `export use` cannot adopt it: declare it `export` instead"
+                ),
+                *span,
+            ),
+            AnalyzeError::ExportUseRenamed { name, span } => (
+                Code::CmBoundaryType,
+                format!(
+                    "`export use` publishes `{name}` under its declared name, so it cannot rename it"
+                ),
                 *span,
             ),
         }
@@ -1417,6 +1437,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     &module_source,
                                     name,
                                     *name_span,
+                                    alias.as_ref().map(|_| *local_span),
                                     all_modules,
                                 );
                             }
@@ -1480,55 +1501,61 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     /// Diagnose an `export use` of `name` from `target` that cannot publish it:
-    /// it names no type, or a struct with a field WIT could not show.
+    /// it names no type, a type of the importing package (published by its own
+    /// `export`), a type under a new name (`alias_span`), or a struct with a
+    /// field WIT could not show.
     fn check_adoption(
         &self,
         from: &ModuleSource,
         target: &ModuleSource,
         name: &str,
         span: Span,
+        alias_span: Option<Span>,
         all_modules: &hashmap::IndexMap<ModuleSource, Module>,
     ) {
         let Some(symbol) = self.symbols.lookup_in_module(target, name) else {
             return; // `import_symbol` reported it.
         };
-        let error =
-            match &symbol.kind {
-                SymbolKind::Struct(_) => {
-                    let private_field = all_modules[symbol.module_source()].items.iter().find_map(
-                        |item| match item {
-                            Item::Struct(decl) if decl.id == symbol.defined_at => {
-                                decl.first_private_field()
-                            }
-                            _ => None,
-                        },
-                    );
-                    let Some(field) = private_field else {
-                        return;
-                    };
+        let name = name.to_string();
+        let error = match &symbol.kind {
+            SymbolKind::Struct(_)
+            | SymbolKind::Enum(_)
+            | SymbolKind::Variant(_)
+            | SymbolKind::Flags(_)
+            | SymbolKind::Newtype(_) => {
+                if symbol.module_source().same_package(from) {
+                    AnalyzeError::ExportUseOwnType { name, span }
+                } else if let Some(span) = alias_span {
+                    AnalyzeError::ExportUseRenamed { name, span }
+                } else if let Some(field) = all_modules[symbol.module_source()]
+                    .items
+                    .iter()
+                    .find_map(|item| match item {
+                        Item::Struct(decl) if decl.id == symbol.defined_at => {
+                            decl.first_private_field()
+                        }
+                        _ => None,
+                    })
+                {
                     AnalyzeError::PrivateFieldPublished {
-                        owner: name.to_string(),
+                        owner: name,
                         field: field.name.clone(),
                         adopted: true,
                         span,
                     }
+                } else {
+                    return;
                 }
-                SymbolKind::Enum(_)
-                | SymbolKind::Variant(_)
-                | SymbolKind::Flags(_)
-                | SymbolKind::Newtype(_) => return,
-                SymbolKind::Function(_)
-                | SymbolKind::Effect(_)
-                | SymbolKind::Trait(_)
-                | SymbolKind::BuiltinType
-                | SymbolKind::Variable(_)
-                | SymbolKind::Resource(_)
-                | SymbolKind::World(_)
-                | SymbolKind::Global(_) => AnalyzeError::ExportUseNotType {
-                    name: name.to_string(),
-                    span,
-                },
-            };
+            }
+            SymbolKind::Function(_)
+            | SymbolKind::Effect(_)
+            | SymbolKind::Trait(_)
+            | SymbolKind::BuiltinType
+            | SymbolKind::Variable(_)
+            | SymbolKind::Resource(_)
+            | SymbolKind::World(_)
+            | SymbolKind::Global(_) => AnalyzeError::ExportUseNotType { name, span },
+        };
         let _ = self.logger.error_in(from, error);
     }
 

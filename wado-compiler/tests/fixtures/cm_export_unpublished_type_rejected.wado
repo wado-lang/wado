@@ -2,11 +2,13 @@
 // package's Component Model interface, so the package publishes each one:
 // declared `export`, or adopted from elsewhere with `export use`. A `#[cm]`
 // type (`Descriptor`) is exempt, its own interface publishing it, and so is a
-// stdlib newtype (`ByteList`), which crosses as the alias it is.
+// stdlib newtype (`ByteList`), which crosses as the alias it is. A newtype's
+// base is reached too, and Kiln's `Request` crosses without its `NoOptions`.
 
 export use { DirEntry, FileType } from "core:fs";
 use { WalkEntry } from "core:fs";
 use { Descriptor } from "wasi:filesystem";
+use { Request } from "core:kiln";
 
 pub struct Point {
     pub x: i32,
@@ -38,8 +40,18 @@ export fn takes_descriptor(d: Descriptor) -> i32 {
     return 0;
 }
 
+export type Wrapped = Point;
+
+export fn takes_wrapped(w: Wrapped) -> i32 {
+    return 0;
+}
+
+export fn generate(req: Request) -> i32 {
+    return 0;
+}
+
 __DATA__
 {
-  "compile_error": ":21:23: analysis error: `Point` in parameter 'p' of `takes_point` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 25:23: `Point` in parameter 'o' of `takes_outer` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 29:22: `WalkEntry` in parameter 'w' of `takes_walk` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`",
+  "compile_error": ":23:23: analysis error: `Point` in parameter 'p' of `takes_point` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 27:23: `Point` in parameter 'o' of `takes_outer` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 31:22: `WalkEntry` in parameter 'w' of `takes_walk` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 45:25: `Point` in parameter 'w' of `takes_wrapped` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`",
   "compile_error_codes": ["CM_BOUNDARY_TYPE"]
 }

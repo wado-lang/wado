@@ -1,9 +1,13 @@
 // A package publishes a type by declaring it `export` or by adopting it with
 // `export use`. WIT shows every field of a record, so a published struct has
-// no field that is not `pub`, and only a type can be published.
+// no field that is not `pub`, and only a type can be published. `export use`
+// adopts another package's type under its own name; a type of this package is
+// published by its `export`.
 
 export use { Uuid } from "core:uuid";
 export use { join } from "core:fs";
+export use { FileType as Kind } from "core:fs";
+export use { S } from "./sub/cross_module_same_name_bound_alias_dep.wado";
 
 export struct Secret {
     pub a: i32,
@@ -12,6 +16,6 @@ export struct Secret {
 
 __DATA__
 {
-  "compile_error": ":10:5: analysis error: `Secret` is `export`, so its field `b` must be `pub`: WIT shows every field of a record; 5:14: `Uuid` is published by `export use`, so its field `bytes` must be `pub`: WIT shows every field of a record; 6:14: `export use` publishes a type, and `join` is not one",
+  "compile_error": ":14:5: analysis error: `Secret` is `export`, so its field `b` must be `pub`: WIT shows every field of a record; 7:14: `Uuid` is published by `export use`, so its field `bytes` must be `pub`: WIT shows every field of a record; 8:14: `export use` publishes a type, and `join` is not one; 9:26: `export use` publishes `FileType` under its declared name, so it cannot rename it; 10:14: `S` is declared in this package, so `export use` cannot adopt it: declare it `export` instead",
   "compile_error_codes": ["CM_BOUNDARY_TYPE"]
 }

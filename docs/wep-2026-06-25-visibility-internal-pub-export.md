@@ -203,6 +203,8 @@ record from the component's WIT.
 - A library (`--lib`) still publishes every `pub` and `internal` type of its
   submodules in its default interface, `export` or not. So two submodule types
   sharing a name collide though neither is surface.
+- `export use { T as U }` is refused, since WIT would still name the type `T`.
+  Whether a rename should reach the WIT name is undecided.
 - The standard library newtype exemption means a stdlib `struct` such as
   `DirEntry` needs `export use` to cross while a stdlib newtype such as
   `ByteList` does not.

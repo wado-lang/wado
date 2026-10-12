@@ -245,6 +245,34 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 }
 "#;
 
+/// The adapter replaces `req` with parameters of its own, so an unpublished
+/// `Options` is reported where the author wrote `req`.
+#[test]
+fn unpublished_options_point_at_the_request_parameter() {
+    let source = TYPED_OPTIONS_GENERATOR.replace("export struct Options", "pub struct Options");
+    let host = in_memory_host(&[]);
+    let result = block_on(compile_with_options(
+        &source,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    assert!(result.is_err(), "`Options` is not published");
+
+    let diags = host.diagnostics();
+    let span = diags
+        .iter()
+        .find(|d| d.code == Code::CmBoundaryType && d.message.contains("`Options`"))
+        .and_then(|d| d.span.as_ref())
+        .unwrap_or_else(|| {
+            panic!(
+                "expected a located CM_BOUNDARY_TYPE:\n{}",
+                diag_list(&diags)
+            )
+        });
+    assert_eq!((span.line, span.column), (9, 20));
+}
+
 #[test]
 fn a_private_entry_type_still_claims_its_name_against_a_submodule() {
     let host = in_memory_host(&[("./rule.wado", DUPLICATE_TYPE_RULE)]);

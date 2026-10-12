@@ -74,7 +74,8 @@ publishes each one, in one of two ways:
 - It declares the type `export`: `export struct`, `export enum`,
   `export variant`, `export flags`, or `export type`.
 - It adopts a type another package declares, with
-  `export use { T } from "…";`. An `export use` names types only.
+  `export use { T } from "…";`. An `export use` names types only, under their
+  declared names, and never a type of its own package.
 
 A reached type the package does not publish is a compile error at the
 parameter, or at the function's declaration for its result. Two kinds of type

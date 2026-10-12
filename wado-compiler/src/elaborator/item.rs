@@ -1504,15 +1504,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// that [`Self::unpublished_within`] finds.
     fn check_published(
         &mut self,
-        function: &str,
+        function: &Function,
         position: &str,
         type_id: TypeId,
-        module: &ModuleSource,
         span: Span,
     ) {
+        let module = self
+            .tysys
+            .resolutions
+            .defs()
+            .module(self.tysys.def_at(function.id));
         if let Some(ty) = self.unpublished_within(type_id, module) {
             let _ = self.emit(TypeError::UnpublishedAtCmBoundary {
-                function: function.to_string(),
+                function: function.name.clone(),
                 position: position.to_string(),
                 ty: self.tysys.type_table.borrow().type_name(ty),
                 span,
@@ -1580,6 +1584,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if hit(self, type_id) {
             return Some(type_id);
+        }
+        // One layer at a time, so `hit` sees each named base of a newtype chain.
+        let base = match self.tysys.type_table.borrow().get(type_id) {
+            ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+            _ => None,
+        };
+        if let Some(base) = base {
+            return self.first_type_within_inner(base, into_fields, hit, visited);
         }
         let (head, resolved) = {
             let tt = self.tysys.type_table.borrow();
@@ -2646,21 +2658,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        let module = scope
-            .tysys
-            .resolutions
-            .defs()
-            .module(scope.tysys.def_at(func.id))
-            .clone();
         let mut param_types = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
             if func.is_export {
                 scope.check_published(
-                    &func.name,
+                    func,
                     &format!("parameter '{}'", param.name),
                     type_id,
-                    &module,
                     param.span,
                 );
             }
@@ -2706,13 +2711,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             });
         }
         if func.is_export {
-            scope.check_published(
-                &func.name,
-                "return type",
-                declared_return_type,
-                &module,
-                func.span,
-            );
+            scope.check_published(func, "return type", declared_return_type, func.span);
         }
         if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
             let _ = scope.emit(TypeError::BorrowAtCmBoundary {
