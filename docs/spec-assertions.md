@@ -75,8 +75,12 @@ A function states the preconditions its caller owes with `contract` clauses,
 written after the `with` clause and before the body. Each clause is a condition
 and an optional message, as an `assert` is, and a function may have any number
 of them. A condition is parsed as an `if` condition is, with no struct literal.
-It is evaluated where the function is defined, so it may name a private field
-its caller could not, and it performs no effect.
+It is evaluated where the function is defined and performs no effect.
+Everything it names is at least as visible as the function, so a caller can
+evaluate the contract it owes. A clause naming a less visible item, such as a
+private field in a `pub fn`'s clause, is a compile error.
+
+> Not yet implemented: a clause may name a less visible item.
 
 <!-- {"fixture":"contract_clause.wado", "assert": false} -->
 

@@ -120,8 +120,7 @@ marker, so a contract on an `export fn` is always checked at the boundary.
 
 The check runs at the call. It reports the caller's position and blames the
 caller. Its predicate is evaluated in the context where the function is
-defined, as a default argument's expression is. A predicate may therefore
-name a private field, though the caller could not write it.
+defined, as a default argument's expression is.
 
 A marked call outside the contract, in a build that does not check, is never
 undefined behavior. It has the class the function states. An unconstrained
@@ -133,6 +132,23 @@ We know of no language with this design. The nearest is Rust, whose caller
 writes `unsafe { … }` and whose standard library checks `unsafe` preconditions
 according to the caller's `debug_assertions`. Rust's precondition is prose,
 though, and breaking it is undefined behavior.
+
+### A caller vouches only for what it can observe
+
+Everything a clause names is at least as visible as the function it guards.
+A `pub fn` cannot state its contract with a private field or a private
+helper, and a clause that does is a compile error. The caller owes the
+contract, so the caller must be able to evaluate it: to test it before the
+call, or to show why it holds before marking the call. A predicate the caller
+cannot read leaves `unchecked` to a guess. Eiffel states the same rule for its
+preconditions.
+
+The same reasoning rules out a contract on input the caller cannot observe
+before the call. An iterator may perform I/O, so its items exist only once the
+callee pulls them. A caller that marked such a call would vouch for data it
+has not seen, often data from outside the program. A function taking an
+iterator therefore has no contract on its items. It validates them as it reads
+them and reports a failure as an error.
 
 ### A contract states inputs only
 
@@ -151,7 +167,7 @@ What a function guarantees about its result is better stated as a type: a type
 whose invariant holds. Constructing such a type has the invariant as its
 precondition, so its contract is again an input contract, and the same
 mechanism checks it. `String` is the example: its UTF-8 invariant is the
-precondition of `from_utf8_unchecked`. A broken type invariant is also what
+precondition of `String::from_utf8`. A broken type invariant is also what
 makes a violation unconstrained, since other code relies on the invariant.
 
 Today such a type is a `struct` with a private field and a checked
@@ -265,6 +281,49 @@ trait IndexValue<I> {
 An impl whose type cannot take every input its trait admits is a design error
 in that impl, not a contract to add.
 
+### A clause may cost as much as the function
+
+The first checks covered only the clauses that cost constant time, because a
+check written with `builtin::contract_checks()` ran in every checking build at
+every call. A clause is checked on two paths: an unmarked call, whose caller
+asked for the check, and a marked call in a build that checks contracts. A
+clause that costs the same order as the function's own work, such as
+validating the bytes a function copies, is therefore written and checked. It
+slows a checking build by a constant factor, and a marked call in a shipping
+build does not pay it.
+
+A clause that would raise the function's complexity is a type to design, not a
+contract to write. A binary search that requires its input sorted takes a
+sorted list type, which checks the order once when it is built.
+
+### UTF-8 in the standard library
+
+The `String` functions that take bytes follow from the rules above:
+
+- `String::try_from_utf8` takes an iterator of bytes and returns a `Result`.
+  It is today's `String::from_utf8` renamed, and `from_utf8_slice` becomes
+  `try_from_utf8_slice`. Its items cannot be vouched for, so it has no
+  contract and no marked form.
+- `String::from_utf8` takes an `AsByteSlice` and returns a `String`. It
+  declares `contract String::is_valid_utf8(…)`, so an unmarked call traps on
+  invalid bytes, and `unchecked String::from_utf8(bytes)` replaces
+  `from_utf8_unchecked`. A `ByteList` passed to it hands over its buffer
+  rather than being copied.
+- `String::push_bytes` declares that the appended bytes are valid UTF-8 on
+  their own, and `unchecked` replaces `push_bytes_unchecked`. The old contract
+  asked only that the result stay valid, which admits half a character now and
+  the rest later. No caller relies on that.
+- Writing one byte of a `String` becomes `internal`. A character written a
+  byte at a time is invalid UTF-8 between the writes, so no contract on one
+  write can state what the sequence keeps. Its contract is the index in range,
+  and the standard library's tests hold the UTF-8 invariant. The optimizer's
+  append fusion still emits it.
+
+No public function rewrites the bytes of an existing `String` in place. A
+program that builds text a byte at a time writes a `ByteList`, which has no
+invariant to break, and converts it once with `String::from_utf8`. An in-place
+API waits for a program outside the standard library that needs one.
+
 ## Roadmap
 
 1. `-f contract-checks`, `builtin::contract_checks()`, and the checks in
@@ -287,14 +346,19 @@ in that impl, not a contract to add.
    walks the holder, as it walks every default body, once in the trait's own
    frame with `Self` abstract, so the effect and purity checks and the language
    service answer for a trait that no impl takes.
-4. An `interface` operation's contract: written on the operation, checked in
+4. A clause naming anything less visible than its function is a compile
+   error, so a caller can always evaluate the contract it owes.
+5. An `interface` operation's contract: written on the operation, checked in
    its default body and in every handler of it, and held to the purity check.
    Until then the parser rejects one.
-5. The indexing traits declare `contains_index` and require it, so
+6. The indexing traits declare `contains_index` and require it, so
    `unchecked xs[i]` is an index read with no range check.
-6. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
-   `#[unavailable]` declaration where Rust has a method of the same name.
-7. The generated WIT carries an `export fn`'s contract as a comment.
+7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
+   `#[unavailable]` declaration where Rust has a method of the same name. The
+   UTF-8 functions take the shapes
+   [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives them,
+   and `String::from_utf8` takes over a `ByteList`'s buffer without a copy.
+8. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps
 
@@ -304,10 +368,10 @@ in that impl, not a contract to add.
   once for each.
 - A contract on a declaration with no body, outside a trait, is a compile
   error.
-- A clause that costs more than the function it guards is not checked: that
-  the bytes are UTF-8 in `push_bytes_unchecked` and `from_utf8_unchecked`, and
-  that a write keeps them UTF-8 in `set_byte_unchecked`.
 - A call through a function value has no callee known statically, so it has no
   contract to check or to remove.
-- An input contract cannot say that a method taking `&mut self` keeps its
-  type's invariant. It can only require inputs that imply it.
+- An input contract states what one call requires. It cannot state an
+  invariant that a sequence of calls breaks and restores, such as UTF-8 while
+  a character is written a byte at a time. Nor can it say that a method taking
+  `&mut self` keeps its type's invariant; it can only require inputs that
+  imply it.
