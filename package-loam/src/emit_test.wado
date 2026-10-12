@@ -143,8 +143,9 @@ test "the weights become the backend's for every pass where they are prepared" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains("    pub W1: Bk::Tensor<f32, [In, Hidden]>,\n");
+    // `W1` is read only as a product's right operand, so it is kept as a matrix.
     assert out.contains(
-        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep(&self.W1),\n",
+        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_matrix(&self.W1),\n",
     );
 }
 
@@ -308,7 +309,7 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     );
     assert out.contains("let header = read_checkpoint(checkpoint)?;");
     assert out.contains(
-        "W1: backend.keep(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
+        "W1: backend.keep_matrix(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
 }
 
@@ -1362,6 +1363,22 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
         "let Q = backend.upload(&Tensor::<i64, [Batch, Seq]> { data: [0, 1, 2, 3], extents: [1, 4] });",
     );
     assert out.contains("let F = backend.gather_rows(&weights.P, &Q);");
+}
+
+test "a weight read past a product is kept whole, one read only by products as a matrix" {
+    // `W` is gathered, as an embedding is; `V` only multiplied.
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W, float[8, 8] V> {
+        E = Gather(W, I)
+        Y = MatMul(E, V)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Batch", "Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+        rule("V", ["Hidden", "Hidden"]),
+    ];
+    let out = generate(source, layout).unwrap();
+    assert out.contains("W: backend.keep(&self.W),"), out;
+    assert out.contains("V: backend.keep_matrix(&self.V),"), out;
 }
 
 test "Gather along any axis but the first lowers to gather, the axes spelled" {

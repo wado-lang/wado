@@ -388,9 +388,11 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
         `&mut ${BACKEND_PARAM}`,
     ).set_return_type(PREPARED_TYPE).add_effect("_").emit_begin(w);
     w.begin(`return ${PREPARED}`);
+    let matrices = matrix_weights(graph, checked);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
-        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, true)},`);
+        let holding = weight_holding(&matrices, &vi.name);
+        w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, holding)},`);
     }
     w.end_with(";");
     w.end();
@@ -398,7 +400,7 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held);
+    emit_constructor(w, graph, checked, names, held, &matrices);
 }
 
 /// A weight as the backend holds it: in the primitive the kernels compute in.
@@ -407,18 +409,75 @@ fn prepared_type(checked: &Checked, tensor: &String) -> String {
     return `${BACKEND_PARAM}::Tensor<${checked.primitives.get(*tensor).unwrap()}, [${axis_list(&shape)}]>`;
 }
 
+/// How long the backend holds a tensor, and what reads it.
+enum Holding {
+    /// For this pass: an input.
+    Pass,
+    /// For every pass: a weight.
+    Keep,
+    /// For every pass, read only as a matrix product's right operand.
+    KeepMatrix,
+}
+
 /// The call making the host tensor `host`, a reference, the backend's: a
 /// half-precision one is converted once here, so `forward` converts none.
-/// Where `kept`, the backend holds it for every pass rather than this one.
-fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String, kept: bool) -> String {
+fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String, holding: Holding) -> String {
     let verb = if converted(checked, held, tensor) {
         "prepare";
-    } else if kept {
-        "keep";
     } else {
-        "upload";
+        match holding {
+            Pass => "upload",
+            Keep => "keep",
+            KeepMatrix => "keep_matrix",
+        }
     };
     return `backend.${verb}(${host})`;
+}
+
+/// How the backend holds the weight `tensor`: as a matrix where `matrices`
+/// names it.
+fn weight_holding(matrices: &TreeSet<String>, tensor: &String) -> Holding {
+    return if matrices.contains(*tensor) { Holding::KeepMatrix } else { Holding::Keep };
+}
+
+/// The initializers of rank 2 read only as a matrix product's right operand:
+/// input 1 of a `MatMul`, or of a `Gemm` that does not transpose it, in the
+/// graph and every branch it carries, and neither an output nor read anywhere
+/// else. A backend may hold such a weight in the layout the product reads.
+fn matrix_weights(graph: &Graph, checked: &Checked) -> TreeSet<String> {
+    let mut right = TreeSet::<String>::new();
+    let mut elsewhere = TreeSet::<String>::new();
+    note_operand_uses(graph, &mut right, &mut elsewhere);
+    for let vi of &graph.outputs {
+        elsewhere.insert(vi.name);
+    }
+    let mut out = TreeSet::<String>::new();
+    for let vi of &graph.initializers {
+        if right.contains(vi.name) && !elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
+            out.insert(vi.name);
+        }
+    }
+    return out;
+}
+
+/// Sort each operand `graph`'s nodes read into `right`, as a matrix product's
+/// right operand, or `elsewhere`, recursing into the branches they carry.
+fn note_operand_uses(graph: &Graph, right: &mut TreeSet<String>, elsewhere: &mut TreeSet<String>) {
+    for let node of &graph.nodes {
+        let product = node.op == "MatMul" || (node.op == "Gemm" && !settled(gemm_options(node)).3);
+        for let [i, input] of node.inputs.into_iter().enumerate() {
+            if product && i == 1 {
+                right.insert(input);
+            } else {
+                elsewhere.insert(input);
+            }
+        }
+        for let attr of &node.attrs {
+            if let Some(g) = &attr.graph {
+                note_operand_uses(g, right, elsewhere);
+            }
+        }
+    }
 }
 
 /// Whether some initializer's data is left to a checkpoint.
@@ -435,7 +494,14 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Prepared::load` reading the rest from a safetensors checkpoint otherwise.
 /// Each tensor is prepared as it is read, so the host copy of one weight at a
 /// time is all that lives beside the prepared ones.
-fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
+fn emit_constructor(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    held: &TreeMap<String, String>,
+    matrices: &TreeSet<String>,
+) {
     let loads = loads_weights(graph);
     w.blank();
     let mut block = ImplSpec::new(PREPARED_TYPE);
@@ -465,7 +531,8 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names:
             None => checkpoint_payload(&e),
         };
         let host = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
-        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, true)},`);
+        let holding = weight_holding(matrices, &vi.name);
+        w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, holding)},`);
     }
     w.end_with(if loads { ");" } else { ";" });
     w.end();
@@ -655,7 +722,7 @@ fn emit_forward(
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
-        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, false)};`);
+        uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, Holding::Pass)};`);
         exprs.values[vi.name] = ident;
     }
     for let vi of &graph.initializers {

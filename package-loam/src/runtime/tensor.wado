@@ -1,7 +1,37 @@
+use { f32x4 } from "core:simd";
+
 /// A tensor of `E` over the axis list `Axes`, row-major.
 pub struct Tensor<E, Axes> {
     pub data: List<E>,
     pub extents: List<i32>,
+    /// The elements as [`Packed`] rows in place of `data`, which is then empty,
+    /// where the `Cpu` backend kept a matrix only products read on their
+    /// right. Every kernel builds its output without one.
+    pub packed: Option<Packed> = null,
+}
+
+/// A matrix's rows as vectors of 4 adjacent elements, each row padded with
+/// zeros to a whole vector, so a product reads 4 columns with one bounds
+/// check and multiplies them in one instruction.
+pub struct Packed {
+    vectors: Array<f32x4>,
+    /// The vectors one row takes.
+    per_row: i32,
+}
+
+/// `data`, a `rows` by `cols` matrix, as [`Packed`] rows.
+fn packed_matrix(data: &List<f32>, rows: i32, cols: i32) -> Packed {
+    let per_row = (cols + 3) / 4;
+    let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
+    for let r of 0..<rows {
+        for let v of 0..<per_row {
+            let c = v * 4;
+            let lane = |i: i32| if c + i < cols { data[r * cols + c + i] } else { 0.0 as f32 };
+            let lanes: Array<f32> = [lane(0), lane(1), lane(2), lane(3)];
+            vectors[r * per_row + v] = f32x4::from(lanes);
+        }
+    }
+    return Packed { vectors, per_row };
 }
 
 /// The elements `extents` hold, or `None` where its non-empty extents multiply
@@ -197,34 +227,10 @@ pub fn matmul_broadcast<A, B, Out>(
         let a_base = at_a * rows * inner;
         let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
-        let whole_cols = cols - cols % TILE;
-        // Rows in bands of up to `TILE`, a lone row left over on its own.
-        let mut r = 0;
-        while r < rows {
-            let height = i32::min(TILE, rows - r);
-            for let mut c = 0; c < whole_cols; c += TILE {
-                let a_at = a_base + r * inner;
-                let b_at = b_base + c;
-                let out_at = out_base + r * cols + c;
-                if height > 1 {
-                    tile_4x4(lhs_data, rhs_data, &mut out, inner, cols, height, a_at, b_at, out_at);
-                } else {
-                    tile_1x4(lhs_data, rhs_data, &mut out, inner, cols, a_at, b_at, out_at);
-                }
-            }
-            for let rr of r..<r + height {
-                for let c of whole_cols..<cols {
-                    out[out_base + rr * cols + c] = dot(
-                        lhs_data,
-                        rhs_data,
-                        inner,
-                        cols,
-                        a_base + rr * inner,
-                        b_base + c,
-                    );
-                }
-            }
-            r += height;
+        let at = MatrixAt { a: a_base, b: b_base, out: out_base };
+        match &b.packed {
+            Some(p) => packed_product(lhs_data, p, &mut out, rows, inner, cols, &at),
+            None => scalar_product(lhs_data, rhs_data, &mut out, rows, inner, cols, &at),
         }
         if let Some(f) = &finishing {
             f.apply(&mut out, out_base, rows * cols);
@@ -236,6 +242,172 @@ pub fn matmul_broadcast<A, B, Out>(
         }
     }
     return Tensor { data: out, extents };
+}
+
+/// Where one batch element's matrices start in `a`, `b` and the output.
+struct MatrixAt {
+    a: i32,
+    b: i32,
+    out: i32,
+}
+
+/// One batch element's product over `b` as stored: rows in bands of up to
+/// [`TILE`], a lone row left over on its own, and the columns past the last
+/// whole tile one element at a time.
+fn scalar_product(
+    a: &List<f32>,
+    b: &List<f32>,
+    out: &mut List<f32>,
+    rows: i32,
+    inner: i32,
+    cols: i32,
+    at: &MatrixAt,
+) {
+    let whole_cols = cols - cols % TILE;
+    let mut r = 0;
+    while r < rows {
+        let height = i32::min(TILE, rows - r);
+        for let mut c = 0; c < whole_cols; c += TILE {
+            let a_at = at.a + r * inner;
+            let b_at = at.b + c;
+            let out_at = at.out + r * cols + c;
+            if height > 1 {
+                tile_4x4(a, b, out, inner, cols, height, a_at, b_at, out_at);
+            } else {
+                tile_1x4(a, b, out, inner, cols, a_at, b_at, out_at);
+            }
+        }
+        for let rr of r..<r + height {
+            for let c of whole_cols..<cols {
+                out[at.out + rr * cols + c] = dot(a, b, inner, cols, at.a + rr * inner, at.b + c);
+            }
+        }
+        r += height;
+    }
+}
+
+/// One batch element's product over `b` [`Packed`], shared by every batch
+/// element: rows in bands as [`scalar_product`] takes them, against 2 vectors
+/// (8 columns) of `b` at a time. A row of an odd number of vectors computes its
+/// last one twice and stores it once, and a padding lane is never stored.
+fn packed_product(
+    a: &List<f32>,
+    b: &Packed,
+    out: &mut List<f32>,
+    rows: i32,
+    inner: i32,
+    cols: i32,
+    at: &MatrixAt,
+) {
+    assert at.b == 0, "a packed matrix is shared by every batch element";
+    let mut r = 0;
+    while r < rows {
+        let height = i32::min(TILE, rows - r);
+        for let mut v = 0; v < b.per_row; v += 2 {
+            let v1 = i32::min(v + 1, b.per_row - 1);
+            let a_at = at.a + r * inner;
+            let out_at = at.out + r * cols;
+            if height > 1 {
+                vector_band(a, b, out, inner, cols, height, a_at, v, v1, out_at);
+            } else {
+                vector_row(a, b, out, inner, cols, a_at, v, v1, out_at);
+            }
+        }
+        r += height;
+    }
+}
+
+/// `height` rows (2 to 4) of the product against the vectors `v0` and `v1`
+/// of each row of `b`, the missing rows of a short band reading its last real
+/// one, as in [`tile_4x4`], and left unstored.
+fn vector_band(
+    a: &List<f32>,
+    b: &Packed,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    height: i32,
+    a_at: i32,
+    v0: i32,
+    v1: i32,
+    out_at: i32,
+) {
+    assert 2 <= height <= TILE;
+    let zero = f32x4::splat(0.0);
+    let [mut s00, mut s01, mut s10, mut s11] = [zero, zero, zero, zero];
+    let [mut s20, mut s21, mut s30, mut s31] = [zero, zero, zero, zero];
+    let a1 = a_at + inner;
+    let a2 = a_at + inner * i32::min(2, height - 1);
+    let a3 = a_at + inner * (height - 1);
+    for let mut k = 0; k < inner; k += 1 {
+        let row = k * b.per_row;
+        let y0 = b.vectors[row + v0];
+        let y1 = b.vectors[row + v1];
+        let x0 = f32x4::splat(a[a_at + k]);
+        let x1 = f32x4::splat(a[a1 + k]);
+        let x2 = f32x4::splat(a[a2 + k]);
+        let x3 = f32x4::splat(a[a3 + k]);
+        s00 = s00 + x0 * y0;
+        s01 = s01 + x0 * y1;
+        s10 = s10 + x1 * y0;
+        s11 = s11 + x1 * y1;
+        s20 = s20 + x2 * y0;
+        s21 = s21 + x2 * y1;
+        s30 = s30 + x3 * y0;
+        s31 = s31 + x3 * y1;
+    }
+    let sums = [[s00, s01], [s10, s11], [s20, s21], [s30, s31]];
+    for let [i, [first, second]] of sums.enumerate() {
+        if i < height {
+            store_vectors(out, cols, out_at + i * cols, v0, v1, first, second);
+        }
+    }
+}
+
+/// [`vector_band`] for a lone row.
+fn vector_row(
+    a: &List<f32>,
+    b: &Packed,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    a_at: i32,
+    v0: i32,
+    v1: i32,
+    out_at: i32,
+) {
+    let zero = f32x4::splat(0.0);
+    let [mut s0, mut s1] = [zero, zero];
+    for let mut k = 0; k < inner; k += 1 {
+        let row = k * b.per_row;
+        let x = f32x4::splat(a[a_at + k]);
+        s0 = s0 + x * b.vectors[row + v0];
+        s1 = s1 + x * b.vectors[row + v1];
+    }
+    store_vectors(out, cols, out_at, v0, v1, s0, s1);
+}
+
+/// Store the sums for the vectors `v0` and `v1` of one output row from
+/// `row_at`: `v1` only where it is not `v0` again, and no lane past `cols`.
+fn store_vectors(out: &mut List<f32>, cols: i32, row_at: i32, v0: i32, v1: i32, first: f32x4, second: f32x4) {
+    store_lanes(out, row_at + v0 * 4, cols - v0 * 4, first);
+    if v1 != v0 {
+        store_lanes(out, row_at + v1 * 4, cols - v1 * 4, second);
+    }
+}
+
+/// Store the first `room` lanes of `v` from `at`, at most all 4.
+fn store_lanes(out: &mut List<f32>, at: i32, room: i32, v: f32x4) {
+    out[at] = v.extract_lane(0);
+    if room > 1 {
+        out[at + 1] = v.extract_lane(1);
+    }
+    if room > 2 {
+        out[at + 2] = v.extract_lane(2);
+    }
+    if room > 3 {
+        out[at + 3] = v.extract_lane(3);
+    }
 }
 
 /// The side of the square of output elements `matmul_broadcast` computes at
@@ -1562,6 +1734,12 @@ pub trait Backend with _ {
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return self.upload(t);
     }
+    /// [`Self::keep`] for a weight read only as a matrix product's right
+    /// operand, which the backend may hold in the layout the product reads
+    /// and in no other.
+    fn keep_matrix<E: Element, A, B>(&mut self, t: &Tensor<E, [A, B]>) -> Self::Tensor<E, [A, B]> {
+        return self.keep(t);
+    }
     /// `t`, held in half precision on the host, as this backend computes with
     /// it. How it stores the result is its own: the type says only that the
     /// kernels read it as f32.
@@ -1722,6 +1900,20 @@ impl Backend for Cpu {
 
     fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
+    }
+
+    /// A matrix of `f32` is held [`Packed`] alone, its `data` left empty: the
+    /// products that read it read only the packed rows.
+    fn keep_matrix<E: Element, A, B>(&mut self, t: &Tensor<E, [A, B]>) -> Tensor<E, [A, B]> {
+        if !E::is_f32() {
+            return *t;
+        }
+        let mut values = List::<f32>::with_capacity(t.data.len());
+        for let x of t.data {
+            values.push(x.cast_to::<f32>());
+        }
+        let packed = packed_matrix(&values, t.extents[0], t.extents[1]);
+        return Tensor { data: [], extents: t.extents, packed: Option::Some(packed) };
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Tensor<E, Axes> {

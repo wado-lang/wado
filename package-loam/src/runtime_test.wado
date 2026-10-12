@@ -362,15 +362,17 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
 }
 
 test "matmul_shared agrees with the product element by element past a whole tile" {
-    // 5 to 8 rows leave 1 to 4 for the last band, and 7 columns a tile of 4
-    // and 3 left over, in each of two batch elements.
+    // 5 to 8 rows leave 1 to 4 for the last band. 7 columns leave 3 past a
+    // tile of 4 and pad a vector, 11 make an odd number of vectors, 16 fit.
     for let rows of 5..=8 {
-        matmul_shared_matches_product(rows);
+        for let cols of [7, 11, 16] {
+            matmul_shared_matches_product(rows, cols);
+        }
     }
 }
 
-fn matmul_shared_matches_product(rows: i32) {
-    let [batch, inner, cols] = [2, 5, 7];
+fn matmul_shared_matches_product(rows: i32, cols: i32) {
+    let [batch, inner] = [2, 5];
     let mut a_data: List<f32> = [];
     for let i of 0..<batch * rows * inner {
         a_data.push((i % 7 - 3) as f32);
@@ -381,17 +383,22 @@ fn matmul_shared_matches_product(rows: i32) {
     }
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([batch, rows, inner], a_data);
     let b: Tensor<f32, [Inner, Col]> = tensor([inner, cols], b_data);
+    // A weight the `Cpu` backend keeps as a matrix carries its packed rows alone.
+    let kept = Cpu {}.keep_matrix(&b);
+    assert kept.packed matches { Some(_) } && kept.data.is_empty();
 
-    let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &b, &null);
-    assert c.extents == [batch, rows, cols] as List<i32>;
-    for let s of 0..<batch {
-        for let r of 0..<rows {
-            for let col of 0..<cols {
-                let mut want: f32 = 0.0;
-                for let k of 0..<inner {
-                    want += a.data[(s * rows + r) * inner + k] * b.data[k * cols + col];
+    for let right of [b, kept] {
+        let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &right, &null);
+        assert c.extents == [batch, rows, cols] as List<i32>;
+        for let s of 0..<batch {
+            for let r of 0..<rows {
+                for let col of 0..<cols {
+                    let mut want: f32 = 0.0;
+                    for let k of 0..<inner {
+                        want += a.data[(s * rows + r) * inner + k] * b.data[k * cols + col];
+                    }
+                    assert c.data[(s * rows + r) * cols + col] == want;
                 }
-                assert c.data[(s * rows + r) * cols + col] == want;
             }
         }
     }
