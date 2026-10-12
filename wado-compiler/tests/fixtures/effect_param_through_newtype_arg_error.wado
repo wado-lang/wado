@@ -10,6 +10,10 @@ struct Holder<F> {
 
 type Hold<F> = Holder<F>;
 
+fn hold<effect E>(f: fn() with E) -> Hold<fn() with E> {
+    return Holder { f } as Hold<fn() with E>;
+}
+
 fn pass_on<effect E>(h: Hold<fn() with E>) -> Hold<fn() with E> {
     return h;
 }
@@ -21,7 +25,7 @@ fn fire<effect E>(h: Hold<fn() with E>) with E {
 }
 
 fn quiet() {
-    fire(pass_on(Holder { f: || println("leaked") } as Hold<fn() with Stdout>));
+    fire(pass_on(hold(|| println("leaked"))));
 }
 
 export fn run() with Stdout {
@@ -30,5 +34,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "compile_error": ":24:5: analysis error: missing effect 'Stdout' required by 'fire'"
+    "compile_error": ":28:5: analysis error: missing effect 'Stdout' required by 'fire'"
 }
