@@ -1,0 +1,20 @@
+// `map` is generic over the function it holds, so the adapter's type carries
+// that function's row: a function declaring no effects cannot advance an
+// adapter built from one declaring `Stdout`.
+use { println, Stdout } from "core:cli";
+
+fn total(xs: List<i32>, g: fn mut(i32) -> i32 with Stdout) -> i32 {
+    let mut t = 0;
+    for let y of xs.into_iter().map(g) {
+        t += y;
+    }
+    return t;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1];
+    println(`${total(xs, |x| x)}`);
+}
+
+__DATA__
+{"compile_error": ":8:5: analysis error: missing effect 'Stdout' required by 'next'", "compile_error_count": 1}

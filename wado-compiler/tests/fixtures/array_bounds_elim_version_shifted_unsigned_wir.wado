@@ -1,0 +1,31 @@
+// Loop-versioned BCE over a check shifted by an unsigned local. No unsigned
+// local is negative, so the residual asks instead that `len - ob` not wrap:
+// `ob <= len`. The fast arm then carries no check.
+
+use { println, Stdout } from "core:cli";
+
+fn sum(xs: &Array<i32>, len: u32, ob: u32, n: u32) -> i32 {
+    let mut total = 0;
+    for let mut c: u32 = 0; c < n; c += 1 {
+        let i = ob + c;
+        if !(i < len) {
+            panic("out of range");
+        }
+        total += xs[i as i32];
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    let xs: Array<i32> = [1, 2, 3, 4, 5, 6, 7, 8];
+    println(`${sum(&xs, builtin::black_box(8), builtin::black_box(2), builtin::black_box(5))}`);
+}
+
+__DATA__
+{
+    "stdout": "25\n",
+    "wir_scope": ".wado/run",
+    "wir_expect:O2": [
+        "(ob <=u len) & (n_{} <=u (len - ob))"
+    ]
+}

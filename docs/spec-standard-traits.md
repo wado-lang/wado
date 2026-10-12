@@ -35,6 +35,25 @@ of a stream does I/O. A loop over it, and any adapter wrapping it, demands what
 its `next` performs. A function generic over an iterator forwards that with
 [`with _`](./spec-effects.md#with-_).
 
+A lazy adapter (`map`, `filter`) holds the closure it is built from, and its
+type carries the closure's effects. Building one demands nothing. Advancing it
+demands what the closure performs:
+
+<!-- {"fixture":"effect_iterator_map_closure.wado"} -->
+
+```wado
+fn shout(xs: List<i32>) -> List<i32> with Stdout {
+    return xs.into_iter().map(|x| {
+        println(`${x}`);
+        return x * 2;
+    }).collect();
+}
+
+test {
+    assert shout([1, 2]) == [2, 4];
+}
+```
+
 ### IntoIterator - Conversion Trait
 
 <!-- {"fixture":"spec_traits_iterator_decls.wado"} -->

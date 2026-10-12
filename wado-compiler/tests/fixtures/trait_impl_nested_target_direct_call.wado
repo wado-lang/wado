@@ -1,0 +1,33 @@
+// A trait impl whose target nests its parameter, `impl<T> Peek for
+// Listed<Option<T>>`, binds `T` from the receiver at a direct method call as
+// it does through a bound.
+
+struct Listed<L> {
+    items: L,
+}
+
+trait Peek with () {
+    type Item;
+    fn peek(&self) -> Option<Self::Item>;
+}
+
+impl<T> Peek for Listed<Option<T>> {
+    type Item = T;
+    fn peek(&self) -> Option<T> {
+        return self.items;
+    }
+}
+
+fn peeked<P: Peek>(p: &P) -> Option<P::Item> {
+    return p.peek();
+}
+
+test "a direct call" {
+    let held = Listed { items: Option::Some("x") };
+    assert held.peek() == Option::Some("x");
+}
+
+test "through a bound" {
+    let held = Listed { items: Option::Some(3) };
+    assert peeked(&held) == Option::Some(3);
+}

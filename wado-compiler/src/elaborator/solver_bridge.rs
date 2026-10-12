@@ -336,21 +336,29 @@ impl Lowering {
     /// its parameters, its return, then its effects as one tuple, so two
     /// signatures differing only in a `with` clause are two types, and no two
     /// arities collide.
-    fn fn_type(
-        &self,
-        is_mut: bool,
-        mut signature: Vec<SolverType>,
-        effects: impl IntoIterator<Item = TypeDeclId>,
-    ) -> SolverType {
+    fn fn_type(&self, is_mut: bool, mut signature: Vec<SolverType>, row: SolverType) -> SolverType {
         let head = self
             .known_type(&DeclKey::FnShape { is_mut })
             .expect("`Lowering::new` interns both function heads");
-        let effects = effects
-            .into_iter()
-            .map(|e| SolverType::Decl(e, Vec::new()))
-            .collect();
-        signature.push(SolverType::Tuple(effects));
+        signature.push(row);
         SolverType::Decl(head, signature)
+    }
+
+    /// A row of named effects as the solver spells it. One holding an effect
+    /// parameter is [`SolverType::AnyRow`]: it stands for whatever row meets
+    /// it. A variable is a row the effect check has yet to solve, so it
+    /// selects nothing here: an impl is chosen as if it performed nothing.
+    fn effect_row(&self, effects: &[EffectRef]) -> SolverType {
+        if effects.iter().any(EffectRef::is_param) {
+            return SolverType::AnyRow;
+        }
+        SolverType::Tuple(
+            effects
+                .iter()
+                .filter(|e| !e.is_var())
+                .map(|e| SolverType::Decl(self.effect_head(e), Vec::new()))
+                .collect(),
+        )
     }
 
     fn effect_head(&self, effect: &EffectRef) -> TypeDeclId {
@@ -414,7 +422,7 @@ impl Lowering {
             } => self.fn_type(
                 *is_mut,
                 said(signature.iter().map(|ty| self.named_arg(ty, param)))?,
-                effects.iter().map(|e| self.effect_head(e)),
+                self.effect_row(effects),
             ),
             TypeHead::Projection(_) => {
                 let projected = name.projected().expect("a projection head projects");
@@ -569,17 +577,32 @@ impl Lowering {
                         .chain(std::iter::once(&f.return_type))
                         .map(|ty| self.ast_type(ty, written)),
                 )?;
-                let effects: Vec<TypeDeclId> = f
+                // A name reaching no effect declaration is the signature's own
+                // effect parameter, `_` among them.
+                let mut open = false;
+                let effects: Vec<SolverType> = f
                     .effects
                     .iter()
-                    .map(|effect| match resolutions.get(effect.id) {
-                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => self
-                            .known_type(&DeclKey::Def(def))
-                            .expect("every effect is interned up front"),
-                        _ => self.undeclared_effect(),
+                    .filter_map(|effect| match resolutions.get(effect.id) {
+                        Resolution::Def(def) if resolutions.defs().kind(def).is_effect() => {
+                            Some(SolverType::Decl(
+                                self.known_type(&DeclKey::Def(def))
+                                    .expect("every effect is interned up front"),
+                                Vec::new(),
+                            ))
+                        }
+                        _ => {
+                            open = true;
+                            None
+                        }
                     })
                     .collect();
-                Ok(self.fn_type(f.is_mut, signature, effects))
+                let row = if open {
+                    SolverType::AnyRow
+                } else {
+                    SolverType::Tuple(effects)
+                };
+                Ok(self.fn_type(f.is_mut, signature, row))
             }
             // A placeholder no inference fills, or the parser's recovery from
             // a reported error.
@@ -711,11 +734,7 @@ impl Lowering {
                         .chain(std::iter::once(return_type))
                         .map(|&a| self.type_id(table, a, param)),
                 )?;
-                Ok(self.fn_type(
-                    *is_mut,
-                    signature,
-                    effects.iter().map(|e| self.effect_head(e)),
-                ))
+                Ok(self.fn_type(*is_mut, signature, self.effect_row(effects)))
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.

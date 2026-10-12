@@ -1,0 +1,20 @@
+// An effect parameter nothing at the call determines stands for no effect: the
+// callee holds for every row its parameter may take, the empty one among them.
+use { println, Stdout } from "core:cli";
+
+fn make<effect E>() -> fn() with E {
+    return || {};
+}
+
+fn use_it() {
+    let f = make();
+    f();
+}
+
+export fn run() with Stdout {
+    use_it();
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

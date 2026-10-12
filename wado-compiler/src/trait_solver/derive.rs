@@ -25,7 +25,8 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             | SolverType::Pack(_)
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
-            | SolverType::Projection { .. } => None,
+            | SolverType::Projection { .. }
+            | SolverType::AnyRow => None,
         })
         .collect();
     program.traits.entry(trait_).or_default().structural = true;

@@ -33,7 +33,7 @@ struct spec_modules_visibility.wado//$Closure_0 {  // TypeId(6)}
 
 array Array<i32> (mut i32);  // TypeId(7)
 
-struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32> {  // TypeId(8)
+struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32> {  // TypeId(8)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut f: ref struct,
 }
@@ -120,7 +120,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(42)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>") -> ref "core:prelude//List<i32>";  // TypeId(43)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>") -> ref "core:prelude//List<i32>";  // TypeId(43)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(44)
 
@@ -199,7 +199,7 @@ fn "spec_modules_visibility.wado/$test_0"() {
     let i: i32;
     let $licm_repr_46: ref Array<i32>;
     $v0_9 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_modules_visibility.wado//$Closure_0" {  }, inspect: ref.func "closure/spec_modules_visibility.wado/$closure_inspect_wrapper_0", func: ref.func "closure/spec_modules_visibility.wado/$closure_wrapper_0" };
-    $v1_10 = "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_26(array.new_fixed<i32>(1, 2)), index: 0, end: 2 }, f: $v0_9 });
+    $v1_10 = "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_26(array.new_fixed<i32>(1, 2)), index: 0, end: 2 }, f: $v0_9 });
     elements_26 = global:spec_modules_visibility.wado::$const_obj_13;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_i32__9: block -> bool {
         if local.tee a_end($v1_10.used) != 2 {
@@ -1212,7 +1212,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>>"(iter) {
+fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>>"(iter) {
     let result: ref "core:prelude//List<i32>";
     let elements: ref Array<i32>;
     let item_9: i32;
@@ -1230,7 +1230,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     $hfs_index_23 = $licm_inner_19.index;
     b169: block {
         l170: loop {
-            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__i32__core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
+            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__1: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__2: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__2 $hfs_index_23 >= $licm_end_21;
                     item_9 = builtin::array_get_value<i32>(elements, $hfs_index_23);
@@ -1245,7 +1245,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
                     }
                     builtin::array_set<i32>(result.repr, used, $fused_slot_18);
                     result.used = used + 1;
-                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__i32__core_prelude_traits_wado_Iterator__next_sroa_return__1;
+                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__1;
                 };
                 $licm_inner_19.index = $hfs_index_23;
                 break b169;

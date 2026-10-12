@@ -1501,7 +1501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // instantiated — defers to its solver instead of rejecting
                     // every value.
                     let incompatible = matches!(
-                        check_assignable(value, value_type, &self.tysys.type_table.borrow(),),
+                        self.assignable(value, value_type, field.value.span()),
                         TypeCheckResult::Incompatible
                     );
                     if incompatible {
@@ -1815,7 +1815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // enclosing body's own parameter), while a variable or a pack
             // defers to its solver.
             let incompatible = matches!(
-                check_assignable(elem_expr, element_type, &self.tysys.type_table.borrow(),),
+                self.assignable(elem_expr, element_type, element.span()),
                 TypeCheckResult::Incompatible
             );
             if incompatible {

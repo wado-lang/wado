@@ -164,7 +164,8 @@ fn chain(program: &Program, receiver: &SolverType) -> Vec<SolverType> {
         | SolverType::Param(_)
         | SolverType::Pack(_)
         | SolverType::Tuple(_)
-        | SolverType::Projection { .. } => (None, Some(receiver.clone())),
+        | SolverType::Projection { .. }
+        | SolverType::AnyRow => (None, Some(receiver.clone())),
     };
     let mut chain: Vec<SolverType> = Vec::new();
     let mut wrapped = false;
@@ -200,7 +201,8 @@ fn generality(target: &SolverType) -> Generality {
         SolverType::Decl(..)
         | SolverType::Ref { .. }
         | SolverType::Tuple(_)
-        | SolverType::Projection { .. } => {
+        | SolverType::Projection { .. }
+        | SolverType::AnyRow => {
             if target.mentions(&|_| true) {
                 Generality::Head
             } else {

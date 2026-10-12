@@ -5,7 +5,7 @@
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
 use crate::compiler_host::CompilerHost;
-use crate::tir::{EffectRef, ResolvedType, TupleSlot, TypeId, TypeTable};
+use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -182,9 +182,10 @@ fn check_at(
         }
         // A call through the slot performs no more than its type says. Where a
         // value can also be written back through the slot, a narrower row would
-        // admit a wider one, so there the rows match. An effect parameter is
-        // the effect check's to resolve.
-        if !expected_effects.iter().any(EffectRef::is_param) {
+        // admit a wider one, so there the rows match. An effect parameter or
+        // variable is the effect check's to resolve.
+        let open = |row: &[EffectRef]| row.iter().any(|e| e.is_param() || e.is_var());
+        if !open(expected_effects) && !actual_effects.iter().any(EffectRef::is_var) {
             let covers = |wide: &[EffectRef], narrow: &[EffectRef]| {
                 narrow.iter().all(|effect| wide.contains(effect))
             };
@@ -262,6 +263,16 @@ fn check_at(
     }
 
     TypeCheckResult::Compatible
+}
+
+/// Whose frame a slot's type is written in, which says whose effect
+/// parameters its rows name.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum SlotFrame {
+    /// The enclosing function's: a binding, a `return`, a cast's target.
+    Own,
+    /// A callee's parameter, whose effect parameters the call resolves.
+    Callee,
 }
 
 /// Two tuple types over the same packs are the same type only when their
@@ -377,18 +388,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `<H: CompilerHost>` plumbing to the `Elaborator` boundary so
     /// `TypeSystem` itself stays host-agnostic.
     pub(super) fn typecheck(&self, actual: TypeId, expected: TypeId, span: Span) {
-        self.typecheck_worded(actual, expected, span, |payload| TypeError::TypeMismatch {
-            expected: payload.expected,
-            found: payload.found,
-            span,
+        self.typecheck_in(actual, expected, span, SlotFrame::Own);
+    }
+
+    /// [`Self::typecheck`] on a value bound to a callee's parameter, whose type
+    /// is written in the callee's frame.
+    pub(super) fn typecheck_into_callee(&self, actual: TypeId, expected: TypeId, span: Span) {
+        self.typecheck_in(actual, expected, span, SlotFrame::Callee);
+    }
+
+    fn typecheck_in(&self, actual: TypeId, expected: TypeId, span: Span, frame: SlotFrame) {
+        self.typecheck_worded(actual, expected, span, frame, |payload| {
+            TypeError::TypeMismatch {
+                expected: payload.expected,
+                found: payload.found,
+                span,
+            }
         });
     }
 
     /// [`Self::typecheck`] on a call argument, worded by [`ArgSite::mismatch`].
     pub(super) fn typecheck_arg(&self, actual: TypeId, expected: TypeId, site: ArgSite) {
-        self.typecheck_worded(actual, expected, site.span(), |payload| {
-            site.mismatch(payload.expected, payload.found)
-        });
+        self.typecheck_worded(
+            actual,
+            expected,
+            site.span(),
+            SlotFrame::Callee,
+            |payload| site.mismatch(payload.expected, payload.found),
+        );
     }
 
     fn typecheck_worded(
@@ -396,13 +423,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         actual: TypeId,
         expected: TypeId,
         span: Span,
+        frame: SlotFrame,
         mismatch: impl FnOnce(TypeMismatchPayload) -> TypeError,
     ) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
             let _ = self.emit(mismatch(payload));
             return;
         }
+        self.record_row_flows(actual, expected, span, frame);
         self.reject_pack_layout_mismatch(actual, expected, span);
+    }
+
+    /// [`check_assignable`], recording what [`Self::record_row_flows`] says
+    /// where the value is admitted.
+    pub(super) fn assignable(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+    ) -> TypeCheckResult {
+        let result = check_assignable(actual, expected, &self.tysys.type_table.borrow());
+        if result != TypeCheckResult::Incompatible {
+            self.record_row_flows(actual, expected, span, SlotFrame::Own);
+        }
+        result
+    }
+
+    /// Record each row of `actual` beside the row of `expected` it moves into,
+    /// where either holds an effect variable. The type check admits a variable
+    /// unbounded, since only the effect check knows what it stands for; the
+    /// effect check bounds or widens it there. A callee's slot names the
+    /// callee's own effect parameters, which the argument determines rather
+    /// than meets, so those rows are left to the call's resolution.
+    pub(super) fn record_row_flows(
+        &self,
+        actual: TypeId,
+        expected: TypeId,
+        span: Span,
+        frame: SlotFrame,
+    ) {
+        let module = self.current_module_source.source_path();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let mut flows = Vec::new();
+        table.zip_rows(expected, actual, false, &mut |into, from| {
+            let determined_by_it =
+                frame == SlotFrame::Callee && into.iter().any(EffectRef::is_param);
+            let open = from.iter().chain(into).any(EffectRef::is_var);
+            if open && from != into && !determined_by_it {
+                flows.push(RowFlow {
+                    from: from.to_vec(),
+                    into: into.to_vec(),
+                    span,
+                    module: module.clone(),
+                });
+            }
+        });
+        for flow in flows {
+            table.record_row_flow(flow);
+        }
     }
 
     /// Reject a value carrying no pack where one element of a pack, or a tuple

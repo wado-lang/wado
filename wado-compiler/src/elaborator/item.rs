@@ -23,7 +23,7 @@ use crate::token::Span;
 
 use super::infer_hole::InferHoleTable;
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext, TypeParamScope, param_decl};
-use super::sig::{DeclSig, MethodSig};
+use super::sig::{DeclSig, MethodSig, own_effect_params};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
@@ -1344,7 +1344,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// question: whether an impl reaches a receiver reads its recorded target.
     pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
         let mut block = self.enter_impl_params_scope(impl_block);
-        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = block
+            .tysys
+            .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params);
         block.record_impl_sig(impl_block, impl_is_concrete);
     }
 
@@ -1354,7 +1356,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let impl_def = self.tysys.def_at(impl_block.id);
         let mut block = self.enter_impl_params_scope(impl_block);
 
-        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = block
+            .tysys
+            .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params);
 
         if impl_block.is_synthesize_request {
             return;
@@ -1414,6 +1418,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params,
                         param_types,
                         return_type,
+                        own_effects: own_effect_params(&method.type_params),
                     },
                     self_kind,
                     params: method
@@ -1970,6 +1975,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_params,
                             param_types,
                             return_type,
+                            own_effects: own_effect_params(&method.type_params),
                         },
                         self_kind: method
                             .params
@@ -2208,6 +2214,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params: decl_slots.clone(),
                         param_types: params.iter().map(|p| p.type_id).collect(),
                         return_type: method.return_type.as_ref().map(|_| return_type),
+                        own_effects: own_effect_params(&method.type_params),
                     },
                     self_kind,
                     params: sig_params,
@@ -2479,6 +2486,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 type_params: real_type_params,
                 param_types,
                 return_type,
+                own_effects: own_effect_params(&func.type_params),
             },
             type_param_ids,
             params: func
@@ -2935,12 +2943,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
 impl TypeSystem {
     /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
-    /// [i32, i32]`): every target argument pins a position (`arg_pins`).
-    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
+    /// [i32, i32]`): every target argument pins a position (`arg_pins`), a
+    /// parameter of `type_params` an `fn` bound fixes among them.
+    pub(super) fn impl_is_concrete_instantiation(
+        &self,
+        impl_ty: &ast::Type,
+        type_params: &[ast::GenericParam],
+    ) -> bool {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.arg_pins(a))
+        !args.is_empty() && args.iter().all(|a| self.arg_pins(a, type_params))
     }
 }
 

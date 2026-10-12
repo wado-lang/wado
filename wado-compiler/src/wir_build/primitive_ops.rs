@@ -855,9 +855,9 @@ impl FunctionTranslator<'_, '_> {
 
         // Get the raw GC array type. Element name must match the
         // key `register_raw_array_type` uses
-        // (`mangle_type_arg_for_generic`, qualifies Struct /
+        // (`mangle_type_arg_rowless`, qualifies Struct /
         // GenericInstance args by `ModuleSource`).
-        let elem_name = self.type_table.mangle_type_arg_for_generic(element_type_id);
+        let elem_name = self.type_table.mangle_type_arg_rowless(element_type_id);
         let raw_array_type = self
             .ctx
             .array_type_by_name
@@ -955,7 +955,7 @@ impl FunctionTranslator<'_, '_> {
             // Same alignment as `build_list_get` above: lookup must
             // use the qualified mangle so the key matches what
             // `register_raw_array_type` registered.
-            let elem_name = self.type_table.mangle_type_arg_for_generic(element_type_id);
+            let elem_name = self.type_table.mangle_type_arg_rowless(element_type_id);
             let raw_array_type = self
                 .ctx
                 .array_type_by_name

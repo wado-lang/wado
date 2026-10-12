@@ -1,0 +1,27 @@
+// An impl whose type parameter is bounded by a function type answers a method
+// called directly on a value of its target, as it does one called through a
+// bound.
+use { println, Stdout } from "core:cli";
+
+trait Tr {
+    fn go(&self) -> i32;
+}
+
+struct One<G> {
+    b: G,
+}
+
+impl<G: fn() -> i32> Tr for One<G> {
+    fn go(&self) -> i32 {
+        return (self.b)();
+    }
+}
+
+export fn run() with Stdout {
+    let b: fn() -> i32 = || 7;
+    let t = One { b };
+    println(`${t.go()}`);
+}
+
+__DATA__
+{"stdout": "7\n"}

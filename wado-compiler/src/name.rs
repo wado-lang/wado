@@ -2277,7 +2277,7 @@ fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
             name,
             module_source,
         } => format!("{module_source}/{name}"),
-        tir::EffectRef::Param { name } => name.clone(),
+        tir::EffectRef::Param { name } | tir::EffectRef::Var { name, .. } => name.clone(),
     }
 }
 
@@ -3595,6 +3595,18 @@ impl FqTypeName {
             head,
             args: self.args.iter().map(at).collect(),
         }
+    }
+
+    /// This name with every function type's row in it, nested ones included,
+    /// replaced by what `row` answers for it.
+    #[must_use]
+    pub fn map_rows(&self, row: &impl Fn(&[tir::EffectRef]) -> Vec<tir::EffectRef>) -> FqTypeName {
+        let mut out = self.descend(&|name| name.map_rows(row));
+        if let TypeHead::Function { effects, .. } = &mut out.head {
+            *effects = row(effects);
+        }
+        out.reference.clone_from(&self.reference);
+        out
     }
 
     /// The spelling a diagnostic prints: the type as source writes it, modules

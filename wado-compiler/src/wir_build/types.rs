@@ -344,7 +344,7 @@ fn register_struct(
         let qualified_args: Vec<String> = mono
             .impl_type_args
             .iter()
-            .map(|t| type_table.mangle_type_arg_for_generic(*t))
+            .map(|t| type_table.mangle_type_arg_rowless(*t))
             .collect();
         let qualified_name = mangle_generic_name(&mono.generic_name, &qualified_args);
         if qualified_name != tir_struct.name {
@@ -464,7 +464,7 @@ fn register_raw_array_type(
     // lookup misses and the wrapper struct ends up unregistered for
     // any element whose qualified form differs from the unqualified
     // one (i.e. user-defined Structs / GenericInstances).
-    let elem_name = type_table.mangle_type_arg_for_generic(element_type_id);
+    let elem_name = type_table.mangle_type_arg_rowless(element_type_id);
     if ctx.array_type_by_name.contains_key(&elem_name) {
         // Already registered under a different TypeId
         let existing = ctx.array_type_by_name.get(&elem_name).unwrap().clone();
@@ -473,7 +473,7 @@ fn register_raw_array_type(
     }
     // Newtype dedup: both spellings are entered below, so lookup derives one
     // key and finds it.
-    let resolved_name = type_table.mangle_type_arg_for_generic_resolving_newtypes(element_type_id);
+    let resolved_name = type_table.mangle_type_arg_rowless_resolving_newtypes(element_type_id);
     if resolved_name != elem_name && ctx.array_type_by_name.contains_key(&resolved_name) {
         let existing = ctx.array_type_by_name.get(&resolved_name).unwrap().clone();
         ctx.array_type_map.insert(element_type_id, existing);
@@ -641,7 +641,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                 // under two fqs and hit a `ref`/`ref null` validation mismatch.
                 let elem_names: Vec<String> = elements
                     .iter()
-                    .map(|&e| type_table.mangle_type_arg_for_generic_resolving_newtypes(e))
+                    .map(|&e| type_table.mangle_type_arg_rowless_resolving_newtypes(e))
                     .collect();
                 let tuple_display = format!("[{}]", elem_names.join(", "));
                 let fq = wir_tuple_type_key(&tuple_display);
@@ -1117,8 +1117,7 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
                 // `List<[FieldName, FieldValue]>` and
                 // `List<[String, List<u8>]>` dedup to one entry when
                 // FieldName/FieldValue are newtypes.
-                let elem_name =
-                    type_table.mangle_type_arg_for_generic_resolving_newtypes(type_args[0]);
+                let elem_name = type_table.mangle_type_arg_rowless_resolving_newtypes(type_args[0]);
                 if !array_elem_types.iter().any(|(_, n)| n == &elem_name) {
                     array_elem_types.push((type_args[0], elem_name));
                 }
@@ -1166,7 +1165,12 @@ pub(super) fn generic_instance_name(
 ) -> String {
     let type_arg_names: Vec<String> = type_args
         .iter()
-        .map(|t| normalized_projection_name(type_table, *t).to_mangled())
+        .map(|&t| match type_table.get(t) {
+            ResolvedType::AssocTypeProjection { .. } => {
+                normalized_projection_name(type_table, t).to_mangled()
+            }
+            _ => type_table.mangle_type_arg_rowless(t),
+        })
         .collect();
     mangle_generic_name(name, &type_arg_names)
 }
@@ -1208,7 +1212,7 @@ pub(super) fn list_wrapper_struct_name(
     element_type_id: TypeId,
 ) -> StructName {
     list_wrapper_struct_name_for_elem(
-        &type_table.mangle_type_arg_for_generic_resolving_newtypes(element_type_id),
+        &type_table.mangle_type_arg_rowless_resolving_newtypes(element_type_id),
     )
 }
 

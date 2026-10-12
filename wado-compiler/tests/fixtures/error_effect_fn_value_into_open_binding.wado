@@ -1,0 +1,16 @@
+// A binding's row stands for every value moved into it, one whose own row is
+// fixed included: calling it demands what that value performs.
+use { println, Stdout } from "core:cli";
+
+fn leak(loud: fn() with Stdout) {
+    let mut f = || {};
+    f = loud;
+    f();
+}
+
+export fn run() with Stdout {
+    leak(|| { println("leak"); });
+}
+
+__DATA__
+{"compile_error": ":8:5: analysis error: missing effect 'Stdout' required by '(indirect call)'", "compile_error_count": 1}

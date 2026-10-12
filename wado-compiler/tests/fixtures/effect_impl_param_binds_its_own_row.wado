@@ -1,0 +1,33 @@
+// An impl's effect parameter is the row at the place its target writes it, not
+// the row of every function the receiver holds: `go` performs what `a` does,
+// and `b`'s Stderr is not demanded.
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+trait Tr with _ {
+    fn go(&self);
+}
+
+struct Two<F, G> {
+    a: F,
+    b: G,
+}
+
+impl<effect E, F: fn() with E, G: fn() with Stderr> Tr for Two<F, G> {
+    fn go(&self) with E {
+        (self.a)();
+    }
+}
+
+fn call() with Stdout {
+    let a: fn() with Stdout = || { println("a"); };
+    let b: fn() with Stderr = || { eprintln("b"); };
+    let t = Two { a, b };
+    t.go();
+}
+
+export fn run() with Stdout {
+    call();
+}
+
+__DATA__
+{"stdout": "a\n"}

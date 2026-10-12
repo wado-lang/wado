@@ -328,13 +328,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Project the closure's `fn(...)` / `fn mut(...)` type so the
         // caller's typecheck context (`expression_types[closure.id]`, etc.)
         // sees it. Reify rebuilds an equivalent type from its own facts.
+        // Its row is what the body performs, which the effect check works out:
+        // a variable here.
         let param_types: Vec<TypeId> = params.iter().map(|(_, t)| *t).collect();
-        let func_type = self.tysys.type_table.borrow_mut().make_function_with_mut(
-            any_mutating_capture,
-            param_types,
-            return_type,
-            Vec::new(),
-        );
+        let mut table = self.tysys.type_table.borrow_mut();
+        let row = vec![table.mint_effect_var()];
+        let func_type =
+            table.make_function_with_mut(any_mutating_capture, param_types, return_type, row);
+        drop(table);
 
         ctx.source_bindings.extend(closure_ctx.source_bindings);
         func_type

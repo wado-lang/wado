@@ -50,7 +50,7 @@ struct tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Futur
 
 struct spec_worlds_command_stdio.wado//$Closure_0 {  // TypeId(9)}
 
-struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char> {  // TypeId(10)
+struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {  // TypeId(10)
     mut inner: ref "core:prelude/string.wado//StrCharIter",
     mut f: ref struct,
 }
@@ -157,7 +157,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_i
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> i32;  // TypeId(53)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>") -> ref "core:prelude/string.wado//String";  // TypeId(54)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>") -> ref "core:prelude/string.wado//String";  // TypeId(54)
 
 type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len" = fn(ref "core:prelude/slice.wado//Slice<u8>") -> i32;  // TypeId(55)
 
@@ -334,7 +334,7 @@ fn "spec_worlds_command_stdio.wado/run"() with Stdin, Stdout, Stderr {
     elements_14 = s.repr;
     $mv$scalar$valid = s.used;
     f_138 = struct.new "spec_worlds_command_stdio.wado//$Closure_0" {  };
-    s = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: elements_14, used: $mv$scalar$valid, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_138, func: ref.func "closure/spec_worlds_command_stdio.wado/$closure_wrapper_0" } });
+    s = "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: elements_14, used: $mv$scalar$valid, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_138, func: ref.func "closure/spec_worlds_command_stdio.wado/$closure_wrapper_0" } });
     $mv$scalar$valid = builtin::i32_wrap_i64(local.tee packed_46("wasi/stream-new"()));
     new_used_113 = builtin::i32_wrap_i64(packed_46 >> 32_i64);
     $mv$scalar$valid = "spec_worlds_command_stdio.wado/$cm_binding__Stdout_write_via_stream"($mv$scalar$valid);
@@ -1368,7 +1368,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
     return 0;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>>"(iter) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>>"(iter) {
     let s: ref "core:prelude/string.wado//String";
     let v_8: ref "core:prelude/string.wado//StrCharIter";
     let $fused_slot_33: char;
@@ -1393,7 +1393,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
     $sroa_$iter_0_f_36 = iter.f;
     b199: block {
         l200: loop {
-            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_sroa_return__4: block {
+            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4: block {
                 $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__5: block {
                     break_if $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__5 $sroa_$sroa_$iter_0_inner_35_byte_index_66 >= $sroa_$sroa_$iter_0_inner_35_used_65;
                     $sroa_slot_62 = 0;
@@ -1431,7 +1431,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::from_iter<core:pre
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$iter_0_f_36)).env, $fused_slot_33);
                     };
                     "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $fused_slot_34);
-                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_char__core_prelude_traits_wado_Iterator__next_sroa_return__4;
+                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_string_wado_StrCharIter_fn_mut_char___char__core_prelude_traits_wado_Iterator__next_sroa_return__4;
                 };
                 break b199;
             };

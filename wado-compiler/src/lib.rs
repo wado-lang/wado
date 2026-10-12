@@ -83,7 +83,7 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
-use crate::world_registry::{TEST_WORLD, WorldInfo};
+use crate::world_registry::TEST_WORLD;
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
@@ -394,9 +394,9 @@ pub struct CompilerOptions {
     /// Log level for compiler diagnostics.
     /// When `None`, uses the default (`Info`).
     pub log_level: Option<LogLevel>,
-    /// Which allocator to use (e.g., `"bump"`, `"debug"`).
+    /// Which allocator to use (e.g., `"freelist"`, `"debug"`).
     /// Matches `#[allocator("...")]` attributes in `core:allocator`.
-    /// When `None`, the compiler auto-selects: `"debug"` for test world, `"bump"` otherwise.
+    /// When `None`, the compiler auto-selects: `"debug"` for test world, `"freelist"` otherwise.
     pub allocator: Option<String>,
     /// Kiln invocation redirects consulted by the module loader. Callers
     /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
@@ -1002,29 +1002,18 @@ fn resource_in_lib_sig<'a>(
 
 /// Select the allocator: tag the `#[allocator("<mode>")]` function matching the
 /// chosen mode as the `realloc` export and clear the export from the others.
-/// `None` picks the world's default (debug for test, freelist for HTTP/library,
-/// bump otherwise). Shared by the compile and dump pipelines.
+/// `None` picks the world's default (debug for test, freelist otherwise).
+/// Shared by the compile and dump pipelines.
 fn select_allocator<H: CompilerHost>(
     package: &mut Package,
     allocator: Option<String>,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
     let allocator_tag = allocator.unwrap_or_else(|| {
-        // HTTP service worlds default to `freelist` (long-running process,
-        // benefits from reclamation). Detection routes through
-        // `WorldInfo::has_http_handler_export` so the "is this the HTTP
-        // service world?" rule stays in one place.
-        let is_http_service = package
-            .world_registry
-            .get(&package.target_world)
-            .is_some_and(WorldInfo::has_http_handler_export);
         if package.is_test_world() {
             "debug".to_string()
-        } else if is_http_service || package.is_lib_world() {
-            // A library is consumed by a long-running host; reclaim memory.
-            "freelist".to_string()
         } else {
-            "bump".to_string()
+            "freelist".to_string()
         }
     });
     if let Some(alloc_module) = package.tir_modules.get_mut(&ModuleSource::allocator()) {
@@ -1300,7 +1289,7 @@ fn compile_after_load<H: CompilerHost>(
         scope,
         contract_checks: codegen_flags.contract_checks,
     });
-    let sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
+    let mut sem = semantics::semantics_with_logger(load_result, logger, true, coverage);
     if !sem.is_complete() {
         return Err(Bail);
     }
@@ -1346,6 +1335,7 @@ fn compile_after_load<H: CompilerHost>(
         let diags = effect_check::check_semantics(&sem, provided_import_fqs);
         let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
+        sem.redirect_effect_vars(&diags.rows);
         for error in diags.effects {
             let _ = logger.error(error);
         }

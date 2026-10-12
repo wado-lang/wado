@@ -1,0 +1,32 @@
+// A stream read must leave nothing behind under the allocator a CLI program
+// gets. Each `read_dir` reads entries into a buffer, and the host allocates
+// each entry's name after it. The binding frees them in allocation order, and
+// the bump allocator CLI programs once had reclaimed only the latest block, so
+// every read stranded its buffer: a walk of a large tree ran linear memory out
+// (`mise run format` over 40,000 entries).
+
+use { println, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+
+export fn run() with (Stdout, Preopens) {
+    for let name of ["a.txt", "b.txt", "c.txt"] {
+        fs::write(name, &"x").unwrap();
+    }
+    let mut seen = 0;
+    for let _ of 0..<10 {
+        seen += fs::read_dir("").unwrap().len();
+    }
+    let settled = builtin::memory_size();
+    for let _ of 0..<1000 {
+        seen += fs::read_dir("").unwrap().len();
+    }
+    println(`${seen} ${builtin::memory_size() - settled}`);
+}
+
+__DATA__
+{
+    "allocator": "freelist",
+    "preopened_dirs": [["", "scratch"]],
+    "stdout": "3030 0\n"
+}

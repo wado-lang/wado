@@ -757,6 +757,31 @@ fn pure_caller(g: fn mut(i32) with Stdout) {
 Where a value can also be written back through the slot, as an element of a
 list behind `&mut`, the rows must be equal.
 
+A closure literal's type carries the effects its body performs, and the value
+carries them wherever it moves. Where it moves into a slot of a function type,
+a binding, a parameter, a cast's target or an element, it may perform only what
+that type's row holds:
+
+<!-- {"fixture":"error_closure_beyond_expected_fn_type.wado"} -->
+
+```wado
+fn pure_caller(f: fn()) {
+    f();
+}
+
+export fn run() with Stdout {
+    let inner: fn() = || {
+        println("this println needs Stdout but inner's type does not carry it");
+    };
+    pure_caller(inner);
+    pure_caller(|| { println("as an argument too"); });
+}
+```
+
+The effects travel with the value. Whoever calls it, directly or through a
+value built from it, must hold them (see
+[Generic Effects](./spec-effects.md#generic-effects-effect-polymorphism)).
+
 A type parameter may be bounded by a closure type. The bound names the type
 once, so the parameter can be reused across positions:
 

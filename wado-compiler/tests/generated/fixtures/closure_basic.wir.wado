@@ -73,12 +73,12 @@ array Array<i32> (mut i32);  // TypeId(19)
 
 array Array<fn(i32)->i32> (mut ref struct);  // TypeId(20)
 
-struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32> {  // TypeId(21)
+struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32> {  // TypeId(21)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut f: ref struct,
 }
 
-struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>> {  // TypeId(22)
+struct core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool> {  // TypeId(22)
     mut inner: ref "core:prelude/slice.wado//SliceValueIter<i32>",
     mut pred: ref struct,
 }
@@ -114,18 +114,18 @@ struct canonical//CanonicalClosure_0 {  // TypeId(29)
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, i32) -> bool;  // TypeId(30)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> bool;  // TypeId(30)
 
-struct canonical//CanonicalClosure_2 {  // TypeId(31)
+struct canonical//CanonicalClosure_1 {  // TypeId(31)
     env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_2",
+    func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype/$canonical_closure_fn_3" = fn(ref null struct, ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(32)
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/types.wado//Box<i32>") -> "core:prelude/traits.wado//enum:Ordering";  // TypeId(32)
 
-struct canonical//CanonicalClosure_3 {  // TypeId(33)
+struct canonical//CanonicalClosure_2 {  // TypeId(33)
     env: ref null struct,
-    func: ref "functype/$canonical_closure_fn_3",
+    func: ref "functype/$canonical_closure_fn_2",
 }
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(34)
@@ -316,9 +316,9 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" =
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>::grow" = fn(ref "core:prelude//List<fn(i32)->i32>");  // TypeId(127)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>") -> [i32, i32];  // TypeId(128)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>") -> [i32, i32];  // TypeId(128)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>") -> [i32, i32];  // TypeId(129)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>") -> [i32, i32];  // TypeId(129)
 
 type "functype//closure_basic.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<fn(i32)->i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(130)
 
@@ -980,25 +980,25 @@ fn "closure_basic.wado/$test_38_iterator_chain"() {
     let $sroa_slot_155: i32;
     let $sroa_nums_repr_156: ref Array<i32>;
     let $sroa_v_pred_162: ref struct;
-    let $sroa_self_inner_170: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>";
+    let $sroa_self_inner_170: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
     $sroa_nums_repr_156 = array.new_fixed<i32>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     pred = struct.new "closure_basic.wado//$Closure_56" {  };
     f_54 = struct.new "closure_basic.wado//$Closure_57" {  };
-    $sroa_v_pred_162 = struct.new "canonical//CanonicalClosure_2" { env: pred, func: ref.func "closure/closure_basic.wado/$closure_wrapper_2" };
-    $sroa_self_inner_170 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_156, index: 0, end: 10 }, pred: $sroa_v_pred_162 };
+    $sroa_v_pred_162 = struct.new "canonical//CanonicalClosure_1" { env: pred, func: ref.func "closure/closure_basic.wado/$closure_wrapper_2" };
+    $sroa_self_inner_170 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_156, index: 0, end: 10 }, pred: $sroa_v_pred_162 };
     $sroa_v_pred_162 = struct.new "canonical//CanonicalClosure_0" { env: f_54, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_3", func: ref.func "closure/closure_basic.wado/$closure_wrapper_3" };
     result_56 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_134(array.new_fixed<i32>()), used: 0 };
     b41: block {
         l42: loop {
             $sroa_slot_154 = 0;
             $sroa_slot_155 = 0;
-            $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__5: block {
+            $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__5: block {
                 let $mv$$local_2_137$0: i32;
                 let $mv$$local_2_137$1: i32;
-                multivalue_bind [$mv$$local_2_137$0, $mv$$local_2_137$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]"($sroa_self_inner_170);
+                multivalue_bind [$mv$$local_2_137$0, $mv$$local_2_137$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"($sroa_self_inner_170);
                 if $mv$$local_2_137$0 == 1 {
                     $sroa_slot_154 = 1;
-                    break $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__5: $sroa_slot_155 = block -> i32 {
+                    break $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__5: $sroa_slot_155 = block -> i32 {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_v_pred_162)).env, $mv$$local_2_137$1);
                     };
@@ -1006,7 +1006,7 @@ fn "closure_basic.wado/$test_38_iterator_chain"() {
                 }
                 $sroa_slot_154 = 0;
                 $sroa_slot_155 = 0;
-                break $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__5;
+                break $inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__5;
             };
             let $match_scrut_1: i32;
             if local.tee $match_scrut_1($sroa_slot_154) == 1 {
@@ -1217,7 +1217,7 @@ condition: result.len() == 5
     $match_scrut_1 = 0;
     b58: block {
         l59: loop {
-            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__i32__core_prelude_traits_wado_Iterator__next_sroa_return__20: block {
+            $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__20: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__21: block {
                     break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__21 used >= 10;
                     $mv$$local_2_137$1 = builtin::array_get_value<i32>($sroa_nums_repr_156, used);
@@ -1226,7 +1226,7 @@ condition: result.len() == 5
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_v_pred_162)).env, $mv$$local_2_137$1);
                     };
                     $match_scrut_1 = $match_scrut_1 + $mv$$local_2_137$0;
-                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__i32__core_prelude_traits_wado_Iterator__next_sroa_return__20;
+                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__20;
                 };
                 break b58;
             };
@@ -1243,7 +1243,7 @@ condition: result.len() == 5
 fn "closure_basic.wado/$test_39_iterator_filter"() {
     let $local_16: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/format.wado//Formatter";
-    let self_47: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>";
+    let self_47: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
     let pred_50: ref "closure_basic.wado//$Closure_60";
     let result_52: ref "core:prelude//List<i32>";
     let pred_75: ref "closure_basic.wado//$Closure_61";
@@ -1252,13 +1252,13 @@ fn "closure_basic.wado/$test_39_iterator_filter"() {
     let $sroa_nums_repr_131: ref Array<i32>;
     $sroa_nums_repr_131 = array.new_fixed<i32>(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     pred_50 = struct.new "closure_basic.wado//$Closure_60" {  };
-    self_47 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_131, index: 0, end: 10 }, pred: struct.new "canonical//CanonicalClosure_2" { env: pred_50, func: ref.func "closure/closure_basic.wado/$closure_wrapper_5" } };
+    self_47 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_131, index: 0, end: 10 }, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_50, func: ref.func "closure/closure_basic.wado/$closure_wrapper_5" } };
     result_52 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_106(array.new_fixed<i32>()), used: 0 };
     b62: block {
         l63: loop {
             let $mv$$local_3_54$0: i32;
             let $mv$$local_3_54$1: i32;
-            multivalue_bind [$mv$$local_3_54$0, $mv$$local_3_54$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_47);
+            multivalue_bind [$mv$$local_3_54$0, $mv$$local_3_54$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_47);
             if $mv$$local_3_54$0 == 1 {
                 if @unlikely(local.tee used_109(result_52.used) >= builtin::array_len(result_52.repr)) {
                     cold_path;
@@ -1365,11 +1365,11 @@ condition: evens[4] == 10
         unreachable;
     }
     pred_75 = struct.new "closure_basic.wado//$Closure_61" { $capture_0: 5 };
-    self_47 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_131, index: 0, end: 10 }, pred: struct.new "canonical//CanonicalClosure_2" { env: pred_75, func: ref.func "closure/closure_basic.wado/$closure_wrapper_6" } };
+    self_47 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_131, index: 0, end: 10 }, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_75, func: ref.func "closure/closure_basic.wado/$closure_wrapper_6" } };
     result_52 = struct.new "core:prelude//List<i32>" { repr: local.tee $sroa_nums_repr_131(array.new_fixed<i32>()), used: 0 };
     b71: block {
         l72: loop {
-            multivalue_bind [used_109, $mv$$local_3_54$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_47);
+            multivalue_bind [used_109, $mv$$local_3_54$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_47);
             if used_109 == 1 {
                 if @unlikely(local.tee $mv$$local_3_54$0(result_52.used) >= builtin::array_len(result_52.repr)) {
                     cold_path;
@@ -1479,7 +1479,7 @@ condition: large[4] == 10
 fn "closure_basic.wado/$test_41_iterator_map"() {
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
-    let self_33: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>";
+    let self_33: ref "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>";
     let f_36: ref "closure_basic.wado//$Closure_66";
     let result_38: ref "core:prelude//List<i32>";
     let f_60: ref "closure_basic.wado//$Closure_67";
@@ -1488,13 +1488,13 @@ fn "closure_basic.wado/$test_41_iterator_map"() {
     let $sroa_nums_repr_115: ref Array<i32>;
     $sroa_nums_repr_115 = array.new_fixed<i32>(1, 2, 3, 4, 5);
     f_36 = struct.new "closure_basic.wado//$Closure_66" {  };
-    self_33 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_115, index: 0, end: 5 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_36, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_basic.wado/$closure_wrapper_7" } };
+    self_33 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_115, index: 0, end: 5 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_36, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_7", func: ref.func "closure/closure_basic.wado/$closure_wrapper_7" } };
     result_38 = struct.new "core:prelude//List<i32>" { repr: local.tee elements_90(array.new_fixed<i32>()), used: 0 };
     b80: block {
         l81: loop {
             let $mv$$local_3_40$0: i32;
             let $mv$$local_3_40$1: i32;
-            multivalue_bind [$mv$$local_3_40$0, $mv$$local_3_40$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_33);
+            multivalue_bind [$mv$$local_3_40$0, $mv$$local_3_40$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_33);
             if $mv$$local_3_40$0 == 1 {
                 if @unlikely(local.tee used_93(result_38.used) >= builtin::array_len(result_38.repr)) {
                     cold_path;
@@ -1575,11 +1575,11 @@ condition: doubled[4] == 10
         unreachable;
     }
     f_60 = struct.new "closure_basic.wado//$Closure_67" { $capture_0: 3 };
-    self_33 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_115, index: 0, end: 5 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_60, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_8", func: ref.func "closure/closure_basic.wado/$closure_wrapper_8" } };
+    self_33 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_nums_repr_115, index: 0, end: 5 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_60, inspect: ref.func "closure/closure_basic.wado/$closure_inspect_wrapper_8", func: ref.func "closure/closure_basic.wado/$closure_wrapper_8" } };
     result_38 = struct.new "core:prelude//List<i32>" { repr: local.tee $sroa_nums_repr_115(array.new_fixed<i32>()), used: 0 };
     b88: block {
         l89: loop {
-            multivalue_bind [used_93, $mv$$local_3_40$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_33);
+            multivalue_bind [used_93, $mv$$local_3_40$1] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_33);
             if used_93 == 1 {
                 if @unlikely(local.tee $mv$$local_3_40$0(result_38.used) >= builtin::array_len(result_38.repr)) {
                     cold_path;
@@ -1888,7 +1888,7 @@ fn "closure_basic.wado/$test_44_sorted_by"() {
     let cmp: ref "closure_basic.wado//$Closure_70";
     let copy: ref "core:prelude//List<i32>";
     cmp = struct.new "closure_basic.wado//$Closure_70" {  };
-    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(local.tee copy(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 1, 4, 1, 5, 9, 2, 6), used: 8 }), struct.new "canonical//CanonicalClosure_3" { env: cmp, func: ref.func "closure/closure_basic.wado/$closure_wrapper_9" });
+    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(local.tee copy(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 1, 4, 1, 5, 9, 2, 6), used: 8 }), struct.new "canonical//CanonicalClosure_2" { env: cmp, func: ref.func "closure/closure_basic.wado/$closure_wrapper_9" });
     $load_0 = copy.used;
     if @unlikely(0 >= $load_0) {
         cold_path;
@@ -3927,8 +3927,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
                                     a_11 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, i) };
                                     b_12 = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($licm_repr_36, j) };
                                     if block -> "core:prelude/traits.wado//enum:Ordering" {
-                                        let $indirect_call_1: ref "canonical//CanonicalClosure_3";
-                                        call_ref "functype/$canonical_closure_fn_3"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_3"(cmp)).env, a_11, b_12);
+                                        let $indirect_call_1: ref "canonical//CanonicalClosure_2";
+                                        call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"(cmp)).env, a_11, b_12);
                                     } == 2 {
                                         builtin::array_set<i32>(buf, k, b_12.value);
                                         j = j + 1;
@@ -4013,7 +4013,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<fn(i32)->i32>::grow"(self
     self.repr = new_repr;
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->i32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let $load_0: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let $load_1: i32;
     let item_4: i32;
@@ -4029,7 +4029,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/slice
     return 0, 0;
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let item_4: i32;
     let $licm_inner_6: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let $licm_pred_7: ref struct;
@@ -4050,8 +4050,8 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
             $hfs_index_10 = $hfs_index_10 + 1;
             $licm_inner_6.index = $hfs_index_10;
             if block -> bool {
-                let $indirect_call_1: ref "canonical//CanonicalClosure_2";
-                call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($licm_pred_7)).env, item_4);
+                let $indirect_call_1: ref "canonical//CanonicalClosure_1";
+                call_ref "functype/$canonical_closure_fn_1"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_1"($licm_pred_7)).env, item_4);
             } {
                 return 1, item_4;
             }

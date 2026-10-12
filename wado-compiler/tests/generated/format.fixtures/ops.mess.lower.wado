@@ -4,6 +4,8 @@ global PAGE_SIZE: u64 = 65536;
 
 global MAX_ADDRESS: u64 = 4294967295;
 
+global DEBUG_LIVE: u32 = 2703027456;
+
 global NEG_ZERO_BITS: u64 = 9223372036854775808;
 
 global POW10: List<u64> = deferred null;
@@ -681,7 +683,12 @@ pub struct "Slice<fn()->()>" {
     end: i32,
 }
 
-pub struct "IterMap<core:prelude/string.wado/StrCharIter,char>" {
+pub struct "IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" {
+    pub inner: StrCharIter,
+    pub f: fn mut(char) -> char,
+}
+
+pub struct "IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" {
     pub inner: StrCharIter,
     pub f: fn mut(char) -> char,
 }
@@ -707,9 +714,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrLinesIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrLinesIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>" {
     pub inner: StrLinesIter,
-    pub pred: fn mut(String) -> bool,
+    pub pred: fn mut(String) -> bool with E,
 }
 
 pub struct "IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -733,9 +740,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>" {
     pub inner: StrSplitWhitespaceIter,
-    pub pred: fn mut(String) -> bool,
+    pub pred: fn mut(String) -> bool with E,
 }
 
 pub struct "IterStepBy<core:prelude/string.wado/StrSplitNIter>" {
@@ -759,9 +766,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrSplitNIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrSplitNIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>" {
     pub inner: StrSplitNIter,
-    pub pred: fn mut(String) -> bool,
+    pub pred: fn mut(String) -> bool with E,
 }
 
 pub struct "IterStepBy<core:prelude/string.wado/StrSplitIter>" {
@@ -785,9 +792,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrSplitIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrSplitIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>" {
     pub inner: StrSplitIter,
-    pub pred: fn mut(String) -> bool,
+    pub pred: fn mut(String) -> bool with E,
 }
 
 pub struct "IterStepBy<core:prelude/string.wado/StrCharIndicesIter>" {
@@ -811,9 +818,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>" {
     pub inner: StrCharIndicesIter,
-    pub pred: fn mut([i32, char]) -> bool,
+    pub pred: fn mut([i32, char]) -> bool with E,
 }
 
 pub struct "IterStepBy<core:prelude/string.wado/StrCharIter>" {
@@ -837,9 +844,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrCharIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrCharIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>" {
     pub inner: StrCharIter,
-    pub pred: fn mut(char) -> bool,
+    pub pred: fn mut(char) -> bool with E,
 }
 
 pub struct "IterStepBy<core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -863,9 +870,9 @@ pub struct "IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub count: i32,
 }
 
-pub struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
+pub struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>" {
     pub inner: StrUtf8ByteIter,
-    pub pred: fn mut(u8) -> bool,
+    pub pred: fn mut(u8) -> bool with E,
 }
 
 pub struct "SliceRefIter<core:prelude/string.wado/String>" {
@@ -1090,7 +1097,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>,fn mut(u8)->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>,fn mut(u8)->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1098,7 +1105,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>,core:prelude/string.wado/StrUtf8ByteIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1178,7 +1185,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>,fn mut(char)->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>,fn mut(char)->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1186,7 +1193,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>,core:prelude/string.wado/StrCharIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1266,7 +1273,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>,fn mut([i32,char])->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>,fn mut([i32,char])->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1274,7 +1281,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>,core:prelude/string.wado/StrCharIndicesIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1354,7 +1361,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>,fn mut(core:prelude/string.wado/String)->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1362,7 +1369,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrSplitIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1442,7 +1449,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>,fn mut(core:prelude/string.wado/String)->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1450,7 +1457,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrSplitNIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1530,7 +1537,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>,fn mut(core:prelude/string.wado/String)->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1538,7 +1545,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1618,7 +1625,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>,fn mut(core:prelude/string.wado/String)->bool>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1626,7 +1633,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrLinesIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1706,7 +1713,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,fn mut(char)->char>" {
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,fn mut(char)->char>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1714,12 +1721,33 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
     is_secret: bool,
 }
 
-pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,core:prelude/string.wado/StrCharIter>" {
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,core:prelude/string.wado/StrCharIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,fn mut(char)->char>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,core:prelude/string.wado/StrCharIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" {
+    pub inner: StrCharIter,
+    pub f: fn mut(char) -> char with E,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<fn()->()>,i32>" {
@@ -1760,6 +1788,22 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<fn()->()>,&Array<
     is_secret: bool,
 }
 
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,fn mut(char)->char>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,core:prelude/string.wado/StrCharIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,i32>" {
     index: i32,
     field_name: String,
@@ -1785,6 +1829,174 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u64>,i32>" {
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u64>,&Array<u64>>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>" {
+    pub inner: StrUtf8ByteIter,
+    pub pred: fn mut(u8) -> bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>" {
+    pub inner: StrCharIter,
+    pub pred: fn mut(char) -> bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>" {
+    pub inner: StrCharIndicesIter,
+    pub pred: fn mut([i32, char]) -> bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>" {
+    pub inner: StrSplitIter,
+    pub pred: fn mut(String) -> bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>" {
+    pub inner: StrSplitNIter,
+    pub pred: fn mut(String) -> bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>" {
+    pub inner: StrSplitWhitespaceIter,
+    pub pred: fn mut(String) -> bool,
+}
+
+pub struct "IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>" {
+    pub inner: StrLinesIter,
+    pub pred: fn mut(String) -> bool,
+}
+
+pub struct "IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>" {
+    pub inner: StrCharIter,
+    pub f: fn mut(char) -> char,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,fn mut(char)->char>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>,core:prelude/string.wado/StrCharIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrLinesIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrSplitNIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>,fn mut(core:prelude/string.wado/String)->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>,core:prelude/string.wado/StrSplitIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>,fn mut([i32,char])->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>,core:prelude/string.wado/StrCharIndicesIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>,fn mut(char)->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>,core:prelude/string.wado/StrCharIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>,fn mut(u8)->bool>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>,core:prelude/string.wado/StrUtf8ByteIter>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -2311,7 +2523,7 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrLines
 }
 
 pub struct "Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>" {
-    value: Option<fn mut(String) -> bool>,
+    value: Option<fn mut(String) -> bool with E>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>>" {
@@ -2331,11 +2543,11 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharI
 }
 
 pub struct "Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>" {
-    value: Option<fn mut([i32, char]) -> bool>,
+    value: Option<fn mut([i32, char]) -> bool with E>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<fn mut(char)->bool>>" {
-    value: Option<fn mut(char) -> bool>,
+    value: Option<fn mut(char) -> bool with E>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>" {
@@ -2343,7 +2555,7 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8B
 }
 
 pub struct "Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>" {
-    value: Option<fn mut(u8) -> bool>,
+    value: Option<fn mut(u8) -> bool with E>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>" {
@@ -2480,24 +2692,29 @@ fn bump(align: u32, size: u32) -> u32 {
     return start as u32;
 }
 
-pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    if (newsize == 0) {
-        if ((oldptr + oldsize) as u32 == core::allocator::frontier()) {
-            core::allocator::set_frontier(oldptr as u32);
-        }
-        return 0;
-    }
-    return core::allocator::bump(align as u32, newsize as u32) as i32;
-}
-
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
-        if (oldsize != 0) {
-            core::builtin::memory_fill(oldptr, 255, oldsize);
+        if (oldptr != 0) {
+            let tag: u32 = (oldptr as u32 - 4);
+            if (core::allocator::load(tag) != core::allocator::DEBUG_LIVE) {
+                core::builtin::cold_path();
+                core::builtin::unreachable();
+            }
+            core::allocator::store(tag, 4294967295);
+            if (oldsize != 0) {
+                core::builtin::memory_fill(oldptr, 255, oldsize);
+            }
         }
         return 0;
     }
-    return core::allocator::bump(align as u32, newsize as u32) as i32;
+    let gap: u32 = if (align < 4) {
+        4;
+    } else {
+        align as u32;
+    };
+    let block: u32 = (core::allocator::bump(align as u32, (gap + newsize as u32)) + gap);
+    core::allocator::store((block - 4), core::allocator::DEBUG_LIVE);
+    return block as i32;
 }
 
 fn fl_size(tag: u32) -> u32 {
@@ -6157,14 +6374,14 @@ pub fn "$field_get$core:prelude/slice.wado/Slice<fn()->()>$i32"(v: &Slice<fn()->
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>$core:prelude/string.wado/StrCharIter"(v: &IterMap<core:prelude/string.wado/StrCharIter,char>, index: i32) -> StrCharIter {
+pub fn "$field_get$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>$core:prelude/string.wado/StrCharIter"(v: &IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>$fn mut(char)->char"(v: &IterMap<core:prelude/string.wado/StrCharIter,char>, index: i32) -> fn mut(char) -> char {
+pub fn "$field_get$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>$fn mut(char)->char"(v: &IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>, index: i32) -> fn mut(char) -> char {
     return match index {
         1 => v.f,
         _ => core::builtin::unreachable(),
@@ -6239,14 +6456,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: &IterFilter<core:prelude/string.wado/StrLinesIter>, index: i32) -> StrLinesIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>$core:prelude/string.wado/StrLinesIter"(v: &IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> StrLinesIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrLinesIter>, index: i32) -> fn mut(String) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> fn mut(String) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -6321,14 +6538,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: &IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>, index: i32) -> StrSplitWhitespaceIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: &IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> StrSplitWhitespaceIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>, index: i32) -> fn mut(String) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> fn mut(String) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -6403,14 +6620,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: &IterFilter<core:prelude/string.wado/StrSplitNIter>, index: i32) -> StrSplitNIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>$core:prelude/string.wado/StrSplitNIter"(v: &IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> StrSplitNIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrSplitNIter>, index: i32) -> fn mut(String) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> fn mut(String) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -6485,14 +6702,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: &IterFilter<core:prelude/string.wado/StrSplitIter>, index: i32) -> StrSplitIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>$core:prelude/string.wado/StrSplitIter"(v: &IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> StrSplitIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrSplitIter>, index: i32) -> fn mut(String) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: &IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>, index: i32) -> fn mut(String) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -6567,14 +6784,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: &IterFilter<core:prelude/string.wado/StrCharIndicesIter>, index: i32) -> StrCharIndicesIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>$core:prelude/string.wado/StrCharIndicesIter"(v: &IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>, index: i32) -> StrCharIndicesIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>$fn mut([i32,char])->bool"(v: &IterFilter<core:prelude/string.wado/StrCharIndicesIter>, index: i32) -> fn mut([i32, char]) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(v: &IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>, index: i32) -> fn mut([i32, char]) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -6649,14 +6866,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: &IterFilter<core:prelude/string.wado/StrCharIter>, index: i32) -> StrCharIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>$core:prelude/string.wado/StrCharIter"(v: &IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>$fn mut(char)->bool"(v: &IterFilter<core:prelude/string.wado/StrCharIter>, index: i32) -> fn mut(char) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>$fn mut(char)->bool"(v: &IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>, index: i32) -> fn mut(char) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -6731,14 +6948,14 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
 }
 
 // retains: v
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> StrUtf8ByteIter {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>$core:prelude/string.wado/StrUtf8ByteIter"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>, index: i32) -> StrUtf8ByteIter {
     return match index {
         0 => v.inner,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>$fn mut(u8)->bool"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> fn mut(u8) -> bool {
+pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>$fn mut(u8)->bool"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>, index: i32) -> fn mut(u8) -> bool with E {
     return match index {
         1 => v.pred,
         _ => core::builtin::unreachable(),
@@ -10758,14 +10975,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$()"(payload: (), index: i32) -> Option<fn mut(String) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$()"(payload: (), index: i32) -> Option<fn mut(String) -> bool with E> {
     return match index {
-        0 => Option<fn mut(String) -> bool>::None,
+        0 => Option<fn mut(String) -> bool with E>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>, index: i32) -> fn mut(String) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>>, index: i32) -> fn mut(String) -> bool with E {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10775,9 +10992,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(core:prelude/string.
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(payload: fn mut(String) -> bool, index: i32) -> Option<fn mut(String) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(core:prelude/string.wado/String)->bool>$fn mut(core:prelude/string.wado/String)->bool"(payload: fn mut(String) -> bool with E, index: i32) -> Option<fn mut(String) -> bool with E> {
     return match index {
-        1 => Option<fn mut(String) -> bool>::Some(payload),
+        1 => Option<fn mut(String) -> bool with E>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10956,14 +11173,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$(
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$()"(payload: (), index: i32) -> Option<fn mut([i32, char]) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$()"(payload: (), index: i32) -> Option<fn mut([i32, char]) -> bool with E> {
     return match index {
-        0 => Option<fn mut([i32, char]) -> bool>::None,
+        0 => Option<fn mut([i32, char]) -> bool with E>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(v: Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>, index: i32) -> fn mut([i32, char]) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(v: Box<core:prelude/types.wado/Option<fn mut([i32,char])->bool>>, index: i32) -> fn mut([i32, char]) -> bool with E {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -10973,9 +11190,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$f
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(payload: fn mut([i32, char]) -> bool, index: i32) -> Option<fn mut([i32, char]) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut([i32,char])->bool>$fn mut([i32,char])->bool"(payload: fn mut([i32, char]) -> bool with E, index: i32) -> Option<fn mut([i32, char]) -> bool with E> {
     return match index {
-        1 => Option<fn mut([i32, char]) -> bool>::Some(payload),
+        1 => Option<fn mut([i32, char]) -> bool with E>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -10994,14 +11211,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(v: 
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(payload: (), index: i32) -> Option<fn mut(char) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$()"(payload: (), index: i32) -> Option<fn mut(char) -> bool with E> {
     return match index {
-        0 => Option<fn mut(char) -> bool>::None,
+        0 => Option<fn mut(char) -> bool with E>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(char)->bool>>, index: i32) -> fn mut(char) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(char)->bool>>, index: i32) -> fn mut(char) -> bool with E {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -11011,9 +11228,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(payload: fn mut(char) -> bool, index: i32) -> Option<fn mut(char) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(char)->bool>$fn mut(char)->bool"(payload: fn mut(char) -> bool with E, index: i32) -> Option<fn mut(char) -> bool with E> {
     return match index {
-        1 => Option<fn mut(char) -> bool>::Some(payload),
+        1 => Option<fn mut(char) -> bool with E>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -11072,14 +11289,14 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(v: Bo
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(payload: (), index: i32) -> Option<fn mut(u8) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$()"(payload: (), index: i32) -> Option<fn mut(u8) -> bool with E> {
     return match index {
-        0 => Option<fn mut(u8) -> bool>::None,
+        0 => Option<fn mut(u8) -> bool with E>::None,
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>, index: i32) -> fn mut(u8) -> bool {
+pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(v: Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>, index: i32) -> fn mut(u8) -> bool with E {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -11089,9 +11306,9 @@ pub fn "$case_extract$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(payload: fn mut(u8) -> bool, index: i32) -> Option<fn mut(u8) -> bool> {
+pub fn "$case_construct$core:prelude/types.wado/Option<fn mut(u8)->bool>$fn mut(u8)->bool"(payload: fn mut(u8) -> bool with E, index: i32) -> Option<fn mut(u8) -> bool with E> {
     return match index {
-        1 => Option<fn mut(u8) -> bool>::Some(payload),
+        1 => Option<fn mut(u8) -> bool with E>::Some(payload),
         _ => core::builtin::unreachable(),
     };
 }
@@ -11851,8 +12068,8 @@ fn "$value_copy$core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/St
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterFilter<core:prelude/string.wado/StrUtf8ByteIter>) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
-    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>"(v: IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool>) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool> {
+    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter,fn mut(u8)->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -11876,8 +12093,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>"(v: IterFilter<core:prelude/string.wado/StrCharIter>) -> IterFilter<core:prelude/string.wado/StrCharIter> {
-    return IterFilter<core:prelude/string.wado/StrCharIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>"(v: IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool>) -> IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool> {
+    return IterFilter<core:prelude/string.wado/StrCharIter,fn mut(char)->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -11901,8 +12118,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>"(v: IterFilter<core:prelude/string.wado/StrCharIndicesIter>) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
-    return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>"(v: IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool>) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool> {
+    return IterFilter<core:prelude/string.wado/StrCharIndicesIter,fn mut([i32,char])->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -11926,8 +12143,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>"(v: IterFilter<core:prelude/string.wado/StrSplitIter>) -> IterFilter<core:prelude/string.wado/StrSplitIter> {
-    return IterFilter<core:prelude/string.wado/StrSplitIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>"(v: IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool>) -> IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool> {
+    return IterFilter<core:prelude/string.wado/StrSplitIter,fn mut(core:prelude/string.wado/String)->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -11951,8 +12168,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>"(v: IterFilter<core:prelude/string.wado/StrSplitNIter>) -> IterFilter<core:prelude/string.wado/StrSplitNIter> {
-    return IterFilter<core:prelude/string.wado/StrSplitNIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>"(v: IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool>) -> IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool> {
+    return IterFilter<core:prelude/string.wado/StrSplitNIter,fn mut(core:prelude/string.wado/String)->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -11976,8 +12193,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> {
-    return IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>"(v: IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool>) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool> {
+    return IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter,fn mut(core:prelude/string.wado/String)->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -12001,8 +12218,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>"(v: IterFilter<core:prelude/string.wado/StrLinesIter>) -> IterFilter<core:prelude/string.wado/StrLinesIter> {
-    return IterFilter<core:prelude/string.wado/StrLinesIter> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), pred: v.pred };
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>"(v: IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool>) -> IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool> {
+    return IterFilter<core:prelude/string.wado/StrLinesIter,fn mut(core:prelude/string.wado/String)->bool> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), pred: v.pred };
 }
 
 // retains: v
@@ -12026,8 +12243,8 @@ fn "$value_copy$core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/Str
 }
 
 // retains: v
-fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
-    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
+fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>"(v: IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char>) -> IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> {
+    return IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->char> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
 }
 
 // retains: v

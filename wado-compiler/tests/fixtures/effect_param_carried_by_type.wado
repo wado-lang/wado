@@ -1,0 +1,71 @@
+// An effect parameter a call resolves is substituted in the type the call
+// produces. A struct built around a function value carries the value's row,
+// so advancing it later demands what the value performs.
+use { println, Stdout } from "core:cli";
+
+struct Mapped<I, F> {
+    inner: I,
+    f: F,
+}
+
+impl<I: Iterator, U, effect E, F: fn mut(I::Item) -> U with E> Iterator for Mapped<I, F> {
+    type Item = U;
+
+    fn next(&mut self) -> Option<U> with E {
+        let Some(x) = self.inner.next() else {
+            return null;
+        };
+        return Option::Some((self.f)(x));
+    }
+}
+
+fn mapped<U, effect E, F: fn mut(i32) -> U with E>(f: F) -> Mapped<SliceValueIter<i32>, F> {
+    let xs: List<i32> = [1, 2];
+    return Mapped { inner: xs.iter_value(), f };
+}
+
+fn pure_total() -> i32 {
+    let mut t = 0;
+    for let y of mapped(|x: i32| x + 1) {
+        t += y;
+    }
+    return t;
+}
+
+test {
+    assert pure_total() == 5;
+}
+
+struct Src {
+    n: i32,
+}
+
+impl Src {
+    fn mapped<U, effect E, F: fn mut(i32) -> U with E>(&self, f: F) -> Mapped<SliceValueIter<i32>, F> {
+        let xs: List<i32> = [self.n, self.n + 1];
+        return Mapped { inner: xs.iter_value(), f };
+    }
+}
+
+fn loud_total() -> i32 with Stdout {
+    let mut loud: fn mut(i32) -> i32 with Stdout = |x| {
+        println(`f ${x}`);
+        return x * 10;
+    };
+    let mut t = 0;
+    for let y of mapped(loud) {
+        t += y;
+    }
+    let src = Src { n: 3 };
+    for let y of src.mapped(loud) {
+        t += y;
+    }
+    return t;
+}
+
+test "a function value's row is carried" {
+    assert loud_total() == 100;
+}
+
+__DATA__
+{"test": {}, "stdout": "f 1\nf 2\nf 3\nf 4\n"}

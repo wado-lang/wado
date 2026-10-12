@@ -2077,7 +2077,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     && impl_block.type_params.is_empty()
                 {
                     Some(qualified_struct_name.clone())
-                } else if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
+                } else if scope
+                    .tysys
+                    .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params)
+                {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
@@ -2118,7 +2121,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let provided_method_names: Vec<String> =
             impl_block.methods.iter().map(|m| m.name.clone()).collect();
 
-        let impl_is_concrete = scope.tysys.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = scope
+            .tysys
+            .impl_is_concrete_instantiation(&impl_block.ty, &impl_block.type_params);
         for method in &impl_block.methods {
             // Records-only: reify emits the method `TirFunction`
             // from the recorded signature facts + the AST.

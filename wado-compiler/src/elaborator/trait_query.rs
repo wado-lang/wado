@@ -3265,7 +3265,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 link,
                 Some(eq),
                 Some(block),
-                self.tysys.impl_is_concrete_instantiation(&header.ty),
+                self.tysys
+                    .impl_is_concrete_instantiation(&header.ty, &header.type_params),
                 header.module.clone(),
                 self.impl_receiver(header, link),
             )

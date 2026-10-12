@@ -35,7 +35,7 @@ struct core:prelude/slice.wado//SliceValueIter<i32> {  // TypeId(8)
     mut end: i32,
 }
 
-struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32> {  // TypeId(9)
+struct core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32> {  // TypeId(9)
     mut inner: ref "core:prelude/string.wado//StrCharIter",
     mut f: ref struct,
 }
@@ -101,7 +101,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prel
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(35)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>") -> [i32, u32];  // TypeId(36)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32>^core:prelude/traits.wado/Iterator::next$sroa[return]" = fn(ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32>") -> [i32, u32];  // TypeId(36)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(37)
 
@@ -153,7 +153,7 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     let rx_41: i32;
     let tx_42: i32;
     let result_50: ref "core:prelude//List<u8>";
-    let self_79: ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>";
+    let self_79: ref "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32>";
     let f_82: ref "collect_into_newtype.wado//$Closure_0";
     let result_84: ref "core:prelude//List<u32>";
     let self_150: ref "core:prelude/string.wado//String";
@@ -197,11 +197,11 @@ fn "collect_into_newtype.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"(used_213, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_41);
     f_82 = struct.new "collect_into_newtype.wado//$Closure_0" {  };
-    self_79 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,u32>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: $sroa_s_repr_180, used: 2, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_82, func: ref.func "closure/collect_into_newtype.wado/$closure_wrapper_0" } };
+    self_79 = struct.new "core:prelude/traits.wado//IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32>" { inner: struct.new "core:prelude/string.wado//StrCharIter" { repr: $sroa_s_repr_180, used: 2, byte_index: 0 }, f: struct.new "canonical//CanonicalClosure_0" { env: f_82, func: ref.func "closure/collect_into_newtype.wado/$closure_wrapper_0" } };
     result_84 = struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(), used: 0 };
     b3: block {
         l4: loop {
-            multivalue_bind [rx_41, used_213] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_79);
+            multivalue_bind [rx_41, used_213] = "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self_79);
             if rx_41 == 1 {
                 if @unlikely(local.tee tx_42(result_84.used) >= builtin::array_len(result_84.repr)) {
                     cold_path;
@@ -612,7 +612,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {
     self.repr = new_repr;
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,u32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,fn mut(char)->u32>^core:prelude/traits.wado/Iterator::next$sroa[return]"(self) {
     let $load_0: ref "core:prelude/string.wado//StrCharIter";
     let $load_1: i32;
     $fused_$inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__0: block {
