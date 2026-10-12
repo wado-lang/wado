@@ -1225,6 +1225,35 @@ pub variant Step {
     Fold([RowOp, i32]),
 }
 
+/// Constants compare by their bits, since a step stands for what it computes:
+/// `==` on `f32` takes -0.0 for 0.0, which a sum tells apart, and every NaN for
+/// one, whose payload a shader passes on.
+impl Eq for Step {
+    fn eq(&self, other: &Self) -> bool {
+        return self.key() == other.key();
+    }
+}
+
+impl Ord for Step {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.key().cmp(&other.key());
+    }
+}
+
+impl Step {
+    /// The case, then its payload, each as a number.
+    fn key(&self) -> [i32, i32, i32, i32] {
+        return match *self {
+            Operand(n) => [0, n, 0, 0],
+            Constant(c) => [1, c.to_bits() as i32, 0, 0],
+            Unary([op, a]) => [2, ReflectEnum::<UnaryOp>::discriminant(&op), a, 0],
+            Binary([op, a, b]) => [3, ReflectEnum::<BinaryOp>::discriminant(&op), a, b],
+            Select([c, a, b]) => [4, c, a, b],
+            Fold([op, a]) => [5, ReflectEnum::<RowOp>::discriminant(&op), a, 0],
+        };
+    }
+}
+
 /// An elementwise operator as data: each output element over the operands'
 /// elements at its position and the constants folded in. A backend reads it as
 /// it can, the CPU one step at a time and a GPU one as a shader, which a
@@ -1357,7 +1386,7 @@ impl Expr {
     /// Where `step` is computed: an equal step already here, or `step` added
     /// last.
     fn shared(&mut self, step: Step) -> i32 {
-        if let Some(at) = self.steps.position(|s| same_step(&s, &step)) {
+        if let Some(at) = self.steps.position(|s| s == step) {
             return at;
         }
         self.steps.push(step);
@@ -1454,15 +1483,6 @@ fn selected(c: &Slice<f32>, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
         out.push(if value_at(c, j) != 0.0 { value_at(a, j) } else { value_at(b, j) });
     }
     return out;
-}
-
-/// Whether two steps compute one value. Constants compare by their bits: `==`
-/// takes -0.0 for 0.0, which a sum tells apart.
-fn same_step(a: &Step, b: &Step) -> bool {
-    if let Constant(x) = *a && let Constant(y) = *b {
-        return x.to_bits() == y.to_bits();
-    }
-    return *a == *b;
 }
 
 fn whole(values: List<f32>) -> Slice<f32> {
