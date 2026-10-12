@@ -27,7 +27,12 @@ fn packed_matrix(data: &List<f32>, rows: i32, cols: i32) -> Packed {
         for let v of 0..<per_row {
             let c = v * 4;
             let lane = |i: i32| if c + i < cols { data[r * cols + c + i] } else { 0.0 as f32 };
-            let lanes: Array<f32> = [lane(0), lane(1), lane(2), lane(3)];
+            let lanes: Array<f32> = [
+                lane(0),
+                lane(1),
+                lane(2),
+                lane(3),
+            ];
             vectors[r * per_row + v] = f32x4::from(lanes);
         }
     }
@@ -254,15 +259,7 @@ struct MatrixAt {
 /// One batch element's product over `b` as stored: rows in bands of up to
 /// [`TILE`], a lone row left over on its own, and the columns past the last
 /// whole tile one element at a time.
-fn scalar_product(
-    a: &List<f32>,
-    b: &List<f32>,
-    out: &mut List<f32>,
-    rows: i32,
-    inner: i32,
-    cols: i32,
-    at: &MatrixAt,
-) {
+fn scalar_product(a: &List<f32>, b: &List<f32>, out: &mut List<f32>, rows: i32, inner: i32, cols: i32, at: &MatrixAt) {
     let whole_cols = cols - cols % TILE;
     let mut r = 0;
     while r < rows {
@@ -290,15 +287,7 @@ fn scalar_product(
 /// element: rows in bands as [`scalar_product`] takes them, against 2 vectors
 /// (8 columns) of `b` at a time. A row of an odd number of vectors computes its
 /// last one twice and stores it once, and a padding lane is never stored.
-fn packed_product(
-    a: &List<f32>,
-    b: &Packed,
-    out: &mut List<f32>,
-    rows: i32,
-    inner: i32,
-    cols: i32,
-    at: &MatrixAt,
-) {
+fn packed_product(a: &List<f32>, b: &Packed, out: &mut List<f32>, rows: i32, inner: i32, cols: i32, at: &MatrixAt) {
     assert at.b == 0, "a packed matrix is shared by every batch element";
     let mut r = 0;
     while r < rows {
@@ -356,7 +345,12 @@ fn vector_band(
         s30 = s30 + x3 * y0;
         s31 = s31 + x3 * y1;
     }
-    let sums = [[s00, s01], [s10, s11], [s20, s21], [s30, s31]];
+    let sums = [
+        [s00, s01],
+        [s10, s11],
+        [s20, s21],
+        [s30, s31],
+    ];
     for let [i, [first, second]] of sums.enumerate() {
         if i < height {
             store_vectors(out, cols, out_at + i * cols, v0, v1, first, second);

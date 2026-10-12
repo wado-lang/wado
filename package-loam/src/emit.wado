@@ -421,7 +421,13 @@ enum Holding {
 
 /// The call making the host tensor `host`, a reference, the backend's: a
 /// half-precision one is converted once here, so `forward` converts none.
-fn preparation(checked: &Checked, held: &TreeMap<String, String>, tensor: &String, host: String, holding: Holding) -> String {
+fn preparation(
+    checked: &Checked,
+    held: &TreeMap<String, String>,
+    tensor: &String,
+    host: String,
+    holding: Holding,
+) -> String {
     let verb = if converted(checked, held, tensor) {
         "prepare";
     } else {
@@ -464,7 +470,7 @@ fn matrix_weights(graph: &Graph, checked: &Checked) -> TreeSet<String> {
 /// right operand, or `elsewhere`, recursing into the branches they carry.
 fn note_operand_uses(graph: &Graph, right: &mut TreeSet<String>, elsewhere: &mut TreeSet<String>) {
     for let node of &graph.nodes {
-        let product = node.op == "MatMul" || (node.op == "Gemm" && !settled(gemm_options(node)).3);
+        let product = node.op == "MatMul" || node.op == "Gemm" && !settled(gemm_options(node)).3;
         for let [i, input] of node.inputs.into_iter().enumerate() {
             if product && i == 1 {
                 right.insert(input);
