@@ -779,9 +779,11 @@ fn documented_impls<'a>(
     include_private: bool,
     resolution: &Resolution<'a>,
 ) -> Vec<DocImpl<'a>> {
-    let impls = module.items.iter().filter_map(|item| match item {
-        Item::Impl(i) => Some(i),
-        _ => None,
+    let impls = module.items.iter().filter_map(|item| {
+        let Item::Impl(i) = item else {
+            return None;
+        };
+        Some(i)
     });
     let trait_head = |i: &ImplBlock| i.trait_type.as_ref().and_then(spell_head);
     let unnameable = if include_private {

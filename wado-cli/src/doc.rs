@@ -474,13 +474,13 @@ mod format_contract_tests {
         render_single(&doc, "simple", "demo.wado", OutputFormat::Simple)
     }
 
-    /// The page of `source`, as `/demo.wado` beside the `(name, source)` files
-    /// of `deps` it imports as `./name`.
     fn markdown_importing(source: &str, deps: &[(&str, &str)]) -> String {
         let doc = page(source, deps, false);
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
+    /// The page of `source`, as `./demo.wado` beside the `(name, source)` files
+    /// of `deps` it imports as `./name`.
     fn page(source: &str, deps: &[(&str, &str)], include_private: bool) -> DocModule {
         let paths: Vec<String> = deps.iter().map(|(name, _)| format!("./{name}")).collect();
         let mut files = vec![("./demo.wado", source)];
