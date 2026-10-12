@@ -187,10 +187,10 @@ pruned to the functions called
 
 The world selects the allocator, and `--allocator` overrides it.
 
-| Allocator  | Default for                   | Behaviour                                            |
-| ---------- | ----------------------------- | ---------------------------------------------------- |
-| `freelist` | Every world but the test one  | Reuses freed blocks.                                 |
-| `debug`    | Test world                    | Never reuses freed memory, and poisons it with 0xFF. |
+| Allocator  | Default for                  | Behaviour                                            |
+| ---------- | ---------------------------- | ---------------------------------------------------- |
+| `freelist` | Every world but the test one | Reuses freed blocks.                                 |
+| `debug`    | Test world                   | Never reuses freed memory, and poisons it with 0xFF. |
 
 ## Known Limitations
 
