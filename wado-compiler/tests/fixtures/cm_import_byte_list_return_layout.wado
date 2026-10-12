@@ -1,0 +1,12 @@
+// A `ByteList` an import returns lands in its return area as the `list<u8>` it
+// wraps, a pointer and a length. Sized as a 4-byte handle, the area is freed
+// with a size the debug allocator rejects.
+
+use { Random } from "wasi:random";
+
+test "an imported ByteList returns through a list-sized area" {
+    assert Random::get_random_bytes(4).len() == 4;
+}
+
+__DATA__
+{"test": {}}

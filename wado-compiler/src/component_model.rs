@@ -5138,7 +5138,8 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named) else {
-                return unregistered();
+                return prelude_newtype_base(named)
+                    .map_or_else(unregistered, |base| cm_layout_with_registry(base, registry));
             };
             if let Some(resolved) =
                 registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
