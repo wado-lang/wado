@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791779122267,
+  "lastUpdate": 1791782373692,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66453,6 +66453,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dc4a302e2587aa72641569e34fb37436fd3b751d"
         },
         "date": 1791779121599,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2944,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7321,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22317,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 341419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "66df566a21d3d98d18a1f6ec6597c5d501490211",
+          "message": "Merge pull request #2338 from wado-lang/ccr-5228ac7b-lvvyxg\n\nfeat(wado-cli): test each commit by what it changed, and skip what still passes",
+          "timestamp": "2026-10-12T14:00:02+09:00",
+          "tree_id": "c9ddcf6ae7919bf2fa05e2b7e75b7769834c2911",
+          "url": "https://github.com/wado-lang/wado/commit/66df566a21d3d98d18a1f6ec6597c5d501490211"
+        },
+        "date": 1791782373222,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
