@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791752126427,
+  "lastUpdate": 1791779122267,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66429,6 +66429,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 340348,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc4a302e2587aa72641569e34fb37436fd3b751d",
+          "message": "Merge pull request #2336 from wado-lang/list-index-check-elim\n\nperf!: version loops on bounds checks shifted past the guard variable",
+          "timestamp": "2026-10-12T13:07:11+09:00",
+          "tree_id": "6069c9aabfdd9532a5e396f7227f5de19920ebf0",
+          "url": "https://github.com/wado-lang/wado/commit/dc4a302e2587aa72641569e34fb37436fd3b751d"
+        },
+        "date": 1791779121599,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2944,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7321,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22317,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 341419,
             "unit": "bytes"
           }
         ]
