@@ -1079,10 +1079,7 @@ impl String {
             builtin::cold_path();
             return Result::Err(String::utf8_error_at(&bytes, prefix));
         }
-        return Result::Ok(String {
-            repr: bytes.to_array() as ByteArray,
-            used: bytes.len(),
-        });
+        return Result::Ok(unchecked String::from_utf8(bytes));
     }
 
     /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and
