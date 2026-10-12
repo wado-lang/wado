@@ -1888,13 +1888,23 @@ impl TypeTable {
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
+        self.render_anon_struct(id, &|t| self.type_name(t))
+    }
+
+    /// [`Self::anon_struct_name`] with each field or hole type spelled by
+    /// `field_type`, so a qualified rendering stays qualified inside the shape.
+    fn render_anon_struct(
+        &self,
+        id: AnonStructId,
+        field_type: &dyn Fn(TypeId) -> String,
+    ) -> String {
         match &self.anon_structs[id.0 as usize].shape {
-            AnonShape::Template(shape) => self.template_shape_name(shape),
+            AnonShape::Template(shape) => self.template_shape_name(shape, field_type),
             AnonShape::Fields(fields) if fields.is_empty() => "{}".to_string(),
             AnonShape::Fields(fields) => {
                 let parts: Vec<String> = fields
                     .iter()
-                    .map(|(n, ty)| format!("{n}: {}", self.type_name(*ty)))
+                    .map(|(n, ty)| format!("{n}: {}", field_type(*ty)))
                     .collect();
                 format!("{{ {} }}", parts.join(", "))
             }
@@ -1904,7 +1914,11 @@ impl TypeTable {
 
     /// A template shape as its text, each hole spelled as its type and
     /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
-    fn template_shape_name(&self, shape: &TemplateShape) -> String {
+    fn template_shape_name(
+        &self,
+        shape: &TemplateShape,
+        hole_type: &dyn Fn(TypeId) -> String,
+    ) -> String {
         let mut name = String::from("`");
         let mut room = TEMPLATE_NAME_MAX_CHARS;
         let mut push = |text: &str| {
@@ -1930,7 +1944,7 @@ impl TypeTable {
                         .spec
                         .as_ref()
                         .map_or(String::new(), |s| format!(":{s}"));
-                    push(&format!("${{{}{spec}}}", self.type_name(hole.ty)))
+                    push(&format!("${{{}{spec}}}", hole_type(hole.ty)))
                 })
         });
         if !complete {
@@ -5514,6 +5528,10 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => {
                 format!("Array<{}>", type_name(*elem))
             }
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.render_anon_struct(*id, &type_name),
             ResolvedType::Struct { def, type_args } => {
                 // The declared head, not the rendered one: a message shows
                 // `Box<i32>`, never the `Box@<local>` a local declaration is
