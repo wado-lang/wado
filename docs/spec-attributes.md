@@ -488,7 +488,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     // The tag sits in the `max(align, 4)` bytes in front of the block, which
     // keep the block aligned.
     let gap = if align < 4 { 4 } else { align as u32 };
-    let block = bump(align as u32, gap + newsize as u32) + gap;
+    let block = bump(align as u32, gap as u64 + newsize as u32 as u64) + gap;
     store(block - 4, DEBUG_LIVE);
     return block as i32;
 }

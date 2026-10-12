@@ -1,0 +1,28 @@
+// A `break` value unrolled per tuple element takes a sibling's type in every
+// element or in none. Here `v` is `i64` in the first element and `i32` in the
+// second, so the second's `if` cannot become `i64` and the mismatch is
+// reported, not hidden behind the first element's retargeted literal.
+
+use { println, Stdout } from "core:cli";
+
+fn pick() -> i64 {
+    let c = builtin::black_box(false);
+    let found = search: {
+        for let v of [1 as i64, 2 as i32] {
+            if builtin::black_box(v > 1) {
+                break search: if c { 0 } else { v };
+            }
+        }
+        builtin::black_box(7 as i64)
+    };
+    return found;
+}
+
+export fn run() with Stdout {
+    println(`${pick()}`);
+}
+
+__DATA__
+{
+    "compile_error": ":10:17: analysis error: type mismatch: expected 'i64', found 'i32'"
+}

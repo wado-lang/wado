@@ -110,8 +110,8 @@ pub struct WebGpuBackend {
     device: GpuDevice,
     queue: GpuQueue,
     pipelines: List<Pipeline>,
-    /// Each compiled shader's place in `pipelines`, by its source.
-    compiled: TreeMap<String, i32>,
+    /// Each compiled shader's place in `pipelines`, by what it is made of.
+    compiled: TreeMap<ShaderKey, i32>,
     /// The buffers `keep` wrote, which live as long as the backend.
     kept: List<Slot>,
     /// The buffers of the current pass, which `begin` releases.
@@ -411,10 +411,10 @@ impl WebGpuBackend {
         return out;
     }
 
-    /// `shader` compiled, at the place in `pipelines` it is kept.
-    fn compile(&mut self, shader: &String) -> i32 with (GpuDevice, GpuShaderModule, GpuComputePipeline) {
+    /// The shader `key` makes compiled, at the place in `pipelines` it is kept.
+    fn compile(&mut self, key: &ShaderKey) -> i32 with (GpuDevice, GpuShaderModule, GpuComputePipeline) {
         let module = self.device.create_shader_module(GpuShaderModuleDescriptor {
-            code: *shader,
+            code: key.source(),
             compilation_hints: null,
             label: null,
         });
@@ -429,15 +429,15 @@ impl WebGpuBackend {
         });
         let at = self.pipelines.len();
         self.pipelines.push(Pipeline { compiled: pipeline });
-        self.compiled[*shader] = at;
+        self.compiled[*key] = at;
         return at;
     }
 
-    /// Records `shader` over `spans`, bound in order, then its parameters, in
-    /// `groups` workgroups along each dimension.
+    /// Records the shader `key` makes over `spans`, bound in order, then its
+    /// parameters, in `groups` workgroups along each dimension.
     fn dispatch(
         &mut self,
-        shader: &String,
+        key: ShaderKey,
         spans: List<Span>,
         params: List<u32>,
         groups: [i32, i32, i32],
@@ -448,9 +448,9 @@ impl WebGpuBackend {
         }
         self.dispatches += 1;
         let params_slot = self.written(params.len(), |i| params[i], false);
-        let found = match self.compiled.get(*shader) {
+        let found = match self.compiled.get(key) {
             Some(at) => at,
-            None => self.compile(shader),
+            None => self.compile(&key),
         };
         let mut all = spans;
         all.push(Span { slot: params_slot, first: 0, count: params.len() });
@@ -513,10 +513,10 @@ impl WebGpuBackend {
         for let o of bound.views {
             push_view(&mut params, o.offset, &stretched(&o, &extents));
         }
-        let shader = elementwise_shader(op, &bound.bindings, extents.len());
+        let key = ShaderKey::Elementwise([*op, bound.bindings, extents.len()]);
         let mut spans = bound.spans;
         spans.push(fresh(&out));
-        self.dispatch(&shader, spans, params, [x, y, 1]);
+        self.dispatch(key, spans, params, [x, y, 1]);
         return Option::Some(out);
     }
 
@@ -550,10 +550,10 @@ impl WebGpuBackend {
         for let o of bound.views {
             push_view(&mut params, o.offset, &stretched(&o, &extents));
         }
-        let shader = row_shader(op, &bound.bindings, rank, row_axes, reduced);
+        let key = ShaderKey::Rows([*op, bound.bindings, rank, row_axes, reduced]);
         let mut spans = bound.spans;
         spans.push(fresh(&out));
-        self.dispatch(&shader, spans, params, [x, y, 1]);
+        self.dispatch(key, spans, params, [x, y, 1]);
         return Option::Some(out);
     }
 
@@ -670,7 +670,7 @@ impl WebGpuBackend {
             let mut params = element_params(count, x, &to.extents);
             push_view(&mut params, from.offset - source.first, &from.strides);
             push_view(&mut params, to.offset - target.first, &to.strides);
-            self.dispatch(&copy_shader(to.extents.len()), [source, target], params, [x, y, 1]);
+            self.dispatch(ShaderKey::Copy(to.extents.len()), [source, target], params, [x, y, 1]);
             return;
         }
         let axis = split_axis(&to.extents);
@@ -838,10 +838,10 @@ impl WebGpuBackend {
                 Some(e) && last => e.op,
                 _ => operand(0),
             };
-            let shader = product_shader(&op, &bound.bindings, br, continued);
+            let key = ShaderKey::Product([op, bound.bindings, br, continued]);
             let mut spans = bound.spans;
             spans.push(fresh(&out));
-            self.dispatch(&shader, spans, params, [
+            self.dispatch(key, spans, params, [
                 covering(cols, TILE),
                 covering(rows, TILE),
                 count,
@@ -956,7 +956,7 @@ impl WebGpuBackend {
             params.push(lo as u32);
             push_view(&mut params, part.offset - target.first, &part.strides);
             let indices = Span { slot: index_slot, first: 0, count: words.len() };
-            self.dispatch(&gather_shader(part.extents.len(), axis), [source, indices, target], params, [x, y, 1]);
+            self.dispatch(ShaderKey::Gather([part.extents.len(), axis]), [source, indices, target], params, [x, y, 1]);
             return;
         }
         // `gathered` checked that one row binds.
@@ -983,6 +983,8 @@ impl WebGpuBackend {
 impl Backend for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
     type Operand<Axes> = PlacedRead<Axes>;
+    /// The product's shader reads a plain row-major matrix.
+    type Rhs<K, N> = Placed<f32, [K, N]>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(t, false);
@@ -991,6 +993,17 @@ impl Backend for WebGpuBackend {
     /// A kept mask is written once, and each pass reads it where it is.
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(t, true);
+    }
+
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        return self.stored(t, true);
+    }
+
+    fn keep_rhs_transposed<K, N>(
+        &mut self,
+        t: &Tensor<f32, [N, K]>,
+    ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        return self.stored(&self.cpu.transpose2(t), true);
     }
 
     /// Submits what the pass before recorded and releases its buffers, so a
@@ -1125,6 +1138,15 @@ impl Backend for WebGpuBackend {
         then: Option<Epilogue<PlacedRead<Out>>>,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return self.product::<A, B, Out>(a, b, &then);
+    }
+
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Placed<f32, [..Bs, M, K]>,
+        b: &Placed<f32, [K, N]>,
+        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
+    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.matmul_shared(a, b, then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
@@ -1739,6 +1761,35 @@ fn steps_wgsl(op: &Expr, last: i32, indent: String) -> String {
         body.push_str(`${indent}let s${i} = ${value};\n`);
     }
     return body;
+}
+
+/// What a shader is made of. Equal keys make the same WGSL, so the compiled
+/// pipelines are found by the key, compared in place of the source it would
+/// take to build first.
+variant ShaderKey {
+    /// [`elementwise_shader`]'s arguments.
+    Elementwise([Expr, List<i32>, i32]),
+    /// [`row_shader`]'s arguments.
+    Rows([Expr, List<i32>, i32, i32, bool]),
+    /// [`copy_shader`]'s argument.
+    Copy(i32),
+    /// [`product_shader`]'s arguments.
+    Product([Expr, List<i32>, i32, bool]),
+    /// [`gather_shader`]'s arguments.
+    Gather([i32, i32]),
+}
+
+impl ShaderKey {
+    /// The WGSL this key makes.
+    fn source(&self) -> String {
+        return match self {
+            Elementwise([op, bindings, rank]) => elementwise_shader(op, bindings, *rank),
+            Rows([op, bindings, rank, row_axes, reduced]) => row_shader(op, bindings, *rank, *row_axes, *reduced),
+            Copy(rank) => copy_shader(*rank),
+            Product([op, bindings, batch, continued]) => product_shader(op, bindings, *batch, *continued),
+            Gather([rank, axis]) => gather_shader(*rank, *axis),
+        };
+    }
 }
 
 /// The WGSL an elementwise kernel runs: `op` at each output position of a

@@ -1200,6 +1200,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             match tt.get(tt.reflect_structure_head(scrutinee)) {
                 ResolvedType::Struct { def, .. } => Some(*def),
+                // A generic struct over a parameter its function has yet to
+                // fill, as `Pair<T>` is inside `fn f<T>`.
+                ResolvedType::GenericInstance { def, .. } => Some(StructDef::Decl(*def))
+                    .filter(|_| self.lookup_struct_fields_of_decl(*def).is_some()),
                 _ => None,
             }
         };
@@ -3115,9 +3119,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `expected_type` lookup above and WIR `br` depth resolution.
         if let Some(label) = &break_stmt.label {
             let branch_type = value.unwrap_or(TypeTable::UNIT);
+            let value_id = break_stmt.value.as_ref().map(|v| v.id());
             for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
-                    target.break_types.push(branch_type);
+                    target.break_types.push((value_id, branch_type));
                     break;
                 }
             }

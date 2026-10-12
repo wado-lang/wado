@@ -1,9 +1,10 @@
 // GPT-2 (124M) on onnxruntime: the program generate.wado times, over
-// onnx/decoder_model.onnx. The first argument caps onnxruntime's threads;
-// without it onnxruntime picks its own.
+// onnx/decoder_model.onnx. A numeric argument caps onnxruntime's threads,
+// which it otherwise picks itself; `webgpu` runs on the WebGPU execution
+// provider in place of the CPU one.
 //
 //   mise run loam-oracle-deps   # at the repository root
-//   node gpt2_124m/onnxruntime.mjs [threads]
+//   node gpt2_124m/onnxruntime.mjs [threads | webgpu]
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -17,11 +18,21 @@ const STEPS = 8;
 const WARMUP = 1;
 const ITERATIONS = 3;
 
-const threads = process.argv[2] ? parseInt(process.argv[2], 10) : 0;
-const session = await ort.InferenceSession.create(
-  new URL('model.onnx', model).pathname,
-  threads ? { intraOpNumThreads: threads, interOpNumThreads: 1 } : {},
-);
+const arg = process.argv[2];
+const options = arg === 'webgpu'
+  ? { executionProviders: ['webgpu'] }
+  : arg
+  ? { intraOpNumThreads: parseInt(arg, 10), interOpNumThreads: 1 }
+  : {};
+const created = ort.InferenceSession.create(new URL('model.onnx', model).pathname, options);
+// Not every host's onnxruntime-node serves WebGPU, and the arms after this
+// one still have something to measure there.
+const session = arg === 'webgpu'
+  ? await created.catch((e) => {
+    console.log(`SKIP: onnxruntime WebGPU (${e.message})`);
+    process.exit(0);
+  })
+  : await created;
 const recorded = JSON.parse(readFileSync(new URL('tokenize.json', model), 'utf8')).tokenize;
 const ids = recorded.find((t) => t.text === PROMPT).ids;
 

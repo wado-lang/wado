@@ -2676,10 +2676,10 @@ fn grow_memory(end: u64) {
     }
 }
 
-fn bump(align: u32, size: u32) -> u32 {
+fn bump(align: u32, size: u64) -> u32 {
     let mask: u64 = (align as u64 - 1);
     let start: u64 = ((core::allocator::frontier() as u64 + mask) & ~mask);
-    let end: u64 = (start + size as u64);
+    let end: u64 = (start + size);
     if (end > core::allocator::MAX_ADDRESS) {
         core::builtin::cold_path();
         core::builtin::unreachable();
@@ -2712,7 +2712,7 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
     } else {
         align as u32;
     };
-    let block: u32 = (core::allocator::bump(align as u32, (gap + newsize as u32)) + gap);
+    let block: u32 = (core::allocator::bump(align as u32, (gap as u64 + newsize as u32 as u64)) + gap);
     core::allocator::store((block - 4), core::allocator::DEBUG_LIVE);
     return block as i32;
 }
@@ -2863,7 +2863,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         }
         curr = core::allocator::load((curr + 8));
     }
-    let block: u32 = core::allocator::bump(1, size);
+    let block: u32 = core::allocator::bump(1, wide_size);
     core::allocator::fl_set_tags(block, size, 1);
     return (block + 8) as i32;
 }

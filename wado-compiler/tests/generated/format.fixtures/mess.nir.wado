@@ -48,10 +48,10 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
     let gap: u32 = core::builtin::select::<u32>((align < 4), 4, align as u32);
     let block: u32 = ($unbroken_11: {
         let align: u32 = align as u32;
-        let size: u32 = (gap + newsize as u32);
+        let size: u64 = (gap as u64 + newsize as u32 as u64);
         let mask: u64 = (align as u64 - 1);
         let start: u64 = ((core::allocator::heap_offset as u64 + mask) & ~mask);
-        let end: u64 = (start + size as u64);
+        let end: u64 = (start + size);
         if (end > 4294967295) {
             core::builtin::cold_path();
             core::builtin::unreachable();
@@ -230,7 +230,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         curr = core::builtin::i32_load((curr + 8) as i32) as u32;
     }
     let start: u64 = (core::allocator::heap_offset as u64 & 18446744073709551615);
-    let end: u64 = (start + size as u64);
+    let end: u64 = (start + wide_size);
     if (end > 4294967295) {
         core::builtin::cold_path();
         core::builtin::unreachable();

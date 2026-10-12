@@ -2,6 +2,7 @@
 
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::{Result, bail};
 use lexopt::Arg::{Long, Short, Value};
@@ -24,6 +25,9 @@ Options:
       --log-level <level>
                          Log level: debug, info, warn, error, off (default: warn)
                          info names the adapter each request-adapter returns
+      --profile guest[,path[,interval_ms]]
+                         Sample the guest into a Firefox Profiler file
+                         (default: profile.json, 10ms)
   -h, --help             Show this help and this machine's adapter list
   -V, --version          Show the version
 
@@ -113,6 +117,34 @@ impl AdapterSelector {
     }
 }
 
+/// `--profile guest[,path[,interval_ms]]`, as `wado run` takes it.
+#[derive(PartialEq, Eq, Debug)]
+pub struct GuestProfile {
+    pub path: PathBuf,
+    pub interval: Duration,
+}
+
+impl GuestProfile {
+    fn parse(value: &str) -> Option<Self> {
+        let mut parts = value.split(',');
+        if parts.next() != Some("guest") {
+            return None;
+        }
+        let path = PathBuf::from(parts.next().unwrap_or("profile.json"));
+        let interval_ms = match parts.next() {
+            Some(ms) => ms.parse().ok()?,
+            None => 10,
+        };
+        if parts.next().is_some() {
+            return None;
+        }
+        Some(Self {
+            path,
+            interval: Duration::from_millis(interval_ms),
+        })
+    }
+}
+
 /// One run, as the command line asks for it.
 pub struct Args {
     /// The `.wado` source or `.wasm` component to run.
@@ -120,6 +152,7 @@ pub struct Args {
     pub opt_level: OptLevel,
     pub log_level: LogLevel,
     pub gpu_adapter: Option<AdapterSelector>,
+    pub profile: Option<GuestProfile>,
     /// Empty means preopen nothing, which `--no-dir` also asks for.
     pub preopens: Vec<PathBuf>,
     /// The arguments after the input file, which belong to the program.
@@ -144,6 +177,7 @@ impl Args {
         let mut opt_level = OptLevel::O2;
         let mut log_level = LogLevel::Warn;
         let mut gpu_adapter = None;
+        let mut profile = None;
         let mut preopens = Vec::new();
         let mut no_dir = false;
         let mut program_args = Vec::new();
@@ -172,6 +206,13 @@ impl Args {
                 }
                 Long("gpu-adapter") => {
                     gpu_adapter = Some(AdapterSelector::parse(parser.value()?.string()?));
+                }
+                Long("profile") => {
+                    let value = parser.value()?.string()?;
+                    let Some(parsed) = GuestProfile::parse(&value) else {
+                        bail!("unknown profile mode '{value}'. Use guest[,path[,interval_ms]]");
+                    };
+                    profile = Some(parsed);
                 }
                 Long("dir") => preopens.push(PathBuf::from(parser.value()?)),
                 Long("no-dir") => no_dir = true,
@@ -202,6 +243,7 @@ impl Args {
             opt_level,
             log_level,
             gpu_adapter,
+            profile,
             preopens,
             program_args,
         }))
@@ -266,6 +308,28 @@ mod tests {
         );
         assert_eq!(adapter("-1"), Some(AdapterSelector::Name("-1".to_owned())));
         assert!(try_parse(&["--gpu-adapter"]).is_err());
+    }
+
+    #[test]
+    fn a_guest_profile_takes_wado_runs_spelling() {
+        let profile = |value: &str| parse(&["--profile", value, "app.wado"]).profile;
+        assert_eq!(parse(&["app.wado"]).profile, None);
+        assert_eq!(
+            profile("guest"),
+            Some(GuestProfile {
+                path: PathBuf::from("profile.json"),
+                interval: Duration::from_millis(10),
+            })
+        );
+        assert_eq!(
+            profile("guest,out.json,2"),
+            Some(GuestProfile {
+                path: PathBuf::from("out.json"),
+                interval: Duration::from_millis(2),
+            })
+        );
+        assert!(try_parse(&["--profile", "jitdump", "app.wado"]).is_err());
+        assert!(try_parse(&["--profile", "guest,a,b", "app.wado"]).is_err());
     }
 
     #[test]

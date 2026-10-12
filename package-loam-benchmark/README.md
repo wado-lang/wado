@@ -32,6 +32,7 @@ generated tokens.
 | -------------------------------- | ------------------------------------------ |
 | onnxruntime, its own thread pool | `onnxruntime.mjs`                          |
 | onnxruntime, 1 thread            | `onnxruntime.mjs 1`                        |
+| onnxruntime, WebGPU EP           | `onnxruntime.mjs webgpu`                   |
 | Loam `WebGpuBackend`             | `gpt2_124m_webgpu.wado`, `wado run-webgpu` |
 | Loam `Cpu`                       | `gpt2_124m.wado`, `wado run`               |
 

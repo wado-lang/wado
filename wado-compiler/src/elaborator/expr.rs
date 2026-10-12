@@ -37,7 +37,7 @@ use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::control_flow::{
-    collect_unresolved_null_breaks, collect_unresolved_null_tails,
+    break_values, collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
 };
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
@@ -723,6 +723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
             Expr::LabeledBlock(lb) => {
+                let overlays_before = self.tuple_overlay_counts();
                 let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected_type);
                 // A labeled block yields via `break label: value`, not a tail
                 // expression, so its trailing statement stays in statement
@@ -733,7 +734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
                 // the same unification; project only the result type.
-                self.unify_labeled_block(lb, &target.break_types, expected_type)
+                self.unify_labeled_block(lb, &target.break_types, expected_type, &overlays_before)
             }
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
@@ -768,14 +769,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn unify_labeled_block(
         &mut self,
         lb: &LabeledBlockExpr,
-        break_types: &[TypeId],
+        breaks: &[(Option<AstId>, TypeId)],
         expected_type: Option<TypeId>,
+        overlays_before: &IndexMap<AstId, usize>,
     ) -> TypeId {
         let expected_type = self.settled_result_expectation(expected_type);
-        let tail_type = self.labeled_block_tail_type(lb);
-        let mut branch_types: Vec<TypeId> = break_types
+        let mut tail_type = self.labeled_block_tail_type(lb);
+        let mut breaks = breaks.to_vec();
+        if expected_type.is_none() {
+            tail_type = self.retarget_labeled_literals(lb, &mut breaks, tail_type, overlays_before);
+        }
+        let mut branch_types: Vec<TypeId> = breaks
             .iter()
-            .copied()
+            .map(|&(_, ty)| ty)
             .chain(std::iter::once(tail_type))
             .collect();
         self.settle_branch_holes(&mut branch_types, expected_type);
@@ -795,6 +801,121 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         result_type
+    }
+
+    /// Give the numeric-literal branches of a labeled block the type a sibling
+    /// fixed, as [`Self::if_branch_types`] does for an `if`. A `break` with no
+    /// value yields `()`, which fixes no numeric type. The type a value fixes
+    /// is the one its `break` recorded, since a value inside a tuple for-of has
+    /// its facts in that loop's element overlays by now. A retargeted value
+    /// updates every record of it in `breaks`. Returns the tail's type.
+    fn retarget_labeled_literals(
+        &mut self,
+        lb: &LabeledBlockExpr,
+        breaks: &mut [(Option<AstId>, TypeId)],
+        tail_type: TypeId,
+        overlays_before: &IndexMap<AstId, usize>,
+    ) -> TypeId {
+        let values: Vec<&ast::Expr> = {
+            let ctx = self.ctrl_flow_ctx();
+            break_values(ctx, &lb.block, &lb.label)
+        }
+        .into_iter()
+        .filter(|v| breaks.iter().any(|&(id, _)| id == Some(v.id())))
+        .collect();
+        let mut tails = NumericLiteralTails::default();
+        let tail_is_literal = tail_type != TypeTable::NEVER
+            && self.collect_block_numeric_literal_tails(&lb.block, tail_type, &mut tails)
+            && !tails.literals.is_empty();
+        let fixed = breaks
+            .iter()
+            .filter_map(|&(id, ty)| {
+                let value = values.iter().find(|v| Some(v.id()) == id)?;
+                (!self.is_numeric_literal_arm(value, ty)).then_some(ty)
+            })
+            .chain((!tail_is_literal).then_some(tail_type))
+            .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t));
+        let Some(target) = fixed else {
+            return tail_type;
+        };
+        for &value in &values {
+            // A value unrolled per element retargets in every element or in
+            // none: its records carry one type, and an element left on its own
+            // must keep the mismatch it is reported by.
+            let mut retargets = true;
+            self.in_each_store_of(value.id(), overlays_before, |this| {
+                let mut tails = NumericLiteralTails::default();
+                retargets &= this.collect_numeric_literal_tails(value, target, &mut tails);
+            });
+            if !retargets {
+                continue;
+            }
+            let mut retargeted = None;
+            self.in_each_store_of(value.id(), overlays_before, |this| {
+                retargeted = this
+                    .coerce_numeric_literal_tail(value, target)
+                    .or(retargeted);
+            });
+            if let Some(retargeted) = retargeted {
+                for (id, ty) in breaks.iter_mut() {
+                    if *id == Some(value.id()) {
+                        *ty = retargeted;
+                    }
+                }
+            }
+        }
+        if tail_is_literal {
+            return self
+                .coerce_block_numeric_literal_tail(&lb.block, target)
+                .unwrap_or(tail_type);
+        }
+        tail_type
+    }
+
+    /// Run `f` with each set of body facts that records `id` installed as the
+    /// current one: the walk's own, and the element overlays of every tuple
+    /// for-of instantiated since `overlays_before` was counted. An unrolled
+    /// loop peels its elements' facts off the walk's, so a node inside one is
+    /// read and recorded there, once per element. An instantiation counted
+    /// before belongs to another walk of the same source, an earlier element
+    /// of a loop around this one.
+    fn in_each_store_of(
+        &mut self,
+        id: AstId,
+        overlays_before: &IndexMap<AstId, usize>,
+        mut f: impl FnMut(&mut Self),
+    ) {
+        if self.sem.types.expression_types.contains_key(&id) {
+            f(self);
+        }
+        let loops: Vec<AstId> = self.sem.types.tuple_overlays.keys().copied().collect();
+        for key in loops {
+            let instantiations = self.sem.types.tuple_overlays[&key].len();
+            for inst in overlays_before.get(&key).copied().unwrap_or(0)..instantiations {
+                for elem in 0..self.sem.types.tuple_overlays[&key][inst].len() {
+                    let element = &mut self.sem.types.tuple_overlays[&key][inst][elem];
+                    if !element.expression_types.contains_key(&id) {
+                        continue;
+                    }
+                    let mut facts = std::mem::take(element);
+                    std::mem::swap(&mut self.sem.types.body, &mut facts);
+                    f(self);
+                    std::mem::swap(&mut self.sem.types.body, &mut facts);
+                    self.sem.types.tuple_overlays[&key][inst][elem] = facts;
+                }
+            }
+        }
+    }
+
+    /// How many instantiations each tuple for-of has recorded so far, which
+    /// [`Self::in_each_store_of`] takes as the walks a later one is not.
+    fn tuple_overlay_counts(&self) -> IndexMap<AstId, usize> {
+        self.sem
+            .types
+            .tuple_overlays
+            .iter()
+            .map(|(key, instantiations)| (*key, instantiations.len()))
+            .collect()
     }
 
     /// What the path reaching the block's end yields, or `never` when no path

@@ -1,0 +1,53 @@
+// A generic struct destructures by name inside a function that has yet to fill
+// its parameter, where its type is `Pair<T>` itself rather than an instance:
+// in a `let`, in a `match`, and with a field an associated type spells.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+fn split<T>(p: Pair<T>) -> [T, T] {
+    let Pair { a, b } = p;
+    return [a, b];
+}
+
+fn first<T>(p: &Pair<T>) -> T {
+    return match p {
+        Pair { a, .. } => *a,
+    };
+}
+
+trait Holds {
+    type Item;
+}
+
+struct Ints {
+}
+
+impl Holds for Ints {
+    type Item = i64;
+}
+
+struct Held<H: Holds> {
+    value: H::Item,
+}
+
+fn unwrap_held<H: Holds>(h: Held<H>) -> H::Item {
+    let Held { value } = h;
+    return value;
+}
+
+export fn run() with Stdout {
+    let [x, y] = split(Pair { a: 1, b: 2 });
+    let f = first(&Pair { a: "p", b: "q" });
+    let v = unwrap_held(Held::<Ints> { value: 7 });
+    println(`${x} ${y} ${f} ${v}`);
+}
+
+__DATA__
+{
+    "stdout": "1 2 p 7\n"
+}

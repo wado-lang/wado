@@ -1,7 +1,67 @@
+use { f32x4 } from "core:simd";
+
 /// A tensor of `E` over the axis list `Axes`, row-major.
 pub struct Tensor<E, Axes> {
     pub data: List<E>,
     pub extents: List<i32>,
+}
+
+/// The `Cpu` backend's right operand of a matrix product, `[K, N]`: its rows
+/// as vectors of 4 adjacent elements, each row padded with zeros to a whole
+/// vector, so a product reads 4 columns with one bounds check and multiplies
+/// them in one instruction.
+pub struct Packed<K, N> {
+    vectors: Array<f32x4>,
+    /// The vectors one row takes.
+    per_row: i32,
+    rows: i32,
+    cols: i32,
+}
+
+/// The `rows` by `cols` matrix whose element `[r, c]` is `at(r, c)`, packed.
+fn packed_matrix<K, N>(rows: i32, cols: i32, at: fn(i32, i32) -> f32) -> Packed<K, N> {
+    let per_row = (cols + 3) / 4;
+    let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
+    for let r of 0..<rows {
+        for let v of 0..<per_row {
+            let c = v * 4;
+            let lane = |i: i32| if c + i < cols { at(r, c + i) } else { 0.0 as f32 };
+            let lanes: Array<f32> = [
+                lane(0),
+                lane(1),
+                lane(2),
+                lane(3),
+            ];
+            vectors[r * per_row + v] = f32x4::from(lanes);
+        }
+    }
+    return Packed { vectors, per_row, rows, cols };
+}
+
+/// A batched matrix product by a right operand prepared as [`Packed`], shared
+/// by every batch element.
+pub fn matmul_packed<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Packed<K, N>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    let rank = a.extents.len();
+    let rows = a.extents[rank - 2];
+    let inner = a.extents[rank - 1];
+    assert inner == b.rows;
+    let cols = b.cols;
+    let mut extents = a.extents;
+    extents[rank - 1] = cols;
+    let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    let finishing = finish(then, &extents);
+    for let s of 0..<element_count(&a.extents[0..<rank - 2].to_list()) {
+        let out_base = s * rows * cols;
+        packed_product(&a.data, b, &mut out, rows, s * rows * inner, out_base);
+        if let Some(f) = &finishing {
+            f.apply(&mut out, out_base, rows * cols);
+        }
+    }
+    return Tensor { data: out, extents };
 }
 
 /// The elements `extents` hold, or `None` where its non-empty extents multiply
@@ -197,14 +257,8 @@ pub fn matmul_broadcast<A, B, Out>(
         let a_base = at_a * rows * inner;
         let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
-        for let mut r = 0; r < rows; r += 1 {
-            for let mut k = 0; k < inner; k += 1 {
-                let lhs = lhs_data[a_base + r * inner + k];
-                for let mut c = 0; c < cols; c += 1 {
-                    out[out_base + r * cols + c] += lhs * rhs_data[b_base + k * cols + c];
-                }
-            }
-        }
+        let at = MatrixAt { a: a_base, b: b_base, out: out_base };
+        scalar_product(lhs_data, rhs_data, &mut out, rows, inner, cols, &at);
         if let Some(f) = &finishing {
             f.apply(&mut out, out_base, rows * cols);
         }
@@ -215,6 +269,272 @@ pub fn matmul_broadcast<A, B, Out>(
         }
     }
     return Tensor { data: out, extents };
+}
+
+/// Where one batch element's matrices start in `a`, `b` and the output.
+struct MatrixAt {
+    a: i32,
+    b: i32,
+    out: i32,
+}
+
+/// One batch element's product over `b` as stored: rows in bands of up to
+/// [`TILE`], a lone row left over on its own, and the columns past the last
+/// whole tile one element at a time.
+fn scalar_product(a: &List<f32>, b: &List<f32>, out: &mut List<f32>, rows: i32, inner: i32, cols: i32, at: &MatrixAt) {
+    let whole_cols = cols - cols % TILE;
+    let mut r = 0;
+    while r < rows {
+        let height = i32::min(TILE, rows - r);
+        for let mut c = 0; c < whole_cols; c += TILE {
+            let a_at = at.a + r * inner;
+            let b_at = at.b + c;
+            let out_at = at.out + r * cols + c;
+            if height > 1 {
+                tile_4x4(a, b, out, inner, cols, height, a_at, b_at, out_at);
+            } else {
+                tile_1x4(a, b, out, inner, cols, a_at, b_at, out_at);
+            }
+        }
+        for let rr of r..<r + height {
+            for let c of whole_cols..<cols {
+                out[at.out + rr * cols + c] = dot(a, b, inner, cols, at.a + rr * inner, at.b + c);
+            }
+        }
+        r += height;
+    }
+}
+
+/// One batch element's product over `b`, its `rows` rows of `a` from `a_base`
+/// and of the output from `out_base`: rows in bands as [`scalar_product`]
+/// takes them, against 2 vectors (8 columns) of `b` at a time. A row of an odd
+/// number of vectors computes its last one twice and stores it once, and a
+/// padding lane is never stored.
+fn packed_product<K, N>(a: &List<f32>, b: &Packed<K, N>, out: &mut List<f32>, rows: i32, a_base: i32, out_base: i32) {
+    let [inner, cols] = [b.rows, b.cols];
+    let mut r = 0;
+    while r < rows {
+        let height = i32::min(TILE, rows - r);
+        for let mut v = 0; v < b.per_row; v += 2 {
+            let v1 = i32::min(v + 1, b.per_row - 1);
+            let a_at = a_base + r * inner;
+            let out_at = out_base + r * cols;
+            if height > 1 {
+                vector_band(a, b, out, inner, cols, height, a_at, v, v1, out_at);
+            } else {
+                vector_row(a, b, out, inner, cols, a_at, v, v1, out_at);
+            }
+        }
+        r += height;
+    }
+}
+
+/// `height` rows (2 to 4) of the product against the vectors `v0` and `v1`
+/// of each row of `b`, the missing rows of a short band reading its last real
+/// one, as in [`tile_4x4`], and left unstored.
+fn vector_band<K, N>(
+    a: &List<f32>,
+    b: &Packed<K, N>,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    height: i32,
+    a_at: i32,
+    v0: i32,
+    v1: i32,
+    out_at: i32,
+) {
+    assert 2 <= height <= TILE;
+    let zero = f32x4::splat(0.0);
+    let [mut s00, mut s01, mut s10, mut s11] = [zero, zero, zero, zero];
+    let [mut s20, mut s21, mut s30, mut s31] = [zero, zero, zero, zero];
+    let a1 = a_at + inner;
+    let a2 = a_at + inner * i32::min(2, height - 1);
+    let a3 = a_at + inner * (height - 1);
+    for let mut k = 0; k < inner; k += 1 {
+        let row = k * b.per_row;
+        let y0 = b.vectors[row + v0];
+        let y1 = b.vectors[row + v1];
+        let x0 = f32x4::splat(a[a_at + k]);
+        let x1 = f32x4::splat(a[a1 + k]);
+        let x2 = f32x4::splat(a[a2 + k]);
+        let x3 = f32x4::splat(a[a3 + k]);
+        s00 = s00 + x0 * y0;
+        s01 = s01 + x0 * y1;
+        s10 = s10 + x1 * y0;
+        s11 = s11 + x1 * y1;
+        s20 = s20 + x2 * y0;
+        s21 = s21 + x2 * y1;
+        s30 = s30 + x3 * y0;
+        s31 = s31 + x3 * y1;
+    }
+    let sums = [
+        [s00, s01],
+        [s10, s11],
+        [s20, s21],
+        [s30, s31],
+    ];
+    for let [i, [first, second]] of sums.enumerate() {
+        if i < height {
+            store_vectors(out, cols, out_at + i * cols, v0, v1, first, second);
+        }
+    }
+}
+
+/// [`vector_band`] for a lone row.
+fn vector_row<K, N>(
+    a: &List<f32>,
+    b: &Packed<K, N>,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    a_at: i32,
+    v0: i32,
+    v1: i32,
+    out_at: i32,
+) {
+    let zero = f32x4::splat(0.0);
+    let [mut s0, mut s1] = [zero, zero];
+    for let mut k = 0; k < inner; k += 1 {
+        let row = k * b.per_row;
+        let x = f32x4::splat(a[a_at + k]);
+        s0 = s0 + x * b.vectors[row + v0];
+        s1 = s1 + x * b.vectors[row + v1];
+    }
+    store_vectors(out, cols, out_at, v0, v1, s0, s1);
+}
+
+/// Store the sums for the vectors `v0` and `v1` of one output row from
+/// `row_at`: `v1` only where it is not `v0` again, and no lane past `cols`.
+fn store_vectors(out: &mut List<f32>, cols: i32, row_at: i32, v0: i32, v1: i32, first: f32x4, second: f32x4) {
+    store_lanes(out, row_at + v0 * 4, cols - v0 * 4, first);
+    if v1 != v0 {
+        store_lanes(out, row_at + v1 * 4, cols - v1 * 4, second);
+    }
+}
+
+/// Store the first `room` lanes of `v` from `at`, at most all 4.
+fn store_lanes(out: &mut List<f32>, at: i32, room: i32, v: f32x4) {
+    out[at] = v.extract_lane(0);
+    if room > 1 {
+        out[at + 1] = v.extract_lane(1);
+    }
+    if room > 2 {
+        out[at + 2] = v.extract_lane(2);
+    }
+    if room > 3 {
+        out[at + 3] = v.extract_lane(3);
+    }
+}
+
+/// The side of the square of output elements `matmul_broadcast` computes at
+/// once, its sums held in locals across the whole inner axis. Per step of that
+/// axis it reads 4 elements of `a` and 4 adjacent ones of `b` for 16 products,
+/// where an element at a time reads 2 and writes 1 for each.
+global TILE: i32 = 4;
+
+/// The square of `out` at `out_at`, `height` rows (2 to 4) by 4 columns: rows
+/// of `a` from `a_at`, `inner` long, against 4 adjacent columns of `b` from
+/// `b_at`, rows `cols` apart. A band short of 4 rows computes its last row
+/// again in the place of the missing ones, which costs less than a narrower
+/// tile, and stores only its own.
+fn tile_4x4(
+    a: &List<f32>,
+    b: &List<f32>,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    height: i32,
+    a_at: i32,
+    b_at: i32,
+    out_at: i32,
+) {
+    assert 2 <= height <= TILE;
+    let [mut s00, mut s01, mut s02, mut s03] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let [mut s10, mut s11, mut s12, mut s13] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let [mut s20, mut s21, mut s22, mut s23] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let [mut s30, mut s31, mut s32, mut s33] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let a1 = a_at + inner;
+    let a2 = a_at + inner * i32::min(2, height - 1);
+    let a3 = a_at + inner * (height - 1);
+    for let mut k = 0; k < inner; k += 1 {
+        let x0 = a[a_at + k];
+        let x1 = a[a1 + k];
+        let x2 = a[a2 + k];
+        let x3 = a[a3 + k];
+        let bk = b_at + k * cols;
+        let y0 = b[bk];
+        let y1 = b[bk + 1];
+        let y2 = b[bk + 2];
+        let y3 = b[bk + 3];
+        s00 += x0 * y0;
+        s01 += x0 * y1;
+        s02 += x0 * y2;
+        s03 += x0 * y3;
+        s10 += x1 * y0;
+        s11 += x1 * y1;
+        s12 += x1 * y2;
+        s13 += x1 * y3;
+        s20 += x2 * y0;
+        s21 += x2 * y1;
+        s22 += x2 * y2;
+        s23 += x2 * y3;
+        s30 += x3 * y0;
+        s31 += x3 * y1;
+        s32 += x3 * y2;
+        s33 += x3 * y3;
+    }
+    let o1 = out_at + cols;
+    let o2 = o1 + cols;
+    let o3 = o2 + cols;
+    out[out_at] = s00;
+    out[out_at + 1] = s01;
+    out[out_at + 2] = s02;
+    out[out_at + 3] = s03;
+    out[o1] = s10;
+    out[o1 + 1] = s11;
+    out[o1 + 2] = s12;
+    out[o1 + 3] = s13;
+    if height > 2 {
+        out[o2] = s20;
+        out[o2 + 1] = s21;
+        out[o2 + 2] = s22;
+        out[o2 + 3] = s23;
+    }
+    if height > 3 {
+        out[o3] = s30;
+        out[o3 + 1] = s31;
+        out[o3 + 2] = s32;
+        out[o3 + 3] = s33;
+    }
+}
+
+/// [`tile_4x4`] for a lone row of `a`, where computing three more would cost
+/// more than it saves.
+fn tile_1x4(a: &List<f32>, b: &List<f32>, out: &mut List<f32>, inner: i32, cols: i32, a_at: i32, b_at: i32, out_at: i32) {
+    let [mut s0, mut s1, mut s2, mut s3] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    for let mut k = 0; k < inner; k += 1 {
+        let x = a[a_at + k];
+        let bk = b_at + k * cols;
+        s0 += x * b[bk];
+        s1 += x * b[bk + 1];
+        s2 += x * b[bk + 2];
+        s3 += x * b[bk + 3];
+    }
+    out[out_at] = s0;
+    out[out_at + 1] = s1;
+    out[out_at + 2] = s2;
+    out[out_at + 3] = s3;
+}
+
+/// One element of the product: the row of `a` from `a_at` against the column
+/// of `b` from `b_at`, as the columns past the last whole tile are.
+fn dot(a: &List<f32>, b: &List<f32>, inner: i32, cols: i32, a_at: i32, b_at: i32) -> f32 {
+    let mut sum: f32 = 0.0;
+    for let mut k = 0; k < inner; k += 1 {
+        sum += a[a_at + k] * b[b_at + k * cols];
+    }
+    return sum;
 }
 
 /// `Gather` along axis 0: the row of `data` each index names, as an embedding
@@ -928,6 +1248,35 @@ pub variant Step {
     Fold([RowOp, i32]),
 }
 
+/// Constants compare by their bits, since a step stands for what it computes:
+/// `==` on `f32` takes -0.0 for 0.0, which a sum tells apart, and every NaN for
+/// one, whose payload a shader passes on.
+impl Eq for Step {
+    fn eq(&self, other: &Self) -> bool {
+        return self.key() == other.key();
+    }
+}
+
+impl Ord for Step {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.key().cmp(&other.key());
+    }
+}
+
+impl Step {
+    /// The case, then its payload, each as a number.
+    fn key(&self) -> [i32, i32, i32, i32] {
+        return match *self {
+            Operand(n) => [0, n, 0, 0],
+            Constant(c) => [1, c.to_bits() as i32, 0, 0],
+            Unary([op, a]) => [2, ReflectEnum::<UnaryOp>::discriminant(&op), a, 0],
+            Binary([op, a, b]) => [3, ReflectEnum::<BinaryOp>::discriminant(&op), a, b],
+            Select([c, a, b]) => [4, c, a, b],
+            Fold([op, a]) => [5, ReflectEnum::<RowOp>::discriminant(&op), a, 0],
+        };
+    }
+}
+
 /// An elementwise operator as data: each output element over the operands'
 /// elements at its position and the constants folded in. A backend reads it as
 /// it can, the CPU one step at a time and a GPU one as a shader, which a
@@ -1060,7 +1409,7 @@ impl Expr {
     /// Where `step` is computed: an equal step already here, or `step` added
     /// last.
     fn shared(&mut self, step: Step) -> i32 {
-        if let Some(at) = self.steps.position(|s| same_step(&s, &step)) {
+        if let Some(at) = self.steps.position(|s| s == step) {
             return at;
         }
         self.steps.push(step);
@@ -1157,15 +1506,6 @@ fn selected(c: &Slice<f32>, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
         out.push(if value_at(c, j) != 0.0 { value_at(a, j) } else { value_at(b, j) });
     }
     return out;
-}
-
-/// Whether two steps compute one value. Constants compare by their bits: `==`
-/// takes -0.0 for 0.0, which a sum tells apart.
-fn same_step(a: &Step, b: &Step) -> bool {
-    if let Constant(x) = *a && let Constant(y) = *b {
-        return x.to_bits() == y.to_bits();
-    }
-    return *a == *b;
 }
 
 fn whole(values: List<f32>) -> Slice<f32> {
@@ -1421,6 +1761,9 @@ pub trait Backend with _ {
     /// Each `read` checks a tensor against the output's axes, so `fused`
     /// takes its operands as one list.
     type Operand<Axes>;
+    /// A matrix product's right operand `[K, N]`, prepared for the product
+    /// alone, which no other kernel reads.
+    type Rhs<K, N>;
 
     /// `t`, held on the host, as this backend holds it.
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
@@ -1431,15 +1774,29 @@ pub trait Backend with _ {
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return self.upload(t);
     }
+    /// `t`, a weight read only as a matrix product's right operand, held for
+    /// every pass in the layout [`Self::matmul_rhs`] reads it in.
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Self::Rhs<K, N>;
+    /// [`Self::keep_rhs`] of `t`'s transpose, as a `Gemm` that transposes its
+    /// right operand reads it, so no pass transposes it again.
+    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Self::Rhs<K, N>;
+    /// [`Self::keep_rhs`] of a weight held in half precision on the host.
+    fn prepare_rhs<E: Held, K, N>(&mut self, t: &Tensor<E, [K, N]>) -> Self::Rhs<K, N> {
+        return self.keep_rhs(&widen(t));
+    }
+    /// [`Self::keep_rhs_transposed`] of a weight held in half precision.
+    fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Self::Rhs<K, N> {
+        return self.keep_rhs_transposed(&widen(t));
+    }
     /// `t`, held in half precision on the host, as this backend computes with
     /// it. How it stores the result is its own: the type says only that the
     /// kernels read it as f32.
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
         return self.keep(&widen(t));
     }
-    /// The start of a forward pass. What the pass before computed is dead,
-    /// since `forward` returns only what it downloaded, so a backend may
-    /// release it.
+    /// The start of a forward pass. What the pass before computed is dead: a
+    /// caller of `pass` reads its outputs before the next pass, and `forward`
+    /// has downloaded them, so a backend may release it.
     fn begin(&mut self) {
     }
 
@@ -1502,6 +1859,13 @@ pub trait Backend with _ {
         b: &Self::Tensor<f32, B>,
         then: Option<Epilogue<Self::Operand<Out>>>,
     ) -> Self::Tensor<f32, Out>;
+    /// `matmul_shared` by a right operand [`Self::keep_rhs`] prepared.
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Rhs<K, N>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
         &mut self,
@@ -1584,6 +1948,7 @@ pub struct Cpu {
 impl Backend for Cpu {
     type Tensor<E: Element, Axes> = Tensor<E, Axes>;
     type Operand<Axes> = Read<Axes>;
+    type Rhs<K, N> = Packed<K, N>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
@@ -1591,6 +1956,16 @@ impl Backend for Cpu {
 
     fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
+    }
+
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {
+        let cols = t.extents[1];
+        return packed_matrix(t.extents[0], cols, |r, c| t.data[r * cols + c]);
+    }
+
+    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Packed<K, N> {
+        let inner = t.extents[1];
+        return packed_matrix(inner, t.extents[0], |r, c| t.data[c * inner + r]);
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Tensor<E, Axes> {
@@ -1667,6 +2042,15 @@ impl Backend for Cpu {
         then: Option<Epilogue<Read<Out>>>,
     ) -> Tensor<f32, Out> {
         return matmul_broadcast(a, b, &then);
+    }
+
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Tensor<f32, [..Bs, M, K]>,
+        b: &Packed<K, N>,
+        then: Option<Epilogue<Read<[..Bs, M, N]>>>,
+    ) -> Tensor<f32, [..Bs, M, N]> {
+        return matmul_packed(a, b, &then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(

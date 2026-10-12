@@ -1,0 +1,85 @@
+// A `break` inside a tuple for-of is resolved once per element, so the
+// labeled block records it more than once. The block's type still comes from
+// what each branch yields, and a numeric literal still takes the type a
+// sibling fixes.
+
+use { println, Stdout } from "core:cli";
+
+fn first_big(fallback: u8) -> u8 {
+    let found = search: {
+        for let v of [1 as u8, 200 as u8] {
+            if v > 100 {
+                break search: v;
+            }
+        }
+        fallback
+    };
+    return found;
+}
+
+fn first_big_or_zero() -> u64 {
+    let found = search: {
+        for let v of [1 as u64, 200 as u64] {
+            if v > 100 {
+                break search: 0;
+            }
+        }
+        builtin::black_box(7 as u64)
+    };
+    return found;
+}
+
+// The type a loop element's `break` yields fixes the tail literal's.
+fn first_big_or_literal() -> u8 {
+    let found = search: {
+        for let v of [1 as u8, 200 as u8] {
+            if v > 100 {
+                break search: v;
+            }
+        }
+        0
+    };
+    return found;
+}
+
+// A branching value is retargeted whole, its `if` with its literals.
+fn branching_break() -> u64 {
+    let c = builtin::black_box(true);
+    let found = search: {
+        for let v of [1, "a"] {
+            if c {
+                break search: if c { 0 } else { 1 };
+            }
+        }
+        builtin::black_box(7 as u64)
+    };
+    return found;
+}
+
+// Each element of the outer loop unifies the block apart, so its literal
+// takes that element's type and not the one the element after it fixes.
+fn per_outer_element() -> String {
+    let mut out = "";
+    for let w of [1 as u8, 2 as u64] {
+        let found = search: {
+            for let v of [1, 2] {
+                if builtin::black_box(v > 1) {
+                    break search: 0;
+                }
+            }
+            w
+        };
+        out.push_str(`${found} `);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    println(`${first_big(9)} ${first_big_or_zero()} ${first_big_or_literal()} ${branching_break()}`);
+    println(per_outer_element());
+}
+
+__DATA__
+{
+    "stdout": "200 0 200 0\n0 0 \n"
+}

@@ -95,6 +95,19 @@ test "a step two operators both read is computed once" {
     assert zeros.steps.len() == 3;
 }
 
+test "two operators differing only in a constant's bits are two operators" {
+    // A WebGPU pipeline is found by its operator, and `x + -0.0` keeps the
+    // sign of a -0.0 that `x + 0.0` drops.
+    let plus = operand(0).binary(BinaryOp::Add, &constant(0.0));
+    let minus = operand(0).binary(BinaryOp::Add, &constant(-0.0));
+    assert plus != minus;
+    assert plus.cmp(&minus) != Ordering::Equal;
+    let quiet = constant(f32::from_bits(0x7fc00000));
+    let payload = constant(f32::from_bits(0x7fc00001));
+    assert quiet != payload;
+    assert quiet == quiet;
+}
+
 test "a select picks the second operand where the first is not zero" {
     let e = operand(0).select(&operand(1), &operand(2));
     let c: List<f32> = [1.0, 0.0, 2.0];
@@ -359,6 +372,63 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
     let dot = matmul_broadcast::<[Inner], [Inner], []>(&v, &v, &null);
     assert dot.extents.is_empty();
     assert dot.data == [5.0] as List<f32>;
+}
+
+test "matmul_shared agrees with the product element by element past a whole tile" {
+    // 5 to 8 rows leave 1 to 4 for the last band. 7 columns leave 3 past a
+    // tile of 4 and pad a vector, 11 make an odd number of vectors, 16 fit.
+    for let rows of 5..=8 {
+        for let cols of [7, 11, 16] {
+            matmul_shared_matches_product(rows, cols);
+        }
+    }
+}
+
+fn matmul_shared_matches_product(rows: i32, cols: i32) {
+    let [batch, inner] = [2, 5];
+    let mut a_data: List<f32> = [];
+    for let i of 0..<batch * rows * inner {
+        a_data.push((i % 7 - 3) as f32);
+    }
+    let mut b_data: List<f32> = [];
+    for let i of 0..<inner * cols {
+        b_data.push((i % 5 - 2) as f32);
+    }
+    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([batch, rows, inner], a_data);
+    let b: Tensor<f32, [Inner, Col]> = tensor([inner, cols], b_data);
+    let mut cpu = Cpu {};
+    // The same matrix prepared as a product's right operand, from itself and
+    // from its transpose, as a `Gemm` that transposes it holds it.
+    let kept = cpu.keep_rhs(&b);
+    let kept_transposed = cpu.keep_rhs_transposed(&transpose2(&b));
+
+    let products: List<Tensor<f32, [Batch, Row, Col]>> = [
+        matmul_shared(&a, &b, &null),
+        cpu.matmul_rhs(&a, &kept, null),
+        cpu.matmul_rhs(&a, &kept_transposed, null),
+    ];
+    for let c of products {
+        assert c.extents == [batch, rows, cols] as List<i32>;
+        for let s of 0..<batch {
+            for let r of 0..<rows {
+                for let col of 0..<cols {
+                    let mut want: f32 = 0.0;
+                    for let k of 0..<inner {
+                        want += a.data[(s * rows + r) * inner + k] * b.data[k * cols + col];
+                    }
+                    assert c.data[(s * rows + r) * cols + col] == want;
+                }
+            }
+        }
+    }
+}
+
+test "a prepared right operand multiplies a matrix with no batch axis" {
+    let a: Tensor<f32, [Row, Inner]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let b: Tensor<f32, [Inner, Col]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+    let mut cpu = Cpu {};
+    let c: Tensor<f32, [Row, Col]> = cpu.matmul_rhs(&a, &cpu.keep_rhs(&b), null);
+    assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
 }
 
 /// The two operands' sum, or their product, as an `Expr`.

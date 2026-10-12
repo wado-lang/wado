@@ -7,7 +7,7 @@
 //! imports, so the tests discover none of it, and `program_over` in
 //! `oracle.wado` splices it.
 
-use { Cpu, Element, Epilogue, Expr, Held, Read, widen } from "lib:loam";
+use { Cpu, Element, Epilogue, Expr, Held, Packed, Read, widen } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {
@@ -56,10 +56,31 @@ fn opened<Axes>(cpu: &mut Cpu, then: &Option<Epilogue<Handle<f32, Axes>>>) -> Op
 impl Backend for Opaque {
     type Tensor<E: Element, Axes> = Handle<E, Axes>;
     type Operand<Axes> = Handle<f32, Axes>;
+    type Rhs<K, N> = Packed<K, N>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<E, Axes> {
         self.uploads += 1;
         return handle(*t);
+    }
+
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {
+        self.uploads += 1;
+        return self.cpu.keep_rhs(t);
+    }
+
+    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Packed<K, N> {
+        self.uploads += 1;
+        return self.cpu.keep_rhs_transposed(t);
+    }
+
+    fn prepare_rhs<E: Held, K, N>(&mut self, t: &Tensor<E, [K, N]>) -> Packed<K, N> {
+        self.prepared += 1;
+        return self.cpu.keep_rhs(&widen(t));
+    }
+
+    fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Packed<K, N> {
+        self.prepared += 1;
+        return self.cpu.keep_rhs_transposed(&widen(t));
     }
 
     fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
@@ -163,6 +184,16 @@ impl Backend for Opaque {
     ) -> Handle<f32, Out> {
         let read = opened(&mut self.cpu, &then);
         return handle(self.cpu.matmul_broadcast::<A, B, Out>(&a.held, &b.held, read));
+    }
+
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Handle<f32, [..Bs, M, K]>,
+        b: &Packed<K, N>,
+        then: Option<Epilogue<Handle<f32, [..Bs, M, N]>>>,
+    ) -> Handle<f32, [..Bs, M, N]> {
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul_rhs(&a.held, b, read));
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(

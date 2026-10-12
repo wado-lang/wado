@@ -79,11 +79,12 @@ fn grow_memory(end: u64) {
 }
 
 /// Take `size` bytes at the heap frontier, aligned to `align`, growing memory to
-/// fit them. Traps when they would end past the 32-bit address space.
-fn bump(align: u32, size: u32) -> u32 {
+/// fit them. Traps when they would end past the 32-bit address space, which
+/// `size` is wide enough to state however a caller sums it.
+fn bump(align: u32, size: u64) -> u32 {
     let mask = align as u64 - 1;
     let start = frontier() as u64 + mask & ~mask;
-    let end = start + size as u64;
+    let end = start + size;
     if end > MAX_ADDRESS {
         builtin::unreachable();
     }
@@ -122,7 +123,7 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
     // The tag sits in the `max(align, 4)` bytes in front of the block, which
     // keep the block aligned.
     let gap = if align < 4 { 4 } else { align as u32 };
-    let block = bump(align as u32, gap + newsize as u32) + gap;
+    let block = bump(align as u32, gap as u64 + newsize as u32 as u64) + gap;
     store(block - 4, DEBUG_LIVE);
     return block as i32;
 }
@@ -344,7 +345,7 @@ export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32
 
     // No fit: bump-allocate a fresh block at the heap frontier, which keeps
     // its congruence to 8 (mod 16) because every block size is a multiple of 16.
-    let block = bump(1, size);
+    let block = bump(1, wide_size);
     fl_set_tags(block, size, 1);
     return (block + 8) as i32;
 }

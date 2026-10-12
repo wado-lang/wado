@@ -3147,8 +3147,11 @@ impl MethodInfo {
 pub(super) struct LabeledBlockTarget {
     /// The label name
     pub(super) label: String,
-    /// Types collected from `break label: expr;` statements
-    pub(super) break_types: Vec<TypeId>,
+    /// The branch each `break label` resolved yields, keyed by the id of its
+    /// value (none for a valueless one). A break resolved more than once, as
+    /// one in a tuple for-of is, records more than once, and one in a body
+    /// left unresolved records none.
+    pub(super) break_types: Vec<(Option<AstId>, TypeId)>,
     /// Expected type propagated from the labeled block's use site, if any.
     /// `break label: expr` values are resolved against this so a literal
     /// (e.g. `break label: 10` with `let x: i64 = ...`) coerces correctly.

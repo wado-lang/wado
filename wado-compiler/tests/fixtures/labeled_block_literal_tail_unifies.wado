@@ -1,0 +1,40 @@
+// A labeled block's branches agree on one type the way an `if`'s do: a numeric
+// literal on either side takes the type a sibling fixed, so neither a tail `0`
+// beside `break found: x` nor a `break found: 0` beside a typed tail stays the
+// `i32` the literal defaults to.
+
+use { println, Stdout } from "core:cli";
+
+fn first_at_least(xs: &List<u32>, floor: u32) -> u32 {
+    let found = search: {
+        for let x of xs {
+            if *x >= floor {
+                break search: *x;
+            }
+        }
+        0
+    };
+    return found;
+}
+
+fn last_or_zero(xs: &List<u64>) -> u64 {
+    let last = pick: {
+        if xs.is_empty() {
+            break pick: 0;
+        }
+        xs[xs.len() - 1]
+    };
+    return last;
+}
+
+export fn run() with Stdout {
+    let xs: List<u32> = [1, 5, 9];
+    let ys: List<u64> = [];
+    let zs: List<u64> = [4, 8];
+    println(`${first_at_least(&xs, 4)} ${first_at_least(&xs, 10)} ${last_or_zero(&ys)} ${last_or_zero(&zs)}`);
+}
+
+__DATA__
+{
+    "stdout": "5 0 0 8\n"
+}

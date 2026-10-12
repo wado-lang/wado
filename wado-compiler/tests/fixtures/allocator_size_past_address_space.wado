@@ -1,0 +1,13 @@
+/// Test that every allocator traps on a request past the 32-bit address space,
+/// whatever it adds in front of the block: the debug allocator's tag gap,
+/// summed in 32 bits, once wrapped `0xFFFF_FFFC` to a 0-byte block it then
+/// handed out as though it held the request.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    builtin::realloc(0, 0, 4, 0xFFFF_FFFC as u32 as i32);
+    println("should not reach here");
+}
+
+__DATA__
+{"allocator": ["debug", "freelist"], "trapped": true}

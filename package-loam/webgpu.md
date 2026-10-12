@@ -81,9 +81,10 @@ buffer of its own, so none is overwritten before the encoder runs.
 A resource is move-only in Wado, so views cannot share a `GpuBuffer` by value.
 The backend owns its buffers and a view names one by its place. `keep`, which
 `Prepared` calls for every weight, writes a buffer that lives as long as the
-backend. Every other buffer belongs to the pass, and `begin`, which `forward`
-calls first, releases those of the pass before: `forward` returns only what it
-downloaded, so nothing still names them.
+backend. Every other buffer belongs to the pass, and `begin`, which `pass`
+calls first, releases those of the pass before. A caller of `pass` reads its
+outputs before the next pass, and `forward` has downloaded them, so nothing
+still names those buffers.
 
 ### Fusion is chosen for dispatches
 
@@ -152,8 +153,9 @@ epilogue and into a row group. GPT-2's attention mask is one.
 An exporter writes a linear layer as a `Reshape` flattening the leading axes,
 a `Gemm`, and a `Reshape` restoring them. Between the product and the
 operators after it stands a regrouping, which no kernel takes in. The plan
-lowers the three as one `matmul_shared` over the leading axes instead (a
-`Spread`), the two reshapes computing nothing. Each element of the product
+lowers the three as one product over the leading axes instead (a `Spread`):
+`matmul_rhs` where the weight is prepared as one, `matmul_shared` otherwise.
+The two reshapes compute nothing. Each element of the product
 sums the same terms in the same order, so the CPU's result does not change.
 GPT-2's GELU and its residual adds then join the epilogue of the layer before
 them.

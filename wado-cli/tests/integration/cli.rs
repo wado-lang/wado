@@ -404,6 +404,53 @@ fn test_run_propagates_a_guest_exit_code() {
         .stderr(predicate::str::contains("wasm backtrace").not());
 }
 
+/// A profiled run refuses what it cannot honour before the guest runs, so
+/// neither stands in for what the run itself would report.
+#[test]
+fn test_run_profile_refuses_a_bad_budget_or_path_before_running() {
+    wado()
+        .env("WADO_PROFILE_MAX_SECS", "30s")
+        .args([
+            "run",
+            "--profile",
+            "guest,scratchpad/profile.json",
+            "wado-cli/tests/fixtures/run_exit_code.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not '30s'"))
+        .stderr(predicate::str::contains("run_exit_code: bad input").not());
+    wado()
+        .args([
+            "run",
+            "--profile",
+            "guest,no-such-directory/profile.json",
+            "wado-cli/tests/fixtures/run_exit_code.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot write the profile to"))
+        .stderr(predicate::str::contains("run_exit_code: bad input").not());
+}
+
+/// A profile that fails to write as the run ends does not replace what the run
+/// reported: `/dev/full` opens, and every write to it fails.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_run_reports_its_own_outcome_over_a_profile_it_could_not_write() {
+    wado()
+        .args([
+            "run",
+            "--profile",
+            "guest,/dev/full",
+            "wado-cli/tests/fixtures/run_exit_code.wado",
+        ])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains("run_exit_code: bad input"))
+        .stderr(predicate::str::contains("No space left on device"));
+}
+
 #[test]
 fn test_version() {
     wado()

@@ -1190,7 +1190,7 @@ async fn run_http_server(
         && let Some(profiler) = lock(&handle.profiler).take()
     {
         match std::fs::File::create(path) {
-            Ok(file) => match profiler.finish(std::io::BufWriter::new(file)) {
+            Ok(file) => match runtime::write_guest_profile(profiler, file) {
                 Ok(()) => {
                     eprintln!("Profile written to {path}");
                     eprintln!("View at https://profiler.firefox.com/");
