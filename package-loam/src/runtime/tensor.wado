@@ -214,7 +214,14 @@ pub fn matmul_broadcast<A, B, Out>(
             }
             for let rr of r..<r + height {
                 for let c of whole_cols..<cols {
-                    out[out_base + rr * cols + c] = dot(lhs_data, rhs_data, inner, cols, a_base + rr * inner, b_base + c);
+                    out[out_base + rr * cols + c] = dot(
+                        lhs_data,
+                        rhs_data,
+                        inner,
+                        cols,
+                        a_base + rr * inner,
+                        b_base + c,
+                    );
                 }
             }
             r += height;
@@ -315,16 +322,7 @@ fn tile_4x4(
 
 /// [`tile_4x4`] for a lone row of `a`, where computing three more would cost
 /// more than it saves.
-fn tile_1x4(
-    a: &List<f32>,
-    b: &List<f32>,
-    out: &mut List<f32>,
-    inner: i32,
-    cols: i32,
-    a_at: i32,
-    b_at: i32,
-    out_at: i32,
-) {
+fn tile_1x4(a: &List<f32>, b: &List<f32>, out: &mut List<f32>, inner: i32, cols: i32, a_at: i32, b_at: i32, out_at: i32) {
     let [mut s0, mut s1, mut s2, mut s3] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
     for let mut k = 0; k < inner; k += 1 {
         let x = a[a_at + k];
