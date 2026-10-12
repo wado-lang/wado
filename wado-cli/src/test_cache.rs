@@ -5,8 +5,8 @@
 //! run was given, and the file's path, and lists every file its compile read,
 //! the stdlib modules it took among them.
 //! It is stored only for a component whose outcome those files decide: one
-//! importing the filesystem, the network or `core:eval` reads what no compile
-//! recorded, and runs every time.
+//! importing any effect beyond output receives what no compile recorded, and
+//! runs every time.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -22,22 +22,25 @@ use crate::kiln_provider::hex32;
 use crate::manifest::package_root;
 use crate::sync::lock;
 
-/// The import namespaces whose answers no compile records.
-const UNRECORDED_IMPORTS: &[&str] = &[
-    "wasi:filesystem/",
-    "wasi:sockets/",
-    "wasi:http/",
-    "wasi:tls/",
-    "core:eval/",
+/// The interfaces that hand a test nothing: output, its types, and exit.
+/// Every other import is an effect whose answer can change between runs (a
+/// clock, randomness, a file, the network, `core:eval`), so it decides the
+/// outcome as much as the compile's inputs do.
+const OUTPUT_ONLY_IMPORTS: &[&str] = &[
+    "wasi:cli/types",
+    "wasi:cli/stdout",
+    "wasi:cli/stderr",
+    "wasi:cli/exit",
 ];
 
 /// Whether a component importing `imports` can be cached: its tests depend on
 /// nothing beyond what its compile read.
 pub(crate) fn cacheable<'a>(mut imports: impl Iterator<Item = &'a str>) -> bool {
     imports.all(|name| {
-        !UNRECORDED_IMPORTS
-            .iter()
-            .any(|prefix| name.starts_with(prefix))
+        let unversioned = name
+            .split_once('@')
+            .map_or(name, |(interface, _)| interface);
+        OUTPUT_ONLY_IMPORTS.contains(&unversioned)
     })
 }
 

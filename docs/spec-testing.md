@@ -176,8 +176,9 @@ summary counts the file's tests as they went before and names the file on a
 `cached:` line.
 
 A result is cached only where those inputs decide it. A file is always run when
-its compile reads an environment variable, or when its tests can reach what no
-compile reads: the filesystem, the network, or `core:eval`.
+its compile reads an environment variable, or when its tests perform an effect
+beyond writing to stdout or stderr: a clock, randomness, the filesystem, the
+network, or `core:eval` hands a test what no compile reads.
 
 `--no-cache` runs every file and still records the passes. `--coverage`,
 `--profile` and `--no-run` neither read nor record them. Results live in

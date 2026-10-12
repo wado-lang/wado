@@ -891,19 +891,19 @@ fn test_test_skips_a_passed_file_until_something_it_read_changes() {
 }
 
 #[test]
-fn test_test_never_caches_a_file_reaching_the_filesystem() {
-    // What it reads at run time is no input its compile recorded.
+fn test_test_never_caches_a_file_taking_input_at_run_time() {
+    // What it receives at run time is no input its compile recorded.
     let tmp = tempfile::tempdir().unwrap();
-    let main = tmp.path().join("fs_test.wado");
+    let main = tmp.path().join("random_test.wado");
     std::fs::write(
         &main,
-        "use fs from \"core:fs\";\n\ntest \"reads\" {\n    assert fs::exists(\"fs_test.wado\");\n}\n",
+        "use secure_random from \"core:secure_random\";\n\ntest \"draws\" {\n    assert secure_random::bytes(4).len() == 4;\n}\n",
     )
     .unwrap();
     for _ in 0..2 {
         wado()
-            .current_dir(tmp.path())
-            .args(["test", "fs_test.wado"])
+            .args(["test"])
+            .arg(&main)
             .assert()
             .success()
             .stdout(predicate::str::contains("cached:").not());
