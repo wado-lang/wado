@@ -144,9 +144,10 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
         }
     }
 
-    emit_weights(&mut w, graph, checked, &names, &held);
+    let kept = kept_literals(&literals, checked);
+    emit_weights(&mut w, graph, checked, &names, &held, &kept);
     let symbols = Symbols::of(&carriers, &names);
-    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals, symbols, fuse)?;
+    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals, &kept, symbols, fuse)?;
     return Result::Ok(w.to_string());
 }
 
@@ -367,8 +368,15 @@ fn sanitize(name: &String) -> String {
 
 /// The graph's initializers twice: `Weights` on the host as the graph holds
 /// them, and `Prepared`, which `forward` reads, as the backend computes with
-/// them.
-fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
+/// them. `Prepared` holds the `kept` literals too, which need no host copy.
+fn emit_weights(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    held: &TreeMap<String, String>,
+    kept: &List<String>,
+) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
     prepared.add_generic(BACKEND_BOUND);
@@ -376,6 +384,9 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
         let ident = names.get(&vi.name);
         weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
         prepared.add_pub_field(ident, prepared_type(checked, &vi.name));
+    }
+    for let tensor of kept {
+        prepared.add_pub_field(names.get(tensor), prepared_type(checked, tensor));
     }
     w.blank();
     w.line("/// The graph's initializers, held on the host as the graph holds them.");
@@ -394,13 +405,21 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
         let holding = weight_holding(&matrices, &vi.name);
         w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, holding)},`);
     }
+    emit_kept_literals(w, checked, names, kept);
     w.end_with(";");
     w.end();
     w.end();
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held, &matrices);
+    emit_constructor(w, graph, checked, names, held, &matrices, kept);
+}
+
+/// The `Prepared` fields of the `kept` literals, each built where it is kept.
+fn emit_kept_literals(w: &mut CodeWriter, checked: &Checked, names: &Names, kept: &List<String>) {
+    for let tensor of kept {
+        w.line(`${names.get(tensor)}: ${kept_literal(checked, tensor)},`);
+    }
 }
 
 /// A weight as the backend holds it: in the primitive the kernels compute in.
@@ -507,6 +526,7 @@ fn emit_constructor(
     names: &Names,
     held: &TreeMap<String, String>,
     matrices: &TreeSet<String>,
+    kept: &List<String>,
 ) {
     let loads = loads_weights(graph);
     w.blank();
@@ -540,6 +560,7 @@ fn emit_constructor(
         let holding = weight_holding(matrices, &vi.name);
         w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, holding)},`);
     }
+    emit_kept_literals(w, checked, names, kept);
     w.end_with(if loads { ");" } else { ";" });
     w.end();
     w.end();
@@ -711,6 +732,7 @@ fn emit_forward(
     held: &TreeMap<String, String>,
     scalars: TreeMap<String, f32>,
     literals: &Literals,
+    kept: &List<String>,
     mut symbols: Symbols,
     fuse: bool,
 ) -> Result<(), EmitError> {
@@ -733,6 +755,9 @@ fn emit_forward(
     }
     for let vi of &graph.initializers {
         exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
+    }
+    for let tensor of kept {
+        exprs.values[*tensor] = `weights.${names.get(tensor)}`;
     }
     let several = graph.outputs.len() > 1;
     let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
@@ -811,7 +836,7 @@ fn scope_body(
     }
     for let [alias, spelled] of literals.aliases.entries() {
         if !exprs.values.contains_key(*alias) {
-            exprs.values[*alias] = names.get(spelled);
+            exprs.values[*alias] = exprs.value(spelled);
         }
     }
     let decided = plan(graph, checked, fuse);
@@ -1037,12 +1062,11 @@ fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, f3
     return false;
 }
 
-/// A folded tensor spelled out as a `Tensor` literal, under the shape stage 0
-/// gave it.
+/// A folded tensor spelled out as a `Tensor` literal for this pass, under the
+/// shape stage 0 gave it.
 fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shape = checked.shapes.get(*tensor).unwrap();
     let data = match checked.known.get(*tensor).unwrap().elements {
-        Ints(v) => `${v}`,
         Symbolic(v) => {
             let mut spelled: List<String> = [];
             for let p of v {
@@ -1050,6 +1074,47 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
             }
             `[${spelled.join(", ")}]`;
         },
+        constant => constant_elements(&constant),
+    };
+    let extents = symbols.spell_shape(&shape)?;
+    return Result::Ok(`backend.upload(${host_literal(checked, tensor, data, extents)})`);
+}
+
+/// A folded tensor that no symbol enters, held by the backend for every pass:
+/// one `forward` would otherwise rebuild and upload on each call, as large as
+/// the context where it is a mask.
+fn kept_literal(checked: &Checked, tensor: &String) -> String {
+    let extents = static_extents(&checked.shapes[*tensor]).expect("a kept literal's shape is static");
+    let data = constant_elements(&checked.known[*tensor].elements);
+    return `backend.keep(${host_literal(checked, tensor, data, `${extents}`)})`;
+}
+
+/// The folded tensors in `literals` that no symbol enters, which `Prepared`
+/// holds rather than `forward` building them.
+fn kept_literals(literals: &Literals, checked: &Checked) -> List<String> {
+    let mut kept: List<String> = [];
+    for let tensor of literals.spelled {
+        let constant = !(checked.known[tensor].elements matches { Symbolic(_) });
+        if constant && static_extents(&checked.shapes[tensor]) matches { Some(_) } {
+            kept.push(tensor);
+        }
+    }
+    return kept;
+}
+
+/// The shape's extents where each is a constant.
+fn static_extents(shape: &Shape) -> Option<List<i64>> {
+    let mut extents: List<i64> = [];
+    for let axis of shape.axes {
+        extents.push(axis.extent.poly().as_constant()?);
+    }
+    return Option::Some(extents);
+}
+
+/// The elements of a folded tensor no symbol enters, as a list expression.
+fn constant_elements(elements: &Elements) -> String {
+    return match *elements {
+        Ints(v) => `${v}`,
         Floats(v) => {
             let spelled: List<String> = v.into_iter().map(|x| float_literal(x)).collect();
             `[${spelled.join(", ")}]`;
@@ -1063,13 +1128,16 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
             }
             `List::<u8>::from_le_bytes(${byte_string_literal(&bytes)}).into_iter().map(|b| b != 0).collect()`;
         },
+        Symbolic(_) => unreachable(),
     };
+}
+
+/// A reference to the host `Tensor` of `data` over `extents`, typed as the
+/// folded `tensor` is.
+fn host_literal(checked: &Checked, tensor: &String, data: String, extents: String) -> String {
     let element = checked.primitives.get(*tensor).unwrap();
-    return Result::Ok(
-        `backend.upload(&Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${symbols.spell_shape(
-            &shape,
-        )?} })`,
-    );
+    let shape = checked.shapes.get(*tensor).unwrap();
+    return `&Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents} }`;
 }
 
 /// An input axis whose length the graph spells as arithmetic over symbols,

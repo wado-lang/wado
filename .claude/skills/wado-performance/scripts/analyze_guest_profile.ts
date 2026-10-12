@@ -15,8 +15,12 @@
  * CM-async may add more). Function names carry monomorphization detail, so each
  * instantiation (`List<f64>^Serialize::serialize<…>`) is counted separately.
  *
+ * `--under NAME` keeps only the samples whose stack passes through a function
+ * whose name contains NAME, which isolates a timed phase from setup (a model's
+ * load from its generation loop).
+ *
  * Runs directly on Node.js >= 23.6 (type stripping is on by default):
- *   ./analyze_guest_profile.ts profile.json [--top N]
+ *   ./analyze_guest_profile.ts profile.json [--top N] [--under NAME]
  */
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -30,16 +34,20 @@ interface Thread {
 }
 
 const { values, positionals } = parseArgs({
-  options: { top: { type: "string", short: "n", default: "25" } },
+  options: {
+    top: { type: "string", short: "n", default: "25" },
+    under: { type: "string" },
+  },
   allowPositionals: true,
 });
 
 const path = positionals[0];
 if (!path) {
-  console.error("usage: analyze_guest_profile.ts PROFILE.json [--top N]");
+  console.error("usage: analyze_guest_profile.ts PROFILE.json [--top N] [--under NAME]");
   process.exit(1);
 }
 const top = Number(values.top);
+const under = values.under;
 
 const data = JSON.parse(readFileSync(path, "utf8")) as { threads: Thread[] };
 
@@ -57,17 +65,15 @@ for (const t of data.threads) {
   };
   for (const leaf of t.samples.stack) {
     if (leaf == null) continue;
+    const stack: string[] = [];
+    for (let cur: number | null = leaf; cur != null; cur = t.stackTable.prefix[cur]) {
+      stack.push(nameOf(cur));
+    }
+    if (under != null && !stack.some((nm) => nm.includes(under))) continue;
     total++;
-    bump(self, nameOf(leaf));
-    const seen = new Set<string>();
-    let cur: number | null = leaf;
-    while (cur != null) {
-      const nm = nameOf(cur);
-      if (!seen.has(nm)) {
-        seen.add(nm);
-        bump(inclusive, nm);
-      }
-      cur = t.stackTable.prefix[cur];
+    bump(self, stack[0]);
+    for (const nm of new Set(stack)) {
+      bump(inclusive, nm);
     }
   }
 }

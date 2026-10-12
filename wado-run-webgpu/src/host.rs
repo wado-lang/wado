@@ -1,7 +1,11 @@
 //! The wasmtime host: WASI P3 plus `wasi:webgpu`, backed by wgpu.
 
+use std::fs::File;
+use std::io::BufWriter;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{Result, bail};
 use tokio::task::spawn_blocking;
@@ -13,7 +17,7 @@ use wasi_webgpu_wasmtime::{
     add_to_linker as add_webgpu_to_linker,
 };
 use wasmtime::component::{Accessor, Component, Linker, Resource, ResourceTable};
-use wasmtime::{Collector, Config, Engine, Store};
+use wasmtime::{Collector, Config, Engine, GuestProfiler, Store, UpdateDeadline};
 use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
 use wasmtime_wasi::p3::bindings::Command;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
@@ -131,7 +135,9 @@ impl WasiWebGpuCtxView for Host {
 
 /// Run a component that exports `wasi:cli/run`, on the GPU already found.
 pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
-    let engine = Engine::new(&engine_config(args.opt_level))?;
+    let mut config = engine_config(args.opt_level);
+    config.epoch_interruption(args.profile.is_some());
+    let engine = Engine::new(&config)?;
     let component = Component::from_file(&engine, component)?;
 
     let mut linker: Linker<Host> = Linker::new(&engine);
@@ -171,13 +177,72 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
     }
 
     let mut store = Store::new(&engine, host(args, gpu)?);
+    let sampling = args
+        .profile
+        .as_ref()
+        .map(|profile| Sampling::start(&engine, &component, &mut store, profile.interval))
+        .transpose()?;
     let command = Command::instantiate_async(&mut store, &component, &linker).await?;
-    let result = store
+    let ran = store
         .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
-        .await??;
-    match result {
+        .await;
+    if let (Some(sampling), Some(profile)) = (sampling, &args.profile) {
+        sampling.finish(&profile.path)?;
+    }
+    match ran?? {
         Ok(()) => Ok(()),
         Err(()) => bail!("the program exited with an error"),
+    }
+}
+
+/// `--profile guest`, as `wado run` samples: a thread advances the epoch every
+/// interval, and the store's deadline callback records where the guest is.
+struct Sampling {
+    profiler: Arc<Mutex<Option<GuestProfiler>>>,
+    stop: Arc<AtomicBool>,
+}
+
+impl Sampling {
+    fn start(engine: &Engine, component: &Component, store: &mut Store<Host>, interval: Duration) -> Result<Self> {
+        let profiler = GuestProfiler::new_component(
+            engine,
+            "wado-run-webgpu",
+            interval,
+            component.clone(),
+            std::iter::empty::<(String, wasmtime::Module)>(),
+        )?;
+        let profiler = Arc::new(Mutex::new(Some(profiler)));
+        let sampled = Arc::clone(&profiler);
+        store.epoch_deadline_callback(move |store| {
+            if let Some(p) = sampled.lock().expect("the profiler lock").as_mut() {
+                p.sample(&store, interval);
+            }
+            Ok(UpdateDeadline::Continue(1))
+        });
+        store.set_epoch_deadline(1);
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopped = Arc::clone(&stop);
+        let ticking = engine.clone();
+        std::thread::spawn(move || {
+            while !stopped.load(Ordering::Relaxed) {
+                std::thread::sleep(interval);
+                ticking.increment_epoch();
+            }
+        });
+        Ok(Self { profiler, stop })
+    }
+
+    fn finish(self, path: &Path) -> Result<()> {
+        self.stop.store(true, Ordering::Relaxed);
+        let profiler = self
+            .profiler
+            .lock()
+            .expect("the profiler lock")
+            .take()
+            .expect("sampling finishes once");
+        profiler.finish(BufWriter::new(File::create(path)?))?;
+        eprintln!("Profile written to {}", path.display());
+        Ok(())
     }
 }
 
