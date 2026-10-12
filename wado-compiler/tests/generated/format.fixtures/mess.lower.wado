@@ -2925,16 +2925,6 @@ fn bump(align: u32, size: u32) -> u32 {
     return start as u32;
 }
 
-pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    if (newsize == 0) {
-        if ((oldptr + oldsize) as u32 == core::allocator::frontier()) {
-            core::allocator::set_frontier(oldptr as u32);
-        }
-        return 0;
-    }
-    return core::allocator::bump(align as u32, newsize as u32) as i32;
-}
-
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
         if (oldsize != 0) {

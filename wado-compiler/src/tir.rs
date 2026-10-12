@@ -8615,7 +8615,7 @@ pub struct TirFunction {
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
 
-    /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
+    /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"freelist"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
     /// Categorizes the function for kind-specific optimizations. Most functions

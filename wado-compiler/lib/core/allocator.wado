@@ -5,12 +5,10 @@
 /// This module defines the linear memory allocator for the Component Model.
 /// All items here are compiled into a separate Wasm core module named "mem".
 ///
-/// Three allocator implementations are provided:
-/// - `bump_realloc`: Default bump allocator with free-rewind optimization.
+/// Two allocator implementations are provided:
+/// - `freelist_realloc`: Free-list allocator that reclaims freed memory.
 /// - `debug_realloc`: Debug allocator that poisons freed memory with 0xFF
 ///   and never reuses freed addresses (for use-after-free detection).
-/// - `freelist_realloc`: Free-list allocator that reclaims freed memory.
-///   Suitable for long-living processes (e.g. HTTP servers).
 ///
 /// The compiler selects one based on `--allocator` flag or target world,
 /// and DCE removes the unused implementations.
@@ -97,43 +95,6 @@ fn bump(align: u32, size: u32) -> u32 {
     return start as u32;
 }
 
-/// The freed run `[freed_start, freed_end)` the bump allocator could not
-/// rewind yet, `freed_end == 0` when there is none. A run freed in allocation
-/// order, as a stream read frees the names the host allocated after its buffer,
-/// leaves only its last block at the frontier; this is what rewinds the rest.
-global mut freed_start: u32 = 0;
-global mut freed_end: u32 = 0;
-
-/// Bump allocator — advances a pointer with alignment.
-/// A free rewinds the frontier when it frees the latest allocation, and also
-/// over the freed run that then ends there. Any other free extends the run
-/// when it starts where the run ends, and otherwise replaces it.
-/// Selected by `--allocator bump` (default for CLI/HTTP worlds).
-#[allocator("bump")]
-export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    if newsize == 0 {
-        bump_free(oldptr as u32, oldptr as u32 + oldsize as u32);
-        return 0;
-    }
-    return bump(align as u32, newsize as u32) as i32;
-}
-
-fn bump_free(start: u32, end: u32) {
-    if end == frontier() {
-        if start == freed_end {
-            set_frontier(freed_start);
-            freed_end = 0;
-        } else {
-            set_frontier(start);
-        }
-    } else if start == freed_end {
-        freed_end = end;
-    } else if start != end {
-        freed_start = start;
-        freed_end = end;
-    }
-}
-
 /// Debug allocator — advances a pointer with alignment, never reuses freed memory.
 /// When newsize is 0, poisons the freed region with 0xFF bytes.
 /// Selected by `--allocator debug` or automatically for the test world.
@@ -150,8 +111,8 @@ export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> 
 }
 
 /// Free-list allocator — reclaims freed memory with a *coalescing*,
-/// size-class-segregated free list. Suitable for long-running processes
-/// (e.g. HTTP servers).
+/// size-class-segregated free list. The default for every world but the test
+/// world.
 ///
 /// Every block carries an 8-byte header and 8-byte footer (boundary
 /// tags), both holding `block_size | used_bit`. On free, the physically

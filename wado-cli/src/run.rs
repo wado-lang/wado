@@ -294,8 +294,7 @@ async fn run_cli_component(
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     let cranelift_opt = opts.knobs.opt_level.to_wasmtime();
-    // Leave `target_world` unset so the compiler picks the cli/command default
-    // (and bump allocator unless overridden).
+    // Leave `target_world` unset so the compiler picks the cli/command default.
     let flags = CompileFlags {
         knobs: opts.knobs,
         ..CompileFlags::default()

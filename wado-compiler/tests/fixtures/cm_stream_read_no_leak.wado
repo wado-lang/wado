@@ -1,10 +1,9 @@
-// A stream read must leave nothing behind under the bump allocator. Each
-// `read_dir` reads entries into a buffer, and the host allocates each entry's
-// name after it (after a wait's event record too, when the read blocks). The
-// binding frees them in allocation order, which leaves only the last block at
-// the frontier, so the bump allocator once stranded the rest on every read: a
-// walk of a large tree ran linear memory out (`mise run format` over 40,000
-// entries).
+// A stream read must leave nothing behind under the allocator a CLI program
+// gets. Each `read_dir` reads entries into a buffer, and the host allocates
+// each entry's name after it. The binding frees them in allocation order, and
+// the bump allocator CLI programs once had reclaimed only the latest block, so
+// every read stranded its buffer: a walk of a large tree ran linear memory out
+// (`mise run format` over 40,000 entries).
 
 use { println, Stdout } from "core:cli";
 use fs from "core:fs";
@@ -27,7 +26,7 @@ export fn run() with (Stdout, Preopens) {
 
 __DATA__
 {
-    "allocator": "bump",
+    "allocator": "freelist",
     "preopened_dirs": [["", "scratch"]],
     "stdout": "3030 0\n"
 }

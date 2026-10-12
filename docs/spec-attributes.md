@@ -462,15 +462,18 @@ The Component Model requires a component to provide a linear memory and a `reall
 
 ### `#[allocator("name")]`
 
-Marks a function in a `wasm_module` as the `realloc` implementation named `name`. The world selects which one the component uses: `bump` for CLI programs, `freelist` for HTTP services, and `debug` for the test world. `debug` never reuses freed memory and fills it with `0xFF`.
+Marks a function in a `wasm_module` as the `realloc` implementation named `name`. The world selects which one the component uses: `debug` for the test world and `freelist` for every other. `debug` never reuses freed memory and fills it with `0xFF`.
 
 <!-- {"source":"wado-compiler/lib/core/allocator.wado"} -->
 
 ```wado
-#[allocator("bump")]
-export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+#[allocator("debug")]
+export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {
-        bump_free(oldptr as u32, oldptr as u32 + oldsize as u32);
+        if oldsize != 0 {
+            builtin::memory_fill(oldptr, 0xFF, oldsize);
+        }
         return 0;
     }
     return bump(align as u32, newsize as u32) as i32;

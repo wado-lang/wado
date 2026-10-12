@@ -814,19 +814,33 @@ fn "core:cbor/core:cbor/CborDeserializer::read_be$sroa[return]"(self, n) {
     $licm_end_17 = $load_1.end;
     $licm_start_18 = $load_1.start;
     $licm_repr_19 = $load_1.repr;
-    $licm_arith_20 = $licm_end_17 - $licm_start_18;
-    b68: block {
-        l69: loop {
-            break_if b68 i >= n;
-            v = (v << 8_i64) | builtin::i64_extend_i32_u(index = $load_0 + i; if @unlikely(((0 <= index) & (index < $licm_arith_20)) == 0) {
-                cold_path;
-                "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::get_unchecked$cold0$dae[self]"(index, $licm_end_17, $licm_start_18, $licm_arith_20);
-                unreachable;
-            }; builtin::array_get_value<u8>($licm_repr_19, $licm_start_18 + index));
-            i = i + 1;
-            continue l69;
+    if (if local.tee $licm_arith_20($licm_end_17 - $licm_start_18) >= 0 -> i32 {
+        ($load_0 >= 0) & (n <= ($licm_arith_20 - $load_0));
+    } else {
+        0;
+    }) {
+        b70: block {
+            l71: loop {
+                break_if b70 i >= n;
+                v = (v << 8_i64) | builtin::i64_extend_i32_u(index = $load_0 + i; builtin::array_get_value<u8>($licm_repr_19, $licm_start_18 + index));
+                i = i + 1;
+                continue l71;
+            };
         };
-    };
+    } else {
+        b72: block {
+            l73: loop {
+                break_if b72 i >= n;
+                v = (v << 8_i64) | builtin::i64_extend_i32_u(index = $load_0 + i; if @unlikely(((0 <= index) & (index < $licm_arith_20)) == 0) {
+                    cold_path;
+                    "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::get_unchecked$cold0$dae[self]"(index, $licm_end_17, $licm_start_18, $licm_arith_20);
+                    unreachable;
+                }; builtin::array_get_value<u8>($licm_repr_19, $licm_start_18 + index));
+                i = i + 1;
+                continue l73;
+            };
+        };
+    }
     self.pos = $load_0 + n;
     return 0, v, ref.null none;
 }
@@ -1023,7 +1037,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
     }
     indef = self.pos;
     block {
-        l103: loop {
+        l107: loop {
             if $sroa_slot_34 = 0; $sroa_slot_35 = 0; $match_16 = ref.null none; $inline_core_cbor_CborDeserializer__peek_byte_sroa_return__1: block {
                 if @unlikely(indef >= (local.tee $load_2(local.tee $load_1(self.input).end) - local.tee $load_3($load_1.start))) {
                     cold_path;
@@ -1086,7 +1100,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bytes_body$sroa[return]"(self, ar
                 return 1, ref.null none, $qm_e_15;
             }
             indef = self.pos;
-            continue l103;
+            continue l107;
         };
     };
 }
@@ -1186,9 +1200,9 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self) {
     $licm_repr_29 = $qm_v_7.repr;
     $licm_arith_30 = indef - 1;
     if indef <= indef {
-        b127: block {
-            l128: loop {
-                break_if b127 $mv$$vr_17$0 >= indef;
+        b131: block {
+            l132: loop {
+                break_if b131 $mv$$vr_17$0 >= indef;
                 b = builtin::i64_extend_i32_u(builtin::array_get_value<u8>($licm_repr_29, $mv$$vr_17$0));
                 if local.tee pr($licm_arith_30 - $mv$$vr_17$0) < 8 {
                     lo = lo | (b << builtin::i64_extend_i32_s(pr * 8));
@@ -1196,13 +1210,13 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self) {
                     arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
                 }
                 $mv$$vr_17$0 = $mv$$vr_17$0 + 1;
-                continue l128;
+                continue l132;
             };
         };
     } else {
-        b130: block {
-            l131: loop {
-                break_if b130 $mv$$vr_17$0 >= indef;
+        b134: block {
+            l135: loop {
+                break_if b134 $mv$$vr_17$0 >= indef;
                 b = builtin::i64_extend_i32_u(if @unlikely($mv$$vr_17$0 >= indef) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self]"($mv$$vr_17$0, indef);
@@ -1214,7 +1228,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self) {
                     arg = arg | (b << builtin::i64_extend_i32_s((pr - 8) * 8));
                 }
                 $mv$$vr_17$0 = $mv$$vr_17$0 + 1;
-                continue l131;
+                continue l135;
             };
         };
     }
@@ -1227,7 +1241,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128$sroa[return]"(self)
     let arg: u64;
     let $pattern_temp_0: ref "tuple//[u8, u8, u64, bool]";
     block {
-        l135: loop {
+        l139: loop {
             let $mv$$vr_8$0: i32;
             let $mv$$vr_8$1: ref null "tuple//[u8, u8, u64, bool]";
             let $mv$$vr_8$2: ref null "core:serde//DeserializeError";
@@ -1251,7 +1265,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128$sroa[return]"(self)
                     "core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(local.tee $mv_arg_4(global:core:cbor::$const_obj_8).repr, $mv_arg_4.used, builtin::i64_extend_i32_s(self.pos));
                 };
             } else if major == 6 {
-                continue_if l135 @likely(((((((arg == 0_i64) | (arg == 1_i64)) | (arg == 21_i64)) | (arg == 22_i64)) | (arg == 23_i64)) | (arg == 37_i64)) | (arg == 55799_i64));
+                continue_if l139 @likely(((((((arg == 0_i64) | (arg == 1_i64)) | (arg == 21_i64)) | (arg == 22_i64)) | (arg == 23_i64)) | (arg == 37_i64)) | (arg == 55799_i64));
                 if arg == 2_i64 {
                     return "core:cbor/core:cbor/CborDeserializer::read_bignum_mag$sroa[return]"(self);
                 } else if @unlikely(arg == 3_i64) {
@@ -1274,7 +1288,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_unsigned_u128$sroa[return]"(self)
                     "core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(local.tee $mv_arg_1(global:core:cbor::$const_obj_5).repr, $mv_arg_1.used, builtin::i64_extend_i32_s(self.pos));
                 };
             }
-            continue l135;
+            continue l139;
         };
     };
 }

@@ -748,9 +748,9 @@ fn test_inline_threshold_growth_and_iterations() {
 
 #[test]
 fn test_allocator() {
-    let parser = Parser::from_args(&["--allocator", "bump", "a.wado"]);
+    let parser = Parser::from_args(&["--allocator", "freelist", "a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.knobs.allocator, Some("bump".to_string()));
+    assert_eq!(opts.knobs.allocator, Some("freelist".to_string()));
 }
 
 #[test]
