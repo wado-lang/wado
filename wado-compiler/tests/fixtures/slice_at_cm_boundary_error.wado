@@ -1,6 +1,6 @@
-// A view (a slice, a `StrSlice`, any struct borrowing storage it does not own,
-// generic or not, directly or through an `Option`) has no Component Model
-// representation, so it is rejected at the definition site of anything crossing
+// A reference or a view (a slice, a `StrSlice`, any struct borrowing storage it
+// does not own, generic or not, directly or through an `Option`) has no
+// Component Model representation, so it is rejected at the definition site of anything crossing
 // the CM boundary, under the name the program uses (`ByteSlice`, not the
 // `Slice<u8>` it wraps).
 //
@@ -38,13 +38,48 @@ export fn takes_maybe(m: Maybe) -> i32 {
     return 0;
 }
 
+pub type Borrowed = &List<i32>;
+
+pub struct Lent {
+    pub b: Borrowed,
+}
+
+export fn takes_lent(l: Lent) -> i32 {
+    return 0;
+}
+
+pub struct Inner {
+    pub s: StrSlice,
+}
+
+pub struct Holder<T> {
+    pub i: Inner,
+    pub v: T,
+}
+
+export fn takes_holder(h: Option<Holder<i32>>) -> i32 {
+    return 0;
+}
+
+export fn takes_ref(r: &List<i32>) -> i32 {
+    return 0;
+}
+
+export fn takes_optional_ref(r: Option<&List<i32>>) -> i32 {
+    return 0;
+}
+
 __DATA__
 {
-  "compile_error": ":13:23: analysis error: `Slice<i32>` in parameter 'a' of `takes_slice` is not allowed: a view points into storage it does not own and has no Component Model representation; copy it into a `List<T>` or a `String`",
+  "compile_error": ":13:23: analysis error: `Slice<i32>` in parameter 'a' of `takes_slice` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`",
   "compile_errors_contains": [
     "`StrSlice` in parameter 's' of `takes_str_slice` is not allowed",
     "`ByteSlice` in parameter 'b' of `takes_byte_slice` is not allowed",
     "`Window<i32>` in parameter 'w' of `takes_window` is not allowed",
-    "`Maybe` in parameter 'm' of `takes_maybe` is not allowed"
+    "`Maybe` in parameter 'm' of `takes_maybe` is not allowed",
+    "`Lent` in parameter 'l' of `takes_lent` is not allowed",
+    "`StrSlice` in parameter 'h' of `takes_holder` is not allowed",
+    "`&List<i32>` in parameter 'r' of `takes_ref` is not allowed",
+    "`&List<i32>` in parameter 'r' of `takes_optional_ref` is not allowed"
   ]
 }

@@ -7550,10 +7550,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if let Some(flags_info) = flags
                 && matches!(suffix, "none" | "all")
             {
-                let member_count = flags_info.members.len() as u32;
                 let value: u64 = match suffix {
                     "none" => 0,
-                    "all" => u64::from((1u32 << member_count) - 1),
+                    "all" => u64::from(flags_info.members.iter().fold(0, |all, m| all | m.bitmask)),
                     _ => unreachable!(),
                 };
                 return TirExpr::new(

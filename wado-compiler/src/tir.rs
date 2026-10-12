@@ -1898,7 +1898,7 @@ impl TypeTable {
                     .collect();
                 format!("{{ {} }}", parts.join(", "))
             }
-            shape @ AnonShape::Synthetic(_) => self.render_shape(shape, &|tt, ty| tt.type_name(ty)),
+            AnonShape::Synthetic(name) => name.clone(),
         }
     }
 

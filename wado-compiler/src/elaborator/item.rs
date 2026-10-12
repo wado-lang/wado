@@ -1453,15 +1453,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .is_some()
     }
 
-    /// The first view `type_id` is or holds anywhere within it, as the program
-    /// names it: `ByteSlice`, not the `Slice<u8>` it wraps. A view points into
-    /// storage it does not own, which has no Component Model representation.
-    pub(super) fn cm_view_within(&self, type_id: TypeId) -> Option<TypeId> {
-        self.first_type_within(type_id, true, &Self::is_cm_view)
+    /// The first borrow `type_id` is or holds anywhere within it, as the program
+    /// names it: a reference, or a view (`ByteSlice`, not the `Slice<u8>` it
+    /// wraps). A borrow points into storage it does not own, which has no
+    /// Component Model representation. A borrowed resource is exempt: it
+    /// crosses an import as a handle.
+    pub(super) fn cm_borrow_within(&self, type_id: TypeId) -> Option<TypeId> {
+        self.first_type_within(type_id, true, &|scope: &Self, t| {
+            scope.is_cm_view(t) || scope.is_storage_reference(t)
+        })
     }
 
-    /// `Slice<T>`, or a struct with a field that borrows what is not a resource,
-    /// through anything but another struct (`StrSlice`, `Option<&T>`).
+    /// `Slice<T>`, or a struct with a field that holds a reference, through
+    /// anything but another struct (`StrSlice`, `Option<&T>`).
     fn is_cm_view(&self, type_id: TypeId) -> bool {
         let head = {
             let tt = self.tysys.type_table.borrow();
@@ -1473,29 +1477,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             head
         };
-        let borrows_storage = |scope: &Self, t: TypeId| {
-            let tt = scope.tysys.type_table.borrow();
-            match tt.get(t) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => !matches!(
-                    tt.get(tt.representation_head(*inner)),
-                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-                ),
-                _ => false,
-            }
-        };
         self.struct_field_types(head).is_some_and(|fields| {
             fields.iter().any(|(_, t)| {
-                self.first_type_within(*t, false, &borrows_storage)
+                self.first_type_within(*t, false, &Self::is_storage_reference)
                     .is_some()
             })
         })
     }
 
+    /// A reference to anything but a resource.
+    fn is_storage_reference(&self, type_id: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(tt.representation_head(type_id)) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => !matches!(
+                tt.get(tt.representation_head(*inner)),
+                ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
+            ),
+            _ => false,
+        }
+    }
+
     /// The first type within `type_id`, itself included, that `hit` holds for.
     /// The walk reaches through newtypes, references, arrays, type arguments and
     /// variant payloads, and into a struct's fields when `into_fields` is set. A
-    /// generic instance shows only its type arguments: the fields of one the
-    /// compiler declares (`AsyncCall<T>`) are its own business.
+    /// struct the compiler declares shows only its type arguments: the fields of
+    /// `AsyncCall<T>` or `List<T>` are its own business.
     fn first_type_within(
         &self,
         type_id: TypeId,
@@ -1533,6 +1539,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .struct_field_types(head)
                 .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
                 .unwrap_or_default(),
+            ResolvedType::GenericInstance { def, .. }
+                if into_fields
+                    && self.tysys.type_table.borrow().compiler_type_item(def).is_none()
+                    && let Some(fields) = self.struct_field_types(head) =>
+            {
+                fields.into_iter().map(|(_, t)| t).collect()
+            }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => type_args,
             _ => Vec::new(),
@@ -2581,14 +2594,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            // A view has no CM representation. Rejecting it here keeps the
+            // A borrow has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && let Some(view) = scope.cm_view_within(type_id) {
-                let _ = scope.emit(TypeError::ViewAtCmBoundary {
+            if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(type_id) {
+                let _ = scope.emit(TypeError::BorrowAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
-                    view: scope.tysys.type_table.borrow().type_name(view),
+                    borrow: scope.tysys.type_table.borrow().type_name(borrow),
                     span: param.span,
                 });
             }
@@ -2613,11 +2626,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: func.span,
             });
         }
-        if crosses_cm_boundary && let Some(view) = scope.cm_view_within(declared_return_type) {
-            let _ = scope.emit(TypeError::ViewAtCmBoundary {
+        if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type)
+        {
+            let _ = scope.emit(TypeError::BorrowAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
-                view: scope.tysys.type_table.borrow().type_name(view),
+                borrow: scope.tysys.type_table.borrow().type_name(borrow),
                 span: func.span,
             });
         }

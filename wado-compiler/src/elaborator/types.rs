@@ -1334,13 +1334,13 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A view has no Component Model representation. Triggered when an
-    /// `export` (or imported) function's parameter or return type is or holds
-    /// one; `view` is the type that makes it one.
-    ViewAtCmBoundary {
+    /// A reference or a view has no Component Model representation. Triggered
+    /// when an `export` (or imported) function's parameter or return type is
+    /// or holds one; `borrow` is the type that makes it one.
+    BorrowAtCmBoundary {
         function: String,
         position: String,
-        view: String,
+        borrow: String,
         span: Span,
     },
 
@@ -2770,15 +2770,15 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::ViewAtCmBoundary {
+            TypeError::BorrowAtCmBoundary {
                 function,
                 position,
-                view,
+                borrow,
                 span,
             } => (
                 Code::CmBoundaryType,
                 format!(
-                    "`{view}` in {position} of `{function}` is not allowed: a view points into storage it does not own and has no Component Model representation; copy it into a `List<T>` or a `String`"
+                    "`{borrow}` in {position} of `{function}` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`"
                 ),
                 *span,
             ),

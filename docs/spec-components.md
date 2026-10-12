@@ -46,15 +46,19 @@ boundary:
   `List<u16>`.
 - `Array<T>` and the newtypes over it (`ByteArray`). A `List<T>` crosses in its
   place.
+- A reference to anything but a resource, such as `&List<i32>`. A borrowed
+  resource crosses as a `borrow` handle
+  ([Handles at the Boundary](#handles-at-the-boundary)).
 - A view: `Slice<T>`, `StrSlice`, the newtypes over them (`ByteSlice`), and any
-  struct with a field borrowing what is not a resource. A view points into
-  storage it does not own; copy it into a `List<T>` or a `String`.
-- A reference, except as a borrowed resource handle on an import.
+  struct with a field borrowing what is not a resource.
+
+A reference and a view both point into storage they do not own; pass an owned
+value such as a `List<T>` or a `String` instead.
 
 A signature that names one of them, anywhere within it, is a compile error at
-that parameter, or at the function's declaration for its result. This holds for every `export fn`, not only a world's
-entry point, because each one lands on the component's surface, and for every
-imported operation.
+that parameter, or at the function's declaration for its result. This holds for
+every `export fn`, not only a world's entry point, because each one lands on the
+component's surface, and for every imported operation.
 
 An anonymous struct never crosses either: no signature can name one yet
 ([Anonymous Structs](./spec-types.md#anonymous-structs)).
@@ -330,7 +334,7 @@ A trap does not unwind, so it runs no drops.
 | `&R` or `&mut R` parameter, `&self` or `&mut self` | `borrow<R>`                         |
 | Bare `self` receiver                               | `own<R>`, transferring the receiver |
 
-A reference crosses a Component Model import only as a borrowed resource handle. An import taking any other reference, such as `&String`, is a compile error.
+A reference crosses the boundary only as a borrowed resource handle (see [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries)).
 
 Rationale: [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
