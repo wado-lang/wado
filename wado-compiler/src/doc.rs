@@ -2,7 +2,7 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
+    AssertStmt, AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
     StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl, Visibility,
     type_head_name, written_params,
@@ -16,8 +16,8 @@ use crate::primitive::PrimitiveType;
 use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
-    unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
-    unparse_trait_header, unparse_type_into,
+    unparse_contract_clause, unparse_enum_signature, unparse_function_signature,
+    unparse_struct_signature, unparse_trait_header, unparse_type_into,
 };
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
@@ -117,6 +117,9 @@ pub struct DocFunction {
     /// rather than in it: a signature is one line, and a reader wants both.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub attrs: Vec<String>,
+    /// The `contract` clauses, one line of source each: what a caller owes.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub contracts: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
 }
@@ -363,7 +366,10 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
         .methods
         .iter()
         .filter(|m| !m.is_contract_holder())
-        .map(|m| build_doc_function(m, trivia))
+        .map(|m| {
+            let held = t.contract_holder(&m.name).into_iter();
+            build_doc_function_with(m, held.flat_map(Function::contracts), trivia)
+        })
         .collect();
 
     DocTrait {
@@ -559,6 +565,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
             attrs: unparse_attributes(&m.attrs),
+            contracts: m.contracts().map(unparse_contract_clause).collect(),
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
@@ -593,6 +600,7 @@ fn build_doc_resource(
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
             attrs: unparse_attributes(&m.attrs),
+            contracts: m.contracts().map(unparse_contract_clause).collect(),
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
@@ -608,9 +616,20 @@ fn build_doc_resource(
 }
 
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
+    build_doc_function_with(f, f.contracts(), trivia)
+}
+
+/// A trait method's clauses live in the trait's hidden holder, not on the
+/// method, so the caller passes them.
+fn build_doc_function_with<'a>(
+    f: &Function,
+    contracts: impl Iterator<Item = &'a AssertStmt>,
+    trivia: &TriviaMap,
+) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
         attrs: unparse_attributes(&f.attrs),
+        contracts: contracts.map(unparse_contract_clause).collect(),
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -1213,6 +1232,7 @@ fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     DocFunction {
         signature: sig,
         attrs: Vec::new(),
+        contracts: Vec::new(),
         doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &[]),
     }
 }

@@ -3554,6 +3554,17 @@ pub fn unparse_expr_source(expr: &Expr) -> String {
     out
 }
 
+/// A `contract` clause as one line of source.
+#[must_use]
+pub fn unparse_contract_clause(clause: &AssertStmt) -> String {
+    let mut out = format!("contract {}", unparse_expr_source(&clause.condition));
+    if let Some(message) = &clause.message {
+        out.push_str(", ");
+        out.push_str(&unparse_expr_source(message));
+    }
+    out
+}
+
 pub fn unparse_expr_simple(expr: &Expr) -> String {
     let mut output = String::new();
     unparse_expr_into(expr, &mut output);
