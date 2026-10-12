@@ -841,7 +841,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for &value in &values {
             let mut retargeted = None;
             self.in_each_store_of(value.id(), overlays_before, |this| {
-                retargeted = this.coerce_numeric_literal_tail(value, target).or(retargeted);
+                retargeted = this
+                    .coerce_numeric_literal_tail(value, target)
+                    .or(retargeted);
             });
             if let Some(retargeted) = retargeted {
                 for (id, ty) in breaks.iter_mut() {
