@@ -43,6 +43,11 @@ touches neither the worktree nor the index.
 
 If conflicting, resolve with the `git-upstream-sync` skill.
 
+If the branch changes the stdlib (`wado-compiler/lib/`), run
+`mise run update-stdlib-coverage-baseline` once, here, and commit what it
+changes. CI fails on any difference from the baseline, a region a test now
+reaches included; `wado-compiler/AGENTS.md` says what the update may change.
+
 ## Title
 
 A short summary of the value the branch creates, not of what was edited. A
