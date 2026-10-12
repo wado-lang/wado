@@ -40,10 +40,6 @@ export fn takes_descriptor(d: Descriptor) -> i32 {
 
 __DATA__
 {
-  "compile_errors_contains": [
-    ":21:23: analysis error: `Point` in parameter 'p' of `takes_point` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`",
-    "`Point` in parameter 'o' of `takes_outer` is not published",
-    "`WalkEntry` in parameter 'w' of `takes_walk` is not published"
-  ],
-  "compile_errors_not_contains": ["takes_entry", "takes_descriptor"]
+  "compile_error": ":21:23: analysis error: `Point` in parameter 'p' of `takes_point` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 25:23: `Point` in parameter 'o' of `takes_outer` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`; 29:22: `WalkEntry` in parameter 'w' of `takes_walk` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`",
+  "compile_error_codes": ["CM_BOUNDARY_TYPE"]
 }
