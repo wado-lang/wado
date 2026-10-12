@@ -584,7 +584,7 @@ impl MockStdout {
     fn drain(&mut self) -> String {
         let mut result = String::with_capacity(256);
         for let stream of self.streams {
-            result.push_str(&String::from_utf8_lossy(stream.read_to_end()));
+            result.push_str(&String::from_utf8_lossy(stream.read_to_end_bytes()));
             stream.drop();
         }
         self.streams = [];

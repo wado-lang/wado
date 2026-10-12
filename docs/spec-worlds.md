@@ -256,7 +256,7 @@ use { Stdin } from "wasi:cli";
 
 export fn run() with (Stdin, Stdout, Stderr) {
     let [input, _done] = Stdin::read_via_stream();
-    let bytes = input.read_to_end();
+    let bytes = input.read_to_end_bytes();
     input.drop();
     let text = String::from_utf8_lossy(bytes);
     assert text.lines().count() == 2;
@@ -460,7 +460,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     let [done, _done_tx] = Future::<Result<(), ErrorCode>>::new();
     let [request_body, _request_trailers] = Request::consume_body(request, done);
-    let name = String::from_utf8_lossy(request_body.read_to_end());
+    let name = String::from_utf8_lossy(request_body.read_to_end_bytes());
     request_body.drop();
 
     let [body, body_tx] = Stream::<u8>::new();
