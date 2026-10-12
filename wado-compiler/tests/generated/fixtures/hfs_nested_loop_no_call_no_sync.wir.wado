@@ -123,20 +123,31 @@ fn "hfs_nested_loop_no_call_no_sync.wado/run"() with Stdout {
                 break b0;
             }
             k = 0;
-            $licm_arith_69 = round * 2;
-            b3: block {
-                l4: loop {
-                    break_if b3 k >= 2;
-                    $hfs_hold_87 = $hfs_hold_87 | (if @unlikely(local.tee index_9($licm_arith_69 + k) >= 8) {
-                        cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,$v1]"(index_9);
-                        unreachable;
-                    }; builtin::array_get_value<u8>($licm_repr_68, index_9) << $hfs_bits_88);
-                    $hfs_bits_88 = $hfs_bits_88 + 8;
-                    k = k + 1;
-                    continue l4;
+            if (local.tee $licm_arith_69(round * 2) >= 0) & (2 <= (8 - $licm_arith_69)) {
+                b4: block {
+                    l5: loop {
+                        break_if b4 k >= 2;
+                        $hfs_hold_87 = $hfs_hold_87 | (index_9 = $licm_arith_69 + k; builtin::array_get_value<u8>($licm_repr_68, index_9) << $hfs_bits_88);
+                        $hfs_bits_88 = $hfs_bits_88 + 8;
+                        k = k + 1;
+                        continue l5;
+                    };
                 };
-            };
+            } else {
+                b6: block {
+                    l7: loop {
+                        break_if b6 k >= 2;
+                        $hfs_hold_87 = $hfs_hold_87 | (if @unlikely(local.tee index_9($licm_arith_69 + k) >= 8) {
+                            cold_path;
+                            "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$dae[self,$v1]"(index_9);
+                            unreachable;
+                        }; builtin::array_get_value<u8>($licm_repr_68, index_9) << $hfs_bits_88);
+                        $hfs_bits_88 = $hfs_bits_88 + 8;
+                        k = k + 1;
+                        continue l7;
+                    };
+                };
+            }
             out_2 = out_2 + ($hfs_hold_87 & 255);
             $hfs_hold_87 = $hfs_hold_87 >>u 8;
             $hfs_bits_88 = $hfs_bits_88 - 8;
@@ -185,16 +196,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b7: block {
-        l8: loop {
-            break_if b7 (digit_count - offset) < 2;
+    b10: block {
+        l11: loop {
+            break_if b10 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l8;
+            continue l11;
         };
     };
     if digit_count > offset {
@@ -297,17 +308,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b31: block {
-        l32: loop {
-            break_if b31 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b34: block {
+        l35: loop {
+            break_if b34 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l32;
+            continue l35;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l34: loop {
+        l37: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -337,7 +348,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l34;
+            continue l37;
         };
     };
 }

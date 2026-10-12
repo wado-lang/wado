@@ -1,4 +1,6 @@
-/// Test that the freelist allocator traps on immediate double-free.
+/// Test that every allocator traps on an immediate double free, the debug one
+/// the test world runs under included, so a test catches what production would
+/// trap on.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -10,4 +12,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"allocator": "freelist", "trapped": true}
+{"allocator": ["freelist", "debug"], "trapped": true}

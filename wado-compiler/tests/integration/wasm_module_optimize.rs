@@ -9,7 +9,7 @@ use crate::common::compile_source_with_compiler_options;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// Any program pulls in the allocator, so the bodies under test are the bundled
-/// `bump_realloc` / `grow_memory`, not anything this source writes.
+/// `freelist_realloc` / `grow_memory`, not anything this source writes.
 const SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 
@@ -64,10 +64,9 @@ fn allocator_core_module_is_peepholed() {
 }
 
 /// DCE compacts the wasm module's function list, so its name section has to be
-/// derived from the survivors. `bump` happens to leave its two survivors at
-/// their original indices; `freelist` keeps functions that sit *behind* dropped
-/// ones, so a name list built before compaction shifts onto the wrong functions
-/// and hands every survivor a dead function's name.
+/// derived from the survivors. `freelist` keeps functions that sit *behind*
+/// dropped ones, so a name list built before compaction shifts onto the wrong
+/// functions and hands every survivor a dead function's name.
 #[test]
 fn wasm_module_names_survive_dce_compaction() {
     let mem = mem_module_wat_with_allocator(OptLevel::O2, Some("freelist"));
@@ -75,11 +74,9 @@ fn wasm_module_names_survive_dce_compaction() {
         mem.contains(r#"(export "realloc" (func $realloc))"#),
         "the exported `realloc` should name the surviving realloc; mem module was:\n{mem}"
     );
-    for dropped in ["bump_realloc", "debug_realloc"] {
-        assert!(
-            !mem.contains(dropped),
-            "`{dropped}` is DCE'd under --allocator freelist, so its name must not \
-             land on a survivor; mem module was:\n{mem}"
-        );
-    }
+    assert!(
+        !mem.contains("debug_realloc"),
+        "`debug_realloc` is DCE'd under --allocator freelist, so its name must not \
+         land on a survivor; mem module was:\n{mem}"
+    );
 }

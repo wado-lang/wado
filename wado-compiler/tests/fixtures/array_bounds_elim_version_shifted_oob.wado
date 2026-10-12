@@ -1,0 +1,27 @@
+// Loop-versioned BCE over a shifted check, slow path: `ob + n` runs past the
+// list, so the residual fails and the checked loop panics at the first index
+// out of bounds, with the standard message.
+
+use { Stdout } from "core:cli";
+
+fn bump(out: &mut List<i32>, ob: i32, n: i32) {
+    for let mut c = 0; c < n; c += 1 {
+        out[ob + c] += 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut out = List::<i32>::filled(8, 0);
+    bump(&mut out, builtin::black_box(4), builtin::black_box(5));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_value",
+        "index out of bounds",
+        "index: 8",
+        "self.used: 8"
+    ],
+    "trapped": true
+}

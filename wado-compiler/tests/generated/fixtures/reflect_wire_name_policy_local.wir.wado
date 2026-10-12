@@ -689,10 +689,14 @@ fn "core:serde/core/serde/apply_case<core:prelude/string.wado/String>$dae[style]
     at_head = 1;
     prev = 0;
     i = 0;
-    if $mv$s$used <= $mv$s$used {
-        b81: block {
-            l82: loop {
-                break_if b81 i >= $mv$s$used;
+    if (if $mv$s$used <= $mv$s$used -> i32 {
+        ($mv$s$used >= 1) & ($mv$s$used <= ($mv$s$used - 1));
+    } else {
+        0;
+    }) {
+        b82: block {
+            l83: loop {
+                break_if b82 i >= $mv$s$used;
                 $for_0_body: block {
                     if ((local.tee b_11(builtin::array_get_value<u8>($mv$s$repr, i)) == 95) | (b_11 == 45)) | (b_11 == 32) {
                         at_head = 1;
@@ -711,11 +715,6 @@ fn "core:serde/core/serde/apply_case<core:prelude/string.wado/String>$dae[style]
                             0;
                         }), (i + 1) < $mv$s$used, 0) -> i32 {
                             index_35 = i + 1;
-                            if @unlikely(((0 <= index_35) & (index_35 < $mv$s$used)) == 0) {
-                                cold_path;
-                                "core:prelude/string.wado/core:prelude/string.wado/String::get_byte_unchecked$cold0$dae[self]"(index_35, $mv$s$used);
-                                unreachable;
-                            }
                             (local.tee b_36(builtin::array_get_value<u8>($mv$s$repr, index_35)) >=u 97) & (b_36 <=u 122);
                         } else {
                             0;
@@ -734,7 +733,7 @@ fn "core:serde/core/serde/apply_case<core:prelude/string.wado/String>$dae[style]
                     prev = b_11;
                 };
                 i = i + 1;
-                continue l82;
+                continue l83;
             };
         };
     } else {

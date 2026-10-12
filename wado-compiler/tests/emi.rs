@@ -2452,7 +2452,7 @@ fn a_stage_reduces_only_what_it_calls_a_finding() {
     };
     let spec = Spec {
         test_world: false,
-        allocator: "bump".to_string(),
+        allocator: "freelist".to_string(),
     };
     let injection = Injection {
         path: Path::new("never-read.wado"),

@@ -215,7 +215,7 @@ struct TestSpec {
     #[serde(rename = "wasi:http/service")]
     http_service: Option<HttpServiceSpec>,
 
-    /// The allocators to run under, one run each: a name (`"bump"`, `"debug"`,
+    /// The allocators to run under, one run each: a name (`"debug"`,
     /// `"freelist"`) or a list of them. Unset runs `debug`, which catches a
     /// use-after-free.
     #[serde(default, deserialize_with = "one_or_many")]
