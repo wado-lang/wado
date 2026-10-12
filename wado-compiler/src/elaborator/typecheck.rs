@@ -136,15 +136,8 @@ fn check_at(
         } = type_table.get(expected_inner)
         && actual_def == expected_def
         && !actual_args.is_empty()
-        && actual_args.len() == expected_args.len()
     {
-        for (a, e) in actual_args.iter().zip(expected_args.iter()) {
-            match check_at(*a, *e, type_table, Position::Invariant) {
-                TypeCheckResult::Compatible => {}
-                verdict => return verdict,
-            }
-        }
-        return TypeCheckResult::Compatible;
+        return check_type_args(actual_args, expected_args, type_table);
     }
     let actual_is_newtype = matches!(
         type_table.get(actual_inner),
@@ -259,17 +252,7 @@ fn check_at(
         if actual_def != expected_def {
             return TypeCheckResult::Incompatible;
         }
-        if actual_args.len() != expected_args.len() {
-            return TypeCheckResult::Incompatible;
-        }
-        for (a, e) in actual_args.iter().zip(expected_args.iter()) {
-            match check_at(*a, *e, type_table, Position::Invariant) {
-                TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
-                TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
-                TypeCheckResult::Compatible => {}
-            }
-        }
-        return TypeCheckResult::Compatible;
+        return check_type_args(actual_args, expected_args, type_table);
     }
 
     // Rule 9: `resource Child extends Parent`, where the position admits it.
@@ -286,6 +269,25 @@ fn check_at(
         return TypeCheckResult::Incompatible;
     }
 
+    TypeCheckResult::Compatible
+}
+
+/// Two instances of one generic declaration, compared argument by argument;
+/// an argument is an element's type, so it admits no subtype.
+fn check_type_args(
+    actual: &[TypeId],
+    expected: &[TypeId],
+    type_table: &TypeTable,
+) -> TypeCheckResult {
+    if actual.len() != expected.len() {
+        return TypeCheckResult::Incompatible;
+    }
+    for (a, e) in actual.iter().zip(expected) {
+        match check_at(*a, *e, type_table, Position::Invariant) {
+            TypeCheckResult::Compatible => {}
+            verdict => return verdict,
+        }
+    }
     TypeCheckResult::Compatible
 }
 

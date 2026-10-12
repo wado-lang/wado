@@ -5277,7 +5277,8 @@ impl TypeTable {
         let (a, b) = (self.representation_head(a), self.representation_head(b));
         // An effect row carries no representation, so two instances apart only
         // in an argument's row are one.
-        self.type_key(a) == self.type_key(b) || self.fq_type_name_rowless(a) == self.fq_type_name_rowless(b)
+        self.type_key(a) == self.type_key(b)
+            || self.fq_type_name_rowless(a) == self.fq_type_name_rowless(b)
     }
 
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
