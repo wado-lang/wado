@@ -1445,16 +1445,124 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Recursively check whether `type_id` mentions a `fn(...)` / `fn mut(...)`
-    /// closure type. Used to reject closures crossing the Component Model
-    /// boundary (export/import function signatures, CM-exposed record fields,
-    /// variant payloads, etc.). Descends through refs, arrays, generic-arg
-    /// containers, newtype unwrap, and (when the struct's field registry is
-    /// in scope) named-struct field types.
+    /// Whether `type_id` mentions a `fn(...)` / `fn mut(...)` closure type
+    /// anywhere within it, which no Component Model signature can carry.
     pub(super) fn type_contains_closure(&self, type_id: TypeId) -> bool {
-        let type_table = self.tysys.type_table.borrow();
+        self.first_type_within(type_id, true, &|scope: &Self, t| {
+            let tt = scope.tysys.type_table.borrow();
+            matches!(
+                tt.get(tt.representation_head(t)),
+                ResolvedType::Function { .. }
+            )
+        })
+        .is_some()
+    }
+
+    /// The first borrow `type_id` is or holds anywhere within it, as the program
+    /// names it: a reference, or a view (`ByteSlice`, not the `Slice<u8>` it
+    /// wraps). A borrow points into storage it does not own, which has no
+    /// Component Model representation. A borrowed resource is exempt: it
+    /// crosses as a `borrow<R>` handle.
+    pub(super) fn cm_borrow_within(&self, type_id: TypeId) -> Option<TypeId> {
+        self.first_type_within(type_id, true, &|scope: &Self, t| {
+            scope.is_cm_view(t) || scope.is_storage_reference(t)
+        })
+    }
+
+    /// `Slice<T>`, or a struct with a field that holds a reference, through
+    /// anything but another struct (`StrSlice`, `Option<&T>`).
+    fn is_cm_view(&self, type_id: TypeId) -> bool {
+        let head = {
+            let tt = self.tysys.type_table.borrow();
+            let head = tt.representation_head(type_id);
+            if let ResolvedType::GenericInstance { def, .. } = tt.get(head)
+                && tt.is_compiler_item(*def, CompilerItem::Slice)
+            {
+                return true;
+            }
+            head
+        };
+        self.struct_field_types(head).is_some_and(|fields| {
+            fields.iter().any(|(_, t)| {
+                self.first_type_within(*t, false, &Self::is_storage_reference)
+                    .is_some()
+            })
+        })
+    }
+
+    /// A reference to anything but a resource.
+    fn is_storage_reference(&self, type_id: TypeId) -> bool {
+        let tt = self.tysys.type_table.borrow();
+        match tt.get(tt.representation_head(type_id)) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => !matches!(
+                tt.get(tt.representation_head(*inner)),
+                ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
+            ),
+            _ => false,
+        }
+    }
+
+    /// The first type within `type_id`, itself included, that `hit` holds for.
+    /// The walk reaches through newtypes, references, arrays, type arguments and
+    /// variant payloads, and into a struct's fields when `into_fields` is set. A
+    /// struct the compiler declares shows only its type arguments: the fields of
+    /// `AsyncCall<T>` or `List<T>` are its own business.
+    fn first_type_within(
+        &self,
+        type_id: TypeId,
+        into_fields: bool,
+        hit: &dyn Fn(&Self, TypeId) -> bool,
+    ) -> Option<TypeId> {
         let mut visited: IndexSet<TypeId> = IndexSet::default();
-        self.type_contains_closure_inner(&type_table, type_id, &mut visited)
+        self.first_type_within_inner(type_id, into_fields, hit, &mut visited)
+    }
+
+    fn first_type_within_inner(
+        &self,
+        type_id: TypeId,
+        into_fields: bool,
+        hit: &dyn Fn(&Self, TypeId) -> bool,
+        visited: &mut IndexSet<TypeId>,
+    ) -> Option<TypeId> {
+        if !visited.insert(type_id) {
+            return None;
+        }
+        if hit(self, type_id) {
+            return Some(type_id);
+        }
+        let (head, resolved) = {
+            let tt = self.tysys.type_table.borrow();
+            let head = tt.representation_head(type_id);
+            (head, tt.get(head).clone())
+        };
+        let within = match resolved {
+            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
+                vec![t]
+            }
+            ResolvedType::Variant { .. } => self.tysys.case_payload_types(head).unwrap_or_default(),
+            ResolvedType::Struct { .. } if into_fields => self
+                .struct_field_types(head)
+                .map(|fields| fields.into_iter().map(|(_, t)| t).collect())
+                .unwrap_or_default(),
+            ResolvedType::GenericInstance { def, .. }
+                if into_fields
+                    && self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .compiler_type_item(def)
+                        .is_none()
+                    && let Some(fields) = self.struct_field_types(head) =>
+            {
+                fields.into_iter().map(|(_, t)| t).collect()
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args,
+            _ => Vec::new(),
+        };
+        within
+            .into_iter()
+            .find_map(|t| self.first_type_within_inner(t, into_fields, hit, visited))
     }
 
     /// Diagnose a closure in parameter `param` of the import `function`. A bare
@@ -1500,113 +1608,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param: param.to_string(),
                 span,
             });
-        }
-    }
-
-    /// Whether `type_id` is, or contains anywhere within it, a `Slice<T>` — a
-    /// reference view, which has no Component Model representation. A nested
-    /// one degrades just as loudly as a top-level one, so the search reaches
-    /// tuple members, struct fields, variant payloads, and type arguments.
-    pub(super) fn type_contains_slice_view(&self, type_id: TypeId) -> bool {
-        let tt = self.tysys.type_table.borrow();
-        let mut visited: IndexSet<TypeId> = IndexSet::default();
-        self.type_contains_slice_view_inner(&tt, type_id, &mut visited)
-    }
-
-    fn type_contains_slice_view_inner(
-        &self,
-        type_table: &TypeTable,
-        type_id: TypeId,
-        visited: &mut IndexSet<TypeId>,
-    ) -> bool {
-        use crate::tir::ResolvedType;
-        if !visited.insert(type_id) {
-            return false;
-        }
-        let base = type_table.representation_head(type_id);
-        if base != type_id && self.type_contains_slice_view_inner(type_table, base, visited) {
-            return true;
-        }
-        match type_table.get(base) {
-            ResolvedType::Ref(t) | ResolvedType::MutRef(t) => {
-                self.type_contains_slice_view_inner(type_table, *t, visited)
-            }
-            ResolvedType::BuiltinArray(t) => {
-                self.type_contains_slice_view_inner(type_table, *t, visited)
-            }
-            ResolvedType::Newtype { base_type, .. } => {
-                self.type_contains_slice_view_inner(type_table, *base_type, visited)
-            }
-            ResolvedType::GenericInstance { def, type_args } => {
-                if type_table.is_compiler_item(*def, CompilerItem::Slice) {
-                    return true;
-                }
-                type_args
-                    .iter()
-                    .any(|t| self.type_contains_slice_view_inner(type_table, *t, visited))
-            }
-            ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.type_contains_slice_view_inner(type_table, *t, visited)),
-            ResolvedType::Struct { .. } => {
-                let field_types: Vec<TypeId> = self
-                    .struct_fields_of_type(base)
-                    .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
-                    .unwrap_or_default();
-                field_types
-                    .into_iter()
-                    .any(|t| self.type_contains_slice_view_inner(type_table, t, visited))
-            }
-            ResolvedType::Variant { .. } => self
-                .tysys
-                .case_payload_types(base)
-                .unwrap_or_default()
-                .into_iter()
-                .any(|t| self.type_contains_slice_view_inner(type_table, t, visited)),
-            _ => false,
-        }
-    }
-
-    fn type_contains_closure_inner(
-        &self,
-        type_table: &TypeTable,
-        type_id: TypeId,
-        visited: &mut IndexSet<TypeId>,
-    ) -> bool {
-        if !visited.insert(type_id) {
-            return false;
-        }
-        match type_table.get(type_id) {
-            ResolvedType::Function { .. } => true,
-            ResolvedType::Ref(t) | ResolvedType::MutRef(t) | ResolvedType::BuiltinArray(t) => {
-                self.type_contains_closure_inner(type_table, *t, visited)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.type_contains_closure_inner(type_table, *t, visited)),
-            ResolvedType::Newtype { base_type, .. } => {
-                self.type_contains_closure_inner(type_table, *base_type, visited)
-            }
-            ResolvedType::Struct { .. } => {
-                // Recurse into the struct's field types via the elaborator's
-                // pre-built field registry. Self-recursive structs are
-                // protected by `visited`.
-                let field_types: Vec<TypeId> = self
-                    .struct_fields_of_type(type_id)
-                    .map(|info| info.fields.iter().map(|(_, ty, _)| *ty).collect())
-                    .unwrap_or_default();
-                field_types
-                    .into_iter()
-                    .any(|t| self.type_contains_closure_inner(type_table, t, visited))
-            }
-            ResolvedType::Variant { .. } => self
-                .tysys
-                .case_payload_types(type_id)
-                .unwrap_or_default()
-                .into_iter()
-                .any(|t| self.type_contains_closure_inner(type_table, t, visited)),
-            _ => false,
         }
     }
 
@@ -2606,13 +2607,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            // A slice has no CM representation. Rejecting it here keeps the
+            // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && scope.type_contains_slice_view(type_id) {
-                let _ = scope.emit(TypeError::SliceAtCmBoundary {
+            if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(type_id) {
+                let _ = scope.emit(TypeError::BorrowAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
+                    borrow: scope.tysys.type_table.borrow().type_name(borrow),
                     span: param.span,
                 });
             }
@@ -2637,10 +2639,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: func.span,
             });
         }
-        if crosses_cm_boundary && scope.type_contains_slice_view(declared_return_type) {
-            let _ = scope.emit(TypeError::SliceAtCmBoundary {
+        if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
+            let _ = scope.emit(TypeError::BorrowAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
+                borrow: scope.tysys.type_table.borrow().type_name(borrow),
                 span: func.span,
             });
         }

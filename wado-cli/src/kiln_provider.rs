@@ -228,7 +228,7 @@ impl CliGeneratorProvider {
     /// is reported even though the run keeps the build it pinned.
     fn observe(&self, abs: &Path, bytes: &[u8]) {
         if let Some(run) = &self.run {
-            run.inputs().observe(abs, bytes);
+            run.observe(abs, bytes);
         }
     }
 
@@ -689,6 +689,10 @@ impl CompilerHost for SilentHost {
     fn env_var(&self, name: &str) -> Option<String> {
         self.inner.env_var(name)
     }
+
+    fn stdlib_module_read(&self, import_path: &str) {
+        self.inner.stdlib_module_read(import_path);
+    }
 }
 
 /// Build a [`ResolvedGenerator`] from a prebuilt generator component: recover
@@ -1038,23 +1042,39 @@ impl CliGeneratorProvider {
 
 impl GeneratorProvider for CliGeneratorProvider {
     async fn resolve(&self, module: &GeneratorModule) -> Result<ResolvedGenerator, ProviderError> {
-        if let Some(run) = &self.run
-            && let Some(pinned) = run.generators().get(&self.run_key(module))
-        {
+        let Some(run) = &self.run else {
+            return self.resolve_unpinned(module).await;
+        };
+        if let Some(pinned) = run.generators().get(&self.run_key(module), run) {
             return Ok(pinned);
         }
-        let resolved = match module {
+        // Resolved through a view of its own, so the reads it took are kept
+        // with the generator for every later compile that reuses it.
+        let resolution = run.scoped();
+        let resolved = self
+            .clone()
+            .with_run_cache(Arc::clone(&resolution))
+            .resolve_unpinned(module)
+            .await?;
+        // Two fixtures can resolve one generator at once; whichever lands
+        // first is the run's.
+        Ok(run
+            .generators()
+            .pin(self.run_key(module), resolved, &resolution, run))
+    }
+}
+
+impl CliGeneratorProvider {
+    async fn resolve_unpinned(
+        &self,
+        module: &GeneratorModule,
+    ) -> Result<ResolvedGenerator, ProviderError> {
+        match module {
             // A `Spec` reaching the provider is a *registry* build-dependency:
             // a path build-dependency is rewritten to `LocalPath` up front by
             // `compile::rewrite_build_dep_modules`.
-            GeneratorModule::Spec(spec) => self.resolve_spec(spec).await?,
-            GeneratorModule::LocalPath(path) => self.resolve_local(path).await?,
-        };
-        match &self.run {
-            // Two fixtures can resolve one generator at once; whichever lands
-            // first is the run's.
-            Some(run) => Ok(run.generators().pin(self.run_key(module), resolved)),
-            None => Ok(resolved),
+            GeneratorModule::Spec(spec) => self.resolve_spec(spec).await,
+            GeneratorModule::LocalPath(path) => self.resolve_local(path).await,
         }
     }
 }

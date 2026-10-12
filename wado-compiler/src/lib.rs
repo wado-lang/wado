@@ -148,6 +148,7 @@ pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
+use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
 
@@ -231,11 +232,21 @@ pub(crate) fn report_without_span<H: CompilerHost>(
     code: Code,
     message: String,
 ) {
+    report_at(logger, code, message, None);
+}
+
+/// Report a compilation error, at `span` where the pipeline knows one.
+fn report_at<H: CompilerHost>(
+    logger: &Logger<'_, H>,
+    code: Code,
+    message: String,
+    span: Option<Span>,
+) {
     let _ = logger.error(Diagnostic {
         severity: Severity::Error,
         code,
         message,
-        span: None,
+        span: span.map(|span| DiagnosticSpan::from_span(&span, None)),
     });
 }
 
@@ -259,6 +270,12 @@ pub(crate) fn bail_with<H: CompilerHost>(
     message: String,
 ) -> Bail {
     report_without_span(logger, code, message);
+    Bail
+}
+
+/// Report a synthesis failure, at the declaration it concerns where it names one.
+fn bail_with_synthesis<H: CompilerHost>(logger: &Logger<'_, H>, error: SynthesisError) -> Bail {
+    report_at(logger, Code::UnsupportedFeature, error.message, error.span);
     Bail
 }
 
@@ -1749,8 +1766,7 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(package)
-            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
+        synthesis::synthesize(package).map_err(|error| bail_with_synthesis(logger, error))?
     };
 
     // === Phase 8c: Effect Dispatch Synthesis ===
@@ -2248,7 +2264,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             let package = {
                 let _span = logger.span("synthesis");
                 synthesis::synthesize(package)
-                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
+                    .map_err(|error| bail_with_synthesis(&logger, error))?
             };
 
             // Effect dispatch synthesis (lowers WithHandler / Resume).

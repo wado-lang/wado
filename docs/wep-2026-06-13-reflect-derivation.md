@@ -55,9 +55,13 @@ carries a parallel metadata list or value accessor.
 
 A newtype is the one kind with no members: it has a base, and its value bridges
 are the bidirectional `From` the compiler already generates for it ([Conversion Traits](./wep-2026-03-16-conversion-traits.md) §7), so `ReflectNewtype` carries
-neither a member channel nor a bridge of its own. Its `#[wire(name_policy)]`
-names the newtype itself, which is why the policy sits on the root: it states a
-fact about the declaration rather than about anything under it.
+neither a member channel nor a bridge of its own. It takes no
+`#[wire(name_policy)]` either: a policy names members, and a newtype has its
+base's. So the root's `wire_name_policy()` on a newtype answers with the
+policy of the declaration it wraps, the one exception to the root answering
+for the type itself. A newtype that carried a policy of its own wrote its base's
+fields under it and read them back under the base's, so it could not read what
+it wrote.
 
 Identity and structure part ways at a newtype. It names _itself_ through the
 root, and inherits its base's structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)).

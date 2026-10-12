@@ -252,7 +252,6 @@ const WIRE_TARGET: &[AttrTarget] = &[
     AttrTarget::Variant,
     AttrTarget::VariantCase,
     AttrTarget::Flags,
-    AttrTarget::Newtype,
 ];
 
 /// The `#[wire(…)]` keys a declaration reads.
@@ -260,12 +259,11 @@ fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
     match target {
         AttrTarget::StructField => &["name", "positional", "default"],
         AttrTarget::EnumCase | AttrTarget::VariantCase => &["name"],
-        AttrTarget::Struct
-        | AttrTarget::Enum
-        | AttrTarget::Variant
-        | AttrTarget::Flags
-        | AttrTarget::Newtype => &["name_policy"],
+        AttrTarget::Struct | AttrTarget::Enum | AttrTarget::Variant | AttrTarget::Flags => {
+            &["name_policy"]
+        }
         AttrTarget::Module
+        | AttrTarget::Newtype
         | AttrTarget::Function
         | AttrTarget::Param
         | AttrTarget::GenericParam

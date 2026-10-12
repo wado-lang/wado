@@ -1,6 +1,16 @@
+// A flags value is one 32-bit word, so a declaration holds at most 32 members.
+// The over-wide declaration is the one error: the type and every member, the
+// ones past the word included, still resolve.
 flags Big { F0,F1,F2,F3,F4,F5,F6,F7,F8,F9,F10,F11,F12,F13,F14,F15,F16,F17,F18,F19,F20,F21,F22,F23,F24,F25,F26,F27,F28,F29,F30,F31,F32 }
+
+fn first(b: Big) -> bool {
+    return b & Big::F0 == Big::F32;
+}
 
 fn run() {}
 
 __DATA__
-{"compile_error": "flags `Big` has 33 members; at most 32 are supported"}
+{
+  "compile_error": ":4:7: analysis error: flags `Big` has 33 members; at most 32 are supported",
+  "compile_errors_not_contains": ["unknown type", "unknown identifier"]
+}

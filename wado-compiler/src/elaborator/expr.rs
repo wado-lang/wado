@@ -3145,7 +3145,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A struct's fields in declaration order, typed at this instance.
-    fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
+    pub(super) fn struct_field_types(&self, struct_type: TypeId) -> Option<Vec<(String, TypeId)>> {
         let resolved = self.tysys.type_table.borrow().get(struct_type).clone();
         let (info, type_args) = match resolved {
             ResolvedType::Struct { def, .. } => (self.lookup_struct_fields_of(def)?, Vec::new()),

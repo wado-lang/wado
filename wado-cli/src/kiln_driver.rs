@@ -1390,6 +1390,8 @@ mod tests {
 
             fn emit_diagnostic(&self, _d: Diagnostic) {}
 
+            fn stdlib_module_read(&self, _import_path: &str) {}
+
             async fn run_generator(
                 &self,
                 _wasm: &[u8],
@@ -1630,6 +1632,8 @@ mod tests {
             }
 
             fn emit_diagnostic(&self, _d: Diagnostic) {}
+
+            fn stdlib_module_read(&self, _import_path: &str) {}
         }
 
         fn runtime() -> tokio::runtime::Runtime {
@@ -1680,6 +1684,7 @@ mod tests {
                         })
                 }
                 fn emit_diagnostic(&self, _d: Diagnostic) {}
+                fn stdlib_module_read(&self, _import_path: &str) {}
                 async fn run_generator(
                     &self,
                     _wasm: &[u8],

@@ -869,6 +869,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return result;
         }
 
+        let self_ty = if is_policy {
+            self.tysys.type_table.borrow().wire_policy_subject(self_ty)
+        } else {
+            self_ty
+        };
         let Some((base_name, module_source, type_args)) = self.tysys.reflect_root_subject(self_ty)
         else {
             let self_name = self.tysys.type_table.borrow().type_name(self_ty);
