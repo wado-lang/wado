@@ -24,7 +24,15 @@ const options = arg === 'webgpu'
   : arg
   ? { intraOpNumThreads: parseInt(arg, 10), interOpNumThreads: 1 }
   : {};
-const session = await ort.InferenceSession.create(new URL('model.onnx', model).pathname, options);
+const created = ort.InferenceSession.create(new URL('model.onnx', model).pathname, options);
+// Not every host's onnxruntime-node serves WebGPU, and the arms after this
+// one still have something to measure there.
+const session = arg === 'webgpu'
+  ? await created.catch((e) => {
+    console.log(`SKIP: onnxruntime WebGPU (${e.message})`);
+    process.exit(0);
+  })
+  : await created;
 const recorded = JSON.parse(readFileSync(new URL('tokenize.json', model), 'utf8')).tokenize;
 const ids = recorded.find((t) => t.text === PROMPT).ids;
 
