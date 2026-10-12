@@ -1146,7 +1146,7 @@ impl Backend for WebGpuBackend {
         b: &Placed<f32, [K, N]>,
         then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
     ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, b, &then);
+        return self.matmul_shared(a, b, then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(

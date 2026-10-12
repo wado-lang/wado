@@ -330,17 +330,18 @@ fn module_idents() -> TreeSet<String> {
     }
     reserved.insert("forward");
     reserved.insert("pass");
-    reserved.insert("out");
     reserved.insert("Outputs");
     reserved.insert(PASSED);
     reserved.insert("weights");
     reserved.insert("Weights");
     reserved.insert(PREPARED);
     reserved.insert(KEPT);
-    // The methods `Weights` and `Prepared` carry, which a field must not share.
+    // The methods `Weights`, `Prepared` and `Kept` carry, which a field must
+    // not share.
     reserved.insert("prepare");
     reserved.insert("load");
     reserved.insert("embedded");
+    reserved.insert("new");
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
     return reserved;
@@ -549,9 +550,6 @@ fn rhs_weights(graph: &Graph, checked: &Checked) -> TreeMap<String, bool> {
         elsewhere: TreeSet::new(),
     };
     uses.note(graph, checked);
-    for let vi of &graph.outputs {
-        uses.elsewhere.insert(vi.name);
-    }
     let mut out = TreeMap::<String, bool>::new();
     for let vi of &graph.initializers {
         if let Some(transposed) = uses.right.get(vi.name) && !uses.elsewhere.contains(vi.name) && checked.shapes[vi.name].rank(
@@ -570,9 +568,14 @@ struct OperandUses {
 }
 
 impl OperandUses {
-    /// The reads of `graph`'s nodes and of the branches they carry. A tensor
-    /// read in both orientations is read elsewhere, as no one layout serves.
+    /// The reads of `graph`'s nodes, its outputs, and those of the branches
+    /// they carry, a branch's outputs being values it yields as tensors. A
+    /// tensor read in both orientations is read elsewhere, as no one layout
+    /// serves.
     fn note(&mut self, graph: &Graph, checked: &Checked) {
+        for let vi of &graph.outputs {
+            self.elsewhere.insert(vi.name);
+        }
         for let node of &graph.nodes {
             let orientation = rhs_orientation(node, &checked.shapes);
             for let [i, input] of node.inputs.into_iter().enumerate() {
@@ -918,17 +921,21 @@ fn emit_forward(
     w.blank();
     w.line("/// [`pass`], its outputs read back to the host.");
     forward.emit_begin(w);
-    w.line(`let out = pass(${arguments.join(", ")});`);
+    let passed = `pass(${arguments.join(", ")})`;
     let downloaded = |tensor: &String, place: String| {
         let read = `backend.download(&${place})`;
         return if converted(checked, held, tensor) { `narrow(&${read})` } else { read };
     };
+    // Bound to the outputs' own names, which the module's names already
+    // keep apart, so `forward` reserves none of its own.
     if !several {
-        w.line(`return ${downloaded(&graph.outputs[0].name, "out")};`);
+        w.line(`return ${downloaded(&graph.outputs[0].name, passed)};`);
     } else {
+        let idents: List<String> = graph.outputs.into_iter().map(|vi| names.get(&vi.name)).collect();
+        w.line(`let ${PASSED} { ${idents.join(", ")} } = ${passed};`);
         let fields: List<String> = graph.outputs.into_iter().map(|vi| {
-            let field = names.get(&vi.name);
-            return `${field}: ${downloaded(&vi.name, `out.${field}`)}`;
+            let ident = names.get(&vi.name);
+            return `${ident}: ${downloaded(&vi.name, ident)}`;
         }).collect();
         w.line(`return Outputs { ${fields.join(", ")} };`);
     }
