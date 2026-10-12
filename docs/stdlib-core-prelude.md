@@ -4702,6 +4702,8 @@ Append any `AsStrSlice` text to this one.
 
 #### `pub fn push_bytes<S: AsByteSlice>(&mut self, bytes: &S)`
 
+- `contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"`
+
 Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
 `ByteSlice`, or a `String`), which must be valid UTF-8 on their own.
 
@@ -4964,6 +4966,8 @@ can vouch for them: there is no marked form. Bytes the caller holds go
 to `from_utf8`.
 
 #### `pub fn from_utf8<S: AsByteSlice>(bytes: S) -> String`
+
+- `contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"`
 
 Copy bytes that must be valid UTF-8 into a `String`.
 

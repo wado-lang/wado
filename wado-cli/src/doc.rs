@@ -1021,7 +1021,14 @@ fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
 }
 
 fn render_md_function(out: &mut String, f: &DocFunction, h: &str) {
-    render_md_member(out, &f.signature, &f.attrs, &f.contracts, f.doc.as_deref(), h);
+    render_md_member(
+        out,
+        &f.signature,
+        &f.attrs,
+        &f.contracts,
+        f.doc.as_deref(),
+        h,
+    );
 }
 
 /// `text` as a code span. Text holding a backtick would close a plain span

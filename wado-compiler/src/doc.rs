@@ -2,10 +2,10 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssertStmt, AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
-    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl, Visibility,
-    type_head_name, written_params,
+    AssertStmt, AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam,
+    GlobalDecl, ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind,
+    StructDecl, StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl,
+    Visibility, type_head_name, written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
