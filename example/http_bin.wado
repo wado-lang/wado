@@ -191,7 +191,7 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
     let buf = body_stream.read_to_end_bytes();
     body_stream.drop();
-    return match decode_content(&coding, buf as ByteList) {
+    return match decode_content(&coding, buf) {
         Ok(decoded) => Result::Ok(String::try_from_utf8(decoded).unwrap_or("")),
         Err(UnsupportedCoding(c)) => Result::Err(RouteResponse {
             ..json_response(415, json_error(`Unsupported Content-Encoding: ${c}`)),

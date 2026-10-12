@@ -547,8 +547,11 @@ coherence Rule 1 gives the specific block, and monomorphization settles it by
 mangled-name collision. The source spells only the call through the template,
 so the template's method gets an edge to the specific block's same-named
 method — an edge, not a root: a program that never reaches the template needs
-neither block. A blanket over a bare type parameter (`impl<T: Shout> Show for T`) covers every head, so its method gets the edge to the same-named method of
-every other block of its trait. A call through the blanket's bound
+neither block.
+
+A blanket over a bare type parameter (`impl<T: Shout> Show for T`) covers
+every head, so its method gets the edge to the same-named method of every other
+block of its trait. A call through the blanket's bound
 (`fn f<T: Shout>(x: T) { x.show() }`) reaches the blanket alone, yet lands on
 the receiver's own block.
 
