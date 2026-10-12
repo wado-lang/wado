@@ -1053,7 +1053,13 @@ impl String {
     /// to `from_utf8`.
     pub fn try_from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _ {
         let collected: List<u8> = bytes.into_iter().collect();
-        return String::try_from_utf8_slice(collected.as_slice() as ByteSlice);
+        String::validate_utf8(&(collected.as_slice() as ByteSlice))?;
+        return Result::Ok(String::adopt_validated(collected));
+    }
+
+    fn adopt_validated(bytes: List<u8>) -> String {
+        let used = bytes.len();
+        return String { repr: bytes.internal_into_raw() as ByteArray, used };
     }
 
     /// Copy bytes that must be valid UTF-8 into a `String`.
@@ -1080,12 +1086,17 @@ impl String {
     /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
     /// sequence cut short at the end fails too, with `error_len() == None`.
     pub fn try_from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error> {
-        let prefix = String::utf8_valid_prefix(&bytes);
+        String::validate_utf8(&bytes)?;
+        return Result::Ok(String::copy_validated(&bytes));
+    }
+
+    fn validate_utf8(bytes: &ByteSlice) -> Result<(), Utf8Error> {
+        let prefix = String::utf8_valid_prefix(bytes);
         if prefix != bytes.len() {
             builtin::cold_path();
-            return Result::Err(String::utf8_error_at(&bytes, prefix));
+            return Result::Err(String::utf8_error_at(bytes, prefix));
         }
-        return Result::Ok(String::copy_validated(&bytes));
+        return Result::Ok(());
     }
 
     /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and
@@ -1232,8 +1243,8 @@ impl String {
     pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String with _ {
         let collected: List<u8> = bytes.into_iter().collect();
         let slice = collected.as_slice() as ByteSlice;
-        if let Ok(s) = String::try_from_utf8_slice(slice) {
-            return s;
+        if String::validate_utf8(&slice) matches { Ok(_) } {
+            return String::adopt_validated(collected);
         }
         builtin::cold_path();
         let len = slice.len();

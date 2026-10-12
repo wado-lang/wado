@@ -115,6 +115,12 @@ impl<T> List<T> {
         return &self.repr;
     }
 
+    /// The backing array, which may hold more than `len()` elements, taken
+    /// from a list the caller no longer needs.
+    internal fn internal_into_raw(self) -> Array<T> {
+        return self.repr;
+    }
+
     internal fn internal_from_raw(repr: Array<T>, used: i32) -> List<T> {
         return List { repr, used };
     }
