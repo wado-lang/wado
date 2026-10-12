@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791830053020,
+  "lastUpdate": 1791831242736,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66629,6 +66629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/6a8cdf70f15555aad6630abaab81b3ba528c22b4"
         },
         "date": 1791830052354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2943,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7320,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21814,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 342404,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "19ac7137f02e27e1791b26ba83d60f97e88b3f4e",
+          "message": "Merge pull request #2342 from wado-lang/effect-params-constituent-walk\n\nfix: an effect inside a generic newtype's argument reaches the effect check",
+          "timestamp": "2026-10-13T03:16:26+09:00",
+          "tree_id": "a57bab25183da083e59d425e2bd05e03947d3ee3",
+          "url": "https://github.com/wado-lang/wado/commit/19ac7137f02e27e1791b26ba83d60f97e88b3f4e"
+        },
+        "date": 1791831241789,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
