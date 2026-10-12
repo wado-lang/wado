@@ -768,18 +768,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn unify_labeled_block(
         &mut self,
         lb: &LabeledBlockExpr,
-        break_types: &[TypeId],
+        breaks: &[(Option<AstId>, TypeId)],
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let expected_type = self.settled_result_expectation(expected_type);
         let mut tail_type = self.labeled_block_tail_type(lb);
-        let mut break_types = break_types.to_vec();
+        let mut breaks = breaks.to_vec();
         if expected_type.is_none() {
-            tail_type = self.retarget_labeled_literals(lb, &mut break_types, tail_type);
+            tail_type = self.retarget_labeled_literals(lb, &mut breaks, tail_type);
         }
-        let mut branch_types: Vec<TypeId> = break_types
+        let mut branch_types: Vec<TypeId> = breaks
             .iter()
-            .copied()
+            .map(|&(_, ty)| ty)
             .chain(std::iter::once(tail_type))
             .collect();
         self.settle_branch_holes(&mut branch_types, expected_type);
@@ -803,22 +803,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Give the numeric-literal branches of a labeled block the type a sibling
     /// fixed, as [`Self::if_branch_types`] does for an `if`. A `break` with no
-    /// value yields `()`, which fixes no numeric type. Returns the tail's type.
+    /// value yields `()`, which fixes no numeric type. `breaks` is what the
+    /// resolved breaks recorded, each under its value's id, so a retargeted
+    /// value updates every record of it. Returns the tail's type.
     fn retarget_labeled_literals(
         &mut self,
         lb: &LabeledBlockExpr,
-        break_types: &mut Vec<TypeId>,
+        breaks: &mut [(Option<AstId>, TypeId)],
         tail_type: TypeId,
     ) -> TypeId {
-        let values = {
+        let values: Vec<&ast::Expr> = {
             let ctx = self.ctrl_flow_ctx();
             break_values(ctx, &lb.block, &lb.label)
-        };
-        assert!(
-            values.len() <= break_types.len(),
-            "every `break` value is one of the block's recorded breaks"
-        );
-        let valueless = break_types.len() - values.len();
+        }
+        .into_iter()
+        .filter(|v| breaks.iter().any(|&(id, _)| id == Some(v.id())))
+        .collect();
         let mut tails = NumericLiteralTails::default();
         let tail_is_literal = tail_type != TypeTable::NEVER
             && self.collect_block_numeric_literal_tails(&lb.block, tail_type, &mut tails)
@@ -836,19 +836,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return tail_type;
         };
         for &value in &values {
-            self.coerce_numeric_literal_tail(value, target);
+            if let Some(retargeted) = self.coerce_numeric_literal_tail(value, target) {
+                self.reach_tuple_overlays(value);
+                for (id, ty) in breaks.iter_mut() {
+                    if *id == Some(value.id()) {
+                        *ty = retargeted;
+                    }
+                }
+            }
         }
-        *break_types = values
-            .iter()
-            .map(|v| self.ast_expr_type(v).unwrap_or(TypeTable::UNKNOWN))
-            .chain(std::iter::repeat_n(TypeTable::UNIT, valueless))
-            .collect();
         if tail_is_literal {
             return self
                 .coerce_block_numeric_literal_tail(&lb.block, target)
                 .unwrap_or(tail_type);
         }
         tail_type
+    }
+
+    /// Copy what retargeting `value`'s literals recorded into every unrolled
+    /// tuple for-of element that recorded them first. Reify reads an element's
+    /// facts in place of the module's own, and a `break` value inside the loop
+    /// is retargeted only once the labeled block around it is unified, after
+    /// the elements were peeled off.
+    fn reach_tuple_overlays(&mut self, value: &ast::Expr) {
+        let mut ids = vec![value.id()];
+        let mut tails = NumericLiteralTails::default();
+        if self.collect_numeric_literal_tails(value, TypeTable::UNKNOWN, &mut tails) {
+            for literal in tails.literals {
+                ids.push(literal.id());
+                if let ast::Expr::Unary(unary) = literal
+                    && let ast::Expr::Literal(inner) = &unary.expr
+                {
+                    ids.push(inner.id);
+                }
+            }
+        }
+        let types = &mut self.sem.types;
+        let facts: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                (
+                    *id,
+                    types.expression_types.get(id).copied(),
+                    types.coercions.get(id).cloned(),
+                )
+            })
+            .collect();
+        for overlay in types.tuple_overlays.values_mut().flatten().flatten() {
+            for (id, ty, coercion) in &facts {
+                if !overlay.expression_types.contains_key(id) {
+                    continue;
+                }
+                if let Some(ty) = ty {
+                    overlay.expression_types.insert(*id, *ty);
+                }
+                if let Some(coercion) = coercion {
+                    overlay.coercions.insert(*id, coercion.clone());
+                }
+            }
+        }
     }
 
     /// What the path reaching the block's end yields, or `never` when no path

@@ -1,0 +1,24 @@
+// A labeled block whose `break` sits in a body the elaborator rejects before
+// resolving it: a `continue` in a tuple for-of. The rejection is reported,
+// and the unrecorded `break` does not crash the block's unification.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r = found: {
+        for let v of [1, "a"] {
+            if builtin::black_box(true) {
+                continue;
+            }
+            break found: 1;
+        }
+        0
+    };
+    println(`${r}`);
+}
+
+__DATA__
+{
+    "compile_error": ":11:17: analysis error: invalid pattern: `continue` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)",
+    "compile_error_codes": ["INVALID_SYNTAX"]
+}

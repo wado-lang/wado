@@ -3115,9 +3115,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `expected_type` lookup above and WIR `br` depth resolution.
         if let Some(label) = &break_stmt.label {
             let branch_type = value.unwrap_or(TypeTable::UNIT);
+            let value_id = break_stmt.value.as_ref().map(|v| v.id());
             for target in ctx.labeled_block_targets.iter_mut().rev() {
                 if &target.label == label {
-                    target.break_types.push(branch_type);
+                    target.break_types.push((value_id, branch_type));
                     break;
                 }
             }

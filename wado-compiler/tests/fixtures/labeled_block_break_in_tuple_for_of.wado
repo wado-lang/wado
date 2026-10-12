@@ -1,0 +1,39 @@
+// A `break` inside a tuple for-of is resolved once per element, so the
+// labeled block records it more than once. The block's type still comes from
+// what each branch yields, and a numeric literal still takes the type a
+// sibling fixes.
+
+use { println, Stdout } from "core:cli";
+
+fn first_big(fallback: u8) -> u8 {
+    let found = search: {
+        for let v of [1 as u8, 200 as u8] {
+            if v > 100 {
+                break search: v;
+            }
+        }
+        fallback
+    };
+    return found;
+}
+
+fn first_big_or_zero() -> u64 {
+    let found = search: {
+        for let v of [1 as u64, 200 as u64] {
+            if v > 100 {
+                break search: 0;
+            }
+        }
+        builtin::black_box(7 as u64)
+    };
+    return found;
+}
+
+export fn run() with Stdout {
+    println(`${first_big(9)} ${first_big_or_zero()}`);
+}
+
+__DATA__
+{
+    "stdout": "200 0\n"
+}
