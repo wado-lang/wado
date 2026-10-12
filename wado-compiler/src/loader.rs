@@ -1485,6 +1485,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         self.check_stdlib_identities()?;
+        for import_path in self.loaded.keys().filter_map(stdlib_cache_key) {
+            self.host.stdlib_module_read(&import_path);
+        }
 
         // Collect and load files referenced by #include_str / #include_bytes
         let included_files = {

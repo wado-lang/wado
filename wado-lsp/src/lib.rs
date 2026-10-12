@@ -792,6 +792,10 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.env_var(name)
     }
 
+    fn stdlib_module_read(&self, import_path: &str) {
+        self.inner.stdlib_module_read(import_path);
+    }
+
     fn run_generator(
         &self,
         component_wasm: &[u8],

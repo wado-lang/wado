@@ -275,6 +275,10 @@ impl CompilerHost for SnapshotHost {
         );
     }
 
+    /// The snapshot is the stdlib itself, shared by every compile, each of
+    /// which reports the modules it takes.
+    fn stdlib_module_read(&self, _import_path: &str) {}
+
     async fn run_generator(
         &self,
         _component_wasm: &[u8],

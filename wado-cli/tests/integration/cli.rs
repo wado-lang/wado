@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use predicates::prelude::*;
 
-use crate::common::{custom_sections, wado, wado_in};
+use crate::common::{custom_sections, wado, wado_in, wado_test};
 
 /// A project under a directory whose name contains a space must compile. The
 /// entry is passed by ABSOLUTE path so the Kiln harvest uses an absolute
@@ -814,8 +814,8 @@ fn test_trace_env_var_reaches_stderr() {
 
 #[test]
 fn test_test_passing() {
-    wado()
-        .args(["test", "wado-compiler/tests/fixtures/test_decl.wado"])
+    wado_test()
+        .args(["wado-compiler/tests/fixtures/test_decl.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("2 passed, 0 failed"));
@@ -825,8 +825,8 @@ fn test_test_passing() {
 fn test_test_installs_the_stdlib_before_anything_reaches_it() {
     // A dev build takes the stdlib from its host, and the prewarm workers
     // reached it first: one swallowed panic per worker (issue #2102).
-    wado()
-        .args(["test", "wado-compiler/tests/fixtures/test_decl.wado"])
+    wado_test()
+        .args(["wado-compiler/tests/fixtures/test_decl.wado"])
         .assert()
         .success()
         .stderr(predicate::str::contains("panicked").not());
@@ -836,14 +836,8 @@ fn test_test_installs_the_stdlib_before_anything_reaches_it() {
 fn test_test_evaluates_on_a_single_cpu_permit() {
     // An `eval` compile takes its test's only permit, so the test must be able
     // to take it back once the compile ends.
-    wado()
-        .args([
-            "test",
-            "--parallel",
-            "1",
-            "--no-cache",
-            "wado-compiler/lib/core/eval_test.wado",
-        ])
+    wado_test()
+        .args(["--parallel", "1", "wado-compiler/lib/core/eval_test.wado"])
         .timeout(Duration::from_secs(300))
         .assert()
         .success()
@@ -852,20 +846,167 @@ fn test_test_evaluates_on_a_single_cpu_permit() {
 
 #[test]
 fn test_test_failing() {
-    wado()
-        .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_fail.wado"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("1 passed, 1 failed"));
 }
 
 #[test]
-fn test_test_unexpectedly_passed_todo_says_what_the_mark_meant() {
+fn test_test_skips_a_passed_file_until_something_it_read_changes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dep = tmp.path().join("dep.wado");
+    let body = |n: i32| format!("pub fn two() -> i32 {{\n    return {n};\n}}\n");
+    std::fs::write(&dep, body(2)).unwrap();
+    let main = tmp.path().join("main_test.wado");
+    std::fs::write(
+        &main,
+        "use { two } from \"./dep.wado\";\n\ntest \"adds\" {\n    assert two() + 1 == 3;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(&main).assert();
+
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:").not());
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"))
+        .stdout(predicate::str::contains("1 passed, 0 failed"));
+    wado_test()
+        .arg(&main)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cached:").not());
+
+    std::fs::write(&dep, body(3)).unwrap();
+    run()
+        .failure()
+        .stdout(predicate::str::contains("0 passed, 1 failed"));
+    // A failure is never cached.
+    run()
+        .failure()
+        .stdout(predicate::str::contains("cached:").not());
+}
+
+#[test]
+fn test_test_reruns_a_passed_file_once_a_path_dependency_names_another_entry() {
+    let tmp = tempfile::tempdir().unwrap();
+    let greet = tmp.path().join("greet");
+    std::fs::create_dir_all(&greet).unwrap();
+    let manifest =
+        |lib: &str| format!("[package]\nname = \"greet\"\nversion = \"0.1.0\"\nlib = \"{lib}\"\n");
+    std::fs::write(greet.join("wado.toml"), manifest("a.wado")).unwrap();
+    std::fs::write(greet.join("a.wado"), "pub fn n() -> i32 { return 1; }\n").unwrap();
+    std::fs::write(greet.join("b.wado"), "pub fn n() -> i32 { return 2; }\n").unwrap();
+    let app = tmp.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("wado.toml"),
+        "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\ngreet = { path = \"../greet\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("app_test.wado"),
+        "use { n } from \"greet\";\n\ntest \"one\" {\n    assert n() == 1;\n}\n",
+    )
+    .unwrap();
+    let run = || wado().arg("test").arg(app.join("app_test.wado")).assert();
+
+    run().success();
+    run()
+        .success()
+        .stdout(predicate::str::contains("cached:  1 files"));
+    std::fs::write(greet.join("wado.toml"), manifest("b.wado")).unwrap();
+    run()
+        .failure()
+        .stdout(predicate::str::contains("0 passed, 1 failed"));
+}
+
+#[test]
+fn test_test_keys_its_cache_by_the_compilers_environment() {
+    // The compiler reads `WADO_*` itself, and they change what it emits.
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("env_test.wado");
+    std::fs::write(&main, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
+    wado().arg("test").arg(&main).assert().success();
     wado()
-        .args([
-            "test",
-            "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
-        ])
+        .env("WADO_SKIP_PASS", "inline")
+        .arg("test")
+        .arg(&main)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("cached:").not());
+}
+
+#[test]
+fn test_test_reports_on_every_run_what_a_cache_cannot_hold() {
+    let tmp = tempfile::tempdir().unwrap();
+    let empty = tmp.path().join("empty_test.wado");
+    std::fs::write(&empty, "pub fn f() -> i32 {\n    return 1;\n}\n").unwrap();
+    let fuel = tmp.path().join("fuel_test.wado");
+    std::fs::write(&fuel, "test \"t\" {\n    assert 1 + 1 == 2;\n}\n").unwrap();
+    for _ in 0..2 {
+        // A file without tests is a skip, which says it holds none.
+        wado()
+            .arg("test")
+            .arg(&empty)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("skip:"))
+            .stdout(predicate::str::contains("cached:").not());
+        wado()
+            .args(["test", "--report-fuel"])
+            .arg(&fuel)
+            .assert()
+            .success()
+            .stdout(predicate::str::is_match(r"fuel \d+").unwrap());
+    }
+}
+
+#[test]
+fn test_test_runs_a_file_named_twice_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("twice_test.wado");
+    std::fs::write(
+        &main,
+        "test \"a\" {\n    assert 1 == 1;\n}\n\ntest \"b\" {\n    assert 2 == 2;\n}\n",
+    )
+    .unwrap();
+    wado()
+        .arg("test")
+        .arg(tmp.path())
+        .arg(&main)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2 passed, 0 failed"));
+}
+
+#[test]
+fn test_test_never_caches_a_file_taking_input_at_run_time() {
+    // What it receives at run time is no input its compile recorded.
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("random_test.wado");
+    std::fs::write(
+        &main,
+        "use secure_random from \"core:secure_random\";\n\ntest \"draws\" {\n    assert secure_random::bytes(4).len() == 4;\n}\n",
+    )
+    .unwrap();
+    for _ in 0..2 {
+        wado()
+            .args(["test"])
+            .arg(&main)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("cached:").not());
+    }
+}
+
+#[test]
+fn test_test_unexpectedly_passed_todo_says_what_the_mark_meant() {
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_todo_unexpected_pass.wado"])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
@@ -878,9 +1019,8 @@ fn test_test_unexpectedly_passed_todo_says_what_the_mark_meant() {
 
 #[test]
 fn test_test_unexpectedly_passed_todo_in_tap() {
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "tap",
             "wado-cli/tests/fixtures/test_todo_unexpected_pass.wado",
@@ -893,11 +1033,8 @@ fn test_test_unexpectedly_passed_todo_in_tap() {
 
 #[test]
 fn test_test_unexpectedly_passed_todo_in_a_todo_module_points_at_the_module() {
-    wado()
-        .args([
-            "test",
-            "wado-cli/tests/fixtures/test_todo_module_unexpected_pass.wado",
-        ])
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_todo_module_unexpected_pass.wado"])
         .assert()
         .failure()
         .stdout(predicate::str::contains(
@@ -911,8 +1048,8 @@ fn test_test_unexpectedly_passed_todo_in_a_todo_module_points_at_the_module() {
 fn test_test_trap_names_its_reason() {
     // The reason is the cause under wasmtime's backtrace context: a plain
     // `Display` leaves it out, and `Debug` adds the host's own backtrace.
-    wado()
-        .args(["test", "wado-cli/tests/fixtures/test_trap.wado"])
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_trap.wado"])
         .env("RUST_BACKTRACE", "1")
         .assert()
         .failure()
@@ -926,8 +1063,8 @@ fn test_test_heartbeat_is_default_and_reports_failure_immediately() {
     // log lines and no per-test `ok`/`FAILED` lines (that's `verbose`
     // territory) — but a failing test still gets its own `not ok` line,
     // not just a buried count in the final summary.
-    wado()
-        .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_fail.wado"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("not ok"))
@@ -942,8 +1079,8 @@ fn test_test_heartbeat_discards_output_from_passing_tests() {
     // A passing test's own stdout is captured (not left to race directly
     // onto the real stdout — see `runtime::create_test_store`); heartbeat
     // discards it since there's nothing that needs attention.
-    wado()
-        .args(["test", "wado-cli/tests/fixtures/test_stdout.wado"])
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_stdout.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("hello from the test body").not());
@@ -953,8 +1090,8 @@ fn test_test_heartbeat_discards_output_from_passing_tests() {
 fn test_test_heartbeat_shows_captured_stderr_on_failure() {
     // A failing test's captured stderr is attached to its immediate
     // failure notice — not just discarded like a passing test's output.
-    wado()
-        .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
+    wado_test()
+        .args(["wado-cli/tests/fixtures/test_fail.wado"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("stderr:"))
@@ -966,9 +1103,8 @@ fn test_test_verbose_shows_captured_stdout_inline() {
     // verbose is a full transcript: a passing test's own stdout prints
     // right under its `ok` line, in order, instead of being discarded or
     // racing directly onto the real stdout.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "verbose",
             "wado-cli/tests/fixtures/test_stdout.wado",
@@ -982,9 +1118,8 @@ fn test_test_verbose_shows_captured_stdout_inline() {
 
 #[test]
 fn test_test_report_fuel_joins_the_duration() {
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "verbose",
             "--report-fuel",
@@ -999,12 +1134,8 @@ fn test_test_report_fuel_joins_the_duration() {
 /// run asked for.
 #[test]
 fn test_test_heartbeat_shows_a_passing_tests_fuel() {
-    wado()
-        .args([
-            "test",
-            "--report-fuel",
-            "wado-cli/tests/fixtures/test_stdout.wado",
-        ])
+    wado_test()
+        .args(["--report-fuel", "wado-cli/tests/fixtures/test_stdout.wado"])
         .assert()
         .success()
         .stdout(
@@ -1018,9 +1149,8 @@ fn test_test_tap_renders_captured_output_as_comments_or_yaml_fields() {
     // stdout renders as one; a failing test's captured stderr instead
     // becomes a `stderr:` field in the same YAML block as `message:`,
     // since that's the one place TAP already gathers rich diagnostics.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "tap",
             "wado-cli/tests/fixtures/test_stdout.wado",
@@ -1040,9 +1170,8 @@ fn test_test_heartbeat_reports_skip_for_files_without_test_blocks() {
     // `skip` axis (not silently folded into `load: N ok`) is how a
     // developer notices "this file has no tests" rather than assuming
     // it was covered.
-    wado()
+    wado_test()
         .args([
-            "test",
             "wado-cli/tests/fixtures/test_no_test_blocks.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
@@ -1061,9 +1190,8 @@ fn test_test_tap_format_produces_a_tap14_document() {
     // file with no `test` blocks, a `# Subtest:` block (with its own
     // leading plan) for a file with tests, and diagnostics as a YAML
     // block under a failing Test Point.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "tap",
             "wado-cli/tests/fixtures/test_no_test_blocks.wado",
@@ -1096,9 +1224,8 @@ fn test_test_filter_keeps_matching_path() {
     // --filter is a path-based wildcard. `*` does not cross path
     // separators (consistent with shell glob and `.gitignore`); use `**`
     // to match across directories.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--filter",
             "**/test_decl.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
@@ -1111,9 +1238,8 @@ fn test_test_filter_keeps_matching_path() {
 #[test]
 fn test_test_filter_repeatable_keeps_union_of_matches() {
     // `--filter` is repeatable: a path is kept when any pattern matches.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--filter",
             "**/test_decl.wado",
             "--filter",
@@ -1130,9 +1256,8 @@ fn test_test_compile_failure_reported_on_compile_axis() {
     // A file that fails to compile must (a) not abort the run, (b) be reported
     // on the `compile` axis, and (c) cause a non-zero exit. The peer file
     // still compiles and its passing test still runs.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "verbose",
             "wado-cli/tests/fixtures/test_compile_error.wado",
@@ -1151,9 +1276,8 @@ fn test_test_compile_failure_reported_on_compile_axis() {
 
 #[test]
 fn test_test_heartbeat_recaps_compile_failures_at_end() {
-    wado()
+    wado_test()
         .args([
-            "test",
             "wado-cli/tests/fixtures/test_compile_error.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
         ])
@@ -1169,9 +1293,8 @@ fn test_test_heartbeat_recaps_compile_failures_at_end() {
 
 #[test]
 fn test_test_tap_recaps_compile_failures_at_end() {
-    wado()
+    wado_test()
         .args([
-            "test",
             "--format",
             "tap",
             "wado-cli/tests/fixtures/test_compile_error.wado",
@@ -1194,12 +1317,8 @@ fn test_test_no_run_skips_phase_two() {
     // wasmtime execution phase so the two tests in `test_decl.wado` do
     // not run; (c) exit 0. The compile axis shows 1 ok and the test
     // axis shows zero passes.
-    wado()
-        .args([
-            "test",
-            "--no-run",
-            "wado-compiler/tests/fixtures/test_decl.wado",
-        ])
+    wado_test()
+        .args(["--no-run", "wado-compiler/tests/fixtures/test_decl.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("compile: 1 ok, 0 failed"))
@@ -1214,9 +1333,8 @@ fn test_test_no_run_surfaces_todo_compile_errors() {
     // detectable at compile time and must stay visible — both as a
     // `todo: N pending` summary line and in the consolidated
     // `TODO tests:` section, matching the normal-run path's parity.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--no-run",
             "--format",
             "verbose",
@@ -1235,9 +1353,8 @@ fn test_test_no_run_surfaces_todo_compile_errors() {
 #[test]
 fn test_test_filter_drops_non_matching_path() {
     // No path matches the pattern, so no test files remain to run.
-    wado()
+    wado_test()
         .args([
-            "test",
             "--filter",
             "**/does_not_match.wado",
             "wado-compiler/tests/fixtures/test_decl.wado",
@@ -1250,13 +1367,8 @@ fn test_test_filter_drops_non_matching_path() {
 #[test]
 fn test_test_parallel_option() {
     // Test with explicit parallel count
-    wado()
-        .args([
-            "test",
-            "-p",
-            "2",
-            "wado-compiler/tests/fixtures/test_decl.wado",
-        ])
+    wado_test()
+        .args(["-p", "2", "wado-compiler/tests/fixtures/test_decl.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("2 passed, 0 failed"));
@@ -1265,9 +1377,8 @@ fn test_test_parallel_option() {
 #[test]
 fn test_test_parallel_long_option() {
     // Test with long option
-    wado()
+    wado_test()
         .args([
-            "test",
             "--parallel",
             "1",
             "wado-compiler/tests/fixtures/test_decl.wado",

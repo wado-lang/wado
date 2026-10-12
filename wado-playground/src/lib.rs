@@ -92,6 +92,10 @@ impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
             self.inner.emit_diagnostic(diagnostic);
         }
     }
+
+    fn stdlib_module_read(&self, import_path: &str) {
+        self.inner.stdlib_module_read(import_path);
+    }
 }
 
 /// Compiler options shared by the browser entry point and the tests, so the

@@ -239,21 +239,31 @@ n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 ./scripts/exclusive.sh test cargo test -- --test-threads="$threads"
 """
 
+[tasks.test-e2e]
+description = "Run the compiler's e2e fixtures at O0 and O2: the check for a compiler change"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+touch wado-compiler/tests/e2e.rs
+n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
+./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- --test-threads="$threads"
+"""
+
 [tasks.test-wado]
 description = "Run Wado module tests"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# package-gale and the stdlib are excluded in CI only, where test-gale-o2 and
-# `test-stdlib` or `test-stdlib-coverage` (once per optimization level) cover
-# them; locally one run walks every nested package. benchmark/* test blocks need
+# package-gale and the stdlib are excluded: `test-gale-o2` and `test-stdlib`
+# cover them, and the full run reaches the stdlib through
+# `update-stdlib-coverage-baseline` already. benchmark/* test blocks need
 # no `--dir`: their file reads sit in `export fn run()`, which the test world
 # never calls. Same batch-compilation shape as `test-gale-o2`, whose comment
 # explains the purge and what holding the pages costs in RSS.
 export MIMALLOC_PURGE_DELAY=-1
-extra_args=()
+extra_args=(--exclude 'package-gale/**' --exclude 'wado-compiler/**')
 if [ -n "${CI:-}" ]; then
-    extra_args+=(--exclude 'package-gale/**' --exclude 'wado-compiler/**' --format tap)
+    extra_args+=(--format tap)
 fi
 ./scripts/exclusive.sh test-wado scripts/dev-bin.sh wado test -O2 "${extra_args[@]}"
 """
