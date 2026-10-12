@@ -1491,6 +1491,10 @@ test "a constant with no operator to fold into is a rank-0 literal" {
 
     assert out.contains("C: backend.keep(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] }),");
     assert out.contains(`let Y = backend.fused::<[]>([backend.read(&weights.C)], &${unary(UnaryOp::Relu)});`);
+    // `Weights::prepare` and `Prepared::embedded` both hold it, from one copy
+    // of its data: a mask is as large as the context it covers.
+    assert out.split("data: [0.5 as f32]").count() == 2;
+    assert out.split("C: kept.C,").count() == 3;
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {

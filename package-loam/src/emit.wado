@@ -330,6 +330,7 @@ fn module_idents() -> TreeSet<String> {
     reserved.insert("weights");
     reserved.insert("Weights");
     reserved.insert(PREPARED);
+    reserved.insert(KEPT);
     // The methods `Weights` and `Prepared` carry, which a field must not share.
     reserved.insert("prepare");
     reserved.insert("load");
@@ -351,6 +352,10 @@ global PASSED: String = "Passed";
 /// The struct `forward` reads the weights from, and its type over the backend.
 global PREPARED: String = "Prepared";
 global PREPARED_TYPE: String = `${PREPARED}<${BACKEND_PARAM}>`;
+
+/// The struct the constructors of `Prepared` take its kept literals from.
+global KEPT: String = "Kept";
+global KEPT_TYPE: String = `${KEPT}<${BACKEND_PARAM}>`;
 
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
 /// one, and a name may start with a digit.
@@ -404,6 +409,7 @@ fn emit_weights(
         "backend",
         `&mut ${BACKEND_PARAM}`,
     ).set_return_type(PREPARED_TYPE).add_effect("_").emit_begin(w);
+    emit_kept_binding(w, kept);
     w.begin(`return ${PREPARED}`);
     let matrices = matrix_weights(graph, checked);
     for let vi of &graph.initializers {
@@ -411,7 +417,7 @@ fn emit_weights(
         let holding = weight_holding(&matrices, &vi.name);
         w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, holding)},`);
     }
-    emit_kept_literals(w, checked, names, kept);
+    emit_kept_fields(w, names, kept);
     w.end_with(";");
     w.end();
     w.end();
@@ -419,12 +425,51 @@ fn emit_weights(
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
     emit_constructor(w, graph, checked, names, held, &matrices, kept);
+    if !kept.is_empty() {
+        emit_kept(w, checked, names, kept);
+    }
 }
 
-/// The `Prepared` fields of the `kept` literals, each built where it is kept.
-fn emit_kept_literals(w: &mut CodeWriter, checked: &Checked, names: &Names, kept: &List<String>) {
+/// `Kept`, the `kept` literals as the backend holds them, built once by
+/// `Kept::new` for each constructor of `Prepared` to take apart: spelled in
+/// each, a mask's data would be in the module twice.
+fn emit_kept(w: &mut CodeWriter, checked: &Checked, names: &Names, kept: &List<String>) {
+    let mut held = StructSpec::new(KEPT);
+    held.add_generic(BACKEND_BOUND);
+    for let tensor of kept {
+        held.add_field(names.get(tensor), prepared_type(checked, tensor));
+    }
+    w.blank();
+    w.line("/// The folded tensors `Prepared` holds, which no symbol enters.");
+    held.emit(w);
+    w.blank();
+    let mut block = ImplSpec::new(KEPT_TYPE);
+    block.add_generic(BACKEND_BOUND);
+    block.emit_begin(w);
+    FnSpec::new("new").add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(KEPT_TYPE).add_effect("_").emit_begin(
+        w,
+    );
+    w.begin(`return ${KEPT}`);
     for let tensor of kept {
         w.line(`${names.get(tensor)}: ${kept_literal(checked, tensor)},`);
+    }
+    w.end_with(";");
+    w.end();
+    w.end();
+}
+
+/// The binding of `Kept` a constructor of `Prepared` reads its fields from.
+fn emit_kept_binding(w: &mut CodeWriter, kept: &List<String>) {
+    if !kept.is_empty() {
+        w.line(`let kept = ${KEPT}::new(backend);`);
+    }
+}
+
+/// The `Prepared` fields of the `kept` literals, read from that binding.
+fn emit_kept_fields(w: &mut CodeWriter, names: &Names, kept: &List<String>) {
+    for let tensor of kept {
+        let ident = names.get(tensor);
+        w.line(`${ident}: kept.${ident},`);
     }
 }
 
@@ -546,12 +591,14 @@ fn emit_constructor(
             "&ByteList",
         ).set_return_type(`Result<${PREPARED_TYPE}, LoadError>`).add_effect("_").emit_begin(w);
         w.line("let header = read_checkpoint(checkpoint)?;");
+        emit_kept_binding(w, kept);
         w.begin(`return Result::Ok(${PREPARED}`);
     } else {
         w.line("/// The weights the graph carries.");
         FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
             PREPARED_TYPE,
         ).add_effect("_").emit_begin(w);
+        emit_kept_binding(w, kept);
         w.begin(`return ${PREPARED}`);
     }
     for let vi of &graph.initializers {
@@ -566,7 +613,7 @@ fn emit_constructor(
         let holding = weight_holding(matrices, &vi.name);
         w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, holding)},`);
     }
-    emit_kept_literals(w, checked, names, kept);
+    emit_kept_fields(w, names, kept);
     w.end_with(if loads { ");" } else { ";" });
     w.end();
     w.end();
