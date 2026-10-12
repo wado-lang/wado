@@ -1590,12 +1590,7 @@ impl Analyzer<'_> {
             return None;
         };
         let retained = self.retained_by(func, args.len(), call);
-        let mutates_receiver =
-            param == 0 && args.split().0.is_some() && self.mutates_receiver(func);
-        if clean_root(lent) != Some(place.root)
-            || retained.keeps(u32::try_from(param).unwrap())
-            || mutates_receiver
-        {
+        if clean_root(lent) != Some(place.root) || retained.keeps(u32::try_from(param).unwrap()) {
             return None;
         }
         for (pos, a) in args.iter().enumerate() {

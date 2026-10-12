@@ -1,0 +1,19 @@
+// A handler of an async operation that misdeclares its return reports the
+// declaration, not a crash comparing the handler against it.
+interface Fetch {
+    async fn get(n: i32) -> i32;
+}
+
+struct Echo {}
+
+impl Fetch for Echo {
+    fn get(&mut self, n: i32) -> i32 {
+        resume n;
+    }
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "must return `AsyncCall<T>`"}

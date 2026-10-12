@@ -1389,9 +1389,8 @@ impl JsonDeserializer {
     }
 
     /// The `MalformedInput` error for invalid UTF-8 string content at `start`
-    /// (RFC 8259 §8.1). A cold-path builder so call sites can match
-    /// `String::try_from_utf8`'s own `Result` inline (extracting the `String`
-    /// with no re-wrapping allocation on the hot path) yet share one error.
+    /// (RFC 8259 §8.1), built off the hot path for every site whose scan
+    /// found the run invalid.
     fn invalid_utf8_string(&self, start: i32) -> DeserializeError {
         builtin::cold_path();
         return DeserializeError::malformed("invalid UTF-8 in string", start as i64);

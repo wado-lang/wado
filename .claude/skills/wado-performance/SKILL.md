@@ -228,8 +228,7 @@ paid on a benchmark `fts` never touched.
   both. A run of adjacent `push` / `push_str` calls is fused into one capacity
   check by `nir/string_push`, so write the appends plainly and let it batch them.
 - **Returning `Array<T>` by value copies it while its source stays live** — for
-  one element, read with `get_unchecked` or write with
-  `internal_set_byte_unchecked`.
+  one element, read with `get_unchecked` or write through the owner's index.
 - **An `assert` of a caller-guaranteed precondition is free; the same test as a
   guard is not.** `is_json_ws` in `core:json` needs `b < 64` (Wasm masks a shift
   count mod 64) and every call site short-circuits on `b > b' '` first. Writing

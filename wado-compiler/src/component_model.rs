@@ -660,12 +660,6 @@ static BYTE_LIST_BASE: LazyLock<Type> = LazyLock::new(|| {
     })
 });
 
-/// The base of a prelude newtype a binding names, which no CM interface
-/// declares.
-pub fn prelude_newtype_base(named: &NamedType) -> Option<&'static Type> {
-    (named.name == BYTE_LIST).then(|| &*BYTE_LIST_BASE)
-}
-
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
 /// type is a reference, so a copyable handle is a number: an `f64`, which jco
 /// hands JavaScript as a plain number where a `u64` would be a `BigInt`.
@@ -3277,11 +3271,21 @@ impl CmInterfaceRegistry {
     /// Resolve a newtype *reference* to its aliased base type by its declaring
     /// interface (`NamedType::source_interface`), so two modules that declare a
     /// same-named newtype resolve to their own base — never a bare-name guess.
-    /// A source-less reference is not a known newtype here.
+    /// A source-less reference is a known newtype only as a prelude one.
     fn resolve_newtype_ref(&self, named: &NamedType) -> Option<&Type> {
-        self.source_interface(named)
-            .and_then(|source| self.get_newtype_by_source(&source, &DeclName::new(&named.name)))
-            .or_else(|| prelude_newtype_base(named))
+        match self.source_interface(named) {
+            Some(source) => self.get_newtype_by_source(&source, &DeclName::new(&named.name)),
+            None => self.prelude_newtype_base(named),
+        }
+    }
+
+    /// The base of the prelude newtype `named` refers to. A reference with a
+    /// declaring interface names that interface's type, whatever its name.
+    pub fn prelude_newtype_base(&self, named: &NamedType) -> Option<&'static Type> {
+        if self.source_interface(named).is_some() {
+            return None;
+        }
+        (named.name == BYTE_LIST).then(|| &*BYTE_LIST_BASE)
     }
 
     /// The registration source and base type of a newtype the compiled package
@@ -5138,7 +5142,8 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named) else {
-                return prelude_newtype_base(named)
+                return registry
+                    .prelude_newtype_base(named)
                     .map_or_else(unregistered, |base| cm_layout_with_registry(base, registry));
             };
             if let Some(resolved) =

@@ -2401,14 +2401,6 @@ impl CompilerItems {
         self.require_enum(item).1
     }
 
-    /// Name-only convenience for a [`CompilerItemKind::Newtype`] item.
-    pub fn newtype_name(&self, item: CompilerItem) -> &str {
-        match self.require(item) {
-            Resolved::Newtype { name, .. } => name.as_str(),
-            other => kind_mismatch_ice(item, "Newtype", other),
-        }
-    }
-
     /// Name-only convenience for a [`CompilerItemKind::Method`] item.
     /// Returns the unmangled method name (e.g. `"push_str"`).
     pub fn method_name(&self, item: CompilerItem) -> &str {

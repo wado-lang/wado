@@ -281,12 +281,7 @@ pub fn cm_type_to_type_id(
         Type::Named(named) if named.name.as_str() == string_struct_name => {
             type_table.make_compiler_struct(CompilerItem::String)
         }
-        Type::Named(named)
-            if named.name.as_str()
-                == type_table
-                    .compiler_items()
-                    .newtype_name(CompilerItem::ByteList) =>
-        {
+        Type::Named(named) if registry.prelude_newtype_base(named).is_some() => {
             type_table.make_byte_list()
         }
         Type::Named(named) => match named.name.as_str() {

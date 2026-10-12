@@ -720,9 +720,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let handle_at = (op.self_kind != SelfKind::None).then_some(0);
             let table = self.tysys.type_table.borrow();
             let resumed = if op.is_async {
-                table
-                    .as_async_call(expected.return_type)
-                    .expect("an async operation returns `AsyncCall<T>`")
+                // An async operation declared without `AsyncCall<T>` is
+                // reported at its declaration, which leaves nothing to compare.
+                let Some(carried) = table.as_async_call(expected.return_type) else {
+                    continue;
+                };
+                carried
             } else {
                 expected.return_type
             };

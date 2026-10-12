@@ -18,7 +18,7 @@ use crate::ast::NamedType;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
-    parse_resource_func, prelude_newtype_base,
+    parse_resource_func,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
@@ -817,7 +817,10 @@ impl<'a> Emitter<'a> {
                 if let Some(handle) = self.extern_handle(named) {
                     return Ok(handle);
                 }
-                if let Some(base) = prelude_newtype_base(named) {
+                if let Some(base) = self
+                    .cm_interface_registry
+                    .and_then(|registry| registry.prelude_newtype_base(named))
+                {
                     return self.map_ast_type(base, current_fq, uses);
                 }
                 match primitive_by_name(&named.name) {
