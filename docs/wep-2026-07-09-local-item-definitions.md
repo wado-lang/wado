@@ -86,7 +86,7 @@ whether reify or this WEP's eager annotate-time emission produced it.
 A local `enum`, `variant` or `flags` parses, but no reference to one of its
 cases resolves. A case path fails as `unknown identifier` (`Color::Red`), and a
 variant construction as `unknown function` (`Shape::Circle(1)`), not with a
-message of its own. Only a local `struct` and a local newtype work in full.
+message of its own. Only a local `struct` and a local newtype are usable.
 
 ### Methods on a local type
 
@@ -107,6 +107,17 @@ target as foreign, because `type_decl_index` holds module-level declarations
 only. And a `TraitEnv` that reaches a local block while `Signatures` does not is
 worse than the gap: the header resolves where no signature exists, so the
 diagnostic becomes a panic.
+
+### Outer type parameters in a local item
+
+A local item may name the enclosing function's and `impl`'s type parameters
+([the spec](./spec-expressions.md#local-item-definitions)). Only a local newtype
+without parameters of its own does. A local struct's fields, and a generic local
+newtype's base, resolve with only the item's own parameters in scope. In a
+struct `T` fails as `unknown type`. Under `type Mixed<U> = [T, U];` the base
+is not `[T, U]`, so casting a `[T, i32]` to `Mixed<i32>` fails as a cast
+between unrelated types. It waits for a use case, since an item can take the
+parameter as its own (`struct Box<T>`).
 
 ### `Self` in a local struct
 

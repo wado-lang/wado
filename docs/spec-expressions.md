@@ -263,6 +263,16 @@ test {
 
 So do local newtypes: `type N<T> = List<T>;`.
 
+A local item may also name the type parameters in scope where it is declared:
+those of the enclosing function, and of the enclosing `impl` in a method. A
+local `type Bag = List<T>;` inside `fn f<T>` is `List` of that call's `T`. A
+local item's own parameter of the same name shadows the outer one, as `Box<T>`
+does above.
+
+> Not yet implemented: only a local newtype without parameters of its own sees
+> an outer type parameter. A local `struct` naming one is rejected as
+> `unknown type`, and a generic local newtype does not resolve it either.
+
 A function body may also declare `enum`, `variant` and `flags` items, and
 `impl`/`trait` blocks that give a local type methods.
 
