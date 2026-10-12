@@ -86,7 +86,7 @@ whether reify or this WEP's eager annotate-time emission produced it.
 A local `enum`, `variant` or `flags` parses, but no reference to one of its
 cases resolves. A case path fails as `unknown identifier` (`Color::Red`), and a
 variant construction as `unknown function` (`Shape::Circle(1)`), not with a
-message of its own. Only a local `struct` and a local newtype work in full.
+message of its own. Only a local `struct` and a local newtype are usable.
 
 ### Methods on a local type
 
