@@ -30,6 +30,14 @@ pub fn wado() -> assert_cmd::Command {
     cmd.into()
 }
 
+/// `wado test`, reading no cached result: a test of the runner's own output
+/// needs every file compiled and run, however often it ran before.
+pub fn wado_test() -> assert_cmd::Command {
+    let mut cmd = wado();
+    cmd.args(["test", "--no-cache"]);
+    cmd
+}
+
 /// `wado` invocation rooted at `dir`. Use this when the test creates a
 /// self-contained workspace (`wado.toml`, sources) under a tempdir.
 pub fn wado_in(dir: &Path) -> assert_cmd::Command {

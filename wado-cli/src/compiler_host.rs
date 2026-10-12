@@ -290,18 +290,27 @@ impl FilesystemCompilerHost {
 
 impl CompilerHost for FilesystemCompilerHost {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, SourceError> {
-        let bytes = self.inner.load_source(path).await?;
         // Every module and asset a compile reads passes here, which is how the
         // run learns what tree it is describing.
-        self.run
-            .inputs()
-            .observe(&self.inner.base_path().join(path), &bytes);
-        Ok(bytes)
+        let file = self.inner.base_path().join(path);
+        let loaded = self.inner.load_source(path).await;
+        match &loaded {
+            Ok(bytes) => self.run.observe(&file, bytes),
+            Err(SourceError::NotFound { .. }) => self.run.observe_absent(&file),
+            Err(SourceError::IoError { .. } | SourceError::NetworkError { .. }) => {
+                self.run.observe_untracked();
+            }
+        }
+        loaded
     }
 
-    // Not observed: a presence check reads nothing, so it describes no input.
     async fn source_exists(&self, path: &str) -> bool {
-        self.inner.source_exists(path).await
+        let exists = self.inner.source_exists(path).await;
+        // A present file is recorded once the compile reads it.
+        if !exists {
+            self.run.observe_absent(&self.inner.base_path().join(path));
+        }
+        exists
     }
 
     /// Saves into the OS temp directory, which exists on every platform the
@@ -338,7 +347,24 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     fn env_var(&self, name: &str) -> Option<String> {
+        self.run.observe_untracked();
         std::env::var(name).ok()
+    }
+
+    /// A dev build compiles against the stdlib it read from disk, which an edit
+    /// changes. A release build embeds it, so the binary alone stands for it.
+    fn stdlib_module_read(&self, import_path: &str) {
+        #[cfg(debug_assertions)]
+        {
+            use wado_compiler::stdlib::{DEV_STDLIB_ROOT, module_file};
+
+            let file = module_file(import_path)
+                .unwrap_or_else(|| panic!("{import_path} is a stdlib module"));
+            self.run
+                .depend_on_watched(&Path::new(DEV_STDLIB_ROOT).join(file));
+        }
+        #[cfg(not(debug_assertions))]
+        let _ = import_path;
     }
 
     async fn run_generator(

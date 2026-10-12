@@ -103,10 +103,9 @@ wado test package-gale                         # the whole package
 wado test package-gale/src/codegen_test.wado   # one file
 ```
 
-`wado test package-gale` is the whole check for Gale work. A compiler change
-needs no separate Gale run either: locally, `mise run test-wado` walks this
-package, which catches miscompiles the e2e fixtures miss. `test-gale-o2` is
-CI's.
+`wado test package-gale` is the whole check for Gale work. `mise run test-wado`
+leaves this package out. CI runs it as `test-gale-o2` on every push, which
+catches the miscompiles a compiler change slips past the e2e fixtures.
 
 Pass the package directory and let the CLI discover the files. A hand-written glob is the thing that goes wrong: the descriptor corpus sits one directory deeper (`tests/antlr4-compat/stage_{a,b,b_oracle,c}/<Category>/`), so a flat `tests/antlr4-compat/*.wado` reaches about a third of the suite, passes, and says nothing about the rest — including the corpus that exists to catch compatibility regressions. The fixtures it never reaches also keep whatever the generator emitted the last time something did run them, so the committed corpus drifts behind the generator with every green run.
 
