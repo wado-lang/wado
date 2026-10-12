@@ -95,19 +95,36 @@ fn bump(align: u32, size: u32) -> u32 {
     return start as u32;
 }
 
+/// The word in front of a block the debug allocator handed out, while the
+/// block is live. A free that finds anything else there frees a block twice,
+/// or one the allocator never handed out.
+global DEBUG_LIVE: u32 = 0xA11C_ED00;
+
 /// Debug allocator — advances a pointer with alignment, never reuses freed memory.
-/// When newsize is 0, poisons the freed region with 0xFF bytes.
+/// When newsize is 0, poisons the freed region with 0xFF bytes, and traps on a
+/// double free as `freelist` does, so a test catches what production traps on.
 /// Selected by `--allocator debug` or automatically for the test world.
 #[allocator("debug")]
 export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    // Free: poison freed memory with 0xFF, never reuse
     if newsize == 0 {
-        if oldsize != 0 {
-            builtin::memory_fill(oldptr, 0xFF, oldsize);
+        if oldptr != 0 {
+            let tag = oldptr as u32 - 4;
+            if load(tag) != DEBUG_LIVE {
+                builtin::unreachable();
+            }
+            store(tag, 0xFFFF_FFFF);
+            if oldsize != 0 {
+                builtin::memory_fill(oldptr, 0xFF, oldsize);
+            }
         }
         return 0;
     }
-    return bump(align as u32, newsize as u32) as i32;
+    // The tag sits in the `max(align, 4)` bytes in front of the block, which
+    // keep the block aligned.
+    let gap = if align < 4 { 4 } else { align as u32 };
+    let block = bump(align as u32, gap + newsize as u32) + gap;
+    store(block - 4, DEBUG_LIVE);
+    return block as i32;
 }
 
 /// Free-list allocator — reclaims freed memory with a *coalescing*,
