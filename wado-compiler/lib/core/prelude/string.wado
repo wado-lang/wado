@@ -1103,7 +1103,9 @@ impl String {
 
     /// Length of the longest prefix of `bytes` that is complete, valid UTF-8,
     /// or `-1 - i` where `i` is the offset of a sequence no further byte could
-    /// complete. ASCII is tested here, `utf8_sequence_len` being a call.
+    /// complete. ASCII and the common 2- and 3-byte sequences are tested here,
+    /// `utf8_sequence_len` being a call; it takes the leads whose second byte
+    /// is restricted (`E0`, `ED`), 4-byte sequences, and every failure.
     ///
     /// After an ASCII byte the run goes on four bytes per test: the four
     /// `array.get`s of one block share their bounds checks, the cost of a byte
@@ -1113,12 +1115,22 @@ impl String {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
-            if bytes.get_unchecked(i) < 0x80 {
+            let b0 = bytes.get_unchecked(i);
+            if b0 < 0x80 {
                 i += 1;
                 while i + 4 <= len
                     && (bytes.get_unchecked(i) | bytes.get_unchecked(i + 1) | bytes.get_unchecked(i + 2) | bytes.get_unchecked(i + 3)) < 0x80 {
                     i += 4;
                 }
+                continue;
+            }
+            if ((b0 >= 0xE1) & (b0 < 0xF0) & (b0 != 0xED)) & (i + 2 < len)
+                && ((bytes.get_unchecked(i + 1) ^ 0x80) | (bytes.get_unchecked(i + 2) ^ 0x80)) < 0x40 {
+                i += 3;
+                continue;
+            }
+            if ((b0 >= 0xC2) & (b0 < 0xE0)) & (i + 1 < len) && (bytes.get_unchecked(i + 1) ^ 0x80) < 0x40 {
+                i += 2;
                 continue;
             }
             let advance = String::utf8_sequence_len(bytes, i, len);

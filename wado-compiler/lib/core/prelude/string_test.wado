@@ -721,6 +721,23 @@ test "String::try_from_utf8 finds a bad byte in every lane of an ASCII run" {
     }
 }
 
+test "String::try_from_utf8 takes every 2- and 3-byte lead the scan tests itself" {
+    // The bounds of the leads the scan settles inline, and the two it leaves
+    // to `utf8_sequence_len`, each with both continuation extremes.
+    let valid: List<ByteList> = [
+        [0xC2, 0x80], [0xDF, 0xBF], [0xE0, 0xA0, 0x80], [0xE1, 0x80, 0x80],
+        [0xEC, 0xBF, 0xBF], [0xED, 0x9F, 0xBF], [0xEE, 0x80, 0x80], [0xEF, 0xBF, 0xBF],
+    ];
+    for let bytes of valid {
+        assert String::try_from_utf8(bytes) matches { Ok(_) };
+    }
+    assert utf8_err([0xE1, 0x80, 0xC0] as ByteList) == Utf8Error::invalid(0, 2);
+    assert utf8_err([0xE1, 0xC0, 0x80] as ByteList) == Utf8Error::invalid(0, 1);
+    assert utf8_err([0xDF, 0xC0] as ByteList) == Utf8Error::invalid(0, 1);
+    assert utf8_err([0xE1, 0x80] as ByteList) == Utf8Error::incomplete(0);
+    assert utf8_err([0xDF] as ByteList) == Utf8Error::incomplete(0);
+}
+
 test "String::try_from_utf8 lonely continuation byte" {
     assert utf8_err([0x80] as ByteList) == Utf8Error::invalid(0, 1);
 }
