@@ -2553,7 +2553,7 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
             .or_default()
             .insert(defs.ast_id(to));
     };
-    let mut by_head: IndexMap<(DefId, &ImplTargetKey), Vec<&ImplHeader>> = IndexMap::default();
+    let mut by_trait: IndexMap<DefId, Vec<&ImplHeader>> = IndexMap::default();
     for header in tysys.trait_env.impl_headers.values() {
         let Some(trait_) = header.trait_def() else {
             continue;
@@ -2565,27 +2565,29 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
                 edge(declared, method.def);
             }
         }
-        by_head
-            .entry((trait_, &header.target))
-            .or_default()
-            .push(header);
+        by_trait.entry(trait_).or_default().push(header);
     }
     // Coherence Rule 1: a generic block and one written for a single
     // instantiation of the same head mangle to one name, and the specific block
-    // wins. The source spells only the call through the template, so the
-    // template's method must reach the specific one or monomorphization never
-    // sees the block it has to yield to.
-    for headers in by_head.into_values() {
-        let (concretes, generics): (Vec<_>, Vec<_>) =
-            headers.into_iter().partition(|header| header.is_concrete());
-        for generic in generics {
-            for concrete in &concretes {
+    // wins. A blanket over a bare type parameter covers every head, so it yields
+    // to every other block of its trait. The source spells only the call through
+    // the generic block, so its method must reach the specific one or
+    // monomorphization never sees the block it has to yield to.
+    for headers in by_trait.values() {
+        for generic in headers.iter().filter(|header| !header.is_concrete()) {
+            let covers_every_head = matches!(generic.target, ImplTargetKey::TypeParam(..));
+            let specifics = headers.iter().filter(|other| {
+                !std::ptr::eq(**other, *generic)
+                    && (covers_every_head
+                        || (other.is_concrete() && other.target == generic.target))
+            });
+            for specific in specifics {
                 for method in &generic.methods {
-                    let Some(specific) = concrete.methods.iter().find(|m| m.name == method.name)
+                    let Some(yields_to) = specific.methods.iter().find(|m| m.name == method.name)
                     else {
                         continue;
                     };
-                    edge(method.def, specific.def);
+                    edge(method.def, yields_to.def);
                 }
             }
         }
