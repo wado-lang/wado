@@ -1741,10 +1741,6 @@ fn steps_wgsl(op: &Expr, last: i32, indent: String) -> String {
     return body;
 }
 
-/// The WGSL an elementwise kernel runs: `op` at each output position of a
-/// rank-`rank` output, operand `k` read from binding `bindings[k]`.
-/// Parameters: the count, the invocations per row of workgroups, the output's
-/// extents, then each operand's offset and strides over them.
 /// What a shader is made of. Equal keys make the same WGSL, so the compiled
 /// pipelines are found by the key, compared in place of the source it would
 /// take to build first.
@@ -1774,6 +1770,10 @@ impl ShaderKey {
     }
 }
 
+/// The WGSL an elementwise kernel runs: `op` at each output position of a
+/// rank-`rank` output, operand `k` read from binding `bindings[k]`.
+/// Parameters: the count, the invocations per row of workgroups, the output's
+/// extents, then each operand's offset and strides over them.
 fn elementwise_shader(op: &Expr, bindings: &List<i32>, rank: i32) -> String {
     let buffers = 1 + max_of(bindings);
     let mut body = coords_wgsl("i", 2, 0, rank, "c", "    ");

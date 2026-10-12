@@ -28,7 +28,7 @@ Options:
       --profile guest[,path[,interval_ms]]
                          Sample the guest into a Firefox Profiler file
                          (default: profile.json, 10ms)
-  -h, --help            Show this help and this machine's adapter list
+  -h, --help             Show this help and this machine's adapter list
   -V, --version          Show the version
 
 Arguments after the input file go to the program.
