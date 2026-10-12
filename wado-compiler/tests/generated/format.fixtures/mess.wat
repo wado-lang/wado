@@ -655,35 +655,34 @@
       (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (i64.gt_u
-          (local.tee 15
+          (local.tee 14
             (i64.add
-              (local.tee 14
+              (local.tee 15
                 (i64.and
                   (i64.extend_i32_u
                     (global.get 0))
                   (i64.const -1)))
-              (i64.extend_i32_u
-                (local.get 3))))
+              (local.get 14)))
           (i64.const 4294967295))
         (then
           (unreachable)))
       (@metadata.code.branch_hint "\00")
       (if ;; label = @1
         (i64.gt_u
-          (local.get 15)
+          (local.get 14)
           (i64.mul
             (i64.extend_i32_s
               (memory.size))
             (i64.const 65536)))
         (then
           (call $grow_memory
-            (local.get 15))))
+            (local.get 14))))
       (global.set 0
         (i32.wrap_i64
-          (local.get 15)))
+          (local.get 14)))
       (local.set 4
         (i32.wrap_i64
-          (local.get 14)))
+          (local.get 15)))
       (local.set 8
         (i32.add
           (local.get 3)
