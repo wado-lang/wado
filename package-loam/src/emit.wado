@@ -789,7 +789,8 @@ fn emit_forward(
     w.blank();
     w.line("/// The graph's forward pass, one kernel call per kernel `loam dump` reports,");
     w.line("/// its outputs left where the backend computed them, for a caller to read");
-    w.line("/// only the part it needs.");
+    w.line("/// only the part it needs. The next `pass` or `forward` releases them, so read");
+    w.line("/// them first.");
     pass.emit_begin(w);
     let spelled_axes = emit_input_checks(w, graph, shapes, names);
     // A symbol is bound once something spells it, which the body decides.
