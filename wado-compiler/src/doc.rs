@@ -2,17 +2,18 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssertStmt, AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam,
-    GlobalDecl, ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind,
-    StructDecl, StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl,
-    Visibility, type_head_name, written_params,
+    AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
+    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
+    StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl, Visibility,
+    type_head_name, written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::lexer::is_ident_continue;
 use crate::loader::resolve_wasm_asset_path;
-use crate::module_source::ModuleSourceInterner;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
+use crate::semantics::Semantics;
 use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
@@ -222,6 +223,53 @@ pub struct DocFlagsMember {
 /// out an impl of a trait its reader cannot name. `None` keeps the impl.
 pub type ReadImport<'a> = dyn Fn(&str) -> Option<String> + 'a;
 
+/// The program a page's module is loaded in, read at that module. The page
+/// parses its own source, for the comments, and asks this what a name in it
+/// resolves to.
+pub struct Resolution<'a> {
+    sem: &'a Semantics,
+    module: ModuleSource,
+    read_import: &'a ReadImport<'a>,
+}
+
+impl<'a> Resolution<'a> {
+    /// The program's entry module.
+    #[must_use]
+    pub fn of_entry(sem: &'a Semantics, read_import: &'a ReadImport<'a>) -> Self {
+        Self {
+            sem,
+            module: sem.entry_module_source.clone(),
+            read_import,
+        }
+    }
+
+    /// `module_spec` as the program's entry imports it.
+    #[must_use]
+    pub fn new(sem: &'a Semantics, module_spec: &str, read_import: &'a ReadImport<'a>) -> Self {
+        Self {
+            sem,
+            module: sem.resolve_notation_module(module_spec),
+            read_import,
+        }
+    }
+
+    /// The same program, read at `module_spec`.
+    fn at(&self, module_spec: &str) -> Self {
+        Self::new(self.sem, module_spec, self.read_import)
+    }
+
+    /// The trait `b` implements, whose `contract` clauses bind its methods.
+    fn implemented_trait(&self, b: &ImplBlock) -> Option<&'a TraitDecl> {
+        self.sem.implemented_trait_at(&self.module, b.span)
+    }
+}
+
+/// An `impl` block the page documents, with the trait it implements.
+struct DocImpl<'a> {
+    block: &'a ImplBlock,
+    implemented: Option<&'a TraitDecl>,
+}
+
 /// [`ReadImport`] over the bundled standard library.
 pub fn read_stdlib_import(path: &str) -> Option<String> {
     stdlib::get_stdlib_module(path).map(str::to_owned)
@@ -236,7 +284,7 @@ pub fn extract_doc_with(
     source: &str,
     module_name: &str,
     include_private: bool,
-    read_import: &ReadImport,
+    resolution: &Resolution,
 ) -> DocModule {
     extract_doc_filtered(
         module,
@@ -245,7 +293,7 @@ pub fn extract_doc_with(
         module_name,
         include_private,
         false,
-        read_import,
+        resolution,
     )
 }
 
@@ -260,7 +308,7 @@ pub fn extract_doc_filtered(
     module_name: &str,
     include_private: bool,
     include_internal: bool,
-    read_import: &ReadImport,
+    resolution: &Resolution,
 ) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
     let synopsis = collect_synopsis(module, source);
@@ -275,7 +323,7 @@ pub fn extract_doc_filtered(
     let mut effects: Vec<DocEffect> = Vec::new();
     let mut resources: Vec<DocResource> = Vec::new();
     let mut functions: Vec<DocFunction> = Vec::new();
-    let impls = documented_impls(module, include_private, read_import);
+    let impls = documented_impls(module, include_private, resolution);
 
     for item in &module.items {
         let visible = include_private
@@ -366,7 +414,7 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
         .methods
         .iter()
         .filter(|m| !m.is_contract_holder())
-        .map(|m| build_doc_function_with(m, t.method_contracts(&m.name), trivia))
+        .map(|m| build_doc_function_with(m, Some(t), trivia))
         .collect();
 
     DocTrait {
@@ -384,7 +432,7 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
 
 fn build_doc_struct(
     s: &StructDecl,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocStruct {
@@ -428,7 +476,7 @@ fn build_doc_struct(
 
 fn build_doc_type(
     t: &Newtype,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocType {
@@ -574,7 +622,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
 /// `Stream<T>::read_to_end` is not in the `resource` body.
 fn build_doc_resource(
     r: &ResourceDecl,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocResource {
@@ -614,20 +662,24 @@ fn build_doc_operation(m: &Function, trivia: &TriviaMap) -> DocFunction {
 }
 
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
-    build_doc_function_with(f, f.contracts(), trivia)
+    build_doc_function_with(f, None, trivia)
 }
 
-/// A trait method's clauses live in the trait's hidden holder, not on the
-/// method, so the caller passes them.
-fn build_doc_function_with<'a>(
+/// A method of `declaring_trait`, or of an impl of it, is bound by the
+/// clauses the trait declares.
+fn build_doc_function_with(
     f: &Function,
-    contracts: impl Iterator<Item = &'a AssertStmt>,
+    declaring_trait: Option<&TraitDecl>,
     trivia: &TriviaMap,
 ) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
         attrs: unparse_attributes(&f.attrs),
-        contracts: contracts.map(unparse_contract_clause).collect(),
+        contracts: f
+            .binding_contracts(declaring_trait)
+            .into_iter()
+            .map(unparse_contract_clause)
+            .collect(),
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -722,28 +774,28 @@ fn is_internal_item(item: &Item) -> bool {
 /// else those whose trait, if any, the reader can name. A reader who cannot
 /// name a trait cannot call its methods, so listing them would advertise an
 /// API that does not exist.
-fn documented_impls<'m>(
-    module: &'m Module,
+fn documented_impls<'a>(
+    module: &'a Module,
     include_private: bool,
-    read_import: &ReadImport,
-) -> Vec<&'m ImplBlock> {
-    let impls: Vec<&ImplBlock> = module
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(i) => Some(i),
-            _ => None,
-        })
-        .collect();
-    if include_private {
-        return impls;
-    }
+    resolution: &Resolution<'a>,
+) -> Vec<DocImpl<'a>> {
+    let impls = module.items.iter().filter_map(|item| match item {
+        Item::Impl(i) => Some(i),
+        _ => None,
+    });
     let trait_head = |i: &ImplBlock| i.trait_type.as_ref().and_then(spell_head);
-    let heads: IndexSet<String> = impls.iter().filter_map(|i| trait_head(i)).collect();
-    let unnameable = unnameable_heads(module, &heads, read_import);
+    let unnameable = if include_private {
+        IndexSet::default()
+    } else {
+        let heads: IndexSet<String> = impls.clone().filter_map(trait_head).collect();
+        unnameable_heads(module, &heads, resolution.read_import)
+    };
     impls
-        .into_iter()
         .filter(|i| !trait_head(i).is_some_and(|head| unnameable.contains(&head)))
+        .map(|block| DocImpl {
+            block,
+            implemented: resolution.implemented_trait(block),
+        })
         .collect()
 }
 
@@ -931,28 +983,37 @@ fn parse_stdlib_for_doc(label: &str, source: &str) -> ParseResult {
     parsed
 }
 
+/// The source of a program that loads the stdlib module `module_name`, for the
+/// [`Semantics`] its page reads.
+#[must_use]
+pub fn stdlib_doc_entry(module_name: &str) -> String {
+    format!("use _ from \"{module_name}\";\n")
+}
+
 /// Extract documentation from a stdlib module by name.
 ///
 /// For `core:prelude`, follows `pub use` re-exports and merges items from
 /// the sub-modules into a single `DocModule`. For other modules, extracts
-/// docs directly from the source.
+/// docs directly from the source. `include_private` is as in
+/// [`extract_doc_with`].
 ///
-/// Returns `None` if the module name is not a known stdlib module.
-pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
-    extract_stdlib_doc_with(module_name, false)
-}
-
-/// [`extract_stdlib_doc`] with explicit visibility (see [`extract_doc_with`]).
-pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Option<DocModule> {
+/// Returns `None` if the module name is not a known stdlib module. `sem`
+/// analyzes [`stdlib_doc_entry`] for `module_name`.
+pub fn extract_stdlib_doc_with(
+    module_name: &str,
+    include_private: bool,
+    sem: &Semantics,
+) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = parse_stdlib_for_doc(module_name, source);
+    let resolution = Resolution::new(sem, module_name, &read_stdlib_import);
     let mut doc = extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         source,
         module_name,
         include_private,
-        &read_stdlib_import,
+        &resolution,
     );
 
     // For modules with pub use re-exports, follow them to get the actual items
@@ -960,7 +1021,8 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
     if !reexport_sources.is_empty() {
         let exported_names = collect_pub_use_names(&parsed.ast);
         for reexport_source in &reexport_sources {
-            if let Some(sub_doc) = component_reexport_doc(module_name, reexport_source) {
+            if let Some(sub_doc) = component_reexport_doc(module_name, reexport_source, &resolution)
+            {
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
                 continue;
             }
@@ -975,7 +1037,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                     reexport_source,
                     false,
                     true,
-                    &read_stdlib_import,
+                    &resolution.at(reexport_source),
                 );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -991,6 +1053,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                 &sub_parsed.ast,
                 &sub_parsed.trivia,
                 include_private,
+                &resolution.at(se_source),
             );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
@@ -1009,6 +1072,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                         &se_parsed.ast,
                         &se_parsed.trivia,
                         include_private,
+                        &resolution.at(sub_se),
                     );
                     merge_primitive_types(&mut doc.primitive_types, prim_types);
                 }
@@ -1018,6 +1082,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                 &sub_parsed.ast,
                 &sub_parsed.trivia,
                 include_private,
+                &resolution.at(reexport_source),
             );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
@@ -1030,7 +1095,11 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
 /// Items a stdlib module re-exports from a bundled component asset
 /// (`pub use { X } from "./icu.wat"`). The types come from the component's WIT
 /// rather than from Wado source, so they carry no doc comments.
-fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<DocModule> {
+fn component_reexport_doc(
+    module_name: &str,
+    reexport_source: &str,
+    resolution: &Resolution,
+) -> Option<DocModule> {
     let mut interner = ModuleSourceInterner::new();
     let from = interner.core(module_name.strip_prefix("core:")?);
     let path = resolve_wasm_asset_path(&from, reexport_source, "").ok()?;
@@ -1048,7 +1117,7 @@ fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<Do
         &path,
         false,
         true,
-        &read_stdlib_import,
+        &resolution.at(&path),
     ))
 }
 
@@ -1158,14 +1227,18 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
 
 fn collect_impl_methods_for_type(
     type_name: &str,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
     let mut inherent_methods = Vec::new();
     let mut trait_impls = Vec::new();
 
-    for i in impls {
+    for DocImpl {
+        block: i,
+        implemented,
+    } in impls
+    {
         if type_head_name(&i.ty) != Some(type_name) {
             continue;
         }
@@ -1174,7 +1247,7 @@ fn collect_impl_methods_for_type(
             let methods: Vec<DocFunction> = i
                 .methods
                 .iter()
-                .map(|m| build_doc_function(m, trivia))
+                .map(|m| build_doc_function_with(m, *implemented, trivia))
                 .collect();
             if methods.is_empty() {
                 continue;
@@ -1200,12 +1273,12 @@ fn collect_impl_methods_for_type(
 /// The associated constants of the inherent `impl` blocks on `type_name`.
 fn collect_impl_constants_for_type(
     type_name: &str,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> Vec<DocFunction> {
     let mut constants = Vec::new();
-    for i in impls {
+    for DocImpl { block: i, .. } in impls {
         if type_head_name(&i.ty) != Some(type_name) || i.trait_type.is_some() {
             continue;
         }
@@ -1253,10 +1326,11 @@ fn collect_primitive_types_from_module(
     module: &Module,
     trivia: &TriviaMap,
     include_private: bool,
+    resolution: &Resolution,
 ) -> Vec<DocPrimitiveType> {
     use crate::hashmap::IndexMap;
 
-    let impls = documented_impls(module, include_private, &read_stdlib_import);
+    let impls = documented_impls(module, include_private, resolution);
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for prim_name in PrimitiveType::all_primitive_names() {

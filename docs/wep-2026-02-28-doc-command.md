@@ -107,6 +107,13 @@ This approach:
 - Reuses the battle-tested `CommentMap` that the formatter already depends on
 - Works with existing `///` comments in the WASI stdlib without any source changes
 
+The page also reads the analysis of a program that loads its module
+(`Semantics`), for what a name resolves to. A trait's `contract` clauses bind
+every impl of it, so an impl's method shows the clauses of the trait method it
+implements, wherever the trait is declared. The page's own parse keeps the
+comments, which the analysis drops, and names an `impl` block to the analysis
+by its span. A stdlib module is analyzed through a program importing it.
+
 ### CommentKind Extension
 
 Extend `CommentKind` to distinguish doc comments from regular comments:

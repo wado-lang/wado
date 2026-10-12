@@ -2495,6 +2495,18 @@ impl Function {
             .map_while(Stmt::as_contract)
     }
 
+    /// The `contract` clauses that bind this function, declared by the trait
+    /// it is a method of or implements, else by itself.
+    pub fn binding_contracts<'a>(
+        &'a self,
+        declaring_trait: Option<&'a TraitDecl>,
+    ) -> Vec<&'a AssertStmt> {
+        match declaring_trait {
+            Some(t) => t.method_contracts(&self.name).collect(),
+            None => self.contracts().collect(),
+        }
+    }
+
     /// Whether this is the default method a trait declares, hidden, to hold
     /// the `contract` clauses of one of its methods.
     pub fn is_contract_holder(&self) -> bool {

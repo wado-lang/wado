@@ -5,12 +5,14 @@ use std::path::Path;
 use lexopt::Arg::Value;
 use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocPrimitiveType, DocResource, DocStruct,
-    DocTrait, DocTraitImpl, DocVariant, extract_doc_with, extract_stdlib_doc_with,
-    read_stdlib_import,
+    DocTrait, DocTraitImpl, DocVariant, Resolution, extract_doc_with, extract_stdlib_doc_with,
+    read_stdlib_import, stdlib_doc_entry,
 };
 use wado_compiler::path::is_cwd_relative;
+use wado_compiler::semantics::{Semantics, semantics};
 
 use crate::args::{self, CliExit};
+use crate::compiler_host::FilesystemCompilerHost;
 
 const MODULE_PLACEHOLDER: &str = "{module}";
 
@@ -198,12 +200,11 @@ fn is_stdlib_module(input: &str) -> bool {
     wado_compiler::module_source::is_bundled_specifier(input)
 }
 
-pub fn run(opts: DocOptions) -> Result<(), CliExit> {
-    let docs: Vec<(String, DocModule)> = opts
-        .inputs
-        .iter()
-        .map(|input| load_doc(input, opts.all).map(|doc| (input.clone(), doc)))
-        .collect::<Result<_, _>>()?;
+pub async fn run(opts: DocOptions) -> Result<(), CliExit> {
+    let mut docs: Vec<(String, DocModule)> = Vec::with_capacity(opts.inputs.len());
+    for input in &opts.inputs {
+        docs.push((input.clone(), load_doc(input, opts.all).await?));
+    }
 
     let format_name = match opts.format {
         OutputFormat::Markdown => "markdown",
@@ -234,9 +235,18 @@ pub fn run(opts: DocOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
+/// The analysis of `source`, entered as `filename` in `dir`, that a page reads
+/// to resolve the names its module uses.
+async fn analyze(source: &str, dir: &Path, filename: &str) -> Semantics {
+    let host = FilesystemCompilerHost::silent(dir.to_path_buf());
+    semantics(source, &host, Some(filename)).await
+}
+
+async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     if is_stdlib_module(input) {
-        return extract_stdlib_doc_with(input, include_private)
+        let sem = analyze(&stdlib_doc_entry(input), Path::new("."), "doc.wado").await;
+        assert!(sem.is_complete(), "the standard library analyzes: {input}");
+        return extract_stdlib_doc_with(input, include_private, &sem)
             .ok_or_else(|| CliExit::error(format!("Unknown stdlib module: {input}")));
     }
 
@@ -260,13 +270,18 @@ fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
                 .flatten()
         })
     };
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| CliExit::error(format!("not a file: '{}'", path.display())))?;
+    let sem = analyze(&source, dir, filename).await;
     Ok(extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         &source,
         module_name,
         include_private,
-        &read_import,
+        &Resolution::of_entry(&sem, &read_import),
     ))
 }
 
@@ -364,17 +379,22 @@ fn format_markdown(content: &str) -> String {
 #[cfg(test)]
 mod format_contract_tests {
     use super::*;
-    use wado_compiler::doc::{ReadImport, extract_stdlib_doc};
+    use futures::executor::block_on;
     use wado_lsp::host::install_dev_stdlib;
+    use wado_lsp::test_support::in_memory_host;
+
+    fn stdlib_doc_with(module: &str, include_private: bool) -> DocModule {
+        install_dev_stdlib();
+        block_on(load_doc(module, include_private))
+            .unwrap_or_else(|_| panic!("{module} stdlib doc"))
+    }
 
     fn stdlib_doc(module: &str) -> DocModule {
-        install_dev_stdlib();
-        extract_stdlib_doc(module).unwrap_or_else(|| panic!("{module} stdlib doc"))
+        stdlib_doc_with(module, false)
     }
 
     fn stdlib_doc_all(module: &str) -> DocModule {
-        install_dev_stdlib();
-        extract_stdlib_doc_with(module, true).unwrap_or_else(|| panic!("{module} stdlib doc"))
+        stdlib_doc_with(module, true)
     }
 
     #[test]
@@ -446,37 +466,54 @@ mod format_contract_tests {
     }
 
     fn markdown_of(source: &str) -> String {
-        markdown_importing(source, &read_stdlib_import)
+        markdown_importing(source, &[])
     }
 
     fn simple_all_of(source: &str) -> String {
-        let parsed = wado_compiler::parse(source)
-            .into_fail_fast()
-            .expect("parse");
-        let doc = extract_doc_with(
-            &parsed.ast,
-            &parsed.trivia,
-            source,
-            "demo",
-            true,
-            &read_stdlib_import,
-        );
+        let doc = page(source, &[], true);
         render_single(&doc, "simple", "demo.wado", OutputFormat::Simple)
     }
 
-    fn markdown_importing(source: &str, read_import: &ReadImport) -> String {
+    /// The page of `source`, as `/demo.wado` beside the `(name, source)` files
+    /// of `deps` it imports as `./name`.
+    fn markdown_importing(source: &str, deps: &[(&str, &str)]) -> String {
+        let doc = page(source, deps, false);
+        render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
+    }
+
+    fn page(source: &str, deps: &[(&str, &str)], include_private: bool) -> DocModule {
+        let paths: Vec<String> = deps.iter().map(|(name, _)| format!("./{name}")).collect();
+        let mut files = vec![("./demo.wado", source)];
+        files.extend(
+            paths
+                .iter()
+                .map(String::as_str)
+                .zip(deps.iter().map(|(_, s)| *s)),
+        );
+        let sem = block_on(semantics(
+            source,
+            &in_memory_host(&files),
+            Some("./demo.wado"),
+        ));
+        let read_import = |import: &str| {
+            read_stdlib_import(import).or_else(|| {
+                let name = import.strip_prefix("./")?;
+                deps.iter()
+                    .find(|(dep, _)| *dep == name)
+                    .map(|(_, dep_source)| (*dep_source).to_string())
+            })
+        };
         let parsed = wado_compiler::parse(source)
             .into_fail_fast()
             .expect("parse");
-        let doc = extract_doc_with(
+        extract_doc_with(
             &parsed.ast,
             &parsed.trivia,
             source,
             "demo",
-            false,
-            read_import,
-        );
-        render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
+            include_private,
+            &Resolution::of_entry(&sem, &read_import),
+        )
     }
 
     /// A newtype lists the impls written for it, as a struct does.
@@ -558,9 +595,7 @@ mod format_contract_tests {
     fn an_impl_of_an_imported_internal_trait_is_left_out() {
         let dep = "internal trait Hidden {\n    fn hidden(&self) -> i32;\n}\n\ninternal use { Hidden as Veiled } from \"./veiled.wado\";\n\npub trait Shown {\n    fn shown(&self) -> i32;\n}\n";
         let source = "//! Demo.\n\nuse { Hidden, Veiled as Masked, Shown as Visible } from \"./dep.wado\";\nuse dep from \"./dep.wado\";\n\npub struct Gauge {\n    value: i32,\n}\n\npub struct Meter {\n    value: i32,\n}\n\nimpl Hidden for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Masked for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl dep::Hidden for Meter {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Visible for Gauge {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl dep::Shown for Meter {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n";
-        let out = markdown_importing(source, &|import: &str| {
-            (import == "./dep.wado").then(|| dep.to_string())
-        });
+        let out = markdown_importing(source, &[("dep.wado", dep)]);
         assert!(
             out.contains("impl Visible for Gauge") && out.contains("impl dep::Shown for Meter"),
             "an impl of an imported pub trait must be documented:\n{out}"
@@ -615,6 +650,18 @@ mod format_contract_tests {
         assert!(
             out.contains("`contract 0 <= i < self.size()`"),
             "a trait method's contract must be documented:\n{out}"
+        );
+    }
+
+    /// A trait's clauses bind every impl of it, wherever the trait is declared.
+    #[test]
+    fn an_impl_method_documents_its_trait_methods_contract() {
+        let dep = "pub trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\n";
+        let source = "//! Demo.\n\nuse { Pick } from \"./dep.wado\";\n\npub struct Deck {\n    top: i32,\n}\n\nimpl Pick for Deck {\n    fn pick(&self, i: i32) -> i32 {\n        return self.top + i;\n    }\n}\n";
+        let out = markdown_importing(source, &[("dep.wado", dep)]);
+        assert!(
+            out.contains("`contract i >= 0`"),
+            "an impl's method must document its trait method's contract:\n{out}"
         );
     }
 

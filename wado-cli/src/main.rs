@@ -352,7 +352,7 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
         }
         Cmd::Doc => {
             let opts = wado_cli::doc::parse_args(parser)?;
-            wado_cli::doc::run(opts)
+            Box::pin(wado_cli::doc::run(opts)).await
         }
         Cmd::Dump => {
             let opts = wado_cli::dump::parse_args(parser)?;

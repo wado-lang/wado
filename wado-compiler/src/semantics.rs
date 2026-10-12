@@ -672,16 +672,30 @@ impl Semantics {
         } else {
             None
         };
-        let contracts = match declaring_trait {
-            Some(t) => t.method_contracts(&f.name).collect(),
-            None => f.contracts().collect(),
-        };
-        Some((f, contracts))
+        Some((f, f.binding_contracts(declaring_trait)))
+    }
+
+    /// The trait implemented by the `impl` block of `module` spanning
+    /// `impl_span`. A reader holding its own parse of the module's source names
+    /// the block by its span, which every parse of that source agrees on.
+    #[must_use]
+    pub fn implemented_trait_at(
+        &self,
+        module: &ModuleSource,
+        impl_span: Span,
+    ) -> Option<&ast::TraitDecl> {
+        let block = self.modules.get(module)?.items.iter().find_map(|item| {
+            let Item::Impl(b) = item else {
+                return None;
+            };
+            (b.span.start == impl_span.start && b.span.end == impl_span.end).then_some(b)
+        })?;
+        self.implemented_trait(block)
     }
 
     /// The trait `b` implements; `None` for an inherent block or one that
     /// handles an effect.
-    fn implemented_trait(&self, b: &ast::ImplBlock) -> Option<&ast::TraitDecl> {
+    fn implemented_trait(&self, b: &ImplBlock) -> Option<&ast::TraitDecl> {
         let trait_id = self.referenced_symbol(b.trait_type.as_ref()?.id()?)?;
         let module = self.modules.get(self.module_of_id(trait_id)?)?;
         module.items.iter().find_map(|item| {
