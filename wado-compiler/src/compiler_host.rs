@@ -556,6 +556,11 @@ pub trait CompilerHost: Send + Sync {
     fn env_var(&self, _name: &str) -> Option<String> {
         None
     }
+
+    /// The compile took the stdlib module `import_path` (`"core:json"`), which
+    /// reaches no [`Self::load_source`], so a host recording what a compile
+    /// depends on hears of it here. Ignored by default.
+    fn stdlib_module_read(&self, _import_path: &str) {}
 }
 
 /// The project's `[dependencies]`, resolved for bare-name imports.

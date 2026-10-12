@@ -25,12 +25,14 @@ use crate::compile::{self, CompileFlags};
 use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_coverage_include};
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession};
+use crate::fingerprint::Input;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest::package_root;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, ProfileMode, WasiState};
 use crate::sync::lock;
+use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
     CompileEvent, HeartbeatReporter, LoadEvent, PackageDoneArgs, TapReporter, TestReporter,
     VerboseReporter,
@@ -575,6 +577,8 @@ struct CompiledArtifact {
     path: String,
     wasm: Vec<u8>,
     is_todo_module: bool,
+    /// What the compile read, where it read nothing but files.
+    reads: Option<Vec<Input>>,
 }
 
 /// Load-stage output: a module fully resident in wasmtime. Wrapped in
@@ -599,6 +603,9 @@ struct LoadedModule {
     profiler: Option<(GuestProfilerSlot, Duration)>,
     /// `--coverage`: the run's report, and where this component's hits land.
     coverage: Option<(Arc<CoverageRun>, Vec<Registered>)>,
+    /// What the compile read, where those reads decide every test's outcome,
+    /// so a pass can be cached.
+    cache_reads: Option<Vec<Input>>,
     _module_permit: OwnedSemaphorePermit,
 }
 
@@ -890,10 +897,11 @@ async fn compile_artifact(
     reporter: Arc<dyn TestReporter>,
 ) -> CompileOutcome {
     let compile_start = Instant::now();
+    let scope = run_cache.scoped();
     let panic_or_result = AssertUnwindSafe(compile::try_compile_with_run_cache(
         &path,
         &flags,
-        Some(run_cache),
+        Some(Arc::clone(&scope)),
     ))
     .catch_unwind()
     .await;
@@ -931,6 +939,7 @@ async fn compile_artifact(
                 path,
                 wasm: result.wasm,
                 is_todo_module: result.is_todo_module,
+                reads: scope.reads(),
             })
         }
         Err(failure) if failure.is_todo_module => {
@@ -1060,6 +1069,9 @@ fn load_module(
                 let plans = read_from_component(&artifact.wasm)?;
                 Some((Arc::clone(run), run.register(&artifact.path, &plans)))
             });
+            let cache_reads = artifact.reads.filter(|_| {
+                test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))
+            });
             reporter.on_load(
                 &artifact.path,
                 LoadEvent::Ok {
@@ -1076,6 +1088,7 @@ fn load_module(
                 is_todo_module: artifact.is_todo_module,
                 profiler,
                 coverage,
+                cache_reads,
                 _module_permit: module_permit,
             })
         }
@@ -1278,9 +1291,8 @@ async fn run_load_stage(
     profiler_slot: Option<GuestProfilerSlot>,
     coverage_run: Option<Arc<CoverageRun>>,
     reporter: Arc<dyn TestReporter>,
-) -> (usize, usize) {
-    let mut ok_count = 0_usize;
-    let mut skip_count = 0_usize;
+) -> LoadTally {
+    let mut tally = LoadTally::default();
 
     let mut stream = receiver_stream(artifact_rx)
         .map(|artifact| {
@@ -1345,10 +1357,15 @@ async fn run_load_stage(
     while let Some(join_result) = stream.next().await {
         let outcome = join_result.expect("load task panicked");
         match outcome {
-            LoadOutcome::Loaded(module) => {
-                ok_count += 1;
+            LoadOutcome::Loaded(mut module) => {
+                tally.ok += 1;
                 if module.tests.is_empty() {
-                    skip_count += 1;
+                    tally.skip += 1;
+                }
+                if let Some(reads) = module.cache_reads.take() {
+                    tally
+                        .cacheable
+                        .push((module.path.clone(), reads, module.tests.len()));
                 }
                 epoch_ticker.register(&module.engine);
                 if loaded_tx.send(Arc::new(module)).await.is_ok() {
@@ -1362,7 +1379,18 @@ async fn run_load_stage(
             }
         }
     }
-    (ok_count, skip_count)
+    tally
+}
+
+/// What the load stage passed on.
+#[derive(Default)]
+struct LoadTally {
+    ok: usize,
+    /// Of `ok`, the files declaring no `test` block.
+    skip: usize,
+    /// Of `ok`, each file a pass could be cached for: its path, what its
+    /// compile read, and how many tests it declares.
+    cacheable: Vec<(String, Vec<Input>, usize)>,
 }
 
 /// **Stage 3 driver** — consume `LoadedModule`s as they stream in,
@@ -1486,17 +1514,13 @@ impl StageTimings {
 /// additively in both run and `--no-run` modes from the same formula:
 /// `compile_ok = compiled_count + todo_compile_errors.len()`.
 ///
-/// `load_ok` is the count of modules that cleared the load stage (and
+/// `load.ok` is the count of modules that cleared the load stage (and
 /// therefore reached the execute stage); it's tracked explicitly because
 /// modules with zero `#[test]` exports leave no trace in `test_results`,
-/// and under `--no-run` the load stage doesn't run so `load_ok = 0`.
+/// and under `--no-run` the load stage doesn't run so `load.ok = 0`.
 struct PipelineOutcome {
     compiled_count: usize,
-    load_ok: usize,
-    /// Files that loaded successfully but declared zero `test` blocks.
-    /// Already counted within `load_ok`; tracked separately so the
-    /// summary can call them out instead of silently absorbing them.
-    skip_files: usize,
+    load: LoadTally,
     test_results: Vec<TestResult>,
     todo_compile_errors: Vec<TodoCompileError>,
     compile_failures: Vec<CompileFailure>,
@@ -1645,7 +1669,7 @@ async fn run_pipeline(
         reporter.clone(),
     );
 
-    let load_future: Pin<Box<dyn Future<Output = (usize, usize)> + Send>> =
+    let load_future: Pin<Box<dyn Future<Output = LoadTally> + Send>> =
         if let Some(ticker) = epoch_ticker.as_ref() {
             Box::pin(run_load_stage(
                 artifact_rx,
@@ -1672,7 +1696,7 @@ async fn run_pipeline(
             Box::pin(async move {
                 let mut rx = artifact_rx;
                 while rx.recv().await.is_some() {}
-                (0, 0)
+                LoadTally::default()
             })
         };
 
@@ -1711,7 +1735,7 @@ async fn run_pipeline(
     let result_task = tokio::spawn(collect_into_vec(result_rx));
 
     let compiled_count = compile_task.await.expect("compile stage panicked");
-    let (load_ok, skip_files) = load_task.await.expect("load stage panicked");
+    let load = load_task.await.expect("load stage panicked");
     execute_task.await.expect("execute stage panicked");
     let todos = todo_task.await.expect("todo collector panicked");
     let cfails = cfail_task.await.expect("cfail collector panicked");
@@ -1722,8 +1746,7 @@ async fn run_pipeline(
 
     PipelineOutcome {
         compiled_count,
-        load_ok,
-        skip_files,
+        load,
         test_results: results,
         todo_compile_errors: todos,
         compile_failures: cfails,
@@ -1921,6 +1944,9 @@ pub(crate) struct PackageTotals {
     pub(crate) load_ok: usize,
     pub(crate) load_failed: usize,
     pub(crate) skip_files: usize,
+    /// Files neither compiled nor run because they passed before and nothing
+    /// they read has changed. Their tests count as they did then.
+    pub(crate) cached_files: usize,
     pub(crate) test_passed: u32,
     pub(crate) test_failed: u32,
     pub(crate) todo_pending: u32,
@@ -1935,6 +1961,7 @@ impl PackageTotals {
         self.load_ok += other.load_ok;
         self.load_failed += other.load_failed;
         self.skip_files += other.skip_files;
+        self.cached_files += other.cached_files;
         self.test_passed += other.test_passed;
         self.test_failed += other.test_failed;
         self.todo_pending += other.todo_pending;
@@ -1972,6 +1999,12 @@ pub(crate) fn format_three_axis_lines(
         lines.push(format!(
             "skip:    {} files (no test blocks)",
             totals.skip_files
+        ));
+    }
+    if totals.cached_files > 0 {
+        lines.push(format!(
+            "cached:  {} files (passed before and nothing they read changed; --no-cache reruns them)",
+            totals.cached_files
         ));
     }
     lines.push(format!(
@@ -2269,11 +2302,27 @@ async fn run_one_package(
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
     coverage_run: Option<Arc<CoverageRun>>,
+    test_cache: Option<&TestCache>,
 ) -> PackageTotals {
     reporter.on_package_start(pkg_run, show_banner);
 
+    let mut cached_files = 0_usize;
+    let mut cached = Tally::default();
+    let mut paths = Vec::with_capacity(pkg_run.paths.len());
+    for path in &pkg_run.paths {
+        match test_cache.and_then(|cache| cache.lookup(path)) {
+            Some(tally) => {
+                reporter.on_cached(path, tally);
+                cached_files += 1;
+                cached.passed += tally.passed;
+                cached.todo_pending += tally.todo_pending;
+            }
+            None => paths.push(path.clone()),
+        }
+    }
+
     let outcome = run_pipeline(
-        &pkg_run.paths,
+        &paths,
         flags,
         cpu,
         compile_jobs,
@@ -2293,14 +2342,17 @@ async fn run_one_package(
 
     let PipelineOutcome {
         compiled_count,
-        load_ok,
-        skip_files,
+        load,
         test_results,
         todo_compile_errors,
         compile_failures,
         load_failures,
         timings,
     } = outcome;
+
+    if let Some(cache) = test_cache {
+        store_passes(cache, load.cacheable, &test_results);
+    }
 
     // Compile_ok is additive in both modes: every file that produced a
     // `CompileOutcome::Compiled` (= `compiled_count`) or a
@@ -2332,12 +2384,13 @@ async fn run_one_package(
         PackageTotals {
             compile_ok,
             compile_failed,
-            load_ok,
+            load_ok: load.ok,
             load_failed,
-            skip_files,
-            test_passed,
+            skip_files: load.skip,
+            cached_files,
+            test_passed: test_passed + cached.passed,
             test_failed,
-            todo_pending,
+            todo_pending: todo_pending + cached.todo_pending,
             todo_resolved,
             timings,
         }
@@ -2354,6 +2407,35 @@ async fn run_one_package(
     });
 
     totals
+}
+
+/// Cache each file in `cacheable` whose every test passed, or trapped as a
+/// pending TODO, so a later run with nothing changed skips it.
+fn store_passes(
+    cache: &TestCache,
+    cacheable: Vec<(String, Vec<Input>, usize)>,
+    results: &[TestResult],
+) {
+    let mut outcomes: IndexMap<&str, Vec<TestOutcome>> = IndexMap::default();
+    for result in results {
+        outcomes
+            .entry(result.file_path.as_str())
+            .or_default()
+            .push(result.outcome);
+    }
+    'files: for (path, reads, tests) in cacheable {
+        let file_outcomes = outcomes.get(path.as_str()).map_or(&[][..], Vec::as_slice);
+        assert_eq!(file_outcomes.len(), tests, "every test of {path} reported");
+        let mut tally = Tally::default();
+        for outcome in file_outcomes {
+            match outcome {
+                TestOutcome::Pass => tally.passed += 1,
+                TestOutcome::TodoPending => tally.todo_pending += 1,
+                TestOutcome::Fail | TestOutcome::TodoResolved => continue 'files,
+            }
+        }
+        cache.store(&path, reads, tally);
+    }
 }
 
 /// Build the thread-local stdlib snapshot on `parallelism` distinct blocking
@@ -2494,6 +2576,18 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
+    // A profile or a coverage report needs the tests to run, and `--no-run`
+    // has no pass to record.
+    let test_cache = (!no_run && coverage_run.is_none() && matches!(profile, ProfileMode::None))
+        .then(|| {
+            let mut keyed = (*flags).clone();
+            // `--no-cache` only skips reading, so it is no part of the key.
+            keyed.knobs.no_cache = false;
+            TestCache::new(
+                &format!("{keyed:?} {runtime_knobs:?}"),
+                !flags.knobs.no_cache,
+            )
+        });
     let mut grand = PackageTotals::default();
     for pkg_run in &package_runs {
         let totals = run_one_package(
@@ -2513,6 +2607,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             reporter.clone(),
             Arc::clone(&run_cache),
             coverage_run.clone(),
+            test_cache.as_ref(),
         )
         .await;
         grand.merge(&totals);

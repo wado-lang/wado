@@ -48,6 +48,10 @@ Each commit runs the tests of what it changed:
 | A package (`package-*/`)                   | `wado test <package>`       |
 | Any other Rust crate                       | `cargo test -p <crate>`     |
 
+`wado test` skips a file that passed while nothing it read has changed, so a
+rerun after a Wado edit tests only what the edit reached. A rebuilt `wado`
+binary reruns everything.
+
 The full run is `mise run test`, `mise run test-wado`, then
 `mise run update-stdlib-coverage-baseline`. It runs once, before the branch
 goes up for review, and CI runs it on every push. CI fails on any difference

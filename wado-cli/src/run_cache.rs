@@ -12,28 +12,34 @@
 //! compile` wants.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
+use wado_lsp::host::discovery::{absolutize, normalize_path};
 
 use crate::compiler_host::KilnComponentCache;
+use crate::fingerprint::Input;
 use crate::kiln_driver::ResolvedGenerator;
 use crate::sync::lock;
 
 /// Everything one CLI run shares across the files it processes.
 pub struct RunCache {
-    components: KilnComponentCache,
-    generators: GeneratorCache,
-    inputs: SourceWatch,
+    components: Arc<KilnComponentCache>,
+    generators: Arc<GeneratorCache>,
+    inputs: Arc<SourceWatch>,
+    /// What one compile read, in a view [`Self::scoped`] made for it.
+    reads: Option<ReadLog>,
 }
 
 impl Default for RunCache {
     fn default() -> Self {
         let cache = Self {
-            components: KilnComponentCache::default(),
-            generators: GeneratorCache::default(),
-            inputs: SourceWatch::default(),
+            components: Arc::default(),
+            generators: Arc::default(),
+            inputs: Arc::default(),
+            reads: None,
         };
         cache.inputs.observe_dev_stdlib();
         cache
@@ -67,26 +73,127 @@ impl RunCache {
     pub fn inputs(&self) -> &SourceWatch {
         &self.inputs
     }
+
+    /// A view sharing everything this run holds, which also records what is
+    /// read through it, so one compile can learn what it depended on.
+    #[must_use]
+    pub fn scoped(&self) -> Arc<Self> {
+        Arc::new(Self {
+            components: Arc::clone(&self.components),
+            generators: Arc::clone(&self.generators),
+            inputs: Arc::clone(&self.inputs),
+            reads: Some(ReadLog::default()),
+        })
+    }
+
+    /// Record that `path` held `bytes`.
+    pub fn observe(&self, path: &Path, bytes: &[u8]) {
+        let hash = self.inputs.observe(path, bytes);
+        self.record(path, Some(hash));
+    }
+
+    /// Record that `path` was looked up and was not there: the outcome changes
+    /// once it appears.
+    pub fn observe_absent(&self, path: &Path) {
+        self.record(path, None);
+    }
+
+    /// Record that what was read depends on `path` holding `bytes` (`None`:
+    /// being absent). The run's watch is left out: it names moved sources, and
+    /// this is for files the compile reads around the host, such as a manifest.
+    pub fn depend_on(&self, path: &Path, bytes: Option<&[u8]>) {
+        self.record(path, bytes.map(|bytes| Sha256::digest(bytes).into()));
+    }
+
+    /// Record a read no file describes, such as an environment variable, so
+    /// the scope's reads cannot vouch for its outcome.
+    pub fn observe_untracked(&self) {
+        if let Some(log) = &self.reads {
+            log.untracked.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn record(&self, path: &Path, hash: Option<[u8; 32]>) {
+        if let Some(log) = &self.reads {
+            let path = normalize_path(&absolutize(path));
+            lock(&log.inputs)
+                .entry(path.clone())
+                .or_insert_with(|| Input::hashed(path, hash));
+        }
+    }
+
+    /// What was read through this view, or `None` where something it read is
+    /// not a file, or the view is not [`Self::scoped`].
+    #[must_use]
+    pub(crate) fn reads(&self) -> Option<Vec<Input>> {
+        let log = self.reads.as_ref()?;
+        if log.untracked.load(Ordering::Relaxed) {
+            return None;
+        }
+        Some(lock(&log.inputs).values().cloned().collect())
+    }
+
+    /// Record `reads`, which another view made, as read through this one.
+    fn replay(&self, reads: Option<&[Input]>) {
+        let Some(log) = &self.reads else {
+            return;
+        };
+        let Some(reads) = reads else {
+            self.observe_untracked();
+            return;
+        };
+        let mut inputs = lock(&log.inputs);
+        for input in reads {
+            inputs
+                .entry(input.path.clone())
+                .or_insert_with(|| input.clone());
+        }
+    }
+}
+
+/// The reads of one [`RunCache::scoped`] view.
+#[derive(Default)]
+struct ReadLog {
+    inputs: Mutex<IndexMap<PathBuf, Input>>,
+    untracked: AtomicBool,
 }
 
 /// Generators resolved by this run, keyed by manifest root + module. The first
 /// resolution wins for the rest of it, so an edit in flight cannot take effect
 /// halfway through; [`SourceWatch`] is what reports that the edit happened.
+///
+/// Each keeps what resolving it read, which a later compile reusing it has
+/// depended on as much as the first did.
 #[derive(Default)]
 pub struct GeneratorCache {
-    resolved: Mutex<IndexMap<String, ResolvedGenerator>>,
+    resolved: Mutex<IndexMap<String, (ResolvedGenerator, Option<Vec<Input>>)>>,
 }
 
 impl GeneratorCache {
+    /// The generator pinned under `key`, its reads replayed into `run`.
     #[must_use]
-    pub fn get(&self, key: &str) -> Option<ResolvedGenerator> {
-        lock(&self.resolved).get(key).cloned()
+    pub fn get(&self, key: &str, run: &RunCache) -> Option<ResolvedGenerator> {
+        let (resolved, reads) = lock(&self.resolved).get(key).cloned()?;
+        run.replay(reads.as_deref());
+        Some(resolved)
     }
 
-    /// Store `resolved` unless the run already pinned one, and return what is
-    /// pinned — so racing resolutions all observe the same answer.
-    pub fn pin(&self, key: String, resolved: ResolvedGenerator) -> ResolvedGenerator {
-        lock(&self.resolved).entry(key).or_insert(resolved).clone()
+    /// Store `resolved`, which reading through `resolution` produced, unless
+    /// the run already pinned one, and return what is pinned — so racing
+    /// resolutions all observe the same answer. Its reads replay into `run`.
+    pub fn pin(
+        &self,
+        key: String,
+        resolved: ResolvedGenerator,
+        resolution: &RunCache,
+        run: &RunCache,
+    ) -> ResolvedGenerator {
+        let (resolved, reads) = lock(&self.resolved)
+            .entry(key)
+            .or_insert_with(|| (resolved, resolution.reads()))
+            .clone();
+        run.replay(reads.as_deref());
+        resolved
     }
 }
 
@@ -116,8 +223,8 @@ pub struct SourceWatch {
 
 impl SourceWatch {
     /// Record `bytes` as what `path` held when the run first read it; a later
-    /// read is compared against that, never replaces it.
-    pub fn observe(&self, path: &Path, bytes: &[u8]) {
+    /// read is compared against that, never replaces it. Returns their hash.
+    pub fn observe(&self, path: &Path, bytes: &[u8]) -> [u8; 32] {
         // Hash outside the lock — every compile worker reads at once — then
         // insert-or-compare under one hold, so two workers reaching the same
         // path cannot each decide they are the first and drop the loser's hash.
@@ -136,6 +243,7 @@ impl SourceWatch {
                 );
             }
         }
+        hash
     }
 
     /// Record the stdlib this process compiles against. A dev build takes it

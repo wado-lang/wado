@@ -150,7 +150,12 @@ wado test file.wado                 # run tests in one file
 wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
 wado test --profile guest file.wado # guest profile over that file's tests
 wado test --coverage=lcov,json      # also report what ran, into build/coverage/
+wado test --no-cache                # also rerun the files that passed before
 ```
+
+A file that passed is skipped while nothing it read has changed: the summary
+names it on a `cached:` line. A file that reaches the filesystem, the network
+or `core:eval` always runs.
 
 `--coverage` prints a per-file summary after the run. `coverage.json` names,
 for each region, the tests that ran it. `wado dump --coverage-plan file.wado`

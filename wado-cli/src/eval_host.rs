@@ -6,7 +6,7 @@
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
 use tokio::sync::{OnceCell, OwnedSemaphorePermit, Semaphore, TryAcquireError, oneshot};
@@ -28,6 +28,7 @@ use wado_lsp::host::discovery::{absolutize, normalize_path};
 use crate::COMPILER_STACK_SIZE;
 use crate::cache::write_atomic;
 use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics};
+use crate::fingerprint::{Input, compiler_digest, hash_field};
 use crate::kiln_provider::hex32;
 use crate::knobs::CompileKnobs;
 use crate::runtime::{CAPTURED_STDIO_CAPACITY, DEFAULT_GC_HEAP_INITIAL_SIZE, create_fuel_engine};
@@ -70,66 +71,6 @@ const LINKED_INTERFACES: &[&str] = &[
     "wasi:cli/stderr@0.3.0",
     "wasi:cli/exit@0.3.0",
 ];
-
-/// What every outcome depends on beyond its own inputs: the running `wado`
-/// binary, which links the compiler and wasmtime, and the stdlib it compiles
-/// against, which a dev build reads from disk.
-///
-/// The binary is known by its size and modification time, as ccache knows a
-/// compiler by default. Hashing its contents costs seconds for a dev build,
-/// and every rebuild changes both anyway.
-///
-/// A rebuild beneath a long `wado test` replaces the file at the binary's
-/// path, which then describes another compiler, so the digest is read when the
-/// run starts, and on Linux through the running image itself.
-fn compiler_digest() -> [u8; 32] {
-    let exe = running_exe();
-    let stat = std::fs::metadata(&exe)
-        .unwrap_or_else(|e| panic!("reading the running `wado` binary {}: {e}", exe.display()));
-    let modified = stat
-        .modified()
-        .expect("the platform reports a modification time");
-    let nanos_since_epoch = match modified.duration_since(UNIX_EPOCH) {
-        Ok(after) => i128::try_from(after.as_nanos()),
-        Err(before) => i128::try_from(before.duration().as_nanos()).map(|nanos| -nanos),
-    }
-    .expect("a modification time within i128 nanoseconds of 1970");
-    let mut hasher = Sha256::new();
-    hasher.update(stat.len().to_le_bytes());
-    hasher.update(nanos_since_epoch.to_le_bytes());
-    hash_dev_stdlib(&mut hasher);
-    hasher.finalize().into()
-}
-
-#[cfg(target_os = "linux")]
-fn running_exe() -> PathBuf {
-    PathBuf::from("/proc/self/exe")
-}
-
-#[cfg(not(target_os = "linux"))]
-fn running_exe() -> PathBuf {
-    std::env::current_exe().expect("locating the running `wado` binary")
-}
-
-#[cfg(debug_assertions)]
-fn hash_dev_stdlib(hasher: &mut Sha256) {
-    wado_lsp::host::install_dev_stdlib();
-    for (file, source) in wado_compiler::stdlib::installed_dev_stdlib() {
-        hash_field(hasher, file.as_bytes());
-        hash_field(hasher, source.as_bytes());
-    }
-}
-
-/// A release build embeds the stdlib, so rebuilding the binary is the only way
-/// to change it.
-#[cfg(not(debug_assertions))]
-fn hash_dev_stdlib(_hasher: &mut Sha256) {}
-
-/// Length-prefixed, so no two sequences of fields hash alike.
-fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
-    hasher.update((bytes.len() as u64).to_le_bytes());
-    hasher.update(bytes);
-}
 
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
 pub struct EvalHost {
@@ -500,34 +441,6 @@ impl CompilerHost for DependencyHost {
     fn dependency_index(&self) -> DependencyIndex {
         self.deps.index.clone()
     }
-}
-
-/// A file a compile looked up, known by its contents, or by its absence.
-#[derive(serde::Serialize, serde::Deserialize)]
-struct Input {
-    path: PathBuf,
-    /// `None` where the file was absent.
-    sha256: Option<String>,
-}
-
-impl Input {
-    fn of(path: PathBuf, bytes: Option<&[u8]>) -> Self {
-        Self {
-            path,
-            sha256: bytes.map(digest),
-        }
-    }
-
-    fn unchanged(&self) -> bool {
-        match std::fs::read(&self.path) {
-            Ok(bytes) => self.sha256.as_deref() == Some(digest(&bytes).as_str()),
-            Err(e) => e.kind() == std::io::ErrorKind::NotFound && self.sha256.is_none(),
-        }
-    }
-}
-
-fn digest(bytes: &[u8]) -> String {
-    hex32(&Sha256::digest(bytes).into())
 }
 
 /// A cached outcome, valid while every file the compile read is unchanged.

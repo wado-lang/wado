@@ -166,6 +166,23 @@ over every [discovered](#test-discovery) file. It exits non-zero when any test
 fails, any TODO test unexpectedly passes, or any file fails to compile other
 than a `#![TODO]` module, which counts as a pending TODO instead.
 
+### Cached Results
+
+A file whose tests all passed, or trapped as pending TODOs, is not compiled or
+run again while nothing that decided the outcome has changed. That is the
+`wado` binary, the stdlib it compiles against, the run's options, and every
+file the file's compile read, including Kiln generators and their inputs. The
+summary counts the file's tests as they went before and names the file on a
+`cached:` line.
+
+A result is cached only where those inputs decide it. A file is always run when
+its compile reads an environment variable, or when its tests can reach what no
+compile reads: the filesystem, the network, or `core:eval`.
+
+`--no-cache` runs every file and still records the passes. `--coverage`,
+`--profile` and `--no-run` neither read nor record them. Results live in
+`build/test/` under the file's package root.
+
 ## Test Discovery
 
 `wado test` with no path argument walks the current directory for `*.wado`
