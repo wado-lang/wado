@@ -4,6 +4,8 @@ global PAGE_SIZE: u64 = 65536;
 
 global MAX_ADDRESS: u64 = 4294967295;
 
+global DEBUG_LIVE: u32 = 2703027456;
+
 global NEG_ZERO_BITS: u64 = 9223372036854775808;
 
 global POW10: List<u64> = deferred null;
@@ -2692,12 +2694,27 @@ fn bump(align: u32, size: u32) -> u32 {
 
 pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
     if (newsize == 0) {
-        if (oldsize != 0) {
-            core::builtin::memory_fill(oldptr, 255, oldsize);
+        if (oldptr != 0) {
+            let tag: u32 = (oldptr as u32 - 4);
+            if (core::allocator::load(tag) != core::allocator::DEBUG_LIVE) {
+                core::builtin::cold_path();
+                core::builtin::unreachable();
+            }
+            core::allocator::store(tag, 4294967295);
+            if (oldsize != 0) {
+                core::builtin::memory_fill(oldptr, 255, oldsize);
+            }
         }
         return 0;
     }
-    return core::allocator::bump(align as u32, newsize as u32) as i32;
+    let gap: u32 = if (align < 4) {
+        4;
+    } else {
+        align as u32;
+    };
+    let block: u32 = (core::allocator::bump(align as u32, (gap + newsize as u32)) + gap);
+    core::allocator::store((block - 4), core::allocator::DEBUG_LIVE);
+    return block as i32;
 }
 
 fn fl_size(tag: u32) -> u32 {
