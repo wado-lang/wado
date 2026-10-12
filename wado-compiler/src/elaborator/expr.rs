@@ -37,7 +37,7 @@ use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::control_flow::{
-    collect_unresolved_null_breaks, collect_unresolved_null_tails,
+    break_values, collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
 };
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
@@ -772,7 +772,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let expected_type = self.settled_result_expectation(expected_type);
-        let tail_type = self.labeled_block_tail_type(lb);
+        let mut tail_type = self.labeled_block_tail_type(lb);
+        let mut break_types = break_types.to_vec();
+        if expected_type.is_none() {
+            tail_type = self.retarget_labeled_literals(lb, &mut break_types, tail_type);
+        }
         let mut branch_types: Vec<TypeId> = break_types
             .iter()
             .copied()
@@ -795,6 +799,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         result_type
+    }
+
+    /// Give the numeric-literal branches of a labeled block the type a sibling
+    /// fixed, as [`Self::if_branch_types`] does for an `if`. A `break` with no
+    /// value yields `()`, which fixes no numeric type. Returns the tail's type.
+    fn retarget_labeled_literals(
+        &mut self,
+        lb: &LabeledBlockExpr,
+        break_types: &mut Vec<TypeId>,
+        tail_type: TypeId,
+    ) -> TypeId {
+        let values = {
+            let ctx = self.ctrl_flow_ctx();
+            break_values(ctx, &lb.block, &lb.label)
+        };
+        assert!(
+            values.len() <= break_types.len(),
+            "every `break` value is one of the block's recorded breaks"
+        );
+        let valueless = break_types.len() - values.len();
+        let mut tails = NumericLiteralTails::default();
+        let tail_is_literal = tail_type != TypeTable::NEVER
+            && self.collect_block_numeric_literal_tails(&lb.block, tail_type, &mut tails)
+            && !tails.literals.is_empty();
+        let fixed = values
+            .iter()
+            .filter(|v| {
+                let ty = self.ast_expr_type(v).unwrap_or(TypeTable::UNKNOWN);
+                !self.is_numeric_literal_arm(v, ty)
+            })
+            .filter_map(|v| self.ast_expr_type(v))
+            .chain((!tail_is_literal).then_some(tail_type))
+            .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t));
+        let Some(target) = fixed else {
+            return tail_type;
+        };
+        for &value in &values {
+            self.coerce_numeric_literal_tail(value, target);
+        }
+        *break_types = values
+            .iter()
+            .map(|v| self.ast_expr_type(v).unwrap_or(TypeTable::UNKNOWN))
+            .chain(std::iter::repeat_n(TypeTable::UNIT, valueless))
+            .collect();
+        if tail_is_literal {
+            return self
+                .coerce_block_numeric_literal_tail(&lb.block, target)
+                .unwrap_or(tail_type);
+        }
+        tail_type
     }
 
     /// What the path reaching the block's end yields, or `never` when no path

@@ -336,9 +336,10 @@ enum Step {
     Descend,
 }
 
-trait AstTreeProbe {
-    fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step;
-    fn check_expr(&mut self, _expr: &ast::Expr) -> Step {
+/// `'t` is the tree's own lifetime, so a probe may keep what it visits.
+trait AstTreeProbe<'t> {
+    fn check_stmt(&mut self, stmt: &'t ast::Stmt) -> Step;
+    fn check_expr(&mut self, _expr: &'t ast::Expr) -> Step {
         Step::Descend
     }
 }
@@ -350,7 +351,7 @@ struct LoopEscape {
     inner_labels: Vec<String>,
 }
 
-impl AstTreeProbe for LoopEscape {
+impl AstTreeProbe<'_> for LoopEscape {
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
         match stmt {
             ast::Stmt::Break(b) => match &b.label {
@@ -390,7 +391,7 @@ struct BreakToLabel<'a> {
     label: &'a str,
 }
 
-impl AstTreeProbe for BreakToLabel<'_> {
+impl AstTreeProbe<'_> for BreakToLabel<'_> {
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
         match stmt {
             ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) => Step::Match,
@@ -421,7 +422,7 @@ struct NullBreakCollector<'a> {
     spans: Vec<Span>,
 }
 
-impl AstTreeProbe for NullBreakCollector<'_> {
+impl AstTreeProbe<'_> for NullBreakCollector<'_> {
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
         match stmt {
             ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) && b.value.is_some() => {
@@ -462,6 +463,46 @@ pub(super) fn collect_unresolved_null_breaks(
     probe.spans
 }
 
+/// The values every `break <label>: <value>` inside `block` yields, an inner
+/// labeled block reusing the name shadowing it.
+pub(super) fn break_values<'t>(
+    ctx: CtrlFlowCtx<'_>,
+    block: &'t ast::Block,
+    label: &str,
+) -> Vec<&'t ast::Expr> {
+    let mut probe = BreakValues {
+        label,
+        values: Vec::new(),
+    };
+    any_in_tree(ctx, block, &mut probe);
+    probe.values
+}
+
+struct BreakValues<'l, 't> {
+    label: &'l str,
+    values: Vec<&'t ast::Expr>,
+}
+
+impl<'t> AstTreeProbe<'t> for BreakValues<'_, 't> {
+    fn check_stmt(&mut self, stmt: &'t ast::Stmt) -> Step {
+        match stmt {
+            ast::Stmt::Break(b) if b.label.as_deref() == Some(self.label) => {
+                self.values.extend(b.value.as_deref());
+                Step::Skip
+            }
+            ast::Stmt::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+
+    fn check_expr(&mut self, expr: &'t ast::Expr) -> Step {
+        match expr {
+            ast::Expr::LabeledBlock(lb) if lb.label == self.label => Step::Skip,
+            _ => Step::Descend,
+        }
+    }
+}
+
 /// Whether the body names its result anywhere. The walk stops at a closure
 /// body, which is a function of its own and where `task return` is rejected.
 pub(super) fn block_delivers(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bool {
@@ -470,7 +511,7 @@ pub(super) fn block_delivers(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> bool {
 
 struct TaskReturnPresent;
 
-impl AstTreeProbe for TaskReturnPresent {
+impl AstTreeProbe<'_> for TaskReturnPresent {
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
         match stmt {
             ast::Stmt::TaskReturn(_) => Step::Match,
@@ -485,7 +526,7 @@ struct UnboundLoopJump {
     found: Option<(LoopJump, Span)>,
 }
 
-impl AstTreeProbe for UnboundLoopJump {
+impl AstTreeProbe<'_> for UnboundLoopJump {
     fn check_stmt(&mut self, stmt: &ast::Stmt) -> Step {
         match stmt {
             ast::Stmt::Break(b) if b.label.is_none() => {
@@ -527,11 +568,19 @@ fn block_can_break_to_label(ctx: CtrlFlowCtx<'_>, block: &ast::Block, label: &st
     any_in_tree(ctx, block, &mut probe)
 }
 
-fn any_in_tree<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, block: &ast::Block, probe: &mut P) -> bool {
+fn any_in_tree<'t, P: AstTreeProbe<'t>>(
+    ctx: CtrlFlowCtx<'_>,
+    block: &'t ast::Block,
+    probe: &mut P,
+) -> bool {
     block.stmts.iter().any(|s| any_in_stmt(ctx, s, probe))
 }
 
-fn any_in_stmt<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, probe: &mut P) -> bool {
+fn any_in_stmt<'t, P: AstTreeProbe<'t>>(
+    ctx: CtrlFlowCtx<'_>,
+    stmt: &'t ast::Stmt,
+    probe: &mut P,
+) -> bool {
     match probe.check_stmt(stmt) {
         Step::Match => return true,
         Step::Skip => return false,
@@ -599,9 +648,9 @@ fn any_in_stmt<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, stmt: &ast::Stmt, probe: &
     }
 }
 
-fn condition_any<P: AstTreeProbe>(
+fn condition_any<'t, P: AstTreeProbe<'t>>(
     ctx: CtrlFlowCtx<'_>,
-    cond: &ast::Condition,
+    cond: &'t ast::Condition,
     probe: &mut P,
 ) -> bool {
     match cond {
@@ -613,7 +662,11 @@ fn condition_any<P: AstTreeProbe>(
     }
 }
 
-fn any_in_expr<P: AstTreeProbe>(ctx: CtrlFlowCtx<'_>, expr: &ast::Expr, probe: &mut P) -> bool {
+fn any_in_expr<'t, P: AstTreeProbe<'t>>(
+    ctx: CtrlFlowCtx<'_>,
+    expr: &'t ast::Expr,
+    probe: &mut P,
+) -> bool {
     match probe.check_expr(expr) {
         Step::Match => return true,
         Step::Skip => return false,
