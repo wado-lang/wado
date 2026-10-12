@@ -983,6 +983,8 @@ impl WebGpuBackend {
 impl Backend for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
     type Operand<Axes> = PlacedRead<Axes>;
+    /// The product's shader reads a plain row-major matrix.
+    type Rhs<K, N> = Placed<f32, [K, N]>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(t, false);
@@ -991,6 +993,14 @@ impl Backend for WebGpuBackend {
     /// A kept mask is written once, and each pass reads it where it is.
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(t, true);
+    }
+
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        return self.stored(t, true);
+    }
+
+    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        return self.stored(&self.cpu.transpose2(t), true);
     }
 
     /// Submits what the pass before recorded and releases its buffers, so a
@@ -1125,6 +1135,15 @@ impl Backend for WebGpuBackend {
         then: Option<Epilogue<PlacedRead<Out>>>,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return self.product::<A, B, Out>(a, b, &then);
+    }
+
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Placed<f32, [..Bs, M, K]>,
+        b: &Placed<f32, [K, N]>,
+        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
+    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, b, &then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(

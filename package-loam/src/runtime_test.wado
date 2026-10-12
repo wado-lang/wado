@@ -396,12 +396,18 @@ fn matmul_shared_matches_product(rows: i32, cols: i32) {
     }
     let a: Tensor<f32, [Batch, Row, Inner]> = tensor([batch, rows, inner], a_data);
     let b: Tensor<f32, [Inner, Col]> = tensor([inner, cols], b_data);
-    // A weight the `Cpu` backend keeps as a matrix carries its packed rows alone.
-    let kept = Cpu {}.keep_matrix(&b);
-    assert kept.packed matches { Some(_) } && kept.data.is_empty();
+    let mut cpu = Cpu {};
+    // The same matrix prepared as a product's right operand, from itself and
+    // from its transpose, as a `Gemm` that transposes it holds it.
+    let kept = cpu.keep_rhs(&b);
+    let kept_transposed = cpu.keep_rhs_transposed(&transpose2(&b));
 
-    for let right of [b, kept] {
-        let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &right, &null);
+    let products: List<Tensor<f32, [Batch, Row, Col]>> = [
+        matmul_shared(&a, &b, &null),
+        cpu.matmul_rhs(&a, &kept, null),
+        cpu.matmul_rhs(&a, &kept_transposed, null),
+    ];
+    for let c of products {
         assert c.extents == [batch, rows, cols] as List<i32>;
         for let s of 0..<batch {
             for let r of 0..<rows {
@@ -417,15 +423,11 @@ fn matmul_shared_matches_product(rows: i32, cols: i32) {
     }
 }
 
-test "a kept matrix lifted to a batch axis of 1 still multiplies as itself" {
-    // A branch naming a weight's axes apart reads it through `lift`, which
-    // must carry the packed rows the kept matrix holds in place of its data.
-    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([1, 2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+test "a prepared right operand multiplies a matrix with no batch axis" {
+    let a: Tensor<f32, [Row, Inner]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
     let b: Tensor<f32, [Inner, Col]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
-    let kept = Cpu {}.keep_matrix(&b);
-    let lifted: Tensor<f32, [Batch, Inner, Col]> = lift(&kept, 3);
-
-    let c = matmul_broadcast::<[Batch, Row, Inner], [Batch, Inner, Col], [Batch, Row, Col]>(&a, &lifted, &null);
+    let mut cpu = Cpu {};
+    let c: Tensor<f32, [Row, Col]> = cpu.matmul_rhs(&a, &cpu.keep_rhs(&b), null);
     assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
 }
 

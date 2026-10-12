@@ -4,29 +4,28 @@ use { f32x4 } from "core:simd";
 pub struct Tensor<E, Axes> {
     pub data: List<E>,
     pub extents: List<i32>,
-    /// The elements as [`Packed`] rows in place of `data`, which is then empty,
-    /// where the `Cpu` backend kept a matrix only products read on their
-    /// right. Every kernel builds its output without one.
-    pub packed: Option<Packed> = null,
 }
 
-/// A matrix's rows as vectors of 4 adjacent elements, each row padded with
-/// zeros to a whole vector, so a product reads 4 columns with one bounds
-/// check and multiplies them in one instruction.
-pub struct Packed {
+/// The `Cpu` backend's right operand of a matrix product, `[K, N]`: its rows
+/// as vectors of 4 adjacent elements, each row padded with zeros to a whole
+/// vector, so a product reads 4 columns with one bounds check and multiplies
+/// them in one instruction.
+pub struct Packed<K, N> {
     vectors: Array<f32x4>,
     /// The vectors one row takes.
     per_row: i32,
+    rows: i32,
+    cols: i32,
 }
 
-/// `data`, a `rows` by `cols` matrix, as [`Packed`] rows.
-fn packed_matrix<E: Element>(data: &List<E>, rows: i32, cols: i32) -> Packed {
+/// The `rows` by `cols` matrix whose element `[r, c]` is `at(r, c)`, packed.
+fn packed_matrix<K, N>(rows: i32, cols: i32, at: fn(i32, i32) -> f32) -> Packed<K, N> {
     let per_row = (cols + 3) / 4;
     let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
     for let r of 0..<rows {
         for let v of 0..<per_row {
             let c = v * 4;
-            let lane = |i: i32| if c + i < cols { data[r * cols + c + i].cast_to::<f32>() } else { 0.0 as f32 };
+            let lane = |i: i32| if c + i < cols { at(r, c + i) } else { 0.0 as f32 };
             let lanes: Array<f32> = [
                 lane(0),
                 lane(1),
@@ -36,7 +35,33 @@ fn packed_matrix<E: Element>(data: &List<E>, rows: i32, cols: i32) -> Packed {
             vectors[r * per_row + v] = f32x4::from(lanes);
         }
     }
-    return Packed { vectors, per_row };
+    return Packed { vectors, per_row, rows, cols };
+}
+
+/// A batched matrix product by a right operand prepared as [`Packed`], shared
+/// by every batch element.
+pub fn matmul_packed<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Packed<K, N>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    let rank = a.extents.len();
+    let rows = a.extents[rank - 2];
+    let inner = a.extents[rank - 1];
+    assert inner == b.rows;
+    let cols = b.cols;
+    let mut extents = a.extents;
+    extents[rank - 1] = cols;
+    let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    let finishing = finish(then, &extents);
+    for let s of 0..<element_count(&a.extents[0..<rank - 2].to_list()) {
+        let out_base = s * rows * cols;
+        packed_product(&a.data, b, &mut out, rows, s * rows * inner, out_base);
+        if let Some(f) = &finishing {
+            f.apply(&mut out, out_base, rows * cols);
+        }
+    }
+    return Tensor { data: out, extents };
 }
 
 /// The elements `extents` hold, or `None` where its non-empty extents multiply
@@ -233,10 +258,7 @@ pub fn matmul_broadcast<A, B, Out>(
         let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
         let at = MatrixAt { a: a_base, b: b_base, out: out_base };
-        match &b.packed {
-            Some(p) => packed_product(lhs_data, p, &mut out, rows, inner, cols, &at),
-            None => scalar_product(lhs_data, rhs_data, &mut out, rows, inner, cols, &at),
-        }
+        scalar_product(lhs_data, rhs_data, &mut out, rows, inner, cols, &at);
         if let Some(f) = &finishing {
             f.apply(&mut out, out_base, rows * cols);
         }
@@ -283,19 +305,20 @@ fn scalar_product(a: &List<f32>, b: &List<f32>, out: &mut List<f32>, rows: i32, 
     }
 }
 
-/// One batch element's product over `b` [`Packed`], shared by every batch
-/// element: rows in bands as [`scalar_product`] takes them, against 2 vectors
-/// (8 columns) of `b` at a time. A row of an odd number of vectors computes its
-/// last one twice and stores it once, and a padding lane is never stored.
-fn packed_product(a: &List<f32>, b: &Packed, out: &mut List<f32>, rows: i32, inner: i32, cols: i32, at: &MatrixAt) {
-    assert at.b == 0, "a packed matrix is shared by every batch element";
+/// One batch element's product over `b`, its `rows` rows of `a` from `a_base`
+/// and of the output from `out_base`: rows in bands as [`scalar_product`]
+/// takes them, against 2 vectors (8 columns) of `b` at a time. A row of an odd
+/// number of vectors computes its last one twice and stores it once, and a
+/// padding lane is never stored.
+fn packed_product<K, N>(a: &List<f32>, b: &Packed<K, N>, out: &mut List<f32>, rows: i32, a_base: i32, out_base: i32) {
+    let [inner, cols] = [b.rows, b.cols];
     let mut r = 0;
     while r < rows {
         let height = i32::min(TILE, rows - r);
         for let mut v = 0; v < b.per_row; v += 2 {
             let v1 = i32::min(v + 1, b.per_row - 1);
-            let a_at = at.a + r * inner;
-            let out_at = at.out + r * cols;
+            let a_at = a_base + r * inner;
+            let out_at = out_base + r * cols;
             if height > 1 {
                 vector_band(a, b, out, inner, cols, height, a_at, v, v1, out_at);
             } else {
@@ -309,9 +332,9 @@ fn packed_product(a: &List<f32>, b: &Packed, out: &mut List<f32>, rows: i32, inn
 /// `height` rows (2 to 4) of the product against the vectors `v0` and `v1`
 /// of each row of `b`, the missing rows of a short band reading its last real
 /// one, as in [`tile_4x4`], and left unstored.
-fn vector_band(
+fn vector_band<K, N>(
     a: &List<f32>,
-    b: &Packed,
+    b: &Packed<K, N>,
     out: &mut List<f32>,
     inner: i32,
     cols: i32,
@@ -359,9 +382,9 @@ fn vector_band(
 }
 
 /// [`vector_band`] for a lone row.
-fn vector_row(
+fn vector_row<K, N>(
     a: &List<f32>,
-    b: &Packed,
+    b: &Packed<K, N>,
     out: &mut List<f32>,
     inner: i32,
     cols: i32,
@@ -689,7 +712,7 @@ pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out> {
     assert rank >= t.extents.len();
     let mut extents = List::<i32>::filled(rank - t.extents.len(), 1);
     extents.extend(&t.extents);
-    return Tensor { data: t.data, extents, packed: t.packed };
+    return Tensor { data: t.data, extents };
 }
 
 /// Moves a row-major `index` over `extents` one position on and returns the
@@ -1738,6 +1761,9 @@ pub trait Backend with _ {
     /// Each `read` checks a tensor against the output's axes, so `fused`
     /// takes its operands as one list.
     type Operand<Axes>;
+    /// A matrix product's right operand `[K, N]`, prepared for the product
+    /// alone, which no other kernel reads.
+    type Rhs<K, N>;
 
     /// `t`, held on the host, as this backend holds it.
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
@@ -1748,11 +1774,19 @@ pub trait Backend with _ {
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
         return self.upload(t);
     }
-    /// [`Self::keep`] for a weight read only as a matrix product's right
-    /// operand, which the backend may hold in the layout the product reads
-    /// and in no other.
-    fn keep_matrix<E: Element, A, B>(&mut self, t: &Tensor<E, [A, B]>) -> Self::Tensor<E, [A, B]> {
-        return self.keep(t);
+    /// `t`, a weight read only as a matrix product's right operand, held for
+    /// every pass in the layout [`Self::matmul_rhs`] reads it in.
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Self::Rhs<K, N>;
+    /// [`Self::keep_rhs`] of `t`'s transpose, as a `Gemm` that transposes its
+    /// right operand reads it, so no pass transposes it again.
+    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Self::Rhs<K, N>;
+    /// [`Self::keep_rhs`] of a weight held in half precision on the host.
+    fn prepare_rhs<E: Held, K, N>(&mut self, t: &Tensor<E, [K, N]>) -> Self::Rhs<K, N> {
+        return self.keep_rhs(&widen(t));
+    }
+    /// [`Self::keep_rhs_transposed`] of a weight held in half precision.
+    fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Self::Rhs<K, N> {
+        return self.keep_rhs_transposed(&widen(t));
     }
     /// `t`, held in half precision on the host, as this backend computes with
     /// it. How it stores the result is its own: the type says only that the
@@ -1825,6 +1859,13 @@ pub trait Backend with _ {
         b: &Self::Tensor<f32, B>,
         then: Option<Epilogue<Self::Operand<Out>>>,
     ) -> Self::Tensor<f32, Out>;
+    /// `matmul_shared` by a right operand [`Self::keep_rhs`] prepared.
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Rhs<K, N>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(
         &mut self,
@@ -1907,6 +1948,7 @@ pub struct Cpu {
 impl Backend for Cpu {
     type Tensor<E: Element, Axes> = Tensor<E, Axes>;
     type Operand<Axes> = Read<Axes>;
+    type Rhs<K, N> = Packed<K, N>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
@@ -1916,14 +1958,14 @@ impl Backend for Cpu {
         return *t;
     }
 
-    /// A matrix of `f32` is held [`Packed`] alone, its `data` left empty: the
-    /// products that read it read only the packed rows.
-    fn keep_matrix<E: Element, A, B>(&mut self, t: &Tensor<E, [A, B]>) -> Tensor<E, [A, B]> {
-        if !E::is_f32() {
-            return *t;
-        }
-        let packed = packed_matrix(&t.data, t.extents[0], t.extents[1]);
-        return Tensor { data: [], extents: t.extents, packed: Option::Some(packed) };
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {
+        let cols = t.extents[1];
+        return packed_matrix(t.extents[0], cols, |r, c| t.data[r * cols + c]);
+    }
+
+    fn keep_rhs_transposed<K, N>(&mut self, t: &Tensor<f32, [N, K]>) -> Packed<K, N> {
+        let inner = t.extents[1];
+        return packed_matrix(inner, t.extents[0], |r, c| t.data[c * inner + r]);
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Tensor<E, Axes> {
@@ -2000,6 +2042,15 @@ impl Backend for Cpu {
         then: Option<Epilogue<Read<Out>>>,
     ) -> Tensor<f32, Out> {
         return matmul_broadcast(a, b, &then);
+    }
+
+    fn matmul_rhs<..Bs, M, K, N>(
+        &mut self,
+        a: &Tensor<f32, [..Bs, M, K]>,
+        b: &Packed<K, N>,
+        then: Option<Epilogue<Read<[..Bs, M, N]>>>,
+    ) -> Tensor<f32, [..Bs, M, N]> {
+        return matmul_packed(a, b, &then);
     }
 
     fn gather_rows<E: Element, Row, ..Rest, ..Ix>(

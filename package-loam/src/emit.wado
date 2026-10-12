@@ -145,9 +145,15 @@ pub fn emit(graph: &Graph, checked: &Checked, runtime: &String, fuse: bool = tru
     }
 
     let kept = kept_literals(&literals, checked);
-    emit_weights(&mut w, graph, checked, &names, &held, &kept);
+    let rhs = rhs_weights(graph, checked);
+    emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs);
     let symbols = Symbols::of(&carriers, &names);
-    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals, &kept, symbols, fuse)?;
+    let exprs = Operands {
+        values: TreeMap::<String, String>::new(),
+        scalars,
+        rhs,
+    };
+    emit_forward(&mut w, graph, checked, &names, &held, exprs, &literals, &kept, symbols, fuse)?;
     return Result::Ok(w.to_string());
 }
 
@@ -379,7 +385,8 @@ fn sanitize(name: &String) -> String {
 
 /// The graph's initializers twice: `Weights` on the host as the graph holds
 /// them, and `Prepared`, which `forward` reads, as the backend computes with
-/// them. `Prepared` holds the `kept` literals too, which need no host copy.
+/// them. `Prepared` holds the `kept` literals too, which need no host copy,
+/// and the `rhs` weights as a product's right operand.
 fn emit_weights(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -387,6 +394,7 @@ fn emit_weights(
     names: &Names,
     held: &TreeMap<String, String>,
     kept: &List<String>,
+    rhs: &TreeMap<String, bool>,
 ) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
@@ -394,7 +402,7 @@ fn emit_weights(
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
-        prepared.add_pub_field(ident, prepared_type(checked, &vi.name));
+        prepared.add_pub_field(ident, weight_type(checked, rhs, &vi.name));
     }
     for let tensor of kept {
         prepared.add_pub_field(names.get(tensor), prepared_type(checked, tensor));
@@ -411,10 +419,9 @@ fn emit_weights(
     ).set_return_type(PREPARED_TYPE).add_effect("_").emit_begin(w);
     emit_kept_binding(w, kept);
     w.begin(`return ${PREPARED}`);
-    let matrices = matrix_weights(graph, checked);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
-        let holding = weight_holding(&matrices, &vi.name);
+        let holding = weight_holding(rhs, &vi.name);
         w.line(`${ident}: ${preparation(checked, held, &vi.name, `&self.${ident}`, holding)},`);
     }
     emit_kept_fields(w, names, kept);
@@ -424,7 +431,7 @@ fn emit_weights(
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held, &matrices, kept);
+    emit_constructor(w, graph, checked, names, held, rhs, kept);
     if !kept.is_empty() {
         emit_kept(w, checked, names, kept);
     }
@@ -485,8 +492,10 @@ enum Holding {
     Pass,
     /// For every pass: a weight.
     Keep,
-    /// For every pass, read only as a matrix product's right operand.
-    KeepMatrix,
+    /// For every pass, prepared as a matrix product's right operand.
+    KeepRhs,
+    /// As `KeepRhs`, from the transpose of the weight as stored.
+    KeepRhsTransposed,
 }
 
 /// The call making the host tensor `host`, a reference, the backend's: a
@@ -498,62 +507,101 @@ fn preparation(
     host: String,
     holding: Holding,
 ) -> String {
-    let verb = if converted(checked, held, tensor) {
-        "prepare";
-    } else {
-        match holding {
-            Pass => "upload",
-            Keep => "keep",
-            KeepMatrix => "keep_matrix",
-        }
+    let converted = converted(checked, held, tensor);
+    let verb = match holding {
+        Pass | Keep && converted => "prepare",
+        Pass => "upload",
+        Keep => "keep",
+        KeepRhs => if converted { "prepare_rhs" } else { "keep_rhs" },
+        KeepRhsTransposed => if converted { "prepare_rhs_transposed" } else { "keep_rhs_transposed" },
     };
     return `backend.${verb}(${host})`;
 }
 
-/// How the backend holds the weight `tensor`: as a matrix where `matrices`
-/// names it.
-fn weight_holding(matrices: &TreeSet<String>, tensor: &String) -> Holding {
-    return if matrices.contains(*tensor) { Holding::KeepMatrix } else { Holding::Keep };
+/// How the backend holds the weight `tensor`, prepared as a product's right
+/// operand where `rhs` names it.
+fn weight_holding(rhs: &TreeMap<String, bool>, tensor: &String) -> Holding {
+    return match rhs.get(*tensor) {
+        Some(true) => Holding::KeepRhsTransposed,
+        Some(false) => Holding::KeepRhs,
+        None => Holding::Keep,
+    };
 }
 
-/// The initializers of rank 2 read only as a matrix product's right operand:
-/// input 1 of a `MatMul`, or of a `Gemm` that does not transpose it, in the
-/// graph and every branch it carries, and neither an output nor read anywhere
-/// else. A backend may hold such a weight in the layout the product reads.
-fn matrix_weights(graph: &Graph, checked: &Checked) -> TreeSet<String> {
-    let mut right = TreeSet::<String>::new();
-    let mut elsewhere = TreeSet::<String>::new();
-    note_operand_uses(graph, &mut right, &mut elsewhere);
+/// The weight `tensor` as `Prepared` holds it.
+fn weight_type(checked: &Checked, rhs: &TreeMap<String, bool>, tensor: &String) -> String {
+    let Some(transposed) = rhs.get(*tensor) else {
+        return prepared_type(checked, tensor);
+    };
+    let shape = checked.shapes[*tensor];
+    let [k, n] = if transposed { [1, 0] } else { [0, 1] };
+    return `${BACKEND_PARAM}::Rhs<${shape.axes[k].name}, ${shape.axes[n].name}>`;
+}
+
+/// The initializers of rank 2 that every read takes as a matrix product's right
+/// operand, in one orientation, in the graph and every branch it carries, and
+/// that are not an output. Each maps to whether the product reads it
+/// transposed, as a `Gemm` with `transB` does. A backend holds such a weight
+/// in the layout the product reads, which no other kernel reads.
+fn rhs_weights(graph: &Graph, checked: &Checked) -> TreeMap<String, bool> {
+    let mut uses = OperandUses { right: TreeMap::new(), elsewhere: TreeSet::new() };
+    uses.note(graph, checked);
     for let vi of &graph.outputs {
-        elsewhere.insert(vi.name);
+        uses.elsewhere.insert(vi.name);
     }
-    let mut out = TreeSet::<String>::new();
+    let mut out = TreeMap::<String, bool>::new();
     for let vi of &graph.initializers {
-        if right.contains(vi.name) && !elsewhere.contains(vi.name) && checked.shapes[vi.name].rank() == 2 {
-            out.insert(vi.name);
+        if let Some(transposed) = uses.right.get(vi.name)
+            && !uses.elsewhere.contains(vi.name)
+            && checked.shapes[vi.name].rank() == 2
+        {
+            out[vi.name] = transposed;
         }
     }
     return out;
 }
 
-/// Sort each operand `graph`'s nodes read into `right`, as a matrix product's
-/// right operand, or `elsewhere`, recursing into the branches they carry.
-fn note_operand_uses(graph: &Graph, right: &mut TreeSet<String>, elsewhere: &mut TreeSet<String>) {
-    for let node of &graph.nodes {
-        let product = node.op == "MatMul" || node.op == "Gemm" && !settled(gemm_options(node)).3;
-        for let [i, input] of node.inputs.into_iter().enumerate() {
-            if product && i == 1 {
-                right.insert(input);
-            } else {
-                elsewhere.insert(input);
+/// How the nodes read each operand: as a product's right operand, transposed
+/// or not, or some other way.
+struct OperandUses {
+    right: TreeMap<String, bool>,
+    elsewhere: TreeSet<String>,
+}
+
+impl OperandUses {
+    /// The reads of `graph`'s nodes and of the branches they carry. A tensor
+    /// read in both orientations is read elsewhere, as no one layout serves.
+    fn note(&mut self, graph: &Graph, checked: &Checked) {
+        for let node of &graph.nodes {
+            let orientation = rhs_orientation(node, &checked.shapes);
+            for let [i, input] of node.inputs.into_iter().enumerate() {
+                if i == 1 && let Some(transposed) = orientation {
+                    if self.right.get(input) matches { Some(t) && t != transposed } {
+                        self.elsewhere.insert(input);
+                    }
+                    self.right[input] = transposed;
+                } else {
+                    self.elsewhere.insert(input);
+                }
             }
         }
-        for let attr of &node.attrs {
-            if let Some(g) = &attr.graph {
-                note_operand_uses(g, right, elsewhere);
-            }
+        for let [branch_graph, branch] of branches_of(graph, checked) {
+            self.note(&branch_graph, &branch);
         }
     }
+}
+
+/// Whether `node` reads its operand 1 as the right operand of a matrix
+/// product `matmul_rhs` serves, and if so whether transposed:
+/// `Gemm`'s, and `MatMul`'s beside a left operand of rank 2 or more.
+fn rhs_orientation(node: &Node, shapes: &TreeMap<String, Shape>) -> Option<bool> {
+    if node.op == "Gemm" {
+        return Option::Some(settled(gemm_options(node)).3);
+    }
+    if node.op == "MatMul" && shapes[node.inputs[0]].rank() >= 2 {
+        return Option::Some(false);
+    }
+    return null;
 }
 
 /// Whether some initializer's data is left to a checkpoint.
@@ -576,7 +624,7 @@ fn emit_constructor(
     checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
-    matrices: &TreeSet<String>,
+    rhs: &TreeMap<String, bool>,
     kept: &List<String>,
 ) {
     let loads = loads_weights(graph);
@@ -610,7 +658,7 @@ fn emit_constructor(
             None => checkpoint_payload(&e),
         };
         let host = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
-        let holding = weight_holding(matrices, &vi.name);
+        let holding = weight_holding(rhs, &vi.name);
         w.line(`${names.get(&vi.name)}: ${preparation(checked, held, &vi.name, host, holding)},`);
     }
     emit_kept_fields(w, names, kept);
@@ -633,6 +681,9 @@ struct Operands {
     values: TreeMap<String, String>,
     /// A folded float of one element, as the constant an `Expr` folds in.
     scalars: TreeMap<String, f32>,
+    /// The weights held as a product's right operand, which only `matmul_rhs`
+    /// reads, as `rhs_weights` finds them.
+    rhs: TreeMap<String, bool>,
     /// What a kernel `Plan` fuses into the kernel after it computes, not yet
     /// written.
     pending: TreeMap<String, Term> = TreeMap::new(),
@@ -783,17 +834,13 @@ fn emit_forward(
     checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
-    scalars: TreeMap<String, f32>,
+    mut exprs: Operands,
     literals: &Literals,
     kept: &List<String>,
     mut symbols: Symbols,
     fuse: bool,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
-    let mut exprs = Operands {
-        values: TreeMap::<String, String>::new(),
-        scalars,
-    };
     let mut pass = FnSpec::new("pass", Vis::Pub);
     pass.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut forward = FnSpec::new("forward", Vis::Pub);
@@ -1041,6 +1088,7 @@ fn branch_lines(
     let mut inner = Operands {
         values: exprs.values,
         scalars: scalar_literals(branch),
+        rhs: exprs.rhs,
     };
     for let [tensor, _] of exprs.values.entries() {
         let [Some(from), Some(to)] = [
@@ -1050,6 +1098,9 @@ fn branch_lines(
             continue;
         };
         if axis_list(&from) != axis_list(&to) {
+            // A branch checks against a copy of the shapes around it, and only
+            // the outermost graph declares weights.
+            assert !exprs.rhs.contains_key(*tensor), "a branch renames no weight's axes";
             inner.values[*tensor] = relabeled(&around.primitives[*tensor], &from, &to, &exprs.reference(tensor));
         }
     }
@@ -1451,7 +1502,12 @@ fn node_term(
     }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
-        return Result::Ok(Option::Some(Term::after(product_head(&a, &b, &left, &right, &out), out)));
+        let head = if exprs.rhs.contains_key(node.inputs[1]) {
+            rhs_product_head(&a, &b);
+        } else {
+            product_head(&a, &b, &left, &right, &out);
+        };
+        return Result::Ok(Option::Some(Term::after(head, out)));
     }
     if op == "Conv" {
         return Result::Ok(Option::Some(Term::after(conv_head(node, shapes, exprs, symbols)?, out)));
@@ -2005,7 +2061,6 @@ fn spread_product(s: &Spread, shapes: &TreeMap<String, Shape>, exprs: &Operands)
 /// leading axes, and computes over the axes the second restores.
 fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spread: Option<SpreadOperand>) -> Term {
     let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
-    let [b, right] = transposed(&exprs.reference(&node.inputs[1]), &shapes.get(node.inputs[1]).unwrap(), trans_b);
     let [a, left, product_axes] = match spread {
         Some(s) => [s.reference, s.shape, s.product],
         None => {
@@ -2013,7 +2068,14 @@ fn gemm_term(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands, spr
             [a, left, gemm_product(node, shapes)];
         },
     };
-    let mut term = Term::after(product_head(&a, &b, &left, &right, &product_axes), product_axes);
+    let b_operand = exprs.reference(&node.inputs[1]);
+    let head = if exprs.rhs.contains_key(node.inputs[1]) {
+        rhs_product_head(&a, &b_operand);
+    } else {
+        let [b, right] = transposed(&b_operand, &shapes.get(node.inputs[1]).unwrap(), trans_b);
+        product_head(&a, &b, &left, &right, &product_axes);
+    };
+    let mut term = Term::after(head, product_axes);
     if alpha != 1.0 {
         term = term.binary(BinaryOp::Mul, &Term::constant(alpha));
     }
@@ -2072,6 +2134,12 @@ fn product_head(a: &String, b: &String, left: &Shape, right: &Shape, out: &Shape
     }
     let turbofish = `::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>`;
     return `backend.matmul_broadcast${turbofish}(${a}, ${b}`;
+}
+
+/// A matrix product by `b`, a weight `Prepared` holds as a product's right
+/// operand, as its call less `then`.
+fn rhs_product_head(a: &String, b: &String) -> String {
+    return `backend.matmul_rhs(${a}, ${b}`;
 }
 
 fn is_identity(perm: &List<i32>) -> bool {

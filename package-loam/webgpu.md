@@ -152,8 +152,9 @@ epilogue and into a row group. GPT-2's attention mask is one.
 An exporter writes a linear layer as a `Reshape` flattening the leading axes,
 a `Gemm`, and a `Reshape` restoring them. Between the product and the
 operators after it stands a regrouping, which no kernel takes in. The plan
-lowers the three as one `matmul_shared` over the leading axes instead (a
-`Spread`), the two reshapes computing nothing. Each element of the product
+lowers the three as one product over the leading axes instead (a `Spread`):
+`matmul_rhs` where the weight is prepared as one, `matmul_shared` otherwise.
+The two reshapes compute nothing. Each element of the product
 sums the same terms in the same order, so the CPU's result does not change.
 GPT-2's GELU and its residual adds then join the epilogue of the layer before
 them.

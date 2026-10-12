@@ -85,13 +85,13 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     assert out.contains(
         "pub fn forward<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f32, [Batch, Out]> with _ {",
     );
-    assert out.contains("let H = backend.matmul(&X, &weights.W1, null);");
+    assert out.contains("let H = backend.matmul_rhs(&X, &weights.W1, null);");
     assert out.contains(
         `let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &${sum(
         )});`,
     );
     assert out.contains(`let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
-    assert out.contains("let T = backend.matmul(&A, &weights.W2, null);");
+    assert out.contains("let T = backend.matmul_rhs(&A, &weights.W2, null);");
     // `pass` leaves the output on the backend, and `forward` reads it back.
     assert out.contains(
         "pub fn pass<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
@@ -104,12 +104,12 @@ test "a product takes the elementwise operators after it as its epilogue" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains(
-        `let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: ${src(
+        `let A = backend.matmul_rhs(&X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: ${src(
             operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )} }));`,
     );
     assert out.contains(
-        `let Y = backend.matmul(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: ${sum(
+        `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&weights.B2)], op: ${sum(
         )} }));`,
     );
     assert !out.contains("let H ");
@@ -147,11 +147,12 @@ test "each input is uploaded after the checks that read the host's and the pass 
 test "the weights become the backend's for every pass where they are prepared" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
-    assert out.contains("    pub W1: Bk::Tensor<f32, [In, Hidden]>,\n");
-    // `W1` is read only as a product's right operand, so it is kept as a matrix.
+    // `W1` is read only as a product's right operand, so it is prepared as one.
+    assert out.contains("    pub W1: Bk::Rhs<In, Hidden>,\n");
     assert out.contains(
-        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_matrix(&self.W1),\n",
+        "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_rhs(&self.W1),\n",
     );
+    assert out.contains("backend.matmul_rhs(&X, &weights.W1"), out;
 }
 
 test "the forward pass checks each input against the graph before any kernel" {
@@ -159,7 +160,7 @@ test "the forward pass checks each input against the graph before any kernel" {
 
     let body = out;
     let check = body.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
-    assert check < body.find("matmul(").unwrap();
+    assert check < body.find("matmul_rhs(").unwrap();
 }
 
 test "an axis the boundary and the weights fix to one length carries it as a constant" {
@@ -319,7 +320,7 @@ test "weights the graph lacks are read from a checkpoint by Prepared::load" {
     );
     assert out.contains("let header = read_checkpoint(checkpoint)?;");
     assert out.contains(
-        "W1: backend.keep_matrix(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
+        "W1: backend.keep_rhs(&Tensor::<f32, [In, Hidden]> { data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?), extents: [4, 3] }),",
     );
 }
 
@@ -740,7 +741,8 @@ g (float[4, 2, 8] X) => (float[4, 6] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains("pub W: Tensor<f32, [Merged<[Head, Dim]>, Out]>,");
-    assert out.contains("let Y = backend.matmul(&R, &weights.W, null);");
+    assert out.contains("pub W: Bk::Rhs<Merged<[Head, Dim]>, Out>,"), out;
+    assert out.contains("let Y = backend.matmul_rhs(&R, &weights.W, null);");
 }
 
 test "Split cuts one run along the axis for each output" {
@@ -1106,8 +1108,7 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
 
 test "a MatMul against one matrix shares it across the batch" {
     let source = `
-g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
-<float[8, 16] W>
+g (float[1, 4, 8] X, float[8, 16] W) => (float[1, 4, 16] Y)
 {
     Y = MatMul(X, W)
 }
@@ -1118,7 +1119,7 @@ g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.matmul_shared(&X, &weights.W, null);");
+    assert out.contains("let Y = backend.matmul_shared(&X, &W, null);");
 }
 
 test "a MatMul batch axis that stretches lowers to matmul_broadcast, the result spelled" {
@@ -1183,10 +1184,10 @@ test "a half precision boundary is prepared into the f32 the kernels compute in"
     let out = generate(mlp("float16"), mlp_layout()).unwrap();
 
     // A weight once, where `Prepared` is built; an input on each call.
-    assert out.contains("    pub W1: Bk::Tensor<f32, [In, Hidden]>,\n");
-    assert out.contains("W1: backend.prepare(&self.W1),");
+    assert out.contains("    pub W1: Bk::Rhs<In, Hidden>,\n");
+    assert out.contains("W1: backend.prepare_rhs(&self.W1),");
     assert out.contains("let X = backend.prepare(X);");
-    assert out.contains("let A = backend.matmul(&X, &weights.W1, Option::Some(Epilogue {");
+    assert out.contains("let A = backend.matmul_rhs(&X, &weights.W1, Option::Some(Epilogue {");
     assert out.contains("return narrow(&backend.download(&out));");
 }
 
@@ -1377,7 +1378,7 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
     assert out.contains("let F = backend.gather_rows(&weights.P, &weights.Q);");
 }
 
-test "a weight read past a product is kept whole, one read only by products as a matrix" {
+test "a weight read past a product is kept whole, one read only by products as their right operand" {
     // `W` is gathered, as an embedding is; `V` only multiplied.
     let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W, float[8, 8] V> {
         E = Gather(W, I)
@@ -1390,9 +1391,53 @@ test "a weight read past a product is kept whole, one read only by products as a
     ];
     let out = generate(source, layout).unwrap();
     assert out.contains("W: backend.keep(&self.W),"), out;
-    assert out.contains("V: backend.keep_matrix(&self.V),"), out;
+    assert out.contains("V: backend.keep_rhs(&self.V),"), out;
+    assert out.contains("let Y = backend.matmul_rhs(&E, &weights.V, null);"), out;
 }
 
+test "a Gemm's transposed weight is prepared transposed, so no pass transposes it" {
+    let source = `g (float[2, 3] A) => (float[2, 4] Y) <float[4, 3] B> {
+        Y = Gemm <transB = 1> (A, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("A", ["Batch", "In"]),
+        rule("B", ["Out", "In"]),
+    ];
+    let out = generate(source, layout).unwrap();
+    assert out.contains("    pub B: Bk::Rhs<In, Out>,\n"), out;
+    assert out.contains("B: backend.keep_rhs_transposed(&self.B),"), out;
+    assert out.contains("let Y = backend.matmul_rhs(&A, &weights.B, null);"), out;
+    assert !out.contains("transpose2"), out;
+}
+
+test "a weight two products read in two orientations, or one beside a vector, stays a tensor" {
+    let source = `g (float[2, 3] A, float[4] V) => (float[2, 4] Y, float[3] Z) <float[4, 3] B> {
+        Y = Gemm <transB = 1> (A, B)
+        Z = MatMul(V, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("A", ["Batch", "In"]),
+        rule("V", ["Out"]),
+        rule("B", ["Out", "In"]),
+    ];
+    let out = generate(source, layout).unwrap();
+    assert out.contains("B: backend.keep(&self.B),"), out;
+    assert !out.contains("matmul_rhs"), out;
+}
+
+test "a branch multiplies by a prepared weight as the graph around it holds it" {
+    let source = `g (bool[1] C, float[2, 2] X) => (float[2, 2] Y) <float[2, 2] W> {
+        Y = If <then_branch = t () => (float[2, 2] A) { A = MatMul(X, W) }, else_branch = e () => (float[2, 2] B) { B = Neg(X) }> (C)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("C", ["One"]),
+        rule("X", ["Row", "Col"]),
+        rule("W", ["Col", "Col"]),
+    ];
+    let out = generate(source, layout).unwrap();
+    assert out.contains("    pub W: Bk::Rhs<Col, Col>,\n"), out;
+    assert out.contains("backend.matmul_rhs(&X, &weights.W, null)"), out;
+}
 test "Gather along any axis but the first lowers to gather, the axes spelled" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
         Y = Gather<axis = 1>(W, I)
