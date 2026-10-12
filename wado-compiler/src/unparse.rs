@@ -1327,11 +1327,8 @@ impl<'a> Unparser<'a> {
                 self.emit_blank_lines_to(effective_start_line(attrs, span.line));
                 match trait_ {
                     Some(t) => {
-                        let contracts: Vec<&AssertStmt> = t
-                            .contract_holder(&method.name)
-                            .into_iter()
-                            .flat_map(Function::contracts)
-                            .collect();
+                        let contracts: Vec<&AssertStmt> =
+                            t.method_contracts(&method.name).collect();
                         self.unparse_function_with_contracts(method, &contracts);
                     }
                     None => self.unparse_function(method),

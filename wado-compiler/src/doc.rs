@@ -366,10 +366,7 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
         .methods
         .iter()
         .filter(|m| !m.is_contract_holder())
-        .map(|m| {
-            let held = t.contract_holder(&m.name).into_iter();
-            build_doc_function_with(m, held.flat_map(Function::contracts), trivia)
-        })
+        .map(|m| build_doc_function_with(m, t.method_contracts(&m.name), trivia))
         .collect();
 
     DocTrait {

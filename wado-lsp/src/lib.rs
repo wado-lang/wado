@@ -461,7 +461,10 @@ impl Engine {
                 .ok_or(SymbolQueryError::NoLocation);
         }
         if let Some(function) = sem.function_at(def.ast_id) {
-            return Ok(hover::hover_for_function(function));
+            return Ok(hover::hover_for_function(
+                function,
+                sem.contracts_at(def.ast_id),
+            ));
         }
         Err(SymbolQueryError::NoLocation)
     }

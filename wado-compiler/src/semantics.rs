@@ -653,24 +653,41 @@ impl Semantics {
     /// holds each function's address, so nothing scans the AST at query time.
     #[must_use]
     pub fn function_at(&self, id: AstId) -> Option<&ast::Function> {
+        self.function_and_item_at(id).map(|(f, _)| f)
+    }
+
+    /// The `contract` clauses of the function [`Semantics::function_at`]
+    /// answers for `id`. A trait method's live in its trait's hidden holder.
+    #[must_use]
+    pub fn contracts_at(&self, id: AstId) -> Vec<&ast::AssertStmt> {
+        match self.function_and_item_at(id) {
+            Some((f, Item::Trait(t))) => t.method_contracts(&f.name).collect(),
+            Some((f, _)) => f.contracts().collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// The function [`Semantics::function_at`] answers, with the item holding it.
+    fn function_and_item_at(&self, id: AstId) -> Option<(&ast::Function, &Item)> {
         use crate::ast_index::FunctionLocation;
         let owning = self.module_of_id(id)?;
         let module = self.modules.get(owning)?;
         let location = self.ast_indices.get(owning)?.function_location(id)?;
-        match location {
-            FunctionLocation::Free { item_idx } => match module.items.get(item_idx)? {
-                Item::Function(f) => Some(f),
-                _ => None,
-            },
+        let (item_idx, method_idx) = match location {
+            FunctionLocation::Free { item_idx } => (item_idx, None),
             FunctionLocation::Method {
                 item_idx,
                 method_idx,
-            } => match module.items.get(item_idx)? {
-                Item::Impl(b) => b.methods.get(method_idx),
-                Item::Trait(t) => t.methods.get(method_idx),
-                _ => None,
-            },
-        }
+            } => (item_idx, Some(method_idx)),
+        };
+        let item = module.items.get(item_idx)?;
+        let f = match (item, method_idx) {
+            (Item::Function(f), None) => Some(f),
+            (Item::Impl(b), Some(i)) => b.methods.get(i),
+            (Item::Trait(t), Some(i)) => t.methods.get(i),
+            _ => None,
+        }?;
+        Some((f, item))
     }
 
     /// Definition location of the symbol identified by `key`.
