@@ -1094,7 +1094,7 @@ fn kept_literal(checked: &Checked, tensor: &String) -> String {
 fn kept_literals(literals: &Literals, checked: &Checked) -> List<String> {
     let mut kept: List<String> = [];
     for let tensor of literals.spelled {
-        let constant = !(checked.known[tensor].elements matches { Symbolic(_) });
+        let constant = !checked.known[tensor].elements matches { Symbolic(_) };
         if constant && static_extents(&checked.shapes[tensor]) matches { Some(_) } {
             kept.push(tensor);
         }
