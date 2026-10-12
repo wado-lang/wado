@@ -1,0 +1,34 @@
+// A function whose only effect parameter sits inside a newtype's argument
+// passes the effect on to its result: `pass_on` declares no `with`, yet the
+// `Stdout` it carries reaches `fire`, so a caller performing none is refused.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder<F> {
+    f: F,
+}
+
+type Hold<F> = Holder<F>;
+
+fn pass_on<effect E>(h: Hold<fn() with E>) -> Hold<fn() with E> {
+    return h;
+}
+
+fn fire<effect E>(h: Hold<fn() with E>) with E {
+    let inner = h as Holder<fn() with E>;
+    let f = inner.f;
+    f();
+}
+
+fn quiet() {
+    fire(pass_on(Holder { f: || println("leaked") } as Hold<fn() with Stdout>));
+}
+
+export fn run() with Stdout {
+    quiet();
+}
+
+__DATA__
+{
+    "compile_error": ":24:5: analysis error: missing effect 'Stdout' required by 'fire'"
+}

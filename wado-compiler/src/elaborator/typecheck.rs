@@ -121,7 +121,31 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 5: Newtype/flags distinctness
+    // Rule 5: Newtype/flags distinctness. Two instances of one generic newtype
+    // compare by their arguments, as two of one generic struct do (Rule 8), so
+    // an argument's effect row is the effect check's to resolve.
+    if let ResolvedType::Newtype {
+        def: actual_def,
+        type_args: actual_args,
+        ..
+    } = type_table.get(actual_inner)
+        && let ResolvedType::Newtype {
+            def: expected_def,
+            type_args: expected_args,
+            ..
+        } = type_table.get(expected_inner)
+        && actual_def == expected_def
+        && !actual_args.is_empty()
+        && actual_args.len() == expected_args.len()
+    {
+        for (a, e) in actual_args.iter().zip(expected_args.iter()) {
+            match check_at(*a, *e, type_table, Position::Invariant) {
+                TypeCheckResult::Compatible => {}
+                verdict => return verdict,
+            }
+        }
+        return TypeCheckResult::Compatible;
+    }
     let actual_is_newtype = matches!(
         type_table.get(actual_inner),
         ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
