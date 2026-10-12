@@ -1457,7 +1457,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// names it: a reference, or a view (`ByteSlice`, not the `Slice<u8>` it
     /// wraps). A borrow points into storage it does not own, which has no
     /// Component Model representation. A borrowed resource is exempt: it
-    /// crosses an import as a handle.
+    /// crosses as a `borrow<R>` handle.
     pub(super) fn cm_borrow_within(&self, type_id: TypeId) -> Option<TypeId> {
         self.first_type_within(type_id, true, &|scope: &Self, t| {
             scope.is_cm_view(t) || scope.is_storage_reference(t)
@@ -1541,7 +1541,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_default(),
             ResolvedType::GenericInstance { def, .. }
                 if into_fields
-                    && self.tysys.type_table.borrow().compiler_type_item(def).is_none()
+                    && self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .compiler_type_item(def)
+                        .is_none()
                     && let Some(fields) = self.struct_field_types(head) =>
             {
                 fields.into_iter().map(|(_, t)| t).collect()
@@ -2594,7 +2599,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            // A borrow has no CM representation. Rejecting it here keeps the
+            // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
             if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(type_id) {
@@ -2626,8 +2631,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: func.span,
             });
         }
-        if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type)
-        {
+        if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
             let _ = scope.emit(TypeError::BorrowAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),

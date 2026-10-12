@@ -334,8 +334,6 @@ A trap does not unwind, so it runs no drops.
 | `&R` or `&mut R` parameter, `&self` or `&mut self` | `borrow<R>`                         |
 | Bare `self` receiver                               | `own<R>`, transferring the receiver |
 
-A reference crosses the boundary only as a borrowed resource handle (see [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries)).
-
 Rationale: [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 ### Resource Inheritance
