@@ -303,8 +303,8 @@ The `String` functions that take bytes follow from the rules above:
 
 - `String::try_from_utf8` takes an iterator of bytes and returns a `Result`.
   It takes over from the `Result`-returning `String::from_utf8`, and
-  `from_utf8_slice` becomes `try_from_utf8_slice`. Its items cannot be vouched for, so it has no
-  contract and no marked form.
+  `from_utf8_slice` becomes `try_from_utf8_slice`. Its items cannot be vouched
+  for, so it has no contract and no marked form.
 - `String::from_utf8` takes an `AsByteSlice` and returns a `String`. It
   declares `contract String::is_valid_utf8(…)`, so an unmarked call traps on
   invalid bytes, and `unchecked String::from_utf8(bytes)` replaces

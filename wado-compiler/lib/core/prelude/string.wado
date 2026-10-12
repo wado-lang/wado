@@ -537,10 +537,10 @@ impl String {
         return self.repr[index];
     }
 
-    /// Internal: write the byte at `index` with no UTF-8 check (stdlib use
-    /// only). A character written a byte at a time is invalid UTF-8 between the
-    /// writes, so no contract on one write can state the invariant; the caller
-    /// restores it before anything reads the string.
+    /// Write the byte at `index` with no UTF-8 check. A character written a
+    /// byte at a time is invalid UTF-8 between the writes, so no contract on one
+    /// write can state the invariant; the caller restores it before anything
+    /// reads the string.
     #[compiler_item("string_set_byte_unchecked")]
     internal fn internal_set_byte_unchecked(&mut self, index: i32, value: u8) {
         if builtin::contract_checks() {
