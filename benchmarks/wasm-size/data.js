@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791785695923,
+  "lastUpdate": 1791809559036,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66561,6 +66561,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 341419,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fc884b6429c28f39707bf507c0868fb550235bca",
+          "message": "Merge pull request #2340 from wado-lang/loam-matmul\n\nperf(loam): GPT-2 on WebGPU generates as fast as onnxruntime's CPU thread pool",
+          "timestamp": "2026-10-12T21:35:18+09:00",
+          "tree_id": "94f8e34409813d001ae9391c7338a0502c0a0066",
+          "url": "https://github.com/wado-lang/wado/commit/fc884b6429c28f39707bf507c0868fb550235bca"
+        },
+        "date": 1791809558502,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2943,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7320,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22316,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 341418,
             "unit": "bytes"
           }
         ]
