@@ -689,7 +689,7 @@ pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out> {
     assert rank >= t.extents.len();
     let mut extents = List::<i32>::filled(rank - t.extents.len(), 1);
     extents.extend(&t.extents);
-    return Tensor { data: t.data, extents };
+    return Tensor { data: t.data, extents, packed: t.packed };
 }
 
 /// Moves a row-major `index` over `extents` one position on and returns the
