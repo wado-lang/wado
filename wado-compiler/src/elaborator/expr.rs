@@ -839,6 +839,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return tail_type;
         };
         for &value in &values {
+            // A value unrolled per element retargets in every element or in
+            // none: its records carry one type, and an element left on its own
+            // must keep the mismatch it is reported by.
+            let mut retargets = true;
+            self.in_each_store_of(value.id(), overlays_before, |this| {
+                let mut tails = NumericLiteralTails::default();
+                retargets &= this.collect_numeric_literal_tails(value, target, &mut tails);
+            });
+            if !retargets {
+                continue;
+            }
             let mut retargeted = None;
             self.in_each_store_of(value.id(), overlays_before, |this| {
                 retargeted = this
