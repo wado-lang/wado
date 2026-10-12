@@ -19,7 +19,7 @@ assert primes.len() == 4;
 assert primes.get(1) matches { Some(v) && v == 3 };
 assert primes.get(9) matches { None };
 
-let decoded = String::from_utf8([87, 97, 100, 111] as List<u8>);
+let decoded = String::try_from_utf8([87, 97, 100, 111] as List<u8>);
 assert decoded matches { Ok(s) && s == "Wado" };
 ```
 
@@ -4682,19 +4682,6 @@ Read the byte at `index` without bounds checks. For safe access use `bytes()`.
 Any other `index` is a contract violation, and the result is
 unspecified: a byte of the backing array past `len()`, or a trap.
 
-#### `pub fn set_byte_unchecked(&mut self, index: i32, value: u8)`
-
-`#[compiler_item("string_set_byte_unchecked")]`
-
-Write the byte at `index` without bounds or UTF-8 checks.
-
-# Contract
-
-- `0 <= index < self.len()`.
-- The resulting byte sequence must remain valid UTF-8.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
-
 #### `pub fn as_bytes(&self) -> ByteSlice`
 
 Read-only view of the string's UTF-8 bytes as an `Slice<u8>` over `[0, len())`.
@@ -4713,16 +4700,13 @@ Append `n` copies of `byte` to this string.
 
 Append any `AsStrSlice` text to this one.
 
-#### `pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S)`
+#### `pub fn push_bytes<S: AsByteSlice>(&mut self, bytes: &S)`
 
 Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
-`ByteSlice`, or a `String`).
+`ByteSlice`, or a `String`), which must be valid UTF-8 on their own.
 
-# Contract
-
-- The resulting byte sequence must remain valid UTF-8.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
+A marked call that breaks the contract leaves the string invalid, and
+the behavior is unconstrained.
 
 #### `pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32)`
 
@@ -4971,11 +4955,27 @@ If `count` is negative, replaces all occurrences.
 
 Build a `String` from an iterable of chars.
 
-#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _`
+#### `pub fn try_from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _`
 
 Build a `String` from an iterable of bytes, validating UTF-8.
 
-#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error>`
+An iterator may read its bytes from outside the program, so no caller
+can vouch for them: there is no marked form. Bytes the caller holds go
+to `from_utf8`.
+
+#### `pub fn from_utf8<S: AsByteSlice>(bytes: S) -> String`
+
+Copy bytes that must be valid UTF-8 into a `String`.
+
+`unchecked String::from_utf8(bytes)` skips the validation where the
+build does not check contracts. A marked call on invalid bytes builds an
+invalid string, and the behavior is unconstrained.
+
+#### `pub fn from_utf8_unchecked()`
+
+``#[unavailable("write `unchecked String::from_utf8(bytes)`; an iterator goes through `try_from_utf8`")]``
+
+#### `pub fn try_from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error>`
 
 Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
 sequence cut short at the end fails too, with `error_len() == None`.
@@ -4998,15 +4998,6 @@ Whether `bytes` is well-formed UTF-8.
 #### `pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String with _`
 
 Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
-
-#### `pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String with _`
-
-Build a `String` from an iterable of bytes without UTF-8 validation.
-
-# Contract
-
-The caller must ensure the bytes form valid UTF-8. Breaking it is a
-contract violation, and the behavior is unconstrained.
 
 #### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter`
 

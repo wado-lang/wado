@@ -67,62 +67,62 @@ fn "param_spec_caller_rewrites_field.wado/emit"(opt, out) {
     let i: i32;
     let new_used_11: i32;
     let start_12: i32;
-    let new_used_34: i32;
-    let start_35: i32;
-    let new_used_57: i32;
-    let start_58: i32;
-    let $licm_repeat_95: i32;
-    let $licm_mode_96: i32;
-    let $licm_arith_97: bool;
-    let $hfs_used_99: i32;
+    let new_used_28: i32;
+    let start_29: i32;
+    let new_used_45: i32;
+    let start_46: i32;
+    let $licm_repeat_71: i32;
+    let $licm_mode_72: i32;
+    let $licm_arith_73: bool;
+    let $hfs_used_75: i32;
     i = 0;
-    $licm_repeat_95 = opt.repeat;
-    $licm_arith_97 = local.tee $licm_mode_96(opt.mode) == 1;
-    $licm_mode_96 = $licm_mode_96 == 2;
-    $hfs_used_99 = out.used;
+    $licm_repeat_71 = opt.repeat;
+    $licm_arith_73 = local.tee $licm_mode_72(opt.mode) == 1;
+    $licm_mode_72 = $licm_mode_72 == 2;
+    $hfs_used_75 = out.used;
     b0: block {
         l1: loop {
-            break_if b0 i >= $licm_repeat_95;
-            if $licm_arith_97 {
-                if @unlikely(local.tee new_used_11($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
+            break_if b0 i >= $licm_repeat_71;
+            if $licm_arith_73 {
+                if @unlikely(local.tee new_used_11($hfs_used_75 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_11);
                 } else {
                 }
-                start_12 = local.tee $hfs_used_99(out.used);
-                $hfs_used_99 = new_used_11;
+                start_12 = local.tee $hfs_used_75(out.used);
+                $hfs_used_75 = new_used_11;
                 builtin::array_set_u8(out.repr, start_12, 97);
-            } else if $licm_mode_96 {
-                if @unlikely(local.tee new_used_34($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
+            } else if $licm_mode_72 {
+                if @unlikely(local.tee new_used_28($hfs_used_75 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_34);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_28);
                 } else {
                 }
-                start_35 = local.tee $hfs_used_99(out.used);
-                $hfs_used_99 = new_used_34;
-                builtin::array_set_u8(out.repr, start_35, 98);
+                start_29 = local.tee $hfs_used_75(out.used);
+                $hfs_used_75 = new_used_28;
+                builtin::array_set_u8(out.repr, start_29, 98);
             } else {
-                if @unlikely(local.tee new_used_57($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
+                if @unlikely(local.tee new_used_45($hfs_used_75 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_57);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_45);
                 } else {
                 }
-                start_58 = local.tee $hfs_used_99(out.used);
-                $hfs_used_99 = new_used_57;
-                builtin::array_set_u8(out.repr, start_58, 63);
+                start_46 = local.tee $hfs_used_75(out.used);
+                $hfs_used_75 = new_used_45;
+                builtin::array_set_u8(out.repr, start_46, 63);
             }
             i = i + 1;
-            out.used = $hfs_used_99;
+            out.used = $hfs_used_75;
             continue l1;
         };
     };
-    if @unlikely(local.tee start_58(out.used + 1) > builtin::array_len(out.repr)) {
+    if @unlikely(local.tee start_46(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_58);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, start_46);
     }
-    new_used_57 = out.used;
-    out.used = start_58;
-    builtin::array_set_u8(out.repr, new_used_57, 47);
+    new_used_45 = out.used;
+    out.used = start_46;
+    builtin::array_set_u8(out.repr, new_used_45, 47);
 }
 
 fn "param_spec_caller_rewrites_field.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
