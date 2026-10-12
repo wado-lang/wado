@@ -197,13 +197,27 @@ pub fn matmul_broadcast<A, B, Out>(
         let a_base = at_a * rows * inner;
         let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
-        for let mut r = 0; r < rows; r += 1 {
-            for let mut k = 0; k < inner; k += 1 {
-                let lhs = lhs_data[a_base + r * inner + k];
-                for let mut c = 0; c < cols; c += 1 {
-                    out[out_base + r * cols + c] += lhs * rhs_data[b_base + k * cols + c];
+        let whole_cols = cols - cols % TILE;
+        // Rows in bands of `TILE`, and the rows left over one at a time.
+        let mut r = 0;
+        while r < rows {
+            let height = if rows - r >= TILE { TILE } else { 1 };
+            for let mut c = 0; c < whole_cols; c += TILE {
+                let a_at = a_base + r * inner;
+                let b_at = b_base + c;
+                let out_at = out_base + r * cols + c;
+                if height == TILE {
+                    tile_4x4(lhs_data, rhs_data, &mut out, inner, cols, a_at, b_at, out_at);
+                } else {
+                    tile_1x4(lhs_data, rhs_data, &mut out, inner, cols, a_at, b_at, out_at);
                 }
             }
+            for let rr of r..<r + height {
+                for let c of whole_cols..<cols {
+                    out[out_base + rr * cols + c] = dot(lhs_data, rhs_data, inner, cols, a_base + rr * inner, b_base + c);
+                }
+            }
+            r += height;
         }
         if let Some(f) = &finishing {
             f.apply(&mut out, out_base, rows * cols);
@@ -215,6 +229,115 @@ pub fn matmul_broadcast<A, B, Out>(
         }
     }
     return Tensor { data: out, extents };
+}
+
+/// The side of the square of output elements `matmul_broadcast` computes at
+/// once, its sums held in locals across the whole inner axis. Per step of that
+/// axis it reads 4 elements of `a` and 4 adjacent ones of `b` for 16 products,
+/// where an element at a time reads 2 and writes 1 for each.
+global TILE: i32 = 4;
+
+/// The 4x4 square of `out` at `out_at`: rows of `a` from `a_at`, `inner` long,
+/// against 4 adjacent columns of `b` from `b_at`, rows `cols` apart.
+fn tile_4x4(
+    a: &List<f32>,
+    b: &List<f32>,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    a_at: i32,
+    b_at: i32,
+    out_at: i32,
+) {
+    let [mut s00, mut s01, mut s02, mut s03] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let [mut s10, mut s11, mut s12, mut s13] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let [mut s20, mut s21, mut s22, mut s23] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let [mut s30, mut s31, mut s32, mut s33] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    let a1 = a_at + inner;
+    let a2 = a1 + inner;
+    let a3 = a2 + inner;
+    for let mut k = 0; k < inner; k += 1 {
+        let x0 = a[a_at + k];
+        let x1 = a[a1 + k];
+        let x2 = a[a2 + k];
+        let x3 = a[a3 + k];
+        let bk = b_at + k * cols;
+        let y0 = b[bk];
+        let y1 = b[bk + 1];
+        let y2 = b[bk + 2];
+        let y3 = b[bk + 3];
+        s00 += x0 * y0;
+        s01 += x0 * y1;
+        s02 += x0 * y2;
+        s03 += x0 * y3;
+        s10 += x1 * y0;
+        s11 += x1 * y1;
+        s12 += x1 * y2;
+        s13 += x1 * y3;
+        s20 += x2 * y0;
+        s21 += x2 * y1;
+        s22 += x2 * y2;
+        s23 += x2 * y3;
+        s30 += x3 * y0;
+        s31 += x3 * y1;
+        s32 += x3 * y2;
+        s33 += x3 * y3;
+    }
+    let o1 = out_at + cols;
+    let o2 = o1 + cols;
+    let o3 = o2 + cols;
+    out[out_at] = s00;
+    out[out_at + 1] = s01;
+    out[out_at + 2] = s02;
+    out[out_at + 3] = s03;
+    out[o1] = s10;
+    out[o1 + 1] = s11;
+    out[o1 + 2] = s12;
+    out[o1 + 3] = s13;
+    out[o2] = s20;
+    out[o2 + 1] = s21;
+    out[o2 + 2] = s22;
+    out[o2 + 3] = s23;
+    out[o3] = s30;
+    out[o3 + 1] = s31;
+    out[o3 + 2] = s32;
+    out[o3 + 3] = s33;
+}
+
+/// [`tile_4x4`] for one row of `a`, as the rows past the last whole band are.
+fn tile_1x4(
+    a: &List<f32>,
+    b: &List<f32>,
+    out: &mut List<f32>,
+    inner: i32,
+    cols: i32,
+    a_at: i32,
+    b_at: i32,
+    out_at: i32,
+) {
+    let [mut s0, mut s1, mut s2, mut s3] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
+    for let mut k = 0; k < inner; k += 1 {
+        let x = a[a_at + k];
+        let bk = b_at + k * cols;
+        s0 += x * b[bk];
+        s1 += x * b[bk + 1];
+        s2 += x * b[bk + 2];
+        s3 += x * b[bk + 3];
+    }
+    out[out_at] = s0;
+    out[out_at + 1] = s1;
+    out[out_at + 2] = s2;
+    out[out_at + 3] = s3;
+}
+
+/// One element of the product: the row of `a` from `a_at` against the column
+/// of `b` from `b_at`, as the columns past the last whole tile are.
+fn dot(a: &List<f32>, b: &List<f32>, inner: i32, cols: i32, a_at: i32, b_at: i32) -> f32 {
+    let mut sum: f32 = 0.0;
+    for let mut k = 0; k < inner; k += 1 {
+        sum += a[a_at + k] * b[b_at + k * cols];
+    }
+    return sum;
 }
 
 /// `Gather` along axis 0: the row of `data` each index names, as an embedding

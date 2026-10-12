@@ -361,6 +361,36 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
     assert dot.data == [5.0] as List<f32>;
 }
 
+test "matmul_shared agrees with the product element by element past a whole tile" {
+    // 6 rows and 7 columns: a band of 4 rows and rows left over, a tile of 4
+    // columns and columns left over, in each of two batch elements.
+    let [batch, rows, inner, cols] = [2, 6, 5, 7];
+    let mut a_data: List<f32> = [];
+    for let i of 0..<batch * rows * inner {
+        a_data.push((i % 7 - 3) as f32);
+    }
+    let mut b_data: List<f32> = [];
+    for let i of 0..<inner * cols {
+        b_data.push((i % 5 - 2) as f32);
+    }
+    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([batch, rows, inner], a_data);
+    let b: Tensor<f32, [Inner, Col]> = tensor([inner, cols], b_data);
+
+    let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &b, &null);
+    assert c.extents == [batch, rows, cols] as List<i32>;
+    for let s of 0..<batch {
+        for let r of 0..<rows {
+            for let col of 0..<cols {
+                let mut want: f32 = 0.0;
+                for let k of 0..<inner {
+                    want += a.data[(s * rows + r) * inner + k] * b.data[k * cols + col];
+                }
+                assert c.data[(s * rows + r) * cols + col] == want;
+            }
+        }
+    }
+}
+
 /// The two operands' sum, or their product, as an `Expr`.
 fn sum() -> Expr {
     return operand(0).binary(BinaryOp::Add, &operand(1));
