@@ -2511,9 +2511,7 @@ fn write_profile(
     };
     let write = |e: &dyn std::fmt::Display| CliExit::error(format!("failed to write {path}: {e}"));
     let file = std::fs::File::create(path).map_err(|e| write(&e))?;
-    profiler
-        .finish(std::io::BufWriter::new(file))
-        .map_err(|e| write(&e))?;
+    runtime::write_guest_profile(profiler, file).map_err(|e| write(&e))?;
     eprintln!("Profile written to {path}");
     eprintln!("View at https://profiler.firefox.com/");
     Ok(())

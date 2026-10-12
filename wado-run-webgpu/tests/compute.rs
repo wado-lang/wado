@@ -97,6 +97,25 @@ fn a_guest_profile_stops_at_its_budget_and_is_still_written() {
     assert!(profile.contains("\"threads\""), "{profile}");
 }
 
+/// A profile that fails to write as the run ends does not replace what the run
+/// reported: `/dev/full` opens, and every write to it fails.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_runs_own_outcome_comes_before_a_profile_it_could_not_write() {
+    let output = runner()
+        .env("WADO_PROFILE_MAX_SECS", "1")
+        .args([
+            "--profile=guest,/dev/full,1",
+            fixture("spins_forever.wado").to_str().unwrap(),
+        ])
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr: {stderr}");
+    assert!(stderr.contains("WADO_PROFILE_MAX_SECS"), "stderr: {stderr}");
+    assert!(stderr.contains("No space left on device"), "stderr: {stderr}");
+}
+
 #[test]
 fn a_budget_not_in_whole_seconds_is_refused_before_the_run() {
     let dir = tempfile::tempdir().expect("a temporary directory");

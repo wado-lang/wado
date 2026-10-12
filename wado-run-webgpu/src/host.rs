@@ -1,7 +1,7 @@
 //! The wasmtime host: WASI P3 plus `wasi:webgpu`, backed by wgpu.
 
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -190,12 +190,19 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
         }
         Err(e) => Err(e),
     };
-    if let Some(sampling) = sampling {
-        sampling.finish()?;
-    }
-    match ran?? {
+    let profiled = sampling.map(Sampling::finish).transpose();
+    let outcome = (|| match ran?? {
         Ok(()) => Ok(()),
         Err(()) => bail!("the program exited with an error"),
+    })();
+    // What the run reported comes first; a profile it could not write is
+    // only the error where the run itself succeeded.
+    match (outcome, profiled) {
+        (Err(e), Err(p)) => {
+            eprintln!("error: {p:#}");
+            Err(e)
+        }
+        (outcome, profiled) => outcome.and(profiled.map(|_| ())),
     }
 }
 
@@ -274,7 +281,12 @@ impl Sampling {
             .expect("the profiler lock")
             .take()
             .expect("sampling finishes once");
-        profiler.finish(BufWriter::new(self.file))?;
+        // Flushed here: a `BufWriter` dropped with its last block unwritten
+        // reports no error, so a profile that never reached the disk would
+        // read as written.
+        let mut out = BufWriter::new(self.file);
+        profiler.finish(&mut out)?;
+        out.flush()?;
         eprintln!("Profile written to {}", self.path.display());
         Ok(())
     }

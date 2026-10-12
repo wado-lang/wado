@@ -1,6 +1,5 @@
 use std::ffi::OsStr;
 use std::fmt::Write as _;
-use std::io::BufWriter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -276,21 +275,33 @@ async fn run_cli_component(
         eprintln!("fuel {fuel}");
     }
 
+    let outcome = (|| match outer?? {
+        Ok(()) => Ok(()),
+        Err(()) => bail!("Component returned error"),
+    })();
+
+    let mut profiled = Ok(());
     if let Some((profiler_arc, stop, file)) = profiler {
         stop.store(true, Ordering::Relaxed);
 
         if let ProfileMode::Guest { path, .. } = profile {
             let guest_profiler = lock(&profiler_arc).take().unwrap();
-            guest_profiler.finish(BufWriter::new(file))?;
-            eprintln!("Profile written to {path}");
-            eprintln!("View at https://profiler.firefox.com/");
+            profiled = runtime::write_guest_profile(guest_profiler, file).map(|()| {
+                eprintln!("Profile written to {path}");
+                eprintln!("View at https://profiler.firefox.com/");
+            });
         }
     }
 
-    let result = outer??;
-    result.map_err(|()| anyhow::anyhow!("Component returned error"))?;
-
-    Ok(())
+    // What the run reported comes first; a profile it could not write is
+    // only the error where the run itself succeeded.
+    match (outcome, profiled) {
+        (Err(e), Err(p)) => {
+            eprintln!("error: {p:#}");
+            Err(e)
+        }
+        (outcome, profiled) => outcome.and(profiled),
+    }
 }
 
 /// How many seconds `WADO_PROFILE_MAX_SECS` lets a profiled run go on;

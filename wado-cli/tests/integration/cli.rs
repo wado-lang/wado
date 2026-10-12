@@ -433,6 +433,24 @@ fn test_run_profile_refuses_a_bad_budget_or_path_before_running() {
         .stderr(predicate::str::contains("run_exit_code: bad input").not());
 }
 
+/// A profile that fails to write as the run ends does not replace what the run
+/// reported: `/dev/full` opens, and every write to it fails.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_run_reports_its_own_outcome_over_a_profile_it_could_not_write() {
+    wado()
+        .args([
+            "run",
+            "--profile",
+            "guest,/dev/full",
+            "wado-cli/tests/fixtures/run_exit_code.wado",
+        ])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains("run_exit_code: bad input"))
+        .stderr(predicate::str::contains("No space left on device"));
+}
+
 #[test]
 fn test_version() {
     wado()
