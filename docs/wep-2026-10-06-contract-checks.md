@@ -373,8 +373,8 @@ API waits for a program outside the standard library that needs one.
   error.
 - A call through a function value has no callee known statically, so it has no
   contract to check or to remove.
-- `wado doc` and hover show an impl's method without the clauses of the trait
-  method it implements, though those clauses bind it.
+- `wado doc` shows an impl's method without the clauses of the trait method it
+  implements, though those clauses bind it. Hover shows them.
 - `String::from_utf8` copies the bytes of a `ByteList` argument, though the
   argument is its own copy and its buffer could become the string's.
 - An input contract states what one call requires. It cannot state an

@@ -656,19 +656,43 @@ impl Semantics {
         self.function_and_item_at(id).map(|(f, _)| f)
     }
 
-    /// The function [`Semantics::function_at`] answers for `id`, with its
-    /// `contract` clauses. A trait method's live in its trait's hidden holder.
+    /// The function [`Semantics::function_at`] answers for `id`, with the
+    /// `contract` clauses that bind it. A trait method's live in its trait's
+    /// hidden holder, and bind every impl of it as well.
     #[must_use]
     pub fn function_with_contracts_at(
         &self,
         id: AstId,
     ) -> Option<(&ast::Function, Vec<&ast::AssertStmt>)> {
         let (f, item) = self.function_and_item_at(id)?;
-        let contracts = match item {
-            Item::Trait(t) => t.method_contracts(&f.name).collect(),
-            _ => f.contracts().collect(),
+        let declaring_trait = if let Item::Trait(t) = item {
+            Some(t)
+        } else if let Item::Impl(b) = item {
+            self.implemented_trait(b)
+        } else {
+            None
+        };
+        let contracts = match declaring_trait {
+            Some(t) => t.method_contracts(&f.name).collect(),
+            None => f.contracts().collect(),
         };
         Some((f, contracts))
+    }
+
+    /// The trait `b` implements; `None` for an inherent block or one that
+    /// handles an effect.
+    fn implemented_trait(&self, b: &ast::ImplBlock) -> Option<&ast::TraitDecl> {
+        let trait_id = self.referenced_symbol(b.trait_type.as_ref()?.id()?)?;
+        let module = self.modules.get(self.module_of_id(trait_id)?)?;
+        module.items.iter().find_map(|item| {
+            if let Item::Trait(t) = item
+                && t.id == trait_id
+            {
+                Some(t)
+            } else {
+                None
+            }
+        })
     }
 
     /// The function [`Semantics::function_at`] answers, with the item holding it.
