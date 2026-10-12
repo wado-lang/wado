@@ -141,7 +141,8 @@ helper, and a clause that does is a compile error. The caller owes the
 contract, so the caller must be able to evaluate it: to test it before the
 call, or to show why it holds before marking the call. A predicate the caller
 cannot read leaves `unchecked` to a guess. Eiffel states the same rule for its
-preconditions.
+preconditions. For the same reason, `wado doc` and the editor's hover show a
+function's clauses beside its signature.
 
 The same reasoning rules out a contract on input the caller cannot observe
 before the call. An iterator may perform I/O, so its items exist only once the
@@ -370,6 +371,8 @@ API waits for a program outside the standard library that needs one.
   error.
 - A call through a function value has no callee known statically, so it has no
   contract to check or to remove.
+- `wado doc` and hover show an impl's method without the clauses of the trait
+  method it implements, though those clauses bind it.
 - `String::from_utf8` copies the bytes of a `ByteList` argument, though the
   argument is its own copy and its buffer could become the string's.
 - An input contract states what one call requires. It cannot state an
