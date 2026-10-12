@@ -26,12 +26,12 @@ pub struct Console {
 impl Console {
     /// Everything printed on stdout.
     pub fn stdout(&self) -> String {
-        return String::from_utf8_lossy(self.out);
+        return String::from_utf8_lossy(self.out as ByteList);
     }
 
     /// Everything printed on stderr.
     pub fn stderr(&self) -> String {
-        return String::from_utf8_lossy(self.err);
+        return String::from_utf8_lossy(self.err as ByteList);
     }
 
     fn capture(&mut self, writer: i32, data: &List<u8>) -> bool {

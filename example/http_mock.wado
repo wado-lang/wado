@@ -101,7 +101,7 @@ fn get(path: String) -> Request {
 fn header_text(resp: &Response, name: String) -> String {
     let values = resp.get_headers().get(name as FieldName);
     assert values.len() == 1;
-    return String::from_utf8_lossy(values[0] as List<u8>);
+    return String::from_utf8_lossy(values[0]);
 }
 
 test "/status pings the upstream and reports its status" {

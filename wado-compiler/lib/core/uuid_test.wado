@@ -11,8 +11,8 @@ struct MockRandom {
 }
 
 impl Random for MockRandom {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
-        let mut out: List<u8> = [];
+    fn get_random_bytes(&mut self, max_len: u64) -> ByteList {
+        let mut out: ByteList = [];
         let mut n = max_len as i32;
         while n > 0 && self.pos < self.data.len() {
             out.push(self.data[self.pos]);

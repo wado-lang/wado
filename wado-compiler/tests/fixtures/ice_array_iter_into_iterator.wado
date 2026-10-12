@@ -1,13 +1,17 @@
 // ListIter<T> should implement IntoIterator, allowing it to be passed
-// to functions expecting IntoIterator<Item = u8> (e.g., String::from_utf8).
+// to functions expecting IntoIterator<Item = u8>.
 //
 // Previously the compiler panicked at wir_build/translate.rs with:
 //   [WIR] unresolved Call: name="ListIter<u8>^IntoIterator::into_iter"
 use { println, Stdout } from "core:cli";
 
+fn collect_bytes<I: IntoIterator<Item = u8>>(bytes: I) -> ByteList with _ {
+    return bytes.into_iter().collect();
+}
+
 export fn run() with Stdout {
     let arr: List<u8> = [72, 101, 108, 108, 111] as List<u8>;
-    if let Ok(s) = String::from_utf8(arr.iter_value()) {
+    if let Ok(s) = String::try_from_utf8(collect_bytes(arr.iter_value())) {
         println(s);
     }
 }

@@ -460,8 +460,8 @@ impl Engine {
             return hover::hover_for_item_symbol(sem, symbol, public_only)
                 .ok_or(SymbolQueryError::NoLocation);
         }
-        if let Some(function) = sem.function_at(def.ast_id) {
-            return Ok(hover::hover_for_function(function));
+        if let Some((function, contracts)) = sem.function_with_contracts_at(def.ast_id) {
+            return Ok(hover::hover_for_function(function, contracts));
         }
         Err(SymbolQueryError::NoLocation)
     }

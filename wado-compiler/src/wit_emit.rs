@@ -817,6 +817,12 @@ impl<'a> Emitter<'a> {
                 if let Some(handle) = self.extern_handle(named) {
                     return Ok(handle);
                 }
+                if let Some(base) = self
+                    .cm_interface_registry
+                    .and_then(|registry| registry.prelude_newtype_base(named))
+                {
+                    return self.map_ast_type(base, current_fq, uses);
+                }
                 match primitive_by_name(&named.name) {
                     Some(prim) => Ok(prim),
                     None => Ok(Type::named(self.cm_type_name(named, current_fq, uses))),

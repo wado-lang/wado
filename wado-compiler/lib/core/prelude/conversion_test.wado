@@ -564,6 +564,6 @@ fn reason<E: Error>(e: E) -> String {
 
 test "Error bounds any type that reports a reason" {
     assert reason(i32::from_str("x").unwrap_err()) == "invalid digit found in string";
-    assert reason(String::from_utf8([0xFF] as List<u8>).unwrap_err()) == "invalid utf-8 sequence of 1 bytes from index 0";
+    assert reason(String::try_from_utf8([0xFF] as ByteList).unwrap_err()) == "invalid utf-8 sequence of 1 bytes from index 0";
     assert reason(PortError::OutOfRange) == "port out of range";
 }

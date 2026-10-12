@@ -9,7 +9,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     let [done, _done_tx] = Future::<Result<(), ErrorCode>>::new();
     let [request_body, _request_trailers] = Request::consume_body(request, done);
-    let text = String::from_utf8_lossy(request_body.read_to_end());
+    let text = String::from_utf8_lossy(request_body.read_to_end_bytes());
     request_body.drop();
 
     let headers = Headers::new();

@@ -224,6 +224,21 @@ fn hover_renders_function_signature() {
     });
 }
 
+/// A trait method's clauses live in a hidden holder, not on the method.
+#[test]
+fn hover_shows_a_trait_methods_contract() {
+    futures::executor::block_on(async {
+        let lib = "pub trait Pick with () {\n    fn size(&self) -> i32;\n\n    fn pick(&self, i: i32) -> i32\n        contract 0 <= i < self.size();\n}\n";
+        let result = hover("./lib.wado", lib, "./lib.wado", "./lib.wado#Pick::pick")
+            .await
+            .expect("resolves hover");
+        assert_eq!(
+            result.contents.value,
+            "```wado\nfn pick(&self, i: i32) -> i32\n    contract 0 <= i < self.size()\n```"
+        );
+    });
+}
+
 #[test]
 fn hover_struct_default_view_elides_private_fields() {
     futures::executor::block_on(async {

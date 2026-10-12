@@ -122,16 +122,28 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
 /// Hover for a method or free function reached by [`AstId`] (e.g. a symbol
 /// notation `Type::m`), where there is no item-level [`Symbol`] to render.
 #[must_use]
-pub(crate) fn hover_for_function(f: &ast::Function) -> HoverResult {
-    fenced_hover(function_hover_text(f))
+pub(crate) fn hover_for_function<'a>(
+    f: &ast::Function,
+    contracts: impl IntoIterator<Item = &'a ast::AssertStmt>,
+) -> HoverResult {
+    fenced_hover(function_hover_text(f, contracts))
 }
 
-/// A function's attributes above its signature. The fence carries more than one
-/// line, so a reader sees what the declaration states as the declaration writes
-/// it — every attribute, with no allowlist.
-fn function_hover_text(f: &ast::Function) -> String {
+/// A function's attributes above its signature and its `contract` clauses
+/// below it. The fence carries more than one line, so a reader sees what the
+/// declaration states as the declaration writes it — every attribute, with no
+/// allowlist, and every clause the caller owes.
+fn function_hover_text<'a>(
+    f: &ast::Function,
+    contracts: impl IntoIterator<Item = &'a ast::AssertStmt>,
+) -> String {
     let mut out = unparse::unparse_attributes(&f.attrs);
     out.push(unparse::unparse_function_signature(f));
+    out.extend(
+        contracts
+            .into_iter()
+            .map(|clause| format!("    {}", unparse::unparse_contract_clause(clause))),
+    );
     out.join("\n")
 }
 
@@ -316,7 +328,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
 /// identified by `target`.
 fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
     match item {
-        Item::Function(f) => (f.id == target).then(|| function_hover_text(f)),
+        Item::Function(f) => (f.id == target).then(|| function_hover_text(f, f.contracts())),
         // Struct fields follow `public_only` (matching `wado doc`'s `..`
         // elision when set); enum cases are always public.
         Item::Struct(s) => {
@@ -353,13 +365,13 @@ fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
             t.methods
                 .iter()
                 .find(|m| m.id == target)
-                .map(function_hover_text)
+                .map(|m| function_hover_text(m, t.method_contracts(&m.name)))
         }
         Item::Impl(imp) => imp
             .methods
             .iter()
             .find(|m| m.id == target)
-            .map(function_hover_text),
+            .map(|m| function_hover_text(m, m.contracts())),
         Item::Flags(fl) => (fl.id == target).then(|| unparse::unparse_flags_header(fl)),
         Item::Newtype(n) => (n.id == target).then(|| unparse::unparse_newtype_signature(n)),
         Item::BuiltinTypeDecl(d) => {
@@ -416,6 +428,18 @@ mod tests {
                     .contains("fn add(a: i32, b: i32) -> i32"),
                 "got: {}",
                 result.contents.value
+            );
+        });
+    }
+
+    #[test]
+    fn fn_hover_shows_its_contract() {
+        futures::executor::block_on(async {
+            let source = "fn half(n: i32) -> i32\n    contract n % 2 == 0, \"n must be even\"\n{\n    return n / 2;\n}\nfn run() -> i32 {\n    return half(4);\n}\n";
+            let result = hover_at(source, 6, 12).await.expect("hover on half call");
+            assert_eq!(
+                result.contents.value,
+                "```wado\nfn half(n: i32) -> i32\n    contract n % 2 == 0, \"n must be even\"\n```"
             );
         });
     }

@@ -1333,7 +1333,7 @@ impl From<Utf8Error> for ParseError;
 
 fn percent_decode(input: String) -> Result<String, ParseError> {
     let bytes = decode_octets(input)?;
-    return Result::Ok(String::from_utf8(bytes)?);   // Utf8Error -> ParseError
+    return Result::Ok(String::try_from_utf8(bytes)?);   // Utf8Error -> ParseError
 }
 ```
 

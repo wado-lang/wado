@@ -26,8 +26,8 @@ use super::sem::decls::{Owed, OwedBounds, PendingBounds};
 use super::trait_env::{DefaultArg, ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
-    MethodInfo, MethodOwner, OperatorImpl, ResolvedTraitMethod, SigPosition, TraitMethodMatch,
-    TypeError, TypeLookup,
+    MethodInfo, MethodOwner, OperatorImpl, ParamList, ResolvedTraitMethod, SigPosition,
+    TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
 use super::util;
@@ -585,6 +585,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_decl) = impl_sig.trait_decl else {
             return;
         };
+        if self.tysys.resolutions.defs().kind(trait_decl).is_effect() {
+            self.enforce_handler_method_signatures(
+                impl_block,
+                trait_decl,
+                &impl_sig.trait_type_args,
+            );
+            return;
+        }
         let Some(trait_sig) = signatures.trait_sig(trait_decl) else {
             return;
         };
@@ -671,29 +679,112 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected.return_type,
                     written.decl.return_type.unwrap_or(TypeTable::UNIT),
                 )));
-            for (position, expected, found) in positions {
-                let table = self.tysys.type_table.borrow();
-                // A projection left open names a type only an instantiation
-                // settles, so two spellings of it are not comparable here.
-                let comparable = |id: TypeId| {
-                    !table.contains_assoc_type_projection(id) && !table.awaits_inference(id)
-                };
-                if !comparable(expected)
-                    || !comparable(found)
-                    || table.type_key(expected) == table.type_key(found)
-                {
-                    continue;
-                }
-                drop(table);
-                let _ = self.emit(TypeError::TraitMethodTypeMismatch {
-                    trait_name: header.name.clone(),
+            self.report_signature_mismatches(&header.name, method, positions);
+        }
+    }
+
+    /// Require each handler method to take and return what its operation
+    /// declares: after the handler's own receiver, if any, the operation's
+    /// parameters, a resource instance method's handle first. `resume` hands
+    /// the result to a caller typed against the operation, and an async
+    /// operation's caller waits on the `AsyncCall<T>` that carries it.
+    fn enforce_handler_method_signatures(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+        handled: DefId,
+        handled_args: &[TypeId],
+    ) {
+        let signatures = Rc::clone(&self.tysys.signatures);
+        let effect_name = self.tysys.resolutions.defs().name(handled).to_string();
+        for method in &impl_block.methods {
+            let Some(op) = signatures.resource_method_sig(handled, &method.name) else {
+                continue;
+            };
+            let Some(written) = signatures.method_sig(self.tysys.def_at(method.id)) else {
+                continue;
+            };
+            let found_params = &written.decl.param_types[written.first_value_param()..];
+            let expected = op.instantiate_call(&self.tysys.type_table, handled_args, &[]);
+            if expected.param_types.len() != found_params.len() {
+                let _ = self.emit(TypeError::TraitMethodArityMismatch {
+                    trait_name: effect_name.clone(),
                     method_name: method.name.clone(),
-                    position,
-                    expected: self.tysys.type_id_to_string(expected),
-                    found: self.tysys.type_id_to_string(found),
+                    list: ParamList::Value,
+                    expected: expected.param_types.len(),
+                    found: found_params.len(),
                     span: method.name_span,
                 });
+                continue;
             }
+            // The handle crosses by whatever reference the handler takes it.
+            let handle_at = (op.self_kind != SelfKind::None).then_some(0);
+            let table = self.tysys.type_table.borrow();
+            let resumed = if op.is_async {
+                table.as_async_call(expected.return_type)
+            } else {
+                Some(expected.return_type)
+            };
+            // An async operation declared without `AsyncCall<T>` is reported
+            // at its declaration, which leaves nothing to compare.
+            let Some(resumed) = resumed else {
+                continue;
+            };
+            let value_params = method
+                .params
+                .iter()
+                .filter(|p| p.self_kind == SelfKind::None)
+                .map(|p| SigPosition::Param(p.name.clone()));
+            let positions: Vec<(SigPosition, TypeId, TypeId)> = value_params
+                .zip(expected.param_types.iter().zip(found_params))
+                .enumerate()
+                .map(|(index, (position, (&expected, &found)))| {
+                    if handle_at == Some(index) {
+                        (position, table.peel_refs(expected), table.peel_refs(found))
+                    } else {
+                        (position, expected, found)
+                    }
+                })
+                .chain(std::iter::once((
+                    SigPosition::Return,
+                    resumed,
+                    written.decl.return_type.unwrap_or(TypeTable::UNIT),
+                )))
+                .collect();
+            drop(table);
+            self.report_signature_mismatches(&effect_name, method, positions);
+        }
+    }
+
+    /// Report each position where `method` writes a type other than the one
+    /// `owner` declares.
+    fn report_signature_mismatches(
+        &mut self,
+        owner: &str,
+        method: &ast::Function,
+        positions: impl IntoIterator<Item = (SigPosition, TypeId, TypeId)>,
+    ) {
+        for (position, expected, found) in positions {
+            let table = self.tysys.type_table.borrow();
+            // A projection left open names a type only an instantiation
+            // settles, so two spellings of it are not comparable here.
+            let comparable = |id: TypeId| {
+                !table.contains_assoc_type_projection(id) && !table.awaits_inference(id)
+            };
+            if !comparable(expected)
+                || !comparable(found)
+                || table.type_key(expected) == table.type_key(found)
+            {
+                continue;
+            }
+            drop(table);
+            let _ = self.emit(TypeError::TraitMethodTypeMismatch {
+                trait_name: owner.to_string(),
+                method_name: method.name.clone(),
+                position,
+                expected: self.tysys.type_id_to_string(expected),
+                found: self.tysys.type_id_to_string(found),
+                span: method.name_span,
+            });
         }
     }
 

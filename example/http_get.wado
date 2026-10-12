@@ -39,7 +39,7 @@ fn read_body(resp: Response) -> String {
     let [res_rx, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Response::consume_body(resp, res_rx);
 
-    let body = body_stream.read_to_end();
+    let body = body_stream.read_to_end_bytes();
     body_stream.drop();
 
     return String::from_utf8_lossy(body);

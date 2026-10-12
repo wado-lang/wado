@@ -1,0 +1,47 @@
+// An accessor taking `&self` hands back a projection of its receiver. Read at
+// the receiver's last use, that projection aliases nothing the caller can
+// still reach, so storing it needs no copy: `taken` stores `b.raw()` with `b`
+// dead after, as `return b.raw()` and `Out { repr: b.repr }` already do.
+// `kept` reads `b` again, so its copy stays, and the write through the stored
+// array must not reach `b`.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf { repr: Array<i32>, used: i32 }
+struct Out { repr: Array<i32>, used: i32 }
+
+impl Buf {
+    fn raw(&self) -> Array<i32> { return self.repr; }
+}
+
+fn make() -> Buf {
+    let mut repr: Array<i32> = builtin::array_new(2);
+    repr[0] = builtin::black_box(7);
+    return Buf { repr, used: 1 };
+}
+
+fn taken(b: Buf) -> Out {
+    let used = b.used;
+    return Out { repr: b.raw(), used };
+}
+
+fn kept(b: Buf) -> i32 {
+    let mut out = Out { repr: b.raw(), used: 1 };
+    out.repr[0] = 9;
+    return b.repr[0] * 10 + out.repr[0];
+}
+
+export fn run() with Stdout {
+    let out = taken(make());
+    println(`${out.repr[0]} ${out.used}`);
+    println(`${kept(make())}`);
+}
+
+__DATA__
+{
+    "stdout": "7 1\n79\n",
+    "wir_scope": "/taken",
+    "wir_not_expect:O0": [
+        "$value_copy$"
+    ]
+}

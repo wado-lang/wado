@@ -4656,6 +4656,14 @@ impl TraitDecl {
             .iter()
             .find(|m| m.holds_contracts_of == Some(held.id))
     }
+
+    /// The `contract` clauses of the method named `method`, which its hidden
+    /// holder keeps rather than the method itself.
+    pub fn method_contracts(&self, method: &str) -> impl Iterator<Item = &AssertStmt> {
+        self.contract_holder(method)
+            .into_iter()
+            .flat_map(Function::contracts)
+    }
 }
 
 /// What an effect handler does with an operation it does not implement.

@@ -594,6 +594,30 @@ mod format_contract_tests {
         );
     }
 
+    /// A caller owes the contract, so the reference shows it.
+    #[test]
+    fn a_function_documents_its_contract() {
+        let out = markdown_of(
+            "//! Demo.\n\npub fn half(n: i32) -> i32\n    contract n % 2 == 0, \"n must be even\"\n{\n    return n / 2;\n}\n",
+        );
+        assert!(
+            out.contains("`contract n % 2 == 0, \"n must be even\"`"),
+            "a function's contract must be documented:\n{out}"
+        );
+    }
+
+    /// A trait method's clauses live in a hidden holder, not on the method.
+    #[test]
+    fn a_trait_method_documents_its_contract() {
+        let out = markdown_of(
+            "//! Demo.\n\npub trait Pick with () {\n    fn size(&self) -> i32;\n\n    fn pick(&self, i: i32) -> i32\n        contract 0 <= i < self.size();\n}\n",
+        );
+        assert!(
+            out.contains("`contract 0 <= i < self.size()`"),
+            "a trait method's contract must be documented:\n{out}"
+        );
+    }
+
     #[test]
     fn a_type_parameter_renders_its_default() {
         let out = markdown_of(
@@ -774,13 +798,13 @@ fn render_md_impl_members(
     h4: &str,
 ) {
     for m in constants.iter().chain(methods) {
-        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
+        render_md_function(out, m, h4);
     }
     for ti in trait_impls {
         writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
         let h5 = h(heading_level(h4) + 1);
         for m in &ti.methods {
-            render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h5);
+            render_md_function(out, m, h5);
         }
     }
 }
@@ -900,7 +924,7 @@ fn render_md_functions_section(out: &mut String, doc: &DocModule, h2: &str, h3: 
     }
     writeln!(out, "\n{h2} Functions").unwrap();
     for f in &doc.functions {
-        render_md_member(out, &f.signature, &f.attrs, f.doc.as_deref(), h3);
+        render_md_function(out, f, h3);
     }
 }
 
@@ -911,7 +935,7 @@ fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for m in &t.methods {
-        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
+        render_md_function(out, m, h4);
     }
 }
 
@@ -977,7 +1001,7 @@ fn render_md_effect(out: &mut String, e: &DocEffect, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for m in &e.methods {
-        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
+        render_md_function(out, m, h4);
     }
 }
 
@@ -988,12 +1012,23 @@ fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for m in &r.methods {
-        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
+        render_md_function(out, m, h4);
     }
 }
 
 fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
-    render_md_member(out, sig, &[], doc, h);
+    render_md_member(out, sig, &[], &[], doc, h);
+}
+
+fn render_md_function(out: &mut String, f: &DocFunction, h: &str) {
+    render_md_member(
+        out,
+        &f.signature,
+        &f.attrs,
+        &f.contracts,
+        f.doc.as_deref(),
+        h,
+    );
 }
 
 /// `text` as a code span. Text holding a backtick would close a plain span
@@ -1014,13 +1049,27 @@ fn code_span(text: &str) -> String {
     format!("{fence}{pad}{text}{pad}{fence}")
 }
 
-/// A member's heading, the attributes its declaration carries, and its doc. The
-/// heading is one line, so the attributes go on a line of their own under it.
-fn render_md_member(out: &mut String, sig: &str, attrs: &[String], doc: Option<&str>, h: &str) {
+/// A member's heading, the attributes its declaration carries, its `contract`
+/// clauses, and its doc. The heading is one line, so the attributes go on a
+/// line of their own under it, and the clauses in a list, one item each.
+fn render_md_member(
+    out: &mut String,
+    sig: &str,
+    attrs: &[String],
+    contracts: &[String],
+    doc: Option<&str>,
+    h: &str,
+) {
     writeln!(out, "\n{h} {}", code_span(sig)).unwrap();
     if !attrs.is_empty() {
         let rendered: Vec<String> = attrs.iter().map(|a| code_span(a)).collect();
         writeln!(out, "\n{}", rendered.join(" ")).unwrap();
+    }
+    if !contracts.is_empty() {
+        out.push('\n');
+        for clause in contracts {
+            writeln!(out, "- {}", code_span(clause)).unwrap();
+        }
     }
     if let Some(d) = doc {
         out.push('\n');
@@ -1285,14 +1334,14 @@ fn render_simple_impls(
     if !constants.is_empty() || !methods.is_empty() {
         writeln!(out, "\nimpl {name} {{").unwrap();
         for m in constants.iter().chain(methods) {
-            writeln!(out, "    {};", m.signature).unwrap();
+            write_simple_decl(out, m, "    ");
         }
         out.push_str("}\n");
     }
     for ti in trait_impls {
         writeln!(out, "\n{} {{", ti.signature).unwrap();
         for m in &ti.methods {
-            writeln!(out, "    {};", m.signature).unwrap();
+            write_simple_decl(out, m, "    ");
         }
         out.push_str("}\n");
     }
@@ -1346,7 +1395,7 @@ fn render_simple_effects_section(out: &mut String, doc: &DocModule, h2: &str) {
     for e in &doc.effects {
         writeln!(out, "\n```wado\n{} {{", e.signature).unwrap();
         for m in &e.methods {
-            writeln!(out, "    {};", m.signature).unwrap();
+            write_simple_decl(out, m, "    ");
         }
         out.push_str("}\n```\n");
     }
@@ -1363,7 +1412,7 @@ fn render_simple_resources_section(out: &mut String, doc: &DocModule, h2: &str) 
         } else {
             writeln!(out, "\n```wado\n{} {{", r.signature).unwrap();
             for m in &r.methods {
-                writeln!(out, "    {};", m.signature).unwrap();
+                write_simple_decl(out, m, "    ");
             }
             out.push_str("}\n```\n");
         }
@@ -1384,7 +1433,7 @@ fn render_simple_traits_section(out: &mut String, doc: &DocModule, h2: &str) {
             writeln!(out, "    type {assoc};").unwrap();
         }
         for m in &t.methods {
-            writeln!(out, "    {};", m.signature).unwrap();
+            write_simple_decl(out, m, "    ");
         }
         out.push_str("}\n");
     }
@@ -1416,13 +1465,13 @@ fn render_simple_primitive_types_section(out: &mut String, doc: &DocModule, h2: 
             writeln!(out, "    {};", c.signature).unwrap();
         }
         for m in &p.methods {
-            writeln!(out, "    {};", m.signature).unwrap();
+            write_simple_decl(out, m, "    ");
         }
         out.push_str("}\n");
         for ti in &p.trait_impls {
             writeln!(out, "\n{} {{", ti.signature).unwrap();
             for m in &ti.methods {
-                writeln!(out, "    {};", m.signature).unwrap();
+                write_simple_decl(out, m, "    ");
             }
             out.push_str("}\n");
         }
@@ -1454,9 +1503,19 @@ fn render_simple_functions_section(out: &mut String, doc: &DocModule, h2: &str) 
     }
     writeln!(out, "\n{h2} Functions\n\n```wado").unwrap();
     for f in &doc.functions {
-        writeln!(out, "{};", f.signature).unwrap();
+        write_simple_decl(out, f, "");
     }
     out.push_str("```\n");
+}
+
+/// A function declaration as source: its signature, then each `contract`
+/// clause on a line of its own, as the formatter writes them.
+fn write_simple_decl(out: &mut String, f: &DocFunction, indent: &str) {
+    write!(out, "{indent}{}", f.signature).unwrap();
+    for clause in &f.contracts {
+        write!(out, "\n{indent}    {clause}").unwrap();
+    }
+    out.push_str(";\n");
 }
 
 /// Render a struct in simple format with fields on separate lines.

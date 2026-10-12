@@ -1050,7 +1050,7 @@ impl CborDeserializer {
         }
         let n = len as i32;
         let slice = self.input.slice(self.pos, self.pos + n);
-        let s = match String::from_utf8_slice(slice) {
+        let s = match String::try_from_utf8(slice) {
             Ok(v) => v,
             Err(e) => {
                 builtin::cold_path();

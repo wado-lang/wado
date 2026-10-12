@@ -549,6 +549,12 @@ so the template's method gets an edge to the specific block's same-named
 method — an edge, not a root: a program that never reaches the template needs
 neither block.
 
+A blanket over a bare type parameter (`impl<T: Shout> Show for T`) covers
+every head, so its method gets the edge to the same-named method of every other
+block of its trait. A call through the blanket's bound
+(`fn f<T: Shout>(x: T) { x.show() }`) reaches the blanket alone, yet lands on
+the receiver's own block.
+
 A trait whose calls a synthesis pass mints after this one runs: the format
 traits behind `${x:spec}`, whose callee is read from a specifier `annotate`
 does not interpret, and the reflection faces `reflect_bridge` mints per

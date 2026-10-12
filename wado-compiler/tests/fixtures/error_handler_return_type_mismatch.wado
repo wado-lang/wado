@@ -1,0 +1,24 @@
+// A handler method returns what its operation declares: `resume` hands the
+// value to a caller typed against the interface, not against the handler.
+
+interface Src {
+    fn get() -> i32;
+}
+
+struct H {}
+
+impl Src for H {
+    fn get(&mut self) -> i64 {
+        resume 3 as i64;
+    }
+}
+
+export fn run() {
+    let mut h = H {};
+    with Src => &mut h do {
+        assert Src::get() == 3;
+    };
+}
+
+__DATA__
+{"compile_error": ":11:8: analysis error: method `get` returns `i64`, but `Src` declares `i32`", "compile_error_codes": ["TYPE_MISMATCH"]}

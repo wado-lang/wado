@@ -96,7 +96,7 @@ export fn run() with (Stdout, IpNameLookup, TcpSocket, Connector, Error) {
     data_tx.write_all(request.bytes().collect());
 
     // Read until the peer closes the connection.
-    let response = tls_rx.read_to_end();
+    let response = tls_rx.read_to_end_bytes();
     tls_rx.drop();
     data_tx.drop();
 

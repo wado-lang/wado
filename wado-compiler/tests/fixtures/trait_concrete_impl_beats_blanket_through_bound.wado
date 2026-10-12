@@ -1,0 +1,36 @@
+// A call through a bound the blanket satisfies (`I: Shout` reaching `Show`
+// through `impl<T: Shout> Show for T`) still lands on the receiver's own impl,
+// so that impl stays live though no source spells a call to it.
+
+trait Shout with () {}
+
+trait Show with () {
+    fn show(&self) -> String;
+}
+
+impl<T: Shout> Show for T {
+    fn show(&self) -> String {
+        return "blanket";
+    }
+}
+
+struct Gadget {}
+
+impl Shout for Gadget {}
+
+impl Show for Gadget {
+    fn show(&self) -> String {
+        return "concrete";
+    }
+}
+
+fn show_it<T: Shout>(x: T) -> String {
+    return x.show();
+}
+
+test "a call through the blanket's bound reaches the receiver's own impl" {
+    assert show_it(Gadget {}) == "concrete";
+}
+
+__DATA__
+{"test": {}}

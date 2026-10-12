@@ -1357,7 +1357,7 @@ acquired from it previously will remain valid.
 
 #### `pub type FieldName = String`
 
-#### `pub type FieldValue = List<u8>`
+#### `pub type FieldValue = ByteList`
 
 #### `pub type Headers = Fields`
 
@@ -1773,7 +1773,7 @@ The insecure interface for insecure pseudo-random numbers.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### `fn get_insecure_random_bytes(max_len: u64) -> List<u8>`
+##### `fn get_insecure_random_bytes(max_len: u64) -> ByteList`
 
 `#[cm("wasi:random/insecure@0.3.0#get-insecure-random-bytes")]` `#[cm_params("max-len")]`
 
@@ -1809,7 +1809,7 @@ WASI Random is a random data API.
 It is intended to be portable at least between Unix-family platforms and
 Windows.
 
-##### `fn get_random_bytes(max_len: u64) -> List<u8>`
+##### `fn get_random_bytes(max_len: u64) -> ByteList`
 
 `#[cm("wasi:random/random@0.3.0#get-random-bytes")]` `#[cm_params("max-len")]`
 
@@ -2499,7 +2499,7 @@ The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-connect>
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
-##### `async fn send(&self, data: List<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
+##### `async fn send(&self, data: ByteList, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
 
 `#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.send")]` `#[cm_params("self", "data", "remote-address")]`
 
@@ -2549,7 +2549,7 @@ already done so.
 - <https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg>
 - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
-##### `async fn receive(&self) -> AsyncCall<Result<[List<u8>, IpSocketAddress], ErrorCode>>`
+##### `async fn receive(&self) -> AsyncCall<Result<[ByteList, IpSocketAddress], ErrorCode>>`
 
 `#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.receive")]` `#[cm_params("self")]`
 

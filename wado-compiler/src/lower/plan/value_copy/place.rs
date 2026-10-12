@@ -294,6 +294,12 @@ impl<'a> Resolver<'a> {
         })
     }
 
+    /// The projection `func` returns out of one of its parameters.
+    #[must_use]
+    pub fn return_path(&self, func: &FunctionRef) -> Option<&ReturnPath> {
+        self.return_paths.get(&func.module_source, &func.name)
+    }
+
     /// What `expr` names. Total over the expression kinds: a shape with no arm
     /// of its own is [`Names::Unknown`], never silently nothing.
     #[must_use]
@@ -365,7 +371,7 @@ impl<'a> Resolver<'a> {
                 }
             }
             TirExprKind::Call { func, args, .. } => {
-                match self.return_paths.get(&func.module_source, &func.name) {
+                match self.return_path(func) {
                     Some(path) => match self.names(arg_at(func, args, path.param)) {
                         Names::Place(mut place) => {
                             place.selectors.extend(path.selectors.iter().copied());

@@ -862,7 +862,7 @@ struct Counting {
 }
 
 impl Random for Counting {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> with Random {
+    fn get_random_bytes(&mut self, max_len: u64) -> ByteList with Random {
         self.calls += 1;
         resume Random::get_random_bytes(max_len)   // the next handler out: the host
     }

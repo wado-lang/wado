@@ -16,11 +16,11 @@ struct MockStdio {
 
 impl MockStdio {
     fn stdout_text(&self) -> String {
-        return String::from_utf8_lossy(self.out);
+        return String::from_utf8_lossy(self.out as ByteList);
     }
 
     fn stderr_text(&self) -> String {
-        return String::from_utf8_lossy(self.err);
+        return String::from_utf8_lossy(self.err as ByteList);
     }
 }
 
@@ -121,7 +121,7 @@ fn greet(name: String) with (Stdout, Stderr) {
 
 fn read_all_stdin() -> String with Stdin {
     let [rx, _done] = Stdin::read_via_stream();
-    let buf = rx.read_to_end();
+    let buf = rx.read_to_end_bytes();
     rx.drop();
     return String::from_utf8_lossy(buf);
 }

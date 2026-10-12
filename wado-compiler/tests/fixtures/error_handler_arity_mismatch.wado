@@ -1,0 +1,24 @@
+// A handler method takes as many parameters as its operation, counting the
+// handle of a resource's instance method and not the handler's own receiver.
+
+interface Src {
+    fn get(n: i32) -> i32;
+}
+
+struct H {}
+
+impl Src for H {
+    fn get(&mut self) -> i32 {
+        resume 3;
+    }
+}
+
+export fn run() {
+    let mut h = H {};
+    with Src => &mut h do {
+        assert Src::get(1) == 3;
+    };
+}
+
+__DATA__
+{"compile_error": ":11:8: analysis error: method `get` takes 0 parameter(s) but `Src` declares 1", "compile_error_codes": ["ARITY_MISMATCH"]}

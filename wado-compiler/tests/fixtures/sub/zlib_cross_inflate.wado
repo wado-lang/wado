@@ -18,7 +18,7 @@ use { inflate_zlib, inflate_raw, inflate_gzip, InflateStream, RAW_FORMAT, GZIP_F
 
 fn read_all_stdin() -> ByteList with Stdin {
     let [stdin_stream, _done] = Stdin::read_via_stream();
-    let buf = stdin_stream.read_to_end() as ByteList;
+    let buf = stdin_stream.read_to_end_bytes();
     stdin_stream.drop();
     return buf;
 }

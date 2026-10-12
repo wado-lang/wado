@@ -19,7 +19,7 @@ export fn run() with (Stdout, Stdin) {
     let [stdin_stream, _done] = Stdin::read_via_stream();
 
     // Read all gzip data from stdin
-    let data = stdin_stream.read_to_end() as ByteList;
+    let data = stdin_stream.read_to_end_bytes();
     stdin_stream.drop();
 
     // Decompress gzip and write to stdout

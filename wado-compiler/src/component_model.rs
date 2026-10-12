@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
+use std::sync::LazyLock;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -641,6 +642,23 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
+
+/// The prelude's `type ByteList = List<u8>`, which a binding names for a WIT
+/// `list<u8>`. No CM interface declares it, so the registry carries its base.
+const BYTE_LIST: &str = "ByteList";
+
+static BYTE_LIST_BASE: LazyLock<Type> = LazyLock::new(|| {
+    Type::Generic(GenericType {
+        id: AstId::fresh(),
+        name: "List".to_string(),
+        args: vec![Type::Named(NamedType::new(
+            AstId::fresh(),
+            "u8".to_string(),
+            Span::default(),
+        ))],
+        span: Span::default(),
+    })
+});
 
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
 /// type is a reference, so a copyable handle is a number: an `f64`, which jco
@@ -3253,10 +3271,21 @@ impl CmInterfaceRegistry {
     /// Resolve a newtype *reference* to its aliased base type by its declaring
     /// interface (`NamedType::source_interface`), so two modules that declare a
     /// same-named newtype resolve to their own base — never a bare-name guess.
-    /// A source-less reference is not a known newtype here.
+    /// A source-less reference is a known newtype only as a prelude one.
     fn resolve_newtype_ref(&self, named: &NamedType) -> Option<&Type> {
-        let source = self.source_interface(named)?;
-        self.get_newtype_by_source(&source, &DeclName::new(&named.name))
+        match self.source_interface(named) {
+            Some(source) => self.get_newtype_by_source(&source, &DeclName::new(&named.name)),
+            None => self.prelude_newtype_base(named),
+        }
+    }
+
+    /// The base of the prelude newtype `named` refers to. A reference with a
+    /// declaring interface names that interface's type, whatever its name.
+    pub fn prelude_newtype_base(&self, named: &NamedType) -> Option<&'static Type> {
+        if self.source_interface(named).is_some() {
+            return None;
+        }
+        (named.name == BYTE_LIST).then(|| &*BYTE_LIST_BASE)
     }
 
     /// The registration source and base type of a newtype the compiled package
@@ -5113,7 +5142,9 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named) else {
-                return unregistered();
+                return registry
+                    .prelude_newtype_base(named)
+                    .map_or_else(unregistered, |base| cm_layout_with_registry(base, registry));
             };
             if let Some(resolved) =
                 registry.get_newtype_by_source(&source, &DeclName::new(&named.name))

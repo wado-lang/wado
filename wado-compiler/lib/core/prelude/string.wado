@@ -537,15 +537,12 @@ impl String {
         return self.repr[index];
     }
 
-    /// Write the byte at `index` without bounds or UTF-8 checks.
-    ///
-    /// # Contract
-    /// - `0 <= index < self.len()`.
-    /// - The resulting byte sequence must remain valid UTF-8.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
+    /// Write the byte at `index` with no UTF-8 check. A character written a
+    /// byte at a time is invalid UTF-8 between the writes, so no contract on one
+    /// write can state the invariant; the caller restores it before anything
+    /// reads the string.
     #[compiler_item("string_set_byte_unchecked")]
-    pub fn set_byte_unchecked(&mut self, index: i32, value: u8) {
+    internal fn internal_set_byte_unchecked(&mut self, index: i32, value: u8) {
         if builtin::contract_checks() {
             assert 0 <= index < self.used, "index out of bounds";
         }
@@ -628,7 +625,7 @@ impl String {
         }
         let start = self.internal_reserve_uninit(len);
         for let mut i = 0; i < len; i += 1 {
-            self.set_byte_unchecked(start + i, builtin::i32_load8_u(ptr + i));
+            self.internal_set_byte_unchecked(start + i, builtin::i32_load8_u(ptr + i));
         }
     }
 
@@ -670,13 +667,13 @@ impl String {
     }
 
     /// Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
-    /// `ByteSlice`, or a `String`).
+    /// `ByteSlice`, or a `String`), which must be valid UTF-8 on their own.
     ///
-    /// # Contract
-    /// - The resulting byte sequence must remain valid UTF-8.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S) {
+    /// A marked call that breaks the contract leaves the string invalid, and
+    /// the behavior is unconstrained.
+    pub fn push_bytes<S: AsByteSlice>(&mut self, bytes: &S)
+        contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"
+    {
         let slice = bytes.as_byte_slice();
         let n = slice.len();
         if n == 0 {
@@ -766,7 +763,7 @@ impl String {
             assert byte < 0x80, "not an ASCII byte";
         }
         let start = self.internal_reserve_uninit(1);
-        self.set_byte_unchecked(start, byte);
+        self.internal_set_byte_unchecked(start, byte);
     }
 
     /// Truncates the string to the given byte length. Panics if `byte_len` is
@@ -1049,25 +1046,41 @@ impl String {
         return s;
     }
 
-    /// Build a `String` from an iterable of bytes, validating UTF-8.
-    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> with _ {
-        let collected: List<u8> = bytes.into_iter().collect();
-        return String::from_utf8_slice(collected.as_slice() as ByteSlice);
+    /// Copy bytes into a `String`, or report where they stop being valid UTF-8.
+    /// A sequence cut short at the end fails too, with `error_len() == None`.
+    pub fn try_from_utf8<S: AsByteSlice>(bytes: S) -> Result<String, Utf8Error> {
+        let slice = bytes.as_byte_slice();
+        let prefix = String::utf8_valid_prefix(&slice);
+        if prefix != slice.len() {
+            builtin::cold_path();
+            return Result::Err(String::utf8_error_at(&slice, prefix));
+        }
+        return Result::Ok(String::copy_validated(&slice));
     }
 
-    /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
-    /// sequence cut short at the end fails too, with `error_len() == None`.
-    pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error> {
-        let prefix = String::utf8_valid_prefix(&bytes);
-        if prefix != bytes.len() {
-            builtin::cold_path();
-            return Result::Err(String::utf8_error_at(&bytes, prefix));
-        }
-        return Result::Ok(String {
+    /// Copy bytes that must be valid UTF-8 into a `String`.
+    ///
+    /// `unchecked String::from_utf8(bytes)` skips the validation where the
+    /// build does not check contracts. A marked call on invalid bytes builds an
+    /// invalid string, and the behavior is unconstrained.
+    pub fn from_utf8<S: AsByteSlice>(bytes: S) -> String
+        contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"
+    {
+        return String::copy_validated(&bytes.as_byte_slice());
+    }
+
+    fn copy_validated(bytes: &ByteSlice) -> String {
+        return String {
             repr: bytes.to_array() as ByteArray,
             used: bytes.len(),
-        });
+        };
     }
+
+    #[unavailable("write `unchecked String::from_utf8(bytes)`")]
+    pub fn from_utf8_unchecked();
+
+    #[unavailable("write `String::try_from_utf8(bytes)`, which takes any `AsByteSlice`")]
+    pub fn from_utf8_slice();
 
     /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and
     /// answer how many bytes that was. A trailing sequence cut short is left
@@ -1084,7 +1097,7 @@ impl String {
             builtin::cold_path();
             return Result::Err(String::utf8_error_at(&slice, taken));
         }
-        self.push_bytes_unchecked(&slice.slice(0, taken));
+        unchecked self.push_bytes(&slice.slice(0, taken));
         return Result::Ok(taken);
     }
 
@@ -1209,12 +1222,11 @@ impl String {
         return String::utf8_valid_prefix(&bytes) == bytes.len();
     }
 
-    /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.
-    pub fn from_utf8_lossy<I: IntoIterator<Item = u8>>(bytes: I) -> String with _ {
-        let collected: List<u8> = bytes.into_iter().collect();
-        let slice = collected.as_slice() as ByteSlice;
-        if let Ok(s) = String::from_utf8_slice(slice) {
-            return s;
+    /// Copy bytes into a `String`, replacing invalid UTF-8 with U+FFFD.
+    pub fn from_utf8_lossy<S: AsByteSlice>(bytes: S) -> String {
+        let slice = bytes.as_byte_slice();
+        if String::is_valid_utf8(slice) {
+            return String::copy_validated(&slice);
         }
         builtin::cold_path();
         let len = slice.len();
@@ -1228,20 +1240,6 @@ impl String {
                 builder.push('\uFFFD');
             }
             i += scalar.advance;
-        }
-        return builder;
-    }
-
-    /// Build a `String` from an iterable of bytes without UTF-8 validation.
-    ///
-    /// # Contract
-    /// The caller must ensure the bytes form valid UTF-8. Breaking it is a
-    /// contract violation, and the behavior is unconstrained.
-    pub fn from_utf8_unchecked<I: IntoIterator<Item = u8>>(bytes: I) -> String with _ {
-        let mut builder = String::with_capacity(8);
-        for let b of bytes {
-            let idx = builder.internal_reserve_uninit(1);
-            builder.set_byte_unchecked(idx, b);
         }
         return builder;
     }
