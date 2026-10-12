@@ -97,6 +97,41 @@ fn a_guest_profile_stops_at_its_budget_and_is_still_written() {
     assert!(profile.contains("\"threads\""), "{profile}");
 }
 
+#[test]
+fn a_budget_not_in_whole_seconds_is_refused_before_the_run() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("profile.json");
+    let output = runner()
+        .env("WADO_PROFILE_MAX_SECS", "1.5")
+        .args([
+            &format!("--profile=guest,{},1", path.display()),
+            fixture("spins_forever.wado").to_str().unwrap(),
+        ])
+        .output()
+        .expect("running wado-run-webgpu");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr: {stderr}");
+    assert!(stderr.contains("not '1.5'"), "stderr: {stderr}");
+}
+
+#[test]
+fn a_profile_path_that_cannot_be_written_fails_before_the_run() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("missing/profile.json");
+    let output = run(&[
+        &format!("--profile=guest,{},1", path.display()),
+        fixture("compute_double.wado").to_str().unwrap(),
+    ]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "stderr: {stderr}");
+    assert!(!stdout.contains("compute ok"), "stdout: {stdout}");
+    assert!(
+        stderr.contains("cannot write the profile to"),
+        "stderr: {stderr}"
+    );
+}
+
 /// How far Loam's WebGPU backend may sit from its CPU one: a product summed
 /// in another order, and `erf` as WGSL approximates it.
 const LOAM_TOLERANCE: f32 = 1e-4;

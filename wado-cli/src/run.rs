@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use lexopt::Arg::Value;
 use wasmtime::component::Component;
 use wasmtime::{GuestProfiler, UpdateDeadline};
@@ -204,8 +204,13 @@ async fn run_cli_component(
     let linker = runtime::create_linker(&component)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, argv)?;
 
-    let profiler = if let ProfileMode::Guest { interval_ms, .. } = profile {
+    let profiler = if let ProfileMode::Guest { interval_ms, path } = profile {
         let interval = Duration::from_millis(*interval_ms);
+        let max_secs = profile_budget_secs()?;
+        // Created before the run, so a path that cannot be written fails here
+        // rather than in place of what the run itself reports.
+        let file = std::fs::File::create(path)
+            .with_context(|| format!("cannot write the profile to {path}"))?;
         let profiler = GuestProfiler::new_component(
             &engine,
             "wado",
@@ -231,9 +236,6 @@ async fn run_cli_component(
         });
         store.set_epoch_deadline(1);
 
-        let max_secs = std::env::var("WADO_PROFILE_MAX_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok());
         let stop = Arc::new(AtomicBool::new(false));
         let stop_clone = stop.clone();
         let deadline_thread = deadline;
@@ -251,7 +253,7 @@ async fn run_cli_component(
             }
         });
 
-        Some((profiler, stop))
+        Some((profiler, stop, file))
     } else {
         None
     };
@@ -274,12 +276,11 @@ async fn run_cli_component(
         eprintln!("fuel {fuel}");
     }
 
-    if let Some((profiler_arc, stop)) = profiler {
+    if let Some((profiler_arc, stop, file)) = profiler {
         stop.store(true, Ordering::Relaxed);
 
         if let ProfileMode::Guest { path, .. } = profile {
             let guest_profiler = lock(&profiler_arc).take().unwrap();
-            let file = std::fs::File::create(path)?;
             guest_profiler.finish(BufWriter::new(file))?;
             eprintln!("Profile written to {path}");
             eprintln!("View at https://profiler.firefox.com/");
@@ -290,6 +291,19 @@ async fn run_cli_component(
     result.map_err(|()| anyhow::anyhow!("Component returned error"))?;
 
     Ok(())
+}
+
+/// How many seconds `WADO_PROFILE_MAX_SECS` lets a profiled run go on;
+/// unset, as long as it takes.
+fn profile_budget_secs() -> Result<Option<u64>> {
+    let Some(value) = std::env::var_os("WADO_PROFILE_MAX_SECS") else {
+        return Ok(None);
+    };
+    let value = value.to_string_lossy();
+    let Ok(secs) = value.parse::<u64>() else {
+        bail!("WADO_PROFILE_MAX_SECS takes a whole number of seconds, not '{value}'");
+    };
+    Ok(Some(secs))
 }
 
 pub async fn run(opts: RunOptions) -> Result<(), CliExit> {

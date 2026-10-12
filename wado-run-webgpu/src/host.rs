@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use tokio::task::spawn_blocking;
 use wasi_webgpu_wasmtime::wasi::webgpu::webgpu::{
     Gpu as GuestGpu, GpuQueue as GuestGpuQueue, GpuRequestAdapterOptions,
@@ -205,6 +205,7 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
 struct Sampling {
     profiler: Arc<Mutex<Option<GuestProfiler>>>,
     stop: Arc<AtomicBool>,
+    file: File,
     path: PathBuf,
 }
 
@@ -216,6 +217,11 @@ impl Sampling {
         profile: &GuestProfile,
     ) -> Result<Self> {
         let interval = profile.interval;
+        let budget = profile_budget()?;
+        // Created before the run, so a path that cannot be written fails here
+        // rather than in place of what the run itself reports.
+        let file = File::create(&profile.path)
+            .with_context(|| format!("cannot write the profile to {}", profile.path.display()))?;
         let profiler = GuestProfiler::new_component(
             engine,
             "wado-run-webgpu",
@@ -239,10 +245,6 @@ impl Sampling {
             Ok(UpdateDeadline::Continue(1))
         });
         store.set_epoch_deadline(1);
-        let budget = std::env::var("WADO_PROFILE_MAX_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .map(Duration::from_secs);
         let stop = Arc::new(AtomicBool::new(false));
         let stopped = Arc::clone(&stop);
         let ticking = engine.clone();
@@ -259,12 +261,12 @@ impl Sampling {
         Ok(Self {
             profiler,
             stop,
+            file,
             path: profile.path.clone(),
         })
     }
 
     fn finish(self) -> Result<()> {
-        let path = &self.path;
         self.stop.store(true, Ordering::Relaxed);
         let profiler = self
             .profiler
@@ -272,10 +274,23 @@ impl Sampling {
             .expect("the profiler lock")
             .take()
             .expect("sampling finishes once");
-        profiler.finish(BufWriter::new(File::create(path)?))?;
-        eprintln!("Profile written to {}", path.display());
+        profiler.finish(BufWriter::new(self.file))?;
+        eprintln!("Profile written to {}", self.path.display());
         Ok(())
     }
+}
+
+/// How long `WADO_PROFILE_MAX_SECS` lets a profiled run go on, in whole
+/// seconds as `wado run` reads it; unset, as long as it takes.
+fn profile_budget() -> Result<Option<Duration>> {
+    let Some(value) = std::env::var_os("WADO_PROFILE_MAX_SECS") else {
+        return Ok(None);
+    };
+    let value = value.to_string_lossy();
+    let Ok(secs) = value.parse::<u64>() else {
+        bail!("WADO_PROFILE_MAX_SECS takes a whole number of seconds, not '{value}'");
+    };
+    Ok(Some(Duration::from_secs(secs)))
 }
 
 /// The `wasi:webgpu/webgpu` interface the component imports, versioned as it

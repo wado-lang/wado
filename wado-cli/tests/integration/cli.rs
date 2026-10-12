@@ -404,6 +404,35 @@ fn test_run_propagates_a_guest_exit_code() {
         .stderr(predicate::str::contains("wasm backtrace").not());
 }
 
+/// A profiled run refuses what it cannot honour before the guest runs, so
+/// neither stands in for what the run itself would report.
+#[test]
+fn test_run_profile_refuses_a_bad_budget_or_path_before_running() {
+    wado()
+        .env("WADO_PROFILE_MAX_SECS", "30s")
+        .args([
+            "run",
+            "--profile",
+            "guest,scratchpad/profile.json",
+            "wado-cli/tests/fixtures/run_exit_code.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not '30s'"))
+        .stderr(predicate::str::contains("run_exit_code: bad input").not());
+    wado()
+        .args([
+            "run",
+            "--profile",
+            "guest,no-such-directory/profile.json",
+            "wado-cli/tests/fixtures/run_exit_code.wado",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot write the profile to"))
+        .stderr(predicate::str::contains("run_exit_code: bad input").not());
+}
+
 #[test]
 fn test_version() {
     wado()
