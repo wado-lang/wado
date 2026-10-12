@@ -902,8 +902,8 @@ fn test_test_never_caches_a_file_reaching_the_filesystem() {
     .unwrap();
     for _ in 0..2 {
         wado()
-            .arg("test")
-            .arg(&main)
+            .current_dir(tmp.path())
+            .args(["test", "fs_test.wado"])
             .assert()
             .success()
             .stdout(predicate::str::contains("cached:").not());
