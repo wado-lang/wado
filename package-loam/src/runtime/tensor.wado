@@ -198,16 +198,16 @@ pub fn matmul_broadcast<A, B, Out>(
         let b_base = at_b * inner * cols;
         let out_base = s * rows * cols;
         let whole_cols = cols - cols % TILE;
-        // Rows in bands of `TILE`, and the rows left over one at a time.
+        // Rows in bands of up to `TILE`, a lone row left over on its own.
         let mut r = 0;
         while r < rows {
-            let height = if rows - r >= TILE { TILE } else { 1 };
+            let height = i32::min(TILE, rows - r);
             for let mut c = 0; c < whole_cols; c += TILE {
                 let a_at = a_base + r * inner;
                 let b_at = b_base + c;
                 let out_at = out_base + r * cols + c;
-                if height == TILE {
-                    tile_4x4(lhs_data, rhs_data, &mut out, inner, cols, a_at, b_at, out_at);
+                if height > 1 {
+                    tile_4x4(lhs_data, rhs_data, &mut out, inner, cols, height, a_at, b_at, out_at);
                 } else {
                     tile_1x4(lhs_data, rhs_data, &mut out, inner, cols, a_at, b_at, out_at);
                 }
@@ -237,14 +237,18 @@ pub fn matmul_broadcast<A, B, Out>(
 /// where an element at a time reads 2 and writes 1 for each.
 global TILE: i32 = 4;
 
-/// The 4x4 square of `out` at `out_at`: rows of `a` from `a_at`, `inner` long,
-/// against 4 adjacent columns of `b` from `b_at`, rows `cols` apart.
+/// The square of `out` at `out_at`, `height` rows (2 to 4) by 4 columns: rows
+/// of `a` from `a_at`, `inner` long, against 4 adjacent columns of `b` from
+/// `b_at`, rows `cols` apart. A band short of 4 rows computes its last row
+/// again in the place of the missing ones, which costs less than a narrower
+/// tile, and stores only its own.
 fn tile_4x4(
     a: &List<f32>,
     b: &List<f32>,
     out: &mut List<f32>,
     inner: i32,
     cols: i32,
+    height: i32,
     a_at: i32,
     b_at: i32,
     out_at: i32,
@@ -254,8 +258,8 @@ fn tile_4x4(
     let [mut s20, mut s21, mut s22, mut s23] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
     let [mut s30, mut s31, mut s32, mut s33] = [0.0 as f32, 0.0 as f32, 0.0 as f32, 0.0 as f32];
     let a1 = a_at + inner;
-    let a2 = a1 + inner;
-    let a3 = a2 + inner;
+    let a2 = a_at + inner * i32::min(2, height - 1);
+    let a3 = a_at + inner * (height - 1);
     for let mut k = 0; k < inner; k += 1 {
         let x0 = a[a_at + k];
         let x1 = a[a1 + k];
@@ -294,17 +298,22 @@ fn tile_4x4(
     out[o1 + 1] = s11;
     out[o1 + 2] = s12;
     out[o1 + 3] = s13;
-    out[o2] = s20;
-    out[o2 + 1] = s21;
-    out[o2 + 2] = s22;
-    out[o2 + 3] = s23;
-    out[o3] = s30;
-    out[o3 + 1] = s31;
-    out[o3 + 2] = s32;
-    out[o3 + 3] = s33;
+    if height > 2 {
+        out[o2] = s20;
+        out[o2 + 1] = s21;
+        out[o2 + 2] = s22;
+        out[o2 + 3] = s23;
+    }
+    if height > 3 {
+        out[o3] = s30;
+        out[o3 + 1] = s31;
+        out[o3 + 2] = s32;
+        out[o3 + 3] = s33;
+    }
 }
 
-/// [`tile_4x4`] for one row of `a`, as the rows past the last whole band are.
+/// [`tile_4x4`] for a lone row of `a`, where computing three more would cost
+/// more than it saves.
 fn tile_1x4(
     a: &List<f32>,
     b: &List<f32>,

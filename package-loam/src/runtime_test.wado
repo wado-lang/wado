@@ -362,9 +362,15 @@ test "matmul_broadcast reads a rank-1 operand as a row on the left and a column 
 }
 
 test "matmul_shared agrees with the product element by element past a whole tile" {
-    // 6 rows and 7 columns: a band of 4 rows and rows left over, a tile of 4
-    // columns and columns left over, in each of two batch elements.
-    let [batch, rows, inner, cols] = [2, 6, 5, 7];
+    // 5 to 8 rows leave 1 to 4 for the last band, and 7 columns a tile of 4
+    // and 3 left over, in each of two batch elements.
+    for let rows of 5..=8 {
+        matmul_shared_matches_product(rows);
+    }
+}
+
+fn matmul_shared_matches_product(rows: i32) {
+    let [batch, inner, cols] = [2, 5, 7];
     let mut a_data: List<f32> = [];
     for let i of 0..<batch * rows * inner {
         a_data.push((i % 7 - 3) as f32);
