@@ -310,7 +310,7 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
     let bytes = stream.read_to_end();
     stream.drop();
     done.drop();
-    return match String::from_utf8(bytes) {
+    return match String::try_from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
         Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
     };

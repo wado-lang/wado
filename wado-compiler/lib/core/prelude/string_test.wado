@@ -647,103 +647,103 @@ test "same prefix different suffix" {
     assert "hello1" != "hello2";
 }
 
-test "String::from_utf8 empty" {
-    assert String::from_utf8([] as List<u8>) matches { Ok(s) && s == "" };
+test "String::try_from_utf8empty" {
+    assert String::try_from_utf8([] as List<u8>) matches { Ok(s) && s == "" };
 }
 
-test "String::from_utf8 ASCII" {
-    assert String::from_utf8([72, 101, 108, 108, 111] as List<u8>) matches { Ok(s) && s == "Hello" };
+test "String::try_from_utf8ASCII" {
+    assert String::try_from_utf8([72, 101, 108, 108, 111] as List<u8>) matches { Ok(s) && s == "Hello" };
 }
 
-test "String::from_utf8 2-byte UTF-8" {
+test "String::try_from_utf82-byte UTF-8" {
     // ñ = 0xC3 0xB1
-    assert String::from_utf8([0xC3, 0xB1] as List<u8>) matches { Ok(s) && s == "ñ" };
+    assert String::try_from_utf8([0xC3, 0xB1] as List<u8>) matches { Ok(s) && s == "ñ" };
 }
 
-test "String::from_utf8 3-byte UTF-8" {
+test "String::try_from_utf83-byte UTF-8" {
     // 日 = 0xE6 0x97 0xA5
-    assert String::from_utf8([0xE6, 0x97, 0xA5] as List<u8>) matches { Ok(s) && s == "日" };
+    assert String::try_from_utf8([0xE6, 0x97, 0xA5] as List<u8>) matches { Ok(s) && s == "日" };
 }
 
-test "String::from_utf8 4-byte UTF-8" {
+test "String::try_from_utf84-byte UTF-8" {
     // 😀 = 0xF0 0x9F 0x98 0x80
-    assert String::from_utf8([0xF0, 0x9F, 0x98, 0x80] as List<u8>) matches { Ok(s) && s == "😀" };
+    assert String::try_from_utf8([0xF0, 0x9F, 0x98, 0x80] as List<u8>) matches { Ok(s) && s == "😀" };
 }
 
-test "String::from_utf8 mixed valid UTF-8" {
+test "String::try_from_utf8mixed valid UTF-8" {
     // "Aéï日😀" = 12 bytes
-    assert String::from_utf8([0x41, 0xC3, 0xA9, 0xC3, 0xAF, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as List<u8>) matches { Ok(s) && s == "Aéï日😀" };
+    assert String::try_from_utf8([0x41, 0xC3, 0xA9, 0xC3, 0xAF, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80] as List<u8>) matches { Ok(s) && s == "Aéï日😀" };
 }
 
-test "String::from_utf8 roundtrip" {
+test "String::try_from_utf8roundtrip" {
     let original = "Hello, 世界! 😀";
     let bytes: List<u8> = original.bytes().collect();
-    assert String::from_utf8(bytes) matches { Ok(s) && s == original };
+    assert String::try_from_utf8(bytes) matches { Ok(s) && s == original };
 }
 
-test "String::from_utf8 from bytes iter" {
+test "String::try_from_utf8from bytes iter" {
     // Accepts any IntoIterator<Item = u8>: pass a bytes iterator directly
-    assert String::from_utf8("日本語".bytes()) matches { Ok(s) && s == "日本語" };
+    assert String::try_from_utf8("日本語".bytes()) matches { Ok(s) && s == "日本語" };
 }
 
 fn utf8_err(bytes: List<u8>) -> Utf8Error {
-    return String::from_utf8(bytes).unwrap_err();
+    return String::try_from_utf8(bytes).unwrap_err();
 }
 
-test "String::from_utf8 lonely continuation byte" {
+test "String::try_from_utf8lonely continuation byte" {
     assert utf8_err([0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 overlong 2-byte 0xC0" {
+test "String::try_from_utf8overlong 2-byte 0xC0" {
     assert utf8_err([0xC0, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 overlong 2-byte 0xC1" {
+test "String::try_from_utf8overlong 2-byte 0xC1" {
     assert utf8_err([0xC1, 0xBF] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 bad continuation byte in 2-byte" {
+test "String::try_from_utf8bad continuation byte in 2-byte" {
     // 0xC3 should be followed by 0x80-0xBF; 0x41 ('A') is invalid
     assert utf8_err([0xC3, 0x41] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 truncated 2-byte" {
+test "String::try_from_utf8truncated 2-byte" {
     assert utf8_err([0xC3] as List<u8>) == Utf8Error::incomplete(0);
 }
 
-test "String::from_utf8 truncated 3-byte" {
+test "String::try_from_utf8truncated 3-byte" {
     assert utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);
 }
 
-test "String::from_utf8 truncated 4-byte" {
+test "String::try_from_utf8truncated 4-byte" {
     assert utf8_err([0xF0, 0x9F, 0x98] as List<u8>) == Utf8Error::incomplete(0);
 }
 
-test "String::from_utf8 overlong 3-byte" {
+test "String::try_from_utf8overlong 3-byte" {
     // 0xE0 followed by < 0xA0 is overlong
     assert utf8_err([0xE0, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 surrogate" {
+test "String::try_from_utf8surrogate" {
     // U+D800 encoded as UTF-8: 0xED 0xA0 0x80
     assert utf8_err([0xED, 0xA0, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 overlong 4-byte" {
+test "String::try_from_utf8overlong 4-byte" {
     // 0xF0 followed by < 0x90 is overlong
     assert utf8_err([0xF0, 0x80, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 out of range 4-byte" {
+test "String::try_from_utf8out of range 4-byte" {
     // 0xF4 followed by > 0x8F encodes > U+10FFFF
     assert utf8_err([0xF4, 0x90, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 invalid byte 0xF5" {
+test "String::try_from_utf8invalid byte 0xF5" {
     assert utf8_err([0xF5, 0x80, 0x80, 0x80] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
-test "String::from_utf8 invalid byte 0xFF" {
+test "String::try_from_utf8invalid byte 0xFF" {
     assert utf8_err([0xFF] as List<u8>) == Utf8Error::invalid(0, 1);
 }
 
@@ -838,27 +838,28 @@ test "String::from_utf8_lossy roundtrip valid" {
     assert String::from_utf8_lossy(bytes) == original;
 }
 
-test "String::from_utf8_unchecked empty" {
-    assert String::from_utf8_unchecked([] as List<u8>) == "";
+test "String::from_utf8 empty" {
+    assert String::from_utf8([] as ByteList) == "";
 }
 
-test "String::from_utf8_unchecked ASCII" {
-    assert String::from_utf8_unchecked([72, 101, 108, 108, 111] as List<u8>) == "Hello";
-}
-
-test "String::from_utf8_unchecked multibyte" {
+test "String::from_utf8 multibyte" {
     // "日" = 0xE6 0x97 0xA5
-    assert String::from_utf8_unchecked([0xE6, 0x97, 0xA5] as List<u8>) == "日";
+    assert String::from_utf8([0xE6, 0x97, 0xA5] as ByteList) == "日";
 }
 
-test "String::from_utf8_unchecked roundtrip" {
+test "String::from_utf8 from a view and from a String" {
     let original = "Hello, 世界! 😀";
-    let bytes: List<u8> = original.bytes().collect();
-    assert String::from_utf8_unchecked(bytes) == original;
+    assert String::from_utf8(original.as_bytes()) == original;
+    assert String::from_utf8(original) == original;
 }
 
-test "String::from_utf8_unchecked from bytes iter" {
-    assert String::from_utf8_unchecked("日本語".bytes()) == "日本語";
+test "unchecked String::from_utf8" {
+    assert unchecked String::from_utf8([0xC3, 0xB1] as ByteList) == "ñ";
+}
+
+#[expect_trap]
+test "String::from_utf8 on invalid bytes" {
+    let _ = String::from_utf8([0x61, builtin::black_box(0xFF)] as ByteList);
 }
 
 // --- New API tests ---
@@ -1243,25 +1244,32 @@ test "char_at_byte_unchecked multibyte" {
     assert s.char_at_byte_unchecked(3) == '本';
 }
 
-test "push_bytes_unchecked ASCII" {
+test "push_bytes ASCII" {
     let mut s = String::with_capacity(0);
     let bytes: ByteList = [b'h', b'i'];
-    s.push_bytes_unchecked(&bytes);
+    s.push_bytes(&bytes);
     assert s == "hi";
 }
 
-test "push_bytes_unchecked empty" {
+test "push_bytes empty" {
     let mut s = "abc";
     let bytes: ByteList = [];
-    s.push_bytes_unchecked(&bytes);
+    s.push_bytes(&bytes);
     assert s == "abc";
 }
 
-test "push_bytes_unchecked multibyte" {
+test "unchecked push_bytes multibyte" {
     let mut s = "x";
     let bytes: ByteList = [0xE6, 0x97, 0xA5];  // "日"
-    s.push_bytes_unchecked(&bytes);
+    unchecked s.push_bytes(&bytes);
     assert s == "x日";
+}
+
+#[expect_trap]
+test "push_bytes with half a character" {
+    let mut s = "x";
+    let bytes: ByteList = [builtin::black_box(0xE6), 0x97];
+    s.push_bytes(&bytes);
 }
 
 test "push_str_range_unchecked ASCII" {
@@ -1321,7 +1329,7 @@ test "remove_unchecked ASCII" {
     assert s == "ac";
 }
 
-// `utf8_sequence_len` (behind `from_utf8_slice`) and `decode_utf8_scalar`
+// `utf8_sequence_len` (behind `try_from_utf8_slice`) and `decode_utf8_scalar`
 // (behind `from_utf8_lossy`) each carry the validity table; cross them so
 // neither drifts.
 test "the two UTF-8 validity tables agree" {
@@ -1342,27 +1350,27 @@ test "the two UTF-8 validity tables agree" {
     cases.push([0xF5, 0x80, 0x80, 0x80]);  // lead beyond the range
 
     for let bytes of cases {
-        let accepted = String::from_utf8_slice(bytes.as_slice() as ByteSlice) matches { Ok(_) };
+        let accepted = String::try_from_utf8_slice(bytes.as_slice() as ByteSlice) matches { Ok(_) };
         let lossy = String::from_utf8_lossy(bytes);
         assert accepted == !lossy.contains("\uFFFD"), `${bytes:?}`;
     }
 }
 
-test "String::from_utf8_slice valid (ASCII, multi-byte, mixed)" {
-    assert String::from_utf8_slice(([] as List<u8>).as_slice() as ByteSlice) matches { Ok(s) && s == "" };
-    assert String::from_utf8_slice(([72, 105] as List<u8>).as_slice() as ByteSlice) matches { Ok(s) && s == "Hi" };
+test "String::try_from_utf8_slice valid (ASCII, multi-byte, mixed)" {
+    assert String::try_from_utf8_slice(([] as List<u8>).as_slice() as ByteSlice) matches { Ok(s) && s == "" };
+    assert String::try_from_utf8_slice(([72, 105] as List<u8>).as_slice() as ByteSlice) matches { Ok(s) && s == "Hi" };
     // ñ 日 😀 — 2-, 3-, and 4-byte sequences
     let mixed: List<u8> = [0x41, 0xC3, 0xB1, 0xE6, 0x97, 0xA5, 0xF0, 0x9F, 0x98, 0x80];
-    assert String::from_utf8_slice(mixed.as_slice() as ByteSlice) matches { Ok(s) && s == "Añ日😀" };
+    assert String::try_from_utf8_slice(mixed.as_slice() as ByteSlice) matches { Ok(s) && s == "Añ日😀" };
 }
 
-test "String::from_utf8_slice roundtrip matches from_utf8" {
+test "String::try_from_utf8_slice roundtrip matches try_from_utf8" {
     let original = "Hello, 世界! 😀";
     let bytes: List<u8> = original.bytes().collect();
-    assert String::from_utf8_slice(bytes.as_slice() as ByteSlice) matches { Ok(s) && s == original };
+    assert String::try_from_utf8_slice(bytes.as_slice() as ByteSlice) matches { Ok(s) && s == original };
 }
 
-test "String::from_utf8_slice rejects invalid UTF-8" {
+test "String::try_from_utf8_slice rejects invalid UTF-8" {
     // lonely continuation, overlong, bad continuation, truncated,
     // surrogate codepoint, out-of-Unicode-range — one per error class.
     assert slice_utf8_err([0x80] as List<u8>) == Utf8Error::invalid(0, 1);
@@ -1374,7 +1382,7 @@ test "String::from_utf8_slice rejects invalid UTF-8" {
 }
 
 fn slice_utf8_err(bytes: List<u8>) -> Utf8Error {
-    return String::from_utf8_slice(bytes.as_slice() as ByteSlice).unwrap_err();
+    return String::try_from_utf8_slice(bytes.as_slice() as ByteSlice).unwrap_err();
 }
 
 test "strip_suffix removes a matching suffix" {
@@ -1470,7 +1478,7 @@ test "push_utf8 rejects a short tail no further byte could rescue" {
 }
 
 test "a whole buffer ending mid-character is malformed, not pending" {
-    // `from_utf8` holds the entire input, so there is no later chunk to wait
+    // `try_from_utf8` holds the entire input, so there is no later chunk to wait
     // for and a cut-short sequence is an error — one `error_len` reports as
     // incomplete rather than invalid.
     assert utf8_err([0xE6, 0x97] as List<u8>) == Utf8Error::incomplete(0);

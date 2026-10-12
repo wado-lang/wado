@@ -248,7 +248,7 @@ fn within(ranges: &List<[u32, u32]>, code: u32) -> bool {
 
 /// The lines of `bytes`, UTF-8 that its writer wrote one entry to a line.
 fn lines_of(bytes: &ByteList) -> List<String> {
-    let Ok(text) = String::from_utf8(*bytes) else {
+    let Ok(text) = String::try_from_utf8(*bytes) else {
         unreachable();
     };
     if text.is_empty() {

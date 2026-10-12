@@ -859,7 +859,7 @@ test "to_bytes_canonical sorts nested struct fields recursively" {
 }
 
 fn canonical_text<T: Serialize>(value: &T) -> String {
-    return String::from_utf8_slice(to_bytes_canonical(value).unwrap()).unwrap();
+    return String::try_from_utf8_slice(to_bytes_canonical(value).unwrap()).unwrap();
 }
 
 fn canonical_of_text(json: String) -> String {

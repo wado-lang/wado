@@ -33,7 +33,7 @@ test "verifies the RFC 7515 A.1 token" {
     let Ok(payload) = verify(&rfc7515_token(), &key) else {
         panic("the RFC 7515 A.1 token verifies under its own key");
     };
-    assert String::from_utf8(payload) matches { Ok(text) && text.contains("\"iss\":\"joe\"") };
+    assert String::try_from_utf8(payload) matches { Ok(text) && text.contains("\"iss\":\"joe\"") };
 }
 
 test "signing reproduces the RFC 7515 A.1 signature" {
@@ -62,7 +62,7 @@ test "a round trip carries the payload back" {
     let Ok(payload) = verify(&token, &key) else {
         panic("a freshly signed token verifies");
     };
-    assert String::from_utf8(payload) matches { Ok(text) && text == `{"sub":"joe"}` };
+    assert String::try_from_utf8(payload) matches { Ok(text) && text == `{"sub":"joe"}` };
 }
 
 test "a malformed token is rejected before any hashing" {

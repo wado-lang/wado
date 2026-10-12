@@ -15,7 +15,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 
     // Invalid header name with null byte → should be Err
     let null_byte: List<u8> = [0 as u8];
-    let null_name = match String::from_utf8(null_byte) {
+    let null_name = match String::try_from_utf8(null_byte) {
         Ok(s) => s,
         Err(_) => panic("failed to create string with null byte"),
     };

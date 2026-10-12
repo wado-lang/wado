@@ -33,7 +33,7 @@ export fn run() with (Stdout, Connector, Error) {
     let received = tls_rx.read_to_end();
     tls_rx.drop();
 
-    match String::from_utf8(received) {
+    match String::try_from_utf8(received) {
         Ok(s) => println(s),
         Err(_) => panic("recv was not valid UTF-8"),
     }

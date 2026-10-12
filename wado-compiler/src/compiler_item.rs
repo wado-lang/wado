@@ -509,7 +509,7 @@ pub enum CompilerItem {
     /// `String::internal_reserve_uninit` — the single capacity check the NIR
     /// `append_fuse` rewrite emits for a whole run of appends.
     StringReserveUninit,
-    /// `String::set_byte_unchecked` — the raw byte write `append_fuse` emits
+    /// `String::internal_set_byte_unchecked` — the raw byte write `append_fuse` emits
     /// into space `internal_reserve_uninit` already claimed.
     StringSetByteUnchecked,
     /// `String::internal_write_str_at` — the raw string write `append_fuse`

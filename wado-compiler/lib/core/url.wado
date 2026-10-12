@@ -228,7 +228,7 @@ pub fn percent_decode<S: AsStrSlice>(input: S) -> Result<String, ParseError> {
             i += 1;
         }
     }
-    return Result::Ok(String::from_utf8(bytes)?);
+    return Result::Ok(String::try_from_utf8(bytes)?);
 }
 
 fn percent_encode_query_component<S: AsStrSlice>(input: S) -> String {
@@ -269,7 +269,7 @@ fn percent_decode_query_component<S: AsStrSlice>(input: S) -> String {
             i += 1;
         }
     }
-    if let Ok(s) = String::from_utf8(bytes) {
+    if let Ok(s) = String::try_from_utf8(bytes) {
         return s;
     }
     return input.to_string();

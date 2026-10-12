@@ -1,5 +1,6 @@
-// The test world checks contracts, so an `_unchecked` call outside its
-// contract traps instead of reading past a view or minting a bad value.
+// The test world checks contracts, so an `_unchecked` call or a call marked
+// `unchecked` outside its contract traps instead of reading past a view or
+// minting a bad value.
 
 fn view() -> StrSlice {
     return "héllo wörld".as_str_slice().slice(0, 5);
@@ -15,6 +16,10 @@ test "calls inside their contracts run as before" {
     let mut s = "héllo";
     s.truncate_unchecked(3);
     assert s == "hé";
+    let bytes: ByteList = [0xC3, 0xA9];
+    assert unchecked String::from_utf8(bytes) == "é";
+    s.push_bytes(&bytes);
+    assert s == "héé";
 }
 
 #[expect_trap]
@@ -45,10 +50,16 @@ test "String::get_byte_unchecked past the length" {
 }
 
 #[expect_trap]
-test "String::set_byte_unchecked past the length" {
-    let mut s = String::with_capacity(16);
-    s.push_str("abc");
-    s.set_byte_unchecked(builtin::black_box(3), b'd');
+test "unchecked String::from_utf8 on invalid bytes" {
+    let bytes: ByteList = [0x61, builtin::black_box(0xFF)];
+    let _ = unchecked String::from_utf8(bytes);
+}
+
+#[expect_trap]
+test "unchecked String::push_bytes with half a character" {
+    let mut s = "abc";
+    let bytes: ByteList = [builtin::black_box(0xC3)];
+    unchecked s.push_bytes(&bytes);
 }
 
 #[expect_trap]

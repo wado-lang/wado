@@ -307,8 +307,7 @@ The `String` functions that take bytes follow from the rules above:
 - `String::from_utf8` takes an `AsByteSlice` and returns a `String`. It
   declares `contract String::is_valid_utf8(…)`, so an unmarked call traps on
   invalid bytes, and `unchecked String::from_utf8(bytes)` replaces
-  `from_utf8_unchecked`. A `ByteList` passed to it hands over its buffer
-  rather than being copied.
+  `from_utf8_unchecked`.
 - `String::push_bytes` declares that the appended bytes are valid UTF-8 on
   their own, and `unchecked` replaces `push_bytes_unchecked`. The old contract
   asked only that the result stay valid, which admits half a character now and
@@ -357,7 +356,7 @@ API waits for a program outside the standard library that needs one.
    `unchecked xs[i]` is an index read with no range check.
 7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
    `#[unavailable]` declaration where Rust has a method of the same name. The
-   UTF-8 functions take the shapes
+   UTF-8 functions are done, in the shapes
    [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives them.
 8. The generated WIT carries an `export fn`'s contract as a comment.
 
@@ -371,6 +370,8 @@ API waits for a program outside the standard library that needs one.
   error.
 - A call through a function value has no callee known statically, so it has no
   contract to check or to remove.
+- `String::from_utf8` copies the bytes of a `ByteList` argument, though the
+  argument is its own copy and its buffer could become the string's.
 - An input contract states what one call requires. It cannot state an
   invariant that a sequence of calls breaks and restores, such as UTF-8 while
   a character is written a byte at a time. Nor can it say that a method taking
