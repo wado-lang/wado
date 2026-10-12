@@ -5,6 +5,7 @@
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
 use crate::compiler_host::CompilerHost;
+use crate::defs::DefId;
 use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -28,9 +29,11 @@ pub(super) enum TypeCheckResult {
 /// Pure type compatibility check, emitting no errors. Rules apply in order:
 /// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; a pack-arity
 /// conflict incompatible; anything else genuinely undecided deferred; reference
-/// variance (`&mut T` → `&T` only); newtypes and flags distinct from their base;
-/// `Option`; structural comparison for function types and generic instances;
-/// anything else incompatible.
+/// variance (`&mut T` → `&T` only); newtypes and flags distinct from their base
+/// and from each other, but for two instances of one newtype; `Option`;
+/// structural comparison for function types, and argument by argument for two
+/// instances of one generic struct, resource or newtype; anything else
+/// incompatible.
 pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,
@@ -121,7 +124,19 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Rule 5: Newtype/flags distinctness
+    // Two instances of one declaration compare by their arguments (Rule 8),
+    // whatever their slots.
+    let same_declaration = match (
+        declaration_instance(actual_inner, type_table),
+        declaration_instance(expected_inner, type_table),
+    ) {
+        (Some((a, actual_args)), Some((e, expected_args))) if a == e => {
+            Some((actual_args, expected_args))
+        }
+        _ => None,
+    };
+
+    // Rule 5: Newtype/flags distinctness, but for two instances of one newtype.
     let actual_is_newtype = matches!(
         type_table.get(actual_inner),
         ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
@@ -130,7 +145,10 @@ fn check_at(
         type_table.get(expected_inner),
         ResolvedType::Newtype { .. } | ResolvedType::Flags { .. }
     );
-    if (actual_is_newtype || expected_is_newtype) && actual_inner != expected_inner {
+    if (actual_is_newtype || expected_is_newtype)
+        && actual_inner != expected_inner
+        && same_declaration.is_none()
+    {
         return TypeCheckResult::Incompatible;
     }
     if let ResolvedType::Newtype { base_type, .. } = type_table.get(actual_inner)
@@ -222,30 +240,11 @@ fn check_at(
         return TypeCheckResult::Incompatible;
     }
 
-    // Rule 8: Generic instances -- compare name + type args
-    if let ResolvedType::GenericInstance {
-        def: actual_def,
-        type_args: actual_args,
-    } = type_table.get(actual_inner)
-        && let ResolvedType::GenericInstance {
-            def: expected_def,
-            type_args: expected_args,
-        } = type_table.get(expected_inner)
-    {
-        if actual_def != expected_def {
-            return TypeCheckResult::Incompatible;
-        }
-        if actual_args.len() != expected_args.len() {
-            return TypeCheckResult::Incompatible;
-        }
-        for (a, e) in actual_args.iter().zip(expected_args.iter()) {
-            match check_at(*a, *e, type_table, Position::Invariant) {
-                TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
-                TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
-                TypeCheckResult::Compatible => {}
-            }
-        }
-        return TypeCheckResult::Compatible;
+    // Rule 8: Instances of one generic struct, resource or newtype -- compare
+    // their type args, so an argument's effect row is the effect check's to
+    // resolve.
+    if let Some((actual_args, expected_args)) = same_declaration {
+        return check_type_args(actual_args, expected_args, type_table);
     }
 
     // Rule 9: `resource Child extends Parent`, where the position admits it.
@@ -262,6 +261,37 @@ fn check_at(
         return TypeCheckResult::Incompatible;
     }
 
+    TypeCheckResult::Compatible
+}
+
+/// The declaration `id` instantiates and its type arguments, where it is a
+/// generic struct, a generic resource or a newtype; a non-generic newtype has
+/// none.
+fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
+    match type_table.get(id) {
+        ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::GenericResource { def, type_args }
+        | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),
+        _ => None,
+    }
+}
+
+/// Two instances of one generic declaration, compared argument by argument;
+/// an argument is an element's type, so it admits no subtype.
+fn check_type_args(
+    actual: &[TypeId],
+    expected: &[TypeId],
+    type_table: &TypeTable,
+) -> TypeCheckResult {
+    if actual.len() != expected.len() {
+        return TypeCheckResult::Incompatible;
+    }
+    for (a, e) in actual.iter().zip(expected) {
+        match check_at(*a, *e, type_table, Position::Invariant) {
+            TypeCheckResult::Compatible => {}
+            verdict => return verdict,
+        }
+    }
     TypeCheckResult::Compatible
 }
 

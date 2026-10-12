@@ -1,0 +1,22 @@
+// Two instances of one newtype compare by their arguments, so one whose
+// argument differs is still refused.
+
+struct Holder<T> {
+    value: T,
+}
+
+type Hold<T> = Holder<T>;
+
+fn wide(h: Hold<i64>) -> i64 {
+    return (h as Holder<i64>).value;
+}
+
+export fn run() {
+    let h = Holder { value: 1 as i32 } as Hold<i32>;
+    wide(h);
+}
+
+__DATA__
+{
+    "compile_error": ":16:10: analysis error: type mismatch: expected 'Hold<i64>', found 'Hold<i32>'"
+}

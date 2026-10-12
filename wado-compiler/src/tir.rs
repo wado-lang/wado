@@ -4571,6 +4571,26 @@ impl TypeTable {
                 self.zip_rows(d, a, through_params, each);
             }
         };
+        // Two instances of one newtype meet at their own arguments, which a
+        // row may sit in that the base never mentions.
+        if let (
+            ResolvedType::Newtype {
+                def: dd,
+                type_args: da,
+                ..
+            },
+            ResolvedType::Newtype {
+                def: ad,
+                type_args: aa,
+                ..
+            },
+        ) = (self.get(declared), self.get(actual))
+            && dd == ad
+            && !da.is_empty()
+        {
+            all(da, aa, each);
+            return;
+        }
         let declared = self.representation_head(declared);
         let actual = self.representation_head(actual);
         match (self.get(declared), self.get(actual)) {
@@ -4609,40 +4629,17 @@ impl TypeTable {
         }
     }
 
-    /// Every effect parameter named in a function type's row anywhere in
-    /// `type_id`.
+    /// Every effect parameter named in a row of `type_id` that
+    /// [`Self::zip_rows`] reaches: those an argument's type can determine, and
+    /// no other.
     pub fn effect_params_in(&self, type_id: TypeId, out: &mut IndexSet<String>) {
-        match self.get(type_id) {
-            ResolvedType::Function {
-                params,
-                return_type,
-                effects,
-                ..
-            } => {
-                out.extend(
-                    effects
-                        .iter()
-                        .filter(|e| e.is_param())
-                        .map(|e| e.name().to_string()),
-                );
-                for &p in params {
-                    self.effect_params_in(p, out);
-                }
-                self.effect_params_in(*return_type, out);
-            }
-            ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::BuiltinArray(inner) => {
-                self.effect_params_in(*inner, out);
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                for &a in type_args {
-                    self.effect_params_in(a, out);
-                }
-            }
-            _ => {}
-        }
+        self.zip_rows(type_id, type_id, true, &mut |row, _| {
+            out.extend(
+                row.iter()
+                    .filter(|e| e.is_param())
+                    .map(|e| e.name().to_string()),
+            );
+        });
     }
 
     /// `owning_trait`'s generic associated type `assoc_name`, bound to

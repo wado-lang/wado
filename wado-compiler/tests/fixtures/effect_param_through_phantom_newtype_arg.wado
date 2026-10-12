@@ -1,0 +1,28 @@
+// An effect parameter named only in a newtype's argument, which its base never
+// mentions, is still determined by the argument: two instances of one newtype
+// meet at their own arguments, not only at their base.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder<T> {
+    value: T,
+}
+
+type Tag<F> = Holder<i32>;
+
+fn tag<effect E>(f: fn() with E) -> Tag<fn() with E> {
+    return Holder { value: 1 } as Tag<fn() with E>;
+}
+
+fn fire<effect E>(t: Tag<fn() with E>) -> i32 with E {
+    return (t as Holder<i32>).value;
+}
+
+export fn run() with Stdout {
+    println(`tag ${fire(tag(|| println("never called")))}`);
+}
+
+__DATA__
+{
+    "stdout": "tag 1\n"
+}
