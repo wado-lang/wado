@@ -685,13 +685,10 @@ impl Semantics {
         let trait_id = self.referenced_symbol(b.trait_type.as_ref()?.id()?)?;
         let module = self.modules.get(self.module_of_id(trait_id)?)?;
         module.items.iter().find_map(|item| {
-            if let Item::Trait(t) = item
-                && t.id == trait_id
-            {
-                Some(t)
-            } else {
-                None
-            }
+            let Item::Trait(t) = item else {
+                return None;
+            };
+            (t.id == trait_id).then_some(t)
         })
     }
 
