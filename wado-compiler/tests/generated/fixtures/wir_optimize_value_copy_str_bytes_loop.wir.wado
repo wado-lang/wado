@@ -79,7 +79,7 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let $tmpl_buf_88: ref "core:prelude/string.wado//String";
     let new_used_137: i32;
     let start_138: i32;
-    let start_182: i32;
+    let start_194: i32;
     byte_sum = 0_i64;
     i_1 = 0;
     $tmpl_buf_88 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
@@ -171,13 +171,13 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_88, start_22);
             }
-            start_182 = $tmpl_buf_88.used;
+            start_194 = $tmpl_buf_88.used;
             $tmpl_buf_88.used = start_22;
             arr = $tmpl_buf_88.repr;
-            new_used_21 = start_182 + new_used_21;
+            new_used_21 = start_194 + new_used_21;
             b25: block {
                 l26: loop {
-                    break_if b25 (new_used_21 - start_182) < 2;
+                    break_if b25 (new_used_21 - start_194) < 2;
                     q = x /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, new_used_21 - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -187,15 +187,15 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
                     continue l26;
                 };
             };
-            if new_used_21 > start_182 {
-                builtin::array_set_u8(arr, start_182, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+            if new_used_21 > start_194 {
+                builtin::array_set_u8(arr, start_194, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
             }
             arr = $tmpl_buf_88.repr;
-            start_182 = $tmpl_buf_88.used;
+            start_194 = $tmpl_buf_88.used;
             new_used_21 = 0;
             b28: block {
                 l29: loop {
-                    break_if b28 new_used_21 >= start_182;
+                    break_if b28 new_used_21 >= start_194;
                     byte_51 = builtin::array_get_value<u8>(arr, new_used_21);
                     new_used_21 = new_used_21 + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte_51);

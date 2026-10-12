@@ -175,8 +175,8 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
     let $licm_arith_92: bool;
     let new_used_131: i32;
     let start_132: i32;
-    let new_used_175: i32;
-    let start_176: i32;
+    let new_used_187: i32;
+    let start_188: i32;
     i_2 = 0;
     m = n > m;
     $licm_arith_92 = n > 0;
@@ -279,18 +279,18 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                     builtin::array_set_u8($local_5_5.repr, start_132, 45);
                 } else {
                 }
-                if @unlikely(local.tee new_used_175($local_5_5.used + digit_count_35) > builtin::array_len($local_5_5.repr)) {
+                if @unlikely(local.tee new_used_187($local_5_5.used + digit_count_35) > builtin::array_len($local_5_5.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_175);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5_5, new_used_187);
                 }
-                start_176 = $local_5_5.used;
-                $local_5_5.used = new_used_175;
+                start_188 = $local_5_5.used;
+                $local_5_5.used = new_used_187;
                 arr = $local_5_5.repr;
-                pos = start_176 + digit_count_35;
+                pos = start_188 + digit_count_35;
                 t = abs_val;
                 b35: block {
                     l36: loop {
-                        break_if b35 (pos - start_176) < 2;
+                        break_if b35 (pos - start_188) < 2;
                         q = t /u 100_i64;
                         tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                         builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -300,8 +300,8 @@ fn "opt_lbf_arm_break_captured.wado/loops"(n, m) with Stdout {
                         continue l36;
                     };
                 };
-                if pos > start_176 {
-                    builtin::array_set_u8(arr, start_176, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+                if pos > start_188 {
+                    builtin::array_set_u8(arr, start_188, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
                 }
                 rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
                 tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
