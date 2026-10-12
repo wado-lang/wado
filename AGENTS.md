@@ -52,11 +52,8 @@ Each commit runs the tests of what it changed:
 rerun after a Wado edit tests only what the edit reached. A rebuilt `wado`
 binary reruns everything.
 
-The full run is `mise run test`, `mise run test-wado`, then
-`mise run update-stdlib-coverage-baseline`. It runs once, before the branch
-goes up for review, and CI runs it on every push. CI fails on any difference
-from the baseline, a region a test now reaches included, so commit the update;
-`wado-compiler/AGENTS.md` says what it may change.
+The full run is `mise run test`, then `mise run test-wado`. It runs once,
+before the branch goes up for review, and CI runs it on every push.
 
 Having invoked `/distill` on this branch earlier is not a reason to skip the
 next one, and answering review findings calls for another. The scope is the
