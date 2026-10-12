@@ -244,7 +244,7 @@ An `_unchecked` function becomes an `unchecked` call to its checked twin. The
 old name stays, as an `#[unavailable]` declaration pointing at the new call,
 only where Rust has a method of that name, such as `get_unchecked` or
 `from_utf8_unchecked`, since that is the name a reader from Rust reaches for.
-Any other `_unchecked` name is removed.
+Any other public `_unchecked` name is removed.
 
 `unchecked` means that the caller does not ask for the check in a shipping
 build. A build under `-f contract-checks` still checks a marked call. The word
@@ -301,8 +301,8 @@ sorted list type, which checks the order once when it is built.
 The `String` functions that take bytes follow from the rules above:
 
 - `String::try_from_utf8` takes an iterator of bytes and returns a `Result`.
-  It is today's `String::from_utf8` renamed, and `from_utf8_slice` becomes
-  `try_from_utf8_slice`. Its items cannot be vouched for, so it has no
+  It takes over from the `Result`-returning `String::from_utf8`, and
+  `from_utf8_slice` becomes `try_from_utf8_slice`. Its items cannot be vouched for, so it has no
   contract and no marked form.
 - `String::from_utf8` takes an `AsByteSlice` and returns a `String`. It
   declares `contract String::is_valid_utf8(…)`, so an unmarked call traps on
@@ -313,11 +313,13 @@ The `String` functions that take bytes follow from the rules above:
   their own, and `unchecked` replaces `push_bytes_unchecked`. The old contract
   asked only that the result stay valid, which admits half a character now and
   the rest later. No caller relies on that.
-- Writing one byte of a `String` becomes `internal`. A character written a
-  byte at a time is invalid UTF-8 between the writes, so no contract on one
-  write can state what the sequence keeps. Its contract is the index in range,
-  and the standard library's tests hold the UTF-8 invariant. The optimizer's
-  append fusion still emits it.
+- `set_byte_unchecked` becomes `internal_set_byte_unchecked`, an `internal`
+  function with no contract. A character written a byte at a time is invalid
+  UTF-8 between the writes, so no contract on one write can state what the
+  sequence keeps. The name says what a reader needs: a standard library
+  primitive that skips checks for speed, like `internal_reserve_uninit`. The
+  standard library's tests hold the UTF-8 invariant, and the optimizer's append
+  fusion still emits it.
 
 No public function rewrites the bytes of an existing `String` in place. A
 program that builds text a byte at a time writes a `ByteList`, which has no
@@ -356,8 +358,7 @@ API waits for a program outside the standard library that needs one.
 7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
    `#[unavailable]` declaration where Rust has a method of the same name. The
    UTF-8 functions take the shapes
-   [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives them,
-   and `String::from_utf8` takes over a `ByteList`'s buffer without a copy.
+   [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives them.
 8. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps
