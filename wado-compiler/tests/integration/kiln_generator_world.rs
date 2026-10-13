@@ -116,7 +116,7 @@ fn noop_generator_compiles_to_component_bytes() {
 const TYPED_OPTIONS_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub highlight: bool,
     pub trace: bool,
 }
@@ -146,7 +146,7 @@ const CROSS_MODULE_OPTIONS_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { Rule } from "./rule.wado";
 
-pub struct Options {
+export struct Options {
     pub rules: List<Rule>,
 }
 
@@ -158,7 +158,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 "#;
 
 const CROSS_MODULE_OPTIONS_RULE: &str = r#"
-pub struct Rule {
+export struct Rule {
     pub pattern: String,
     pub names: List<String>,
 }
@@ -190,7 +190,7 @@ use { Request, Response, Error } from "core:kiln";
 use { Rule } from "./rule.wado";
 use { Other } from "./other.wado";
 
-pub struct Options {
+export struct Options {
     pub rules: List<Rule>,
     pub others: List<Other>,
 }
@@ -203,7 +203,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 "#;
 
 const DUPLICATE_TYPE_RULE: &str = r#"
-pub struct Rule {
+export struct Rule {
     pub pattern: String,
 }
 
@@ -213,7 +213,7 @@ pub struct Shared {
 "#;
 
 const DUPLICATE_TYPE_OTHER: &str = r#"
-pub struct Other {
+export struct Other {
     pub name: String,
 }
 
@@ -233,7 +233,7 @@ struct Shared {
     a: String,
 }
 
-pub struct Options {
+export struct Options {
     pub rules: List<Rule>,
 }
 
@@ -244,6 +244,34 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response { files: [] });
 }
 "#;
+
+/// The adapter replaces `req` with parameters of its own, so an unpublished
+/// `Options` is reported where the author wrote `req`.
+#[test]
+fn unpublished_options_point_at_the_request_parameter() {
+    let source = TYPED_OPTIONS_GENERATOR.replace("export struct Options", "pub struct Options");
+    let host = in_memory_host(&[]);
+    let result = block_on(compile_with_options(
+        &source,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    assert!(result.is_err(), "`Options` is not published");
+
+    let diags = host.diagnostics();
+    let span = diags
+        .iter()
+        .find(|d| d.code == Code::CmBoundaryType && d.message.contains("`Options`"))
+        .and_then(|d| d.span.as_ref())
+        .unwrap_or_else(|| {
+            panic!(
+                "expected a located CM_BOUNDARY_TYPE:\n{}",
+                diag_list(&diags)
+            )
+        });
+    assert_eq!((span.line, span.column), (9, 20));
+}
 
 #[test]
 fn a_private_entry_type_still_claims_its_name_against_a_submodule() {

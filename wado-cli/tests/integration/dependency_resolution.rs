@@ -436,7 +436,7 @@ fn two_aliases_for_one_package_share_type_identity() {
     .unwrap();
     fs::write(
         shared.join("src/lib.wado"),
-        r#"pub struct Point {
+        r#"export struct Point {
     pub x: i32,
 }
 

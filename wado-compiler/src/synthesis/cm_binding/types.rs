@@ -164,14 +164,10 @@ impl LiftContext<'_> {
         let module_source = self.module_source_for(source);
         type_table
             .cm_decl_in(name, &module_source)
-            // A lib-local type defined in a submodule: the interface FQ maps to
-            // the entry module, so resolve via the type's own recorded module.
-            // One name reaches one declaration here, since a surface carrying
-            // the same public name twice is refused before synthesis.
-            .or_else(|| {
-                let own = self.cm_interface_registry.lib_local_type_source(name)?;
-                type_table.cm_decl_in(name, own)
-            })
+            // A lib-local type declared outside the entry module: the interface
+            // FQ maps to the entry module, so resolve via the type's recorded
+            // declaration.
+            .or_else(|| self.cm_interface_registry.lib_local_type_def(name))
             .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
     }
 
@@ -333,13 +329,13 @@ pub fn cm_type_to_type_id(
                         type_table.find_named_type_by_cm_package(named.name.as_str(), pkg, Some(ns))
                     })
                 })
-                // A lib-local type defined in a submodule: the interface FQ maps
-                // to the entry module, so resolve via the type's own recorded
-                // module instead.
+                // A lib-local type declared outside the entry module: the
+                // interface FQ maps to the entry module, so resolve via the
+                // type's recorded declaration instead.
                 .or_else(|| {
                     registry
-                        .lib_local_type_source(&named.name)
-                        .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
+                        .lib_local_type_def(&named.name)
+                        .and_then(|def| type_table.find_named_type_by_def(def))
                 })
                 // Resources are bare i32 handles at the CM boundary and need no
                 // registered GC type. Anything else without a TypeId would

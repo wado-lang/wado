@@ -103,7 +103,7 @@ pub fn inject_kiln_request_adapter(
     // extract the `Request<T>` inner type (or `NoOptions` for the bare
     // `Request` form). Iterates by index so the mutation pass can bypass
     // Rust's borrow checker when it needs to call `module.alloc_ast_id()`.
-    let mut target: Option<(usize, String, RequestOptions)> = None;
+    let mut target: Option<(usize, String, Span, RequestOptions)> = None;
     for (idx, item) in module.items.iter().enumerate() {
         let Item::Function(func) = item else { continue };
         if !func.is_export || func.name != "generate" {
@@ -115,11 +115,13 @@ pub fn inject_kiln_request_adapter(
         let Some(request_options) = request_options_type(&first.ty) else {
             continue;
         };
-        target = Some((idx, first.name.clone(), request_options));
+        target = Some((idx, first.name.clone(), first.span, request_options));
         break;
     }
 
-    let Some((item_idx, param_name, request_options)) = target else {
+    // A diagnostic about a parameter the rewrite introduces points at the one
+    // the author wrote.
+    let Some((item_idx, param_name, param_span, request_options)) = target else {
         return;
     };
 
@@ -144,12 +146,12 @@ pub fn inject_kiln_request_adapter(
         id: module.alloc_ast_id(),
         attrs: Vec::new(),
         name: name.to_string(),
-        name_span: span,
+        name_span: param_span,
         ty,
         self_kind: SelfKind::None,
         is_mut: false,
         default: None,
-        span,
+        span: param_span,
     };
 
     let primary_ty = input_file_ty(module);
@@ -325,6 +327,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
         id: module.alloc_ast_id(),
         attrs: Vec::new(),
         visibility: Visibility::Private,
+        is_export: false,
         source: "core:kiln".to_string(),
         source_span: span,
         source_id: module.alloc_ast_id(),

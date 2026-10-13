@@ -1,5 +1,5 @@
 //! Checks an inline `with { generator: { options: … } }` table against the
-//! generator's `pub struct Options`, read from the generator's source.
+//! generator's `export struct Options`, read from the generator's source.
 //!
 //! No generator runs: the descriptor is a property of that source. A generator
 //! the host cannot read in source yields no descriptor and no verdict, since
@@ -113,6 +113,7 @@ async fn descriptor_of<H: CompilerHost>(entry: &Path, host: &H) -> Option<Option
         Some(&filename),
         Some(GENERATOR_WORLD_FQ),
         InvocationIndex::new(),
+        true,
     )
     .await;
     extract_options_descriptor(&sem, &sem.entry_module_source).ok()

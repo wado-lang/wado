@@ -741,6 +741,40 @@ pub(crate) async fn maybe_run_pipeline(
     Ok(outcome)
 }
 
+/// `base_host` with what a build of `path` loads through: the dependencies of
+/// `project`, the manifest nearest it, and the Kiln invocations the entry's
+/// generators produce. `subcommand` names the failure it reports.
+pub(crate) async fn build_load(
+    path: &Path,
+    source: &str,
+    project: Option<manifest::ProjectManifest>,
+    base_host: FilesystemCompilerHost,
+    no_cache: bool,
+    subcommand: &str,
+) -> Result<(FilesystemCompilerHost, wado_compiler::kiln::InvocationIndex), CliExit> {
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let host = attach_manifest_and_component_deps(
+        base_host,
+        project.as_ref(),
+        &base_path,
+        source,
+        Acquisition::Build,
+    )
+    .await
+    .map_err(CliExit::error)?;
+    let outcome = maybe_run_pipeline(path, &host, no_cache, project)
+        .await
+        .map_err(|e| match e {
+            // A malformed inline clause and a redirect conflict are reported
+            // as diagnostics already.
+            PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
+                CliExit::silent_failure(1)
+            }
+            other => CliExit::error(format!("wado {subcommand}: {other}")),
+        })?;
+    Ok((host, outcome.invocations))
+}
+
 /// Resolve the Kiln invocations a generator's own source carries, so the
 /// compile that follows sees generated modules where it wrote schemas. Answers
 /// an empty index when the generator declares none.

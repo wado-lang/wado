@@ -153,6 +153,9 @@ pub enum CompilerItem {
     /// `Request<T>` — the Kiln CM adapter wraps decoded options in
     /// this struct.
     KilnRequest,
+    /// `NoOptions` — `Request`'s default options. The adapter drops it, so it
+    /// never crosses the component boundary.
+    KilnNoOptions,
     /// `String` — the GC-backed UTF-8 string struct. Synthesised
     /// codegen (CM binding, serde, format) refers to it through this
     /// item so the Rust side never hard-codes the struct name.
@@ -748,6 +751,7 @@ impl CompilerItem {
         Self::RangeExclusive,
         Self::RangeInclusive,
         Self::KilnRequest,
+        Self::KilnNoOptions,
         Self::String,
         Self::Option,
         Self::Result,
@@ -993,6 +997,7 @@ impl CompilerItem {
             Self::RangeExclusive => "range_exclusive",
             Self::RangeInclusive => "range_inclusive",
             Self::KilnRequest => "kiln_request",
+            Self::KilnNoOptions => "kiln_no_options",
             Self::String => "string",
             Self::Option => "option",
             Self::Result => "result",
@@ -1424,7 +1429,7 @@ impl CompilerItem {
             | Self::Iterator
             | Self::IntoIterator => true,
             // Kiln generator world only.
-            Self::KilnRequest => world == "core:kiln/generator",
+            Self::KilnRequest | Self::KilnNoOptions => world == "core:kiln/generator",
             // Loaded only when the user imports `core:collections`.
             Self::TreeMap
             | Self::MapEntriesIter
@@ -1564,6 +1569,7 @@ impl CompilerItem {
             | Self::RangeExclusive
             | Self::RangeInclusive
             | Self::KilnRequest
+            | Self::KilnNoOptions
             | Self::String
             | Self::ReflectVariantCase
             | Self::ReflectStructField

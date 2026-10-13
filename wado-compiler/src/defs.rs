@@ -5,8 +5,11 @@
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
 use crate::ast;
-use crate::ast::{AstId, AstVisitor, ImplBlock, Item, Module, Stmt, Visibility, walk_item};
-use crate::hashmap::IndexMap;
+use crate::ast::{
+    AstId, AstVisitor, ImplBlock, Item, Module, Stmt, UseItem, Visibility, walk_item,
+};
+use crate::component_model::cm_definition;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::TUPLE_TYPE_NAME;
 use crate::primitive::PrimitiveType;
@@ -216,6 +219,12 @@ struct Def {
 pub struct DefTable {
     defs: Vec<Def>,
     by_ast_id: IndexMap<AstId, DefId>,
+    /// Each type a package's Component Model interface publishes, with the
+    /// modules publishing it and the name each publishes it under: its own
+    /// where it is declared `export`, and each one whose `export use` adopts it.
+    publishers: IndexMap<DefId, Vec<(ModuleSource, String)>>,
+    /// The types a `#[cm(…)]` binds to an interface of their own.
+    cm_bound: IndexSet<DefId>,
 }
 
 impl DefTable {
@@ -278,6 +287,7 @@ impl DefTable {
                     Item::Impl(block) => table.declare_impl_block(module, block, false),
                     _ => {}
                 }
+                table.note_publication(module, item, symbols);
             }
             table.declare_members(module, ast);
             let mut locals = LocalItems {
@@ -331,6 +341,84 @@ impl DefTable {
             function_local,
             members: Vec::new(),
         });
+    }
+
+    /// Record what `item` says about the Component Model interfaces that publish
+    /// a type: an `export` type is published by its own module, an `export use`
+    /// has the adopting module publish each type it names, and a `#[cm(…)]`
+    /// type belongs to the interface it binds.
+    fn note_publication(&mut self, module: &ModuleSource, item: &Item, symbols: &SymbolTable) {
+        if let Item::Use(decl) = item
+            && decl.is_export
+        {
+            for use_item in &decl.items {
+                if let UseItem::Simple { name, alias, .. } = use_item {
+                    let published = alias.as_ref().unwrap_or(name);
+                    if let Some(symbol) = symbols.lookup_in_module(module, published)
+                        && let Some(def) = self.of_ast_id(symbol.defined_at)
+                    {
+                        self.publish(def, module, published);
+                    }
+                }
+            }
+            return;
+        }
+        if item.type_decl().is_some_and(|decl| decl.is_export) {
+            let def = self.def_at(item.id());
+            self.publish(def, module, &self.name(def).to_string());
+        }
+        if cm_definition(item).is_some()
+            && let Some(def) = self.of_ast_id(item.id())
+            && self.kind(def).is_type()
+        {
+            self.cm_bound.insert(def);
+        }
+    }
+
+    fn publish(&mut self, def: DefId, module: &ModuleSource, name: &str) {
+        let declared_in = self.module(def).clone();
+        let publishers = self.publishers.entry(def).or_default();
+        if let Some((publisher, earlier)) =
+            publishers.iter_mut().find(|(m, _)| m.same_package(module))
+        {
+            assert_eq!(
+                earlier, name,
+                "analyze rejects an `export use` publishing a type under a second name"
+            );
+            if *module == declared_in {
+                *publisher = declared_in;
+            }
+            return;
+        }
+        publishers.push((module.clone(), name.to_string()));
+    }
+
+    /// The types `module`'s package publishes by `export use`, each with the
+    /// name it publishes it under. A type its own declaration publishes by
+    /// `export` is not among them, even where an `export use` names it too.
+    pub fn adopted_by<'a>(
+        &'a self,
+        module: &'a ModuleSource,
+    ) -> impl Iterator<Item = (DefId, &'a str)> + 'a {
+        self.publishers.iter().filter_map(move |(def, publishers)| {
+            let (publisher, name) = publishers.iter().find(|(p, _)| p.same_package(module))?;
+            (publisher != self.module(*def)).then_some((*def, name.as_str()))
+        })
+    }
+
+    /// Whether an `export fn` in `module` may name `def` in its signature:
+    /// `module`'s package publishes it, or a `#[cm(…)]` binds it to an
+    /// interface of its own. A stdlib newtype needs neither: a library
+    /// publishes the one it reaches as the alias it is (`ByteList` crosses as
+    /// `type byte-list = list<u8>`).
+    #[must_use]
+    pub fn crosses_cm_boundary_from(&self, def: DefId, module: &ModuleSource) -> bool {
+        self.cm_bound.contains(&def)
+            || (self.kind(def) == DefKind::Newtype && self.module(def).is_core())
+            || self
+                .publishers
+                .get(&def)
+                .is_some_and(|publishers| publishers.iter().any(|(p, _)| p.same_package(module)))
     }
 
     /// Identify a function-local item (`Stmt::Item`) and its members.

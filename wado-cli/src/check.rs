@@ -12,12 +12,8 @@ use wado_compiler::Code;
 
 use crate::args::{self, CliExit};
 use crate::build;
-use crate::compile::{
-    KilnRun, attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln,
-};
+use crate::compile::{build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::dep_component::Acquisition;
-use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
 
@@ -196,38 +192,17 @@ async fn check_entry(
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let (target_world, lib_world) = world.options();
-    let host = attach_manifest_and_component_deps(
-        FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),
-        manifest_pair.as_ref(),
-        &base_path,
-        &source,
-        Acquisition::Build,
-    )
-    .await
-    .map_err(CliExit::error)?;
-
     // The pipeline a build runs, writes included. A route of its own would be a
     // second behaviour to hold in step with this one.
-    let kiln = prepare_kiln(
+    let (host, invocations) = Box::pin(build_load(
         path,
-        None,
-        &host,
-        &KilnRun::entry(manifest_pair, opts.knobs.no_cache),
-    )
-    .await
-    .map_err(silent_or_reported)?;
-    let outcome = match kiln {
-        None => PipelineOutcome::default(),
-        Some(mut kiln) => {
-            let mut outcome = kiln
-                .run()
-                .await
-                .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
-            kiln.remap_conflicts(&mut outcome.invocations, &host)
-                .map_err(silent_or_reported)?;
-            outcome
-        }
-    };
+        &source,
+        manifest_pair,
+        FilesystemCompilerHost::with_log_level(base_path, opts.knobs.log_level),
+        opts.knobs.no_cache,
+        "check",
+    ))
+    .await?;
 
     // Drive the rest of the compile pipeline so type/resolve errors also gate
     // `wado check`. At `O0`, since the component is discarded: the optimization
@@ -239,7 +214,7 @@ async fn check_entry(
         lib_world,
         opt_level: wado_compiler::OptLevel::O0,
         analysis_only: true,
-        invocations: outcome.invocations.clone(),
+        invocations,
         ..Default::default()
     };
     let entry_name = path.to_string_lossy().into_owned();
@@ -310,17 +285,6 @@ fn check_world(
     CheckWorld::Lib(fq)
 }
 
-/// A malformed inline clause and a redirect conflict have already been reported
-/// as diagnostics, so they exit silently; anything else needs its own message.
-fn silent_or_reported(e: PipelineError) -> CliExit {
-    match e {
-        PipelineError::InlineClause(_) | PipelineError::RedirectConflict(_) => {
-            CliExit::silent_failure(1)
-        }
-        other => CliExit::error(FormatPipelineError(&other)),
-    }
-}
-
 /// Not `KilnGeneratedRegenerated`: the check writes what it generates, so an
 /// overwrite is what an edited input is supposed to produce.
 fn is_kiln_diagnostic(code: &Code) -> bool {
@@ -331,12 +295,4 @@ fn is_kiln_diagnostic(code: &Code) -> bool {
             | Code::KilnNoGeneratedModule
             | Code::KilnGeneratedModified
     )
-}
-
-struct FormatPipelineError<'a>(&'a PipelineError);
-
-impl std::fmt::Display for FormatPipelineError<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "wado check: {}", self.0)
-    }
 }

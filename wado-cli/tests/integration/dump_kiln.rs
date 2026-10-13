@@ -80,3 +80,17 @@ fn dump_wir_runs_kiln_pipeline() {
         .success()
         .stdout(predicate::str::contains("hello"));
 }
+
+/// `doc` analyzes what a build loads, so it runs the generators too.
+#[test]
+fn doc_runs_kiln_pipeline() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_project(root);
+
+    wado_in(root)
+        .args(["doc", "entry.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("fn run()"));
+}

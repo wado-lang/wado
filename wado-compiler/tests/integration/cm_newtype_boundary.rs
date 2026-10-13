@@ -94,7 +94,7 @@ fn compile_lib_source(source: &str) -> Vec<u8> {
 #[test]
 fn lib_option_newtype_compiles_to_valid_wasm() {
     let source = r#"
-pub type Meters = f64;
+export type Meters = f64;
 export fn id_opt(v: Option<Meters>) -> Option<Meters> {
     return v;
 }
@@ -113,7 +113,7 @@ test "shape compiles" {}
 #[test]
 fn lib_newtype_containers_compile_to_valid_wasm() {
     let source = r#"
-pub type Meters = f64;
+export type Meters = f64;
 export fn id_result(v: Result<Meters, u32>) -> Result<Meters, u32> {
     return v;
 }
@@ -138,9 +138,9 @@ test "shape compiles" {}
 #[test]
 fn lib_structural_type_preserves_newtype_in_nested_positions() {
     let source = r#"
-pub type Meters = f64;
-pub struct Line {
-    length: Meters,
+export type Meters = f64;
+export struct Line {
+    pub length: Meters,
 }
 export fn id_line(v: Line) -> Line {
     return v;

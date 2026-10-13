@@ -18,7 +18,7 @@ const TIMEOUT_MS: u64 = 5_000;
 const SOURCE: &str = r#"
 use { Point as P } from "./sub/lib_aliased_point.wado";
 
-pub struct Line {
+export struct Line {
     pub from: P,
     pub to: P,
 }

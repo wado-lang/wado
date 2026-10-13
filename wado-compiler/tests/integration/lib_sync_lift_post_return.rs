@@ -220,9 +220,9 @@ fn lib_sync_lift_listed_string_is_reclaimed_once() {
 /// a buffer, one that owns nothing but is still returned indirectly, and one
 /// returned in a core result with no allocation at all.
 const OPTION_SOURCE: &str = r#"
-pub struct Pair {
-    a: u32,
-    b: u32,
+export struct Pair {
+    pub a: u32,
+    pub b: u32,
 }
 
 export fn owns_memory(n: u32) -> List<u32> {

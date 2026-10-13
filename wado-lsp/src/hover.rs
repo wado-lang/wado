@@ -46,10 +46,18 @@ pub(crate) fn find_hover_opts(
     public_only: bool,
 ) -> Option<HoverResult> {
     let cursor = ctx.cursor_at(position)?;
-    let symbol = cursor.def_symbol()?;
-    let signature = match &symbol.kind {
-        SymbolKind::Variable(_) => render_local_binding(ctx.sem, symbol.defined_at, &symbol.name)?,
-        _ => render_item_signature(ctx.sem, symbol, public_only)?,
+    let signature = if let Some(symbol) = cursor.def_symbol() {
+        if matches!(symbol.kind, SymbolKind::Variable(_)) {
+            render_local_binding(ctx.sem, symbol.defined_at, &symbol.name)?
+        } else {
+            render_item_signature(ctx.sem, symbol, public_only)?
+        }
+    } else {
+        // A method has no item-level symbol: a call names it by its use→def
+        // edge, and its declaration is the node under the cursor.
+        let id = cursor.def_key().unwrap_or(cursor.key());
+        let (f, contracts) = ctx.sem.function_with_contracts_at(id)?;
+        function_hover_text(f, contracts)
     };
 
     let cursor_span = cursor.span()?;
@@ -111,7 +119,11 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
         if b.ty.head_base_name() != Some(symbol.name.as_str()) {
             continue;
         }
-        let block = unparse::unparse_impl_block_signature(b, public_only);
+        if public_only && !sem.implemented(b).is_none_or(Item::is_public) {
+            continue;
+        }
+        let block =
+            unparse::unparse_impl_block_signature(b, public_only, |m| sem.method_contracts(m));
         if !block.is_empty() {
             out.push_str("\n\n");
             out.push_str(&block);
@@ -122,10 +134,7 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
 /// Hover for a method or free function reached by [`AstId`] (e.g. a symbol
 /// notation `Type::m`), where there is no item-level [`Symbol`] to render.
 #[must_use]
-pub(crate) fn hover_for_function<'a>(
-    f: &ast::Function,
-    contracts: impl IntoIterator<Item = &'a ast::AssertStmt>,
-) -> HoverResult {
+pub(crate) fn hover_for_function(f: &ast::Function, contracts: Vec<String>) -> HoverResult {
     fenced_hover(function_hover_text(f, contracts))
 }
 
@@ -133,17 +142,10 @@ pub(crate) fn hover_for_function<'a>(
 /// below it. The fence carries more than one line, so a reader sees what the
 /// declaration states as the declaration writes it — every attribute, with no
 /// allowlist, and every clause the caller owes.
-fn function_hover_text<'a>(
-    f: &ast::Function,
-    contracts: impl IntoIterator<Item = &'a ast::AssertStmt>,
-) -> String {
+fn function_hover_text(f: &ast::Function, contracts: Vec<String>) -> String {
     let mut out = unparse::unparse_attributes(&f.attrs);
     out.push(unparse::unparse_function_signature(f));
-    out.extend(
-        contracts
-            .into_iter()
-            .map(|clause| format!("    {}", unparse::unparse_contract_clause(clause))),
-    );
+    out.extend(contracts.into_iter().map(|clause| format!("    {clause}")));
     out.join("\n")
 }
 
@@ -163,8 +165,11 @@ fn fenced_hover(signature: String) -> HoverResult {
 /// twice — a struct field beside a free function, an enum case beside a
 /// method — and only `Symbol::defined_at` picks out which one.
 fn render_item_signature(sem: &Semantics, symbol: &Symbol, public_only: bool) -> Option<String> {
-    let module = sem.modules.get(symbol.module_source())?;
     let target = symbol.defined_at;
+    if let Some((f, contracts)) = sem.function_with_contracts_at(target) {
+        return Some(function_hover_text(f, contracts));
+    }
+    let module = sem.modules.get(symbol.module_source())?;
     module
         .items
         .iter()
@@ -325,10 +330,10 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
 }
 
 /// Render `item` when it — or one of its members — is the declaration
-/// identified by `target`.
+/// identified by `target`. A function is not among them:
+/// [`Semantics::function_with_contracts_at`] answers it, with its clauses.
 fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
     match item {
-        Item::Function(f) => (f.id == target).then(|| function_hover_text(f, f.contracts())),
         // Struct fields follow `public_only` (matching `wado doc`'s `..`
         // elision when set); enum cases are always public.
         Item::Struct(s) => {
@@ -358,20 +363,7 @@ fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
                 .find(|c| c.id == target)
                 .map(|c| unparse::unparse_variant_case(&v.name, c))
         }
-        Item::Trait(t) => {
-            if t.id == target {
-                return Some(unparse::unparse_trait_header(t));
-            }
-            t.methods
-                .iter()
-                .find(|m| m.id == target)
-                .map(|m| function_hover_text(m, t.method_contracts(&m.name)))
-        }
-        Item::Impl(imp) => imp
-            .methods
-            .iter()
-            .find(|m| m.id == target)
-            .map(|m| function_hover_text(m, m.contracts())),
+        Item::Trait(t) => (t.id == target).then(|| unparse::unparse_trait_header(t)),
         Item::Flags(fl) => (fl.id == target).then(|| unparse::unparse_flags_header(fl)),
         Item::Newtype(n) => (n.id == target).then(|| unparse::unparse_newtype_signature(n)),
         Item::BuiltinTypeDecl(d) => {
@@ -379,7 +371,9 @@ fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
         }
         Item::Interface(e) => (e.id == target).then(|| format!("interface {}", e.name)),
         Item::Global(g) => (g.id == target).then(|| unparse::unparse_global_signature(g)),
-        Item::Use(_)
+        Item::Function(_)
+        | Item::Impl(_)
+        | Item::Use(_)
         | Item::Resource(_)
         | Item::World(_)
         | Item::Test(_)
@@ -440,6 +434,42 @@ mod tests {
             assert_eq!(
                 result.contents.value,
                 "```wado\nfn half(n: i32) -> i32\n    contract n % 2 == 0, \"n must be even\"\n```"
+            );
+        });
+    }
+
+    #[test]
+    fn inherent_method_hover_shows_its_contract() {
+        futures::executor::block_on(async {
+            let source = "struct Deck {}\nimpl Deck {\n    fn at(&self, i: i32) -> i32\n        contract i >= 0\n    {\n        return i;\n    }\n}\nfn run() -> i32 {\n    let d = Deck {};\n    return d.at(1);\n}\n";
+            let result = hover_at(source, 10, 14).await.expect("hover on at call");
+            assert_eq!(
+                result.contents.value,
+                "```wado\nfn at(&self, i: i32) -> i32\n    contract i >= 0\n```"
+            );
+        });
+    }
+
+    #[test]
+    fn impl_method_hover_shows_its_trait_methods_contract() {
+        futures::executor::block_on(async {
+            let source = "trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\nstruct Deck {}\nimpl Pick for Deck {\n    fn pick(&self, i: i32) -> i32 { return i; }\n}\nfn run() -> i32 {\n    let d = Deck {};\n    return d.pick(1);\n}\n";
+            let expected = "```wado\nfn pick(&self, i: i32) -> i32\n    contract i >= 0\n```";
+            let call = hover_at(source, 10, 14).await.expect("hover on pick call");
+            assert_eq!(call.contents.value, expected);
+            let decl = hover_at(source, 6, 8).await.expect("hover on pick decl");
+            assert_eq!(decl.contents.value, expected);
+        });
+    }
+
+    #[test]
+    fn impl_method_hover_reads_the_trait_contract_under_its_own_names() {
+        futures::executor::block_on(async {
+            let source = "trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\nstruct Deck {}\nimpl Pick for Deck {\n    fn pick(&self, j: i32) -> i32 { return j; }\n}\nfn run() -> i32 {\n    let d = Deck {};\n    return d.pick(1);\n}\n";
+            let call = hover_at(source, 10, 14).await.expect("hover on pick call");
+            assert_eq!(
+                call.contents.value,
+                "```wado\nfn pick(&self, j: i32) -> i32\n    contract j >= 0\n```"
             );
         });
     }

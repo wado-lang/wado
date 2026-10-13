@@ -65,6 +65,36 @@ An anonymous struct never crosses either: no signature can name one yet
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
+### Published Types
+
+An `export fn` puts every named type its signature reaches, through fields and
+payloads too, into the package's Component Model interface. The package
+publishes each one, in one of two ways:
+
+- It declares the type `export`: `export struct`, `export enum`,
+  `export variant`, `export flags`, or `export type`.
+- It adopts the type with `export use { T } from "…";`, whichever package
+  declares it. This is how a package publishes a type a Kiln generator wrote
+  for it, where no `export` can be written. An `export use` names a
+  non-generic struct, enum, variant, flags or newtype. It never names a `#[cm]`
+  type, whose own interface publishes it.
+
+An adopted type takes the name the `export use` gives it:
+`export use { FileType as Kind } from "core:fs";` publishes `variant kind`, and
+every reference to the type in the interface says `kind`, a field of another
+adopted type included. A package publishes a type under one name, so adopting
+it under another name than an earlier `export use`, or than its own where it is
+declared `export`, is a compile error.
+
+A reached type the package does not publish is a compile error at the
+parameter, or at the function's declaration for its result. Two kinds of type
+need no publishing: a `#[cm]` type, whose own interface publishes it, and a
+standard library newtype such as `ByteList`, which crosses as the alias it is.
+
+A WIT record shows every field, so each field of a published struct is `pub`.
+A field that is not is a compile error, at the field for an `export struct` and
+at the `export use` for an adopted one.
+
 ### Callbacks
 
 A function type crosses the Component Model boundary in one place: as a

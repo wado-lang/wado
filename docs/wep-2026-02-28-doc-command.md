@@ -48,7 +48,7 @@ Doc comment text is extracted with the `///` prefix stripped (including the sing
 
 `wado doc` outputs **only `pub` and `export` items**. Private items are implementation details and are excluded. `--all` includes them, for a reader working inside the package.
 
-An `impl` of a trait follows the trait's visibility. A reader who cannot name the trait cannot call its methods, so the page leaves out an impl of a trait below `pub`. The trait and the impl often live in different modules, so `wado doc` follows the impl's `use` to the module that declares the trait. A trait whose declaration it cannot read, such as a prelude trait, is taken as `pub`.
+An `impl` of a trait follows the trait's visibility. A reader who cannot name the trait cannot call its methods, so the page leaves out an impl of a trait or interface declared below `pub`. The visibility is the declaration's, whichever `use` the impl reaches it through. A trait with no Wado declaration, such as one a component asset re-exports, is taken as `pub`.
 
 For structs with private fields, the struct is documented but private fields are represented as `..`:
 
@@ -106,6 +106,19 @@ This approach:
 - Requires **zero changes** to the parser, AST, or any compilation phase
 - Reuses the battle-tested `CommentMap` that the formatter already depends on
 - Works with existing `///` comments in the WASI stdlib without any source changes
+
+The page also reads the analysis of a program that loads its module
+(`Semantics`), for what a name resolves to. A trait's `contract` clauses bind
+every impl of it, so an impl's method shows the clauses of the trait method it
+implements, wherever the trait is declared. The page's own parse keeps the
+comments, which the analysis drops, and names an `impl` block to the analysis
+by its span. A stdlib module is analyzed through a program importing it.
+
+`wado doc` documents a program the analysis accepts. It loads what a build
+loads: the manifest's dependencies and the output of the entry's Kiln
+generators. Given a program with errors, it reports them and fails, and
+whatever it wrote is not a page. It checks no more
+than the analysis does, so a program it documents may still fail to compile.
 
 ### CommentKind Extension
 

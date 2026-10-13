@@ -2,17 +2,18 @@ use crate::hashmap::IndexSet;
 use serde::Serialize;
 
 use crate::ast::{
-    AssertStmt, AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam,
-    GlobalDecl, ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind,
-    StructDecl, StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl,
-    Visibility, type_head_name, written_params,
+    AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
+    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
+    written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::lexer::is_ident_continue;
 use crate::loader::resolve_wasm_asset_path;
-use crate::module_source::ModuleSourceInterner;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
+use crate::semantics::Semantics;
 use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_assoc_type_decl, unparse_attributes, unparse_bound_arguments_into,
@@ -217,14 +218,62 @@ pub struct DocFlagsMember {
     pub doc: Option<String>,
 }
 
-/// Reads the source of the module a `use` names, given the path as written.
-/// The page follows an `impl`'s trait to its declaration through it, to leave
-/// out an impl of a trait its reader cannot name. `None` keeps the impl.
-pub type ReadImport<'a> = dyn Fn(&str) -> Option<String> + 'a;
+/// The program a page's module is loaded in, read at that module. The page
+/// parses its own source, for the comments, and asks this what a name in it
+/// resolves to. The program has no errors, so every name resolves.
+pub struct DocScope<'a> {
+    sem: &'a Semantics,
+    module: ModuleSource,
+}
 
-/// [`ReadImport`] over the bundled standard library.
-pub fn read_stdlib_import(path: &str) -> Option<String> {
-    stdlib::get_stdlib_module(path).map(str::to_owned)
+impl<'a> DocScope<'a> {
+    /// The program's entry module.
+    #[must_use]
+    pub fn of_entry(sem: &'a Semantics) -> Self {
+        Self::in_module(sem, sem.entry_module_source.clone())
+    }
+
+    /// `module_spec` as the program's entry imports it.
+    #[must_use]
+    pub fn new(sem: &'a Semantics, module_spec: &str) -> Self {
+        Self::in_module(sem, sem.resolve_notation_module(module_spec))
+    }
+
+    fn in_module(sem: &'a Semantics, module: ModuleSource) -> Self {
+        assert!(sem.is_complete(), "a page reads a complete analysis");
+        assert!(
+            sem.modules.contains_key(&module),
+            "the analysis loaded the page's module {module}"
+        );
+        Self { sem, module }
+    }
+
+    /// The module `module_spec` names, imported from this one.
+    fn at(&self, module_spec: &str) -> Self {
+        Self::in_module(
+            self.sem,
+            self.sem.resolve_module_from(&self.module, module_spec),
+        )
+    }
+
+    /// What `b`, a block of this module in the page's own parse, implements,
+    /// and the `contract` clauses that bind each of its methods.
+    fn analyzed_impl(&self, b: &ImplBlock) -> (Option<&'a Item>, Vec<Vec<String>>) {
+        let block = self.sem.impl_block_at(&self.module, b.span);
+        let contracts = block
+            .methods
+            .iter()
+            .map(|m| self.sem.method_contracts(m))
+            .collect();
+        (self.sem.implemented(block), contracts)
+    }
+}
+
+/// An `impl` block the page documents, with the `contract` clauses that bind
+/// each of its methods, in their order.
+struct DocImpl<'a> {
+    block: &'a ImplBlock,
+    method_contracts: Vec<Vec<String>>,
 }
 
 /// Extract the documentation of a module. `include_private` documents non-`pub`
@@ -236,7 +285,7 @@ pub fn extract_doc_with(
     source: &str,
     module_name: &str,
     include_private: bool,
-    read_import: &ReadImport,
+    scope: &DocScope,
 ) -> DocModule {
     extract_doc_filtered(
         module,
@@ -245,22 +294,23 @@ pub fn extract_doc_with(
         module_name,
         include_private,
         false,
-        read_import,
+        Some(scope),
     )
 }
 
 /// Like [`extract_doc_with`], but `include_internal` also admits top-level
 /// `internal` items, while their members stay at the `include_private` level.
 /// Lets a `pub use` re-export publish an `internal` item without leaking its
-/// own private fields / methods.
-pub fn extract_doc_filtered(
+/// own private fields / methods. `scope` is `None` for a module the analysis
+/// did not load: a component's bindings, which implement no trait.
+fn extract_doc_filtered(
     module: &Module,
     trivia: &TriviaMap,
     source: &str,
     module_name: &str,
     include_private: bool,
     include_internal: bool,
-    read_import: &ReadImport,
+    scope: Option<&DocScope>,
 ) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
     let synopsis = collect_synopsis(module, source);
@@ -275,7 +325,7 @@ pub fn extract_doc_filtered(
     let mut effects: Vec<DocEffect> = Vec::new();
     let mut resources: Vec<DocResource> = Vec::new();
     let mut functions: Vec<DocFunction> = Vec::new();
-    let impls = documented_impls(module, include_private, read_import);
+    let impls = documented_impls(module, include_private, scope);
 
     for item in &module.items {
         let visible = include_private
@@ -366,7 +416,10 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
         .methods
         .iter()
         .filter(|m| !m.is_contract_holder())
-        .map(|m| build_doc_function_with(m, t.method_contracts(&m.name), trivia))
+        .map(|m| {
+            let contracts = t.method_contracts(&m.name).map(unparse_contract_clause);
+            build_doc_function_with(m, contracts.collect(), trivia)
+        })
         .collect();
 
     DocTrait {
@@ -384,7 +437,7 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
 
 fn build_doc_struct(
     s: &StructDecl,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocStruct {
@@ -428,7 +481,7 @@ fn build_doc_struct(
 
 fn build_doc_type(
     t: &Newtype,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocType {
@@ -574,7 +627,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
 /// `Stream<T>::read_to_end` is not in the `resource` body.
 fn build_doc_resource(
     r: &ResourceDecl,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> DocResource {
@@ -614,20 +667,24 @@ fn build_doc_operation(m: &Function, trivia: &TriviaMap) -> DocFunction {
 }
 
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
-    build_doc_function_with(f, f.contracts(), trivia)
+    build_doc_function_with(f, own_contracts(f), trivia)
 }
 
-/// A trait method's clauses live in the trait's hidden holder, not on the
-/// method, so the caller passes them.
-fn build_doc_function_with<'a>(
+fn own_contracts(f: &Function) -> Vec<String> {
+    f.contracts().map(unparse_contract_clause).collect()
+}
+
+/// `contracts` are the clauses that bind `f`, which a trait method's trait
+/// declares.
+fn build_doc_function_with(
     f: &Function,
-    contracts: impl Iterator<Item = &'a AssertStmt>,
+    contracts: Vec<String>,
     trivia: &TriviaMap,
 ) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
         attrs: unparse_attributes(&f.attrs),
-        contracts: contracts.map(unparse_contract_clause).collect(),
+        contracts,
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -719,117 +776,36 @@ fn is_internal_item(item: &Item) -> bool {
 }
 
 /// The `impl` blocks the page documents: every one under `include_private`,
-/// else those whose trait, if any, the reader can name. A reader who cannot
+/// else those whose trait or interface, if any, is `pub`. A reader who cannot
 /// name a trait cannot call its methods, so listing them would advertise an
 /// API that does not exist.
-fn documented_impls<'m>(
-    module: &'m Module,
+fn documented_impls<'a>(
+    module: &'a Module,
     include_private: bool,
-    read_import: &ReadImport,
-) -> Vec<&'m ImplBlock> {
-    let impls: Vec<&ImplBlock> = module
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(i) => Some(i),
-            _ => None,
-        })
-        .collect();
-    if include_private {
-        return impls;
-    }
-    let trait_head = |i: &ImplBlock| i.trait_type.as_ref().and_then(spell_head);
-    let heads: IndexSet<String> = impls.iter().filter_map(|i| trait_head(i)).collect();
-    let unnameable = unnameable_heads(module, &heads, read_import);
-    impls
-        .into_iter()
-        .filter(|i| !trait_head(i).is_some_and(|head| unnameable.contains(&head)))
-        .collect()
-}
-
-/// An `impl` head as written: `Trait`, or `ns::Trait` through a namespace import.
-fn spell_head(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Named(n) => Some(n.name.clone()),
-        Type::Generic(g) => Some(g.name.clone()),
-        Type::NamespacedGeneric(g) => Some(format!("{}::{}", g.namespace, g.name)),
-        _ => None,
-    }
-}
-
-/// Which of `heads` name a trait below `pub`: one `module` declares so, or one
-/// it imports from a module that declares or re-exports it so. A head reaching
-/// no declaration, such as a prelude trait, is taken as nameable.
-fn unnameable_heads(
-    module: &Module,
-    heads: &IndexSet<String>,
-    read_import: &ReadImport,
-) -> IndexSet<String> {
-    let mut unnameable: IndexSet<String> = declared_below_pub(module)
-        .filter(|name| heads.contains(*name))
-        .map(str::to_owned)
-        .collect();
-    for item in &module.items {
-        let Item::Use(u) = item else { continue };
-        let through: Vec<(&String, &str)> = heads
-            .iter()
-            .filter_map(|head| Some((head, imported_name(u, head)?)))
-            .collect();
-        if through.is_empty() {
-            continue;
-        }
-        let Some(source) = read_import(&u.source) else {
-            continue;
-        };
-        let imported = parse(&source).ast;
-        let below_pub: IndexSet<&str> = declared_below_pub(&imported)
-            .chain(reexported_below_pub(&imported))
-            .collect();
-        unnameable.extend(
-            through
-                .into_iter()
-                .filter(|(_, name)| below_pub.contains(name))
-                .map(|(head, _)| head.clone()),
-        );
-    }
-    unnameable
-}
-
-/// The name `head` reaches in the module `u` imports from, if `u` binds it.
-fn imported_name<'a>(u: &'a UseDecl, head: &'a str) -> Option<&'a str> {
-    u.items.iter().find_map(|item| match item {
-        UseItem::Simple { name, alias, .. } => {
-            (alias.as_ref().unwrap_or(name) == head).then_some(name.as_str())
-        }
-        UseItem::Namespace { name, .. } => head.strip_prefix(name.as_str())?.strip_prefix("::"),
-        UseItem::InterfaceFunctions { .. } | UseItem::Wildcard => None,
-    })
-}
-
-/// The traits and interfaces `module` declares below `pub`.
-fn declared_below_pub(module: &Module) -> impl Iterator<Item = &str> {
-    module.items.iter().filter_map(|item| match item {
-        Item::Trait(t) if !t.visibility.is_public() => Some(t.name.as_str()),
-        Item::Interface(i) if !i.visibility.is_public() => Some(i.name.as_str()),
-        _ => None,
-    })
-}
-
-/// The names `module` re-exports with `internal use`. A private `use` exports
-/// nothing, so it is not counted.
-fn reexported_below_pub(module: &Module) -> impl Iterator<Item = &str> {
+    scope: Option<&DocScope<'a>>,
+) -> Vec<DocImpl<'a>> {
     module
         .items
         .iter()
-        .filter_map(|item| match item {
-            Item::Use(u) if u.visibility.is_internal() => Some(&u.items),
-            _ => None,
+        .filter_map(|item| {
+            let Item::Impl(block) = item else {
+                return None;
+            };
+            let (implemented, method_contracts) = if let Some(scope) = scope {
+                scope.analyzed_impl(block)
+            } else {
+                assert!(
+                    block.trait_type.is_none(),
+                    "a module no analysis loaded implements no trait"
+                );
+                (None, block.methods.iter().map(own_contracts).collect())
+            };
+            (include_private || implemented.is_none_or(Item::is_public)).then_some(DocImpl {
+                block,
+                method_contracts,
+            })
         })
-        .flatten()
-        .filter_map(|item| match item {
-            UseItem::Simple { name, alias, .. } => Some(alias.as_ref().unwrap_or(name).as_str()),
-            _ => None,
-        })
+        .collect()
 }
 
 fn render_type(ty: &Type) -> String {
@@ -931,28 +907,37 @@ fn parse_stdlib_for_doc(label: &str, source: &str) -> ParseResult {
     parsed
 }
 
+/// The source of a program that loads the stdlib module `module_name`, for the
+/// [`Semantics`] its page reads.
+#[must_use]
+pub fn stdlib_doc_entry(module_name: &str) -> String {
+    format!("use _ from \"{module_name}\";\n")
+}
+
 /// Extract documentation from a stdlib module by name.
 ///
 /// For `core:prelude`, follows `pub use` re-exports and merges items from
 /// the sub-modules into a single `DocModule`. For other modules, extracts
-/// docs directly from the source.
+/// docs directly from the source. `include_private` is as in
+/// [`extract_doc_with`].
 ///
-/// Returns `None` if the module name is not a known stdlib module.
-pub fn extract_stdlib_doc(module_name: &str) -> Option<DocModule> {
-    extract_stdlib_doc_with(module_name, false)
-}
-
-/// [`extract_stdlib_doc`] with explicit visibility (see [`extract_doc_with`]).
-pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Option<DocModule> {
+/// Returns `None` if the module name is not a known stdlib module. `sem`
+/// analyzes [`stdlib_doc_entry`] for `module_name`.
+pub fn extract_stdlib_doc_with(
+    module_name: &str,
+    include_private: bool,
+    sem: &Semantics,
+) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = parse_stdlib_for_doc(module_name, source);
+    let scope = DocScope::new(sem, module_name);
     let mut doc = extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         source,
         module_name,
         include_private,
-        &read_stdlib_import,
+        &scope,
     );
 
     // For modules with pub use re-exports, follow them to get the actual items
@@ -975,7 +960,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                     reexport_source,
                     false,
                     true,
-                    &read_stdlib_import,
+                    Some(&scope.at(reexport_source)),
                 );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -991,6 +976,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                 &sub_parsed.ast,
                 &sub_parsed.trivia,
                 include_private,
+                &scope.at(se_source),
             );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
@@ -1000,6 +986,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
     for reexport_source in &reexport_sources {
         if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
             let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
+            let sub_scope = scope.at(reexport_source);
             // Recursively follow side-effect imports from re-exported sub-modules
             let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
             for sub_se in &sub_se_sources {
@@ -1009,6 +996,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                         &se_parsed.ast,
                         &se_parsed.trivia,
                         include_private,
+                        &sub_scope.at(sub_se),
                     );
                     merge_primitive_types(&mut doc.primitive_types, prim_types);
                 }
@@ -1018,6 +1006,7 @@ pub fn extract_stdlib_doc_with(module_name: &str, include_private: bool) -> Opti
                 &sub_parsed.ast,
                 &sub_parsed.trivia,
                 include_private,
+                &sub_scope,
             );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
@@ -1048,7 +1037,7 @@ fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<Do
         &path,
         false,
         true,
-        &read_stdlib_import,
+        None,
     ))
 }
 
@@ -1158,23 +1147,26 @@ fn extract_item_name<'a>(sig: &'a str, keyword: &str) -> &'a str {
 
 fn collect_impl_methods_for_type(
     type_name: &str,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> (Vec<DocFunction>, Vec<DocTraitImpl>) {
     let mut inherent_methods = Vec::new();
     let mut trait_impls = Vec::new();
 
-    for i in impls {
+    for DocImpl {
+        block: i,
+        method_contracts,
+    } in impls
+    {
         if type_head_name(&i.ty) != Some(type_name) {
             continue;
         }
+        let methods = i.methods.iter().zip(method_contracts);
 
         if let Some(ref trait_ty) = i.trait_type {
-            let methods: Vec<DocFunction> = i
-                .methods
-                .iter()
-                .map(|m| build_doc_function(m, trivia))
+            let methods: Vec<DocFunction> = methods
+                .map(|(m, contracts)| build_doc_function_with(m, contracts.clone(), trivia))
                 .collect();
             if methods.is_empty() {
                 continue;
@@ -1186,9 +1178,9 @@ fn collect_impl_methods_for_type(
                 methods,
             });
         } else {
-            for m in &i.methods {
+            for (m, contracts) in methods {
                 if include_private || m.visibility.is_public() || m.is_export {
-                    inherent_methods.push(build_doc_function(m, trivia));
+                    inherent_methods.push(build_doc_function_with(m, contracts.clone(), trivia));
                 }
             }
         }
@@ -1200,12 +1192,12 @@ fn collect_impl_methods_for_type(
 /// The associated constants of the inherent `impl` blocks on `type_name`.
 fn collect_impl_constants_for_type(
     type_name: &str,
-    impls: &[&ImplBlock],
+    impls: &[DocImpl],
     trivia: &TriviaMap,
     include_private: bool,
 ) -> Vec<DocFunction> {
     let mut constants = Vec::new();
-    for i in impls {
+    for DocImpl { block: i, .. } in impls {
         if type_head_name(&i.ty) != Some(type_name) || i.trait_type.is_some() {
             continue;
         }
@@ -1253,10 +1245,11 @@ fn collect_primitive_types_from_module(
     module: &Module,
     trivia: &TriviaMap,
     include_private: bool,
+    scope: &DocScope,
 ) -> Vec<DocPrimitiveType> {
     use crate::hashmap::IndexMap;
 
-    let impls = documented_impls(module, include_private, &read_stdlib_import);
+    let impls = documented_impls(module, include_private, Some(scope));
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for prim_name in PrimitiveType::all_primitive_names() {

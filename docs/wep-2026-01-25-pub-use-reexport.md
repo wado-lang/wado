@@ -82,7 +82,7 @@ pub use {Stdout} from "wasi:cli";
 ### Restrictions
 
 1. A re-export names only an item the module can import, and gives it no more reach than the item has.
-2. `export use` is a compile error. A re-export stays at module level and never reaches the CM boundary.
+2. `export use` names types only. It publishes them in the importing package's CM interface, which [Published Types](./spec-components.md#published-types) specifies.
 3. A namespace cannot be re-exported, so `pub use utils from …` and `internal use utils from …` are compile errors. `use utils from "./utils.wado"` names a module, not an item. Re-export the members by name instead: `pub use { helper } from "./utils.wado"`.
 4. A wildcard cannot be re-exported, so `pub use _ from …` and `internal use _ from …` are compile errors. `use _ from` binds no name.
 

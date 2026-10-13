@@ -3199,7 +3199,11 @@ impl TypeTable {
         name: &str,
         module_source: &ModuleSource,
     ) -> Option<TypeId> {
-        let def = self.cm_decl_in(name, module_source)?;
+        self.find_named_type_by_def(self.cm_decl_in(name, module_source)?)
+    }
+
+    /// The type `def` declares, of any kind a Component Model interface names.
+    pub fn find_named_type_by_def(&self, def: DefId) -> Option<TypeId> {
         self.find_struct_type(StructDef::Decl(def))
             .or_else(|| self.find_variant_type(def))
             .or_else(|| self.find_enum_type(def))
