@@ -24,9 +24,11 @@ fn grow_memory(end: u64) {
     } else {
         normal_grow;
     };
-    if ((core::builtin::memory_grow((((grow_bytes + 65536) - 1) / 65536) as i32) < 0) && (core::builtin::memory_grow((((deficit + 65536) - 1) / 65536) as i32) < 0)) {
-        core::builtin::cold_path();
-        core::builtin::unreachable();
+    if (core::builtin::memory_grow((((grow_bytes + 65536) - 1) / 65536) as i32) < 0) {
+        if (core::builtin::memory_grow((((deficit + 65536) - 1) / 65536) as i32) < 0) {
+            core::builtin::cold_path();
+            core::builtin::unreachable();
+        }
     }
 }
 

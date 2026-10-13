@@ -11,48 +11,37 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct value_copy_elide_qmark.wado//Pair {  // TypeId(3)
-    mut a: i32,
-    mut b: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//value_copy_elide_qmark.wado/run" = fn();  // TypeId(10)
 
-type "functype//value_copy_elide_qmark.wado/run" = fn();  // TypeId(11)
+type "functype//value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//value_copy_elide_qmark.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//value_copy_elide_qmark.wado/$cm_export__run" = fn();  // TypeId(13)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
+type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(15)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
-
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -67,40 +56,19 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:value_copy_elide_qmark.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(51, 48), used: 2 };
+
 fn "value_copy_elide_qmark.wado/run"() with Stdout {
-    let $local_1: ref "core:prelude/string.wado//String";
-    let $qm_v: ref "value_copy_elide_qmark.wado//Pair";
-    let is_negative_22: bool;
-    let x: i64;
-    let $sroa_slot_44: i32;
-    let start_95: i32;
-    $sroa_slot_44 = 0;
-    $sroa_slot_44 = local.tee $qm_v(struct.new "value_copy_elide_qmark.wado//Pair" { a: 10, b: 20 }).a + $qm_v.b;
-    $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_22 = $sroa_slot_44 < 0;
-    $sroa_slot_44 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($sroa_slot_44); select i64(x < 0_i64, 0_i64 - x, x)));
-    if is_negative_22 {
-        if @unlikely(local.tee is_negative_22(0 + 1) > builtin::array_len($local_1.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, is_negative_22);
-        }
-        start_95 = $local_1.used;
-        $local_1.used = is_negative_22;
-        builtin::array_set_u8($local_1.repr, start_95, 45);
-    } else {
-    }
-    if @unlikely(local.tee start_95($local_1.used + $sroa_slot_44) > builtin::array_len($local_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_95);
-    }
-    is_negative_22 = $local_1.used;
-    $local_1.used = start_95;
-    "core:prelude/primitive.wado/write_decimal_digits"($local_1.repr, is_negative_22, x, $sroa_slot_44);
-    $sroa_slot_44 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    is_negative_22 = builtin::i32_wrap_i64(x >> 32_i64);
-    $sroa_slot_44 = "value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream"($sroa_slot_44);
-    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(is_negative_22, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_slot_44);
+    let packed: i64;
+    let rx_29: i32;
+    let tx_30: i32;
+    rx_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_30 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_29 = "value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream"(rx_29);
+    let $mv_arg_2: ref "core:prelude/string.wado//String";
+    $mv_arg_2 = global:value_copy_elide_qmark.wado::$const_obj_3;
+    "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx_30, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_29);
 }
 
 fn "value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -110,89 +78,6 @@ fn "value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream"(data) with
 fn "value_copy_elide_qmark.wado/$cm_export__run"() {
     "value_copy_elide_qmark.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
-    let q: u64;
-    let pair: i32;
-    let tens: i32;
-    digit_count = offset + digit_count;
-    b3: block {
-        l4: loop {
-            break_if b3 (digit_count - offset) < 2;
-            q = val /u 100_i64;
-            tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
-            digit_count = digit_count - 2;
-            val = q;
-            continue l4;
-        };
-    };
-    if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
-    }
-}
-
-fn "core:prelude/primitive.wado/count_digits_u64"(val) {
-    if val <u 100000_i64 {
-        if val <u 100_i64 {
-            if val <u 10_i64 {
-                return 1;
-            }
-            return 2;
-        }
-        if val <u 1000_i64 {
-            return 3;
-        }
-        if val <u 10000_i64 {
-            return 4;
-        }
-        return 5;
-    }
-    if val <u 10000000000_i64 {
-        if val <u 10000000_i64 {
-            if val <u 1000000_i64 {
-                return 6;
-            }
-            return 7;
-        }
-        if val <u 100000000_i64 {
-            return 8;
-        }
-        if val <u 1000000000_i64 {
-            return 9;
-        }
-        return 10;
-    }
-    if val <u 1000000000000000_i64 {
-        if val <u 1000000000000_i64 {
-            if val <u 100000000000_i64 {
-                return 11;
-            }
-            return 12;
-        }
-        if val <u 10000000000000_i64 {
-            return 13;
-        }
-        if val <u 100000000000000_i64 {
-            return 14;
-        }
-        return 15;
-    }
-    if val <u 100000000000000000_i64 {
-        if val <u 10000000000000000_i64 {
-            return 16;
-        }
-        return 17;
-    }
-    if val <u 1000000000000000000_i64 {
-        return 18;
-    }
-    if val <u -8446744073709551616_i64 {
-        return 19;
-    }
-    return 20;
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
@@ -205,17 +90,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b26: block {
-        l27: loop {
-            break_if b26 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b1: block {
+        l2: loop {
+            break_if b1 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l27;
+            continue l2;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l29: loop {
+        l4: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -245,7 +130,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l29;
+            continue l4;
         };
     };
 }
@@ -259,18 +144,6 @@ fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr,
         "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
-    let capacity: i32;
-    let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
-    if min_capacity <= capacity {
-        return;
-    }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
 }
 
 export fn "value_copy_elide_qmark.wado/$cm_export__run" as "run"

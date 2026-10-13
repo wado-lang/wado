@@ -74,55 +74,38 @@ fn "opt_match_thread_qmark.wado/run"() with Stdout {
     let i_16: i32;
     let b_22: u8;
     let packed: i64;
-    let $sroa_slot_64: i32;
-    let $sroa_slot_65: u8;
+    let $sroa_slot_66: i32;
     let $sroa_slot_67: i32;
-    let $sroa_slot_68: i32;
-    let $licm_repr_78: ref Array<u8>;
-    let $sroa_r_pos_83: i32;
-    $sroa_r_pos_83 = 0;
+    let $licm_repr_76: ref Array<u8>;
+    let $sroa_r_pos_81: i32;
+    $sroa_r_pos_81 = 0;
+    $sroa_slot_66 = 0;
     $sroa_slot_67 = 0;
-    $sroa_slot_68 = 0;
     $inline_sum_sroa_return__2: block {
         total_15 = 0;
         i_16 = 0;
-        $licm_repr_78 = global:opt_match_thread_qmark.wado::$const_obj_6;
+        $licm_repr_76 = global:opt_match_thread_qmark.wado::$const_obj_6;
         b0: block {
             l1: loop {
                 break_if b0 i_16 >= 4;
-                $sroa_slot_64 = 0;
-                $sroa_slot_65 = 0;
-                $inline_opt_match_thread_qmark_wado_Reader__next_byte_sroa_return__3: block {
-                    if $sroa_r_pos_83 >= 4 {
-                        $sroa_slot_64 = 1;
-                        $sroa_slot_65 = 0;
-                        break $inline_opt_match_thread_qmark_wado_Reader__next_byte_sroa_return__3;
-                    }
-                    b_22 = builtin::array_get_value<u8>($licm_repr_78, $sroa_r_pos_83);
-                    $sroa_r_pos_83 = $sroa_r_pos_83 + 1;
-                    $sroa_slot_64 = 0;
-                    $sroa_slot_65 = b_22;
-                    break $inline_opt_match_thread_qmark_wado_Reader__next_byte_sroa_return__3;
-                };
-                $sroa_slot_64 = (if $sroa_slot_64 == 0 -> u8 {
-                    $sroa_slot_65;
-                } else if @unlikely($sroa_slot_64 == 1) -> u8 {
+                if @unlikely($sroa_r_pos_81 >= 4) {
                     cold_path;
-                    $sroa_slot_67 = 1;
-                    break $inline_sum_sroa_return__2: $sroa_slot_68 = 0;
-                } else {
-                    unreachable;
-                });
-                total_15 = total_15 + $sroa_slot_64;
+                    $sroa_slot_66 = 1;
+                    $sroa_slot_67 = 0;
+                    break $inline_sum_sroa_return__2;
+                }
+                b_22 = builtin::array_get_value<u8>($licm_repr_76, $sroa_r_pos_81);
+                $sroa_r_pos_81 = $sroa_r_pos_81 + 1;
+                total_15 = total_15 + b_22;
                 i_16 = i_16 + 1;
                 continue l1;
             };
         };
-        $sroa_slot_67 = 0;
-        $sroa_slot_68 = total_15;
+        $sroa_slot_66 = 0;
+        $sroa_slot_67 = total_15;
         break $inline_sum_sroa_return__2;
     };
-    if @unlikely(local.tee $sroa_slot_68((if ($sroa_slot_67 == 0) & ($sroa_slot_68 == 256) -> bool {
+    if @unlikely(local.tee $sroa_slot_67((if ($sroa_slot_66 == 0) & ($sroa_slot_67 == 256) -> bool {
         1;
     } else {
         0;
@@ -131,50 +114,32 @@ fn "opt_match_thread_qmark.wado/run"() with Stdout {
         "opt_match_thread_qmark.wado/run$cold1"();
         unreachable;
     }
-    $sroa_slot_68 = 0;
     $sroa_slot_67 = 0;
+    $sroa_slot_66 = 0;
     total_15 = 0;
     $inline_sum_sroa_return__8: block {
-        b_22 = 0;
-        $licm_repr_78 = global:opt_match_thread_qmark.wado::$const_obj_5;
-        b7: block {
-            l8: loop {
-                break_if b7 b_22 >= 2;
-                $sroa_r_pos_83 = 0;
-                $sroa_slot_64 = 0;
-                $sroa_slot_65 = 0;
-                $inline_opt_match_thread_qmark_wado_Reader__next_byte_sroa_return__9: block {
-                    if $sroa_slot_68 >= 1 {
-                        $sroa_r_pos_83 = 1;
-                        $sroa_slot_64 = 0;
-                        $sroa_slot_65 = 1;
-                        break $inline_opt_match_thread_qmark_wado_Reader__next_byte_sroa_return__9;
-                    }
-                    i_16 = builtin::array_get_value<u8>($licm_repr_78, $sroa_slot_68);
-                    $sroa_slot_68 = $sroa_slot_68 + 1;
-                    $sroa_r_pos_83 = 0;
-                    $sroa_slot_64 = i_16;
-                    $sroa_slot_65 = 0;
-                    break $inline_opt_match_thread_qmark_wado_Reader__next_byte_sroa_return__9;
-                };
-                drop((if $sroa_r_pos_83 == 0 -> u8 {
-                    $sroa_slot_64;
-                } else if @unlikely($sroa_r_pos_83 == 1) -> u8 {
+        i_16 = 0;
+        $licm_repr_76 = global:opt_match_thread_qmark.wado::$const_obj_5;
+        b5: block {
+            l6: loop {
+                break_if b5 i_16 >= 2;
+                if @unlikely($sroa_slot_67 >= 1) {
                     cold_path;
-                    $sroa_slot_67 = 1;
-                    break $inline_sum_sroa_return__8: total_15 = $sroa_slot_65;
-                } else {
-                    unreachable;
-                }));
-                b_22 = b_22 + 1;
-                continue l8;
+                    $sroa_slot_66 = 1;
+                    total_15 = 1;
+                    break $inline_sum_sroa_return__8;
+                }
+                drop(builtin::array_get_value<u8>($licm_repr_76, $sroa_slot_67));
+                $sroa_slot_67 = $sroa_slot_67 + 1;
+                i_16 = i_16 + 1;
+                continue l6;
             };
         };
-        $sroa_slot_67 = 0;
+        $sroa_slot_66 = 0;
         total_15 = 0;
         break $inline_sum_sroa_return__8;
     };
-    if @unlikely(local.tee total_15((if ($sroa_slot_67 == 1) & (total_15 == 1) -> bool {
+    if @unlikely(local.tee total_15((if ($sroa_slot_66 == 1) & (total_15 == 1) -> bool {
         1;
     } else {
         0;
@@ -184,11 +149,11 @@ fn "opt_match_thread_qmark.wado/run"() with Stdout {
         unreachable;
     }
     total_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    $sroa_slot_67 = builtin::i32_wrap_i64(packed >> 32_i64);
+    $sroa_slot_66 = builtin::i32_wrap_i64(packed >> 32_i64);
     total_15 = "opt_match_thread_qmark.wado/$cm_binding__Stdout_write_via_stream"(total_15);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:opt_match_thread_qmark.wado::$const_obj_4;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_67, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_66, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total_15);
 }
 
@@ -249,17 +214,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b16: block {
-        l17: loop {
-            break_if b16 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b12: block {
+        l13: loop {
+            break_if b12 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l17;
+            continue l13;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l19: loop {
+        l15: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -289,7 +254,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l19;
+            continue l15;
         };
     };
 }
