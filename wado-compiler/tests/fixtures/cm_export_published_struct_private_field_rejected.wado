@@ -1,15 +1,15 @@
 // A package publishes a type by declaring it `export` or by adopting it with
 // `export use`. WIT shows every field of a record, so a published struct has
-// no field that is not `pub`, and only a type can be published. `export use`
-// adopts another package's type under one name; a type of this package is
-// published by its `export`. A WIT interface owns a type a `#[cm]` binds, and
-// WIT has no generic type and gives a resource no `export use`. An effect's
-// operation is not a type.
+// no field that is not `pub`, and only a type can be published, under one
+// name: an `export` type already has its own. A WIT interface owns a type a
+// `#[cm]` binds, and WIT has no generic type and gives a resource no
+// `export use`. An effect's operation is not a type.
 
 export use { Uuid } from "core:uuid";
 export use { join } from "core:fs";
 export use { FileType as Kind, FileType as Sort } from "core:fs";
 export use { S } from "./sub/cross_module_same_name_bound_alias_dep.wado";
+export use { Point as Spot } from "./sub/lib_aliased_point.wado";
 export use { ErrorCode, Fields } from "wasi:http";
 export use { TreeMap } from "core:collections";
 export use { Stdout::{write_via_stream} } from "wasi:cli";
@@ -21,6 +21,6 @@ export struct Secret {
 
 __DATA__
 {
-  "compile_error": ":19:5: analysis error: `Secret` is `export`, so its field `b` must be `pub`: WIT shows every field of a record; 9:14: `Uuid` is published by `export use`, so its field `bytes` must be `pub`: WIT shows every field of a record; 10:14: `export use` publishes a type, and `join` is not one; 11:44: `FileType` is already published as `Kind`, so `export use` cannot publish it as `Sort` too: WIT gives a type one name; 12:14: `S` is declared in this package, so `export use` cannot adopt it: declare it `export` instead; 13:14: `ErrorCode` belongs to the interface its `#[cm]` binds, so `export use` cannot publish it again; 13:25: `Fields` is a resource, and `export use` publishes only a struct, enum, variant, flags or newtype; 14:14: `TreeMap` is generic, and WIT has no generic type, so `export use` cannot publish it; 15:23: `export use` publishes a type, and `write_via_stream` is not one",
+  "compile_error": ":19:5: analysis error: `Secret` is `export`, so its field `b` must be `pub`: WIT shows every field of a record; 8:14: `Uuid` is published by `export use`, so its field `bytes` must be `pub`: WIT shows every field of a record; 9:14: `export use` publishes a type, and `join` is not one; 10:44: `FileType` is already published as `Kind`, so `export use` cannot publish it as `Sort` too: WIT gives a type one name; 11:14: `S` is published by `export use`, so its field `v` must be `pub`: WIT shows every field of a record; 12:23: `Point` is already published as `Point`, so `export use` cannot publish it as `Spot` too: WIT gives a type one name; 13:14: `ErrorCode` belongs to the interface its `#[cm]` binds, so `export use` cannot publish it again; 13:25: `Fields` is a resource, and `export use` publishes only a struct, enum, variant, flags or newtype; 14:14: `TreeMap` is generic, and WIT has no generic type, so `export use` cannot publish it; 15:23: `export use` publishes a type, and `write_via_stream` is not one",
   "compile_error_codes": ["CM_BOUNDARY_TYPE"]
 }

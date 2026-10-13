@@ -677,8 +677,9 @@ struct LibSurface {
     submodule_exports: Vec<world_registry::WorldExportInfo>,
     submodule_type_decls: Vec<(ModuleSource, ast::Item)>,
     submodule_interfaces: Vec<ast::InterfaceDecl>,
-    /// Published beside the package's types, but declared elsewhere: what its
-    /// `export use` adopts, and each stdlib newtype the surface reaches.
+    /// Published beside the submodules' types, but declared outside them: what
+    /// the `export use` adopts from another package or a generator, and each
+    /// stdlib newtype the surface reaches.
     foreign_types: Vec<(ModuleSource, ast::Item)>,
 }
 
@@ -753,29 +754,39 @@ fn collect_lib_surface(
     }
 }
 
-/// The declarations of the types the package's `export use` adopts, each
-/// renamed to the name the `export use` publishes it under.
-fn adopted_type_decls(
+/// Publish the types the package's `export use` adopts on `surface`, each
+/// under the name the `export use` gives it: a type the surface already
+/// carries is renamed where it stands, and any other joins it.
+fn adopt_types(
+    surface: &mut LibSurface,
     resolutions: &resolve::Resolutions,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
     entry_source: &ModuleSource,
-) -> Vec<(ModuleSource, ast::Item)> {
+) {
     let defs = resolutions.defs();
-    defs.adopted_by(entry_source)
-        .map(|(def, published)| {
-            let source = defs.module(def);
-            let mut item = modules[source]
-                .items
-                .iter()
-                .find(|item| item.id() == defs.ast_id(def))
-                .expect("`export use` adopts a module-level declaration")
-                .clone();
-            *item
-                .type_decl_name_mut()
-                .expect("`export use` adopts a type") = published.to_string();
-            (source.clone(), item)
-        })
-        .collect()
+    for (def, published) in defs.adopted_by(entry_source) {
+        let ast_id = defs.ast_id(def);
+        let item = match surface
+            .submodule_type_decls
+            .iter_mut()
+            .find(|(_, item)| item.id() == ast_id)
+        {
+            Some((_, item)) => item,
+            None => {
+                let source = defs.module(def);
+                let item = modules[source]
+                    .items
+                    .iter()
+                    .find(|item| item.id() == ast_id)
+                    .expect("`export use` adopts a module-level declaration");
+                surface.foreign_types.push((source.clone(), item.clone()));
+                &mut surface.foreign_types.last_mut().expect("just pushed").1
+            }
+        };
+        *item
+            .type_decl_name_mut()
+            .expect("`export use` adopts a type") = published.to_string();
+    }
 }
 
 /// The stdlib newtypes a library's surface names, at any depth. The library
@@ -1424,8 +1435,12 @@ fn compile_after_load<H: CompilerHost>(
         let resolutions = sem
             .resolutions()
             .expect("a complete analysis has resolutions");
-        lib_surface.foreign_types =
-            adopted_type_decls(resolutions, &sem.modules, &sem.entry_module_source);
+        adopt_types(
+            &mut lib_surface,
+            resolutions,
+            &sem.modules,
+            &sem.entry_module_source,
+        );
         let stdlib_newtypes = stdlib_newtypes_in_lib_surface(
             resolutions,
             &sem.modules,

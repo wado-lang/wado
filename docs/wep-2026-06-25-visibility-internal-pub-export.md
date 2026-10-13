@@ -108,12 +108,17 @@ fields showed up as record fields. `export` on a type now says it is surface,
 and a type is published only that way:
 
 - A package publishes each named type its `export fn`s reach. It declares the
-  type `export`, or adopts one another package declares with
-  `export use { T } from "…";`.
+  type `export`, or adopts it with `export use { T } from "…";`.
+- `export use` adopts a type of the package's own as readily as another
+  package's. A type a Kiln generator writes belongs to the package that
+  imports it, and generated source carries no `export`, so `export use` is
+  the only way to publish one. It also lets an entry module publish its
+  submodules' types as a facade.
 - `export use { T as U }` publishes the type as `U`. A rename is how a package
   avoids a clash between an adopted name and one of its own, and the CM
   record, variant, enum and flags types are structural, so the name changes no
-  type identity. One type has one name in WIT, so it is adopted under one.
+  type identity. One type has one name in WIT, so it is adopted under one,
+  and an `export` type keeps its own.
 - Every field of a published struct is `pub`. WIT shows every field of a
   record, so a private one would leak.
 - `export use` adopts a struct, enum, variant, flags or newtype, and only a

@@ -376,29 +376,33 @@ impl DefTable {
     }
 
     fn publish(&mut self, def: DefId, module: &ModuleSource, name: &str) {
+        let declared_in = self.module(def).clone();
         let publishers = self.publishers.entry(def).or_default();
-        if let Some((_, earlier)) = publishers.iter().find(|(m, _)| m.same_package(module)) {
+        if let Some((publisher, earlier)) =
+            publishers.iter_mut().find(|(m, _)| m.same_package(module))
+        {
             assert_eq!(
                 earlier, name,
                 "analyze rejects an `export use` publishing a type under a second name"
             );
+            if *module == declared_in {
+                *publisher = declared_in;
+            }
             return;
         }
         publishers.push((module.clone(), name.to_string()));
     }
 
-    /// The types `module`'s package publishes that another package declares,
-    /// each with the name its `export use` publishes it under.
+    /// The types `module`'s package publishes by `export use`, each with the
+    /// name it publishes it under. A type its own declaration publishes by
+    /// `export` is not among them, even where an `export use` names it too.
     pub fn adopted_by<'a>(
         &'a self,
         module: &'a ModuleSource,
     ) -> impl Iterator<Item = (DefId, &'a str)> + 'a {
         self.publishers.iter().filter_map(move |(def, publishers)| {
-            if self.module(*def).same_package(module) {
-                return None;
-            }
-            let (_, name) = publishers.iter().find(|(p, _)| p.same_package(module))?;
-            Some((*def, name.as_str()))
+            let (publisher, name) = publishers.iter().find(|(p, _)| p.same_package(module))?;
+            (publisher != self.module(*def)).then_some((*def, name.as_str()))
         })
     }
 

@@ -247,9 +247,6 @@ pub enum AnalyzeError {
         why: Unpublishable,
         span: Span,
     },
-    /// An `export use` naming a type of its own package, which `export` on the
-    /// declaration publishes.
-    ExportUseOwnType { name: String, span: Span },
     /// An `export use` publishing a type its package already publishes under
     /// another name: WIT gives a type one name.
     ExportUseRenamedTwice {
@@ -441,13 +438,6 @@ impl AnalyzeError {
                         "`{name}` is generic, and WIT has no generic type, so `export use` cannot publish it"
                     ),
                 },
-                *span,
-            ),
-            AnalyzeError::ExportUseOwnType { name, span } => (
-                Code::CmBoundaryType,
-                format!(
-                    "`{name}` is declared in this package, so `export use` cannot adopt it: declare it `export` instead"
-                ),
                 *span,
             ),
             AnalyzeError::ExportUseRenamedTwice {
@@ -1542,11 +1532,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     /// Diagnose an `export use` of `name` from `target`, published under
-    /// `alias` where it gives one, that cannot publish it: it names no type, a
-    /// type of the importing package (published by its own `export`), one a
-    /// `#[cm]` binds to an interface of its own, a generic one, a type the
-    /// package already publishes under another name, or a struct with a field
-    /// WIT could not show.
+    /// `alias` where it gives one, that cannot publish it: it names no type,
+    /// one a `#[cm]` binds to an interface of its own, a generic one, a type
+    /// the package already publishes under another name (an `export` on its
+    /// declaration publishes it under its own), or a struct with a field WIT
+    /// could not show.
     fn check_adoption(
         &mut self,
         from: &ModuleSource,
@@ -1578,13 +1568,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     .find(|item| item.id() == symbol.defined_at)
                     .expect("a type symbol is defined by a module item");
                 let decl = item.type_decl().expect("a type symbol names a type item");
+                let declared_export = decl.is_export && symbol.module_source().same_package(from);
                 let earlier = self
                     .adopted_names
                     .entry((from.package_id(), symbol.defined_at))
-                    .or_insert_with(|| published.to_string());
-                if symbol.module_source().same_package(from) {
-                    AnalyzeError::ExportUseOwnType { name, span }
-                } else if cm_definition(item).is_some() {
+                    .or_insert_with(|| {
+                        if declared_export {
+                            decl.name
+                        } else {
+                            published
+                        }
+                        .to_string()
+                    });
+                if cm_definition(item).is_some() {
                     unpublishable(Unpublishable::CmBound)
                 } else if !decl.type_params.is_empty() {
                     unpublishable(Unpublishable::Generic)

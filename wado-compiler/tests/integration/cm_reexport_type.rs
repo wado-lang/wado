@@ -61,18 +61,9 @@ fn reexported_component_type_compiles_and_decodes() {
     // compiles with validation on, and the decode above re-parses the type.
 }
 
-/// A stdlib type that `export use` adopts is published in the library's own
-/// interface, under the name the `export use` gives it, as a type the library
-/// declares would be.
-#[test]
-fn adopted_stdlib_type_is_published_by_the_library() {
+/// The types a library publishes in its interface.
+fn published_types(source: &str) -> Vec<String> {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/adopt.wado");
-    let source = r#"
-export use { DirEntry, FileType as Kind } from "core:fs";
-export fn kind_of(e: DirEntry) -> Kind {
-    return e.type;
-}
-"#;
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         lib_world: Some(LIB_WORLD_FQ.to_string()),
@@ -86,17 +77,37 @@ export fn kind_of(e: DirEntry) -> Kind {
     else {
         panic!("expected a component");
     };
-    let published: Vec<&str> = resolve.worlds[world]
+    resolve.worlds[world]
         .exports
         .iter()
         .flat_map(|(_, item)| match item {
-            wit_parser::WorldItem::Interface { id, .. } => resolve.interfaces[*id]
-                .types
-                .keys()
-                .map(String::as_str)
-                .collect(),
+            wit_parser::WorldItem::Interface { id, .. } => {
+                resolve.interfaces[*id].types.keys().cloned().collect()
+            }
             _ => Vec::new(),
         })
-        .collect();
+        .collect()
+}
+
+/// A stdlib type that `export use` adopts is published in the library's own
+/// interface, under the name the `export use` gives it, as a type the library
+/// declares would be.
+#[test]
+fn adopted_stdlib_type_is_published_by_the_library() {
+    let published = published_types(
+        "export use { DirEntry, FileType as Kind } from \"core:fs\";\n\
+         export fn kind_of(e: DirEntry) -> Kind { return e.type; }",
+    );
     assert_eq!(published, ["kind", "dir-entry"]);
+}
+
+/// A type of the library's own submodule is published under the name its
+/// `export use` gives it, and under no other.
+#[test]
+fn own_type_is_published_under_its_alias() {
+    let published = published_types(
+        "export use { Helper as Counter } from \"./sub/alias_shadows_same_name_a.wado\";\n\
+         export fn count(c: Counter) -> i32 { return c.h; }",
+    );
+    assert_eq!(published, ["counter"]);
 }
