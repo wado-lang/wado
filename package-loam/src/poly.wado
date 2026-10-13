@@ -154,7 +154,7 @@ impl Derivation {
             CeilDiv | FloorDiv => {
                 let rounding = if self.op matches { CeilDiv } { "ceil" } else { "floor" };
                 if code {
-                    `i64::div_${rounding}(&(${args[0]}), ${args[1]})`;
+                    `${receiver(&self.operands[0], &args[0])}.div_${rounding}(${args[1]})`;
                 } else {
                     `${rounding}(${grouped(&self.operands[0], &args[0])} / ${grouped(&self.operands[1], &args[1])})`;
                 }
@@ -279,6 +279,16 @@ fn quoted(name: &String) -> String {
 /// `text`, spelling `p`, as a factor: in parentheses where it has more than one term.
 fn grouped(p: &Poly, text: &String) -> String {
     return if p.terms.len() > 1 { `(${*text})` } else { *text };
+}
+
+/// `p`, written as `text`, as the receiver of an `i64` method call: a lone
+/// symbol as it stands, anything else grouped, and a constant typed, since a
+/// bare literal receiver is an `i32`.
+fn receiver(p: &Poly, text: &String) -> String {
+    if p.terms.len() == 1 && p.terms[0].coefficient == 1 && p.terms[0].symbols.len() == 1 {
+        return *text;
+    }
+    return if p.as_constant() matches { Some(_) } { `(${*text} as i64)` } else { `(${*text})` };
 }
 
 impl Poly {
