@@ -1267,11 +1267,8 @@ impl Analyzer<'_> {
     /// Whether a result of `result_type` can hold what `arg` lends: for a
     /// borrow, the storage it names. Anything else is answered "yes".
     fn result_reaches(&self, arg: &TirExpr, result_type: TypeId, fresh: bool) -> bool {
-        let referent = match self.type_table.get(arg.type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => return true,
-        };
-        self.reach.reaches(result_type, referent, !fresh)
+        !is_reference_type(arg.type_id, self.type_table)
+            || self.reach.reaches(result_type, arg.type_id, !fresh)
     }
 
     /// A kept position read as a pin: where the destinations are all locals of

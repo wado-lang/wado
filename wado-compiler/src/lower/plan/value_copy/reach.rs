@@ -34,9 +34,15 @@ impl<'a> StorageReach<'a> {
 
     /// Whether a `holder` can reach storage a `target` value owns. A fresh
     /// holder (`by_value` false) owns all of its own storage, so only a
-    /// reference it carries can lead into the target's.
+    /// reference it carries can lead into the target's. A reference target
+    /// stands for the storage at the end of its chain: a callee handed
+    /// `&&List` (a `&self` on `&List`) derefs down to the list.
     #[must_use]
     pub fn reaches(&self, holder: TypeId, target: TypeId, by_value: bool) -> bool {
+        let mut target = target;
+        while let Members::Reference(referent) = self.members(target) {
+            target = referent;
+        }
         let Some(owned) = self.owned(target) else {
             return true;
         };

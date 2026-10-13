@@ -12,12 +12,13 @@
 //! - is lent to a call that may write the field.
 
 use super::funcset::FuncKeySet;
+use super::is_reference_type;
 use super::modref::ModRef;
+use super::place::field_owner;
 use super::reach::StorageReach;
 use super::retention::{CallRetention, RESULT};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::field_owner;
 use crate::tir::{
     FunctionRef, ResolvedType, StructDef, TirExpr, TirExprKind, TirField, TirPattern, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
@@ -219,12 +220,7 @@ impl Scan<'_> {
     fn visit_binding_pattern(&mut self, pattern: &TirPattern, owner: TypeId, path: &mut Steps) {
         match pattern {
             TirPattern::Binding { type_id, .. } => {
-                if !path.is_empty()
-                    && matches!(
-                        self.type_table.get(*type_id),
-                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    )
-                {
+                if !path.is_empty() && is_reference_type(*type_id, self.type_table) {
                     self.held.push(path.clone());
                 }
             }
@@ -243,11 +239,13 @@ impl Scan<'_> {
             }
             TirPattern::Tuple(elements, _) => {
                 let tuple = field_owner(owner, self.type_table);
-                let types = self.type_table.as_tuple(tuple).unwrap_or_default();
-                for (index, element) in elements.iter().enumerate() {
+                let types = self
+                    .type_table
+                    .as_tuple(tuple)
+                    .expect("a tuple pattern matches a tuple");
+                for (index, (element, &element_type)) in elements.iter().zip(&types).enumerate() {
                     let index = u32::try_from(index).expect("tuple arity");
                     path.push((tuple, index));
-                    let element_type = types.get(index as usize).copied().unwrap_or(tuple);
                     self.visit_binding_pattern(element, element_type, path);
                     path.pop();
                 }
@@ -303,10 +301,7 @@ impl TirRefVisitor for Scan<'_> {
                 ..
             }) if matches!(target.kind, TirExprKind::Local { .. }) => self.bind_local(value),
             TirStmtKind::LetDestructure { pattern, value }
-                if matches!(
-                    self.type_table.get(value.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                ) =>
+                if is_reference_type(value.type_id, self.type_table) =>
             {
                 self.visit_binding_pattern(pattern, value.type_id, &mut Vec::new());
             }
@@ -321,11 +316,7 @@ impl TirRefVisitor for Scan<'_> {
                 self.callees.push((**func).clone());
                 for (position, arg) in args.iter().enumerate() {
                     let position = u32::try_from(position).expect("arity");
-                    if let TirExprKind::Unary {
-                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                        expr: place,
-                    } = &arg.expr.kind
-                    {
+                    if let Some(place) = borrowed_place(&arg.expr) {
                         self.lend(place, func, position, expr);
                         self.lent.insert(std::ptr::from_ref(&arg.expr));
                     }
@@ -342,11 +333,7 @@ impl TirRefVisitor for Scan<'_> {
             TirExprKind::IndirectCall { args, .. } => {
                 self.indirect = true;
                 for arg in args {
-                    if let TirExprKind::Unary {
-                        op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                        expr: place,
-                    } = &arg.kind
-                    {
+                    if let Some(place) = borrowed_place(arg) {
                         let steps = self.steps(place);
                         self.escaping.push(steps);
                         self.lent.insert(std::ptr::from_ref(arg));
@@ -365,10 +352,7 @@ impl TirRefVisitor for Scan<'_> {
                 expr: scrutinee,
                 arms,
             } => {
-                if matches!(
-                    self.type_table.get(scrutinee.type_id),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                ) {
+                if is_reference_type(scrutinee.type_id, self.type_table) {
                     for arm in arms {
                         self.visit_binding_pattern(
                             &arm.pattern,
@@ -381,5 +365,16 @@ impl TirRefVisitor for Scan<'_> {
             _ => {}
         }
         self.walk_expr(expr);
+    }
+}
+
+/// The place a `&place` or `&mut place` argument borrows.
+fn borrowed_place(expr: &TirExpr) -> Option<&TirExpr> {
+    match &expr.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } => Some(place),
+        _ => None,
     }
 }
