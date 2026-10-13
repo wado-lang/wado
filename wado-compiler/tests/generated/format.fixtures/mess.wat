@@ -26,36 +26,36 @@
           (i64.lt_u
             (local.get 1)
             (i64.const 16777216))))
-      (@metadata.code.branch_hint "\00")
       (if ;; label = @1
-        (if (result i32) ;; label = @1
-          (i32.lt_s
-            (memory.grow
-              (i32.wrap_i64
-                (i64.div_u
-                  (i64.sub
-                    (i64.add
-                      (local.tee 1
-                        (if (result i64) ;; label = @1
-                          (i64.gt_u
-                            (local.get 0)
-                            (local.get 1))
-                          (then
-                            (i64.shl
-                              (i64.const 1)
-                              (i64.sub
-                                (i64.const 64)
-                                (i64.clz
-                                  (i64.sub
-                                    (local.get 0)
-                                    (i64.const 1))))))
-                          (else
-                            (local.get 1))))
-                      (i64.const 65536))
-                    (i64.const 1))
-                  (i64.const 65536))))
-            (i32.const 0))
-          (then
+        (i32.lt_s
+          (memory.grow
+            (i32.wrap_i64
+              (i64.div_u
+                (i64.sub
+                  (i64.add
+                    (local.tee 1
+                      (if (result i64) ;; label = @1
+                        (i64.gt_u
+                          (local.get 0)
+                          (local.get 1))
+                        (then
+                          (i64.shl
+                            (i64.const 1)
+                            (i64.sub
+                              (i64.const 64)
+                              (i64.clz
+                                (i64.sub
+                                  (local.get 0)
+                                  (i64.const 1))))))
+                        (else
+                          (local.get 1))))
+                    (i64.const 65536))
+                  (i64.const 1))
+                (i64.const 65536))))
+          (i32.const 0))
+        (then
+          (@metadata.code.branch_hint "\00")
+          (if ;; label = @2
             (i32.lt_s
               (memory.grow
                 (i32.wrap_i64
@@ -66,11 +66,9 @@
                         (i64.const 65536))
                       (i64.const 1))
                     (i64.const 65536))))
-              (i32.const 0)))
-          (else
-            (i32.const 0)))
-        (then
-          (unreachable)))
+              (i32.const 0))
+            (then
+              (unreachable)))))
     )
     (func $fl_unlink (;1;) (type 1) (param i32)
       (local i32 i32)
