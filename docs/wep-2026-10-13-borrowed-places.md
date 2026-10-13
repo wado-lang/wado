@@ -76,10 +76,40 @@ place where some body's borrow through that field (`observed.rs`):
   may write the field;
 - is lent to a call that may write the field.
 
-What a call may write is the callee's own answer (`modref.rs`). A result whose
-type cannot hold the storage keeps no borrow of it, whatever the callee's
-retention says (`reach.rs`). `rmsnorm(g, &x) -> List<&mut Value>` holds none of
-`x`'s backing array.
+What a call may write is the callee's own answer (`modref.rs`).
+
+An element assignment `xs[i] = v` reaches the element through
+`List::index_assign`, a call. The walk notes each such call whose elements are of
+an in-place type and decides it as it decides a field. An element is borrowed
+through a call (`index_ref`, an iterator's `next`), which names no field, so a
+borrow of the whole list counts as one of the element. In bounds, lowering
+writes the value field by field into the element, and every field of an
+in-place type into that field's own storage. Out of bounds it calls
+`index_assign`, which traps with its message. `List`'s own code assigns its
+backing array's slots, not a `List` element, so it keeps repointing them.
+
+### What a call keeps of a borrow
+
+Retention says which argument positions a call keeps and where. Whether what it
+keeps can reach the storage a borrow names is read off the types
+(`reach.rs`):
+
+- A result that cannot hold the storage keeps no borrow of it.
+  `rmsnorm(g, &x) -> List<&mut Value>` holds none of `x`'s storage.
+- A reference reaches the borrowed storage only through an object of that
+  storage's kind. What the object owns by value is its own: a `Value` owns a
+  `List<&mut Value>`, which is not `x`'s. A sharing the walk made is the alias
+  chains' to answer.
+- A result that reaches only what the borrow's references lead to holds what
+  the argument holds, not the argument. An iterator's `next` hands back an
+  element of the list the iterator borrows, so whoever holds the element holds
+  the list, and the iterator itself is free.
+
+Retention records the types of what an escaping position hands out of sight. An
+unknown callee keeps at most what its argument reaches, so `f(item)` in a
+`map` lets the item escape and not the iterator it came out of. The caller pins
+an argument's own storage only where those values reach it. Otherwise what the
+argument holds escapes, and the argument itself is free.
 
 A local declared without an initializer holds no storage until its first
 assignment, so its first assignment cannot write in place. A local that a later
@@ -225,7 +255,7 @@ The clients are:
   `copy_prop_refproj_capture`, `opt_ref_elim_call_replaces_referent`,
   `opt_ref_elim_loop_backedge`, `opt_ref_elim_mut_alias`,
   `value_copy_share_is_not_a_licence_to_skip`.
-- [ ] The same for a `List` element, `xs[i] = v`, which reaches the place
+- [x] The same for a `List` element, `xs[i] = v`, which reaches the place
   through `index_assign`. `List`'s own code relies on repointing its backing
   array's slots (`push` fills an empty one, a swap moves handles), so the
   rewrite is the user-level assignment's, not every `Array` store's.
@@ -240,6 +270,16 @@ A function the ownership walk does not analyze (`has_unsupported_form`) reads
 no liveness. It writes in place to every borrowed or captured local, and to every
 field some borrow in it reads, even where the holder is already dead. That costs
 a field-by-field store where a repoint would do.
+
+### An element assignment writes the whole element in place
+
+What an element's borrows reach is not tracked below the element. An element
+assignment that writes in place writes every field of an in-place type into
+that field's own storage, where one borrowed field would do, and a borrow of
+the whole list counts as one of every element. An element of a `List` reached
+through a reference writes in place wherever some body's borrow through the
+field holding the list is observed (`observed.rs`), and always where the
+reference is to the list itself.
 
 ### A destructured field's path is assumed to borrow
 
