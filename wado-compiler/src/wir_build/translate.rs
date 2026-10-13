@@ -2246,9 +2246,9 @@ impl FunctionTranslator<'_, '_> {
         // A split `&S` reads its referent's fields at the call, as the callee
         // would have, so every argument after it that runs code runs before
         // those reads.
-        let first_split_ref = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
+        let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
         let runs_before_split_reads = |this: &Self, i: usize, op: Operand| {
-            first_split_ref.is_some_and(|r| i > r) && runs_code(this, op)
+            first_borrowed.is_some_and(|r| i > r) && runs_code(this, op)
         };
         // An argument evaluated into the prelude runs ahead of every argument
         // left on the stack, so each one to its left is spilled to hold source

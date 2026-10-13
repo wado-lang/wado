@@ -76,7 +76,7 @@ impl UnregisteredType {
 }
 
 /// A parameter a call site hands over field by field: `ParamAbi::MultiValue`.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct SplitParam {
     /// `(field_name, type_id)` of each Wasm slot, in order.
     pub fields: Vec<(String, TypeId)>,
