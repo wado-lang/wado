@@ -201,19 +201,19 @@ impl Instant {
     /// Construct an instant from milliseconds since the Unix epoch
     /// (`Temporal.Instant.fromEpochMilliseconds`).
     pub fn from_epoch_milliseconds(milliseconds: i64) -> Instant {
-        return checked_instant(floor_div(milliseconds, 1000), floor_mod(milliseconds, 1000) * 1_000_000);
+        return checked_instant(milliseconds.div_floor(1000), floor_mod(milliseconds, 1000) * 1_000_000);
     }
 
     /// Construct an instant from microseconds since the Unix epoch. The inverse
     /// of `epoch_microseconds`.
     pub fn from_epoch_microseconds(microseconds: i64) -> Instant {
-        return checked_instant(floor_div(microseconds, 1_000_000), floor_mod(microseconds, 1_000_000) * 1000);
+        return checked_instant(microseconds.div_floor(1_000_000), floor_mod(microseconds, 1_000_000) * 1000);
     }
 
     /// Construct an instant from nanoseconds since the Unix epoch
     /// (`Temporal.Instant.fromEpochNanoseconds`).
     pub fn from_epoch_nanoseconds(nanoseconds: i128) -> Instant {
-        let whole_seconds = floor_div_i128(nanoseconds, 1_000_000_000);
+        let whole_seconds = nanoseconds.div_floor(1_000_000_000);
         let limit = MAX_EPOCH_SECONDS as i128;
         if whole_seconds < -limit || whole_seconds > limit {
             panic("core:temporal: the instant is outside the range of 10^8 days either side of the epoch");
@@ -387,7 +387,7 @@ impl Instant {
 /// the day.
 fn day_parts(seconds: i64, nanoseconds: u32) -> [i64, i64] {
     return [
-        floor_div(seconds, SECONDS_PER_DAY),
+        seconds.div_floor(SECONDS_PER_DAY),
         floor_mod(seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + nanoseconds as i64,
     ];
 }
@@ -431,7 +431,7 @@ fn try_instant(seconds: i64, nanoseconds: i64) -> Option<Instant> {
     if seconds < -2 * MAX_EPOCH_SECONDS || seconds > 2 * MAX_EPOCH_SECONDS {
         return null;
     }
-    let whole = seconds + floor_div(nanoseconds, NANOSECONDS_PER_SECOND);
+    let whole = seconds + nanoseconds.div_floor(NANOSECONDS_PER_SECOND);
     let sub = floor_mod(nanoseconds, NANOSECONDS_PER_SECOND);
     if !is_valid_instant(whole, sub) {
         return null;
@@ -1413,7 +1413,7 @@ fn round_time(time_of_day: i64, increment: i64, unit: Unit, mode: RoundingMode) 
     }
     let total = time_of_day - quantity + rounded;
     return [
-        floor_div(total, NANOSECONDS_PER_DAY),
+        total.div_floor(NANOSECONDS_PER_DAY),
         floor_mod(total, NANOSECONDS_PER_DAY),
     ];
 }
@@ -1422,9 +1422,9 @@ fn round_time(time_of_day: i64, increment: i64, unit: Unit, mode: RoundingMode) 
 /// time of day it reaches.
 fn add_time(time_of_day: i64, time: TimeDuration) -> [i64, i64] {
     let nanoseconds = time_of_day % NANOSECONDS_PER_SECOND + time.nanoseconds;
-    let seconds = time_of_day / NANOSECONDS_PER_SECOND + time.seconds + floor_div(nanoseconds, NANOSECONDS_PER_SECOND);
+    let seconds = time_of_day / NANOSECONDS_PER_SECOND + time.seconds + nanoseconds.div_floor(NANOSECONDS_PER_SECOND);
     return [
-        floor_div(seconds, SECONDS_PER_DAY),
+        seconds.div_floor(SECONDS_PER_DAY),
         floor_mod(seconds, SECONDS_PER_DAY) * NANOSECONDS_PER_SECOND + floor_mod(nanoseconds, NANOSECONDS_PER_SECOND),
     ];
 }
@@ -2198,7 +2198,7 @@ fn year_month_within_limits(year: i64, month: i64) -> bool {
 /// a result outside the date range traps.
 fn calendar_date_add(date: &IsoDate, duration: &DateDuration) -> i64 {
     let months = date.month - 1 + duration.months;
-    let year = date.year + duration.years + floor_div(months, 12);
+    let year = date.year + duration.years + months.div_floor(12);
     let month = floor_mod(months, 12) + 1;
     let day = i64::min(date.day, iso_days_in_month(year, month));
     let days = epoch_days_of(year, month, day) + duration.weeks * 7 + duration.days;
@@ -2229,12 +2229,12 @@ fn calendar_date_until(one: &IsoDate, two: &IsoDate, largest_unit: Unit) -> Date
     if largest_unit matches { Year | Month } {
         months = (two.year - start_year) * 12 + two.month - one.month;
         let total = one.month - 1 + months;
-        if months != 0 && surpasses(sign, start_year + floor_div(total, 12), floor_mod(total, 12) + 1, one.day, two) {
+        if months != 0 && surpasses(sign, start_year + total.div_floor(12), floor_mod(total, 12) + 1, one.day, two) {
             months -= sign;
         }
     }
     let total = one.month - 1 + months;
-    let base_year = start_year + floor_div(total, 12);
+    let base_year = start_year + total.div_floor(12);
     let base_month = floor_mod(total, 12) + 1;
     let base = epoch_days_of(base_year, base_month, i64::min(one.day, iso_days_in_month(base_year, base_month)));
     let remaining = epoch_days_of(two.year, two.month, two.day) - base;
@@ -2313,7 +2313,7 @@ fn iso_weeks_in_year(year: i64) -> i64 {
 /// Weekday of 31 December of `year`, `0` (Sunday) … `6` (Saturday), by the
 /// closed form the ISO week count is built on.
 fn year_end_weekday(year: i64) -> i64 {
-    return floor_mod(year + floor_div(year, 4) - floor_div(year, 100) + floor_div(year, 400), 7);
+    return floor_mod(year + year.div_floor(4) - year.div_floor(100) + year.div_floor(400), 7);
 }
 
 /// Temporal month code, `"M01"` … `"M12"`. The ISO 8601 calendar has no leap
@@ -2328,11 +2328,6 @@ fn day_of_week_of(days: i64) -> i64 {
     return floor_mod(days + 3, 7) + 1;
 }
 
-/// Quotient of `a` by positive `m`, flooring toward negative infinity.
-fn floor_div(a: i64, m: i64) -> i64 {
-    return (a - floor_mod(a, m)) / m;
-}
-
 /// Non-negative remainder of `a` modulo positive `m`.
 fn floor_mod(a: i64, m: i64) -> i64 {
     let r = a % m;
@@ -2340,15 +2335,6 @@ fn floor_mod(a: i64, m: i64) -> i64 {
         return r + m;
     }
     return r;
-}
-
-/// Quotient of `a` by positive `m`, flooring toward negative infinity.
-fn floor_div_i128(a: i128, m: i128) -> i128 {
-    let mut q = a / m;
-    if a % m < 0 {
-        q -= 1;
-    }
-    return q;
 }
 
 // Formatting, as Temporal's `toString` writes each part.

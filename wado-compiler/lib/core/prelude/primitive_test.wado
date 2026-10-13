@@ -717,3 +717,43 @@ test "wrapping_neg negates an unsigned value modulo its width" {
     assert builtin::black_box(0x8000_0000 as u32).wrapping_neg() == 0x8000_0000;
     assert builtin::black_box(1 as u64).wrapping_neg() == u64::MAX;
 }
+
+test "div_floor rounds a signed quotient toward negative infinity" {
+    assert builtin::black_box(7 as i8).div_floor(2) == 3;
+    assert builtin::black_box(-7 as i8).div_floor(2) == -4;
+    assert builtin::black_box(7 as i16).div_floor(-2) == -4;
+    assert builtin::black_box(-7 as i16).div_floor(-2) == 3;
+    assert builtin::black_box(-8).div_floor(2) == -4;
+    assert builtin::black_box(-7).div_floor(2) == -4;
+    assert builtin::black_box(7).div_floor(-2) == -4;
+    assert builtin::black_box(-7 as i64).div_floor(2) == -4;
+    assert builtin::black_box(-7 as i64).div_floor(-2) == 3;
+    assert builtin::black_box(i64::MIN).div_floor(2) == i64::MIN / 2;
+    assert builtin::black_box(i64::MIN + 1).div_floor(2) == i64::MIN / 2;
+}
+
+test "div_ceil rounds a signed quotient toward positive infinity" {
+    assert builtin::black_box(7 as i8).div_ceil(2) == 4;
+    assert builtin::black_box(-7 as i8).div_ceil(2) == -3;
+    assert builtin::black_box(7 as i16).div_ceil(-2) == -3;
+    assert builtin::black_box(-7 as i16).div_ceil(-2) == 4;
+    assert builtin::black_box(8).div_ceil(2) == 4;
+    assert builtin::black_box(7).div_ceil(2) == 4;
+    assert builtin::black_box(-7).div_ceil(-2) == 4;
+    assert builtin::black_box(7 as i64).div_ceil(2) == 4;
+    assert builtin::black_box(-7 as i64).div_ceil(2) == -3;
+}
+
+test "div_ceil rounds an unsigned quotient up" {
+    assert builtin::black_box(7 as u8).div_ceil(2) == 4;
+    assert builtin::black_box(u8::MAX).div_ceil(2) == 128;
+    assert builtin::black_box(8 as u16).div_ceil(2) == 4;
+    assert builtin::black_box(u32::MAX).div_ceil(2) == 0x8000_0000;
+    assert builtin::black_box(0 as u32).div_ceil(3) == 0;
+    assert builtin::black_box(u64::MAX).div_ceil(u64::MAX) == 1;
+}
+
+#[expect_trap]
+test "div_ceil traps on a zero divisor" {
+    builtin::black_box(builtin::black_box(1).div_ceil(0));
+}

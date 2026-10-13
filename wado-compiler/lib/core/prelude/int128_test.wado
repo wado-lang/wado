@@ -1040,3 +1040,20 @@ test "u128 wrapping_neg negates modulo 2^128" {
     assert builtin::black_box(1 as u128).wrapping_neg() == u128::MAX;
     assert builtin::black_box(0 as u128).wrapping_neg() == 0;
 }
+
+test "i128 div_floor and div_ceil round toward each infinity" {
+    assert builtin::black_box(-7 as i128).div_floor(2) == -4;
+    assert builtin::black_box(7 as i128).div_floor(-2) == -4;
+    assert builtin::black_box(-7 as i128).div_floor(-2) == 3;
+    assert builtin::black_box(-8 as i128).div_floor(2) == -4;
+    assert builtin::black_box(7 as i128).div_ceil(2) == 4;
+    assert builtin::black_box(-7 as i128).div_ceil(2) == -3;
+    assert builtin::black_box(-7 as i128).div_ceil(-2) == 4;
+    assert builtin::black_box(8 as i128).div_ceil(2) == 4;
+}
+
+test "u128 div_ceil rounds up" {
+    assert builtin::black_box(7 as u128).div_ceil(2) == 4;
+    assert builtin::black_box(8 as u128).div_ceil(2) == 4;
+    assert builtin::black_box(u128::MAX).div_ceil(2) == (1 as u128) << 127;
+}

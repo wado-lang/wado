@@ -154,7 +154,7 @@ impl Derivation {
             CeilDiv | FloorDiv => {
                 let rounding = if self.op matches { CeilDiv } { "ceil" } else { "floor" };
                 if code {
-                    `${rounding}_div(${args[0]}, ${args[1]})`;
+                    `i64::div_${rounding}(&(${args[0]}), ${args[1]})`;
                 } else {
                     `${rounding}(${grouped(&self.operands[0], &args[0])} / ${grouped(&self.operands[1], &args[1])})`;
                 }
