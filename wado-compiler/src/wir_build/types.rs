@@ -1026,9 +1026,6 @@ fn register_flags(_ctx: &mut WirContext<'_>) {
 /// - A canonical func type: `(ref struct, P1, P2, ...) -> R`
 /// - A canonical closure struct: `{ env: ref struct, func: ref $func_type }`
 fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
-    use crate::tir::ResolvedType;
-    use crate::wir::WirType;
-
     // Every unique function signature in the shared type table, each carrying
     // whether its `CanonicalClosure_K` takes the slim `{ env, func }` schema or
     // the inspectable `{ env, inspect, func }` one — decided by
@@ -1093,8 +1090,6 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
 /// a nested `List<U>` is registered before `List<List<U>>` and the backing array
 /// gets a concrete element type rather than an abstract `structref`.
 fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
-    use crate::tir::ResolvedType;
-
     // Collect unique List<T> element types from the shared type table.
     let mut array_elem_types: Vec<(tir::TypeId, String)> = Vec::new();
     let tt_rc = ctx.package.type_table.clone();
@@ -1291,8 +1286,6 @@ fn is_abstract_ref(ty: &WirType) -> bool {
 /// and function parameters/results. For any abstract refs, try to resolve
 /// them to concrete types using the now-complete type registry.
 fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
-    use crate::wir::WirType;
-
     // Phase 1: Fix struct fields
     let mut struct_fixups: Vec<(usize, usize, WirType)> = Vec::new();
 

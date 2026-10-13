@@ -17,7 +17,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueId;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
@@ -1750,26 +1750,24 @@ fn find_hoist_candidates(
 /// out of a possibly-zero-iteration loop could trap where the original would
 /// not). `RefNotEq` is excluded (reference operands, not arithmetic).
 fn is_hoistable_binop(op: NirBinaryOp) -> bool {
-    use crate::nir::NirBinaryOp::{
-        Add, And, BitAnd, BitOr, BitXor, Eq, Gt, GtEq, Lt, LtEq, Mul, NotEq, Or, Shl, Shr, Sub,
-    };
     matches!(
         op,
-        Add | Sub
-            | Mul
-            | Eq
-            | NotEq
-            | Lt
-            | LtEq
-            | Gt
-            | GtEq
-            | And
-            | Or
-            | BitAnd
-            | BitOr
-            | BitXor
-            | Shl
-            | Shr
+        NirBinaryOp::Add
+            | NirBinaryOp::Sub
+            | NirBinaryOp::Mul
+            | NirBinaryOp::Eq
+            | NirBinaryOp::NotEq
+            | NirBinaryOp::Lt
+            | NirBinaryOp::LtEq
+            | NirBinaryOp::Gt
+            | NirBinaryOp::GtEq
+            | NirBinaryOp::And
+            | NirBinaryOp::Or
+            | NirBinaryOp::BitAnd
+            | NirBinaryOp::BitOr
+            | NirBinaryOp::BitXor
+            | NirBinaryOp::Shl
+            | NirBinaryOp::Shr
     )
 }
 
@@ -2415,8 +2413,6 @@ fn hoist_invariant_value_operands(
     all_hoist_stmts: &mut Vec<StmtId>,
     ctx: &mut LicmCtx,
 ) -> bool {
-    use crate::nir_value_graph::OpaqueSource;
-
     let (expr_ids, stmt_ids) = collect_loop_subtree(engine.body, loop_body);
 
     // Phase 1: snapshot every operand slot in the subtree, in a fixed order.
@@ -2557,7 +2553,6 @@ fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<St
 /// `FieldAccess` / `Opaque(Expr)` / `Cast`) are excluded — the same shape
 /// `ArithHoist` admits.
 fn is_hoistable_value(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>) -> bool {
-    use crate::nir_value_graph::ValueKind;
     let compound = matches!(
         pool.kind(v),
         ValueKind::Binary { .. } | ValueKind::Unary { .. }
@@ -2571,7 +2566,6 @@ fn is_hoistable_value(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>
 }
 
 fn value_is_invariant(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>) -> bool {
-    use crate::nir_value_graph::{OpaqueSource, ValueKind};
     match pool.kind(v) {
         ValueKind::Int(..)
         | ValueKind::Float(..)

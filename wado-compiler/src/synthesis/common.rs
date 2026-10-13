@@ -19,7 +19,7 @@ use crate::tir::{
     TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern,
     TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirMutVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 
 /// Synthetic span used for all generated code.
@@ -792,7 +792,6 @@ pub fn relocate_synthetic_locals(
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
 ) {
-    use crate::tir_visitor::TirMutVisitor;
     let mut lets: Vec<(u32, TypeId, String, bool)> = Vec::new();
     collect_let_bindings(expr, &mut lets);
     if lets.is_empty() {
@@ -810,7 +809,6 @@ pub fn relocate_synthetic_locals(
 /// Collect every `Let`-bound local in `expr` (index, type, name, mutability),
 /// not descending into nested closures (separate local scope).
 fn collect_let_bindings(expr: &TirExpr, out: &mut Vec<(u32, TypeId, String, bool)>) {
-    use crate::tir_visitor::TirRefVisitor;
     struct Collect<'a>(&'a mut Vec<(u32, TypeId, String, bool)>);
     impl TirRefVisitor for Collect<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {

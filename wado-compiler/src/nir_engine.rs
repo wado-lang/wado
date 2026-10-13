@@ -19,9 +19,9 @@ use crate::nir_arena::{
     StmtNode, Tracked,
 };
 use crate::nir_value_graph::builder::{AliasSets, CallFacts, build};
-use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
+use crate::nir_value_graph::{HeapVersion, OpaqueSource, ValueId, ValueKind, builder};
 use crate::niri::CtfeBuiltinMap;
-use crate::tir::{ObjectTypes, TypeId, TypeTable};
+use crate::tir::{ObjectTypes, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 /// A live-pool representative per field read, plus the versions a placement
@@ -510,7 +510,6 @@ impl<'a> Engine<'a> {
         forwardable: &IndexSet<u32>,
         include_fields: bool,
     ) -> Vec<(ExprId, ValueId)> {
-        use crate::nir_value_graph::builder;
         // Only grow an already-built graph: building it here would use this
         // session's alias config, which is sound only when the caller has set the
         // real sets (`store_load_forward` does). A missing graph is left for the
@@ -589,7 +588,6 @@ impl<'a> Engine<'a> {
     /// `canonical_local(i)`, sound only where `i` holds one value, at a version
     /// above `max_heap_version` so it cannot collide with an existing triple.
     pub fn scoped_field_values(&mut self) -> FieldValues {
-        use crate::nir_value_graph::{OpaqueSource, ValueKind, builder};
         self.ensure_value_graph();
         if self.body.value_graph.is_none() {
             return FieldValues::default();
@@ -875,7 +873,6 @@ impl<'a> Engine<'a> {
     /// without a type table, and for every other shape a `FieldAccess` can name
     /// — a tuple above all, whose field index means something else entirely.
     fn local_is_struct_typed(&self, local: u32) -> bool {
-        use crate::tir::ResolvedType;
         let Some(types) = self.vg_type_table else {
             return false;
         };
@@ -1217,7 +1214,6 @@ impl<'a> Engine<'a> {
     /// an aggregate (the pool models pure scalars only) — the caller then keeps
     /// the skeleton form.
     pub fn replace_expr_with_value(&mut self, id: ExprId, value: Value) -> bool {
-        use crate::const_eval::Value;
         use ValueKind;
         let type_id = self.body.exprs[id].type_id;
         let kind = match value {

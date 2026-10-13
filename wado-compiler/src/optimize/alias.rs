@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FuncId, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaCallArg, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatId, StmtKind,
+    ArenaCallArg, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::builder::AliasSets;
@@ -693,7 +693,6 @@ fn roots_self(body: &Body, self_derived: &IndexSet<u32>, e: ExprId, p0: u32) -> 
 /// Collect the locals a pattern binds into `set`, flagging `changed` when the
 /// set grows. Used to fixpoint self-derived locals through match arms.
 fn collect_pattern_locals(body: &Body, pat: PatId, set: &mut IndexSet<u32>, changed: &mut bool) {
-    use crate::nir_arena::PatKind;
     match &body.pats[pat].kind {
         PatKind::Binding { local_index, .. } => {
             if set.insert(*local_index) {

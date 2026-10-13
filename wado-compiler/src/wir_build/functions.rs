@@ -9,7 +9,7 @@ use crate::nir::{FuncRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
 use crate::primitive::PrimitiveType;
-use crate::tir::TypeTable;
+use crate::tir::{ResolvedType, TypeTable};
 use crate::wir::{
     WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
 };
@@ -706,8 +706,6 @@ fn is_null_operand(body: &Body, op: Operand) -> bool {
 /// discriminant, so their slot is an `i32` even though the declared type is not
 /// a primitive.
 fn storage_prim_of(type_id: tir::TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
-    use crate::tir::ResolvedType;
-
     if let Some(prim) = prim_of(type_id, type_table) {
         return Some(prim);
     }
@@ -794,9 +792,6 @@ fn translate_global_init(
     type_table: &TypeTable,
     wir_type: &WirType,
 ) -> WirInstr {
-    use crate::tir::ResolvedType;
-    use crate::wir::WirInstr;
-
     // What the evaluator cannot reduce is assigned by the initialization
     // function instead, so the slot starts at its type's default. A unit global
     // never gets here: `register_globals` gives it no slot.

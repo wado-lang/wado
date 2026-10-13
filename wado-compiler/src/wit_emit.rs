@@ -14,7 +14,7 @@ use wit_encoder::{
 use std::sync::Arc;
 
 use crate::ast;
-use crate::ast::NamedType;
+use crate::ast::{NamedType, Type as AstType};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
@@ -737,7 +737,6 @@ impl<'a> Emitter<'a> {
         fq: &str,
         uses: &mut Vec<(String, String)>,
     ) -> Result<Option<Type>, WitEmitError> {
-        use crate::ast::Type as AstType;
         let Some(ty) = ret else {
             return Ok(None);
         };
@@ -821,7 +820,6 @@ impl<'a> Emitter<'a> {
         current_fq: &str,
         uses: &mut Vec<(String, String)>,
     ) -> Result<Type, WitEmitError> {
-        use crate::ast::Type as AstType;
         match ty {
             AstType::Named(named) => {
                 if let Some(handle) = self.extern_handle(named) {
@@ -1140,7 +1138,6 @@ fn assemble<T>(
 /// is transparent; a `&Named` (a CM resource) is a leaf rendered `borrow<R>`,
 /// while other references are transparent.
 fn classify_ast(ty: &ast::Type) -> CmShape<ast::Type> {
-    use crate::ast::Type as AstType;
     match ty {
         AstType::Tuple(elems) => CmShape::Tuple(elems.clone()),
         AstType::Reference(inner) | AstType::MutReference(inner) => {
@@ -1304,40 +1301,39 @@ fn collect_named_type_sources(
     registry: &CmInterfaceRegistry,
     out: &mut Vec<String>,
 ) {
-    use crate::ast::Type;
     match ty {
-        Type::Named(named) => {
+        AstType::Named(named) => {
             if let Some(src) = registry.source_interface(named)
                 && is_bundled_specifier(&src)
             {
                 out.push(src);
             }
         }
-        Type::Generic(generic) => {
+        AstType::Generic(generic) => {
             for arg in &generic.args {
                 collect_named_type_sources(arg, registry, out);
             }
         }
-        Type::NamespacedGeneric(generic) => {
+        AstType::NamespacedGeneric(generic) => {
             for arg in &generic.args {
                 collect_named_type_sources(arg, registry, out);
             }
         }
-        Type::Function(func) => {
+        AstType::Function(func) => {
             for param in &func.params {
                 collect_named_type_sources(param, registry, out);
             }
             collect_named_type_sources(&func.return_type, registry, out);
         }
-        Type::Tuple(elems) => {
+        AstType::Tuple(elems) => {
             for elem in elems {
                 collect_named_type_sources(elem, registry, out);
             }
         }
-        Type::Reference(inner) | Type::MutReference(inner) => {
+        AstType::Reference(inner) | AstType::MutReference(inner) => {
             collect_named_type_sources(inner, registry, out);
         }
-        Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
+        AstType::TypePackSpread(_, _) | AstType::Infer(_) | AstType::Error(_) => {}
     }
 }
 

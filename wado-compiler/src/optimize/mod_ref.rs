@@ -1733,7 +1733,6 @@ mod tests {
 
     #[test]
     fn no_cast_traps() {
-        use crate::tir::TypeTable;
         let types = TypeTable::new();
         for (from, to) in [
             (TypeTable::F64, TypeTable::I32),

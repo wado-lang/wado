@@ -3284,7 +3284,6 @@ fn splice_operand(caller: &mut Body, callee: &Body, op: Operand, ctx: &InlineCtx
 /// composite value (`Binary` / `Cast` / `FieldAccess` / …) would carry child ids
 /// that denote unrelated values (often a different width) in the caller's pool.
 fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -> ValueId {
-    use crate::nir_value_graph::{OpaqueSource, ValueKind};
     let recorded_ty = callee.values.type_of(v);
     let new_kind = match callee.values.kind(v).clone() {
         ValueKind::Binary { op, lhs, rhs, ty } => ValueKind::Binary {

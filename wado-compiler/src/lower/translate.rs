@@ -1643,7 +1643,6 @@ impl FunctionTranslator<'_, '_> {
         // scalars live only in the graph). `alloc_unshared`
         // keeps each constant's source width (a type-erased `7` of `i32` vs
         // `i64` must not collide).
-        use crate::nir_value_graph::ValueKind;
         let vk = match &expr.kind {
             // A wide int is a struct, and `u64` could not hold one anyway:
             // fall through to `convert_expr`'s constructor call.
@@ -2665,7 +2664,6 @@ impl FunctionTranslator<'_, '_> {
     /// than a `"String"` literal: a bytes-only program may never monomorphize
     /// `List<u8>` into `struct_fields_map`, but `String` is always present.
     fn seq_u8_repr_type(&self) -> tir::TypeId {
-        use crate::compiler_item::{CompilerItem, SeqField};
         let string_head = StructDef::Decl(
             self.base
                 .type_table

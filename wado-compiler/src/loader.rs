@@ -12,7 +12,8 @@ use rustc_hash::FxBuildHasher;
 
 use crate::ast::{AstIdSpace, ImportAttributes, Item, Module, UseDecl};
 use crate::compiler_host::{
-    Code, CompilerHost, DependencyManifest, Diagnostic, InMemoryCompilerHost, SourceError,
+    Code, CompilerHost, DependencyManifest, Diagnostic, DiagnosticSpan, InMemoryCompilerHost,
+    Severity, SourceError,
 };
 use crate::component_model::SourceInterfaceBatch;
 use crate::kiln::InvocationIndex;
@@ -231,7 +232,6 @@ impl LoadError {
 
 impl From<LoadError> for Diagnostic {
     fn from(e: LoadError) -> Self {
-        use crate::compiler_host::{DiagnosticSpan, Severity};
         match e {
             LoadError::LexError {
                 module_source,
@@ -1841,7 +1841,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// Report a `use ... from "<schema>"` that names a generator no invocation
     /// produced a module for.
     fn emit_kiln_no_generated_module(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
-        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = decl_file_of(from_module_source);
         self.host.emit_diagnostic(Diagnostic {
             severity: Severity::Error,

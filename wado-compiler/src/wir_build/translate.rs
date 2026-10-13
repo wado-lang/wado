@@ -10,7 +10,7 @@ use crate::name::global_name;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
-use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
+use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
@@ -22,7 +22,7 @@ use crate::name::{
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
-use crate::nir_value_graph::{OpaqueSource, ValueId};
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::multi_value_return::{block_tail, block_tail_call};
 use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
@@ -197,8 +197,6 @@ fn free_name(name: &str, idx: u32, needs_suffix: bool, used: &mut IndexSet<Strin
 /// `^Inspect` impls — each refcasting its args first. Must run before
 /// `translate_function_bodies`, which resolves `ClosureToCanonical` against it.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
-    use crate::wir::WirType;
-
     // Snapshot the functor list so we can mutate ctx inside the loop.
     let functors: Vec<nir::ClosureFunctor> = ctx.package.closure_functors.clone();
 
@@ -412,8 +410,6 @@ fn register_call_wrapper(
     call_func_id: WirFuncId,
     live_param_sources: &[CallWrapperArg],
 ) -> WirFuncId {
-    use crate::wir::{WirFunction, WirName, WirType};
-
     let env_local = "$env".to_string();
     let typed_env_local = "$typed_env".to_string();
     let abstract_struct_nullable = WirType::AbstractRef {
@@ -520,8 +516,6 @@ fn register_inspect_wrapper(
     callback_fn_type_id: WirTypeId,
     functor_struct_type_id: WirTypeId,
 ) -> WirFuncId {
-    use crate::wir::{WirFunction, WirName, WirType};
-
     let module_source = &functor.module_source;
     let env_local = "$env".to_string();
     let formatter_local = "$formatter".to_string();
@@ -673,8 +667,6 @@ fn build_fn_canonical_dispatch_body(
     formatter_param_name: String,
     self_box_type_id: Option<TypeId>,
 ) -> Option<Vec<WirInstr>> {
-    use crate::wir::{WirAbstractHeapType, WirType};
-
     // No inspectable canonical struct was ever registered → the stub is
     // dead code. Leave the bodyless declaration in place.
     let base_type_id = ctx.canonical_inspectable_base_type_id.clone()?;
@@ -2389,8 +2381,6 @@ impl FunctionTranslator<'_, '_> {
     /// type recorded by the builder; composite kinds (`Binary`, `Select`,
     /// `FieldAccess`, …) recurse on their operands. Kinds not yet promotable panic.
     pub(super) fn extract_value(&mut self, v: ValueId) -> WirInstr {
-        use crate::nir_value_graph::ValueKind;
-        use crate::wir::WirAbstractHeapType;
         let kind = self.body.values.kind(v).clone();
         let type_id = self
             .body
@@ -2469,7 +2459,6 @@ impl FunctionTranslator<'_, '_> {
             // local read, a call result). It is re-emitted from the recorded
             // source the builder/lower scheduled for it.
             ValueKind::Opaque(id) => {
-                use crate::nir_value_graph::OpaqueSource;
                 match self
                     .body
                     .values

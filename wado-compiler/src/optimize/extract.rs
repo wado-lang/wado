@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::compiler_trace;
 use crate::hashmap::IndexMap;
 use crate::nir_arena::{ExprId, ExprKind, NodeRef, StmtKind};
-use crate::nir_engine::Engine;
+use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::trace::filter;
 
@@ -269,7 +269,6 @@ fn receiver_available_at(
 /// it. (`Cast` never appears — excluded by `value_fully_reemittable_locally`.)
 #[must_use]
 fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: tir::TypeId) -> bool {
-    use crate::nir_value_graph::ValueKind;
     match e.body.values.type_of(v) {
         Some(existing) if existing != type_id => return false,
         Some(_) => {}
@@ -308,7 +307,6 @@ pub(super) fn freeze_pure_arith(
     // the loop's structural-edit staleness.
     phase: FreezePhase,
 ) -> bool {
-    use crate::nir_engine::EngineBuffers;
     let types = project.type_table.borrow();
     let type_table: &TypeTable = &types;
     let first_param_types = first_param_types(project);
@@ -888,7 +886,6 @@ pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
     let Some(NodeRef::Expr(parent)) = e.parent_of(NodeRef::Expr(expr)) else {
         return false;
     };
-    use crate::nir::NirUnaryOp;
     let op = Operand::Expr(expr);
     match &e.body.exprs[parent].kind {
         ExprKind::Unary {

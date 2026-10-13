@@ -2518,8 +2518,11 @@ fn collect_writes_in_pattern(
 mod tests {
     use super::*;
     use crate::call_args::CallArgs;
+    use crate::nir::NirLocal;
+    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::nir_value_graph::ValueKind;
     use crate::niri::CtfeBuiltinMap;
+    use crate::token::Span;
     use TypeTable;
 
     // ----- Body builders for tests -----
@@ -2617,9 +2620,6 @@ mod tests {
     /// so a build that minted them in `mut_escaped`'s iteration order would
     /// produce a differently-shaped graph under a permuted set.
     fn call_then_add_body() -> Body {
-        use crate::nir::{FuncId, NirLocal};
-        use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
-        use crate::token::Span;
         let span = Span::new(0, 0, 0, 0);
         let mut b = Body::empty();
         let mut_local = |name: &str| NirLocal {
@@ -2718,9 +2718,6 @@ mod tests {
     /// Like [`receiver_call_block`], with the receiver argument's declared
     /// `is_mut` (a `&mut self` method's own parameter type) as given.
     fn receiver_call_block_with(body: &mut Body, receiver_is_mut: bool) -> (BlockId, ExprId) {
-        use crate::nir::{FuncId, NirLocal};
-        use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
-        use crate::token::Span;
         let span = Span::new(0, 0, 0, 0);
         *body.locals = vec![NirLocal {
             name: "self".to_string(),
