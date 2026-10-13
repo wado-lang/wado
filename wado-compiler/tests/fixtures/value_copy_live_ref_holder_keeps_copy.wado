@@ -139,6 +139,19 @@ fn element_kept_through_a_closure() -> i32 {
     return kept[0].a;
 }
 
+fn make_reader(p: &P) -> fn() -> i32 {
+    return || p.a;
+}
+
+// A closure capturing the borrow holds `x` as long as it is readable.
+fn captured_by_a_returned_closure(n: i32) -> i32 {
+    let x = P { a: 1, b: n };
+    let f = make_reader(&x);
+    let mut y = x;
+    y.a = 9;
+    return f() * 100 + y.a;
+}
+
 fn swap_under_live_ref() -> i32 {
     let mut a: List<i32> = [1];
     let mut b: List<i32> = [5];
@@ -155,9 +168,10 @@ export fn run() with Stdout {
     println(`${match_binding()} ${live_iterator()} ${iterator_handed_away()}`);
     println(`${swap_under_live_ref()}`);
     println(`${element_field_ref()} ${element_out_of_iterator()} ${element_kept_through_a_closure()}`);
+    println(`${captured_by_a_returned_closure(3)}`);
 }
 
 __DATA__
 {
-    "stdout": "1 1 1 1\n1 1 1\n11\n1 1 1\n"
+    "stdout": "1 1 1 1\n1 1 1\n11\n1 1 1\n109\n"
 }

@@ -121,7 +121,6 @@ impl<'a> StorageReach<'a> {
                 | ResolvedType::Never
                 | ResolvedType::Enum { .. }
                 | ResolvedType::Flags { .. }
-                | ResolvedType::Function { .. }
                 | ResolvedType::Resource { .. }
                 | ResolvedType::GenericResource { .. }
         ) {
@@ -181,8 +180,9 @@ impl<'a> StorageReach<'a> {
                 }
                 None => Members::Unknown,
             },
-            ResolvedType::Function { .. }
-            | ResolvedType::Primitive(_)
+            // A closure holds what it captured, which its type does not name.
+            ResolvedType::Function { .. } => Members::Unknown,
+            ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }

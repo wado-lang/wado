@@ -9187,6 +9187,12 @@ impl DeclarationTable<BuiltinDeclaration> {
             .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
     }
 
+    /// Whether `call` writes no struct field.
+    pub fn writes_no_field<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(BuiltinDeclaration::writes_no_field)
+    }
+
     /// Whether `call` writes nothing itself, only handing back part of an
     /// argument.
     pub fn only_aliases<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {

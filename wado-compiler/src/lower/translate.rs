@@ -19,13 +19,12 @@ use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
-use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
 use crate::synthesis::common::builtin_call;
 use cranelift_entity::EntityRef;
 
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
@@ -340,9 +339,9 @@ fn tir_function_key(f: &TirFunction) -> FunctionId {
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
 /// assignment in `in_place` replaces whole.
-fn guarded_locals(func: &TirFunction, in_place: &IndexMap<Span, IndexSet<u32>>) -> IndexSet<u32> {
+fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32> {
     struct Scan<'a> {
-        in_place: &'a IndexMap<Span, IndexSet<u32>>,
+        in_place: &'a IndexSet<Span>,
         deferred: IndexSet<u32>,
         replaced: IndexSet<u32>,
     }
@@ -364,7 +363,7 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexMap<Span, IndexSet<u32>>) 
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Assign { target, .. } = &expr.kind
                 && let TirExprKind::Local { index, .. } = target.kind
-                && self.in_place.contains_key(&expr.span)
+                && self.in_place.contains(&expr.span)
             {
                 self.replaced.insert(index);
             }
@@ -420,9 +419,9 @@ struct FunctionTranslator<'a, 'p> {
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
     alias_components: value_copy::last_use::AliasComponents,
-    /// Assignments that write into the storage their place holds, by span, each
-    /// with the root's fields a borrow here holds (WEP 2026-10-13).
-    in_place_assigns: IndexMap<Span, IndexSet<u32>>,
+    /// Assignments that write into the storage their place holds, by span
+    /// (WEP 2026-10-13).
+    in_place_assigns: IndexSet<Span>,
     /// Locals declared without a value that such an assignment replaces whole.
     /// One holds no storage before its first assignment, so a flag local says
     /// whether to write in place or to store.
@@ -583,7 +582,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
-            in_place_assigns: IndexMap::default(),
+            in_place_assigns: IndexSet::default(),
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -935,65 +934,100 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// The fields an in-place aggregate is written through: a plain struct's
-    /// from `struct_fields_map`, a `List<T>`'s `{repr, used}` from `SeqField`,
-    /// and a tuple's positional ones. `None` for any other type.
-    fn aggregate_fields(&self, ty: tir::TypeId) -> Option<Vec<(String, u32, tir::TypeId)>> {
-        use crate::compiler_item::SeqField;
+    /// The fields an in-place aggregate (`TypeTable::is_in_place_aggregate`) is
+    /// written through: a plain struct's from `struct_fields_map`, a `List<T>`'s
+    /// `{repr, used}` from `SeqField`, and a tuple's positional ones.
+    fn aggregate_fields(&self, ty: tir::TypeId) -> Vec<(String, u32, tir::TypeId)> {
         let resolved = self.base.type_table.borrow().get(ty).clone();
-        let fields: Vec<(String, u32, tir::TypeId)> =
-            if let ResolvedType::Struct { def, type_args } = resolved {
-                self.base
-                    .struct_fields_map
-                    .get(&(def, type_args))?
-                    .iter()
-                    .map(|f| (f.name.clone(), f.index, f.type_id))
-                    .collect()
-            } else {
-                let (list_elem, tuple_elems) = {
-                    let tt = self.base.type_table.borrow();
-                    (tt.as_list(ty), tt.as_tuple(ty))
-                };
-                if let Some(elem) = list_elem {
-                    let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
-                    vec![
-                        (
-                            SeqField::Backing.field_name().to_string(),
-                            SeqField::Backing.index(),
-                            repr_ty,
-                        ),
-                        (
-                            SeqField::Len.field_name().to_string(),
-                            SeqField::Len.index(),
-                            TypeTable::I32,
-                        ),
-                    ]
-                } else {
-                    tuple_elems?
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, ty)| (i.to_string(), u32::try_from(i).expect("tuple arity"), ty))
-                        .collect()
-                }
-            };
-        (!fields.is_empty()).then_some(fields)
+        if let ResolvedType::Struct { def, type_args } = resolved {
+            return self.base.struct_fields_map[&(def, type_args)]
+                .iter()
+                .map(|f| (f.name.clone(), f.index, f.type_id))
+                .collect();
+        }
+        let (list_elem, tuple_elems) = {
+            let tt = self.base.type_table.borrow();
+            (tt.list_element(ty), tt.as_tuple(ty))
+        };
+        if let Some(elem) = list_elem {
+            let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
+            return [
+                (SeqField::Backing, repr_ty),
+                (SeqField::Len, TypeTable::I32),
+            ]
+            .into_iter()
+            .map(|(field, ty)| (field.field_name().to_string(), field.index(), ty))
+            .collect();
+        }
+        tuple_elems
+            .expect("an in-place aggregate is a struct, a `List` or a tuple")
+            .into_iter()
+            .enumerate()
+            .map(|(i, ty)| (i.to_string(), u32::try_from(i).expect("tuple arity"), ty))
+            .collect()
     }
 
-    /// Expand an assignment that writes into the storage its place holds, field
-    /// by field through two fresh temp locals: `*ref = value` through an
-    /// unboxed `&mut` to an in-place aggregate, and `place = value` where the
-    /// ownership walk found a holder of that storage (WEP 2026-10-13). A
-    /// Box-shaped deref-assign lowers as a single statement via the regular
-    /// `try_boxing_rewrite` `Deref` arm.
-    fn try_expand_in_place_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
-        let TirStmtKind::Expr(expr) = &stmt.kind else {
-            return None;
-        };
+    /// The scalar and reference fields of an in-place `ty`, each as the chain
+    /// of fields reaching it: a field of an in-place type is followed into its
+    /// own fields. Writing every leaf writes a value into the storage already
+    /// there at every depth, which any reference into it then reads.
+    fn leaf_paths(&self, ty: tir::TypeId) -> Vec<Vec<(String, u32, tir::TypeId)>> {
+        fn collect(
+            this: &FunctionTranslator<'_, '_>,
+            ty: tir::TypeId,
+            path: &mut Vec<(String, u32, tir::TypeId)>,
+            out: &mut Vec<Vec<(String, u32, tir::TypeId)>>,
+        ) {
+            for field in this.aggregate_fields(ty) {
+                let field_type = field.2;
+                path.push(field);
+                if this
+                    .base
+                    .type_table
+                    .borrow()
+                    .is_in_place_aggregate(field_type)
+                {
+                    collect(this, field_type, path, out);
+                } else {
+                    out.push(path.clone());
+                }
+                path.pop();
+            }
+        }
+        let mut out = Vec::new();
+        collect(self, ty, &mut Vec::new(), &mut out);
+        out
+    }
+
+    /// The statements an assignment lowers to where it does not lower to one
+    /// node: one that writes in place, and one to a guarded local. Every
+    /// position reaches it through [`Self::convert_expr`], so a mark the
+    /// ownership walk made is expanded wherever the assignment sits.
+    fn expand_assignment(&self, expr: &TirExpr) -> Option<Vec<StmtId>> {
+        match &expr.kind {
+            TirExprKind::Assign { target, .. } => {
+                if let TirExprKind::Local { index, .. } = target.kind
+                    && let Some(&flag) = self.assigned_flags.borrow().get(&index)
+                {
+                    return Some(self.guarded_assign(expr, flag));
+                }
+                self.try_expand_in_place_assign(expr)
+            }
+            TirExprKind::Call { .. } => self.try_expand_in_place_element_assign(expr),
+            _ => None,
+        }
+    }
+
+    /// Expand an assignment that writes into the storage its place holds:
+    /// `*ref = value` through an unboxed `&mut` to an in-place aggregate, and
+    /// `place = value` where the ownership walk found a holder of that storage
+    /// (WEP 2026-10-13). A Box-shaped deref-assign lowers as a single statement
+    /// via the regular `try_boxing_rewrite` `Deref` arm.
+    fn try_expand_in_place_assign(&self, expr: &TirExpr) -> Option<Vec<StmtId>> {
         let TirExprKind::Assign { target, value } = &expr.kind else {
             return None;
         };
-        let empty = IndexSet::default();
-        let (handle, handle_type, place_type, held) = match &target.kind {
+        let handle = match &target.kind {
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: ref_expr,
@@ -1003,45 +1037,62 @@ impl FunctionTranslator<'_, '_> {
                 else {
                     return None;
                 };
-                (&**ref_expr, ref_expr.type_id, inner, &empty)
+                if !self.base.type_table.borrow().is_in_place_aggregate(inner) {
+                    return None;
+                }
+                (**ref_expr).clone()
             }
-            _ => match self.in_place_assigns.get(&expr.span) {
-                Some(held) => (&**target, target.type_id, target.type_id, held),
-                None => return None,
-            },
+            _ if self.in_place_assigns.contains(&expr.span) => {
+                // A handle of a reference type, so every later pass reads the
+                // writes below as going through it.
+                let ref_type = self
+                    .base
+                    .type_table
+                    .borrow_mut()
+                    .make_mut_ref(target.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: target.clone(),
+                    },
+                    ref_type,
+                    target.span,
+                )
+            }
+            _ => return None,
         };
-        let fields = self.aggregate_fields(place_type)?;
-
+        let place_type = target.type_id;
         let span = expr.span;
-        let ref_idx = self.alloc_local(handle_type, "$deref_ref".to_string());
+        let ref_idx = self.alloc_local(handle.type_id, "$deref_ref".to_string());
         let val_idx = self.alloc_local(place_type, "$deref_val".to_string());
-
-        let ref_nir = self.convert_expr(handle);
-        // Copy the RHS unless it is fresh/moved: the per-field write-back would
-        // otherwise alias the RHS's storage. The seed walker registers a helper
-        // for the deref-target RHS type so the wrap resolves.
-        let converted_val = self.convert_operand(value);
-        let val_nir = if self.should_wrap_value_copy(value) {
-            self.wrap_value_copy_operand(converted_val, place_type)
-        } else {
-            converted_val
-        };
-
-        let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
+        let ref_nir = self.convert_expr(&handle);
+        let val_nir = self.assigned_value(value, place_type);
         // Translator-synthesized bindings — never a user-visible defensive
         // copy, and the value's copy decision is made above.
-        out.push(self.synthesized_let(ref_idx, "$deref_ref", handle_type, ref_nir.into(), span));
-        out.push(self.synthesized_let(val_idx, "$deref_val", place_type, val_nir, span));
-        self.write_fields(
-            (ref_idx, handle_type),
+        let mut out = vec![
+            self.synthesized_let(ref_idx, "$deref_ref", handle.type_id, ref_nir.into(), span),
+            self.synthesized_let(val_idx, "$deref_val", place_type, val_nir, span),
+        ];
+        self.write_in_place(
+            (ref_idx, handle.type_id),
             (val_idx, place_type),
-            place_type,
-            &fields,
-            held,
             span,
             &mut out,
         );
         Some(out)
+    }
+
+    /// `value` as an assignment writing it in place takes it: copied unless it
+    /// is fresh or moved, since the write-back would otherwise share its
+    /// storage. The seed walker registers a helper for the type so the wrap
+    /// resolves.
+    fn assigned_value(&self, value: &TirExpr, place_type: tir::TypeId) -> Operand {
+        let converted = self.convert_operand(value);
+        if self.should_wrap_value_copy(value) {
+            self.wrap_value_copy_operand(converted, place_type)
+        } else {
+            converted
+        }
     }
 
     /// Expand `xs[i] = value`, a `List::index_assign` call the ownership walk
@@ -1049,17 +1100,13 @@ impl FunctionTranslator<'_, '_> {
     /// storage, every field of an in-place type into that field's storage
     /// too. One out of bounds takes the call itself, which traps with its
     /// message. The list, index and value are evaluated first, as for the call.
-    fn try_expand_in_place_element_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
-        use crate::compiler_item::SeqField;
-        let TirStmtKind::Expr(call) = &stmt.kind else {
-            return None;
-        };
+    fn try_expand_in_place_element_assign(&self, call: &TirExpr) -> Option<Vec<StmtId>> {
         let TirExprKind::Call { func, args, .. } = &call.kind else {
             return None;
         };
         // A span is no identity: a call the translator synthesizes for a
         // closure carries the span of the source it stands for.
-        if !self.in_place_assigns.contains_key(&call.span)
+        if !self.in_place_assigns.contains(&call.span)
             || !self
                 .base
                 .value_copy
@@ -1077,9 +1124,6 @@ impl FunctionTranslator<'_, '_> {
             .borrow()
             .as_list(list.type_id)
             .expect("`index_assign` is a `List` method");
-        let fields = self
-            .aggregate_fields(element)
-            .expect("the walk marks an element of an in-place type");
         let span = call.span;
 
         let list_idx = self.alloc_local(list.type_id, "$list".to_string());
@@ -1095,12 +1139,7 @@ impl FunctionTranslator<'_, '_> {
                 span,
             )
         };
-        let converted_val = self.convert_operand(value);
-        let val_nir = if self.should_wrap_value_copy(value) {
-            self.wrap_value_copy_operand(converted_val, element)
-        } else {
-            converted_val
-        };
+        let val_nir = self.assigned_value(value, element);
         let mut out = vec![
             self.synthesized_let(
                 list_idx,
@@ -1163,17 +1202,17 @@ impl FunctionTranslator<'_, '_> {
             ),
         );
 
-        let (array_type, array_ref_type) = {
+        let (array_type, array_ref_type, element_ref_type) = {
             let mut tt = self.base.type_table.borrow_mut();
             let array = tt.make_builtin_array(element);
-            (array, tt.make_ref(array))
+            (array, tt.make_mut_ref(array), tt.make_mut_ref(element))
         };
         let get = builtin_call(
-            "array_get_value",
+            "array_get_ref_mut",
             vec![
                 TirExpr::new(
                     TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
+                        op: TirUnaryOp::MutRef,
                         expr: Box::new(list_field(SeqField::Backing, array_type)),
                     },
                     array_ref_type,
@@ -1181,23 +1220,19 @@ impl FunctionTranslator<'_, '_> {
                 ),
                 local(index_idx, "$index", TypeTable::I32),
             ],
-            element,
+            element_ref_type,
         );
-        let ref_idx = self.alloc_local(element, "$deref_ref".to_string());
+        let ref_idx = self.alloc_local(element_ref_type, "$deref_ref".to_string());
         let mut write = vec![self.synthesized_let(
             ref_idx,
             "$deref_ref",
-            element,
+            element_ref_type,
             self.convert_expr(&get).into(),
             span,
         )];
-        let every_field = fields.iter().map(|(_, index, _)| *index).collect();
-        self.write_fields(
-            (ref_idx, element),
+        self.write_in_place(
+            (ref_idx, element_ref_type),
             (val_idx, element),
-            element,
-            &fields,
-            &every_field,
             span,
             &mut write,
         );
@@ -1213,7 +1248,10 @@ impl FunctionTranslator<'_, '_> {
         ]) {
             arg.expr = replacement;
         }
-        let trap = self.alloc_stmt(StmtKind::Expr(self.convert_expr(&trapping).into()), span);
+        let trap = self.alloc_stmt(
+            StmtKind::Expr(self.convert_expr_unexpanded(&trapping).into()),
+            span,
+        );
 
         let then_block = self.alloc_block(write, span);
         let else_block = self.alloc_block(vec![trap], span);
@@ -1249,25 +1287,21 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Write each field of the value in local `val` into the storage local
-    /// `handle` names. A field of an in-place type that a borrow may observe is
-    /// written into its own storage the same way, since repointing it would
-    /// leave that borrow on the old one: one in `held`, which this body's walk
-    /// found borrowed, or one some body's borrow may observe.
-    fn write_fields(
+    /// Write the value in local `val` into the storage the `&mut` local
+    /// `handle` names, leaf by leaf ([`Self::leaf_paths`]), so a reference
+    /// into any part of that storage reads the new value. A value made of
+    /// parts of the place itself (`x = X { f: x.g, g: x.f }` with the copies
+    /// elided) is read in full before anything is written.
+    fn write_in_place(
         &self,
         (handle, handle_type): (u32, tir::TypeId),
         (val, val_type): (u32, tir::TypeId),
-        place_type: tir::TypeId,
-        fields: &[(String, u32, tir::TypeId)],
-        held: &IndexSet<u32>,
         span: Span,
         out: &mut Vec<StmtId>,
     ) {
-        let owner = field_owner(place_type, &self.base.type_table.borrow());
-        for (field_name, field_index, field_type) in fields {
-            let field_of = |local: u32, stem: &str, ty: tir::TypeId| {
-                let base = self.alloc_expr(
+        let chain =
+            |local: u32, stem: &str, ty: tir::TypeId, path: &[(String, u32, tir::TypeId)]| {
+                let mut expr = self.alloc_expr(
                     ExprKind::Local {
                         index: local,
                         name: format!("{stem}_{local}"),
@@ -1275,63 +1309,50 @@ impl FunctionTranslator<'_, '_> {
                     ty,
                     span,
                 );
-                self.alloc_expr(
-                    ExprKind::FieldAccess {
-                        expr: base.into(),
-                        field_index: *field_index,
-                        field_name: field_name.clone(),
-                    },
-                    *field_type,
-                    span,
-                )
+                for (field_name, field_index, field_type) in path {
+                    expr = self.alloc_expr(
+                        ExprKind::FieldAccess {
+                            expr: expr.into(),
+                            field_index: *field_index,
+                            field_name: field_name.clone(),
+                        },
+                        *field_type,
+                        span,
+                    );
+                }
+                expr
             };
-            let target_field = field_of(handle, "$deref_ref", handle_type);
-            let value_field = field_of(val, "$deref_val", val_type);
-            let observed = self
-                .base
-                .type_table
-                .borrow()
-                .is_in_place_aggregate(*field_type)
-                && (held.contains(field_index)
-                    || self
-                        .base
-                        .value_copy
-                        .observed_fields
-                        .contains(owner, *field_index));
-            if observed && let Some(inner) = self.aggregate_fields(*field_type) {
-                let inner_handle = self.alloc_local(*field_type, "$deref_ref".to_string());
-                let inner_val = self.alloc_local(*field_type, "$deref_val".to_string());
-                out.push(self.synthesized_let(
-                    inner_handle,
-                    "$deref_ref",
-                    *field_type,
-                    target_field.into(),
+        let leaves = self.leaf_paths(val_type);
+        let nested = leaves.iter().any(|path| path.len() > 1);
+        let values: Vec<Operand> = leaves
+            .iter()
+            .map(|path| {
+                let read = chain(val, "$deref_val", val_type, path);
+                if !nested {
+                    return read.into();
+                }
+                let leaf_type = path.last().expect("a leaf path names a field").2;
+                let temp = self.alloc_local(leaf_type, "$leaf".to_string());
+                out.push(self.synthesized_let(temp, "$leaf", leaf_type, read.into(), span));
+                let local = self.alloc_expr(
+                    ExprKind::Local {
+                        index: temp,
+                        name: format!("$leaf_{temp}"),
+                    },
+                    leaf_type,
                     span,
-                ));
-                out.push(self.synthesized_let(
-                    inner_val,
-                    "$deref_val",
-                    *field_type,
-                    value_field.into(),
-                    span,
-                ));
-                self.write_fields(
-                    (inner_handle, *field_type),
-                    (inner_val, *field_type),
-                    *field_type,
-                    &inner,
-                    &IndexSet::default(),
-                    span,
-                    out,
                 );
-                continue;
-            }
+                local.into()
+            })
+            .collect();
+        for (path, value) in leaves.iter().zip(values) {
+            let leaf_type = path.last().expect("a leaf path names a field").2;
             let assign = self.alloc_expr(
                 ExprKind::Assign {
-                    target: target_field,
-                    value: value_field.into(),
+                    target: chain(handle, "$deref_ref", handle_type, path),
+                    value,
                 },
-                *field_type,
+                leaf_type,
                 span,
             );
             out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));
@@ -1429,97 +1450,94 @@ impl FunctionTranslator<'_, '_> {
     fn convert_block(&self, block: &TirBlock) -> BlockId {
         let mut stmts: Vec<StmtId> = Vec::with_capacity(block.stmts.len());
         for s in &block.stmts {
-            if let Some(guarded) = self.guarded_stmt(s) {
-                stmts.extend(guarded);
-            } else if let Some(expanded) = self.try_expand_in_place_assign(s) {
-                stmts.extend(expanded);
-            } else if let Some(expanded) = self.try_expand_in_place_element_assign(s) {
-                stmts.extend(expanded);
-            } else {
-                stmts.push(self.convert_stmt(s));
+            match &s.kind {
+                TirStmtKind::Let { local_index, .. }
+                    if self.guarded_locals.contains(local_index) =>
+                {
+                    stmts.extend(self.guarded_let(s, *local_index));
+                }
+                TirStmtKind::Expr(expr) => match self.expand_assignment(expr) {
+                    Some(expanded) => stmts.extend(expanded),
+                    None => stmts.push(self.convert_stmt(s)),
+                },
+                _ => stmts.push(self.convert_stmt(s)),
             }
         }
         self.alloc_block(stmts, block.span)
     }
 
-    /// A guarded local's declaration, followed by its flag starting `false`;
-    /// and a whole assignment to it, which stores and raises the flag while the
-    /// local holds no storage yet, and writes in place once it does.
-    fn guarded_stmt(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+    /// A guarded local's declaration, followed by its flag starting `false`.
+    fn guarded_let(&self, stmt: &TirStmt, local: u32) -> Vec<StmtId> {
         let span = stmt.span;
-        match &stmt.kind {
-            TirStmtKind::Let { local_index, .. } if self.guarded_locals.contains(local_index) => {
-                let flag = self.alloc_local_with(TypeTable::BOOL, "$assigned".to_string(), true);
-                self.assigned_flags.borrow_mut().insert(*local_index, flag);
-                let start = self.convert_operand(&TirExpr::new(
-                    TirExprKind::BoolLiteral(false),
-                    TypeTable::BOOL,
-                    span,
-                ));
-                let declare = self.alloc_stmt(
-                    StmtKind::Let {
-                        name: format!("$assigned_{flag}"),
-                        local_index: flag,
-                        is_mut: true,
-                        type_id: TypeTable::BOOL,
-                        value: start,
-                        skip_value_copy: true,
-                    },
-                    span,
-                );
-                Some(vec![self.convert_stmt(stmt), declare])
-            }
-            TirStmtKind::Expr(TirExpr {
-                kind: TirExprKind::Assign { target, .. },
-                ..
-            }) => {
-                let TirExprKind::Local { index, .. } = target.kind else {
-                    return None;
-                };
-                let flag = *self.assigned_flags.borrow().get(&index)?;
-                let flag_read = |this: &Self| {
-                    this.alloc_expr(
-                        ExprKind::Local {
-                            index: flag,
-                            name: format!("$assigned_{flag}"),
-                        },
-                        TypeTable::BOOL,
-                        span,
-                    )
-                };
-                let raised = self.convert_operand(&TirExpr::new(
-                    TirExprKind::BoolLiteral(true),
-                    TypeTable::BOOL,
-                    span,
-                ));
-                let raise = self.alloc_expr(
-                    ExprKind::Assign {
-                        target: flag_read(self),
-                        value: raised,
-                    },
-                    TypeTable::UNIT,
-                    span,
-                );
-                let store = vec![
-                    self.convert_stmt(stmt),
-                    self.alloc_stmt(StmtKind::Expr(raise.into()), span),
-                ];
-                let Some(in_place) = self.try_expand_in_place_assign(stmt) else {
-                    return Some(store);
-                };
-                let then_block = self.alloc_block(in_place, span);
-                let else_block = self.alloc_block(store, span);
-                Some(vec![self.alloc_stmt(
-                    StmtKind::If {
-                        condition: flag_read(self).into(),
-                        then_block,
-                        else_block: Some(else_block),
-                    },
-                    span,
-                )])
-            }
-            _ => None,
-        }
+        let flag = self.alloc_local_with(TypeTable::BOOL, "$assigned".to_string(), true);
+        self.assigned_flags.borrow_mut().insert(local, flag);
+        let start = self.convert_operand(&TirExpr::new(
+            TirExprKind::BoolLiteral(false),
+            TypeTable::BOOL,
+            span,
+        ));
+        let declare = self.alloc_stmt(
+            StmtKind::Let {
+                name: format!("$assigned_{flag}"),
+                local_index: flag,
+                is_mut: true,
+                type_id: TypeTable::BOOL,
+                value: start,
+                skip_value_copy: true,
+            },
+            span,
+        );
+        vec![self.convert_stmt(stmt), declare]
+    }
+
+    /// A whole assignment to a guarded local, wherever it sits: it stores and
+    /// raises the flag while the local holds no storage yet, and writes in
+    /// place once it does.
+    fn guarded_assign(&self, assign: &TirExpr, flag: u32) -> Vec<StmtId> {
+        let span = assign.span;
+        let flag_read = || {
+            self.alloc_expr(
+                ExprKind::Local {
+                    index: flag,
+                    name: format!("$assigned_{flag}"),
+                },
+                TypeTable::BOOL,
+                span,
+            )
+        };
+        let raised = self.convert_operand(&TirExpr::new(
+            TirExprKind::BoolLiteral(true),
+            TypeTable::BOOL,
+            span,
+        ));
+        let raise = self.alloc_expr(
+            ExprKind::Assign {
+                target: flag_read(),
+                value: raised,
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        let store = vec![
+            self.alloc_stmt(
+                StmtKind::Expr(self.convert_expr_unexpanded(assign).into()),
+                span,
+            ),
+            self.alloc_stmt(StmtKind::Expr(raise.into()), span),
+        ];
+        let Some(in_place) = self.try_expand_in_place_assign(assign) else {
+            return store;
+        };
+        let then_block = self.alloc_block(in_place, span);
+        let else_block = self.alloc_block(store, span);
+        vec![self.alloc_stmt(
+            StmtKind::If {
+                condition: flag_read().into(),
+                then_block,
+                else_block: Some(else_block),
+            },
+            span,
+        )]
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {
@@ -1770,6 +1788,20 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn convert_expr(&self, expr: &TirExpr) -> ExprId {
+        if let Some(stmts) = self.expand_assignment(expr) {
+            let block = self.alloc_block(stmts, expr.span);
+            return self.alloc_expr(
+                ExprKind::plain_block(block, expr.type_id, "assign"),
+                expr.type_id,
+                expr.span,
+            );
+        }
+        self.convert_expr_unexpanded(expr)
+    }
+
+    /// [`Self::convert_expr`] for an assignment it has decided to lower as the
+    /// one node it is.
+    fn convert_expr_unexpanded(&self, expr: &TirExpr) -> ExprId {
         // String / bytes literals lower to a `StructLiteral` over a packed
         // `Array<u8>` repr (`seq_literal`), so the generic aggregate machinery
         // (`.used` field-projection, body globalization) applies.
@@ -2667,7 +2699,6 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
-        use crate::compiler_item::SeqField;
         let (elem, repr_ty) = self.packed_layout(seq_type_id);
         let data = PackedData::new(bytes, elem);
         let len = i32::try_from(data.len()).expect("seq literal length fits i32");

@@ -22,9 +22,135 @@ impl P {
     }
 }
 
+struct G {
+    h: H,
+}
+
+struct E {}
+
 fn reassign_through(h: &mut H, p: &P) -> i32 {
     h.p = P { a: 100, b: 200 };
     return p.sum();
+}
+
+fn make_reader(p: &P) -> fn() -> i32 {
+    return || p.a;
+}
+
+// Each of these takes its new values from `n`, so no call in the body is
+// what keeps the borrow observable.
+
+fn nested_under_local(n: i32) -> i32 {
+    let mut g = G { h: H { p: P { a: 1, b: 1 }, tag: "a" } };
+    let hp = &g.h.p;
+    g = G { h: H { p: P { a: 3, b: n }, tag: "b" } };
+    return hp.sum();
+}
+
+fn nested_under_field(n: i32) -> i32 {
+    let mut g = G { h: H { p: P { a: 1, b: 1 }, tag: "a" } };
+    let hp = &g.h.p;
+    g.h = H { p: P { a: 3, b: n }, tag: "b" };
+    return hp.sum();
+}
+
+fn nested_under_element(n: i32) -> i32 {
+    let mut gs: List<G> = [G { h: H { p: P { a: 1, b: 1 }, tag: "a" } }];
+    let hp = &gs[0].h.p;
+    gs[0] = G { h: H { p: P { a: 3, b: n }, tag: "b" } };
+    return hp.sum();
+}
+
+fn field_of_element(n: i32) -> i32 {
+    let mut hs: List<H> = [H { p: P { a: 1, b: 1 }, tag: "a" }];
+    let r = &hs[0].p;
+    hs[0].p = P { a: 3, b: n };
+    return r.sum();
+}
+
+fn field_in_an_arm(n: i32) -> i32 {
+    let mut h = H { p: P { a: 1, b: 1 }, tag: "a" };
+    let hp = &h.p;
+    match n {
+        3 => h.p = P { a: 3, b: n },
+        _ => {},
+    }
+    return hp.sum();
+}
+
+fn element_in_an_arm(n: i32) -> i32 {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let r = &xs[0];
+    match n {
+        3 => xs[0] = P { a: 3, b: n },
+        _ => {},
+    }
+    return r.sum();
+}
+
+fn element_in_a_closure(n: i32) -> i32 {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let r = &xs[0];
+    let mut set = |v: P| xs[0] = v;
+    set(P { a: 3, b: n });
+    return r.sum();
+}
+
+fn deferred_first_assigned_in_an_arm(n: i32) -> i32 {
+    let mut x: P;
+    match n {
+        _ => x = P { a: 1, b: 1 },
+    }
+    let r = &x;
+    x = P { a: 5, b: n };
+    return r.sum();
+}
+
+fn reassigned_under_a_closure(n: i32) -> i32 {
+    let mut x = P { a: 1, b: n };
+    let f = make_reader(&x);
+    x = P { a: 7, b: n };
+    return f();
+}
+
+test "a place below the assigned one" {
+    assert nested_under_local(3) == 6;
+    assert nested_under_field(3) == 6;
+    assert nested_under_element(3) == 6;
+    assert field_of_element(3) == 6;
+}
+
+test "an assignment in expression position" {
+    assert field_in_an_arm(3) == 6;
+    assert element_in_an_arm(3) == 6;
+    assert element_in_a_closure(3) == 6;
+    assert deferred_first_assigned_in_an_arm(5) == 10;
+}
+
+// The new value is made of the old one's parts, so every part is read before
+// any is written.
+fn swap_under_a_field_ref(n: i32) -> i32 {
+    let mut h = H { p: P { a: 1, b: 1 }, tag: "a" };
+    let mut pair = [h.p, P { a: n, b: n }];
+    let first = &pair.0;
+    pair = [pair.1, pair.0];
+    return first.sum() * 10 + pair.1.sum();
+}
+
+test "a value made of the place's own parts" {
+    assert swap_under_a_field_ref(3) == 62;
+}
+
+test "a borrow a closure captured" {
+    assert reassigned_under_a_closure(3) == 7;
+}
+
+test "a List element of a struct with no fields" {
+    let mut es: List<E> = [E {}, E {}];
+    let r = &es[0];
+    es[0] = E {};
+    let same = ref_eq(r, &es[0]);
+    assert same;
 }
 
 test "a local" {

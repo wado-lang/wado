@@ -103,12 +103,8 @@ impl Scan<'_> {
             let written = |&(owner, field): &(TypeId, u32)| {
                 self.indirect
                     || self.callees.iter().any(|c| {
-                        self.mod_ref.may_write_field_unhanded(
-                            &c.module_source,
-                            &c.name,
-                            owner,
-                            field,
-                        )
+                        self.mod_ref
+                            .may_write_field(&c.module_source, &c.name, owner, field)
                     })
             };
             if let Some(first) = steps.iter().position(written) {
@@ -202,11 +198,10 @@ impl Scan<'_> {
                 return;
             }
         }
-        let writes = self.mod_ref.writes(&func.module_source, &func.name);
-        if let Some(first) = steps
-            .iter()
-            .position(|(owner, field)| writes.may_write_field(*owner, *field))
-        {
+        if let Some(first) = steps.iter().position(|&(owner, field)| {
+            self.mod_ref
+                .may_write_field(&func.module_source, &func.name, owner, field)
+        }) {
             self.escaping.push(steps[first..].to_vec());
         }
     }

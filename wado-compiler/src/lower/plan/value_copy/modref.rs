@@ -135,6 +135,10 @@ impl Writes {
 pub struct ModRef {
     per_func: FuncKeyMap<Writes>,
     unknown: Writes,
+    /// The body-less functions whose declaration says they write no struct
+    /// field (`BuiltinDeclaration::writes_no_field`). Their writes into the
+    /// arrays they are handed stay opaque to every other question.
+    write_no_field: FuncKeySet,
 }
 
 impl ModRef {
@@ -145,22 +149,17 @@ impl ModRef {
         self.per_func.get(module, name).unwrap_or(&self.unknown)
     }
 
-    /// Whether calling `(module, name)` may write field `field` of an `owner`
-    /// it is not handed. A `core:builtin` with no body writes only through
-    /// the arguments it is handed, which are arrays and scalars, never a
-    /// struct field.
+    /// Whether calling `(module, name)` may write field `field` of an `owner`.
     #[must_use]
-    pub fn may_write_field_unhanded(
+    pub fn may_write_field(
         &self,
         module: &ModuleSource,
         name: &str,
         owner: TypeId,
         field: u32,
     ) -> bool {
-        match self.per_func.get(module, name) {
-            Some(writes) => writes.may_write_field(owner, field),
-            None => !module.is_builtin(),
-        }
+        !self.write_no_field.contains(module, name)
+            && self.writes(module, name).may_write_field(owner, field)
     }
 }
 
@@ -226,10 +225,13 @@ pub fn compute_mod_ref(
     // A body this scan reads. One without reaches the caller only through what
     // it is handed, which the call site answers for.
     let mut defined = FuncKeySet::default();
+    let mut write_no_field = FuncKeySet::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         if func.body.is_some() {
             defined.insert(func.module_source.clone(), func.name.clone());
+        } else if builtins.writes_no_field(&*func) {
+            write_no_field.insert(func.module_source.clone(), func.name.clone());
         }
     }
 
@@ -296,6 +298,7 @@ pub fn compute_mod_ref(
             opaque: true,
             ..Writes::default()
         },
+        write_no_field,
     }
 }
 
