@@ -776,6 +776,7 @@ The marker is an error at its own span when it has no case to wrap into:
 variant Reading {
     Celsius(f64),
     Fahrenheit(f64),
+    Kelvin(f64),
 }
 
 impl From<f64> for Reading;
