@@ -1357,7 +1357,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
 /// so synthesis does not collide with indices the body already uses. Nested
 /// closures are not descended into — their locals are a different scope.
 fn max_local_index_in_expr(expr: &TirExpr) -> u32 {
-    use crate::tir_visitor::TirRefVisitor;
     let mut visitor = MaxLocalIndex(0);
     visitor.visit_expr(expr);
     visitor.0
@@ -1373,7 +1372,6 @@ impl MaxLocalIndex {
     }
 
     fn walk_pattern(&mut self, pattern: &TirPattern) {
-        use crate::tir::TirPattern;
         match pattern {
             TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
                 self.note(*local_index);
@@ -3180,7 +3178,6 @@ fn build_handler_impl_index(
 /// Strip a single leading `&` / `&mut` layer to find the underlying
 /// struct type that an `impl Effect for T` block targets.
 fn deref_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
-    use crate::tir::ResolvedType;
     match tt.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
         _ => type_id,

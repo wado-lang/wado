@@ -2,7 +2,7 @@ use crate::ast::{
     self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
     Pattern, Stmt, for_each_pattern_binding,
 };
-use crate::compiler_host::Diagnostic;
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::liveness::is_user_authored;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -74,7 +74,6 @@ pub enum ResourceMoveError {
 
 impl From<ResourceMoveError> for Diagnostic {
     fn from(e: ResourceMoveError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (message, span, module) = match e {
             ResourceMoveError::UseAfterMove {
                 name,

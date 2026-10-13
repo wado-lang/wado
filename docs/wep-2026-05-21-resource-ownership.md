@@ -309,36 +309,9 @@ where it cannot prove move / share / fresh; no elision pass):
   yields `lower_group`'s value and `lower_group` yields `lower_element`'s) has
   each reading the other's unproven "borrowed", and every result the family
   builds is deep-copied.
-- Transient borrows — a borrow that ends before the move does not pin its
-  referent. A `&` call argument to a non-storing callee already did not; a
-  `match` / `if let` over a `&place` scrutinee is the same borrow and now reads
-  the same way, so `if let Repeat(r) = &op { … }; ops.push(op)` moves `op`
-  instead of deep-copying it. What the arms bind names the scrutinee's storage,
-  so an escape recorded against a binding closes back over the binding's
-  referent (`propagate_escapes_to_referents`). A reference binding therefore
-  pins the scrutinee exactly as `&op` itself would wherever it outlives the
-  match — a retaining callee, an aggregate literal, a global, a write through a
-  place, the result.
-
-  A borrow stored in a local lasts as long as that local's value can be read.
-  This covers `let r = &a`, a call result a callee hands the borrow back in
-  (`let it = (&a).into_iter()`), and a binding of a `&a` scrutinee. The
-  referent is pinned only at a move where one of those holders is still
-  readable. A holder is readable where it is live, where a copy read out of it
-  is live, or anywhere once its value has gone where no alias chain follows it,
-  such as a literal, a result, or a callee that keeps it. A scalar read out of a
-  holder carries none of its storage, so `P { a: r.a }` hands nothing on. So a
-  double buffer that iterates `&a` and then swaps `a` and `b` moves both lists
-  every step.
-
-  A call result that is not stored is kept by whatever takes it. Passed straight
-  to another call, or borrowed for one, it lasts as long as that call keeps it,
-  so `view.chars().count()` pins nothing past the count.
-
-  The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
-  `a` to `b`. Where `b` is dead after every binding that reads it, it is
-  rebound before it is read again. A storage-sharing check walks through such
-  an edge but does not count `b` as holding the storage `a` took.
+- Transient borrows — a referent is pinned only at a move where a holder of a
+  borrow of it is still readable. When a holder is readable is stated in
+  [WEP: Borrow Liveness and Assignment to a Borrowed Place](./wep-2026-10-13-borrowed-places.md#a-borrow-lasts-while-its-holder-is-readable).
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
   as an opaque callee made every parameter handed to one escape. `a[i]` is a
@@ -375,16 +348,6 @@ verdict being computed and pin it at borrowed. The returns that do not go throug
 the recursive call are still checked on their own, and those base cases are what
 a recursive result is built from.
 
-### What a root owns
-
-Every rule above asks who owns the storage a place names, and answers from the
-place's root local. A `&` / `&mut` local is not that owner: its immutability says
-nothing about whether the storage is written, its death frees nothing, and a
-write the owner makes never mentions it. A root reached through a reference
-resolves to the place it borrows (`let r = &a.b` answers at `a.b`); one this body
-cannot resolve — a parameter, or a reference a call returned — names storage the
-body does not own and answers nothing, leaving it to sharing.
-
 ### Sharing
 
 A read-only binding may alias its source's storage when nothing writes that
@@ -392,28 +355,10 @@ storage _while the binding is live_. Both halves are readings of one backward
 walk: what is live at each point, and what each point writes. A write conflicts
 when the binding is live there and the two places may alias; the same write
 elsewhere in the body does not. Without liveness a deserializer deep-copies a
-field it read before any `&mut self` call runs.
-
-Live means the storage is still readable, not that the local still is. A match
-arm binding is its scrutinee's storage under a second name, and a `let` out of a
-projection is its root's, so the live set at a write is closed over what each
-live local took its value out of. Reading the local alone calls the storage dead
-while a binding is still looking at it, which shares across the write.
-
-A `break` resumes at the loop's exit and a `continue` at its head, so the two
-read different live sets. Answering both with the exit set drops every
-loop-carried reader, and a write reached through a `continue` then looks
-unobserved.
-
-Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
-a reference already taken out of `p.f` keeps what it has, and only a write
-_inside_ that storage disturbs it. A repoint is therefore never a conflict for a
-binding that read the place: the binding keeps its share across it.
-
-`*p = v` repoints nothing when the referent is an aggregate. The write is
-expanded field by field into the storage the caller holds, so everything read out
-of `*p` sees it. Only a boxed borrow replaces a slot, and one predicate decides
-which of the two an assignment is.
+field it read before any `&mut self` call runs. Who owns the storage a place
+names, what is live at a point, how a write is placed and what a call writes are
+stated in
+[WEP: Borrow Liveness and Assignment to a Borrowed Place](./wep-2026-10-13-borrowed-places.md).
 
 A move also hands storage on, so a binding the fold will move out of cannot share
 it. Two reads are such a move: a value read of the binding, and a place-level
@@ -439,46 +384,6 @@ the move side now reads the same closure. Both sides close over places rather
 than root locals, so two components of one aggregate are not readers of each
 other.
 
-What a call writes is read off the callee rather than assumed: `modref.rs`
-collects each function's writes as fields of the type carrying them and closes
-them over the call graph, so a read of one field survives a call that writes
-another. The receiver is one such handle and every other `&mut` the call is
-given is another, and the callee's own answer covers them alike. A callee with no
-body reaches only the `&mut` arguments it is handed; anything this cannot name
-writes everything.
-
-Some handles the walk loses: one stored into an aggregate, and one given to a
-callee with no body. Each writes the whole of what it was handed. That answer is
-its own, never a field index standing for every field, because a caller comparing
-paths cannot tell such an index from one naming a real field. It reads the two as
-disjoint and ignores the very write it was told about. One function mints the key
-both sides compare (`place::field_owner`), so what a callee records and what a
-caller looks up cannot drift.
-
-A `&mut` that outlives the expression taking it (stored, captured, or kept by
-the callee's return) writes its root wherever its holder runs, which no point in
-the walk names. So no binding shares storage read out of such a root. The
-optimizer's alias query answers the same way: a write through a dereferenced
-field, payload or element reaches whatever the reference was taken from.
-
-An `Index` or a `Variant` step names no type of its own, so a `Field` past one
-answers for the element rather than for the container the caller holds. A path
-reached through either writes the whole of what its root was lent. Keying it by
-the element's field alone leaves a caller holding the container nothing to match,
-and it shares storage the call goes on to write.
-
-A path through a reference-typed field places nothing: it ends at storage its
-root only borrows, so the root names the holder rather than the storage. A read
-taken through one copies: the write that reaches its storage is rooted
-elsewhere, where the root-keyed scan never looks. Two reference fields of one
-root may name one storage as well, so splitting a read and a write at them
-proves nothing. A write made through one is placed no better, and conflicts
-with every binding live at it.
-
-A reference bound out of such a field names no referent this walk can follow:
-the field holds the reference, and the reference points elsewhere again. The
-immutable-root rule abstains over one rather than answering about the holder.
-
 Handing the source root to a new owner costs the binding its share on the same
 terms. That owner may write what the binding aliases, so the read matters where
 the binding's storage is still read afterwards, and nowhere else.
@@ -487,11 +392,6 @@ A `List` or a `String` copy right-sizes its backing storage to the current
 length, which a share skips. Capacity is not part of the value, but `capacity()`
 reads it, so a binding whose own capacity is read keeps its copy. One that never
 asks observes no difference and shares.
-
-Every analysis here asks one resolver what an expression names (`place.rs`).
-Its answer separates a value of its own from a place the walk cannot follow, so
-a shape no arm covers costs an elision rather than becoming a write nobody
-records.
 
 ### Which helpers exist
 
@@ -852,13 +752,6 @@ Moving one resource field out of a temporary aggregate (`make().a`) drops
 nothing else the temporary owns, so a second resource field leaks.
 
 A panic drops nothing the program owns.
-
-### A destructured field's path is assumed to borrow
-
-A pattern-destructured field's path is marked as borrowing, because the pattern
-carries no type saying whether that field does, and the mark refuses those paths
-a share outright. Every WIR golden is byte-identical with the mark removed, so
-nothing measured pays for it.
 
 ### Freshness does not read the fold's own wraps
 

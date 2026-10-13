@@ -1,8 +1,9 @@
-// A `let r = &b.xs` capture folded to a re-read of `b.xs` is unsound if `b.xs`
-// is rewritten inside a loop that also reads `r`: the write, though textually
-// after the read, precedes it on the next iteration's back-edge. ref_elim's
-// capture interval must extend across the enclosing loop, so `r.v` is NOT
-// folded here and each iteration reads the value written by the previous one.
+// `let r = &b.xs` names the place, and `b.xs` is assigned inside a loop that
+// also reads `r`: the write, though textually after the read, precedes it on
+// the next iteration's back-edge. `r` is live there, so the assignment writes
+// into the storage `r` holds (WEP 2026-10-13), and the second turn reads 999.
+// ref_elim's capture interval must extend across the enclosing loop, or it
+// would answer the read from before the write.
 use { println, Stdout } from "core:cli";
 
 struct Inner {
@@ -30,8 +31,8 @@ export fn run() with Stdout {
         i += 1;
     }
     println(`${total}`);
-    assert total == 2;
+    assert total == 1000;
 }
 
 __DATA__
-{"stdout": "2\n"}
+{"stdout": "1000\n"}

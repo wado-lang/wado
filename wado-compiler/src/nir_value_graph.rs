@@ -22,7 +22,6 @@ use crate::tir::{TypeId, TypeTable};
 /// `prim` is the operand's resolved primitive type. A scalar yields `None`
 /// unless `prim` is a width the evaluator's arithmetic is defined at.
 pub(crate) fn value_kind_to_const(kind: &ValueKind, prim: Option<PrimitiveType>) -> Option<Value> {
-    use crate::const_eval::Value;
     Some(match kind {
         ValueKind::Int(value, _) => {
             let prim = prim.filter(|p| is_int_prim(*p))?;
@@ -90,7 +89,6 @@ impl std::hash::Hash for ConstKey {
 /// Structural equality under the identity relation: floats compare by bit
 /// pattern, so `NaN` equals itself and `+0.0` differs from `-0.0`.
 fn const_identity_eq(a: &Value, b: &Value) -> bool {
-    use crate::const_eval::Value;
     match (a, b) {
         (
             Value::Int {
@@ -186,7 +184,6 @@ fn const_identity_eq(a: &Value, b: &Value) -> bool {
 
 /// The hash matching [`const_identity_eq`].
 fn const_identity_hash<H: std::hash::Hasher>(v: &Value, state: &mut H) {
-    use crate::const_eval::Value;
     use std::hash::Hash;
 
     std::mem::discriminant(v).hash(state);
@@ -660,7 +657,6 @@ impl ValuePool {
     /// chooses between an unboxed scalar kind and a boxed [`ValueKind::Const`],
     /// so `Int(7)` and `Const(Int 7)` never become two ids for one value.
     pub fn constant(&mut self, value: &Value, ty: TypeId) -> ValueId {
-        use crate::const_eval::Value;
         let kind = match value {
             Value::Int { value, .. } => ValueKind::Int(*value, ty),
             Value::Float { value, .. } => ValueKind::Float(value.to_bits(), ty),

@@ -6,6 +6,7 @@
 //! Pipeline: `WirPackage` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
 
 use crate::ProviderComponent;
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
@@ -123,7 +124,6 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) -> Option<Inva
 /// window of operators around the failure so the failing instruction is named
 /// rather than left as a raw module offset.
 fn describe_offending_location(wasm: &[u8], offset: u64) -> Option<String> {
-    use crate::hashmap::IndexMap;
     use wasmparser::{Name, Parser, Payload};
     let mut import_funcs = 0u32;
     let mut defined = 0u32;

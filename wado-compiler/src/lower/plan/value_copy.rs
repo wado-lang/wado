@@ -10,8 +10,10 @@ pub mod confine;
 pub mod funcset;
 pub mod last_use;
 pub mod modref;
+pub mod observed;
 pub mod ownership;
 pub mod place;
+pub mod reach;
 pub mod retention;
 pub mod synthesize;
 
@@ -21,7 +23,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable,
+    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
+    TypeTable,
 };
 use funcset::{FuncKeyMap, FuncKeySet};
 
@@ -113,6 +116,11 @@ pub struct ValueCopyPlan {
     /// What each call writes into its receiver, as fields of the receiver's
     /// type: a read of one field is undisturbed by a call that writes another.
     pub mod_ref: modref::ModRef,
+    /// The fields a borrow may observe from outside the body assigning them, so
+    /// an assignment through a parameter or a reference writes in place.
+    pub observed_fields: observed::ObservedFields,
+    /// What a `fn` value of each shape can hold, for `reach::StorageReach`.
+    pub closure_captures: reach::ClosureCaptures,
     /// The projection each accessor returns out of its receiver, so a name
     /// taken from one resolves to the storage it stands for.
     pub return_paths: place::ReturnPaths,
@@ -139,6 +147,9 @@ pub struct ValueCopyPlan {
     /// treats such a call's receiver as a sibling mutation, so a by-value
     /// argument aliasing it keeps its copy.
     pub mut_receiver_methods: FuncKeySet,
+    /// The instances of `List`'s `index_assign`: a call to one is `xs[i] = v`,
+    /// an assignment to an element (WEP 2026-10-13).
+    pub list_element_assigns: FuncKeySet,
     /// Per-parameter confinement: a still-live value into a confined parameter
     /// needs no defensive copy (caller-side replacement for `param_escapes`),
     /// and one the callee hands back is a projection of the argument.
@@ -197,13 +208,27 @@ pub fn plan(
         &builtins,
         &confined_params,
     );
-    let retained = retention::compute_retention(flat, &call_graph, &builtins);
+    let closure_captures = reach::ClosureCaptures::collect(flat);
+    let retained = retention::compute_retention(flat, &call_graph, &builtins, &closure_captures);
+    let list_index_assign = match flat
+        .type_table
+        .borrow()
+        .compiler_items()
+        .template(CompilerItem::ListIndexAssign)
+    {
+        Some(TemplateId::Declared { def, .. }) => Some(def),
+        _ => None,
+    };
     let mut mut_receiver_methods = FuncKeySet::default();
+    let mut list_element_assigns = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {
         let f = f.borrow();
         if f.params.first().is_some_and(|p| p.is_mut_ref) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
+        }
+        if f.def_id.is_some() && f.def_id == list_index_assign {
+            list_element_assigns.insert(f.module_source.clone(), f.name.clone());
         }
         mut_ref_params.insert(
             f.module_source.clone(),
@@ -220,14 +245,20 @@ pub fn plan(
     );
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
+    let mod_ref =
+        modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned, &builtins);
+    let observed_fields = observed::compute(
+        flat,
+        &retained.calls,
+        &mod_ref,
+        &ref_receiver_methods,
+        &closure_captures,
+    );
     ValueCopyPlan {
         helpers,
-        mod_ref: modref::compute_mod_ref(
-            flat,
-            &return_paths,
-            &conventions.returns_owned,
-            &builtins,
-        ),
+        mod_ref,
+        observed_fields,
+        closure_captures,
         return_paths,
         returns_owned: conventions.returns_owned,
         returns_projection: conventions.returns_projection,
@@ -235,6 +266,7 @@ pub fn plan(
         retention: retained.calls,
         functor_rows: retained.rows,
         mut_receiver_methods,
+        list_element_assigns,
         confined_params,
         mut_ref_params,
         ref_receiver_methods,
@@ -278,6 +310,16 @@ pub fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
         type_table.get(type_id),
         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
     )
+}
+
+/// Whether a value of `type_id` copies on every read and so carries no
+/// storage or reference.
+pub fn is_scalar_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_primitive_like(type_id)
+        || matches!(
+            type_table.get(type_id),
+            ResolvedType::Enum { .. } | ResolvedType::Unit
+        )
 }
 
 /// True when a value of `type_id` must be deep-copied on assignment

@@ -95,6 +95,82 @@ fn iterator_handed_away() -> i32 {
     return -1;
 }
 
+struct P {
+    a: i32,
+    b: i32,
+}
+
+struct H {
+    p: P,
+}
+
+// `&hs[0].p` borrows through `index_value`, whose result is a projection of
+// `hs` rather than a value of its own.
+fn element_field_ref() -> i32 {
+    let hs: List<H> = [H { p: P { a: 1, b: 1 } }];
+    let rp = &hs[0].p;
+    let mut moved = hs;
+    moved[0].p.a = 9;
+    return rp.a;
+}
+
+// `first` comes out of the iterator, which holds `xs`: the iterator's own
+// storage is not what `next` hands back, the element it leads to is.
+fn element_out_of_iterator() -> i32 {
+    let xs: List<P> = [P { a: 1, b: 1 }];
+    let mut it = (&xs).into_iter();
+    let first = it.next().unwrap();
+    let mut moved = xs;
+    moved[0].a = 9;
+    return first.a;
+}
+
+// A closure call keeps what it is handed, as far as the item's own type
+// reaches: a `&P` out of `xs` is `xs`'s storage.
+fn element_kept_through_a_closure() -> i32 {
+    let xs: List<P> = [P { a: 1, b: 1 }];
+    let mut kept: List<&P> = [];
+    let mut keep = |p: &P| kept.push(p);
+    for let p of &xs {
+        keep(p);
+    }
+    let mut moved = xs;
+    moved[0].a = 9;
+    return kept[0].a;
+}
+
+fn make_reader(p: &P) -> fn() -> i32 {
+    return || p.a;
+}
+
+// A closure capturing the borrow holds `x` as long as it is readable.
+fn captured_by_a_returned_closure(n: i32) -> i32 {
+    let x = P { a: 1, b: n };
+    let f = make_reader(&x);
+    let mut y = x;
+    y.a = 9;
+    return f() * 100 + y.a;
+}
+
+struct Reader {
+    f: fn mut() -> i32,
+}
+
+fn hold_reader(p: &P) -> Reader {
+    return Reader { f: make_reader(p) };
+}
+
+// The closure is minted as a `fn` and held as a `fn mut`: what a `fn` value
+// can hold is read off its shape, not its mutability.
+fn captured_inside_a_struct(n: i32) -> i32 {
+    let x = P { a: 1, b: n };
+    let mut r = hold_reader(&x);
+    let mut y = x;
+    y.a = 9;
+    let mut f = r.f;
+    return f() * 100 + y.a;
+}
+
 fn swap_under_live_ref() -> i32 {
     let mut a: List<i32> = [1];
     let mut b: List<i32> = [5];
@@ -110,9 +186,11 @@ export fn run() with Stdout {
     println(`${ref_local()} ${copied_ref()} ${call_result()} ${branch_result(true)}`);
     println(`${match_binding()} ${live_iterator()} ${iterator_handed_away()}`);
     println(`${swap_under_live_ref()}`);
+    println(`${element_field_ref()} ${element_out_of_iterator()} ${element_kept_through_a_closure()}`);
+    println(`${captured_by_a_returned_closure(3)} ${captured_inside_a_struct(3)}`);
 }
 
 __DATA__
 {
-    "stdout": "1 1 1 1\n1 1 1\n11\n"
+    "stdout": "1 1 1 1\n1 1 1\n11\n1 1 1\n109 109\n"
 }

@@ -5610,6 +5610,8 @@ Joins elements into a string with the given separator.
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
 
+`#[compiler_item("list_index_assign")]`
+
 #### `impl IndexRef<i32> for List<T>`
 
 ##### `fn index_ref(&self, index: i32) -> &T`

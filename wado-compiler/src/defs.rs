@@ -680,6 +680,7 @@ impl AstVisitor for LocalItems<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
     use crate::lexer::lex;
     use crate::logger::Logger;
     use crate::module_source::ModuleSourceInterner;
@@ -935,7 +936,6 @@ mod tests {
         SymbolTable,
         ModuleSource,
     ) {
-        use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
         let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
         let ast = parser::Parser::new(lexed.tokens)

@@ -1857,6 +1857,23 @@ impl TypeTable {
         }
     }
 
+    /// Whether a value of `ty` is mutated in place through a reference to it, so
+    /// a reference to it is its own GC handle: a `struct` (`String` among them),
+    /// a `List` or a tuple. Assigning such a place writes into its storage
+    /// wherever a reference to it may be read (WEP 2026-10-13). `i128` / `u128`
+    /// are struct-backed but immutable, so their storage may be shared and is
+    /// never written. A reference names storage rather than holding a value,
+    /// whether spelled `&T` or as the `Box<T>` boxing makes of one.
+    pub fn is_in_place_aggregate(&self, ty: TypeId) -> bool {
+        if self.is_reference_shaped(ty) {
+            return false;
+        }
+        match self.get(ty) {
+            ResolvedType::Struct { .. } => !self.is_wide_int(ty),
+            _ => self.list_element(ty).is_some() || self.as_tuple(ty).is_some(),
+        }
+    }
+
     fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
@@ -9174,6 +9191,12 @@ impl DeclarationTable<BuiltinDeclaration> {
             .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
     }
 
+    /// Whether `call` writes no struct field.
+    pub fn writes_no_field<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(BuiltinDeclaration::writes_no_field)
+    }
+
     /// Whether `call` writes nothing itself, only handing back part of an
     /// argument.
     pub fn only_aliases<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
@@ -9510,6 +9533,17 @@ pub struct TirStruct {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<NamePolicy>,
+}
+
+/// Each reified struct's fields, keyed as `ResolvedType::Struct` names it.
+pub type StructFields = IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>;
+
+#[must_use]
+pub fn struct_fields(structs: &[TirStruct]) -> StructFields {
+    structs
+        .iter()
+        .map(|s| ((s.def, s.type_args.clone()), s.fields.clone()))
+        .collect()
 }
 
 #[derive(Debug, Clone)]

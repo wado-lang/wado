@@ -1726,7 +1726,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         symbols: &SymbolTable,
         type_table: &Rc<RefCell<TypeTable>>,
     ) {
-        use crate::symbol::SymbolKind;
         let mut tt = type_table.borrow_mut();
         for symbol in symbols.all_symbols() {
             let is_type_decl = matches!(

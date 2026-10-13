@@ -2465,7 +2465,9 @@ pub fn is_test_function(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstIdSpace;
     use crate::compiler_host::DependencyIndex;
+    use crate::hashmap::IndexSet;
     use std::assert_matches;
 
     #[test]
@@ -2596,7 +2598,6 @@ mod tests {
         // process-global `AstIdSpace`, which varies with unrelated parse
         // history and would otherwise leak into compiler output (mangled WIR
         // function names), making it non-deterministic.
-        use crate::ast::{AstId, AstIdSpace};
         let space_a = AstIdSpace::next();
         let space_b = AstIdSpace::next();
         assert_ne!(space_a, space_b);
@@ -2673,7 +2674,6 @@ mod tests {
 
     #[test]
     fn test_struct_name_hash_eq() {
-        use crate::hashmap::IndexSet;
         let mut interner = ModuleSourceInterner::new();
         let s1 = StructName::from_path_and_name(
             &mut interner,

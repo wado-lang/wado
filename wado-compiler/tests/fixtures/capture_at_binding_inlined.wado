@@ -1,12 +1,10 @@
-// `&<non-local place>` captures the object the place denotes at binding time
-// (WEP reference-representation: it "reads a snapshot copy"). Reassigning the
-// place gives it a fresh handle the earlier reference never saw, so a later read
-// through the reference must observe the captured value, not the reassignment —
-// even after inlining turns `r[0]` into a field read that ref_elim would
-// otherwise fold back into a live re-read of the place. An *in-place* mutation
-// through the shared handle (`xs[i] = …`, `push`) stays visible; only a handle
-// replacement is snapshotted. Each case below reassigns through a different
-// path — direct, aliased `&mut`, and an out-of-line `&mut self` method.
+// `&<non-local place>` names the place, so a later read through the reference
+// observes an assignment to the place, as it observes a mutation through the
+// shared handle (`xs[i] = …`, `push`). The assignment writes into the storage
+// the reference holds wherever the reference is read afterwards
+// (WEP 2026-10-13), and inlining turning `r[0]` into a field read answers the
+// same. Each case below reassigns through a different path — direct, aliased
+// `&mut`, and an out-of-line `&mut self` method.
 use { println, Stdout } from "core:cli";
 
 struct Box { xs: List<i32> }
@@ -46,4 +44,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{ "stdout": "10\n20\n10\n10\n" }
+{ "stdout": "20\n20\n20\n20\n" }

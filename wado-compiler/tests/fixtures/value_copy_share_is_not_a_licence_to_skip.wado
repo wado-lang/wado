@@ -84,7 +84,10 @@ test "a release does not travel to a chain whose root is read again" {
     assert h.xs.len() == 0;
 }
 
-test "a released share does not outrun a stored borrow" {
+// A borrow of `b` read after `b = []` sees the assignment, which therefore
+// writes into `b`'s storage (WEP 2026-10-13). A binding read out of `b` before
+// it cannot share that storage, or the write would empty it too.
+test "a share does not outlive an in-place assignment under a stored borrow" {
     let h = Holder { xs: [1, 2] };
     let mut b = h.peek();
     let w = watch(&b);
@@ -92,11 +95,11 @@ test "a released share does not outrun a stored borrow" {
     b = [];
     let mut c = s;
     c.push(3);
-    assert w.xs.len() == 2;
+    assert w.xs.len() == 0;
     assert c.len() == 3;
 }
 
-test "a released share does not outrun a reference local" {
+test "a share does not outlive an in-place assignment under a reference local" {
     let h = Holder { xs: [1, 2] };
     let mut b = h.peek();
     let r = &b;
@@ -104,7 +107,7 @@ test "a released share does not outrun a reference local" {
     b = [];
     let mut c = s;
     c.push(3);
-    assert r.len() == 2;
+    assert r.len() == 0;
     assert c.len() == 3;
 }
 

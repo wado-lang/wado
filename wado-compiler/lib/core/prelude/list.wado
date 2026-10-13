@@ -357,6 +357,7 @@ impl<T> IndexValue<i32> for List<T> {
 impl<T> IndexAssign<i32> for List<T> {
     type Output = T;
 
+    #[compiler_item("list_index_assign")]
     fn index_assign(&mut self, index: i32, value: Self::Output) {
         assert 0 <= index < self.used, "index out of bounds";
         self.repr[index] = value;

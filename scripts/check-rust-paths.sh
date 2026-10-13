@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Hold every tracked Rust file to the rule that a `crate::` / `super::` path
-# belongs in a `use` item (AGENTS.md > General Rules). Only the driver lives
+# belongs in a `use` item at the top of the module (AGENTS.md > General Rules),
+# not in one inside a function body. Only the driver lives
 # here: the detector is `package-gale/tools/rust_inline_paths.wado`, which
 # parses with the Gale Rust grammar and needs `wado run`.
 #

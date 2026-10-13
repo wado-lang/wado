@@ -13,9 +13,9 @@ use crate::ast::{
     LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
     SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl, TraitBound, TraitDecl,
-    TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound,
+    TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
+    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
@@ -113,7 +113,6 @@ fn has_with(u: &UseDecl) -> bool {
 /// containers) are 0, a container of scalars is 1, a container holding another
 /// container is 2, and so on.
 fn attr_value_depth(v: &AttrValue) -> usize {
-    use crate::ast::AttrValue;
     match v {
         AttrValue::Array(items) if !items.is_empty() => {
             1 + items
@@ -2631,8 +2630,6 @@ impl<'a> Unparser<'a> {
     /// Twin of [`unparse_template_string_into`], which prints the same shape
     /// without comment tracking; keep the two in step.
     fn unparse_template_string(&mut self, t: &TemplateStringExpr) {
-        use crate::ast::TemplatePart;
-
         self.output.push('`');
         for part in &t.parts {
             match part {
@@ -3835,7 +3832,6 @@ fn unparse_closure_into(c: &ClosureExpr, output: &mut String) {
 
 /// Twin of [`Unparser::unparse_template_string`]; keep the two in step.
 fn unparse_template_string_into(t: &TemplateStringExpr, output: &mut String) {
-    use crate::ast::TemplatePart;
     output.push('`');
     for part in &t.parts {
         match part {

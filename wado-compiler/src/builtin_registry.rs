@@ -7,10 +7,12 @@ use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
 use crate::ast;
-use crate::ast::{Attribute, CmBoundary, Function, Item, Type};
+use crate::ast::{Attribute, CmBoundary, Function, Item, Module, Type};
 use crate::compiler_item::CompilerItem;
 use crate::lexer::lex;
 use crate::module_source::ModuleSource;
+use crate::parser::Parser;
+use crate::stdlib;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
@@ -58,10 +60,6 @@ impl BuiltinRegistry {
     /// Types are resolved to `TypeId`s using the provided `TypeTable`.
     pub fn build_from_stdlib(type_table: &RefCell<TypeTable>) -> Self {
         use std::sync::OnceLock;
-
-        use crate::ast::Module;
-        use crate::parser::Parser;
-        use crate::stdlib;
 
         static PARSED_MODULE: OnceLock<Module> = OnceLock::new();
 

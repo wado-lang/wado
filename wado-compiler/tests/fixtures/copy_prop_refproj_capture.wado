@@ -1,6 +1,8 @@
-// copy_prop must not re-materialize `&place` at a use when the place's root was
-// reassigned after the binding — the reference captures its object at binding
-// time. The recursive callee is not inlined, isolating the call-argument path.
+// A reference names its place, so an assignment to `b.xs` after the binding is
+// what `r` reads: `r` is read afterwards, so the assignment writes into the
+// storage `r` holds (WEP 2026-10-13). copy_prop may re-materialize `&b.xs` at
+// the use or not; both answer the new list. The recursive callee is not
+// inlined, isolating the call-argument path.
 use { println, Stdout } from "core:cli";
 
 struct Box { xs: List<i32> }
@@ -20,4 +22,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{ "stdout": "10\n" }
+{ "stdout": "20\n" }
