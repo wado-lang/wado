@@ -411,6 +411,7 @@ fn register_single_function(
         if let nir::ParamAbi::MultiValue {
             field_types,
             field_names,
+            ..
         } = &p.param_abi
         {
             for (field_name, &field_type) in field_names.iter().zip(field_types) {

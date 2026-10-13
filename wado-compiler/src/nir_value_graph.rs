@@ -783,18 +783,34 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         mut f: impl FnMut(Option<OpaqueSource>, ValueId) -> ControlFlow<T>,
     ) -> Option<T> {
+        self.walk_values(root, seen, |v, kind| match kind {
+            ValueKind::Opaque(oid) => match f(self.opaque_source(*oid), v) {
+                ControlFlow::Break(found) => ControlFlow::Break(found),
+                ControlFlow::Continue(()) => ControlFlow::Continue(false),
+            },
+            _ => ControlFlow::Continue(true),
+        })
+    }
+
+    /// Walk the values reachable from `root`, `visit` answering at each
+    /// whether to go on into its children. `Break` stops the walk and is its
+    /// result. A worklist with a visited set, as [`Self::walk_opaques`] says.
+    pub fn walk_values<T>(
+        &self,
+        root: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut visit: impl FnMut(ValueId, &ValueKind) -> ControlFlow<T, bool>,
+    ) -> Option<T> {
         let mut stack = vec![root];
         while let Some(v) = stack.pop() {
             if !seen.insert(v) {
                 continue;
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if let ControlFlow::Break(found) = f(self.opaque_source(*oid), v) {
-                    return Some(found);
-                }
-                continue;
+            match visit(v, self.kind(v)) {
+                ControlFlow::Break(found) => return Some(found),
+                ControlFlow::Continue(true) => self.push_value_children(v, &mut stack),
+                ControlFlow::Continue(false) => {}
             }
-            self.push_value_children(v, &mut stack);
         }
         None
     }
@@ -882,44 +898,6 @@ impl ValuePool {
             }
             ControlFlow::Continue(())
         });
-    }
-
-    /// Every read of a local under `v`: the field index where the local is the
-    /// receiver of a `FieldAccess`, `None` where it is read whole.
-    pub fn for_each_local_read(
-        &self,
-        v: ValueId,
-        seen: &mut IndexSet<ValueId>,
-        mut f: impl FnMut(u32, Option<u32>),
-    ) {
-        let local_of = |id: ValueId| match self.kind(id) {
-            ValueKind::Opaque(oid) => match self.opaque_source(*oid) {
-                Some(OpaqueSource::Local(idx)) => Some(idx),
-                _ => None,
-            },
-            _ => None,
-        };
-        let mut stack = vec![v];
-        while let Some(v) = stack.pop() {
-            if !seen.insert(v) {
-                continue;
-            }
-            if let ValueKind::FieldAccess {
-                receiver,
-                field_index,
-                ..
-            } = self.kind(v)
-                && let Some(idx) = local_of(*receiver)
-            {
-                f(idx, Some(*field_index));
-                continue;
-            }
-            if let Some(idx) = local_of(v) {
-                f(idx, None);
-                continue;
-            }
-            self.push_value_children(v, &mut stack);
-        }
     }
 
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one

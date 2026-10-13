@@ -293,3 +293,13 @@ A pattern-destructured field's path is marked as borrowing, because the pattern
 carries no type saying whether that field does, and the mark refuses those paths
 a share outright. Every WIR golden is byte-identical with the mark removed, so
 nothing measured pays for it.
+
+### A multi-value `&S` asks a coarser question than it needs
+
+A `&S` parameter stays whole wherever the callee may store into any memory its
+caller holds (`FnEffect::writes_shared_heap`). What a split needs answered is
+narrower: whether the referent's fields change while the callee can still read
+them. A store into memory of another type, or one on a path that never returns
+(a bounds-check panic prints before it traps), cannot stale a split field, yet
+each keeps the reference whole. A callee that indexes a `List` field of its
+`&S` is refused this way, for the panic its bounds check reaches.

@@ -12,7 +12,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
-use super::context::WirContext;
+use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
@@ -115,6 +115,7 @@ fn split_locals_for_params(
         let nir::ParamAbi::MultiValue {
             field_types,
             field_names,
+            ..
         } = &param.param_abi
         else {
             continue;
@@ -2222,11 +2223,18 @@ impl FunctionTranslator<'_, '_> {
     fn translate_args(
         &mut self,
         ordered: &[Operand],
-        split: &IndexMap<usize, Vec<(String, TypeId)>>,
+        split: &IndexMap<usize, SplitParam>,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        // Anything but a constant or a local read, which run nothing.
+        // Anything but a constant or a local read, which run nothing. A promoted
+        // value runs the expressions its tree names as extraction sources.
         let runs_code = |this: &Self, op: Operand| match op {
-            Operand::Value(_) => false,
+            Operand::Value(v) => {
+                let mut sourced = false;
+                this.body
+                    .values
+                    .for_each_opaque_expr(v, &mut IndexSet::default(), |_| sourced = true);
+                sourced
+            }
             Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
         };
         // A diverging argument stays in its place: the call after it is dead
@@ -2238,17 +2246,7 @@ impl FunctionTranslator<'_, '_> {
         // A split `&S` reads its referent's fields at the call, as the callee
         // would have, so every argument after it that runs code runs before
         // those reads.
-        let first_split_ref = ordered
-            .iter()
-            .enumerate()
-            .find(|(i, op)| {
-                split.contains_key(i)
-                    && matches!(
-                        self.type_table.get(self.operand_type_id(**op)),
-                        ResolvedType::Ref(_)
-                    )
-            })
-            .map(|(i, _)| i);
+        let first_split_ref = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
         let runs_before_split_reads = |this: &Self, i: usize, op: Operand| {
             first_split_ref.is_some_and(|r| i > r) && runs_code(this, op)
         };
@@ -2270,8 +2268,8 @@ impl FunctionTranslator<'_, '_> {
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
-            if let Some(fields) = split.get(&i) {
-                let (p, reads) = self.split_argument(op, fields);
+            if let Some(param) = split.get(&i) {
+                let (p, reads) = self.split_argument(op, &param.fields);
                 prelude.extend(p);
                 call_args.extend(reads);
             } else if erased(self, op) {

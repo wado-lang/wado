@@ -40,6 +40,12 @@ fn span_head(s: &Span) -> i32 {
     return s.start * 3 + len;
 }
 
+// A `&mut` handed to a `&S` reads at the call all the same.
+#[inline("never")]
+fn through_mut(w: &mut Pair) -> i32 {
+    return total_plus(w, bump_a(w));
+}
+
 // `p.b` is read only past an early return, so splitting would load it at
 // every call where the callee loads it on one path: the reference stays whole.
 #[inline("never")]
@@ -81,13 +87,16 @@ export fn run() {
     assert total(&x) == 3;
     assert guarded(&x) == 3;
     assert total_plus(&x, bump_a(&mut x)) == 1003;
+    let mut m = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert total_plus(&mut m, bump_a(&mut m)) == 1003;
+    let mut n = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert through_mut(&mut n) == 1003;
     assert store_then_read(&mut x, &x) == 12;
     assert read_around_a_callee(&mut x, &x) == 100;
     let s = Span { tag: builtin::black_box(5), start: builtin::black_box(1), end: builtin::black_box(3) };
     let t = Span { tag: builtin::black_box(5), start: builtin::black_box(2), end: builtin::black_box(2) };
     assert span_head(&s) == 5;
-    assert span_head(&t) == -1;
-}
+    assert span_head(&t) == -1;}
 
 __DATA__
 {
@@ -95,8 +104,7 @@ __DATA__
     "wir_expect:O2": [
         "total\" = fn(i32, i32) -> i32",
         "total_plus\" = fn(i32, i32, i32) -> i32",
-        "span_head\" = fn(i32, i32) -> i32",
-        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "span_head\" = fn(i32, i32) -> i32",        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
     ]

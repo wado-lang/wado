@@ -1,10 +1,13 @@
 //! Which aggregate parameters arrive as one Wasm parameter per field instead of
 //! a heap struct. The mirror of [`super::multi_value_return`].
 
+use std::ops::ControlFlow;
+
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirBinaryOp, NirStruct, ParamAbi};
+use crate::nir::{NirBinaryOp, ParamAbi};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -18,10 +21,9 @@ const MAX_PARAM_FIELDS: usize = 8;
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.
 /// Runs after every transformation, so it sees the final NIR shape.
 pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Executor) -> bool {
-    let effects = compute_fn_effects(project, exec);
     let candidates = {
         let type_table = project.type_table.borrow();
-        collect_candidates(project, &type_table, &project.structs, &effects)
+        collect_candidates(project, &type_table, exec)
     };
     if candidates.is_empty() {
         return false;
@@ -35,9 +37,10 @@ pub fn classify_multi_value_params(project: &mut NirPackage, exec: &Executor) ->
 fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
-    structs: &[NirStruct],
-    effects: &[FnEffect],
+    exec: &Executor,
 ) -> IndexMap<(usize, usize), ParamAbi> {
+    // Only a `&S` asks it, and a whole-program summary is not free.
+    let mut effects: Option<Vec<FnEffect>> = None;
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
@@ -54,49 +57,50 @@ fn collect_candidates(
             if param.is_mut || param.is_mut_ref {
                 continue;
             }
-            // A `&S` arrives as the fields its referent held at the call, so
-            // nothing the call runs may store into memory the caller holds.
-            let (aggregate, is_ref) = match type_table.get(param.type_id) {
-                ResolvedType::Ref(referent) if !effects[func_idx].writes_shared_heap => {
-                    (*referent, true)
-                }
-                ResolvedType::Ref(_) => continue,
+            let (aggregate, borrowed) = match type_table.get(param.type_id) {
+                ResolvedType::Ref(referent) => (*referent, true),
                 _ => (param.type_id, false),
             };
             let Some((all_types, all_names, _)) =
-                aggregate_field_info(aggregate, type_table, structs)
+                aggregate_field_info(aggregate, type_table, &project.structs)
             else {
                 continue;
             };
-            let whole_body = NodeRef::Block(body.root());
-            let Some(read) = fields_read(body, whole_body, param.local_index, &all_names) else {
+            // A by-value argument is often a literal or a multi-value result,
+            // which hands over every field, so it takes them all.
+            if !borrowed && !splittable(&all_types, type_table) {
                 continue;
-            };
-            // A borrow's fields are loaded at every call, so one the callee
-            // reads only on some paths costs a load where it reads none.
-            if is_ref && !read.is_subset(&fields_read_on_entry(body, param.local_index, &all_names))
+            }
+            // A `&S` arrives as the fields its referent held at the call, so
+            // nothing the call runs may store into memory the caller holds.
+            if borrowed
+                && effects.get_or_insert_with(|| compute_fn_effects(project, exec))[func_idx]
+                    .writes_shared_heap
             {
                 continue;
             }
-            // A by-value argument is often a literal or a multi-value result,
-            // which hands over every field; a borrow's are loaded at the call,
-            // so it takes only those the callee reads.
+            let local = param.local_index;
+            let reads = Reads::under(body, NodeRef::Block(body.root()), local, &all_names);
+            if reads.whole {
+                continue;
+            }
+            // A borrow's fields are loaded at every call, so it takes those the
+            // callee reads and no other, and only where it reads each on every
+            // path: one read past an early exit costs a load where it is not.
+            if borrowed
+                && !reads
+                    .fields
+                    .is_subset(&fields_read_on_entry(body, local, &all_names))
+            {
+                continue;
+            }
             let (field_types, field_names): (Vec<TypeId>, Vec<String>) = all_types
                 .into_iter()
                 .zip(&all_names)
-                .filter(|(_, name)| !is_ref || read.contains(name.as_str()))
+                .filter(|(_, name)| !borrowed || reads.fields.contains(name.as_str()))
                 .map(|(ty, name)| (ty, name.clone()))
                 .unzip();
-            if !(2..=MAX_PARAM_FIELDS).contains(&field_types.len()) {
-                continue;
-            }
-            // A field the return side declines takes no Wasm slot of its own,
-            // so splitting it would leave the signature and the call site
-            // counting differently.
-            if !field_types
-                .iter()
-                .all(|&t| is_eligible_field_type(t, type_table))
-            {
+            if borrowed && !splittable(&field_types, type_table) {
                 continue;
             }
             out.insert(
@@ -104,11 +108,23 @@ fn collect_candidates(
                 ParamAbi::MultiValue {
                     field_types,
                     field_names,
+                    borrowed,
                 },
             );
         }
     }
     out
+}
+
+/// Whether `field_types` fit the ABI: within its width, and each taking a Wasm
+/// slot. A field the return side declines takes none, so splitting it would
+/// leave the signature and the call site counting differently. One field read
+/// is `sroa_param`'s, which knows a by-value `Box<T>` for the reference it is.
+fn splittable(field_types: &[TypeId], type_table: &TypeTable) -> bool {
+    (2..=MAX_PARAM_FIELDS).contains(&field_types.len())
+        && field_types
+            .iter()
+            .all(|&t| is_eligible_field_type(t, type_table))
 }
 
 /// The fields of `local` read on every path through `body`: those its
@@ -131,25 +147,12 @@ fn fields_read_on_entry<'a>(
             | StmtKind::Continue
             | StmtKind::LabeledBlock { .. } => break,
         };
-        match evaluated {
-            Some(Operand::Expr(e)) if branches(body, e) => break,
-            Some(Operand::Expr(e)) => out.extend(
-                fields_read(body, NodeRef::Expr(e), local, field_names)
-                    .into_iter()
-                    .flatten(),
-            ),
-            // A promoted value is pure, so its whole tree is evaluated.
-            Some(Operand::Value(v)) => {
-                body.values
-                    .for_each_local_read(v, &mut IndexSet::default(), |index, field| {
-                        if index == local
-                            && let Some(i) = field
-                        {
-                            out.insert(field_names[i as usize].as_str());
-                        }
-                    });
+        if let Some(op) = evaluated {
+            let reads = Reads::of_operand(body, op, local, field_names);
+            if reads.branches {
+                break;
             }
-            None => {}
+            out.extend(reads.fields);
         }
         if ends_prefix {
             break;
@@ -158,95 +161,149 @@ fn fields_read_on_entry<'a>(
     out
 }
 
-/// Whether evaluating `expr` takes a path some evaluations skip: a branch, a
-/// jump, a loop, or the right side of a short-circuit `&&` / `||`. A block an
-/// inlined call left holds none of these, and runs straight through.
-fn branches(body: &Body, expr: ExprId) -> bool {
-    body.find_in_nodes_under(NodeRef::Expr(expr), |node| {
-        let branching = match node {
-            NodeRef::Stmt(s) => !matches!(
-                body.stmts[s].kind,
-                StmtKind::Let { .. }
-                    | StmtKind::Expr(_)
-                    | StmtKind::LetDestructure { .. }
-                    | StmtKind::LabeledBlock { .. }
-            ),
-            NodeRef::Expr(e) => matches!(
-                body.exprs[e].kind,
-                ExprKind::If { .. }
+/// How the code under one node reads a local holding an aggregate.
+#[derive(Default)]
+struct Reads<'a> {
+    /// The fields it reads off the local.
+    fields: IndexSet<&'a str>,
+    /// It reads the local whole: an aggregate rebuilt from split locals is not
+    /// the one the caller passed.
+    whole: bool,
+    /// Some evaluation takes a path another skips: a branch, a jump, a loop, or
+    /// the right side of a short-circuit `&&` / `||`. A block an inlined call
+    /// left holds none of these.
+    branches: bool,
+}
+
+impl<'a> Reads<'a> {
+    /// The reads under `root`, the expressions its promoted operands name as
+    /// extraction sources and their value trees among them.
+    fn under(body: &Body, root: NodeRef, local: u32, field_names: &'a [String]) -> Self {
+        let names: IndexSet<&str> = field_names.iter().map(String::as_str).collect();
+        let mut reads = Self::default();
+        let mut whole_reads: Vec<ExprId> = Vec::new();
+        let mut field_subjects: IndexMap<ExprId, &'a str> = IndexMap::default();
+        let mut seen = IndexSet::default();
+        body.for_each_live_node_under(root, |node| {
+            body.for_each_operand(node, |op| {
+                if let Some(v) = op.as_value() {
+                    // The live walk visits the sources itself.
+                    reads.value(body, v, local, field_names, &mut seen);
+                }
+            });
+            match node {
+                NodeRef::Stmt(s) => {
+                    reads.branches |= !matches!(
+                        body.stmts[s].kind,
+                        StmtKind::Let { .. }
+                            | StmtKind::Expr(_)
+                            | StmtKind::LetDestructure { .. }
+                            | StmtKind::LabeledBlock { .. }
+                    );
+                }
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
+                    ExprKind::Local { index, .. } if *index == local => whole_reads.push(e),
+                    ExprKind::FieldAccess {
+                        expr: inner,
+                        field_name,
+                        ..
+                    } => {
+                        if let Some(&name) = names.get(field_name.as_str())
+                            && let Some(inner) = inner.as_expr()
+                        {
+                            field_subjects.insert(inner, name);
+                        }
+                    }
+                    ExprKind::If { .. }
                     | ExprKind::Match { .. }
                     | ExprKind::Switch { .. }
                     | ExprKind::Binary {
                         op: NirBinaryOp::And | NirBinaryOp::Or,
                         ..
-                    }
-            ),
-            NodeRef::Block(_) | NodeRef::Pat(_) => false,
-        };
-        branching.then_some(())
-    })
-    .is_some()
-}
-
-/// The fields of `local` read under `root`, `None` unless every read is the
-/// subject of one of `field_names`. A promoted operand reads as an expression
-/// does, so its value tree is read too.
-// A read of the whole binding refutes: an aggregate rebuilt from the split
-// locals is not the one the caller passed.
-fn fields_read<'a>(
-    body: &Body,
-    root: NodeRef,
-    local: u32,
-    field_names: &'a [String],
-) -> Option<IndexSet<&'a str>> {
-    let names: IndexSet<&str> = field_names.iter().map(String::as_str).collect();
-    let mut whole_reads: Vec<ExprId> = Vec::new();
-    let mut field_subjects: IndexMap<ExprId, &str> = IndexMap::default();
-    let mut read: IndexSet<&str> = IndexSet::default();
-    let mut read_whole = false;
-    let mut seen = IndexSet::default();
-
-    body.for_each_live_node_under(root, |node| {
-        body.for_each_operand(node, |op| {
-            if let Some(v) = op.as_value() {
-                body.values
-                    .for_each_local_read(v, &mut seen, |index, field| {
-                        if index == local {
-                            match field {
-                                Some(i) => {
-                                    read.insert(field_names[i as usize].as_str());
-                                }
-                                None => read_whole = true,
-                            }
-                        }
-                    });
+                    } => reads.branches = true,
+                    _ => {}
+                },
+                NodeRef::Block(_) | NodeRef::Pat(_) => {}
             }
         });
-        let NodeRef::Expr(expr) = node else {
-            return;
-        };
-        match &body.exprs[expr].kind {
-            ExprKind::Local { index, .. } if *index == local => whole_reads.push(expr),
-            ExprKind::FieldAccess {
-                expr: inner,
-                field_name,
-                ..
-            } => {
-                if let Some(&name) = names.get(field_name.as_str())
-                    && let Some(inner) = inner.as_expr()
-                {
-                    field_subjects.insert(inner, name);
+        for e in whole_reads {
+            match field_subjects.get(&e) {
+                Some(&name) => {
+                    reads.fields.insert(name);
                 }
+                None => reads.whole = true,
             }
-            _ => {}
         }
-    });
+        reads
+    }
 
-    if read_whole {
-        return None;
+    /// The reads evaluating `op` makes.
+    fn of_operand(body: &Body, op: Operand, local: u32, field_names: &'a [String]) -> Self {
+        match op {
+            Operand::Expr(e) => Self::under(body, NodeRef::Expr(e), local, field_names),
+            Operand::Value(v) => {
+                let mut reads = Self::default();
+                let sources = reads.value(body, v, local, field_names, &mut IndexSet::default());
+                for e in sources {
+                    reads.merge(Self::under(body, NodeRef::Expr(e), local, field_names));
+                }
+                reads
+            }
+        }
     }
-    for expr in whole_reads {
-        read.insert(field_subjects.get(&expr).copied()?);
+
+    /// Fold in the value tree at `v`, answering the expressions it names as
+    /// extraction sources, which extraction runs.
+    fn value(
+        &mut self,
+        body: &Body,
+        v: ValueId,
+        local: u32,
+        field_names: &'a [String],
+        seen: &mut IndexSet<ValueId>,
+    ) -> Vec<ExprId> {
+        let source = |id: ValueId| match body.values.kind(id) {
+            ValueKind::Opaque(oid) => body.values.opaque_source(*oid),
+            _ => None,
+        };
+        let mut sources = Vec::new();
+        body.values.walk_values::<()>(v, seen, |_, kind| {
+            let descend = match kind {
+                ValueKind::FieldAccess {
+                    receiver,
+                    field_index,
+                    ..
+                } if source(*receiver) == Some(OpaqueSource::Local(local)) => {
+                    self.fields
+                        .insert(field_names[*field_index as usize].as_str());
+                    false
+                }
+                ValueKind::Opaque(oid) => {
+                    match body.values.opaque_source(*oid) {
+                        Some(OpaqueSource::Local(index)) => self.whole |= index == local,
+                        Some(OpaqueSource::Expr(e)) => sources.push(e),
+                        None => {}
+                    }
+                    false
+                }
+                // Extracted as an `if` over the right side.
+                ValueKind::Binary {
+                    op: NirBinaryOp::And | NirBinaryOp::Or,
+                    ..
+                } => {
+                    self.branches = true;
+                    true
+                }
+                _ => true,
+            };
+            ControlFlow::Continue(descend)
+        });
+        sources
     }
-    Some(read)
+
+    fn merge(&mut self, other: Self) {
+        self.fields.extend(other.fields);
+        self.whole |= other.whole;
+        self.branches |= other.branches;
+    }
 }

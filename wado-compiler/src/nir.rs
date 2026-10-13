@@ -769,6 +769,9 @@ pub enum ParamAbi {
     MultiValue {
         field_types: Vec<TypeId>,
         field_names: Vec<String>,
+        /// The parameter is a `&S`: its fields are loaded at the call, after
+        /// every argument that runs code, as the callee would have read them.
+        borrowed: bool,
     },
 }
 
