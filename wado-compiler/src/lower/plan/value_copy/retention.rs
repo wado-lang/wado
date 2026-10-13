@@ -18,6 +18,8 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
+use super::place::unwrap_borrow;
+use super::reach::ClosureCaptures;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -40,6 +42,12 @@ pub const RESULT: u32 = u32::MAX;
 #[derive(Clone, Default)]
 struct RetentionFacts {
     escapes: IndexSet<u32>,
+    /// The types of the values an escaping position hands out of sight, where
+    /// the walk saw each: an unknown callee keeps at most what its argument
+    /// reaches, so `f(item)` lets an `item` escape and not the iterator it came
+    /// out of. A position escaping without an entry may hand out the argument
+    /// itself.
+    escape_types: IndexMap<u32, IndexSet<TypeId>>,
     into_result: IndexSet<u32>,
     /// Retained parameter to the parameters it lands in. A destination the
     /// caller can name bounds the retention: the caller resolves it against its
@@ -65,6 +73,24 @@ impl RetentionFacts {
         }
     }
 
+    /// `source` escapes as values of `types`, or as the argument itself where
+    /// `types` is `None`. Reports whether that widened anything: no entry is
+    /// the widest, and a position's first escape sets the types it starts from.
+    fn escape_as(&mut self, source: u32, types: Option<&IndexSet<TypeId>>) -> bool {
+        let first = self.escapes.insert(source);
+        match types {
+            None => self.escape_types.swap_remove(&source).is_some() || first,
+            Some(types) if first => {
+                self.escape_types.insert(source, types.clone());
+                true
+            }
+            Some(types) => self
+                .escape_types
+                .get_mut(&source)
+                .is_some_and(|mine| extend(mine, types)),
+        }
+    }
+
     /// Whether any channel claims `source`.
     fn claims(&self, source: u32) -> bool {
         self.escapes.contains(&source)
@@ -81,8 +107,11 @@ impl RetentionFacts {
             .chain(self.into_param.keys())
             .copied()
             .collect();
-        let mut grew = extend(&mut self.escapes, &other.escapes)
-            | extend(&mut self.into_result, &other.into_result);
+        let mut grew = false;
+        for &source in &other.escapes {
+            grew |= self.escape_as(source, other.escape_types.get(&source));
+        }
+        grew |= extend(&mut self.into_result, &other.into_result);
         for (&source, destinations) in &other.into_param {
             grew |= extend(self.into_param.entry(source).or_default(), destinations);
         }
@@ -171,17 +200,6 @@ impl Carried {
     }
 }
 
-/// The place an argument names, past the `&`/`&mut` it is wrapped in.
-fn unwrap_borrow(argument: &TirExpr) -> &TirExpr {
-    match &argument.kind {
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr,
-        } => expr,
-        _ => argument,
-    }
-}
-
 fn is_function_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(type_table.get(type_id), ResolvedType::Function { .. })
 }
@@ -235,7 +253,7 @@ impl TirRefVisitor for FunctorLocalReads<'_> {
 }
 
 /// Insert every element of `src` into `dst`, reporting whether `dst` grew.
-fn extend(dst: &mut IndexSet<u32>, src: &IndexSet<u32>) -> bool {
+fn extend<T: Copy + Eq + std::hash::Hash>(dst: &mut IndexSet<T>, src: &IndexSet<T>) -> bool {
     let mut grew = false;
     for &p in src {
         grew |= dst.insert(p);
@@ -393,14 +411,43 @@ pub struct FunctorRows {
 pub struct Retained {
     kept: IndexSet<u32>,
     bounded: IndexMap<u32, IndexSet<u32>>,
+    escaped: IndexMap<u32, Escape>,
+}
+
+/// What a position the call keeps out of sight hands out: values of `types`,
+/// or the argument itself where that is `None`; and where else it lands, as
+/// [`Retained::destinations`] names them.
+#[derive(Clone)]
+pub struct Escape {
+    pub types: Option<IndexSet<TypeId>>,
+    pub landings: IndexSet<u32>,
 }
 
 impl Retained {
     fn of(facts: &RetentionFacts) -> Self {
+        let escaped = facts
+            .escapes
+            .iter()
+            .map(|&source| {
+                let mut landings = facts.into_param.get(&source).cloned().unwrap_or_default();
+                if facts.into_result.contains(&source) {
+                    landings.insert(RESULT);
+                }
+                let types = facts.escape_types.get(&source).cloned();
+                (source, Escape { types, landings })
+            })
+            .collect();
         Retained {
             kept: facts.union(),
             bounded: facts.bounded(),
+            escaped,
         }
+    }
+
+    /// What `position` escapes as, where the call keeps it out of sight.
+    #[must_use]
+    pub fn escape(&self, position: u32) -> Option<&Escape> {
+        self.escaped.get(&position)
     }
 
     /// Join with another reading of the same call: it keeps what either keeps,
@@ -408,6 +455,38 @@ impl Retained {
     /// where it landed. A reading that does not keep a position says nothing
     /// about it, which is what lets the fixpoint start from keeping nothing.
     fn join(&mut self, other: &Retained) {
+        // An escape in either reading escapes the join: as the union of what
+        // each hands out, landing wherever either puts the position.
+        let escaping: IndexSet<u32> = self
+            .escaped
+            .keys()
+            .chain(other.escaped.keys())
+            .copied()
+            .collect();
+        for source in escaping {
+            let landings_of = |reading: &Retained| -> IndexSet<u32> {
+                match (reading.escaped.get(&source), reading.bounded.get(&source)) {
+                    (Some(escape), _) => escape.landings.clone(),
+                    (None, Some(destinations)) => destinations.clone(),
+                    (None, None) => IndexSet::default(),
+                }
+            };
+            let mut landings = landings_of(self);
+            extend(&mut landings, &landings_of(other));
+            let types = match (self.escaped.get(&source), other.escaped.get(&source)) {
+                (Some(mine), Some(theirs)) => match (&mine.types, &theirs.types) {
+                    (Some(mine), Some(theirs)) => {
+                        let mut both = mine.clone();
+                        extend(&mut both, theirs);
+                        Some(both)
+                    }
+                    _ => None,
+                },
+                (Some(only), None) | (None, Some(only)) => only.types.clone(),
+                (None, None) => unreachable!("an escaping position escapes in one reading"),
+            };
+            self.escaped.insert(source, Escape { types, landings });
+        }
         for (source, destinations) in &other.bounded {
             if self.kept.contains(source) {
                 if let Some(mine) = self.bounded.get_mut(source) {
@@ -677,6 +756,7 @@ pub fn compute_retention(
     project: &FlatPackage,
     call_graph: &CallGraph,
     builtins: &BuiltinDeclarations,
+    closure_captures: &ClosureCaptures,
 ) -> RetentionSummary {
     let type_table = project.type_table.borrow();
     let mut calls = CallRetention {
@@ -694,7 +774,7 @@ pub fn compute_retention(
         }
     }
 
-    let carrying = RefCarrying::new(&project.structs, &type_table);
+    let carrying = RefCarrying::new(&project.structs, &type_table, closure_captures);
     let functor_params: Vec<FunctorParams> = project
         .functions
         .iter()
@@ -858,15 +938,21 @@ fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
 pub struct RefCarrying<'a> {
     structs: &'a [TirStruct],
     type_table: &'a TypeTable,
+    captures: &'a ClosureCaptures,
     memo: RefCell<IndexMap<TypeId, bool>>,
 }
 
 impl<'a> RefCarrying<'a> {
     #[must_use]
-    pub fn new(structs: &'a [TirStruct], type_table: &'a TypeTable) -> Self {
+    pub fn new(
+        structs: &'a [TirStruct],
+        type_table: &'a TypeTable,
+        captures: &'a ClosureCaptures,
+    ) -> Self {
         Self {
             structs,
             type_table,
+            captures,
             memo: RefCell::new(IndexMap::default()),
         }
     }
@@ -976,11 +1062,14 @@ impl RefCarrying<'_> {
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => (true, false),
-            // A functor is a value; the environment it closed over is not
-            // reachable from a caller's parameter through its type. Neither is
-            // anything reachable from the rest: they carry no member at all.
-            ResolvedType::Function { .. }
-            | ResolvedType::Primitive(_)
+            // A closure holds what it captured, which its type does not name:
+            // whatever any closure of its shape captured. `make_reader(p)`
+            // returns a closure holding `p`.
+            ResolvedType::Function { .. } => {
+                let captured = self.captures.of(type_id, self.type_table).to_vec();
+                self.any(captured, open)
+            }
+            ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
@@ -1437,8 +1526,12 @@ impl StoresWalker<'_> {
         }
     }
 
-    fn escape(&mut self, positions: &IndexSet<u32>) {
-        self.grew |= extend(&mut self.facts.escapes, positions);
+    /// `positions` leave for good, as values of `types` (`None`: as whatever
+    /// carried them).
+    fn escape(&mut self, positions: &IndexSet<u32>, types: Option<&IndexSet<TypeId>>) {
+        for &position in positions {
+            self.grew |= self.facts.escape_as(position, types);
+        }
     }
 
     /// Which function values `expr` may evaluate to. A mint is itself, a local
@@ -1654,15 +1747,16 @@ impl StoresWalker<'_> {
             self.rebind(*index, &carried);
             return;
         }
-        self.lands_in_place(target, &carried.all());
+        self.lands_in_place(target, &carried.all(), value.type_id);
     }
 
-    /// Where a reference written into `place` ends up. Into a local's own
-    /// aggregate it makes that local a carrier; through one of this body's own
-    /// reference parameters, or a local anchored at some of them, it is a
-    /// bounded retention the caller resolves; anywhere else the caller cannot
-    /// see it.
-    fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>) {
+    /// Where a reference written into `place` ends up, carried by a value of
+    /// `value_type`. Into a local's own aggregate it makes that local a
+    /// carrier; through one of this body's own reference parameters, or a
+    /// local anchored at some of them, it is a bounded retention the caller
+    /// resolves; anywhere else the caller cannot see it.
+    fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>, value_type: TypeId) {
+        let escaping = IndexSet::from_iter([value_type]);
         match Self::place_root(place) {
             Some((root, ty)) if !is_reference_type(ty, self.type_table) => {
                 self.hold_into(root, carried);
@@ -1675,17 +1769,22 @@ impl StoresWalker<'_> {
                         self.retained_into(destination, carried);
                     }
                 } else {
-                    self.escape(carried);
+                    self.escape(carried, Some(&escaping));
                 }
             }
-            None => self.escape(carried),
+            None => self.escape(carried, Some(&escaping)),
         }
     }
 
     /// The storage the argument at a callee's destination position names, read
     /// through the `&`/`&mut` the argument wraps it in.
-    fn lands_in_argument(&mut self, argument: &TirExpr, carried: &IndexSet<u32>) {
-        self.lands_in_place(unwrap_borrow(argument), carried);
+    fn lands_in_argument(
+        &mut self,
+        argument: &TirExpr,
+        carried: &IndexSet<u32>,
+        value_type: TypeId,
+    ) {
+        self.lands_in_place(unwrap_borrow(argument), carried, value_type);
     }
 
     fn retained_into(&mut self, destination: u32, carried: &IndexSet<u32>) {
@@ -1705,8 +1804,17 @@ impl StoresWalker<'_> {
     /// rather than assumed unseen. A result-bound one reaches the caller
     /// through the call's value instead (see [`StoresWalker::carries`]).
     fn call_hands_on(&mut self, args: &[&TirExpr], facts: &RetentionFacts) {
-        let carried = self.carried_args(args.iter().copied(), &facts.escapes, facts);
-        self.escape(&carried);
+        // What escapes from a position is what the callee says it hands out, or
+        // the argument itself where it says nothing.
+        for &source in &facts.escapes {
+            let Some(argument) = args.get(source as usize) else {
+                continue;
+            };
+            let carried = self.claimed(source, argument, facts);
+            let whole = IndexSet::from_iter([argument.type_id]);
+            let types = facts.escape_types.get(&source).unwrap_or(&whole);
+            self.escape(&carried, Some(types));
+        }
         for (&source, destinations) in &facts.into_param {
             let Some(argument) = args.get(source as usize) else {
                 continue;
@@ -1717,10 +1825,10 @@ impl StoresWalker<'_> {
             }
             for &destination in destinations {
                 match args.get(destination as usize) {
-                    Some(place) => self.lands_in_argument(place, &carried),
+                    Some(place) => self.lands_in_argument(place, &carried, argument.type_id),
                     // A destination no argument fills is one this call cannot
                     // resolve, and what it holds is out of sight.
-                    None => self.escape(&carried),
+                    None => self.escape(&carried, Some(&IndexSet::from_iter([argument.type_id]))),
                 }
             }
         }
@@ -1811,7 +1919,7 @@ impl TirRefVisitor for StoresWalker<'_> {
             }
             TirExprKind::GlobalVarSet { value, .. } => {
                 let c = self.carried(value).all();
-                self.escape(&c);
+                self.escape(&c, Some(&IndexSet::from_iter([value.type_id])));
             }
             TirExprKind::Match { expr: scrut, arms } => {
                 for arm in arms {

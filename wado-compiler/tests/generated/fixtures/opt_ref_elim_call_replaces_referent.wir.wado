@@ -33,17 +33,17 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//opt_ref_elim_call_replaces_referent.wado/swap_in$dae[k]" = fn(ref "opt_ref_elim_call_replaces_referent.wado//Outer");  // TypeId(12)
+type "functype//opt_ref_elim_call_replaces_referent.wado/through_alias" = fn(ref "opt_ref_elim_call_replaces_referent.wado//Outer", ref "opt_ref_elim_call_replaces_referent.wado//Outer") -> i32;  // TypeId(12)
 
-type "functype//opt_ref_elim_call_replaces_referent.wado/through_call" = fn(ref "opt_ref_elim_call_replaces_referent.wado//Outer") -> i32;  // TypeId(13)
+type "functype//opt_ref_elim_call_replaces_referent.wado/run" = fn();  // TypeId(13)
 
-type "functype//opt_ref_elim_call_replaces_referent.wado/through_alias" = fn(ref "opt_ref_elim_call_replaces_referent.wado//Outer", ref "opt_ref_elim_call_replaces_referent.wado//Outer") -> i32;  // TypeId(14)
+type "functype//opt_ref_elim_call_replaces_referent.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//opt_ref_elim_call_replaces_referent.wado/run" = fn();  // TypeId(15)
+type "functype//opt_ref_elim_call_replaces_referent.wado/$cm_export__run" = fn();  // TypeId(15)
 
-type "functype//opt_ref_elim_call_replaces_referent.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
+type "functype//opt_ref_elim_call_replaces_referent.wado/swap_in$sroa[&mut(o.inner)]" = fn(ref "opt_ref_elim_call_replaces_referent.wado//Inner", i32);  // TypeId(16)
 
-type "functype//opt_ref_elim_call_replaces_referent.wado/$cm_export__run" = fn();  // TypeId(17)
+type "functype//opt_ref_elim_call_replaces_referent.wado/through_call$sroa[&mut(m.inner)]" = fn(ref "opt_ref_elim_call_replaces_referent.wado//Inner") -> i32;  // TypeId(17)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(18)
 
@@ -78,34 +78,21 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-fn "opt_ref_elim_call_replaces_referent.wado/swap_in$dae[k]"(o) {
-    o.inner = struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: 33 };
-}
-
-fn "opt_ref_elim_call_replaces_referent.wado/through_call"(m) {
-    let r: ref "opt_ref_elim_call_replaces_referent.wado//Inner";
-    r = m.inner;
-    "opt_ref_elim_call_replaces_referent.wado/swap_in$dae[k]"(m);
-    return r.v;
-}
-
 fn "opt_ref_elim_call_replaces_referent.wado/through_alias"(m, p) {
-    let r: ref "opt_ref_elim_call_replaces_referent.wado//Inner";
-    r = m.inner;
-    p.inner = struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: 44 };
-    return r.v;
+    p.inner.v = 44;
+    return m.inner.v;
 }
 
 fn "opt_ref_elim_call_replaces_referent.wado/run"() with Stdout {
-    let o: ref "opt_ref_elim_call_replaces_referent.wado//Outer";
-    let r: ref "opt_ref_elim_call_replaces_referent.wado//Inner";
+    let a: ref "opt_ref_elim_call_replaces_referent.wado//Outer";
     let $local_5: ref "core:prelude/string.wado//String";
     let self_18: i32;
     let is_negative_24: bool;
     let x_28: i64;
-    o = struct.new "opt_ref_elim_call_replaces_referent.wado//Outer" { inner: struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: black_box(3) } };
+    let $sroa_o_inner_96: ref "opt_ref_elim_call_replaces_referent.wado//Inner";
+    $sroa_o_inner_96 = struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: black_box(3) };
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_24 = local.tee self_18("opt_ref_elim_call_replaces_referent.wado/through_call"(o)) < 0;
+    is_negative_24 = local.tee self_18("opt_ref_elim_call_replaces_referent.wado/through_call$sroa[&mut(m.inner)]"($sroa_o_inner_96)) < 0;
     self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(self_18); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
     is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, is_negative_24, self_18);
     "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, is_negative_24, x_28, self_18);
@@ -114,10 +101,9 @@ fn "opt_ref_elim_call_replaces_referent.wado/run"() with Stdout {
     self_18 = "opt_ref_elim_call_replaces_referent.wado/$cm_binding__Stdout_write_via_stream"(self_18);
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_24, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_18);
-    r = local.tee o(struct.new "opt_ref_elim_call_replaces_referent.wado//Outer" { inner: struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: black_box(4) } }).inner;
-    "opt_ref_elim_call_replaces_referent.wado/swap_in$dae[k]"(o);
+    "opt_ref_elim_call_replaces_referent.wado/swap_in$sroa[&mut(o.inner)]"(local.tee $sroa_o_inner_96(struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: black_box(4) }), 33);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_24 = local.tee self_18(r.v) < 0;
+    is_negative_24 = local.tee self_18($sroa_o_inner_96.v) < 0;
     self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(self_18); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
     is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, is_negative_24, self_18);
     "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, is_negative_24, x_28, self_18);
@@ -126,9 +112,9 @@ fn "opt_ref_elim_call_replaces_referent.wado/run"() with Stdout {
     self_18 = "opt_ref_elim_call_replaces_referent.wado/$cm_binding__Stdout_write_via_stream"(self_18);
     "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_24, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_18);
-    o = struct.new "opt_ref_elim_call_replaces_referent.wado//Outer" { inner: struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: black_box(5) } };
+    a = struct.new "opt_ref_elim_call_replaces_referent.wado//Outer" { inner: struct.new "opt_ref_elim_call_replaces_referent.wado//Inner" { v: black_box(5) } };
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    is_negative_24 = local.tee self_18("opt_ref_elim_call_replaces_referent.wado/through_alias"(o, o)) < 0;
+    is_negative_24 = local.tee self_18("opt_ref_elim_call_replaces_referent.wado/through_alias"(a, a)) < 0;
     self_18 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_28(x_28 = builtin::i64_extend_i32_s(self_18); select i64(x_28 < 0_i64, 0_i64 - x_28, x_28)));
     is_negative_24 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($local_5, is_negative_24, self_18);
     "core:prelude/primitive.wado/write_decimal_digits"($local_5.repr, is_negative_24, x_28, self_18);
@@ -146,6 +132,15 @@ fn "opt_ref_elim_call_replaces_referent.wado/$cm_binding__Stdout_write_via_strea
 fn "opt_ref_elim_call_replaces_referent.wado/$cm_export__run"() {
     "opt_ref_elim_call_replaces_referent.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "opt_ref_elim_call_replaces_referent.wado/swap_in$sroa[&mut(o.inner)]"(o, k) {
+    o.v = k;
+}
+
+fn "opt_ref_elim_call_replaces_referent.wado/through_call$sroa[&mut(m.inner)]"(m) {
+    "opt_ref_elim_call_replaces_referent.wado/swap_in$sroa[&mut(o.inner)]"(m, 33);
+    return m.v;
 }
 
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {

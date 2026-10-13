@@ -602,9 +602,6 @@ fn check_cm_boundary_representable_inner(
     names: &CmStdlibNames,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    use crate::primitive::PrimitiveType;
-    use crate::tir::ResolvedType as R;
-
     if visited.contains(&type_id) {
         // `visited` is the recursion path (pushed on entry, popped on exit),
         // so a revisit is a genuine cycle. WIT cannot express recursive
@@ -658,18 +655,20 @@ fn check_cm_boundary_representable_inner(
         match type_table.get(type_id) {
             // No CM value representation in any world: `defvaltype` stops at
             // `f32`, and a half lowered as its `u16` would read as an integer.
-            R::Primitive(PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16) => {
-                Err(format!(
-                    "`{}` has no Component Model value representation",
-                    type_table.type_name(type_id)
-                ))
-            }
-            R::Unit if slot == Slot::Value => Err(
+            ResolvedType::Primitive(
+                PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
+            ) => Err(format!(
+                "`{}` has no Component Model value representation",
+                type_table.type_name(type_id)
+            )),
+            ResolvedType::Unit if slot == Slot::Value => Err(
                 "`()` has no Component Model representation here — it stands only where a \
                  type may be absent: a function result, a `Result` arm or a case payload"
                     .to_string(),
             ),
-            R::Enum { def } | R::Flags { def } | R::Variant { def }
+            ResolvedType::Enum { def }
+            | ResolvedType::Flags { def }
+            | ResolvedType::Variant { def }
                 if declares_no_case(*def, tir_modules) =>
             {
                 Err(format!(
@@ -680,13 +679,15 @@ fn check_cm_boundary_representable_inner(
             }
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
-            R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
-                Ok(())
-            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. } => Ok(()),
             // The handle is an i32, but its payload is lifted and lowered by
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
-            R::GenericResource { def, type_args } => {
+            ResolvedType::GenericResource { def, type_args } => {
                 let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {
@@ -707,7 +708,7 @@ fn check_cm_boundary_representable_inner(
                 }
                 Ok(())
             }
-            R::Struct { def, type_args } => {
+            ResolvedType::Struct { def, type_args } => {
                 if type_table.is_string(type_id) {
                     return Ok(());
                 }
@@ -732,7 +733,7 @@ fn check_cm_boundary_representable_inner(
                     None => Ok(()),
                 }
             }
-            R::Variant { def } => match variant_decl_of(*def, tir_modules) {
+            ResolvedType::Variant { def } => match variant_decl_of(*def, tir_modules) {
                 Some(decl) => {
                     let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
                     for p in payloads {
@@ -742,7 +743,7 @@ fn check_cm_boundary_representable_inner(
                 }
                 None => Ok(()),
             },
-            R::GenericInstance { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args } => {
                 // Option/List/Tuple were handled above by the `as_*` accessors;
                 // `Result<T, E>` recurses into its arms. Any other generic
                 // instance has no concrete CM lowering at this boundary (it
@@ -769,14 +770,16 @@ fn check_cm_boundary_representable_inner(
                     ))
                 }
             }
-            R::Newtype { base_type, .. } => {
+            ResolvedType::Newtype { base_type, .. } => {
                 let base = *base_type;
                 recurse(base, slot, visited)
             }
-            R::Ref(inner) | R::MutRef(inner) if boundary == Boundary::Import => {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
+                if boundary == Boundary::Import =>
+            {
                 let inner = *inner;
                 match type_table.get(type_table.representation_head(inner)) {
-                    R::Resource { .. } | R::GenericResource { .. } => {
+                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
                         recurse(inner, Slot::Value, visited)
                     }
                     _ => Err(format!(
@@ -786,18 +789,18 @@ fn check_cm_boundary_representable_inner(
                     )),
                 }
             }
-            R::Never
-            | R::Ref(_)
-            | R::MutRef(_)
-            | R::Function { .. }
-            | R::TypeParam { .. }
-            | R::AssocParam { .. }
-            | R::TypePack { .. }
-            | R::InferVar(_)
-            | R::AssocTypeProjection { .. }
-            | R::BuiltinArray(_)
-            | R::Unknown
-            | R::Error => Err(format!(
+            ResolvedType::Never
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Function { .. }
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => Err(format!(
                 "type `{}` has no Component Model value representation",
                 type_table.type_name(type_id)
             )),

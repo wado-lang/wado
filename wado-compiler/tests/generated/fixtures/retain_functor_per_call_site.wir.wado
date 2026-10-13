@@ -127,21 +127,21 @@ fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_kee
     let $write_back_2: ref "core:prelude/types.wado//Box<retain_functor_per_call_site.wado/Payload>";
     let $write_back_before_3: ref null "core:prelude/string.wado//String";
     let $write_back_result_5: i32;
-    let $sroa_b_item_19: ref null "core:prelude/string.wado//String";
-    $sroa_b_item_19 = ref.null none;
+    let $sroa_b_item_23: ref null "core:prelude/string.wado//String";
+    $sroa_b_item_23 = ref.null none;
     $write_back_place_1 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "retain_functor_per_call_site.wado//$Closure_0" {  }, func: ref.func "closure/retain_functor_per_call_site.wado/$closure_wrapper_0" };
-    $write_back_2 = struct.new "core:prelude/types.wado//Box<retain_functor_per_call_site.wado/Payload>" { value: $sroa_b_item_19 };
-    $write_back_before_3 = $sroa_b_item_19;
+    $write_back_2 = struct.new "core:prelude/types.wado//Box<retain_functor_per_call_site.wado/Payload>" { value: $sroa_b_item_23 };
+    $write_back_before_3 = $sroa_b_item_23;
     $write_back_result_5 = "retain_functor_per_call_site.wado/via"($write_back_place_1, $write_back_2);
     if ref.eq(local.tee $load_0($write_back_2.value), $write_back_before_3) == 0 {
-        $sroa_b_item_19 = $load_0;
+        $sroa_b_item_23 = $load_0;
     }
     if @unlikely($write_back_result_5 != 1) {
         cold_path;
         "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_keeps_nothing$cold2"($write_back_result_5);
         unreachable;
     }
-    if @unlikely(local.tee $write_back_result_5(ref.is_null($sroa_b_item_19) == 0) == 0) {
+    if @unlikely(local.tee $write_back_result_5(ref.is_null($sroa_b_item_23) == 0) == 0) {
         cold_path;
         "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_keeps_nothing$cold1"();
         unreachable;
@@ -167,45 +167,45 @@ condition: b.item matches { Text(_) }
 fn "retain_functor_per_call_site.wado/$test_0_a_field_reaches_a_functor_that_keeps_nothing$cold2"($v0) {
     let $load_2: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
-    let new_used_19: i32;
-    let start_20: i32;
-    let $sroa_$f_buf_102: ref "core:prelude/string.wado//String";
+    let new_used_23: i32;
+    let start_24: i32;
+    let $sroa_$f_buf_106: ref "core:prelude/string.wado//String";
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(160), used: 0 };
-    if @unlikely(local.tee new_used_19(0 + 110) > builtin::array_len($local_7.repr)) {
+    if @unlikely(local.tee new_used_23(0 + 110) > builtin::array_len($local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_19);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_23);
     }
-    start_20 = $local_7.used;
-    $local_7.used = new_used_19;
-    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), start_20, global:core:prelude/string.wado::$const_obj_21, 0, 20);
-    new_used_19 = start_20 + 20;
-    builtin::array_copy<u8>($load_2, new_used_19, global:retain_functor_per_call_site.wado::$const_obj_51, 0, 52);
-    new_used_19 = start_20 + 72;
-    builtin::array_copy<u8>($load_2, new_used_19, global:core:prelude/string.wado::$const_obj_19, 0, 4);
-    new_used_19 = start_20 + 76;
-    builtin::array_copy<u8>($load_2, new_used_19, global:retain_functor_per_call_site.wado::$const_obj_49, 0, 33);
-    start_20 = start_20 + 109;
-    builtin::array_copy<u8>($load_2, start_20, global:core:prelude/string.wado::$const_obj_17, 0, 1);
-    $sroa_$f_buf_102 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(48, $sroa_$f_buf_102);
-    if @unlikely(local.tee start_20($local_7.used + 70) > builtin::array_len($local_7.repr)) {
+    start_24 = $local_7.used;
+    $local_7.used = new_used_23;
+    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), start_24, global:core:prelude/string.wado::$const_obj_21, 0, 20);
+    new_used_23 = start_24 + 20;
+    builtin::array_copy<u8>($load_2, new_used_23, global:retain_functor_per_call_site.wado::$const_obj_51, 0, 52);
+    new_used_23 = start_24 + 72;
+    builtin::array_copy<u8>($load_2, new_used_23, global:core:prelude/string.wado::$const_obj_19, 0, 4);
+    new_used_23 = start_24 + 76;
+    builtin::array_copy<u8>($load_2, new_used_23, global:retain_functor_per_call_site.wado::$const_obj_49, 0, 33);
+    start_24 = start_24 + 109;
+    builtin::array_copy<u8>($load_2, start_24, global:core:prelude/string.wado::$const_obj_17, 0, 1);
+    $sroa_$f_buf_106 = $local_7;
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(48, $sroa_$f_buf_106);
+    if @unlikely(local.tee start_24($local_7.used + 70) > builtin::array_len($local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, start_20);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, start_24);
     }
-    new_used_19 = $local_7.used;
-    $local_7.used = start_20;
-    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), new_used_19, global:retain_functor_per_call_site.wado::$const_obj_47, 0, 43);
-    new_used_19 = new_used_19 + 43;
-    builtin::array_copy<u8>($load_2, new_used_19, global:retain_functor_per_call_site.wado::$const_obj_46, 0, 27);
-    $sroa_$f_buf_102 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"($v0, $sroa_$f_buf_102);
+    new_used_23 = $local_7.used;
+    $local_7.used = start_24;
+    builtin::array_copy<u8>(local.tee $load_2($local_7.repr), new_used_23, global:retain_functor_per_call_site.wado::$const_obj_47, 0, 43);
+    new_used_23 = new_used_23 + 43;
+    builtin::array_copy<u8>($load_2, new_used_23, global:retain_functor_per_call_site.wado::$const_obj_46, 0, 27);
+    $sroa_$f_buf_106 = $local_7;
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"($v0, $sroa_$f_buf_106);
     if @unlikely(local.tee $v0($local_7.used + 1) > builtin::array_len($local_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, $v0);
     }
-    new_used_19 = $local_7.used;
+    new_used_23 = $local_7.used;
     $local_7.used = $v0;
-    builtin::array_copy<u8>($local_7.repr, new_used_19, global:core:prelude/string.wado::$const_obj_10, 0, 1);
+    builtin::array_copy<u8>($local_7.repr, new_used_23, global:core:prelude/string.wado::$const_obj_10, 0, 1);
     "core:rt/panic"($local_7.repr, $local_7.used);
     unreachable;
 }

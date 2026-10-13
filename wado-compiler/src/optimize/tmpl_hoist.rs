@@ -1617,7 +1617,7 @@ mod tests {
     use super::*;
     use crate::call_args::CallArgs;
     use crate::nir::FuncId;
-    use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
+    use crate::nir_arena::{ArenaCallArg, BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeId;
 
     /// Build a `Body` whose root holds a single expression (built by `build`)
@@ -1663,7 +1663,6 @@ mod tests {
     /// independent value, so the call only *mentions* `arg`, it is not an
     /// alias of it.
     fn call_with(body: &mut Body, arg: ExprId) -> ExprId {
-        use crate::nir_arena::ArenaCallArg;
         use cranelift_entity::EntityRef;
         body.exprs.push(ExprNode {
             kind: ExprKind::Call {

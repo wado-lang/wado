@@ -118,7 +118,10 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   — a variable, an aggregate, a `return` — which is exactly where no write-back
   point exists.
 - `&` (immutable, read-only) to such a place is permitted: it reads a snapshot
-  copy, and there is no write to lose.
+  copy, and there is no write to lose. This holds for a replace-on-assign field
+  or element only. A reference to a place of an in-place type names the place,
+  and an assignment to it is stated in
+  [WEP: Borrow Liveness and Assignment to a Borrowed Place](./wep-2026-10-13-borrowed-places.md).
 - Carve-out: when the `&mut <place>` is a call argument to a parameter the
   callee does not retain, the
   reference provably cannot outlive the call, so it is desugared to a temp +

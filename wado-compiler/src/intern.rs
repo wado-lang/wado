@@ -164,7 +164,6 @@ mod tests {
 
     #[test]
     fn hash_matches_pointer_identity() {
-        use crate::hashmap::IndexSet;
         let mut interner = StringInterner::new();
         let a = interner.intern("key");
         let b = interner.intern("key");

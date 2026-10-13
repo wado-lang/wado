@@ -65,8 +65,9 @@ pub(super) fn namespace_imports_of(
     out
 }
 
-use super::solver_bridge::SolverBridge;
+use super::solver_bridge::{Lowering, SolverBridge, lower_impls};
 use super::types::TypeError;
+use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
 
 /// Pick a `ModuleSource` from the AST and synthesised candidate lists: a
 /// `prefer` hint wins wherever it appears, else the first AST entry, else the
@@ -2414,8 +2415,6 @@ fn check_impl_coherence(
     env: &TraitEnv,
     resolutions: &Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
-    use super::solver_bridge::{Lowering, lower_impls};
-    use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
     let mut lowering = Lowering::over(resolutions);
     lowering.intern_assocs(&env.trait_decl_headers);
     let mut program = Program::default();

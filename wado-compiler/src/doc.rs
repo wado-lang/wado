@@ -1,4 +1,4 @@
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use serde::Serialize;
 
 use crate::ast::{
@@ -1247,8 +1247,6 @@ fn collect_primitive_types_from_module(
     include_private: bool,
     scope: &DocScope,
 ) -> Vec<DocPrimitiveType> {
-    use crate::hashmap::IndexMap;
-
     let impls = documented_impls(module, include_private, Some(scope));
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 

@@ -12,7 +12,8 @@ use crate::module_source::ModuleSource;
 use crate::name::{StructName, wir_enum_type_key, wir_type_key};
 use crate::nir::{FuncId, FuncRef};
 use crate::nir_package::NirPackage;
-use crate::tir::{TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WasmModuleFunc, WasmModuleInfo, WirAbstractHeapType,
     WirComponent, WirData, WirExport, WirField, WirFuncId, WirFuncType, WirFunction, WirGlobal,
@@ -506,7 +507,6 @@ impl<'a> WirContext<'a> {
         // shared with `$canonical_inspectable_base`; the per-signature
         // `func` field comes last. Non-inspectable layout is the slim
         // `{ env, func }` (no shared supertype).
-        use crate::wir::{WirField, WirMeta, WirName, WirStructType};
         let mut fields = vec![WirField {
             name: "env".to_string(),
             ty: abstract_struct_nullable,
@@ -571,7 +571,6 @@ impl<'a> WirContext<'a> {
             heap_type: WirAbstractHeapType::Struct,
             nullable: true,
         };
-        use crate::wir::{WirField, WirMeta, WirName, WirStructType};
         let fields = vec![
             WirField {
                 name: "env".to_string(),
@@ -732,8 +731,6 @@ impl<'a> WirContext<'a> {
         type_table: &TypeTable,
         type_id: TypeId,
     ) -> Result<WirType, UnregisteredType> {
-        use crate::primitive::PrimitiveType;
-        use crate::tir::ResolvedType;
         Ok(match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8 => WirType::I8,
@@ -1135,7 +1132,6 @@ fn collect_referenced_globals(instrs: &[WirInstr], out: &mut IndexMap<String, ()
 }
 
 fn collect_referenced_globals_instr(instr: &WirInstr, out: &mut IndexMap<String, ()>) {
-    use crate::wir::WirInstr;
     match instr {
         WirInstr::GlobalGet { name, .. } | WirInstr::GlobalSet { name, .. } => {
             out.insert(name.fq.clone(), ());

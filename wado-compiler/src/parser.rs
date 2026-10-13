@@ -7257,8 +7257,8 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 mod tests {
     use super::*;
     use crate::ast::{
-        AstVisitor, ConditionElement, EffectHandlerBinding, Item, declared_handle_classes,
-        written_params,
+        AstVisitor, ConditionElement, EffectHandlerBinding, Item, Visibility,
+        declared_handle_classes, written_params,
     };
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
@@ -8126,7 +8126,6 @@ mod tests {
 
     #[test]
     fn test_visibility_ladder_parsing() {
-        use crate::ast::Visibility;
         let module =
             parse("internal fn a() {}\npub fn b() {}\nfn c() {}\nexport fn d() {}").unwrap();
         let vis = |i: usize| match &module.items[i] {

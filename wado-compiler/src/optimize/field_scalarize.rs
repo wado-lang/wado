@@ -18,6 +18,7 @@ use crate::nir_arena::{
     StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
 use crate::optimize::arena_query::is_local;
@@ -1667,7 +1668,6 @@ fn bind_for_sync(
     assigned: &IndexSet<u32>,
     span: Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
-    use crate::nir_value_graph::ValueKind;
     if let Some(v) = value.as_value()
         && matches!(
             body.values.kind(v),

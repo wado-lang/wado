@@ -22,7 +22,7 @@ use crate::ast::{
     self, AstId, AstVisitor, Attribute, CmImport, EffectHandlerBinding, Expr, Function, ImplBlock,
     Item, Pattern, RestClause, Stmt, cm_import_of,
 };
-use crate::compiler_host::Diagnostic;
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::ImplParamSlots;
@@ -84,7 +84,6 @@ pub struct EffectError {
 
 impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message) = match e.fault {
             EffectFault::Missing(kind) => (
                 Code::MissingEffect,
@@ -187,7 +186,6 @@ pub struct PurityError {
 
 impl From<PurityError> for Diagnostic {
     fn from(e: PurityError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let noun = e.context.noun();
         let message = match &e.impurity {
             Impurity::Call(callee) => {

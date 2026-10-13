@@ -449,6 +449,20 @@ impl CaptureScanner {
         true
     }
 
+    /// The operands that compute a place without reading it: a subscript's
+    /// receiver and index, down a chain of fields and derefs.
+    fn scan_place_operands(&mut self, place: &Expr) {
+        match place {
+            Expr::Index(i) => {
+                self.scan_receiver(&i.expr);
+                self.scan(&i.index);
+            }
+            Expr::FieldAccess(f) => self.scan_place_operands(&f.expr),
+            Expr::Unary(u) => self.scan_place_operands(&u.expr),
+            _ => {}
+        }
+    }
+
     fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
         let Position {
             is_root,
@@ -482,6 +496,19 @@ impl CaptureScanner {
                 // `&mut` needs a mutable lvalue; the binding is immutable.
                 if u.op == UnaryOp::MutRef {
                     self.record_write(&u.expr);
+                    return;
+                }
+                // `&place` names the place: a slot for the place would bind its
+                // value and hand the borrow that copy. Only what computes the
+                // place is captured under it.
+                if u.op == UnaryOp::Ref
+                    && !matches!(&u.expr, Expr::Ident(_))
+                    && place_root_name(&u.expr).is_some()
+                {
+                    self.scan_place_operands(&u.expr);
+                    if !is_root {
+                        self.add(unparse_expr_source(expr), ast_id, false, pos);
+                    }
                     return;
                 }
                 self.scan(&u.expr);

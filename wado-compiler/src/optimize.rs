@@ -48,6 +48,7 @@ mod ref_elim;
 mod scalar_forward;
 mod select_lowering;
 mod shared_escape;
+mod split_and_condition;
 mod sroa;
 mod sroa_param;
 pub(crate) mod sroa_variant_return;
@@ -347,6 +348,9 @@ pub fn optimize(
     // Post-optimization rewrites: select lowering for branchless Wasm
     run_pass("nir/select_lowering", &mut project, profiler, |p| {
         select_lowering::select_lowering(p)
+    });
+    run_pass("nir/split_and_condition", &mut project, profiler, |p| {
+        split_and_condition::split_and_conditions(p)
     });
 
     // The multi-value ABI, both sides. These run after every other

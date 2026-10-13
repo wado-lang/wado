@@ -2148,7 +2148,6 @@ fn generate_cm_imports(
     project: &NirPackage,
     import_plan: &[ImportEntry],
 ) {
-    use crate::wir::ImportKind;
     let has_kind = |kind: ImportKind| import_plan.iter().any(|e| e.kind == kind);
     let needs_cli_types = has_kind(ImportKind::SharedTypes);
     let cli_version = project
@@ -3514,7 +3513,6 @@ fn import_interfaces_with_resources(
     project: &NirPackage,
     import_plan: &[ImportEntry],
 ) {
-    use crate::wir::ImportKind;
     let interfaces_with_resources: Vec<_> = project
         .cm_interface_registry
         .interfaces()
@@ -3601,7 +3599,6 @@ fn import_resource_using_interfaces(
     project: &NirPackage,
     import_plan: &[ImportEntry],
 ) {
-    use crate::wir::ImportKind;
     for interface_info in project.cm_interface_registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
@@ -3881,7 +3878,6 @@ fn compose_dependency_components(
     import_plan: &[ImportEntry],
     providers: &[ProviderComponent],
 ) -> Result<Vec<u8>, ProviderMismatch> {
-    use crate::wir::ImportKind;
     use wasm_compose::graph::{
         ComponentId, CompositionGraph, EncodeOptions, ImportIndex, InstanceId,
     };
@@ -4076,7 +4072,6 @@ fn generate_cm_world_func_imports(
     project: &NirPackage,
     import_plan: &[ImportEntry],
 ) {
-    use crate::wir::ImportKind;
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
     let world_funcs: Vec<CmFunctionInfo> = project
         .cm_interface_registry

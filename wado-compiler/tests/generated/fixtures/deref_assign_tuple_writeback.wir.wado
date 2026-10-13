@@ -153,20 +153,22 @@ global global:core:prelude/primitive.wado::$const_obj_121: ref "core:prelude/str
 fn "deref_assign_tuple_writeback.wado/$test_1_deref_assign_of_a_tuple_with_a_string_element_writes_back"() {
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
-    let a: ref Array<u8>;
     let b: ref Array<u8>;
     let i: i32;
-    let $sroa_p_0_27: ref "core:prelude/string.wado//String";
-    $sroa_p_0_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 108, 100), used: 3 };
-    $sroa_p_0_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 };
+    let $sroa_p_0_30: ref "core:prelude/string.wado//String";
+    let $sroa_s_repr_32: ref Array<u8>;
+    $sroa_p_0_30 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 108, 100), used: 3 };
+    $sroa_s_repr_32 = array.new_fixed<u8>(110, 101, 119);
+    $sroa_p_0_30.repr = $sroa_s_repr_32;
+    $sroa_p_0_30.used = 3;
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-        a = $sroa_p_0_27.repr;
+        $sroa_s_repr_32 = $sroa_p_0_30.repr;
         b = global:deref_assign_tuple_writeback.wado::$const_obj_14;
         i = 0;
         b1: block {
             l2: loop {
                 break_if b1 i >= 3;
-                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
+                if builtin::array_get_value<u8>($sroa_s_repr_32, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
                 i = i + 1;
@@ -190,9 +192,9 @@ condition: p.0 == \"new\"
 "), used: 25 }, 25);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_5.repr, i + 25, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("p.0: "), used: 5 }, 5);
         $local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
-        "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($sroa_p_0_27, $local_6);
-        $sroa_p_0_27 = global:deref_assign_tuple_writeback.wado::$const_obj_13;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_5, $sroa_p_0_27.repr, $sroa_p_0_27.used);
+        "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($sroa_p_0_30, $local_6);
+        $sroa_p_0_30 = global:deref_assign_tuple_writeback.wado::$const_obj_13;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_5, $sroa_p_0_30.repr, $sroa_p_0_30.used);
         "core:rt/panic"($local_5.repr, $local_5.used);
         unreachable;
     }

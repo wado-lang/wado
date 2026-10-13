@@ -16,9 +16,10 @@ use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
 use super::translate::{FunctionTranslator, declare_and_set_local};
 use crate::lower::plan::value_copy;
+use crate::lower::wide_int_literal::{WideIntCtor, classify_ctor};
 use crate::nir;
 use crate::nir::FuncId;
-use crate::nir_arena::{ArenaCallArg, Body, Operand};
+use crate::nir_arena::{ArenaCallArg, Body, ExprKind, Operand};
 use crate::tir::ResolvedType;
 use crate::wir::WirFuncId;
 use crate::wir_build::translate::ref_binding_needs_boxing;
@@ -209,9 +210,6 @@ impl FunctionTranslator<'_, '_> {
     /// the struct literal the inliner leaves once it has inlined that
     /// constructor — matching only one would answer differently per `-O` level.
     fn operand_const_wide_int(&self, op: Operand) -> Option<i128> {
-        use crate::lower::wide_int_literal::{WideIntCtor, classify_ctor};
-        use crate::nir_arena::ExprKind;
-
         match &self.body.exprs[op.as_expr()?].kind {
             ExprKind::Call { func_id, args, .. } => {
                 let ctor = classify_ctor(self.type_table, &self.callee_descriptor(*func_id).name)?;
@@ -242,7 +240,6 @@ impl FunctionTranslator<'_, '_> {
     /// element when `elem` is itself value-typed. `None` for a primitive
     /// element, where Wasm GC's plain `array.set` is already a deep copy.
     fn array_element_copy(&self, src_type_id: TypeId) -> Option<WirFuncId> {
-        use crate::tir::ResolvedType;
         let ty = self.type_table.peel_refs(src_type_id);
         let elem = match self.type_table.get(ty) {
             ResolvedType::BuiltinArray(elem) => *elem,

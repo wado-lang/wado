@@ -1,5 +1,6 @@
-//! Every `crate::` / `super::` path a Rust file writes where its item is read
-//! (`AGENTS.md` > General Rules), read off the grammar rather than off bytes.
+//! Every `crate::` / `super::` path a Rust file writes outside a `use` item at
+//! the top of a module (`AGENTS.md` > General Rules), read off the grammar
+//! rather than off bytes.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -18,36 +19,47 @@ use { HashMap } from "core:collections";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
 
-/// One path written where its item is read, at a 1-based line and column.
+/// One path written outside a module-level `use`, at a 1-based line and column.
 pub struct InlinePath {
     pub line: i32,
     pub column: i32,
     pub text: String,
 }
 
-/// The character offset of every `crate` / `super` that opens a path where its
-/// item is read, paired with the text a report quotes for it.
+/// The character offset of every `crate` / `super` that opens a path outside a
+/// module-level `use`, paired with the text a report quotes for it.
 fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
     let cst = &result.cst;
     let toks = &result.tokens;
     let mut out: List<[i32, String]> = [];
     let mut depth = 0;
-    // A `use` item is where a path belongs, and a `pub(in ...)` names a scope
-    // rather than reading an item, so Rust admits no import there. Neither
-    // nests the other, so one depth marks where the exempt subtree closes.
+    // A `use` item at the top of a module is where a path belongs, and a
+    // `pub(in ...)` names a scope rather than reading an item, so Rust admits
+    // no import there. Neither nests the other, so one depth marks where the
+    // exempt subtree closes. A `use` inside a block (a function body among
+    // them) is not at the top of its module.
     let mut exempt_depth = -1;
+    let mut block_depths: List<i32> = [];
     for let mut row = 0; row < cst.row_count(); row += 1 {
         match cst.tag[row] {
             Open => {
                 depth += 1;
                 let kind = cst.kind(row);
-                if exempt_depth < 0 && (kind == rust::RK_USE_DECLARATION || kind == rust::RK_VISIBILITY) {
+                if kind == rust::RK_BLOCK_EXPRESSION {
+                    block_depths.push(depth);
+                }
+                let at_module_top = block_depths.is_empty();
+                if exempt_depth < 0
+                    && (kind == rust::RK_USE_DECLARATION && at_module_top || kind == rust::RK_VISIBILITY) {
                     exempt_depth = depth;
                 }
             },
             Close => {
                 if exempt_depth == depth {
                     exempt_depth = -1;
+                }
+                if block_depths.last() == Option::Some(depth) {
+                    block_depths.pop();
                 }
                 depth -= 1;
             },
@@ -165,7 +177,7 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
         &counts,
         update,
         "inline `crate::` / `super::` paths",
-        "Import them with `use`. Run `scripts/check-rust-paths.sh <file>` to list them.",
+        "Import them with a `use` at the top of the module. Run `scripts/check-rust-paths.sh <file>` to list them.",
     );
 }
 
@@ -192,9 +204,15 @@ test "a use item may name any path" {
     assert hits.len() == 0;
 }
 
-test "a use item inside a function body is still a use item" {
+test "a use item inside a function body is not at the top of the module" {
     let hits = find_inline_paths("fn f() {\n    use crate::a::B;\n    B::new();\n}\n").unwrap();
-    assert hits.len() == 0;
+    assert hits.len() == 1;
+    assert hits[0].line == 2 && hits[0].column == 9 && hits[0].text == "crate::";
+}
+
+test "a use item in an inline module is at the top of that module" {
+    let source = "mod tests {\n    use super::*;\n    use crate::a::B;\n}\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
 }
 
 test "comments and strings hold no paths" {

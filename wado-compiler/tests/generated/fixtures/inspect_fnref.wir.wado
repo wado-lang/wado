@@ -195,17 +195,18 @@ fn "inspect_fnref.wado/$cm_export__$test_1_bare_fn_ref_____renders_as_a_forwardi
 
 fn "inspect_fnref.wado/$cm_export__$test_2_explicit__fn_ref_deref_____matches_the_bare_form"() {
     let $local_2_2: ref "core:prelude/string.wado//String";
+    let $deref_val_5: ref "core:prelude/format.wado//Formatter";
     let f: ref struct;
     let $local_1: ref "core:prelude/string.wado//String";
-    let $local_2_9: ref "core:prelude/format.wado//Formatter";
+    let $local_2_13: ref "core:prelude/format.wado//Formatter";
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
     f = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_fnref.wado//$Closure_4" {  }, inspect: ref.func "closure/inspect_fnref.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_fnref.wado/$closure_wrapper_0" };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $local_2_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    "inspect_fnref.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f }, $local_2_9);
+    $local_2_13 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 1, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
+    "inspect_fnref.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: f }, $local_2_13);
     if @unlikely(local.tee i($inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
         a = $local_1.repr;
         a_end = $local_1.used;
@@ -233,20 +234,38 @@ fn "inspect_fnref.wado/$cm_export__$test_2_explicit__fn_ref_deref_____matches_th
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i + 76, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 97, 116, 32), used: 4 }, 4);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i + 80, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("inspect_fnref.wado"), used: 18 }, 18);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i + 98, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
-        $local_2_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2_2);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(37, $local_2_9);
+        $local_2_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2_2);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt$sroa[self.value]"(37, $local_2_13);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_2_2, 65);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: fmt_alt_ref(&double) == \"|x: i32| double(x)\"
 "), used: 57 }, 57);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i + 57, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("double: "), used: 8 }, 8);
-        $local_2_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2_2);
-        "inspect_fnref.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_fnref.wado//$Closure_5" {  }, inspect: ref.func "closure/inspect_fnref.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_fnref.wado/$closure_wrapper_1" } }, $local_2_9);
+        $deref_val_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2_2);
+        $local_2_13.fill = $deref_val_5.fill;
+        $local_2_13.align = $deref_val_5.align;
+        $local_2_13.sign_plus = $deref_val_5.sign_plus;
+        $local_2_13.alternate = $deref_val_5.alternate;
+        $local_2_13.zero_pad = $deref_val_5.zero_pad;
+        $local_2_13.width = $deref_val_5.width;
+        $local_2_13.precision = $deref_val_5.precision;
+        $local_2_13.indent = $deref_val_5.indent;
+        $local_2_13.buf = $deref_val_5.buf;
+        "inspect_fnref.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_fnref.wado//$Closure_5" {  }, inspect: ref.func "closure/inspect_fnref.wado/$closure_inspect_wrapper_1", func: ref.func "closure/inspect_fnref.wado/$closure_wrapper_1" } }, $local_2_13);
         i = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_2_2, 23);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_2_2.repr, i + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("fmt_alt_ref(&double): "), used: 22 }, 22);
-        $local_2_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2_2);
-        "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_1, $local_2_9);
+        $deref_val_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2_2);
+        $local_2_13.fill = $deref_val_5.fill;
+        $local_2_13.align = $deref_val_5.align;
+        $local_2_13.sign_plus = $deref_val_5.sign_plus;
+        $local_2_13.alternate = $deref_val_5.alternate;
+        $local_2_13.zero_pad = $deref_val_5.zero_pad;
+        $local_2_13.width = $deref_val_5.width;
+        $local_2_13.precision = $deref_val_5.precision;
+        $local_2_13.indent = $deref_val_5.indent;
+        $local_2_13.buf = $deref_val_5.buf;
+        "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_1, $local_2_13);
         b = array.new_fixed<u8>(10);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_2_2, b, 1);
         "core:rt/panic"($local_2_2.repr, $local_2_2.used);

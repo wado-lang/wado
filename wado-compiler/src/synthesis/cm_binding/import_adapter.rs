@@ -392,7 +392,6 @@ fn lift_flat_struct_return(
     locals: &mut Vec<TirLocal>,
     lift_ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    use crate::cm_abi::CmValType;
     let (store_op, byte_width) = match flat {
         CmValType::I32 => ("i32_store", 4),
         CmValType::I64 => ("i64_store", 8),

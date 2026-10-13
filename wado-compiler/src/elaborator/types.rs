@@ -8,7 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
 use crate::ast::{self, AstId, Expr, Visibility};
-use crate::compiler_host::{Code, Diagnostic};
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
 use crate::elaborator::call::DefaultTypeBinding;
@@ -1591,7 +1591,6 @@ impl TypeError {
     /// This error as its `(code, message, span)` triple, which is what
     /// `From<TypeError> for Diagnostic` fills a `Diagnostic` from.
     pub(super) fn render(&self) -> (Code, String, Span) {
-        use crate::compiler_host::Code;
         match self {
             TypeError::TypeMismatch {
                 expected,
@@ -2954,7 +2953,6 @@ impl TypeError {
 
 impl From<TypeError> for Diagnostic {
     fn from(e: TypeError) -> Self {
-        use crate::compiler_host::{DiagnosticSpan, Severity};
         let (code, message, span) = e.render();
         Diagnostic {
             severity: Severity::Error,

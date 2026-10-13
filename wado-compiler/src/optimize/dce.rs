@@ -319,7 +319,6 @@ fn extend_reachable_for_optimizer_passes(
     reachable: &mut IndexSet<FunctionId>,
 ) {
     let call_graph = &graph.call_graph;
-    use crate::compiler_item::CompilerItem;
 
     // `push_str` is generic over `AsStrSlice`, so the item marks one id per
     // monomorph; any of them reaching the fusion keeps the primitives alive.

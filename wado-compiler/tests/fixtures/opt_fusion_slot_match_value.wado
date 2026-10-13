@@ -1,0 +1,67 @@
+// `x = f()?` on a helper `sroa_variant_return` gave a tuple return, inlined
+// into its caller.
+//
+// The consumer is `let t = L: { … break L: [tag, …] }; match t.0 { 0 => t.1,
+// 1 => { return … t.2 … } }`, the value the enclosing block yields. Fusion
+// took only a value-discarding `match t.0 { K => A, _ => B }`, so each exit
+// stored its tag in a local and the match tested it again right after the
+// block, one compare and branch per call that nothing needed. Fused, the
+// tag locals (`$sroa_slot_N`) are gone.
+struct Eof {
+    at: i32,
+}
+
+struct Reader {
+    input: List<u8>,
+    pos: i32,
+}
+
+impl Reader {
+    fn peek_byte(&self) -> Result<u8, Eof> {
+        if self.pos >= self.input.len() {
+            builtin::cold_path();
+            return Result::Err(Eof { at: self.pos });
+        }
+        return Result::Ok(self.input[self.pos]);
+    }
+
+    fn read_bool(&mut self) -> Result<bool, Eof> {
+        let b = self.peek_byte()?;
+        if b == 0xf4 {
+            self.pos += 1;
+            return Result::Ok(false);
+        }
+        if b == 0xf5 {
+            self.pos += 1;
+            return Result::Ok(true);
+        }
+        return Result::Err(Eof { at: self.pos });
+    }
+}
+
+fn count_true(r: &mut Reader) -> Result<i32, Eof> {
+    let mut n = 0;
+    while r.pos < 3 {
+        if r.read_bool()? {
+            n += 1;
+        }
+    }
+    return Result::Ok(n);
+}
+
+export fn run() {
+    let bytes: List<u8> = [0xf4, 0xf5, 0xf5];
+    let mut r = Reader { input: builtin::black_box(bytes), pos: 0 };
+    assert count_true(&mut r) matches { Ok(2) };
+
+    let short: List<u8> = [0xf5];
+    let mut s = Reader { input: builtin::black_box(short), pos: 0 };
+    assert s.read_bool() matches { Ok(true) };
+    assert s.read_bool() matches { Err(Eof { at: 1 }) };
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["$sroa_slot_"]
+}
