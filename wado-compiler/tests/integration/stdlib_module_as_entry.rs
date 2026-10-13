@@ -86,6 +86,25 @@ fn a_wasm_module_entry_is_rejected() {
     );
 }
 
+/// That separate core module holds its own module's code and nothing else, so a
+/// call out of it is rejected where it is written rather than crashing emit.
+#[test]
+fn a_call_out_of_a_wasm_module_is_rejected() {
+    let path = core_dir().join("allocator.wado");
+    let source = std::fs::read_to_string(&path).expect("allocator.wado should be readable");
+    let hand_rounded = "((bytes + PAGE_SIZE - 1) / PAGE_SIZE)";
+    assert!(source.contains(hand_rounded), "`pages` should round up by hand");
+    let probed = source.replace(hand_rounded, "bytes.div_ceil(PAGE_SIZE)");
+
+    let Err(err) = compile_as_test_world_entry(&path, &probed) else {
+        panic!("a call out of a `#![wasm_module(…)]` module must be rejected");
+    };
+    assert!(
+        err.to_string().contains("`pages` calls `u64::div_ceil`, which the core module `mem` does not hold"),
+        "unexpected error: {err}"
+    );
+}
+
 /// The entry's own source is what gets compiled, never the snapshot's copy.
 #[test]
 fn a_stdlib_entry_is_compiled_from_its_source() {

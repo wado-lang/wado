@@ -98,6 +98,7 @@ pub mod trace;
 pub mod trait_solver;
 pub mod unparse;
 pub mod unresolved_types;
+pub mod wasm_module_calls;
 pub mod wir;
 pub mod wir_build;
 pub mod wir_optimize;
@@ -148,6 +149,7 @@ pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
+use wasm_module_calls::calls_out_of_wasm_modules;
 use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
@@ -1842,6 +1844,13 @@ fn compile_after_load<H: CompilerHost>(
 
     // Rejected here rather than at emit, where the split leaves a call to a
     // function the separated module never holds.
+    let calls_out = calls_out_of_wasm_modules(&flat);
+    for (module, diagnostic) in &calls_out {
+        let _ = logger.error_in(module, diagnostic.clone());
+    }
+    if !calls_out.is_empty() {
+        return Err(Bail);
+    }
     if let Some(name) = flat.wasm_module_sources.get(&flat.entry_module_source) {
         let _ = logger.error_in(
             &flat.entry_module_source,
