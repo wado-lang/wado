@@ -157,86 +157,86 @@ fn "float_nan_constant_positive.wado/run"() with Stdout {
     let $v2: bool;
     let $local_5: ref "core:prelude/string.wado//String";
     let self_20: u64;
-    let digit_count_31: i32;
-    let offset_32: i32;
-    let self_51: f64;
-    let self_98: f32;
-    let $sroa_$f_buf_125: ref "core:prelude/string.wado//String";
-    $sroa_$f_buf_125 = local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    let self_36: i32;
+    let q_38: i32;
+    let self_54: f64;
+    let self_104: f32;
+    let $sroa_$f_buf_131: ref "core:prelude/string.wado//String";
+    $sroa_$f_buf_131 = local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     self_20 = builtin::i64_reinterpret_f64(builtin::f64_reinterpret_i64(9221120237041090560_i64));
-    digit_count_31 = $inline_count_digits_u64_base_7: block -> i32 {
+    q_38 = $inline_count_digits_u64_base_7: block -> i32 {
         if self_20 == 0_i64 {
             break $inline_count_digits_u64_base_7: 1;
         }
-        break $inline_count_digits_u64_base_7: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(self_20))) - 1) / 4) + 1;
+        break $inline_count_digits_u64_base_7: select i32((self_36 - (q_38 * 4)) != 0, (local.tee q_38(local.tee self_36(64 - builtin::i32_wrap_i64(builtin::i64_clz(self_20))) / 4) + 1) + ((self_36 ^ 4) >> 31), q_38);
     };
-    offset_32 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_125, 0, digit_count_31);
-    "core:prelude/primitive.wado/write_u64_base_digits"($sroa_$f_buf_125.repr, offset_32, self_20, digit_count_31, 4, 15, 0);
-    if @unlikely(local.tee digit_count_31($local_5.used + 1) > builtin::array_len($local_5.repr)) {
+    self_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_131, 0, q_38);
+    "core:prelude/primitive.wado/write_u64_base_digits"($sroa_$f_buf_131.repr, self_36, self_20, q_38, 4, 15, 0);
+    if @unlikely(local.tee q_38($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, digit_count_31);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, q_38);
     }
-    offset_32 = $local_5.used;
-    $local_5.used = digit_count_31;
-    builtin::array_copy<u8>($local_5.repr, offset_32, global:float_nan_constant_positive.wado::$const_obj_23, 0, 1);
-    $sroa_$f_buf_125 = $local_5;
-    "core:prelude/traits.wado/core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__16: block -> "core:prelude/traits.wado//enum:Ordering" {
-        if local.tee self_51(builtin::f64_reinterpret_i64(9221120237041090560_i64)) < inf {
-            break $inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__16: 0;
+    self_36 = $local_5.used;
+    $local_5.used = q_38;
+    builtin::array_copy<u8>($local_5.repr, self_36, global:float_nan_constant_positive.wado::$const_obj_23, 0, 1);
+    $sroa_$f_buf_131 = $local_5;
+    "core:prelude/traits.wado/core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__17: block -> "core:prelude/traits.wado//enum:Ordering" {
+        if local.tee self_54(builtin::f64_reinterpret_i64(9221120237041090560_i64)) < inf {
+            break $inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__17: 0;
         }
-        if (self_51 <= inf) == 0 {
-            break $inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__16: 2;
+        if (self_54 <= inf) == 0 {
+            break $inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__17: 2;
         }
-        break $inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__16: 1;
-    }, $sroa_$f_buf_125);
-    offset_32 = builtin::i32_wrap_i64(local.tee self_20("wasi/stream-new"()));
-    digit_count_31 = builtin::i32_wrap_i64(self_20 >> 32_i64);
-    offset_32 = "float_nan_constant_positive.wado/$cm_binding__Stdout_write_via_stream"(offset_32);
-    "core:rt/write_string_to_stream$dae[add_newline]"(digit_count_31, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(offset_32);
-    $sroa_$f_buf_125 = local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+        break $inline_f64_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__17: 1;
+    }, $sroa_$f_buf_131);
+    self_36 = builtin::i32_wrap_i64(local.tee self_20("wasi/stream-new"()));
+    q_38 = builtin::i32_wrap_i64(self_20 >> 32_i64);
+    self_36 = "float_nan_constant_positive.wado/$cm_binding__Stdout_write_via_stream"(self_36);
+    "core:rt/write_string_to_stream$dae[add_newline]"(q_38, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_36);
+    $sroa_$f_buf_131 = local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     self_20 = builtin::i64_extend_i32_u(builtin::i32_reinterpret_f32(builtin::f32_reinterpret_i32(2143289344)));
-    offset_32 = $inline_count_digits_u64_base_26: block -> i32 {
+    q_38 = $inline_count_digits_u64_base_27: block -> i32 {
         if self_20 == 0_i64 {
-            break $inline_count_digits_u64_base_26: 1;
+            break $inline_count_digits_u64_base_27: 1;
         }
-        break $inline_count_digits_u64_base_26: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(self_20))) - 1) / 4) + 1;
+        break $inline_count_digits_u64_base_27: select i32((self_36 - (q_38 * 4)) != 0, (local.tee q_38(local.tee self_36(64 - builtin::i32_wrap_i64(builtin::i64_clz(self_20))) / 4) + 1) + ((self_36 ^ 4) >> 31), q_38);
     };
-    digit_count_31 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_125, 0, offset_32);
-    "core:prelude/primitive.wado/write_u64_base_digits"($sroa_$f_buf_125.repr, digit_count_31, self_20, offset_32, 4, 15, 0);
-    if @unlikely(local.tee offset_32($local_5.used + 1) > builtin::array_len($local_5.repr)) {
+    self_36 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_131, 0, q_38);
+    "core:prelude/primitive.wado/write_u64_base_digits"($sroa_$f_buf_131.repr, self_36, self_20, q_38, 4, 15, 0);
+    if @unlikely(local.tee q_38($local_5.used + 1) > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, offset_32);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, q_38);
     }
-    digit_count_31 = $local_5.used;
-    $local_5.used = offset_32;
-    builtin::array_copy<u8>($local_5.repr, digit_count_31, global:float_nan_constant_positive.wado::$const_obj_23, 0, 1);
-    $sroa_$f_buf_125 = $local_5;
-    "core:prelude/traits.wado/core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__35: block -> "core:prelude/traits.wado//enum:Ordering" {
-        if local.tee self_98(builtin::f32_reinterpret_i32(2143289344)) < inf_f32 {
-            break $inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__35: 0;
+    self_36 = $local_5.used;
+    $local_5.used = q_38;
+    builtin::array_copy<u8>($local_5.repr, self_36, global:float_nan_constant_positive.wado::$const_obj_23, 0, 1);
+    $sroa_$f_buf_131 = $local_5;
+    "core:prelude/traits.wado/core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__37: block -> "core:prelude/traits.wado//enum:Ordering" {
+        if local.tee self_104(builtin::f32_reinterpret_i32(2143289344)) < inf_f32 {
+            break $inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__37: 0;
         }
-        if (self_98 <= inf_f32) == 0 {
-            break $inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__35: 2;
+        if (self_104 <= inf_f32) == 0 {
+            break $inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__37: 2;
         }
-        break $inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__35: 1;
-    }, $sroa_$f_buf_125);
-    digit_count_31 = builtin::i32_wrap_i64(local.tee self_20("wasi/stream-new"()));
-    offset_32 = builtin::i32_wrap_i64(self_20 >> 32_i64);
-    digit_count_31 = "float_nan_constant_positive.wado/$cm_binding__Stdout_write_via_stream"(digit_count_31);
-    "core:rt/write_string_to_stream$dae[add_newline]"(offset_32, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(digit_count_31);
-    digit_count_31 = local.tee self_51(builtin::f64_reinterpret_i64(9221120237041090560_i64)) != self_51;
-    offset_32 = 0;
-    if @unlikely((if digit_count_31 -> i32 {
-        $v2 = local.tee self_98(builtin::f32_reinterpret_i32(2143289344)) != self_98;
-        offset_32 = 1;
+        break $inline_f32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__37: 1;
+    }, $sroa_$f_buf_131);
+    self_36 = builtin::i32_wrap_i64(local.tee self_20("wasi/stream-new"()));
+    q_38 = builtin::i32_wrap_i64(self_20 >> 32_i64);
+    self_36 = "float_nan_constant_positive.wado/$cm_binding__Stdout_write_via_stream"(self_36);
+    "core:rt/write_string_to_stream$dae[add_newline]"(q_38, $local_5.repr, $local_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(self_36);
+    self_36 = local.tee self_54(builtin::f64_reinterpret_i64(9221120237041090560_i64)) != self_54;
+    q_38 = 0;
+    if @unlikely((if self_36 -> i32 {
+        $v2 = local.tee self_104(builtin::f32_reinterpret_i32(2143289344)) != self_104;
+        q_38 = 1;
         $v2;
     } else {
         0;
     }) == 0) {
         cold_path;
-        "float_nan_constant_positive.wado/run$cold0"(digit_count_31, $v2, offset_32);
+        "float_nan_constant_positive.wado/run$cold0"(self_36, $v2, q_38);
         unreachable;
     }
 }
