@@ -84,6 +84,66 @@ test "a local declared without a value" {
     assert seen == 0 + 2 + 3;
 }
 
+fn assign_element(xs: &mut List<P>, i: i32, p: P) {
+    xs[i] = p;
+}
+
+test "a List element" {
+    let mut xs: List<P> = [P { a: 1, b: 1 }, P { a: 2, b: 2 }];
+    let r = &xs[0];
+    xs[0] = P { a: 7, b: builtin::black_box(7) };
+    assert r.sum() == 14;
+    assert xs[1].sum() == 4;
+}
+
+test "a List element that is a List" {
+    let mut xss: List<List<i32>> = [[1], [2]];
+    let r = &xss[1];
+    xss[1] = [5, 6, 7];
+    assert r.len() == 3;
+}
+
+test "a field of a List element" {
+    let mut hs: List<H> = [H { p: P { a: 1, b: 1 }, tag: "a" }];
+    let rp = &hs[0].p;
+    let rt = &hs[0].tag;
+    hs[0] = H { p: P { a: 4, b: builtin::black_box(4) }, tag: "b" };
+    assert rp.sum() == 8;
+    assert *rt == "b";
+}
+
+test "a List element an iterator holds" {
+    let mut xs: List<P> = [P { a: 1, b: 1 }, P { a: 2, b: 2 }];
+    let mut it = (&xs).into_iter();
+    let first = it.next().unwrap();
+    xs[0] = P { a: 5, b: builtin::black_box(5) };
+    assert first.sum() == 10;
+}
+
+test "a List element assigned through a reference" {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let r = &xs[0];
+    assign_element(&mut xs, 0, P { a: 6, b: builtin::black_box(6) });
+    assert r.sum() == 12;
+}
+
+test "a copy read out of a List element keeps its value" {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let row = xs[0];
+    let r = &xs[0];
+    xs[0] = P { a: 3, b: builtin::black_box(3) };
+    assert row.sum() == 2;
+    assert r.sum() == 6;
+}
+
+#[expect_trap]
+test "a List element past the end still traps" {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let r = &xs[0];
+    xs[builtin::black_box(1)] = P { a: 3, b: 3 };
+    assert r.sum() == 2;
+}
+
 test "the assigned value stays a copy" {
     let mut x = P { a: 1, b: 2 };
     let r = &x;

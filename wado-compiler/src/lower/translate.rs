@@ -22,6 +22,7 @@ use crate::lower::plan::value_copy::place;
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
+use crate::synthesis::common::builtin_call;
 use cranelift_entity::EntityRef;
 
 use crate::compiler_item::CompilerItem;
@@ -48,11 +49,11 @@ use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
-    ResolvedType, StructDef, StructFields, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr,
-    TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern,
-    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
-    TypeTable, receiver_value, struct_fields,
+    ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirCapture, TirEnum, TirEnumCase,
+    TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
+    TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp,
+    TirVariantCase, TirVariantDecl, TypeTable, receiver_value, struct_fields,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -518,7 +519,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             value_copy::last_use::unanalyzed_in_place_assigns(
                 func,
                 &base.type_table.borrow(),
-                &base.value_copy.observed_fields,
+                base.value_copy,
             )
         };
         let guarded_locals = guarded_locals(func, &in_place_assigns);
@@ -1043,6 +1044,182 @@ impl FunctionTranslator<'_, '_> {
         Some(out)
     }
 
+    /// Expand `xs[i] = value`, a `List::index_assign` call the ownership walk
+    /// marked, so an element in bounds is written field by field into its own
+    /// storage, every field of an in-place type into that field's storage
+    /// too. One out of bounds takes the call itself, which traps with its
+    /// message. The list, index and value are evaluated first, as for the call.
+    fn try_expand_in_place_element_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+        use crate::compiler_item::SeqField;
+        let TirStmtKind::Expr(call) = &stmt.kind else {
+            return None;
+        };
+        let TirExprKind::Call { args, .. } = &call.kind else {
+            return None;
+        };
+        if !self.in_place_assigns.contains_key(&call.span) {
+            return None;
+        }
+        let [list, index, value] = args.iter().map(|a| &a.expr).collect::<Vec<_>>()[..] else {
+            unreachable!("`index_assign` takes a list, an index and a value")
+        };
+        let element = self
+            .base
+            .type_table
+            .borrow()
+            .as_list(list.type_id)
+            .expect("`index_assign` is a `List` method");
+        let fields = self
+            .aggregate_fields(element)
+            .expect("the walk marks an element of an in-place type");
+        let span = call.span;
+
+        let list_idx = self.alloc_local(list.type_id, "$list".to_string());
+        let index_idx = self.alloc_local(TypeTable::I32, "$index".to_string());
+        let val_idx = self.alloc_local(element, "$deref_val".to_string());
+        let local = |index: u32, stem: &str, ty: tir::TypeId| {
+            TirExpr::new(
+                TirExprKind::Local {
+                    index,
+                    name: format!("{stem}_{index}"),
+                },
+                ty,
+                span,
+            )
+        };
+        let converted_val = self.convert_operand(value);
+        let val_nir = if self.should_wrap_value_copy(value) {
+            self.wrap_value_copy_operand(converted_val, element)
+        } else {
+            converted_val
+        };
+        let mut out = vec![
+            self.synthesized_let(
+                list_idx,
+                "$list",
+                list.type_id,
+                self.convert_expr(list).into(),
+                span,
+            ),
+            self.synthesized_let(
+                index_idx,
+                "$index",
+                TypeTable::I32,
+                self.convert_operand(index),
+                span,
+            ),
+            self.synthesized_let(val_idx, "$deref_val", element, val_nir, span),
+        ];
+
+        let list_field = |field: SeqField, ty: tir::TypeId| {
+            TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(local(list_idx, "$list", list.type_id)),
+                    field_index: field.index(),
+                    field_name: field.field_name().to_string(),
+                },
+                ty,
+                span,
+            )
+        };
+        let compare = |left: TirExpr, op: TirBinaryOp, right: TirExpr| {
+            TirExpr::new(
+                TirExprKind::Binary {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                },
+                TypeTable::BOOL,
+                span,
+            )
+        };
+        let zero = TirExpr::new(
+            TirExprKind::IntLiteral {
+                value: 0,
+                repr: "0".to_string(),
+            },
+            TypeTable::I32,
+            span,
+        );
+        let in_bounds = compare(
+            compare(
+                zero,
+                TirBinaryOp::LtEq,
+                local(index_idx, "$index", TypeTable::I32),
+            ),
+            TirBinaryOp::BitAnd,
+            compare(
+                local(index_idx, "$index", TypeTable::I32),
+                TirBinaryOp::Lt,
+                list_field(SeqField::Len, TypeTable::I32),
+            ),
+        );
+
+        let (array_type, array_ref_type) = {
+            let mut tt = self.base.type_table.borrow_mut();
+            let array = tt.make_builtin_array(element);
+            (array, tt.make_ref(array))
+        };
+        let get = builtin_call(
+            "array_get_value",
+            vec![
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(list_field(SeqField::Backing, array_type)),
+                    },
+                    array_ref_type,
+                    span,
+                ),
+                local(index_idx, "$index", TypeTable::I32),
+            ],
+            element,
+        );
+        let ref_idx = self.alloc_local(element, "$deref_ref".to_string());
+        let mut write = vec![self.synthesized_let(
+            ref_idx,
+            "$deref_ref",
+            element,
+            self.convert_expr(&get).into(),
+            span,
+        )];
+        let every_field = fields.iter().map(|(_, index, _)| *index).collect();
+        self.write_fields(
+            (ref_idx, element),
+            (val_idx, element),
+            element,
+            &fields,
+            &every_field,
+            span,
+            &mut write,
+        );
+
+        let mut trapping = call.clone();
+        let TirExprKind::Call { args: locals, .. } = &mut trapping.kind else {
+            unreachable!()
+        };
+        for (arg, replacement) in locals.iter_mut().zip([
+            local(list_idx, "$list", list.type_id),
+            local(index_idx, "$index", TypeTable::I32),
+            local(val_idx, "$deref_val", element),
+        ]) {
+            arg.expr = replacement;
+        }
+        let trap = self.alloc_stmt(StmtKind::Expr(self.convert_expr(&trapping).into()), span);
+
+        let then_block = self.alloc_block(write, span);
+        let else_block = self.alloc_block(vec![trap], span);
+        out.push(self.alloc_stmt(
+            StmtKind::If {
+                condition: self.convert_expr(&in_bounds).into(),
+                then_block,
+                else_block: Some(else_block),
+            },
+            span,
+        ));
+        Some(out)
+    }
+
     fn synthesized_let(
         &self,
         index: u32,
@@ -1247,6 +1424,8 @@ impl FunctionTranslator<'_, '_> {
             if let Some(guarded) = self.guarded_stmt(s) {
                 stmts.extend(guarded);
             } else if let Some(expanded) = self.try_expand_in_place_assign(s) {
+                stmts.extend(expanded);
+            } else if let Some(expanded) = self.try_expand_in_place_element_assign(s) {
                 stmts.extend(expanded);
             } else {
                 stmts.push(self.convert_stmt(s));

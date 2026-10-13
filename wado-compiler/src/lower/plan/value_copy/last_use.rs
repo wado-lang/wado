@@ -212,6 +212,7 @@ pub fn analyze_ownership(
         assign_sites: Vec::new(),
         reach,
         returns_owned: &plan.returns_owned,
+        list_element_assigns: &plan.list_element_assigns,
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
@@ -311,6 +312,9 @@ struct AssignSite {
     last: Option<(TypeId, u32)>,
     /// Whether the place lies past a reference, so its storage is the caller's.
     through_borrow: bool,
+    /// Whether the site assigns an element of the `List` the place names
+    /// (`xs[i] = v`) rather than the place itself.
+    element: bool,
     /// The writes the assignment recorded, which stop repointing if it writes
     /// in place.
     mutations: std::ops::Range<usize>,
@@ -675,12 +679,44 @@ impl Analyzer<'_> {
         start: usize,
         live: &IndexSet<u32>,
     ) {
-        if !self.type_table.is_in_place_aggregate(target.type_id) {
-            return;
+        if self.type_table.is_in_place_aggregate(target.type_id) {
+            self.note_site(assign.span, target, false, start, live);
         }
+    }
+
+    /// Note `call`, a `List::index_assign` on `receiver`, for `in_place_assigns`
+    /// when the elements are of an in-place type.
+    fn note_element_site(
+        &mut self,
+        call: &TirExpr,
+        func: &tir::FunctionRef,
+        receiver: &TirExpr,
+        start: usize,
+        live: &IndexSet<u32>,
+    ) {
+        if self
+            .list_element_assigns
+            .contains(&func.module_source, &func.name)
+            && self
+                .type_table
+                .as_list(receiver.type_id)
+                .is_some_and(|element| self.type_table.is_in_place_aggregate(element))
+        {
+            self.note_site(call.span, receiver, true, start, live);
+        }
+    }
+
+    fn note_site(
+        &mut self,
+        span: Span,
+        target: &TirExpr,
+        element: bool,
+        start: usize,
+        live: &IndexSet<u32>,
+    ) {
         let site = match self.resolver.names(target) {
             Names::Place(path) => AssignSite {
-                span: assign.span,
+                span,
                 root: path.root,
                 top: match path.selectors.first() {
                     Some(Selector::Field { index, .. }) => Some(*index),
@@ -691,6 +727,7 @@ impl Analyzer<'_> {
                     _ => None,
                 },
                 through_borrow: path.through_borrow,
+                element,
                 mutations: start..self.mutations.len(),
                 live: live.clone(),
             },
@@ -706,11 +743,12 @@ impl Analyzer<'_> {
                     return;
                 };
                 AssignSite {
-                    span: assign.span,
+                    span,
                     root,
                     top: None,
                     last,
                     through_borrow: true,
+                    element,
                     mutations: start..self.mutations.len(),
                     live: live.clone(),
                 }
@@ -906,11 +944,12 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
 pub fn unanalyzed_in_place_assigns(
     func: &TirFunction,
     type_table: &TypeTable,
-    observed: &ObservedFields,
+    plan: &ValueCopyPlan,
 ) -> IndexMap<Span, IndexSet<u32>> {
     struct Scan<'a> {
         type_table: &'a TypeTable,
         observed: &'a ObservedFields,
+        list_element_assigns: &'a FuncKeySet,
         held: IndexSet<u32>,
         out: IndexMap<Span, IndexSet<u32>>,
     }
@@ -920,6 +959,38 @@ pub fn unanalyzed_in_place_assigns(
                 // A closure body is a frame of its own; its captures are this
                 // frame's locals, and it holds them.
                 TirExprKind::Closure { .. } => return,
+                // An element of a `List` held anywhere but a plain local of
+                // this frame nobody borrows.
+                TirExprKind::Call { func, .. }
+                    if self
+                        .list_element_assigns
+                        .contains(&func.module_source, &func.name) =>
+                {
+                    let (receiver, _) = expr
+                        .kind
+                        .call_receiver()
+                        .expect("`index_assign` takes its list as the receiver");
+                    let in_place_elements = self
+                        .type_table
+                        .as_list(receiver.type_id)
+                        .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
+                    let list = match &receiver.kind {
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                            expr,
+                        } => expr,
+                        _ => receiver,
+                    };
+                    let unheld_local = matches!(
+                        list.kind,
+                        TirExprKind::Local { index, .. }
+                            if !self.held.contains(&index)
+                                && !is_reference_type(list.type_id, self.type_table)
+                    );
+                    if in_place_elements && !unheld_local {
+                        self.out.insert(expr.span, IndexSet::default());
+                    }
+                }
                 TirExprKind::Assign { target, .. }
                     if self.type_table.is_in_place_aggregate(target.type_id) =>
                 {
@@ -960,7 +1031,8 @@ pub fn unanalyzed_in_place_assigns(
     captures.visit_block(body);
     let mut scan = Scan {
         type_table,
-        observed,
+        observed: &plan.observed_fields,
+        list_element_assigns: &plan.list_element_assigns,
         held: captures.0,
         out: IndexMap::default(),
     };
@@ -1103,6 +1175,7 @@ struct Analyzer<'a> {
     /// Whether a call's result can hold the storage an argument lends.
     reach: &'a StorageReach<'a>,
     returns_owned: &'a FuncKeySet,
+    list_element_assigns: &'a FuncKeySet,
 }
 
 /// What a call does with a reference handed at one argument position.
@@ -1116,6 +1189,9 @@ enum Kept {
     /// Only these locals of this body, so the referent is pinned only where one
     /// of them is still readable.
     Into(Vec<u32>),
+    /// Only what the argument's references lead to, in these locals: they hold
+    /// what the argument holds, and none of its own storage.
+    Through(Vec<u32>),
 }
 
 /// Which fields of a local an escaped borrow reaches. A whole-local or imprecise
@@ -1217,6 +1293,15 @@ impl Analyzer<'_> {
                 self.walk_expr(index, live, record);
                 self.borrow_read(inner, live, record)
             }
+            // A call handing back a projection of an argument (`index_value`)
+            // is a place of that argument's root.
+            TirExprKind::Call { .. }
+                if let Names::Place(projected) = self.resolver.names(place) =>
+            {
+                self.walk_expr(place, live, record);
+                live.insert(projected.root);
+                Some(projected.root)
+            }
             // A borrow of a non-place (a fresh temporary) escapes nothing.
             _ => {
                 self.walk_expr(place, live, record);
@@ -1256,18 +1341,33 @@ impl Analyzer<'_> {
                 if !retained.keeps(position) {
                     return Kept::Transient;
                 }
-                let into_result =
-                    result_type.is_none_or(|(ty, fresh)| self.result_reaches(args[pos], ty, fresh));
-                self.landing(args, result, retained.destinations(position), into_result)
+                let arg = args[pos];
+                let destinations = retained.destinations(position);
+                // What a borrow lends is the storage it names; any other value
+                // lands in the result whole.
+                let Some((ty, fresh)) =
+                    result_type.filter(|_| is_reference_type(arg.type_id, self.type_table))
+                else {
+                    return self.landing(args, result, destinations, true);
+                };
+                if self.reach.reaches(ty, arg.type_id, !fresh) {
+                    return self.landing(args, result, destinations, true);
+                }
+                if !self.reach.reaches_through(ty, arg.type_id, !fresh) {
+                    return self.landing(args, result, destinations, false);
+                }
+                // The result holds none of what the borrow names, only what
+                // that storage's references lead to. Kept anywhere else too,
+                // the borrow pins as a whole.
+                match (
+                    self.landing(args, result, destinations, false),
+                    self.landing(args, result, destinations, true),
+                ) {
+                    (Kept::Transient, Kept::Into(locals)) => Kept::Through(locals),
+                    (_, all) => all,
+                }
             })
             .collect()
-    }
-
-    /// Whether a result of `result_type` can hold what `arg` lends: for a
-    /// borrow, the storage it names. Anything else is answered "yes".
-    fn result_reaches(&self, arg: &TirExpr, result_type: TypeId, fresh: bool) -> bool {
-        !is_reference_type(arg.type_id, self.type_table)
-            || self.reach.reaches(result_type, arg.type_id, !fresh)
     }
 
     /// A kept position read as a pin: where the destinations are all locals of
@@ -1290,10 +1390,14 @@ impl Analyzer<'_> {
                 if !into_result {
                     continue;
                 }
+                // A result whose holders take only what its references lead
+                // to may lead to the argument itself, which it holds.
                 match result {
                     Kept::Transient => {}
                     Kept::Frame => return Kept::Frame,
-                    Kept::Into(holders) => locals.extend(holders.iter().copied()),
+                    Kept::Into(holders) | Kept::Through(holders) => {
+                        locals.extend(holders.iter().copied());
+                    }
                 }
                 continue;
             }
@@ -1329,7 +1433,7 @@ impl Analyzer<'_> {
 
     /// [`Self::pin`] for a `&place` / `&mut place` argument naming `root`.
     fn pin_borrow(&mut self, op: TirUnaryOp, root: u32, place: &TirExpr, kept: &Kept) {
-        if op == TirUnaryOp::MutRef && !matches!(kept, Kept::Transient) {
+        if op == TirUnaryOp::MutRef && !matches!(kept, Kept::Transient | Kept::Through(_)) {
             self.written_through_escape.insert(root);
         }
         self.pin(root, top_field_of(place), kept);
@@ -1344,6 +1448,7 @@ impl Analyzer<'_> {
                 self.pending_bounded
                     .push((root, field, destinations.clone()));
             }
+            Kept::Through(destinations) => self.value_holds.push((root, destinations.clone())),
         }
     }
 
@@ -1409,20 +1514,24 @@ impl Analyzer<'_> {
                 .chain(self.escaped_fields(site.root))
                 .collect();
             // A borrow of the whole root reads a field through the root, which
-            // a repoint of the field leaves it able to follow.
+            // a repoint of the field leaves it able to follow. An element is
+            // borrowed through a call (`index_ref`, an iterator) that names no
+            // field, so for one a borrow of the whole root counts too; and an
+            // element of a `List` the caller lends may be held by the caller.
             let in_place = match site.top {
                 None => !held.is_empty(),
-                Some(top) => held.contains(&Some(top)),
+                Some(top) => held.contains(&Some(top)) || (site.element && held.contains(&None)),
             } || (external
-                && site
-                    .last
-                    .is_some_and(|(owner, field)| observed.contains(owner, field)));
+                && site.last.map_or(site.element, |(owner, field)| {
+                    observed.contains(owner, field)
+                }));
             if in_place {
                 // Writing the whole root in place, a field a borrow holds is
-                // written into its own storage too.
+                // written into its own storage too. What an element's borrows
+                // reach is not tracked, so lowering writes all of it in place.
                 let recurse = match site.top {
-                    None => held.iter().flatten().copied().collect(),
-                    Some(_) => IndexSet::default(),
+                    None if !site.element => held.iter().flatten().copied().collect(),
+                    _ => IndexSet::default(),
                 };
                 out.insert(site.span, recurse);
                 for m in site.mutations.clone() {
@@ -1630,7 +1739,7 @@ impl Analyzer<'_> {
                     Kept::Frame => {
                         self.handed_away.insert(root);
                     }
-                    Kept::Into(destinations) => {
+                    Kept::Into(destinations) | Kept::Through(destinations) => {
                         self.value_holds.push((root, destinations.clone()));
                     }
                 }
@@ -2308,7 +2417,9 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = siblings.iter().map(|a| &a.expr).collect();
                     self.mark_sibling_mut_aliases(&exprs, mutated_receiver.and_then(alias_root));
                     if let Some(receiver) = mutated_receiver {
+                        let start = self.mutations.len();
                         self.record_call_mutation(func, receiver, 0, live);
+                        self.note_element_site(expr, func, receiver, start, live);
                     }
                 }
                 // A `&self` / `&mut self` receiver is a place the callee reads

@@ -95,6 +95,36 @@ fn iterator_handed_away() -> i32 {
     return -1;
 }
 
+struct P {
+    a: i32,
+    b: i32,
+}
+
+struct H {
+    p: P,
+}
+
+// `&hs[0].p` borrows through `index_value`, whose result is a projection of
+// `hs` rather than a value of its own.
+fn element_field_ref() -> i32 {
+    let hs: List<H> = [H { p: P { a: 1, b: 1 } }];
+    let rp = &hs[0].p;
+    let mut moved = hs;
+    moved[0].p.a = 9;
+    return rp.a;
+}
+
+// `first` comes out of the iterator, which holds `xs`: the iterator's own
+// storage is not what `next` hands back, the element it leads to is.
+fn element_out_of_iterator() -> i32 {
+    let xs: List<P> = [P { a: 1, b: 1 }];
+    let mut it = (&xs).into_iter();
+    let first = it.next().unwrap();
+    let mut moved = xs;
+    moved[0].a = 9;
+    return first.a;
+}
+
 fn swap_under_live_ref() -> i32 {
     let mut a: List<i32> = [1];
     let mut b: List<i32> = [5];
@@ -110,9 +140,10 @@ export fn run() with Stdout {
     println(`${ref_local()} ${copied_ref()} ${call_result()} ${branch_result(true)}`);
     println(`${match_binding()} ${live_iterator()} ${iterator_handed_away()}`);
     println(`${swap_under_live_ref()}`);
+    println(`${element_field_ref()} ${element_out_of_iterator()}`);
 }
 
 __DATA__
 {
-    "stdout": "1 1 1 1\n1 1 1\n11\n"
+    "stdout": "1 1 1 1\n1 1 1\n11\n1 1\n"
 }

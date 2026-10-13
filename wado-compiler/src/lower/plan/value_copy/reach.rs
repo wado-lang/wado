@@ -40,30 +40,41 @@ impl<'a> StorageReach<'a> {
         while let Members::Reference(referent) = self.members(target) {
             target = referent;
         }
-        let Some(owned) = self.owned(target) else {
-            return true;
-        };
-        self.walk(holder, &owned, by_value, &mut IndexSet::default())
+        self.storage(target, false)
+            .is_none_or(|owned| self.walk(holder, &owned, by_value, &mut IndexSet::default()))
     }
 
-    /// The storage a `ty` value owns: itself, and what it holds by value, not
-    /// past a reference. `None` where a type cannot be read.
-    fn owned(&self, ty: TypeId) -> Option<IndexSet<Storage>> {
-        let mut owned = IndexSet::default();
-        self.collect_owned(ty, &mut owned).then_some(owned)
+    /// Whether a `holder` can reach storage a `target` value leads to, through
+    /// the references it carries as well as what it owns: an iterator's `next`
+    /// hands back an element of the list the iterator borrows.
+    #[must_use]
+    pub fn reaches_through(&self, holder: TypeId, target: TypeId, by_value: bool) -> bool {
+        self.storage(target, true)
+            .is_none_or(|led_to| self.walk(holder, &led_to, by_value, &mut IndexSet::default()))
     }
 
-    fn collect_owned(&self, ty: TypeId, owned: &mut IndexSet<Storage>) -> bool {
+    /// The storage a `ty` value owns: itself, and what it holds by value, and
+    /// with `through_refs` what its references lead to as well. `None` where a
+    /// type cannot be read.
+    fn storage(&self, ty: TypeId, through_refs: bool) -> Option<IndexSet<Storage>> {
+        let mut storage = IndexSet::default();
+        self.collect(ty, through_refs, &mut storage)
+            .then_some(storage)
+    }
+
+    fn collect(&self, ty: TypeId, through_refs: bool, out: &mut IndexSet<Storage>) -> bool {
         match self.members(ty) {
-            Members::Reference(_) => true,
+            Members::Reference(referent) => !through_refs || self.collect(referent, true, out),
             Members::Unknown => false,
             Members::Held(members) => {
                 let storage = self.storage_of(ty);
-                if storage.first().is_some_and(|s| owned.contains(s)) {
+                if storage.first().is_some_and(|s| out.contains(s)) {
                     return true;
                 }
-                owned.extend(storage);
-                members.into_iter().all(|m| self.collect_owned(m, owned))
+                out.extend(storage);
+                members
+                    .into_iter()
+                    .all(|m| self.collect(m, through_refs, out))
             }
         }
     }
@@ -80,10 +91,10 @@ impl<'a> StorageReach<'a> {
             return false;
         }
         match self.members(ty) {
-            // A reference to anything holding the target's storage reaches it,
-            // and so does one this walk cannot read.
+            // A reference reaches whatever its referent leads to, references
+            // included, and so does one this walk cannot read.
             Members::Reference(referent) => self
-                .owned(referent)
+                .storage(referent, true)
                 .is_none_or(|held| held.iter().any(|s| owned.contains(s))),
             Members::Unknown => true,
             Members::Held(members) => {

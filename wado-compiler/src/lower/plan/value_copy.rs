@@ -23,7 +23,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable,
+    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
+    TypeTable,
 };
 use funcset::{FuncKeyMap, FuncKeySet};
 
@@ -144,6 +145,9 @@ pub struct ValueCopyPlan {
     /// treats such a call's receiver as a sibling mutation, so a by-value
     /// argument aliasing it keeps its copy.
     pub mut_receiver_methods: FuncKeySet,
+    /// The instances of `List`'s `index_assign`: a call to one is `xs[i] = v`,
+    /// an assignment to an element (WEP 2026-10-13).
+    pub list_element_assigns: FuncKeySet,
     /// Per-parameter confinement: a still-live value into a confined parameter
     /// needs no defensive copy (caller-side replacement for `param_escapes`),
     /// and one the callee hands back is a projection of the argument.
@@ -203,12 +207,25 @@ pub fn plan(
         &confined_params,
     );
     let retained = retention::compute_retention(flat, &call_graph, &builtins);
+    let list_index_assign = match flat
+        .type_table
+        .borrow()
+        .compiler_items()
+        .template(CompilerItem::ListIndexAssign)
+    {
+        Some(TemplateId::Declared { def, .. }) => Some(def),
+        _ => None,
+    };
     let mut mut_receiver_methods = FuncKeySet::default();
+    let mut list_element_assigns = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {
         let f = f.borrow();
         if f.params.first().is_some_and(|p| p.is_mut_ref) {
             mut_receiver_methods.insert(f.module_source.clone(), f.name.clone());
+        }
+        if f.def_id.is_some() && f.def_id == list_index_assign {
+            list_element_assigns.insert(f.module_source.clone(), f.name.clone());
         }
         mut_ref_params.insert(
             f.module_source.clone(),
@@ -239,6 +256,7 @@ pub fn plan(
         retention: retained.calls,
         functor_rows: retained.rows,
         mut_receiver_methods,
+        list_element_assigns,
         confined_params,
         mut_ref_params,
         ref_receiver_methods,
