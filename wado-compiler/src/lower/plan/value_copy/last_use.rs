@@ -976,10 +976,27 @@ pub fn unanalyzed_in_place_assigns(
         out: IndexSet<Span>,
     }
     impl Scan<'_> {
-        fn rooted_in_unheld_local(&self, place: &TirExpr) -> bool {
-            place::place_root(place).is_some_and(|root| {
-                !self.held.contains(&root) && !is_reference_local(self.func, root, self.type_table)
-            })
+        /// Whether assigning `place` writes in place, as the walk decides it
+        /// without liveness. Past a reference, the caller's borrows decide,
+        /// through the field `owner` holding the place's storage, and with no
+        /// such field anything may hold it.
+        fn writes_in_place(&self, place: &TirExpr, owner: Option<(TypeId, u32)>) -> bool {
+            match place::place_root(place) {
+                None => true,
+                Some(root) if is_reference_local(self.func, root, self.type_table) => {
+                    owner.is_none_or(|(ty, field)| self.observed.contains(ty, field))
+                }
+                Some(root) => self.held.contains(&root),
+            }
+        }
+
+        fn owning_field(&self, place: &TirExpr) -> Option<(TypeId, u32)> {
+            match &place.kind {
+                TirExprKind::FieldAccess {
+                    expr, field_index, ..
+                } => Some((field_owner(expr.type_id, self.type_table), *field_index)),
+                _ => None,
+            }
         }
     }
     impl TirRefVisitor for Scan<'_> {
@@ -1001,24 +1018,22 @@ pub fn unanalyzed_in_place_assigns(
                         .type_table
                         .as_list(receiver.type_id)
                         .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
-                    if in_place_elements && !self.rooted_in_unheld_local(receiver) {
+                    let list = match &receiver.kind {
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                            expr,
+                        } => expr,
+                        _ => receiver,
+                    };
+                    if in_place_elements && self.writes_in_place(list, self.owning_field(list)) {
                         self.out.insert(expr.span);
                     }
                 }
                 TirExprKind::Assign { target, .. }
-                    if self.type_table.is_in_place_aggregate(target.type_id) =>
+                    if self.type_table.is_in_place_aggregate(target.type_id)
+                        && self.writes_in_place(target, self.owning_field(target)) =>
                 {
-                    let observed = matches!(
-                        &target.kind,
-                        TirExprKind::FieldAccess { expr: inner, field_index, .. }
-                            if self.observed.contains(
-                                field_owner(inner.type_id, self.type_table),
-                                *field_index,
-                            )
-                    );
-                    if observed || !self.rooted_in_unheld_local(target) {
-                        self.out.insert(expr.span);
-                    }
+                    self.out.insert(expr.span);
                 }
                 _ => {}
             }
