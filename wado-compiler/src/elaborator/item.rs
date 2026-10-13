@@ -778,6 +778,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
 
+        if let [source] = trait_type_args[..]
+            && trait_decl.is_some()
+            && trait_decl == scope.tysys.compiler_trait_def(CompilerItem::From)
+        {
+            scope.reject_provided_from(target, source, impl_block.span);
+        }
         for binding in &impl_block.associated_types {
             scope.reject_unsupported_assoc_params(&binding.name, &binding.type_params);
         }
@@ -808,6 +814,33 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .impl_sigs
             .insert(impl_def, sig.clone());
         scope.sem.decls.impl_sigs.insert(impl_def, sig);
+    }
+
+    /// Reject `impl From<source> for target` where the language provides the
+    /// conversion (WEP: Conversion Traits).
+    fn reject_provided_from(&mut self, target: TypeId, source: TypeId, span: Span) {
+        let (provided, header) = {
+            let tt = self.tysys.type_table.borrow();
+            if !tt.converts_without_impl(target, source) {
+                return;
+            }
+            let provided = if tt.type_key(target) == tt.type_key(source) {
+                "every type converts to itself"
+            } else {
+                "a newtype converts to and from each type down its chain"
+            };
+            let header = format!(
+                "From<{}> for {}",
+                tt.type_name(source),
+                tt.type_name(target)
+            );
+            (provided, header)
+        };
+        let _ = self.emit(TypeError::FromOverlapsProvided {
+            header,
+            provided,
+            span,
+        });
     }
 
     /// Every `P: Trait<Assoc = …>` bound on the block's parameters that names

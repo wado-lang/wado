@@ -691,6 +691,15 @@ test "a newtype converts to its base through a bound" {
 }
 ```
 
+A written `From` impl that one of these already answers is an error, since its
+body would never run: `impl From<Point> for Point`, or
+`impl From<i64> for Meters` where `type Meters = i64`.
+
+A `from` the type declares itself wins over both. An inherent `fn from` is
+called as written, and so is a generic impl whose argument happens to be the
+type itself: with `impl<T> From<T> for Slot<T>`, `Slot::from(inner)` wraps an
+`inner: Slot<i32>` into a `Slot<Slot<i32>>`.
+
 The prelude implements `From` for lossless numeric widenings, such as
 `i32` to `i64` and `f32` to `f64`. It implements `TryFrom` for the numeric
 conversions that can lose a value: a narrowing, a change of sign, and a

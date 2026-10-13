@@ -5362,7 +5362,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type)
             }
             (None, Some(name)) => self.binder_in_scope(name),
-            (None, None) => self.tysys.fq_receiver_head(target_type),
+            (None, None) => unreachable!(
+                "the caller checked `From` holds, which for a type that is no parameter selects a block"
+            ),
         };
 
         // The trait as the selected block writes it, which names its function:

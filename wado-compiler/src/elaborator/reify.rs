@@ -6428,14 +6428,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
                     // A parameter receiver: the instance's dispatch picks.
-                    template: match facts.method_def {
-                        _ if facts.type_param_receiver => None,
-                        Some(def) => Some(self.tysys.signatures.declared_template(def)),
-                        None => Some(TemplateId::derived(
-                            facts.module_source.clone(),
-                            &method_info,
-                        )),
-                    },
+                    template: (!facts.type_param_receiver).then(|| {
+                        let def = facts
+                            .method_def
+                            .expect("a selected `From` block declares `from`");
+                        self.tysys.signatures.declared_template(def)
+                    }),
                     module_source: facts.module_source,
                     name: method_info.to_mangled_name(),
                     monomorph_info,

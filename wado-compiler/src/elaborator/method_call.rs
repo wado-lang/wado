@@ -1990,6 +1990,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let strict = callee_sig
             .as_ref()
             .is_some_and(|sig| sig.declaring_slot_count > 0);
+        let inherent = callee_sig
+            .as_ref()
+            .is_some_and(|sig| self.inherent_sig(sig));
         if let Some(sig) = callee_sig
             && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
             && !sig.own_params.is_empty()
@@ -2165,9 +2168,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         if static_call.method == "from"
+            && !inherent
             && let [arg_type] = args[..]
             && let Some(converted) =
-                self.convert_without_impl(static_call.id, target_type_id, arg_type)
+                self.convert_without_impl(static_call.id, target_type_id, arg_type, false)
         {
             return converted;
         }

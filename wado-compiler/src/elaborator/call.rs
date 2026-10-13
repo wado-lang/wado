@@ -1071,20 +1071,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `receiver::from(arg)` where no impl body backs the conversion: the
     /// type of the result, with the cast reify rebuilds recorded at `call`.
-    /// A receiver written without its type arguments converts an instance of
-    /// its own declaration to itself.
+    /// With `bare_generic`, where no declared `from` accepts `arg`, a receiver
+    /// written without its type arguments converts an instance of its own
+    /// declaration to itself.
     pub(super) fn convert_without_impl(
         &mut self,
         call: AstId,
         receiver: TypeId,
         arg: TypeId,
+        bare_generic: bool,
     ) -> Option<TypeId> {
         let (kind, result) = {
             let tt = self.tysys.type_table.borrow();
-            let bare_generic_of_arg = matches!(
-                tt.get(arg),
-                ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
-            ) && tt.nominal_def(arg).is_some()
+            let bare_generic_of_arg = bare_generic
+                && matches!(
+                    tt.get(arg),
+                    ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
+                )
+                && tt.nominal_def(arg).is_some()
                 && tt.nominal_def(arg) == tt.nominal_def(receiver)
                 && tt
                     .nominal_type_args(receiver)
@@ -1101,6 +1105,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.record_desugar(call, kind);
         Some(result)
+    }
+
+    /// Whether the method `def` is declared by an inherent `impl` block.
+    fn declared_in_inherent_block(&self, def: DefId) -> bool {
+        self.tysys
+            .signatures
+            .method_sig(def)
+            .is_some_and(|sig| self.inherent_sig(sig))
+    }
+
+    /// Whether `sig` is a method of an inherent `impl` block.
+    pub(super) fn inherent_sig(&self, sig: &MethodSig) -> bool {
+        sig.declaring_impl
+            .is_some_and(|block| !self.tysys.trait_env.impl_headers[&block].is_trait_impl())
     }
 
     /// Check a `builtin::wrap_in_case::<V, P>` call, the body of a written-out
@@ -1147,12 +1165,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .ok_or(WrappedCase::NotAVariant)?;
             (tt.nominal_type_args(target).unwrap_or_default(), info)
         };
-        let source_key = self.tysys.type_table.borrow().type_key(source);
+        let [source_key, unit_key] = {
+            let tt = self.tysys.type_table.borrow();
+            [tt.type_key(source), tt.type_key(TypeTable::UNIT)]
+        };
         let carrying: Vec<(usize, &str)> = info
             .cases
             .iter()
             .enumerate()
-            .filter(|(_, case)| case.payload != TypeTable::UNIT)
+            .filter(|(_, case)| self.tysys.type_table.borrow().type_key(case.payload) != unit_key)
             .filter(|(_, case)| {
                 let payload = self.tysys.substitute_type_params(case.payload, &args);
                 self.tysys.type_table.borrow().type_key(payload) == source_key
@@ -1584,22 +1605,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the same `from`, and only the argument's type separates
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
+                //
+                // The same resolution the call itself uses, not a second one:
+                // two resolutions of one call disagree, which is what the edge
+                // then records.
+                let receiver_args = self.expected_receiver_args(prefix, None, expected_type);
+                let selection = self
+                    .resolve_static_callee(StaticQuery {
+                        site: receiver_site,
+                        arg_types: &args,
+                        receiver_args: &receiver_args,
+                        ..StaticQuery::of(prefix, suffix)
+                    })
+                    .found()
+                    .map(|callee| callee.method_ref.method_id);
+                let method_def = selection
+                    .flatten()
+                    .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
+                let inherent = method_def.is_some_and(|def| self.declared_in_inherent_block(def));
                 if let Some(suffix_seg) = ident.segments.get(1) {
-                    // The same resolution the call itself uses, not a second
-                    // one: two resolutions of one call disagree, which is what
-                    // the edge then records.
-                    let receiver_args = self.expected_receiver_args(prefix, None, expected_type);
-                    let selected = self
-                        .resolve_static_callee(StaticQuery {
-                            site: receiver_site,
-                            arg_types: &args,
-                            receiver_args: &receiver_args,
-                            ..StaticQuery::of(prefix, suffix)
-                        })
-                        .found()
-                        .and_then(|callee| callee.method_ref.method_id);
-                    let method_def = selected
-                        .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
                     if let Some(method_def) = method_def
                         && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
                     {
@@ -1680,9 +1704,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
                 if suffix == "from"
+                    && !inherent
                     && let [arg_type] = args[..]
-                    && let Some(converted) =
-                        self.convert_without_impl(call.id, receiver_type, arg_type)
+                    && let Some(converted) = self.convert_without_impl(
+                        call.id,
+                        receiver_type,
+                        arg_type,
+                        selection.is_none(),
+                    )
                 {
                     return converted;
                 }
@@ -1838,7 +1867,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let [arg_type] = args[..]
                 && self.names_type_at(receiver_site, prefix)
                 && let receiver_type = self.resolve_unsited_type_name(prefix, call.span)
-                && let Some(converted) = self.convert_without_impl(call.id, receiver_type, arg_type)
+                && let Some(converted) =
+                    self.convert_without_impl(call.id, receiver_type, arg_type, true)
             {
                 self.record_receiver_reference(ident, prefix);
                 return converted;
