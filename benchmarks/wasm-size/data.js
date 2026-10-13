@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791872771961,
+  "lastUpdate": 1791881409407,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66717,6 +66717,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a1237aa3428edf22e586daf8a7605dee31806cfb"
         },
         "date": 1791872771376,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2943,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7320,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21814,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 342404,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "49f8a4fc9f6369128bdf805157ff9e84eccc7590",
+          "message": "Merge pull request #2344 from wado-lang/ccr-5117b114-vbqsqr\n\nfeat(cm): a package publishes the types its exports reach",
+          "timestamp": "2026-10-13T17:30:44+09:00",
+          "tree_id": "ce52f15b928e03e574b42b57e50de06711285819",
+          "url": "https://github.com/wado-lang/wado/commit/49f8a4fc9f6369128bdf805157ff9e84eccc7590"
+        },
+        "date": 1791881408574,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
