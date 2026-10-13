@@ -33,7 +33,7 @@ pub fn calls_out_of_wasm_modules(flat: &FlatPackage) -> Vec<(ModuleSource, Diagn
                 code: Code::UnsupportedFeature,
                 message: format!(
                     "`{}` calls `{callee}`, which the core module `{core_module}` does not hold: \
-                     a `#![wasm_module]` module calls only its own functions and builtins",
+                     a `#![wasm_module]` module calls only its own functions and `builtin::` functions",
                     func.name
                 ),
                 span: Some(DiagnosticSpan::from_span(&span, None)),
