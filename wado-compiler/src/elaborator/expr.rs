@@ -5390,7 +5390,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .nominal_type_args(target_type)
             })
             .unwrap_or_default();
-        let type_param_receiver = impl_def.is_none() && type_param.is_some();
+        let type_param_receiver = impl_def.is_none();
         // Through a bound the trait's own method is the callee, whose edges
         // keep every impl live until monomorphization picks one.
         let method_def = if type_param_receiver {

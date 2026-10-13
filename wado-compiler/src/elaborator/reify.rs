@@ -6821,16 +6821,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
         span: Span,
     ) -> Option<TirExpr> {
-        let kind = self.ann_desugars(call)?;
-        let arg = match kind {
-            DesugarKind::NewtypeFromCollapse
-            | DesugarKind::NewtypeFromUnwrap
-            | DesugarKind::NewtypeFromWrap => self.reify_expr(&args[0], ctx, None),
+        let cast = match self.ann_desugars(call)? {
+            DesugarKind::NewtypeFromCollapse => false,
+            DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap => true,
             _ => return None,
         };
-        Some(match kind {
-            DesugarKind::NewtypeFromCollapse => arg,
-            _ => bare_cast(arg, recorded_type, span),
+        let arg = self.reify_expr(&args[0], ctx, None);
+        Some(if cast {
+            bare_cast(arg, recorded_type, span)
+        } else {
+            arg
         })
     }
 
