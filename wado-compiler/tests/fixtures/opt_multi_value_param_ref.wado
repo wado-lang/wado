@@ -40,6 +40,17 @@ fn span_head(s: &Span) -> i32 {
     return s.start * 3 + len;
 }
 
+// A builtin handed nothing that carries storage (`storage(none)`) stores into
+// no memory the caller holds, opaque as its other effects are: creating and
+// dropping a stream leaves the split standing.
+#[inline("never")]
+fn with_stream(p: &Pair) -> i32 {
+    let pair = builtin::stream_new();
+    builtin::stream_drop_readable(pair as i32);
+    builtin::stream_drop_writable((pair >> 32) as i32);
+    return p.a + p.b;
+}
+
 // A `&mut` handed to a `&S` reads at the call all the same.
 #[inline("never")]
 fn through_mut(w: &mut Pair) -> i32 {
@@ -86,6 +97,7 @@ export fn run() {
     let mut x = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
     assert total(&x) == 3;
     assert guarded(&x) == 3;
+    assert with_stream(&x) == 3;
     assert total_plus(&x, bump_a(&mut x)) == 1003;
     let mut m = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
     assert total_plus(&mut m, bump_a(&mut m)) == 1003;
@@ -104,7 +116,8 @@ __DATA__
     "wir_expect:O2": [
         "total\" = fn(i32, i32) -> i32",
         "total_plus\" = fn(i32, i32, i32) -> i32",
-        "span_head\" = fn(i32, i32) -> i32",        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "span_head\" = fn(i32, i32) -> i32",
+        "with_stream\" = fn(i32, i32) -> i32",        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
     ]

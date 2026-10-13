@@ -744,8 +744,12 @@ fn leaf_effect<'a>(
     let Some(declaration) = declarations.get(f) else {
         return (FnEffect::opaque(), None);
     };
+    let writes_shared_heap = !declaration.mut_params.is_empty() || declaration.stores_unseen();
     let mut effect = match &declaration.facts.side_effect {
-        SideEffect::Opaque => FnEffect::opaque(),
+        SideEffect::Opaque => FnEffect {
+            writes_shared_heap,
+            ..FnEffect::opaque()
+        },
         SideEffect::BlackBox => FnEffect {
             pinned: true,
             ..FnEffect::default()
@@ -760,7 +764,7 @@ fn leaf_effect<'a>(
             reads_mutable_state: *read || *write,
             writes_state: *write,
             may_trap: !matches!(trap, Trap::Never) || declaration.never_returns,
-            writes_shared_heap: !declaration.mut_params.is_empty() || declaration.stores_unseen(),
+            writes_shared_heap,
             hint: *hint,
             ..FnEffect::default()
         },

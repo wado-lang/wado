@@ -8991,10 +8991,13 @@ impl BuiltinDeclaration {
 
     /// Whether the call may store where neither its result nor a `&mut`
     /// argument shows, itself or through the tasks that run while it suspends.
+    /// Handed nothing that carries storage, a call that does not suspend
+    /// reaches no memory to store into, whatever else its effects touch.
     pub fn stores_unseen(&self) -> bool {
-        self.facts.storage == Storage::Opaque
-            || matches!(self.facts.side_effect, SideEffect::Opaque)
-            || self.facts.suspend
+        self.facts.suspend
+            || !self.handed_no_storage
+                && (self.facts.storage == Storage::Opaque
+                    || matches!(self.facts.side_effect, SideEffect::Opaque))
     }
 
     /// Whether the call writes nothing itself: it hands back part of an
