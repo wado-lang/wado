@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791904889038,
+  "lastUpdate": 1791928512759,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66805,6 +66805,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/91d6c5d4cc463c55338873a596581b5fdc609972"
         },
         "date": 1791904888384,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339773,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2cb77d1268091b2bf47cbc3a57581ce158266802",
+          "message": "Merge pull request #2346 from wado-lang/ccr-14b59f21-p9251f\n\nperf(ci): run Test (Wado)'s checks concurrently",
+          "timestamp": "2026-10-14T06:35:45+09:00",
+          "tree_id": "6475ad27ada3e0414cd09103122dbe74908f2c85",
+          "url": "https://github.com/wado-lang/wado/commit/2cb77d1268091b2bf47cbc3a57581ce158266802"
+        },
+        "date": 1791928512256,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
