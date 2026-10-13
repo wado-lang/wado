@@ -706,15 +706,17 @@ impl i8 {
     /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
     pub fn div_floor(&self, rhs: i8) -> i8 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) != (rhs < 0) { q - 1 } else { q };
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two
+        // divisions. The shift is -1 where the signs differ, where `/` rounded
+        // up, and a select of it costs no branch.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 7) } else { q };
     }
 
     /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
     pub fn div_ceil(&self, rhs: i8) -> i8 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) == (rhs < 0) { q + 1 } else { q };
+        // As `div_floor`: `/` rounded down where the signs are the same.
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 7) } else { q };
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -781,7 +783,8 @@ impl u8 {
     /// `self / rhs` rounded up. Traps where `/` does.
     pub fn div_ceil(&self, rhs: u8) -> u8 {
         let q = *self / rhs;
-        return if *self % rhs != 0 { q + 1 } else { q };
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     /// Returns true if the byte is an ASCII digit: 0-9.
@@ -901,15 +904,14 @@ impl i16 {
     /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
     pub fn div_floor(&self, rhs: i16) -> i16 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) != (rhs < 0) { q - 1 } else { q };
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 15) } else { q };
     }
 
     /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
     pub fn div_ceil(&self, rhs: i16) -> i16 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) == (rhs < 0) { q + 1 } else { q };
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 15) } else { q };
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -976,7 +978,8 @@ impl u16 {
     /// `self / rhs` rounded up. Traps where `/` does.
     pub fn div_ceil(&self, rhs: u16) -> u16 {
         let q = *self / rhs;
-        return if *self % rhs != 0 { q + 1 } else { q };
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -1044,15 +1047,14 @@ impl i32 {
     /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
     pub fn div_floor(&self, rhs: i32) -> i32 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) != (rhs < 0) { q - 1 } else { q };
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 31) } else { q };
     }
 
     /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
     pub fn div_ceil(&self, rhs: i32) -> i32 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) == (rhs < 0) { q + 1 } else { q };
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 31) } else { q };
     }
 
     /// Counts the leading zeros in this integer.
@@ -1142,7 +1144,8 @@ impl u32 {
     /// `self / rhs` rounded up. Traps where `/` does.
     pub fn div_ceil(&self, rhs: u32) -> u32 {
         let q = *self / rhs;
-        return if *self % rhs != 0 { q + 1 } else { q };
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
@@ -1217,15 +1220,14 @@ impl i64 {
     /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
     pub fn div_floor(&self, rhs: i64) -> i64 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) != (rhs < 0) { q - 1 } else { q };
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 63) } else { q };
     }
 
     /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
     pub fn div_ceil(&self, rhs: i64) -> i64 {
         let q = *self / rhs;
-        let r = *self % rhs;
-        return if r != 0 && (r < 0) == (rhs < 0) { q + 1 } else { q };
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 63) } else { q };
     }
 
     /// Counts the leading zeros in this integer.
@@ -1316,7 +1318,8 @@ impl u64 {
     /// `self / rhs` rounded up. Traps where `/` does.
     pub fn div_ceil(&self, rhs: u64) -> u64 {
         let q = *self / rhs;
-        return if *self % rhs != 0 { q + 1 } else { q };
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
