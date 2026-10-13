@@ -111,3 +111,13 @@ fn own_type_is_published_under_its_alias() {
     );
     assert_eq!(published, ["counter"]);
 }
+
+/// A newtype of the library's own submodule crosses as the alias it publishes.
+#[test]
+fn own_newtype_is_published_under_its_alias() {
+    let published = published_types(
+        "export use { Meters as Distance } from \"./sub/adopted_newtype.wado\";\n\
+         export fn double(d: Distance) -> Distance { return d + d; }",
+    );
+    assert_eq!(published, ["distance"]);
+}
