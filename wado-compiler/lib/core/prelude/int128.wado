@@ -166,6 +166,13 @@ impl u128 {
         return 0 - *self;
     }
 
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u128) -> u128 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: each is a division in software.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
+    }
+
     /// Gets the low 64 bits
     /// Used by the compiler to lower truncating `u128 as <int>` casts.
     #[compiler_item("u128_low")]
@@ -969,6 +976,19 @@ impl i128 {
     /// as negating it does.
     pub fn abs(x: i128) -> i128 {
         return if x.is_negative() { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i128) -> i128 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: each is a division in software.
+        return if *self - q * rhs != 0 && (*self ^ rhs).is_negative() { q - 1 } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i128) -> i128 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 && !(*self ^ rhs).is_negative() { q + 1 } else { q };
     }
 
     /// Gets the low 64 bits (unsigned)

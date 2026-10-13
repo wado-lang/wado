@@ -291,7 +291,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     if val_i64 == 0 {
         return 1;
     }
-    return (u64_bit_len(val_i64 as u64) - 1) / bits_per_digit + 1;
+    return u64_bit_len(val_i64 as u64).div_ceil(bits_per_digit);
 }
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.
@@ -703,6 +703,22 @@ impl i8 {
         return if x < 0 { -x } else { x };
     }
 
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i8) -> i8 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two
+        // divisions. The shift is -1 where the signs differ, where `/` rounded
+        // up, and a select of it costs no branch.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 7) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i8) -> i8 {
+        let q = *self / rhs;
+        // As `div_floor`: `/` rounded down where the signs are the same.
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 7) } else { q };
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }
@@ -762,6 +778,13 @@ impl u8 {
     /// The negation modulo 2^8: `0` for `0`, `MAX - self + 1` otherwise.
     pub fn wrapping_neg(&self) -> u8 {
         return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u8) -> u8 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     /// Returns true if the byte is an ASCII digit: 0-9.
@@ -878,6 +901,19 @@ impl i16 {
         return if x < 0 { -x } else { x };
     }
 
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i16) -> i16 {
+        let q = *self / rhs;
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 15) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i16) -> i16 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 15) } else { q };
+    }
+
     fn fmt_into(&self, f: &mut Formatter) {
         (*self as i32).fmt_decimal(f);
     }
@@ -937,6 +973,13 @@ impl u16 {
     /// The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
     pub fn wrapping_neg(&self) -> u16 {
         return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u16) -> u16 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -999,6 +1042,19 @@ impl i32 {
     /// as negating it does.
     pub fn abs(x: i32) -> i32 {
         return if x < 0 { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i32) -> i32 {
+        let q = *self / rhs;
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 31) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i32) -> i32 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 31) } else { q };
     }
 
     /// Counts the leading zeros in this integer.
@@ -1085,6 +1141,13 @@ impl u32 {
         return 0 - *self;
     }
 
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u32) -> u32 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
+    }
+
     fn fmt_decimal(&self, f: &mut Formatter) {
         let value = *self as u64;
         let digit_count = count_digits_u64(value);
@@ -1152,6 +1215,19 @@ impl i64 {
     /// as negating it does.
     pub fn abs(x: i64) -> i64 {
         return if x < 0 { -x } else { x };
+    }
+
+    /// `self / rhs` rounded toward negative infinity. Traps where `/` does.
+    pub fn div_floor(&self, rhs: i64) -> i64 {
+        let q = *self / rhs;
+        // As `i8::div_floor`.
+        return if *self - q * rhs != 0 { q + ((*self ^ rhs) >> 63) } else { q };
+    }
+
+    /// `self / rhs` rounded toward positive infinity. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: i64) -> i64 {
+        let q = *self / rhs;
+        return if *self - q * rhs != 0 { q + 1 + ((*self ^ rhs) >> 63) } else { q };
     }
 
     /// Counts the leading zeros in this integer.
@@ -1237,6 +1313,13 @@ impl u64 {
     /// The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
     pub fn wrapping_neg(&self) -> u64 {
         return 0 - *self;
+    }
+
+    /// `self / rhs` rounded up. Traps where `/` does.
+    pub fn div_ceil(&self, rhs: u64) -> u64 {
+        let q = *self / rhs;
+        // `- q * rhs` rather than `% rhs`: an engine runs `/` and `%` as two divisions.
+        return if *self - q * rhs != 0 { q + 1 } else { q };
     }
 
     fn fmt_decimal(&self, f: &mut Formatter) {
