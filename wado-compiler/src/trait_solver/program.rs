@@ -424,6 +424,9 @@ pub struct Program {
     /// where it is written, and no candidate set holds one, so a copy never
     /// ties with its original. Set by [`super::mark_duplicates`].
     pub duplicates: IndexSet<ImplId>,
+    /// Impls a newtype does not inherit from its base: `From<Meters> for i64`,
+    /// which would make every other newtype of `i64` convert from `Meters`.
+    pub not_inherited: IndexSet<ImplId>,
 }
 
 /// The bounds in force where a question was asked: a generic body's `T: Tr`

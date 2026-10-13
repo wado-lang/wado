@@ -1283,6 +1283,49 @@ impl Monomorphizer {
         }
     }
 
+    /// `T::from(x)` at an instance where `T` is `x`'s own type, or a newtype
+    /// and its base, which convert with no impl body behind them (WEP:
+    /// Conversion Traits): the instance is `x`, cast to `T`. `expr`'s own type
+    /// is already substituted, and it is `T`.
+    fn cast_for_implicit_from(
+        &self,
+        expr: &TirExpr,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+        local_count: &mut u32,
+        locals: &mut Vec<TirLocal>,
+    ) -> Option<TirExpr> {
+        let TirExprKind::Call { func, args, .. } = &expr.kind else {
+            return None;
+        };
+        let info = func.method_info.as_ref()?;
+        if !info.is_type_param_receiver
+            || info.method_name != "from"
+            || info.trait_name.as_ref()?.head_only()
+                != type_table.compiler_trait_fq(CompilerItem::From)
+        {
+            return None;
+        }
+        let (None, [arg]) = args.split() else {
+            return None;
+        };
+        let target = expr.type_id;
+        let source = self.substitute_type(arg.expr.type_id, substitution, type_table);
+        if !type_table.converts_without_impl(target, source) {
+            return None;
+        }
+        let mut value = arg.expr.clone();
+        self.substitute_types_in_expr(&mut value, substitution, type_table, local_count, locals);
+        Some(TirExpr::new(
+            TirExprKind::Cast {
+                expr: Box::new(value),
+                target_type: target,
+            },
+            target,
+            expr.span,
+        ))
+    }
+
     fn substitute_types_in_expr(
         &self,
         expr: &mut TirExpr,
@@ -1293,6 +1336,13 @@ impl Monomorphizer {
     ) {
         // Substitute the expression's own type
         expr.type_id = self.substitute_type(expr.type_id, substitution, type_table);
+
+        if let Some(converted) =
+            self.cast_for_implicit_from(expr, substitution, type_table, local_count, locals)
+        {
+            *expr = converted;
+            return;
+        }
 
         if matches!(expr.kind, TirExprKind::VariadicTupleComprehension { .. }) {
             self.expand_tuple_comprehension(expr, substitution, type_table, local_count, locals);

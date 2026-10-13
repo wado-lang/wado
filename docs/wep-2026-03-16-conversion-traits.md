@@ -310,20 +310,27 @@ The standard library provides `From` impls for common lossless conversions:
 - **More verbose than `.into()`**: `String::from(value)` is longer than `value.into()`. This is intentional — explicitness over brevity.
 - **No generic "accepts any convertible type" parameter**: Without `impl Into<T>`, functions cannot accept multiple types via a single parameter. Users call `Type::from(value)` at the call site instead. This avoids monomorphization bloat but requires the caller to be explicit.
 
-## Known gaps
+## Implementation
 
-- A `From` marker on a generic variant, `impl<T> From<T> for W<T>;` or
-  `impl From<i32> for W<i32>;`, is rejected at the marker. The synthesized
-  `from` and the calls to it name the variant's template, never an instance,
-  so the marker used to crash the compiler instead. A written impl works.
-- The reflexive `From<T> for T` and a newtype's two `From` impls answer a call,
-  `T::from(x)`, but not a bound. `fn conv<T: From<i64>>` rejects
-  `conv::<i64>` and `conv::<Meters>` (`type Meters = i64`), so the
-  `print_id::<UserId>` example in §7 does not compile. The three are
-  recognized at the call rather than declared as impls.
-- `?` that needs a `From` impl nobody wrote is reported only where its
-  function is reached from the entry point: the check runs when the call is
-  lowered to WIR. In a function nothing calls it compiles.
+A `From` marker is written out as an ordinary impl once the symbol table is
+built and before references resolve, so the marker is known by the trait it
+names: one spelled through an alias counts, and a module's own trait named
+`From` does not. Its body calls `builtin::wrap_in_case::<Self, P>(value)`, which the elaborator
+checks against the variant's cases and reifies as the one case's construction.
+The marker therefore takes a generic variant, `impl<T> From<T> for W<T>;`, as
+any written impl does, and an impl whose variant has no matching case, or more
+than one, is reported at the marker.
+
+The reflexive `From<T> for T` and a newtype's `From` impls are stated to the
+trait solver, so a bound holds for them as it does for a written impl. A
+newtype inherits the reflexive impl from each base down its chain, which gives
+it `From` of each; each base's `From<Newtype>` is stated on its own and is not
+inherited, or every other newtype of that base would convert from this one. No
+body backs them: a call through a bound that monomorphization finds converting
+to the same type, or along a newtype chain, becomes a cast.
+
+`?` asks the solver for `From<E>` while it types the operator, so a missing
+impl is reported in a function nothing calls.
 
 ## Future Considerations
 

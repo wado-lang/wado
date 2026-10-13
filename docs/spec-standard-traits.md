@@ -660,7 +660,36 @@ export fn run() {
 Two conversions need no written impl:
 
 - A type converts to itself: `T::from(x)` with `x: T` is `x`.
-- A newtype converts to and from its base, both ways, as `as` does.
+- A newtype converts to and from each type down its chain of bases, both
+  ways, as `as` does. Two newtypes of one base do not convert into each
+  other.
+
+Each satisfies a `From` bound, as a written impl does:
+
+<!-- {"fixture":"from_bound_reflexive_newtype.wado"} -->
+
+```wado
+fn convert<T: From<i64>>(v: i64) -> T { return T::from(v); }
+fn unwrap_meters<T: From<Meters>>(m: Meters) -> T { return T::from(m); }
+fn same<T: From<T>>(v: T) -> T { return T::from(v); }
+fn id_of<T: From<u64>>(raw: u64) -> T { return T::from(raw); }
+
+test "a type converts to itself through a bound" {
+    assert convert::<i64>(3) == 3;
+    assert same(Point { x: 6 }).x == 6;
+    assert same("s") == "s";
+}
+
+test "a newtype converts from its base through a bound" {
+    assert convert::<Meters>(3) == 3 as Meters;
+    assert id_of::<UserId>(42) == 42 as UserId;
+}
+
+test "a newtype converts to its base through a bound" {
+    assert unwrap_meters::<i64>(4 as Meters) == 4;
+    assert unwrap_meters::<Meters>(5 as Meters) == 5 as Meters;
+}
+```
 
 The prelude implements `From` for lossless numeric widenings, such as
 `i32` to `i64` and `f32` to `f64`. It implements `TryFrom` for the numeric
@@ -713,6 +742,16 @@ test {
     assert port("80").unwrap() == 80;
     assert port("x") matches { Err(Parse(_)) };
 }
+```
+
+On a generic variant the marker names one instance, or every instance through
+a type parameter:
+
+<!-- {"fixture":"derive_from_marker_generic_variant.wado", "assert": false} -->
+
+```wado
+impl From<String> for Lookup<i32>;
+impl<T> From<T> for Slot<T>;
 ```
 
 The marker is an error at its own span when it has no case to wrap into:

@@ -1,0 +1,40 @@
+// A `From` marker on a generic variant, for one instance or for all of them,
+// converts like the impl it stands for, and satisfies a `From` bound.
+
+variant Lookup<T> {
+    Hit(T),
+    Miss(String),
+}
+
+variant Slot<T> {
+    Full(T),
+    Empty,
+}
+
+impl From<String> for Lookup<i32>;
+impl<T> From<T> for Slot<T>;
+
+fn wrap<V: From<bool>>(b: bool) -> V {
+    return V::from(b);
+}
+
+test "a marker on one instance converts into it" {
+    assert Lookup::<i32>::from("absent") matches { Miss(m) && m == "absent" };
+}
+
+test "a marker over every instance converts into each" {
+    assert Slot::<i32>::from(3) matches { Full(3) };
+    assert Slot::<String>::from("x") matches { Full(s) && s == "x" };
+}
+
+test "a marker satisfies a From bound" {
+    assert wrap::<Slot<bool>>(true) matches { Full(true) };
+}
+
+fn first(r: Result<i32, String>) -> Result<i32, Lookup<i32>> {
+    return Ok(r?);
+}
+
+test "`?` converts through a marker" {
+    assert first(Err("gone")) matches { Err(Miss(m)) && m == "gone" };
+}

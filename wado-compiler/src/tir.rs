@@ -5123,6 +5123,16 @@ impl TypeTable {
         }
     }
 
+    /// Whether `target::from(value: source)` converts with no impl body behind
+    /// it: `source` is `target`, or one lies down the other's newtype chain
+    /// (WEP: Conversion Traits).
+    #[must_use]
+    pub fn converts_without_impl(&self, target: TypeId, source: TypeId) -> bool {
+        self.type_key(target) == self.type_key(source)
+            || self.newtype_chain_reaches(target, source)
+            || self.newtype_chain_reaches(source, target)
+    }
+
     /// A newtype's representation head, or `None` for anything else. The head
     /// rather than one peel, which on a chain lands on another newtype.
     #[must_use]
@@ -5157,8 +5167,12 @@ impl TypeTable {
     /// one peel down, which a longer chain steps past.
     #[must_use]
     pub fn newtype_chain_reaches(&self, id: TypeId, link: TypeId) -> bool {
-        self.newtype_link_owning(id, |tid| self.get_newtype_base(tid) == Some(link))
-            .is_some()
+        let link = self.type_key(link);
+        self.newtype_link_owning(id, |tid| {
+            self.get_newtype_base(tid)
+                .is_some_and(|base| self.type_key(base) == link)
+        })
+        .is_some()
     }
 
     /// The declaration a newtype inherits from: its chain peeled to what it
@@ -9757,11 +9771,10 @@ pub struct TirTraitMethod {
 ///
 /// The set is closed: the elaborator classifies the requested trait at the
 /// syntax boundary and rejects anything else with a diagnostic, so downstream
-/// synthesis never needs to re-parse a trait-name string. `From` carries its
-/// source type as a resolved [`TypeId`] rather than a mangled `From<…>` name.
+/// synthesis never needs to re-parse a trait-name string. A `From` marker
+/// never reaches here: `from_marker` writes it out as an ordinary impl.
 #[derive(Debug, Clone)]
 pub enum SynthTrait {
-    From { source: TypeId },
     Serialize,
     Deserialize,
 }

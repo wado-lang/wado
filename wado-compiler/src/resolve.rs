@@ -562,6 +562,55 @@ impl Resolutions {
     }
 }
 
+/// `ns::member` written in `module`, through a namespace import, which
+/// registers each member under its `ns$member` alias.
+fn namespace_member(
+    symbols: &SymbolTable,
+    defs: &DefTable,
+    module: &ModuleSource,
+    namespace: &str,
+    member: &str,
+) -> Option<DefId> {
+    symbols
+        .imported(module, &namespace_member_alias(namespace, member))
+        .map(|sym| defs.def_at(sym.defined_at))
+}
+
+/// The trait an `impl` header names, for a pass that rewrites the AST before
+/// [`Resolutions::build`] walks it. It answers as that walk does, through the
+/// same scopes, for a head no binder can take.
+pub(crate) struct TraitHeads<'a> {
+    symbols: &'a SymbolTable,
+    defs: &'a DefTable,
+    scopes: Scopes,
+}
+
+impl<'a> TraitHeads<'a> {
+    pub(crate) fn new(
+        modules: &IndexMap<ModuleSource, Module>,
+        symbols: &'a SymbolTable,
+        defs: &'a DefTable,
+    ) -> Self {
+        Self {
+            symbols,
+            defs,
+            scopes: Scopes::build(modules, symbols, defs),
+        }
+    }
+
+    /// The declaration `trait_type`, written in `module`, names.
+    pub(crate) fn resolve(&self, module: &ModuleSource, trait_type: &Type) -> Option<DefId> {
+        match trait_type {
+            Type::Named(named) => self.scopes.resolve(module, &named.name),
+            Type::Generic(generic) => self.scopes.resolve(module, &generic.name),
+            Type::NamespacedGeneric(ns) => {
+                namespace_member(self.symbols, self.defs, module, &ns.namespace, &ns.name)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// The name `Self` binds to inside a `trait` or `impl` body.
 const SELF_TYPE: &str = "Self";
 
@@ -653,14 +702,9 @@ impl Resolver<'_> {
             .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
-    /// `ns::member` through a namespace import, which registers each member
-    /// under its `ns$member` alias.
     fn namespace_member(&self, namespace: &str, member: &str) -> Resolution {
-        self.symbols
-            .imported(self.module, &namespace_member_alias(namespace, member))
-            .map_or(Resolution::Unresolved, |sym| {
-                Resolution::Def(self.defs.def_at(sym.defined_at))
-            })
+        namespace_member(self.symbols, self.defs, self.module, namespace, member)
+            .map_or(Resolution::Unresolved, Resolution::Def)
     }
 
     fn resolve_name(&self, name: &str) -> Resolution {

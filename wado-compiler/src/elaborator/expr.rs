@@ -5231,7 +5231,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_option {
             self.resolve_question_mark_option(inner_type, ctx)
         } else {
-            self.resolve_question_mark_result(inner_type, ctx, qm.id)
+            self.resolve_question_mark_result(inner_type, ctx, qm.id, qm.span)
         }
     }
 
@@ -5263,6 +5263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         inner_type: TypeId,
         ctx: &mut FunctionContext,
         qm_id: AstId,
+        qm_span: Span,
     ) -> TypeId {
         let return_type = ctx.return_type;
 
@@ -5287,12 +5288,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scope.add_local("$qm_v".to_string(), ok_type, false, None);
         scope.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
-        // Record the `From::from(e)` conversion facts when the inner and outer
-        // error types differ (no-op when they match). `resolve_from_call`
-        // writes `FromCallFacts` keyed by the `?` AstId; reify replays the
-        // conversion from the AST + those facts.
-        if inner_err_type != outer_err_type {
-            let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
+        // A conversion an impl supplies records `FromCallFacts` keyed by the
+        // `?`, which reify replays as the call. One that needs no impl, to the
+        // same type or across a newtype boundary, records nothing, and reify
+        // casts. Reported here rather than at the call, so an unreached
+        // function is held to it too.
+        let converts_without_impl = self
+            .tysys
+            .type_table
+            .borrow()
+            .converts_without_impl(outer_err_type, inner_err_type);
+        if !converts_without_impl {
+            let from = {
+                let tt = self.tysys.type_table.borrow();
+                tt.compiler_trait_fq(CompilerItem::From)
+                    .with_args(vec![tt.fq_type_name(inner_err_type)])
+            };
+            if self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                outer_err_type,
+                &from,
+            ) {
+                let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
+            } else {
+                let (outer, inner) = {
+                    let tt = self.tysys.type_table.borrow();
+                    tt.type_names_for_mismatch(outer_err_type, inner_err_type)
+                };
+                let _ = self.emit(TypeError::InvalidQuestionMark {
+                    message: format!(
+                        "`?` cannot convert the error `{inner}` into `{outer}`: `{outer}` does not implement `From<{inner}>`"
+                    ),
+                    span: qm_span,
+                });
+            }
         }
 
         // Reify rebuilds the `Result` `?` desugar
@@ -5325,20 +5355,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_name = DeclName::new(tt.type_name(target_type));
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
+        let type_param = match tt.get(target_type) {
+            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
+            _ => None,
+        };
         drop(tt);
 
         let (impl_def, module_source) = self.find_from_impl(target_type, &target_name, &from_name);
-        let target_receiver = match impl_def {
-            Some(def) => self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type),
-            None => self.tysys.fq_receiver_head(target_type),
+        let target_receiver = match (impl_def, &type_param) {
+            (Some(def), _) => {
+                self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type)
+            }
+            (None, Some(name)) => self.binder_in_scope(name),
+            (None, None) => self.tysys.fq_receiver_head(target_type),
         };
 
+        let type_param_receiver = impl_def.is_none() && type_param.is_some();
+        // Through a bound the trait's own method is the callee, whose edges
+        // keep every impl live until monomorphization picks one.
+        let method_def = if type_param_receiver {
+            self.tysys
+                .compiler_trait_def(CompilerItem::From)
+                .and_then(|from| self.tysys.trait_env.trait_method_decl(from, "from"))
+        } else {
+            impl_def.and_then(|def| self.tysys.declared_method(def, "from"))
+        };
         self.sem.types.from_call_facts.insert(
             caller_id,
             FromCallFacts {
-                method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
+                method_def,
                 module_source,
                 target_name: target_receiver,
+                type_param_receiver,
                 from_name,
                 from_trait_name,
             },
@@ -5348,7 +5396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The `impl From<from_name> for target_type` block and the module that
-    /// wrote it. No block where the synthesis pass mints the impl later.
+    /// wrote it. No block where the target is a type parameter.
     fn find_from_impl(
         &self,
         target_type: TypeId,
@@ -5370,17 +5418,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .find(|key| *defs.module(**key) == self.current_module_source)
             .or_else(|| keys.first())
             .map(|key| (Some(*key), defs.module(*key).clone()))
-            // The `From` impl may be synthesized later, so a miss is not an error.
+            // The caller asked the solver first, so a miss is a type parameter
+            // whose impl monomorphization picks.
             .unwrap_or_else(|| (None, self.current_module_source.clone()))
     }
 
-    /// The `impl From<from> for …` blocks on `target`, a bodyless synthesis
-    /// request among them. The argument is compared by the declaration it names.
-    pub(super) fn impl_keys_of_from(
-        &self,
-        target: &ImplTargetKey,
-        from: &FqTypeName,
-    ) -> Vec<DefId> {
+    /// The `impl From<from> for …` blocks on `target`. The argument is compared
+    /// by the declaration it names.
+    fn impl_keys_of_from(&self, target: &ImplTargetKey, from: &FqTypeName) -> Vec<DefId> {
         let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
             return Vec::new();
         };

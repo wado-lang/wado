@@ -1,0 +1,33 @@
+// `?` converts its error through a written impl, a `From` bound, a newtype
+// boundary, or to the same type behind a type parameter.
+
+type Code = i32;
+
+struct Wide { e: i32 }
+
+impl From<i32> for Wide {
+    fn from(value: i32) -> Wide { return Wide { e: value }; }
+}
+
+fn raw() -> Result<i32, i32> { return Err(7); }
+fn code() -> Result<i32, Code> { return Err(8 as Code); }
+
+fn to_code() -> Result<i32, Code> { return Ok(raw()?); }
+fn to_raw() -> Result<i32, i32> { return Ok(code()?); }
+fn widen<F: From<i32>>() -> Result<i32, F> { return Ok(raw()?); }
+fn same<E>(r: Result<i32, E>) -> Result<i32, E> { return Ok(r?); }
+
+test "across a newtype boundary" {
+    assert to_code() matches { Err(7) };
+    assert to_raw() matches { Err(8) };
+}
+
+test "through a bound" {
+    assert widen::<Wide>() matches { Err(w) && w.e == 7 };
+    assert widen::<i64>() matches { Err(7) };
+    assert widen::<i32>() matches { Err(7) };
+}
+
+test "to the same type behind a type parameter" {
+    assert same::<String>(Err("x")) matches { Err(s) && s == "x" };
+}

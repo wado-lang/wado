@@ -4081,6 +4081,50 @@ impl Type {
         }
     }
 
+    /// This type written a second time: every node takes an id from `fresh`,
+    /// since a resolution is recorded per id and two sites never share one.
+    #[must_use]
+    pub fn refreshed(&self, fresh: &mut dyn FnMut() -> AstId) -> Type {
+        fn each(types: &[Type], fresh: &mut dyn FnMut() -> AstId) -> Vec<Type> {
+            types.iter().map(|t| t.refreshed(fresh)).collect()
+        }
+        match self {
+            Type::Named(named) => Type::Named(NamedType {
+                id: fresh(),
+                ..named.clone()
+            }),
+            Type::Generic(g) => Type::Generic(GenericType {
+                id: fresh(),
+                args: each(&g.args, fresh),
+                ..g.clone()
+            }),
+            Type::NamespacedGeneric(g) => {
+                Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    id: fresh(),
+                    args: each(&g.args, fresh),
+                    ..(**g).clone()
+                }))
+            }
+            Type::Function(f) => Type::Function(Box::new(FunctionType {
+                params: each(&f.params, fresh),
+                return_type: f.return_type.refreshed(fresh),
+                effects: f
+                    .effects
+                    .iter()
+                    .map(|e| EffectName {
+                        id: fresh(),
+                        ..e.clone()
+                    })
+                    .collect(),
+                is_mut: f.is_mut,
+            })),
+            Type::Tuple(elems) => Type::Tuple(each(elems, fresh)),
+            Type::Reference(inner) => Type::Reference(Box::new(inner.refreshed(fresh))),
+            Type::MutReference(inner) => Type::MutReference(Box::new(inner.refreshed(fresh))),
+            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => self.clone(),
+        }
+    }
+
     /// Calls `f` on this type and on every type within it, outermost first.
     pub fn for_each<'a>(&'a self, f: &mut impl FnMut(&'a Type)) {
         let _ = self.any(&mut |ty| {

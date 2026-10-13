@@ -266,7 +266,9 @@ impl Query<'_> {
                 // Only an impl of `trait_` itself answers. One of a subtrait
                 // owes an impl of `trait_` beside it, and where that is missing
                 // the subtrait's impl is the error, not this answer.
-                if def.trait_ != Some(trait_) {
+                if def.trait_ != Some(trait_)
+                    || (subject.is_some() && program.not_inherited.contains(&id))
+                {
                     return None;
                 }
                 let answer = self.impl_answers(id, def, ty)?;

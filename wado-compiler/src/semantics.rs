@@ -21,6 +21,7 @@ use crate::elaborator::liveness::Liveness;
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
 use crate::elaborator::sem::types::MethodDispatch;
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
+use crate::from_marker::write_out_from_markers;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
@@ -1262,7 +1263,7 @@ pub fn semantics_of<H: CompilerHost>(
 /// `Logger` for the full compile pipeline nest analyze/resolve trace
 /// spans under the same root.
 pub(crate) fn semantics_with_logger<H: CompilerHost>(
-    load_result: loader::LoadResult,
+    mut load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
     coverage: Option<CoverageRequest>,
@@ -1281,19 +1282,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // contexts. Single-threaded sharing matches the rest of the
     // compiler's `Rc<RefCell<TypeTable>>` plumbing.
     let interner = std::rc::Rc::new(std::cell::RefCell::new(load_result.interner));
-
-    // Build per-module structural indices upfront — they depend only on the
-    // parsed AST, so they remain valid even if analyze/resolve bail. This
-    // keeps cursor positioning (`Semantics::ast_id_at`) working in partial
-    // mode, which the LSP relies on for file-path jumps.
-    let ast_indices = {
-        let _span = logger.span("ast_index");
-        let mut indices: IndexMap<ModuleSource, AstIndex> = IndexMap::default();
-        for (source, module) in &load_result.modules {
-            indices.insert(source.clone(), AstIndex::build(module));
-        }
-        indices
-    };
 
     // Per-thread stdlib `Semantics` snapshot.  When present,
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
@@ -1326,6 +1314,21 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             )
             .is_ok();
         (analyzer.into_symbols(), ok)
+    };
+    if analyze_ok {
+        write_out_from_markers(&mut load_result.modules, &symbols);
+    }
+
+    // Built once the AST is final, and before anything can bail, so cursor
+    // positioning (`Semantics::ast_id_at`) works in partial mode, which the
+    // LSP relies on for file-path jumps.
+    let ast_indices = {
+        let _span = logger.span("ast_index");
+        let mut indices: IndexMap<ModuleSource, AstIndex> = IndexMap::default();
+        for (source, module) in &load_result.modules {
+            indices.insert(source.clone(), AstIndex::build(module));
+        }
+        indices
     };
 
     if !analyze_ok {

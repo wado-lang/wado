@@ -1048,6 +1048,7 @@ impl SolverBridge {
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
+        Self::state_reflexive_from(tysys, &mut lowering, &mut program);
         mark_duplicates(&mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
@@ -1302,6 +1303,22 @@ impl SolverBridge {
         }
     }
 
+    /// Every type converts to itself: `impl<T> From<T> for T`, which no source
+    /// can write, since a blanket needs a bound to say what it covers. A
+    /// newtype inherits it from its base, so it also states `From<Base>`.
+    fn state_reflexive_from(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
+        let Some(from) = tysys.compiler_trait_def(CompilerItem::From) else {
+            return;
+        };
+        program.push_impl(ImplDef {
+            trait_: Some(lowering.trait_decl(from)),
+            trait_args: vec![SolverType::Param(0)],
+            target: SolverType::Param(0),
+            params: vec![ParamDef::default()],
+            origin: ImplOrigin::Written,
+        });
+    }
+
     /// Each trait's supertraits, argument defaults and reference rule;
     /// `Inspect` holds for all.
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
@@ -1428,7 +1445,9 @@ impl SolverBridge {
     }
 
     /// A newtype inherits its base's impls, and a `flags` type its primitive's.
-    /// Answers the heads whose base it stated.
+    /// Inheriting the reflexive `From` gives a newtype `From` of each type down
+    /// its chain; the converse is stated here. Answers the heads whose base it
+    /// stated.
     fn state_newtype_bases(
         tysys: &TypeSystem,
         data: &DataDecls,
@@ -1438,6 +1457,8 @@ impl SolverBridge {
     ) -> Vec<TypeDeclId> {
         let u32_ = SolverType::Decl(lowering.builtin(TypeTable::FLAGS_BASE_NAME), vec![]);
         let mut stated = Vec::new();
+        // Each newtype head, and how many type parameters it declares.
+        let mut newtypes: Vec<(TypeDeclId, usize)> = Vec::new();
         let mut newtype_base = |head: TypeDeclId, base: SolverType| {
             program.types.insert(
                 head,
@@ -1449,7 +1470,9 @@ impl SolverBridge {
         };
         for (def, base_type) in newtype_decls(data, table) {
             if let Ok(base) = lowering.type_id(table, base_type, &|_| None) {
-                newtype_base(lowering.declared_type(def), base);
+                let head = lowering.declared_type(def);
+                newtypes.push((head, 0));
+                newtype_base(head, base);
             }
         }
         for (&def, info) in &data.generic_newtypes {
@@ -1463,13 +1486,57 @@ impl SolverBridge {
                 self_type: None,
             };
             if let Ok(base) = lowering.ast_type(&info.base_type_ast, &space) {
-                newtype_base(lowering.declared_type(def), base);
+                let head = lowering.declared_type(def);
+                newtypes.push((head, info.type_params.len()));
+                newtype_base(head, base);
             }
         }
         for &def in data.flags_cases.keys() {
             newtype_base(lowering.declared_type(def), u32_.clone());
         }
+        if let Some(from) = tysys.compiler_trait_def(CompilerItem::From) {
+            let from = lowering.trait_decl(from);
+            for (head, params) in newtypes {
+                Self::state_from_newtype(program, from, head, params);
+            }
+        }
         stated
+    }
+
+    /// `From<N> for B` for every `B` down newtype `N`'s chain of bases, none
+    /// of which a newtype of `B` inherits: `Meters` converts into `i64`, and
+    /// `Feet`, another newtype of `i64`, does not convert from `Meters`.
+    fn state_from_newtype(
+        program: &mut Program,
+        from: TraitDeclId,
+        head: TypeDeclId,
+        params: usize,
+    ) {
+        let own = SolverType::Decl(
+            head,
+            (0..params)
+                .map(|i| SolverType::Param(u32::try_from(i).expect("fewer than 2^32 parameters")))
+                .collect(),
+        );
+        let mut level = own.clone();
+        let mut seen = vec![own.clone()];
+        while let SolverType::Decl(at, args) = &level
+            && let Some(base) = program.types.get(at).and_then(|def| def.newtype_base.as_ref())
+            && let Some(base) = base.map_params(&|i| args.get(i as usize).cloned())
+            // A newtype cycle is reported where it is declared.
+            && !seen.contains(&base)
+        {
+            let id = program.push_impl(ImplDef {
+                trait_: Some(from),
+                trait_args: vec![own.clone()],
+                target: base.clone(),
+                params: vec![ParamDef::default(); params],
+                origin: ImplOrigin::Written,
+            });
+            program.not_inherited.insert(id);
+            seen.push(base.clone());
+            level = base;
+        }
     }
 
     /// The impls the declarations derive. A handle derives `Eq` alone, so the

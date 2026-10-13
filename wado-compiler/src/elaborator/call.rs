@@ -37,6 +37,7 @@ use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::escape::unescape_bytes;
+use crate::from_marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
 
@@ -49,6 +50,14 @@ enum ByteLiteral {
     /// A literal whose bytes are unknown, which its own error reports.
     Unknown,
     Len(usize),
+}
+
+/// Why `builtin::wrap_in_case::<V, P>` has no one case to build.
+enum WrappedCase {
+    NotAVariant,
+    Missing,
+    /// The cases carrying `P`, each quoted.
+    Ambiguous(Vec<String>),
 }
 
 /// The parameter an associated-type equality binds: a bare parameter
@@ -1060,6 +1069,71 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::InvalidLiteral { message, span });
     }
 
+    /// Check a `builtin::wrap_in_case::<V, P>` call, the body of a written-out
+    /// `impl From<P> for V;`, and record the case it builds: the one case of
+    /// `V` whose payload is `P`.
+    fn check_wrap_in_case(&mut self, call: AstId, target: TypeId, source: TypeId, span: Span) {
+        let (target_name, source_name) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.type_name(target), tt.type_name(source))
+        };
+        let why = match self.wrapped_case(target, source) {
+            Ok(index) => {
+                self.sem.types.wrapped_cases.insert(call, index);
+                return;
+            }
+            Err(WrappedCase::NotAVariant) => {
+                "only a variant derives `From`; write the impl".to_string()
+            }
+            Err(WrappedCase::Missing) => {
+                format!("no case of `{target_name}` carries a `{source_name}` payload")
+            }
+            Err(WrappedCase::Ambiguous(cases)) => format!(
+                "cases {} both carry a `{source_name}` payload; write the impl",
+                cases.join(" and ")
+            ),
+        };
+        let _ = self.emit(TypeError::MarkerWithheld {
+            trait_name: format!("From<{source_name}>"),
+            type_name: target_name,
+            why,
+            span,
+        });
+    }
+
+    /// The index of the one case of `target` whose payload, under `target`'s
+    /// type arguments, is `source`.
+    fn wrapped_case(&self, target: TypeId, source: TypeId) -> Result<u32, WrappedCase> {
+        let lookup = self.type_lookup();
+        let (args, info) = {
+            let tt = self.tysys.type_table.borrow();
+            let info = tt
+                .nominal_def(target)
+                .and_then(|def| lookup.variant_cases_of(def))
+                .ok_or(WrappedCase::NotAVariant)?;
+            (tt.nominal_type_args(target).unwrap_or_default(), info)
+        };
+        let source_key = self.tysys.type_table.borrow().type_key(source);
+        let carrying: Vec<(usize, &str)> = info
+            .cases
+            .iter()
+            .enumerate()
+            .filter(|(_, case)| case.payload != TypeTable::UNIT)
+            .filter(|(_, case)| {
+                let payload = self.tysys.substitute_type_params(case.payload, &args);
+                self.tysys.type_table.borrow().type_key(payload) == source_key
+            })
+            .map(|(index, case)| (index, case.name.as_str()))
+            .collect();
+        match carrying.as_slice() {
+            [(index, _)] => Ok(u32::try_from(*index).expect("case index fits u32")),
+            [] => Err(WrappedCase::Missing),
+            cases => Err(WrappedCase::Ambiguous(
+                cases.iter().map(|(_, name)| format!("`{name}`")).collect(),
+            )),
+        }
+    }
+
     /// What `expr` is as a byte literal.
     fn byte_literal(&self, expr: &Expr) -> ByteLiteral {
         let Expr::Literal(lit) = expr else {
@@ -1589,44 +1663,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 | ResolvedType::GenericResource { .. }
                         )
                     };
-                    let is_reflexive = if arg_is_generic {
-                        arg_type_name == prefix
-                    } else if let Some(arg_key) = self.type_decl_key(arg_type) {
-                        Some(arg_key) == self.decl_key_or_local(prefix)
-                    } else {
-                        arg_type_name == prefix
+                    let same_key = {
+                        let tt = self.tysys.type_table.borrow();
+                        tt.type_key(arg_type) == tt.type_key(receiver_type)
                     };
-                    if is_reflexive {
+                    if same_key || (arg_is_generic && arg_type_name == prefix) {
                         self.record_desugar(call.id, DesugarKind::NewtypeFromCollapse);
                         return args[0];
                     }
 
-                    // Newtype→Base: u64::from(UserId_val) where type UserId = u64
-                    let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
-                    if let Some(base_id) = base_of_arg
-                        && self.tysys.type_table.borrow().type_name(base_id) == prefix
-                    {
+                    // Along a newtype chain, either way: `u64::from(id)` and
+                    // `UserId::from(raw)` where `type UserId = u64`. Reify
+                    // rebuilds the `Cast` from the recorded `DesugarKind`;
+                    // project only the result type.
+                    let tt = self.tysys.type_table.borrow();
+                    if tt.newtype_chain_reaches(arg_type, receiver_type) {
+                        drop(tt);
                         self.record_desugar(call.id, DesugarKind::NewtypeFromUnwrap);
-                        // Reify rebuilds the newtype `Cast` from the
-                        // recorded `DesugarKind`; project only the result type.
-                        return base_id;
+                        return receiver_type;
                     }
-
-                    // Base→Newtype: UserId::from(u64_val) where type UserId = u64
-                    if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
-                        let base_opt = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .get_newtype_base(newtype_type_id);
-                        if let Some(base_id) = base_opt
-                            && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
-                        {
-                            self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
-                            // Reify rebuilds the newtype `Cast` from
-                            // the recorded `DesugarKind`; project only the type.
-                            return newtype_type_id;
-                        }
+                    if tt.newtype_chain_reaches(receiver_type, arg_type) {
+                        drop(tt);
+                        self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
+                        return receiver_type;
                     }
                 }
 
@@ -1777,21 +1836,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return named.unwrap_or(flags_info.type_id);
             }
             // A variant's own case was constructed above; any other name is a static.
-            else if let Some(variant_info) =
-                self.variant_of_callee(&callee_kind, receiver_site, prefix)
+            else if self
+                .variant_of_callee(&callee_kind, receiver_site, prefix)
+                .is_some()
             {
-                let variant_defined_at = variant_info.defined_at;
-                if suffix == "from"
-                    && args.len() == 1
-                    && self.requests_from_synthesis(&self.impl_target(prefix), args[0])
-                {
-                    let target_type_id = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(variant_defined_at);
-                    return self.resolve_from_call(target_type_id, args[0], call.id);
-                }
                 return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
@@ -2269,6 +2317,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_generic_instantiation(call.id, type_args.clone(), return_type);
         if callee.intrinsic() == Some(ARRAY_NEW_DATA) {
             self.check_array_new_data(&call.args, return_type, call.span);
+        }
+        if callee.intrinsic() == Some(WRAP_IN_CASE)
+            && let [target, source] = type_args[..]
+        {
+            self.check_wrap_in_case(call.id, target, source, call.span);
         }
 
         // Check each argument: reject &T/&mut T passed where non-ref is expected.

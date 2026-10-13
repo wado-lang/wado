@@ -1,0 +1,15 @@
+// A `From` marker is known by the trait it names, not its spelling: one
+// written under an imported alias derives the conversion.
+
+use { From as Conv } from "core:prelude";
+
+variant Reading {
+    Count(i32),
+    Note(String),
+}
+
+impl Conv<i32> for Reading;
+
+test {
+    assert Reading::from(3) matches { Count(3) };
+}

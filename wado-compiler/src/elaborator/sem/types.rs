@@ -254,6 +254,9 @@ macro_rules! with_body_facts {
             /// `static_method_dispatch` / `generic_instantiations`, as a
             /// call's would.
             ann_tagged_template => tagged_templates: $crate::tir::TypeId,
+            /// The case a `builtin::wrap_in_case` call builds, keyed by the
+            /// call's [`AstId`]: the one whose payload is the call's `P`.
+            ann_wrapped_case => wrapped_cases: u32,
         }
     };
 }
@@ -451,8 +454,8 @@ impl BodyFacts {
     /// `(use site, declaration)` pairs.
     ///
     /// A pair is absent where no declaration backs the callee — an auto-derived
-    /// `Eq` / `Ord`, a `From` impl synthesis mints later, a receiver that is a
-    /// type parameter whose block monomorphization picks.
+    /// `Eq` / `Ord`, a receiver that is a type parameter whose block
+    /// monomorphization picks.
     fn dispatch_edges(&self) -> impl Iterator<Item = (AstId, DefId)> + '_ {
         let methods = self
             .method_dispatch
@@ -603,6 +606,9 @@ pub(crate) struct FromCallFacts {
     pub(crate) module_source: ModuleSource,
     /// The receiver the call's method name is built from.
     pub(crate) target_name: FqTypeName,
+    /// Whether the receiver is a type parameter, which each instance's
+    /// dispatch resolves: `F` in `fn f<F: From<E>>() -> Result<T, F>`.
+    pub(crate) type_param_receiver: bool,
     /// `fq_type_name(from_type)` — the conversion source type, used to build
     /// `LocalMethodName::trait_name`'s `From<…>` form.
     pub(crate) from_name: FqTypeName,
@@ -1160,17 +1166,18 @@ pub(crate) enum DesugarKind {
     /// `IndexExpr` keeps its own `expression_types` entry so reify
     /// types the synthesised initialiser correctly.
     IndexMutMethodCall,
-    /// `Newtype::from(x)` where `x` is already of the newtype's base
-    /// type — the elaborator collapses the call to `x` itself. Reify
-    /// reads this tag on the outer `Call`'s [`AstId`] and emits the
-    /// inner argument's TIR directly, skipping the call construction.
+    /// `T::from(x)` where `x` is already a `T` — the elaborator collapses
+    /// the call to `x` itself. Reify reads this tag on the outer `Call`'s
+    /// [`AstId`] and emits the inner argument's TIR directly, skipping the
+    /// call construction.
     NewtypeFromCollapse,
-    /// `Base::from(Newtype_val)` where `Newtype = Base` — the elaborator
-    /// lowers to a `Cast` of the argument to the base type. Reify reads
-    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    /// `Base::from(x)` where `Base` lies down the newtype chain of `x`'s
+    /// type — the elaborator lowers to a `Cast` of the argument to the base.
+    /// Reify reads this tag on the outer `Call`'s `AstId` and emits the same
+    /// shape.
     NewtypeFromUnwrap,
-    /// `Newtype::from(Base_val)` where `Newtype = Base` — the elaborator
-    /// lowers to a `Cast` of the argument to the newtype. Reify reads
-    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    /// `Newtype::from(x)` where `x`'s type lies down `Newtype`'s chain — the
+    /// elaborator lowers to a `Cast` of the argument to the newtype. Reify
+    /// reads this tag on the outer `Call`'s `AstId` and emits the same shape.
     NewtypeFromWrap,
 }
