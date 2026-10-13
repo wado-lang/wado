@@ -1857,6 +1857,23 @@ impl TypeTable {
         }
     }
 
+    /// Whether a value of `ty` is mutated in place through a reference to it, so
+    /// a reference to it is its own GC handle: a `struct` (`String` among them),
+    /// a `List` or a tuple. Assigning such a place writes into its storage
+    /// wherever a reference to it may be read (WEP 2026-10-13). `i128` / `u128`
+    /// are struct-backed but immutable, so their storage may be shared and is
+    /// never written. A reference names storage rather than holding a value,
+    /// whether spelled `&T` or as the `Box<T>` boxing makes of one.
+    pub fn is_in_place_aggregate(&self, ty: TypeId) -> bool {
+        if self.is_reference_shaped(ty) {
+            return false;
+        }
+        match self.get(ty) {
+            ResolvedType::Struct { .. } => !self.is_wide_int(ty),
+            _ => self.list_element(ty).is_some() || self.as_tuple(ty).is_some(),
+        }
+    }
+
     fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {

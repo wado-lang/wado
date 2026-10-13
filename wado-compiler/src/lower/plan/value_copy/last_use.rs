@@ -4,6 +4,7 @@
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
+use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_reference_type, needs_value_copy};
@@ -138,6 +139,10 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
+    /// Assignments to a place of an in-place type that write into the storage
+    /// the place holds, by the assignment's span: a holder of that storage may
+    /// be read afterwards (WEP 2026-10-13).
+    pub in_place_assigns: IndexSet<Span>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -202,6 +207,7 @@ pub fn analyze_ownership(
         consumed: IndexMap::default(),
         value_reads: IndexMap::default(),
         mutations: Vec::new(),
+        assign_sites: Vec::new(),
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
@@ -219,6 +225,9 @@ pub fn analyze_ownership(
             break;
         }
     }
+
+    let in_place_assigns =
+        a.in_place_assigns(func, &paths, &reference_copies, &plan.observed_fields);
 
     let fresh = a.owned_locals(func, oracle, type_table);
 
@@ -259,6 +268,7 @@ pub fn analyze_ownership(
             read_spans,
         },
         share_eligible: a.share_eligible(body, &paths, &place_move_bases),
+        in_place_assigns,
     }
 }
 
@@ -282,6 +292,24 @@ struct PlaceMove {
     /// whole aggregate.
     top: Option<u32>,
     span: Span,
+    live: IndexSet<u32>,
+}
+
+/// An assignment to a place of an in-place type, and the locals live after it:
+/// the storage it would repoint stays reachable through a holder still readable
+/// there (WEP 2026-10-13).
+struct AssignSite {
+    span: Span,
+    root: u32,
+    /// The first field the place reaches through, `None` for the whole root.
+    top: Option<u32>,
+    /// The last field the place names, as `(owner, index)`, `None` for a root.
+    last: Option<(TypeId, u32)>,
+    /// Whether the place lies past a reference, so its storage is the caller's.
+    through_borrow: bool,
+    /// The writes the assignment recorded, which stop repointing if it writes
+    /// in place.
+    mutations: std::ops::Range<usize>,
     live: IndexSet<u32>,
 }
 
@@ -634,6 +662,59 @@ impl Analyzer<'_> {
         self.record_write(place, false, live);
     }
 
+    /// Note `assign`, writing `target`, for `in_place_assigns` when the place
+    /// holds an in-place type; its writes are those recorded since `start`.
+    fn note_assign_site(
+        &mut self,
+        assign: &TirExpr,
+        target: &TirExpr,
+        start: usize,
+        live: &IndexSet<u32>,
+    ) {
+        if !self.type_table.is_in_place_aggregate(target.type_id) {
+            return;
+        }
+        let site = match self.resolver.names(target) {
+            Names::Place(path) => AssignSite {
+                span: assign.span,
+                root: path.root,
+                top: match path.selectors.first() {
+                    Some(Selector::Field { index, .. }) => Some(*index),
+                    _ => None,
+                },
+                last: match path.selectors.last() {
+                    Some(Selector::Field { owner, index }) => Some((*owner, *index)),
+                    _ => None,
+                },
+                through_borrow: path.through_borrow,
+                mutations: start..self.mutations.len(),
+                live: live.clone(),
+            },
+            // A place the resolver cannot follow is answered as the caller's.
+            Names::Value | Names::Unknown => {
+                let last = match &target.kind {
+                    TirExprKind::FieldAccess {
+                        expr, field_index, ..
+                    } => Some((field_owner(expr.type_id, self.type_table), *field_index)),
+                    _ => None,
+                };
+                let Some(root) = place::place_root(target) else {
+                    return;
+                };
+                AssignSite {
+                    span: assign.span,
+                    root,
+                    top: None,
+                    last,
+                    through_borrow: true,
+                    mutations: start..self.mutations.len(),
+                    live: live.clone(),
+                }
+            }
+        };
+        self.assign_sites.push(site);
+    }
+
     fn record_assign(&mut self, place: &TirExpr, live: &IndexSet<u32>) {
         let rebinds = self.rebinds_place(place);
         self.record_write(place, rebinds, live);
@@ -814,9 +895,78 @@ fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
     W(out).visit_expr(expr);
 }
 
+/// The assignments that write in place in a body the ownership walk does not
+/// read, answered without liveness: a local anything borrows or captures, and a
+/// field some borrow anywhere may observe.
+#[must_use]
+pub fn unanalyzed_in_place_assigns(
+    func: &TirFunction,
+    type_table: &TypeTable,
+    observed: &ObservedFields,
+) -> IndexSet<Span> {
+    struct Scan<'a> {
+        type_table: &'a TypeTable,
+        observed: &'a ObservedFields,
+        held: IndexSet<u32>,
+        out: IndexSet<Span>,
+    }
+    impl TirRefVisitor for Scan<'_> {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            match &expr.kind {
+                // A closure body is a frame of its own; its captures are this
+                // frame's locals, and it holds them.
+                TirExprKind::Closure { .. } => return,
+                TirExprKind::Assign { target, .. }
+                    if self.type_table.is_in_place_aggregate(target.type_id) =>
+                {
+                    let in_place = match &target.kind {
+                        TirExprKind::Local { index, .. } => self.held.contains(index),
+                        TirExprKind::FieldAccess {
+                            expr: inner,
+                            field_index,
+                            ..
+                        } => self
+                            .observed
+                            .contains(field_owner(inner.type_id, self.type_table), *field_index),
+                        _ => false,
+                    };
+                    if in_place {
+                        self.out.insert(expr.span);
+                    }
+                }
+                _ => {}
+            }
+            self.walk_expr(expr);
+        }
+    }
+    struct Captures(IndexSet<u32>);
+    impl TirRefVisitor for Captures {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Closure { captures, .. } = &expr.kind {
+                self.0.extend(capture_source_locals(captures));
+                return;
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    let mut captures = Captures(func.address_taken_locals.clone());
+    captures.visit_block(body);
+    let mut scan = Scan {
+        type_table,
+        observed,
+        held: captures.0,
+        out: IndexSet::default(),
+    };
+    scan.visit_block(body);
+    scan.out
+}
+
 /// Forms that re-enter this frame and read a local twice, so the whole function
 /// falls back to copies. A closure does not: it reaches the frame by capture.
-fn has_unsupported_form(body: &TirBlock) -> bool {
+pub fn has_unsupported_form(body: &TirBlock) -> bool {
     struct Scan {
         found: bool,
     }
@@ -943,6 +1093,9 @@ struct Analyzer<'a> {
     value_reads: IndexMap<Span, u32>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation>,
+    /// Assignments to a place of an in-place type, decided once every borrow
+    /// this body makes is known.
+    assign_sites: Vec<AssignSite>,
 }
 
 /// What a call does with a reference handed at one argument position.
@@ -1168,13 +1321,15 @@ impl Analyzer<'_> {
 
     /// Answer each deferred bounded retention against the liveness and the
     /// escapes now known, and say whether that marked anything new.
-    fn resolve_pending_bounded(
-        &mut self,
+    /// What hands a holder's value on to another local, and the storage
+    /// readable anywhere: a local a reference outlives, or whose value went out
+    /// of sight, and everything its value was read out of.
+    fn holder_graph(
+        &self,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         reference_copies: &[(u32, u32)],
-        move_reach: &IndexMap<u32, Vec<IndexSet<u32>>>,
-    ) -> bool {
-        let holds: Vec<(u32, u32)> = self
+    ) -> (Vec<(u32, u32)>, IndexSet<u32>) {
+        let holds = self
             .pending_bounded
             .iter()
             .map(|(root, _, destinations)| (*root, destinations))
@@ -1182,15 +1337,66 @@ impl Analyzer<'_> {
             .flat_map(|(from, destinations)| destinations.iter().map(move |to| (from, *to)))
             .chain(reference_copies.iter().copied())
             .collect();
-        // A local a reference outlives, or whose value went out of sight, is
-        // readable anywhere, and so is everything its value was read out of.
         let anywhere: IndexSet<u32> = self
             .handed_away
             .iter()
             .chain(self.borrow_escaped.keys())
             .copied()
             .collect();
-        let readable_anywhere = readable_storage(paths, &anywhere);
+        (holds, readable_storage(paths, &anywhere))
+    }
+
+    /// The assignments that write in place, each turning the writes it recorded
+    /// from a repoint into a write inside the storage. A place this body owns
+    /// asks its own borrows: one a reference outlives, or one whose holder is
+    /// readable after the assignment. A place past a reference is the caller's,
+    /// so it asks the borrows every body makes of that field.
+    fn in_place_assigns(
+        &mut self,
+        func: &TirFunction,
+        paths: &IndexMap<u32, Vec<AccessPath>>,
+        reference_copies: &[(u32, u32)],
+        observed: &ObservedFields,
+    ) -> IndexSet<Span> {
+        let (holds, readable_anywhere) = self.holder_graph(paths, reference_copies);
+        let mut out = IndexSet::default();
+        for site in &self.assign_sites {
+            let external =
+                site.through_borrow || is_reference_local(func, site.root, self.type_table);
+            let in_place = if external {
+                site.last
+                    .is_some_and(|(owner, field)| observed.contains(owner, field))
+            } else {
+                let readable = readable_storage(paths, &site.live);
+                self.place_escaped(site.root, site.top)
+                    || self
+                        .pending_bounded
+                        .iter()
+                        .any(|(root, field, destinations)| {
+                            *root == site.root
+                                && (field.is_none() || site.top.is_none() || *field == site.top)
+                                && holders_of(destinations, &holds).iter().any(|holder| {
+                                    readable.contains(holder) || readable_anywhere.contains(holder)
+                                })
+                        })
+            };
+            if in_place {
+                out.insert(site.span);
+                for m in site.mutations.clone() {
+                    self.mutations[m].rebinds_place = false;
+                }
+            }
+        }
+        out
+    }
+
+    fn resolve_pending_bounded(
+        &mut self,
+        paths: &IndexMap<u32, Vec<AccessPath>>,
+        reference_copies: &[(u32, u32)],
+        move_reach: &IndexMap<u32, Vec<IndexSet<u32>>>,
+    ) -> bool {
+        let (holds, readable_anywhere) = self.holder_graph(paths, reference_copies);
         let mut marked = false;
         let mut unsettled = Vec::new();
         for (root, field, destinations) in std::mem::take(&mut self.pending_bounded) {
@@ -1998,16 +2204,19 @@ impl Analyzer<'_> {
                             .entry(*index)
                             .or_default()
                             .push((**value).clone());
-                        // A plain local reassignment repoints the whole
-                        // binding rather than writing its old storage in
-                        // place, so it always rebinds.
+                        // A whole-local assignment repoints the binding unless
+                        // `in_place_assigns` finds a holder of its storage.
+                        let start = self.mutations.len();
                         self.mark_local_mutated(*index, true, live);
+                        self.note_assign_site(expr, target, start, live);
                     }
                     live.swap_remove(index);
                     self.walk_stored_value(*index, value, live, record);
                 } else {
                     if record {
+                        let start = self.mutations.len();
                         self.record_assign(target, live);
+                        self.note_assign_site(expr, target, start, live);
                     }
                     self.walk_persisting(value, live, record);
                     self.walk_expr(target, live, record);

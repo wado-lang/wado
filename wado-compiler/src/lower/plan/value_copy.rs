@@ -10,6 +10,7 @@ pub mod confine;
 pub mod funcset;
 pub mod last_use;
 pub mod modref;
+pub mod observed;
 pub mod ownership;
 pub mod place;
 pub mod retention;
@@ -113,6 +114,9 @@ pub struct ValueCopyPlan {
     /// What each call writes into its receiver, as fields of the receiver's
     /// type: a read of one field is undisturbed by a call that writes another.
     pub mod_ref: modref::ModRef,
+    /// The fields a borrow may observe from outside the body assigning them, so
+    /// an assignment through a parameter or a reference writes in place.
+    pub observed_fields: observed::ObservedFields,
     /// The projection each accessor returns out of its receiver, so a name
     /// taken from one resolves to the storage it stands for.
     pub return_paths: place::ReturnPaths,
@@ -220,14 +224,13 @@ pub fn plan(
     );
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
+    let mod_ref =
+        modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned, &builtins);
+    let observed_fields = observed::compute(flat, &retained.calls, &mod_ref, &ref_receiver_methods);
     ValueCopyPlan {
         helpers,
-        mod_ref: modref::compute_mod_ref(
-            flat,
-            &return_paths,
-            &conventions.returns_owned,
-            &builtins,
-        ),
+        mod_ref,
+        observed_fields,
         return_paths,
         returns_owned: conventions.returns_owned,
         returns_projection: conventions.returns_projection,

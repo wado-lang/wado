@@ -19,6 +19,7 @@ use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
+use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
 use cranelift_entity::EntityRef;
@@ -53,6 +54,7 @@ use crate::tir::{
     TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
     TypeTable, receiver_value,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use crate::{nir, tir};
 
@@ -340,6 +342,54 @@ fn tir_function_key(f: &TirFunction) -> FunctionId {
     .function_id()
 }
 
+/// The locals declared without a value (`let x: T;`, a unit initializer) that an
+/// assignment in `in_place` replaces whole.
+fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32> {
+    struct Scan<'a> {
+        in_place: &'a IndexSet<Span>,
+        deferred: IndexSet<u32>,
+        replaced: IndexSet<u32>,
+    }
+    impl TirRefVisitor for Scan<'_> {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            if let TirStmtKind::Let {
+                local_index,
+                type_id,
+                value,
+                ..
+            } = &stmt.kind
+                && *type_id != TypeTable::UNIT
+                && value.type_id == TypeTable::UNIT
+            {
+                self.deferred.insert(*local_index);
+            }
+            self.walk_stmt(stmt);
+        }
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Assign { target, .. } = &expr.kind
+                && let TirExprKind::Local { index, .. } = target.kind
+                && self.in_place.contains(&expr.span)
+            {
+                self.replaced.insert(index);
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    let mut scan = Scan {
+        in_place,
+        deferred: IndexSet::default(),
+        replaced: IndexSet::default(),
+    };
+    scan.visit_block(body);
+    scan.deferred
+        .intersection(&scan.replaced)
+        .copied()
+        .collect()
+}
+
 /// Per-function translation context. Created fresh for each function
 /// the translator walks (top-level functions, generated `$call`
 /// methods, fn-param specialized callees).
@@ -374,6 +424,15 @@ struct FunctionTranslator<'a, 'p> {
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
     alias_components: value_copy::last_use::AliasComponents,
+    /// Assignments that write into the storage their place holds, by span
+    /// (WEP 2026-10-13).
+    in_place_assigns: IndexSet<Span>,
+    /// Locals declared without a value that such an assignment replaces whole.
+    /// One holds no storage before its first assignment, so a flag local says
+    /// whether to write in place or to store.
+    guarded_locals: IndexSet<u32>,
+    /// The flag local of each guarded local, minted at its declaration.
+    assigned_flags: RefCell<IndexMap<u32, u32>>,
     /// The arena every converter pushes nodes into. `convert_function` takes it
     /// (`into_inner`) as the function's `Body`; `convert_global` wraps the
     /// initializer it builds into a single-statement global-init `Body`.
@@ -452,6 +511,21 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 value_copy::last_use::RefTargets::default(),
             )
         };
+        let analyzed = needs_copy_analysis
+            && func
+                .body
+                .as_ref()
+                .is_some_and(|b| !value_copy::last_use::has_unsupported_form(b));
+        let in_place_assigns = if analyzed {
+            ownership.in_place_assigns
+        } else {
+            value_copy::last_use::unanalyzed_in_place_assigns(
+                func,
+                &base.type_table.borrow(),
+                &base.value_copy.observed_fields,
+            )
+        };
+        let guarded_locals = guarded_locals(func, &in_place_assigns);
         let share_eligible_locals = ownership.share_eligible;
         let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
@@ -485,6 +559,9 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             ref_targets,
             moved_roots,
             alias_components,
+            in_place_assigns,
+            guarded_locals,
+            assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -509,6 +586,9 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
+            in_place_assigns: IndexSet::default(),
+            guarded_locals: IndexSet::default(),
+            assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
         }
     }
@@ -560,6 +640,10 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
     /// return the new index. Must be called from within a function
     /// translation; panics for top-level contexts.
     fn alloc_local(&self, type_id: tir::TypeId, name: String) -> u32 {
+        self.alloc_local_with(type_id, name, false)
+    }
+
+    fn alloc_local_with(&self, type_id: tir::TypeId, name: String, is_mut: bool) -> u32 {
         let extra = self
             .extra
             .as_ref()
@@ -569,7 +653,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         locals.push(TirLocal {
             name,
             type_id,
-            is_mut: false,
+            is_mut,
             span: Span::default(),
         });
         index
@@ -854,47 +938,14 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Expand `*ref = value` for an in-place aggregate (non-Box ref) into
-    /// field-by-field assignments through two fresh temp locals — a `struct`
-    /// (`String`) via `struct_fields_map`, or `List<T>` via its `SeqField`
-    /// layout. Box-shaped deref-assigns lower as a single statement via the
-    /// regular `try_boxing_rewrite` `Deref` arm.
-    fn try_expand_deref_aggregate_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+    /// The fields an in-place aggregate is written through: a plain struct's
+    /// from `struct_fields_map`, a `List<T>`'s `{repr, used}` from `SeqField`,
+    /// and a tuple's positional ones. `None` for any other type.
+    fn aggregate_fields(&self, ty: tir::TypeId) -> Option<Vec<(String, u32, tir::TypeId)>> {
         use crate::compiler_item::SeqField;
-        let TirStmtKind::Expr(expr) = &stmt.kind else {
-            return None;
-        };
-        let TirExprKind::Assign { target, value } = &expr.kind else {
-            return None;
-        };
-        let TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: ref_expr,
-        } = &target.kind
-        else {
-            return None;
-        };
-
-        // Box-typed Deref-Assigns are handled by the regular fold path
-        // (Unary(Deref, Box) → FieldAccess(.value)). Only non-Box struct
-        // refs reach the expansion.
-        let ref_type_id = ref_expr.type_id;
-        if self.base.box_plan.box_type_ids.contains(&ref_type_id) {
-            return None;
-        }
-        let inner_type_id = match self.base.type_table.borrow().get(ref_type_id) {
-            ResolvedType::MutRef(inner) => *inner,
-            _ => return None,
-        };
-
-        // The referent must be an in-place aggregate, so `*ref = v` writes each
-        // field of the shared handle; replace-on-assign referents are boxed and
-        // already filtered above. Three shapes reach here: a plain struct, whose
-        // fields come from `struct_fields_map`; a `List<T>`, whose `{repr, used}`
-        // layout comes from `SeqField`; and a tuple, with positional fields.
-        let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
+        let resolved = self.base.type_table.borrow().get(ty).clone();
         let fields: Vec<(String, u32, tir::TypeId)> =
-            if let ResolvedType::Struct { def, type_args } = inner_resolved {
+            if let ResolvedType::Struct { def, type_args } = resolved {
                 self.base
                     .struct_fields_map
                     .get(&(def, type_args))?
@@ -904,7 +955,7 @@ impl FunctionTranslator<'_, '_> {
             } else {
                 let (list_elem, tuple_elems) = {
                     let tt = self.base.type_table.borrow();
-                    (tt.as_list(inner_type_id), tt.as_tuple(inner_type_id))
+                    (tt.as_list(ty), tt.as_tuple(ty))
                 };
                 if let Some(elem) = list_elem {
                     let repr_ty = self.base.type_table.borrow_mut().make_builtin_array(elem);
@@ -921,96 +972,173 @@ impl FunctionTranslator<'_, '_> {
                         ),
                     ]
                 } else {
-                    let elems = tuple_elems?;
-                    elems
+                    tuple_elems?
                         .into_iter()
                         .enumerate()
-                        .map(|(i, ty)| (i.to_string(), i as u32, ty))
+                        .map(|(i, ty)| (i.to_string(), u32::try_from(i).expect("tuple arity"), ty))
                         .collect()
                 }
             };
-        if fields.is_empty() {
+        (!fields.is_empty()).then_some(fields)
+    }
+
+    /// Expand an assignment that writes into the storage its place holds, field
+    /// by field through two fresh temp locals: `*ref = value` through an
+    /// unboxed `&mut` to an in-place aggregate, and `place = value` where the
+    /// ownership walk found a holder of that storage (WEP 2026-10-13). A
+    /// Box-shaped deref-assign lowers as a single statement via the regular
+    /// `try_boxing_rewrite` `Deref` arm.
+    fn try_expand_in_place_assign(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+        let TirStmtKind::Expr(expr) = &stmt.kind else {
             return None;
-        }
+        };
+        let TirExprKind::Assign { target, value } = &expr.kind else {
+            return None;
+        };
+        let (handle, handle_type, place_type) = match &target.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: ref_expr,
+            } if !self.base.box_plan.box_type_ids.contains(&ref_expr.type_id) => {
+                let ResolvedType::MutRef(inner) =
+                    *self.base.type_table.borrow().get(ref_expr.type_id)
+                else {
+                    return None;
+                };
+                (&**ref_expr, ref_expr.type_id, inner)
+            }
+            _ if self.in_place_assigns.contains(&expr.span) => {
+                (&**target, target.type_id, target.type_id)
+            }
+            _ => return None,
+        };
+        let fields = self.aggregate_fields(place_type)?;
 
         let span = expr.span;
-        let ref_idx = self.alloc_local(ref_type_id, "$deref_ref".to_string());
-        let val_idx = self.alloc_local(inner_type_id, "$deref_val".to_string());
+        let ref_idx = self.alloc_local(handle_type, "$deref_ref".to_string());
+        let val_idx = self.alloc_local(place_type, "$deref_val".to_string());
 
-        let ref_nir = self.convert_expr(ref_expr);
+        let ref_nir = self.convert_expr(handle);
         // Copy the RHS unless it is fresh/moved: the per-field write-back would
         // otherwise alias the RHS's storage. The seed walker registers a helper
         // for the deref-target RHS type so the wrap resolves.
         let converted_val = self.convert_operand(value);
         let val_nir = if self.should_wrap_value_copy(value) {
-            self.wrap_value_copy_operand(converted_val, inner_type_id)
+            self.wrap_value_copy_operand(converted_val, place_type)
         } else {
             converted_val
         };
 
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
-        out.push(self.alloc_stmt(
+        // Translator-synthesized bindings — never a user-visible defensive
+        // copy, and the value's copy decision is made above.
+        out.push(self.synthesized_let(ref_idx, "$deref_ref", handle_type, ref_nir.into(), span));
+        out.push(self.synthesized_let(val_idx, "$deref_val", place_type, val_nir, span));
+        self.write_fields(
+            (ref_idx, handle_type),
+            (val_idx, place_type),
+            place_type,
+            &fields,
+            span,
+            &mut out,
+        );
+        Some(out)
+    }
+
+    fn synthesized_let(
+        &self,
+        index: u32,
+        stem: &str,
+        type_id: tir::TypeId,
+        value: Operand,
+        span: Span,
+    ) -> StmtId {
+        self.alloc_stmt(
             StmtKind::Let {
-                name: format!("$deref_ref_{ref_idx}"),
-                local_index: ref_idx,
+                name: format!("{stem}_{index}"),
+                local_index: index,
                 is_mut: false,
-                type_id: ref_type_id,
-                value: ref_nir.into(),
-                // Translator-synthesized binding — never a user-visible
-                // defensive copy. See the equivalent flag on the
-                // wide-int rewrite's `$wide_scrut` binding.
+                type_id,
+                value,
                 skip_value_copy: true,
             },
             span,
-        ));
-        out.push(self.alloc_stmt(
-            StmtKind::Let {
-                name: format!("$deref_val_{val_idx}"),
-                local_index: val_idx,
-                is_mut: false,
-                type_id: inner_type_id,
-                value: val_nir,
-                // The copy decision is made above (`should_wrap_value_copy`), so
-                // this synthesized binding must not re-wrap.
-                skip_value_copy: true,
-            },
-            span,
-        ));
-        for (field_name, field_index, field_type) in &fields {
-            let ref_local = self.alloc_expr(
-                ExprKind::Local {
-                    index: ref_idx,
-                    name: format!("$deref_ref_{ref_idx}"),
-                },
-                ref_type_id,
-                span,
-            );
-            let val_local = self.alloc_expr(
-                ExprKind::Local {
-                    index: val_idx,
-                    name: format!("$deref_val_{val_idx}"),
-                },
-                inner_type_id,
-                span,
-            );
-            let target_field = self.alloc_expr(
-                ExprKind::FieldAccess {
-                    expr: ref_local.into(),
-                    field_index: *field_index,
-                    field_name: field_name.clone(),
-                },
-                *field_type,
-                span,
-            );
-            let value_field = self.alloc_expr(
-                ExprKind::FieldAccess {
-                    expr: val_local.into(),
-                    field_index: *field_index,
-                    field_name: field_name.clone(),
-                },
-                *field_type,
-                span,
-            );
+        )
+    }
+
+    /// Write each field of the value in local `val` into the storage local
+    /// `handle` names. A field of an in-place type that a borrow may observe is
+    /// written into its own storage the same way, since repointing it would
+    /// leave that borrow on the old one.
+    fn write_fields(
+        &self,
+        (handle, handle_type): (u32, tir::TypeId),
+        (val, val_type): (u32, tir::TypeId),
+        place_type: tir::TypeId,
+        fields: &[(String, u32, tir::TypeId)],
+        span: Span,
+        out: &mut Vec<StmtId>,
+    ) {
+        let owner = field_owner(place_type, &self.base.type_table.borrow());
+        for (field_name, field_index, field_type) in fields {
+            let field_of = |local: u32, stem: &str, ty: tir::TypeId| {
+                let base = self.alloc_expr(
+                    ExprKind::Local {
+                        index: local,
+                        name: format!("{stem}_{local}"),
+                    },
+                    ty,
+                    span,
+                );
+                self.alloc_expr(
+                    ExprKind::FieldAccess {
+                        expr: base.into(),
+                        field_index: *field_index,
+                        field_name: field_name.clone(),
+                    },
+                    *field_type,
+                    span,
+                )
+            };
+            let target_field = field_of(handle, "$deref_ref", handle_type);
+            let value_field = field_of(val, "$deref_val", val_type);
+            let observed = self
+                .base
+                .type_table
+                .borrow()
+                .is_in_place_aggregate(*field_type)
+                && self
+                    .base
+                    .value_copy
+                    .observed_fields
+                    .contains(owner, *field_index);
+            if observed && let Some(inner) = self.aggregate_fields(*field_type) {
+                let inner_handle = self.alloc_local(*field_type, "$deref_ref".to_string());
+                let inner_val = self.alloc_local(*field_type, "$deref_val".to_string());
+                out.push(self.synthesized_let(
+                    inner_handle,
+                    "$deref_ref",
+                    *field_type,
+                    target_field.into(),
+                    span,
+                ));
+                out.push(self.synthesized_let(
+                    inner_val,
+                    "$deref_val",
+                    *field_type,
+                    value_field.into(),
+                    span,
+                ));
+                self.write_fields(
+                    (inner_handle, *field_type),
+                    (inner_val, *field_type),
+                    *field_type,
+                    &inner,
+                    span,
+                    out,
+                );
+                continue;
+            }
             let assign = self.alloc_expr(
                 ExprKind::Assign {
                     target: target_field,
@@ -1021,7 +1149,6 @@ impl FunctionTranslator<'_, '_> {
             );
             out.push(self.alloc_stmt(StmtKind::Expr(assign.into()), span));
         }
-        Some(out)
     }
 
     fn try_boxing_deref(
@@ -1115,13 +1242,95 @@ impl FunctionTranslator<'_, '_> {
     fn convert_block(&self, block: &TirBlock) -> BlockId {
         let mut stmts: Vec<StmtId> = Vec::with_capacity(block.stmts.len());
         for s in &block.stmts {
-            if let Some(expanded) = self.try_expand_deref_aggregate_assign(s) {
+            if let Some(guarded) = self.guarded_stmt(s) {
+                stmts.extend(guarded);
+            } else if let Some(expanded) = self.try_expand_in_place_assign(s) {
                 stmts.extend(expanded);
             } else {
                 stmts.push(self.convert_stmt(s));
             }
         }
         self.alloc_block(stmts, block.span)
+    }
+
+    /// A guarded local's declaration, followed by its flag starting `false`;
+    /// and a whole assignment to it, which stores and raises the flag while the
+    /// local holds no storage yet, and writes in place once it does.
+    fn guarded_stmt(&self, stmt: &TirStmt) -> Option<Vec<StmtId>> {
+        let span = stmt.span;
+        match &stmt.kind {
+            TirStmtKind::Let { local_index, .. } if self.guarded_locals.contains(local_index) => {
+                let flag = self.alloc_local_with(TypeTable::BOOL, "$assigned".to_string(), true);
+                self.assigned_flags.borrow_mut().insert(*local_index, flag);
+                let start = self.convert_operand(&TirExpr::new(
+                    TirExprKind::BoolLiteral(false),
+                    TypeTable::BOOL,
+                    span,
+                ));
+                let declare = self.alloc_stmt(
+                    StmtKind::Let {
+                        name: format!("$assigned_{flag}"),
+                        local_index: flag,
+                        is_mut: true,
+                        type_id: TypeTable::BOOL,
+                        value: start,
+                        skip_value_copy: true,
+                    },
+                    span,
+                );
+                Some(vec![self.convert_stmt(stmt), declare])
+            }
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, .. },
+                ..
+            }) => {
+                let TirExprKind::Local { index, .. } = target.kind else {
+                    return None;
+                };
+                let flag = *self.assigned_flags.borrow().get(&index)?;
+                let flag_read = |this: &Self| {
+                    this.alloc_expr(
+                        ExprKind::Local {
+                            index: flag,
+                            name: format!("$assigned_{flag}"),
+                        },
+                        TypeTable::BOOL,
+                        span,
+                    )
+                };
+                let raised = self.convert_operand(&TirExpr::new(
+                    TirExprKind::BoolLiteral(true),
+                    TypeTable::BOOL,
+                    span,
+                ));
+                let raise = self.alloc_expr(
+                    ExprKind::Assign {
+                        target: flag_read(self),
+                        value: raised,
+                    },
+                    TypeTable::UNIT,
+                    span,
+                );
+                let store = vec![
+                    self.convert_stmt(stmt),
+                    self.alloc_stmt(StmtKind::Expr(raise.into()), span),
+                ];
+                let Some(in_place) = self.try_expand_in_place_assign(stmt) else {
+                    return Some(store);
+                };
+                let then_block = self.alloc_block(in_place, span);
+                let else_block = self.alloc_block(store, span);
+                Some(vec![self.alloc_stmt(
+                    StmtKind::If {
+                        condition: flag_read(self).into(),
+                        then_block,
+                        else_block: Some(else_block),
+                    },
+                    span,
+                )])
+            }
+            _ => None,
+        }
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {

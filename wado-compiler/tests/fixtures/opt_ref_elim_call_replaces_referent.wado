@@ -1,6 +1,8 @@
-// `r = &m.inner` keeps the object it took, so `r.v` does not become
-// `m.inner.v` across a call, or a store through another handle, that puts a
-// new object in `m.inner`.
+// `r = &m.inner` names the place, so `r.v` reads what a call, or a store
+// through another handle, assigns to `m.inner` after the binding. Each of those
+// assignments is through a parameter while a borrow of `inner` is held
+// elsewhere, so it writes into the storage `r` holds (WEP 2026-10-13), and
+// ref_elim folding `r.v` into `m.inner.v` answers the same.
 
 use { println, Stdout } from "core:cli";
 
@@ -47,5 +49,5 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "3\n4\n5\n"
+    "stdout": "33\n33\n44\n"
 }

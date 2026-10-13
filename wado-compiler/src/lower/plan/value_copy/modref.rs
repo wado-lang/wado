@@ -102,6 +102,18 @@ impl Writes {
             .map(|(_, _, field)| *field)
     }
 
+    /// Whether field `field` of an `owner` the caller can observe may be
+    /// written, through whichever handle.
+    #[must_use]
+    pub fn may_write_field(&self, owner: TypeId, field: u32) -> bool {
+        self.opaque
+            || self.whole.iter().any(|(_, ty)| *ty == owner)
+            || self
+                .fields
+                .iter()
+                .any(|(_, ty, f)| *ty == owner && *f == field)
+    }
+
     /// Absorb a callee's writes, each re-tagged with the handle this caller
     /// passed in that position.
     fn absorb_through(&mut self, other: &Writes, handed: &IndexMap<u32, Handed>) {
