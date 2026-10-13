@@ -52,21 +52,39 @@ The semantics are the spec's: a reference names a place, and an assignment to
 the place reaches every reference to it. Nothing in the spec changes.
 
 An assignment `place = v` to an in-place type writes into the storage the place
-holds when a holder of that storage may be read afterwards. It is rewritten to
-`*&mut place = v`, which lowers field by field into the existing storage
-([D7](./wep-2026-06-13-reference-representation.md#known-implementation-divergences)).
-Anywhere else it stays a repoint, which is what makes it cheap: the old storage
-is unread, and every elision that relies on a repoint still holds.
+holds when a holder of that storage may be read afterwards. It lowers as
+`*&mut place = v` does, field by field into the existing storage
+([D7](./wep-2026-06-13-reference-representation.md#known-implementation-divergences)),
+recursing into a field a holder may read. Anywhere else it stays a repoint, which
+is what makes it cheap: the old storage is unread, and every elision that relies
+on a repoint still holds.
 
-The rewrite is made in TIR, before every analysis below, so each of them reads
-it as the write through a borrow it already handles. Deciding it is this
-analysis' question at the assignment. An answer the analysis cannot give is
-"readable", so imprecision costs a repoint, never correctness.
+The ownership walk decides it at the assignment (`in_place_assigns`), and
+lowering expands what it marked. The walk counts the assignment as a write into
+the old storage and not as a rebinding, so every decision it makes past the
+assignment already sees the write. An answer the analysis cannot give is
+"readable", so imprecision costs a repoint, never correctness. A function the
+walk does not analyze writes in place wherever a holder can exist at all: a
+local that is borrowed or captured, a field some borrow in the function reads.
+
+A body answers for its own holders from its liveness. What it cannot see is a
+borrow another body holds while it runs, so a field assignment also writes in
+place where some body's borrow through that field (`observed.rs`):
+
+- outlives the borrowing body: returned, stored, or kept by a callee;
+- is held in one of the borrowing body's locals while it calls something that
+  may write the field;
+- is lent to a call that may write the field.
+
+What a call may write is the callee's own answer (`modref.rs`). A result whose
+type cannot hold the storage keeps no borrow of it, whatever the callee's
+retention says (`reach.rs`). `rmsnorm(g, &x) -> List<&mut Value>` holds none of
+`x`'s backing array.
 
 A local declared without an initializer holds no storage until its first
-assignment. A holder of it exists only on a path that assigned it, so where the
-local may still be unassigned no holder is readable, and the assignment
-repoints.
+assignment, so its first assignment cannot write in place. A local that a later
+assignment writes in place carries a flag: the assignment repoints while the
+flag is unset and writes in place once it is set.
 
 ### A borrow lasts while its holder is readable
 
@@ -133,7 +151,7 @@ that read the place.
 
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read
-out of `*p` sees it. An assignment rewritten to write in place is one of these.
+out of `*p` sees it. An assignment written in place is one of these.
 Only a boxed borrow replaces a slot, and one predicate decides which of the two
 an assignment is.
 
@@ -198,23 +216,30 @@ The clients are:
 
 ## Roadmap
 
-- [ ] Rewrite an assignment to an in-place place as `*&mut place = v` where a
-  holder of its storage may be read afterwards, for a local and for a field.
-  Finishing means the six fixtures below follow the spec, and every
-  benchmark's Wado row holds against `origin/main`: compare the wasm of every
-  benchmark first, then time the rows that differ.
+- [x] Write an assignment to an in-place place in place where a holder of its
+  storage may be read afterwards, for a local and for a field
+  (`ref_sees_reassigned_place`). Finishing means the six fixtures below follow
+  the spec, and every benchmark's Wado row holds against `origin/main`: compare
+  the wasm of every benchmark first, then time the rows that differ.
+- [x] Rewrite the fixtures that pin the repoint: `capture_at_binding_inlined`,
+  `copy_prop_refproj_capture`, `opt_ref_elim_call_replaces_referent`,
+  `opt_ref_elim_loop_backedge`, `opt_ref_elim_mut_alias`,
+  `value_copy_share_is_not_a_licence_to_skip`.
 - [ ] The same for a `List` element, `xs[i] = v`, which reaches the place
   through `index_assign`. `List`'s own code relies on repointing its backing
   array's slots (`push` fills an empty one, a swap moves handles), so the
   rewrite is the user-level assignment's, not every `Array` store's.
-- [ ] Rewrite the fixtures that pin the repoint: `capture_at_binding_inlined`,
-  `copy_prop_refproj_capture`, `opt_ref_elim_call_replaces_referent`,
-  `opt_ref_elim_loop_backedge`, `opt_ref_elim_mut_alias`,
-  `value_copy_share_is_not_a_licence_to_skip`.
 - [ ] Take a multi-value `&S` parameter, asking this analysis whether a write
   reaches the referent while the call runs.
 
 ## Known gaps
+
+### An unanalyzed function writes in place on any borrow
+
+A function the ownership walk does not analyze (`has_unsupported_form`) reads
+no liveness. It writes in place to every borrowed or captured local, and to every
+field some borrow in it reads, even where the holder is already dead. That costs
+a field-by-field store where a repoint would do.
 
 ### A destructured field's path is assumed to borrow
 
