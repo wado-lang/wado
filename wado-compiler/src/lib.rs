@@ -149,10 +149,10 @@ pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 use self_comparison::self_comparison_diagnostics;
-use wasm_module_calls::calls_out_of_wasm_modules;
 use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
+use wasm_module_calls::calls_out_of_wasm_modules;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
@@ -768,22 +768,21 @@ fn adopt_types(
     let defs = resolutions.defs();
     for (def, published) in defs.adopted_by(entry_source) {
         let ast_id = defs.ast_id(def);
-        let item = match surface
+        let item = if let Some((_, item)) = surface
             .submodule_type_decls
             .iter_mut()
             .find(|(_, item)| item.id() == ast_id)
         {
-            Some((_, item)) => item,
-            None => {
-                let source = defs.module(def);
-                let item = modules[source]
-                    .items
-                    .iter()
-                    .find(|item| item.id() == ast_id)
-                    .expect("`export use` adopts a module-level declaration");
-                surface.foreign_types.push((source.clone(), item.clone()));
-                &mut surface.foreign_types.last_mut().expect("just pushed").1
-            }
+            item
+        } else {
+            let source = defs.module(def);
+            let item = modules[source]
+                .items
+                .iter()
+                .find(|item| item.id() == ast_id)
+                .expect("`export use` adopts a module-level declaration");
+            surface.foreign_types.push((source.clone(), item.clone()));
+            &mut surface.foreign_types.last_mut().expect("just pushed").1
         };
         *item
             .type_decl_name_mut()

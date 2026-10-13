@@ -93,14 +93,18 @@ fn a_call_out_of_a_wasm_module_is_rejected() {
     let path = core_dir().join("allocator.wado");
     let source = std::fs::read_to_string(&path).expect("allocator.wado should be readable");
     let hand_rounded = "((bytes + PAGE_SIZE - 1) / PAGE_SIZE)";
-    assert!(source.contains(hand_rounded), "`pages` should round up by hand");
+    assert!(
+        source.contains(hand_rounded),
+        "`pages` should round up by hand"
+    );
     let probed = source.replace(hand_rounded, "bytes.div_ceil(PAGE_SIZE)");
 
     let Err(err) = compile_as_test_world_entry(&path, &probed) else {
         panic!("a call out of a `#![wasm_module(…)]` module must be rejected");
     };
     assert!(
-        err.to_string().contains("`pages` calls `u64::div_ceil`, which the core module `mem` does not hold"),
+        err.to_string()
+            .contains("`pages` calls `u64::div_ceil`, which the core module `mem` does not hold"),
         "unexpected error: {err}"
     );
 }

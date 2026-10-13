@@ -5,7 +5,7 @@
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::module_source::ModuleSource;
-use crate::tir::{FunctionRef, TirExpr, TirExprKind};
+use crate::tir::{TirExpr, TirExprKind};
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
@@ -51,22 +51,33 @@ struct CallsOut<'a> {
 }
 
 impl CallsOut<'_> {
-    fn is_held(&self, callee: &FunctionRef) -> bool {
-        callee.module_source.is_builtin()
+    fn is_held(&self, module_source: &ModuleSource) -> bool {
+        module_source.is_builtin()
             || self
                 .flat
                 .wasm_module_sources
-                .get(&callee.module_source)
+                .get(module_source)
                 .is_some_and(|name| name == self.core_module)
     }
 }
 
 impl TirRefVisitor for CallsOut<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Call { func, .. } = &expr.kind
-            && !self.is_held(func)
+        // A function used as a value is called through it, so it is reached as
+        // a call is.
+        let callee = match &expr.kind {
+            TirExprKind::Call { func, .. } => Some((&func.module_source, &func.name)),
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                ..
+            } => Some((module_source, name)),
+            _ => None,
+        };
+        if let Some((module_source, name)) = callee
+            && !self.is_held(module_source)
         {
-            self.found.push((func.name.clone(), expr.span.clone()));
+            self.found.push((name.clone(), expr.span));
         }
         self.walk_expr(expr);
     }
