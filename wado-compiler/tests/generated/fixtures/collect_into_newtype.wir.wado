@@ -498,32 +498,34 @@ fn "core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex"(self) {
     let byte: u8;
     let val_i64_29: i64;
     let offset_33: i32;
+    let self_37: i32;
+    let q: i32;
     let arr: ref Array<u8>;
     let temp: i64;
     let digit: i32;
-    let n_55: i32;
+    let n_58: i32;
     let new_used: i32;
-    let start_60: i32;
-    let $licm_repr_63: ref Array<u8>;
-    let $tmpl_buf_64: ref "core:prelude/string.wado//String";
+    let start_63: i32;
+    let $licm_repr_66: ref Array<u8>;
+    let $tmpl_buf_67: ref "core:prelude/string.wado//String";
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0(self.used) * 2), used: 0 };
     i = 0;
-    $licm_repr_63 = self.repr;
-    $tmpl_buf_64 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $licm_repr_66 = self.repr;
+    $tmpl_buf_67 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     b51: block {
         l52: loop {
             break_if b51 i >= $load_0;
-            byte = builtin::array_get_value<u8>($licm_repr_63, i);
-            $tmpl_buf_64.used = 0;
+            byte = builtin::array_get_value<u8>($licm_repr_66, i);
+            $tmpl_buf_67.used = 0;
             val_i64_29 = builtin::i64_extend_i32_u(byte);
             byte = $inline_count_digits_u64_base_9: block -> i32 {
                 if val_i64_29 == 0_i64 {
                     break $inline_count_digits_u64_base_9: 1;
                 }
-                break $inline_count_digits_u64_base_9: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_29))) - 1) / 4) + 1;
+                break $inline_count_digits_u64_base_9: select i32((self_37 - (q * 4)) != 0, (local.tee q(local.tee self_37(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_29))) / 4) + 1) + ((self_37 ^ 4) >> 31), q);
             };
-            offset_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_64, 0, byte);
-            arr = $tmpl_buf_64.repr;
+            offset_33 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"($tmpl_buf_67, 0, byte);
+            arr = $tmpl_buf_67.repr;
             byte = offset_33 + byte;
             if val_i64_29 == 0_i64 {
                 builtin::array_set_u8(arr, offset_33, 48);
@@ -540,15 +542,15 @@ fn "core:prelude/bytes.wado/core:prelude/bytes.wado/ByteList::to_hex"(self) {
                     };
                 };
             }
-            $inline_core_prelude_string_wado_String__internal_push_string_14: block {
-                break_if $inline_core_prelude_string_wado_String__internal_push_string_14 local.tee n_55($tmpl_buf_64.used) == 0;
-                if @unlikely(local.tee new_used(s.used + n_55) > builtin::array_len(s.repr)) {
+            $inline_core_prelude_string_wado_String__internal_push_string_15: block {
+                break_if $inline_core_prelude_string_wado_String__internal_push_string_15 local.tee n_58($tmpl_buf_67.used) == 0;
+                if @unlikely(local.tee new_used(s.used + n_58) > builtin::array_len(s.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used);
                 }
-                start_60 = s.used;
+                start_63 = s.used;
                 s.used = new_used;
-                builtin::array_copy<u8>(s.repr, start_60, $tmpl_buf_64.repr, 0, n_55);
+                builtin::array_copy<u8>(s.repr, start_63, $tmpl_buf_67.repr, 0, n_58);
             };
             i = i + 1;
             continue l52;

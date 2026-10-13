@@ -3135,8 +3135,8 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0$dae[value]"(low, high) {
     builtin::array_copy<u8>($load_2, new_used_11, global:core:prelude/primitive.wado::$const_obj_88, 0, 27);
     start_12 = start_12 + 61;
     builtin::array_copy<u8>($load_2, start_12, global:core:prelude/primitive.wado::$const_obj_87, 0, 1);
-    start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_140($local_4), 0, 3);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, start_12, 994_i64, 3);
+    start_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_140($local_4), 0, 4);
+    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_140.repr, start_12, 1037_i64, 4);
     if @unlikely(local.tee start_12($local_4.used + 29) > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, start_12);
@@ -3945,28 +3945,28 @@ fn "wasi:http/types.wado/wasi:http/types.wado/Response^core:prelude/traits.wado/
     let new_used: i32;
     let start_15: i32;
     let val_i64_24: i64;
-    let $sroa_other_repr_33: ref Array<u8>;
+    let $sroa_other_repr_36: ref Array<u8>;
     self_2 = f.buf;
-    $sroa_other_repr_33 = array.new_data<u8>("Response#0x");
+    $sroa_other_repr_36 = array.new_data<u8>("Response#0x");
     if @unlikely(local.tee new_used(self_2.used + 11) > builtin::array_len(self_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_2, new_used);
     }
     start_15 = self_2.used;
     self_2.used = new_used;
-    builtin::array_copy<u8>(self_2.repr, start_15, $sroa_other_repr_33, 0, 11);
+    builtin::array_copy<u8>(self_2.repr, start_15, $sroa_other_repr_36, 0, 11);
     val_i64_24 = builtin::i64_extend_i32_u(self);
-    self = $inline_count_digits_u64_base_8: block -> i32 {
+    start_15 = $inline_count_digits_u64_base_8: block -> i32 {
         if val_i64_24 == 0_i64 {
             break $inline_count_digits_u64_base_8: 1;
         }
-        break $inline_count_digits_u64_base_8: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_24))) - 1) / 4) + 1;
+        break $inline_count_digits_u64_base_8: select i32((self - (start_15 * 4)) != 0, (local.tee start_15(local.tee self(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_24))) / 4) + 1) + ((self ^ 4) >> 31), start_15);
     };
-    start_15 = block -> i32 {
-        $sroa_other_repr_33 = array.new_fixed<u8>(48, 120);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $sroa_other_repr_33, 2, self);
+    self = block -> i32 {
+        $sroa_other_repr_36 = array.new_fixed<u8>(48, 120);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $sroa_other_repr_36, 2, start_15);
     };
-    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee self_2(f.buf).repr, start_15, val_i64_24, self, 4, 15, 0);
+    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee self_2(f.buf).repr, self, val_i64_24, start_15, 4, 15, 0);
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(self, data) {
@@ -4139,31 +4139,31 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/Headers^core:prelude/traits.wa
     self_5.used = new_used_17;
     builtin::array_copy<u8>(self_5.repr, start_18, global:core:prelude/traits.wado::$const_obj_36, 0, 9);
     val_i64_27 = builtin::i64_extend_i32_u(self);
-    self = $inline_count_digits_u64_base_9: block -> i32 {
+    start_18 = $inline_count_digits_u64_base_9: block -> i32 {
         if val_i64_27 == 0_i64 {
             break $inline_count_digits_u64_base_9: 1;
         }
-        break $inline_count_digits_u64_base_9: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_27))) - 1) / 4) + 1;
+        break $inline_count_digits_u64_base_9: select i32((self - (start_18 * 4)) != 0, (local.tee start_18(local.tee self(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_27))) / 4) + 1) + ((self ^ 4) >> 31), start_18);
     };
-    start_18 = block -> i32 {
+    self = block -> i32 {
         self_5 = global:core:prelude/traits.wado::$const_obj_35;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, self_5.repr, self_5.used, self);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, self_5.repr, self_5.used, start_18);
     };
-    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee self_5(f.buf).repr, start_18, val_i64_27, self, 4, 15, 0);
-    if @unlikely(local.tee self(local.tee self_5(f.buf).used + 4) > builtin::array_len(self_5.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_5, self);
-    }
-    start_18 = self_5.used;
-    self_5.used = self;
-    builtin::array_copy<u8>(self_5.repr, start_18, global:core:prelude/traits.wado::$const_obj_34, 0, 4);
-    if @unlikely(local.tee start_18(local.tee self_5(f.buf).used + 7) > builtin::array_len(self_5.repr)) {
+    "core:prelude/primitive.wado/write_u64_base_digits"(local.tee self_5(f.buf).repr, self, val_i64_27, start_18, 4, 15, 0);
+    if @unlikely(local.tee start_18(local.tee self_5(f.buf).used + 4) > builtin::array_len(self_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_5, start_18);
     }
     self = self_5.used;
     self_5.used = start_18;
-    builtin::array_copy<u8>(self_5.repr, self, global:core:prelude/traits.wado::$const_obj_33, 0, 7);
+    builtin::array_copy<u8>(self_5.repr, self, global:core:prelude/traits.wado::$const_obj_34, 0, 4);
+    if @unlikely(local.tee self(local.tee self_5(f.buf).used + 7) > builtin::array_len(self_5.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_5, self);
+    }
+    start_18 = self_5.used;
+    self_5.used = self;
+    builtin::array_copy<u8>(self_5.repr, start_18, global:core:prelude/traits.wado::$const_obj_33, 0, 7);
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>>::wait"(self) with Subtask, WaitableSet {

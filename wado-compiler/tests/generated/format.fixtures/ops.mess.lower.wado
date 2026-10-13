@@ -3889,7 +3889,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 193 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 200 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.high: ", used: 11 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3942,7 +3942,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 229 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 236 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"a: ", used: 3 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -4242,7 +4242,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     if (val_i64 == 0) {
         return 1;
     }
-    return ((("core::prelude/fpfmt.wado::u64_bit_len"(val_i64 as u64) - 1) / bits_per_digit) + 1);
+    return Box<i32> { value: "core::prelude/fpfmt.wado::u64_bit_len"(val_i64 as u64) }.i32::div_ceil(bits_per_digit);
 }
 
 fn write_u64_base_digits(arr: &mut Array<u8>, offset: i32, val_i64: i64, digit_count: i32, bits_per_digit: i32, mask: i32, upper: bool) {
@@ -4318,6 +4318,15 @@ pub fn i32::abs(x: i32) -> i32 {
         -x;
     } else {
         x;
+    };
+}
+
+pub fn i32::div_ceil(self: Box<i32>, rhs: i32) -> i32 {
+    let q: i32 = (self.value / rhs);
+    return if ((self.value - (q * rhs)) != 0) {
+        ((q + 1) + ((self.value ^ rhs) >> 31));
+    } else {
+        q;
     };
 }
 
