@@ -675,35 +675,38 @@ impl Semantics {
         Some((f, f.binding_contracts(declaring_trait)))
     }
 
-    /// The trait implemented by the `impl` block of `module` spanning
-    /// `impl_span`. A reader holding its own parse of the module's source names
-    /// the block by its span, which every parse of that source agrees on.
+    /// The trait or interface implemented by the `impl` block of `module`
+    /// spanning `impl_span`. A reader holding its own parse of the module's
+    /// source names the block by its span, which every parse of that source
+    /// agrees on.
     #[must_use]
-    pub fn implemented_trait_at(
-        &self,
-        module: &ModuleSource,
-        impl_span: Span,
-    ) -> Option<&ast::TraitDecl> {
+    pub fn implemented_at(&self, module: &ModuleSource, impl_span: Span) -> Option<&Item> {
         let block = self.modules.get(module)?.items.iter().find_map(|item| {
             let Item::Impl(b) = item else {
                 return None;
             };
             (b.span.start == impl_span.start && b.span.end == impl_span.end).then_some(b)
         })?;
-        self.implemented_trait(block)
+        self.implemented(block)
     }
 
     /// The trait `b` implements; `None` for an inherent block or one that
     /// handles an effect.
     fn implemented_trait(&self, b: &ImplBlock) -> Option<&ast::TraitDecl> {
-        let trait_id = self.referenced_symbol(b.trait_type.as_ref()?.id()?)?;
-        let module = self.modules.get(self.module_of_id(trait_id)?)?;
-        module.items.iter().find_map(|item| {
-            let Item::Trait(t) = item else {
-                return None;
-            };
-            (t.id == trait_id).then_some(t)
-        })
+        let Item::Trait(t) = self.implemented(b)? else {
+            return None;
+        };
+        Some(t)
+    }
+
+    /// The item declaring the trait or interface `b` implements.
+    fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
+        let resolutions = self.resolutions()?;
+        let id = resolutions
+            .defs()
+            .ast_id(resolutions.head_decl(b.trait_type.as_ref()?)?);
+        let module = self.modules.get(self.module_of_id(id)?)?;
+        module.items.iter().find(|item| item.id() == id)
     }
 
     /// The function [`Semantics::function_at`] answers, with the item holding it.

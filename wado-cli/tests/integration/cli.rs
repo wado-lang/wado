@@ -43,6 +43,22 @@ fn test_compile_project_under_path_with_space() {
     assert!(out.exists(), "expected out.wasm to be written");
 }
 
+/// `wado doc` documents a program without errors. Given one with errors, it
+/// reports them and fails, since a page of it would answer wrongly.
+#[test]
+fn test_doc_reports_an_error_and_fails() {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("bad.wado");
+    std::fs::write(&file, "pub fn answer() -> i32 { return \"no\"; }\n").unwrap();
+
+    wado()
+        .arg("doc")
+        .arg(&file)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("error"));
+}
+
 /// Write a minimal manifest-driven CLI package under `dir` and return the
 /// output path to compile to.
 fn write_metadata_project(dir: &std::path::Path) {

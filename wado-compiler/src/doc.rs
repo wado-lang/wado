@@ -4,8 +4,8 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseDecl, UseItem, VariantDecl, Visibility,
-    type_head_name, written_params,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
+    written_params,
 };
 use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -218,61 +218,48 @@ pub struct DocFlagsMember {
     pub doc: Option<String>,
 }
 
-/// Reads the source of the module a `use` names, given the path as written.
-/// The page follows an `impl`'s trait to its declaration through it, to leave
-/// out an impl of a trait its reader cannot name. `None` keeps the impl.
-pub type ReadImport<'a> = dyn Fn(&str) -> Option<String> + 'a;
-
 /// The program a page's module is loaded in, read at that module. The page
 /// parses its own source, for the comments, and asks this what a name in it
-/// resolves to.
+/// resolves to. The program has no errors, so every name resolves.
 pub struct Resolution<'a> {
     sem: &'a Semantics,
     module: ModuleSource,
-    read_import: &'a ReadImport<'a>,
 }
 
 impl<'a> Resolution<'a> {
     /// The program's entry module.
     #[must_use]
-    pub fn of_entry(sem: &'a Semantics, read_import: &'a ReadImport<'a>) -> Self {
-        Self {
-            sem,
-            module: sem.entry_module_source.clone(),
-            read_import,
-        }
+    pub fn of_entry(sem: &'a Semantics) -> Self {
+        Self::in_module(sem, sem.entry_module_source.clone())
     }
 
     /// `module_spec` as the program's entry imports it.
     #[must_use]
-    pub fn new(sem: &'a Semantics, module_spec: &str, read_import: &'a ReadImport<'a>) -> Self {
-        Self {
-            sem,
-            module: sem.resolve_notation_module(module_spec),
-            read_import,
-        }
+    pub fn new(sem: &'a Semantics, module_spec: &str) -> Self {
+        Self::in_module(sem, sem.resolve_notation_module(module_spec))
+    }
+
+    fn in_module(sem: &'a Semantics, module: ModuleSource) -> Self {
+        assert!(sem.is_complete(), "a page reads a complete analysis");
+        Self { sem, module }
     }
 
     /// The same program, read at `module_spec`.
     fn at(&self, module_spec: &str) -> Self {
-        Self::new(self.sem, module_spec, self.read_import)
+        Self::new(self.sem, module_spec)
     }
 
-    /// The trait `b` implements, whose `contract` clauses bind its methods.
-    fn implemented_trait(&self, b: &ImplBlock) -> Option<&'a TraitDecl> {
-        self.sem.implemented_trait_at(&self.module, b.span)
+    /// The trait or interface `b` implements.
+    fn implemented(&self, b: &ImplBlock) -> Option<&'a Item> {
+        self.sem.implemented_at(&self.module, b.span)
     }
 }
 
-/// An `impl` block the page documents, with the trait it implements.
+/// An `impl` block the page documents, with the trait it implements, whose
+/// `contract` clauses bind its methods.
 struct DocImpl<'a> {
     block: &'a ImplBlock,
     implemented: Option<&'a TraitDecl>,
-}
-
-/// [`ReadImport`] over the bundled standard library.
-pub fn read_stdlib_import(path: &str) -> Option<String> {
-    stdlib::get_stdlib_module(path).map(str::to_owned)
 }
 
 /// Extract the documentation of a module. `include_private` documents non-`pub`
@@ -771,7 +758,7 @@ fn is_internal_item(item: &Item) -> bool {
 }
 
 /// The `impl` blocks the page documents: every one under `include_private`,
-/// else those whose trait, if any, the reader can name. A reader who cannot
+/// else those whose trait or interface, if any, is `pub`. A reader who cannot
 /// name a trait cannot call its methods, so listing them would advertise an
 /// API that does not exist.
 fn documented_impls<'a>(
@@ -779,111 +766,28 @@ fn documented_impls<'a>(
     include_private: bool,
     resolution: &Resolution<'a>,
 ) -> Vec<DocImpl<'a>> {
-    let impls = module.items.iter().filter_map(|item| {
-        let Item::Impl(i) = item else {
-            return None;
-        };
-        Some(i)
-    });
-    let trait_head = |i: &ImplBlock| i.trait_type.as_ref().and_then(spell_head);
-    let unnameable = if include_private {
-        IndexSet::default()
-    } else {
-        let heads: IndexSet<String> = impls.clone().filter_map(trait_head).collect();
-        unnameable_heads(module, &heads, resolution.read_import)
-    };
-    impls
-        .filter(|i| !trait_head(i).is_some_and(|head| unnameable.contains(&head)))
-        .map(|block| DocImpl {
-            block,
-            implemented: resolution.implemented_trait(block),
-        })
-        .collect()
-}
-
-/// An `impl` head as written: `Trait`, or `ns::Trait` through a namespace import.
-fn spell_head(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Named(n) => Some(n.name.clone()),
-        Type::Generic(g) => Some(g.name.clone()),
-        Type::NamespacedGeneric(g) => Some(format!("{}::{}", g.namespace, g.name)),
-        _ => None,
-    }
-}
-
-/// Which of `heads` name a trait below `pub`: one `module` declares so, or one
-/// it imports from a module that declares or re-exports it so. A head reaching
-/// no declaration, such as a prelude trait, is taken as nameable.
-fn unnameable_heads(
-    module: &Module,
-    heads: &IndexSet<String>,
-    read_import: &ReadImport,
-) -> IndexSet<String> {
-    let mut unnameable: IndexSet<String> = declared_below_pub(module)
-        .filter(|name| heads.contains(*name))
-        .map(str::to_owned)
-        .collect();
-    for item in &module.items {
-        let Item::Use(u) = item else { continue };
-        let through: Vec<(&String, &str)> = heads
-            .iter()
-            .filter_map(|head| Some((head, imported_name(u, head)?)))
-            .collect();
-        if through.is_empty() {
-            continue;
-        }
-        let Some(source) = read_import(&u.source) else {
-            continue;
-        };
-        let imported = parse(&source).ast;
-        let below_pub: IndexSet<&str> = declared_below_pub(&imported)
-            .chain(reexported_below_pub(&imported))
-            .collect();
-        unnameable.extend(
-            through
-                .into_iter()
-                .filter(|(_, name)| below_pub.contains(name))
-                .map(|(head, _)| head.clone()),
-        );
-    }
-    unnameable
-}
-
-/// The name `head` reaches in the module `u` imports from, if `u` binds it.
-fn imported_name<'a>(u: &'a UseDecl, head: &'a str) -> Option<&'a str> {
-    u.items.iter().find_map(|item| match item {
-        UseItem::Simple { name, alias, .. } => {
-            (alias.as_ref().unwrap_or(name) == head).then_some(name.as_str())
-        }
-        UseItem::Namespace { name, .. } => head.strip_prefix(name.as_str())?.strip_prefix("::"),
-        UseItem::InterfaceFunctions { .. } | UseItem::Wildcard => None,
-    })
-}
-
-/// The traits and interfaces `module` declares below `pub`.
-fn declared_below_pub(module: &Module) -> impl Iterator<Item = &str> {
-    module.items.iter().filter_map(|item| match item {
-        Item::Trait(t) if !t.visibility.is_public() => Some(t.name.as_str()),
-        Item::Interface(i) if !i.visibility.is_public() => Some(i.name.as_str()),
-        _ => None,
-    })
-}
-
-/// The names `module` re-exports with `internal use`. A private `use` exports
-/// nothing, so it is not counted.
-fn reexported_below_pub(module: &Module) -> impl Iterator<Item = &str> {
     module
         .items
         .iter()
-        .filter_map(|item| match item {
-            Item::Use(u) if u.visibility.is_internal() => Some(&u.items),
-            _ => None,
+        .filter_map(|item| {
+            let Item::Impl(block) = item else {
+                return None;
+            };
+            let implemented = resolution.implemented(block);
+            let below_pub = implemented
+                .and_then(Item::visibility)
+                .is_some_and(|v| !v.is_public());
+            (include_private || !below_pub).then(|| DocImpl {
+                block,
+                implemented: implemented.and_then(|item| {
+                    let Item::Trait(t) = item else {
+                        return None;
+                    };
+                    Some(t)
+                }),
+            })
         })
-        .flatten()
-        .filter_map(|item| match item {
-            UseItem::Simple { name, alias, .. } => Some(alias.as_ref().unwrap_or(name).as_str()),
-            _ => None,
-        })
+        .collect()
 }
 
 fn render_type(ty: &Type) -> String {
@@ -1008,7 +912,7 @@ pub fn extract_stdlib_doc_with(
 ) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = parse_stdlib_for_doc(module_name, source);
-    let resolution = Resolution::new(sem, module_name, &read_stdlib_import);
+    let resolution = Resolution::new(sem, module_name);
     let mut doc = extract_doc_with(
         &parsed.ast,
         &parsed.trivia,

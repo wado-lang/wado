@@ -3,12 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use lexopt::Arg::Value;
+use wado_compiler::LogLevel;
 use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocPrimitiveType, DocResource, DocStruct,
     DocTrait, DocTraitImpl, DocVariant, Resolution, extract_doc_with, extract_stdlib_doc_with,
-    read_stdlib_import, stdlib_doc_entry,
+    stdlib_doc_entry,
 };
-use wado_compiler::path::is_cwd_relative;
 use wado_compiler::semantics::{Semantics, semantics};
 
 use crate::args::{self, CliExit};
@@ -236,16 +236,20 @@ pub async fn run(opts: DocOptions) -> Result<(), CliExit> {
 }
 
 /// The analysis of `source`, entered as `filename` in `dir`, that a page reads
-/// to resolve the names its module uses.
-async fn analyze(source: &str, dir: &Path, filename: &str) -> Semantics {
-    let host = FilesystemCompilerHost::silent(dir.to_path_buf());
-    semantics(source, &host, Some(filename)).await
+/// to resolve the names its module uses. A page is written only of a program
+/// without errors: they are reported, and the run fails.
+async fn analyze(source: &str, dir: &Path, filename: &str) -> Result<Semantics, CliExit> {
+    let host = FilesystemCompilerHost::with_log_level(dir.to_path_buf(), LogLevel::Error);
+    let sem = semantics(source, &host, Some(filename)).await;
+    if host.has_errors() || !sem.is_complete() {
+        return Err(CliExit::silent_failure(1));
+    }
+    Ok(sem)
 }
 
 async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     if is_stdlib_module(input) {
-        let sem = analyze(&stdlib_doc_entry(input), Path::new("."), "doc.wado").await;
-        assert!(sem.is_complete(), "the standard library analyzes: {input}");
+        let sem = analyze(&stdlib_doc_entry(input), Path::new("."), "doc.wado").await?;
         return extract_stdlib_doc_with(input, include_private, &sem)
             .ok_or_else(|| CliExit::error(format!("Unknown stdlib module: {input}")));
     }
@@ -253,35 +257,26 @@ async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliEx
     let path = Path::new(input);
     let source = fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
-
-    let parsed = wado_compiler::parse(&source)
-        .into_fail_fast()
-        .map_err(|e| CliExit::error(format!("parsing '{}': {e:?}", path.display())))?;
-
-    let module_name = path
-        .file_stem()
-        .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
-
-    let dir = path.parent().unwrap_or(Path::new(""));
-    let read_import = |import: &str| {
-        read_stdlib_import(import).or_else(|| {
-            is_cwd_relative(import)
-                .then(|| fs::read_to_string(dir.join(import)).ok())
-                .flatten()
-        })
-    };
     let filename = path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| CliExit::error(format!("not a file: '{}'", path.display())))?;
-    let sem = analyze(&source, dir, filename).await;
+    let dir = path.parent().unwrap_or(Path::new(""));
+    let sem = analyze(&source, dir, filename).await?;
+
+    let parsed = wado_compiler::parse(&source)
+        .into_fail_fast()
+        .expect("an analyzed source parses");
+    let module_name = path
+        .file_stem()
+        .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
     Ok(extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         &source,
         module_name,
         include_private,
-        &Resolution::of_entry(&sem, &read_import),
+        &Resolution::of_entry(&sem),
     ))
 }
 
@@ -490,19 +485,13 @@ mod format_contract_tests {
                 .map(String::as_str)
                 .zip(deps.iter().map(|(_, s)| *s)),
         );
-        let sem = block_on(semantics(
-            source,
-            &in_memory_host(&files),
-            Some("./demo.wado"),
-        ));
-        let read_import = |import: &str| {
-            read_stdlib_import(import).or_else(|| {
-                let name = import.strip_prefix("./")?;
-                deps.iter()
-                    .find(|(dep, _)| *dep == name)
-                    .map(|(_, dep_source)| (*dep_source).to_string())
-            })
-        };
+        let host = in_memory_host(&files);
+        let sem = block_on(semantics(source, &host, Some("./demo.wado")));
+        assert!(
+            !host.has_errors(),
+            "a page's program has no errors: {:?}",
+            host.diagnostics()
+        );
         let parsed = wado_compiler::parse(source)
             .into_fail_fast()
             .expect("parse");
@@ -512,7 +501,7 @@ mod format_contract_tests {
             source,
             "demo",
             include_private,
-            &Resolution::of_entry(&sem, &read_import),
+            &Resolution::of_entry(&sem),
         )
     }
 
@@ -539,7 +528,7 @@ mod format_contract_tests {
     #[test]
     fn an_associated_type_keeps_its_parameters_and_bounds() {
         let out = simple_all_of(
-            "//! Demo.\n\npub trait Store {\n    type Buf<E: Elem>: Len;\n    type Plain;\n}\n",
+            "//! Demo.\n\npub trait Elem {}\n\npub trait Len {}\n\npub trait Store {\n    type Buf<E: Elem>: Len;\n    type Plain;\n}\n",
         );
         assert!(
             out.contains("    type Buf<E: Elem>: Len;\n    type Plain;\n"),
@@ -595,7 +584,8 @@ mod format_contract_tests {
     fn an_impl_of_an_imported_internal_trait_is_left_out() {
         let dep = "internal trait Hidden {\n    fn hidden(&self) -> i32;\n}\n\ninternal use { Hidden as Veiled } from \"./veiled.wado\";\n\npub trait Shown {\n    fn shown(&self) -> i32;\n}\n";
         let source = "//! Demo.\n\nuse { Hidden, Veiled as Masked, Shown as Visible } from \"./dep.wado\";\nuse dep from \"./dep.wado\";\n\npub struct Gauge {\n    value: i32,\n}\n\npub struct Meter {\n    value: i32,\n}\n\nimpl Hidden for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Masked for Gauge {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl dep::Hidden for Meter {\n    fn hidden(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl Visible for Gauge {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n\nimpl dep::Shown for Meter {\n    fn shown(&self) -> i32 {\n        return self.value;\n    }\n}\n";
-        let out = markdown_importing(source, &[("dep.wado", dep)]);
+        let veiled = "internal trait Hidden {\n    fn hidden(&self) -> i32;\n}\n";
+        let out = markdown_importing(source, &[("dep.wado", dep), ("veiled.wado", veiled)]);
         assert!(
             out.contains("impl Visible for Gauge") && out.contains("impl dep::Shown for Meter"),
             "an impl of an imported pub trait must be documented:\n{out}"
@@ -657,10 +647,11 @@ mod format_contract_tests {
     #[test]
     fn an_impl_method_documents_its_trait_methods_contract() {
         let dep = "pub trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\n";
-        let source = "//! Demo.\n\nuse { Pick } from \"./dep.wado\";\n\npub struct Deck {\n    top: i32,\n}\n\nimpl Pick for Deck {\n    fn pick(&self, i: i32) -> i32 {\n        return self.top + i;\n    }\n}\n";
+        let source = "//! Demo.\n\nuse { Pick } from \"./dep.wado\";\nuse dep from \"./dep.wado\";\n\npub struct Deck {\n    top: i32,\n}\n\npub struct Hand {\n    top: i32,\n}\n\nimpl Pick for Deck {\n    fn pick(&self, i: i32) -> i32 {\n        return self.top + i;\n    }\n}\n\nimpl dep::Pick for Hand {\n    fn pick(&self, i: i32) -> i32 {\n        return self.top + i;\n    }\n}\n";
         let out = markdown_importing(source, &[("dep.wado", dep)]);
-        assert!(
-            out.contains("`contract i >= 0`"),
+        assert_eq!(
+            out.matches("`contract i >= 0`").count(),
+            2,
             "an impl's method must document its trait method's contract:\n{out}"
         );
     }
