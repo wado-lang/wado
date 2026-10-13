@@ -10,7 +10,7 @@ use crate::ast::{
     ForOfStmt, ForStmt, Function, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module, Pattern,
     ReturnStmt, Stmt, UnaryOp, WhileStmt, for_each_pattern_name,
 };
-use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::logger::{Bail, Logger};
 use crate::module_source::ModuleSource;
 use crate::syntax::{is_statement_keyword, statement_keyword_name_message};
@@ -131,7 +131,6 @@ enum BindingKind {
 
 impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message, span) = match &e {
             BindError::AssignToImmutable { name, span } => (
                 Code::ImmutableAssignment,

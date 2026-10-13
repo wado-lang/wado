@@ -1352,7 +1352,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {
         let (is_resource, is_concrete_value, type_name) = {
             let tt = self.tysys.type_table.borrow();
-            use crate::tir::ResolvedType;
             let resolved = tt.get(self_ty);
             (
                 matches!(

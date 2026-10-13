@@ -116,39 +116,44 @@ fn "inspect_closure_escaped_to_fn_param.wado/run"() with Stdout {
     let g: ref struct;
     let $local_1: ref "core:prelude/string.wado//String";
     let $local_2: ref "core:prelude/format.wado//Formatter";
-    let self_10: i32;
-    let f_11: ref "core:prelude/format.wado//Formatter";
+    let self_12: i32;
     let is_negative: bool;
     let x: i64;
     g = struct.new "canonical//CanonicalClosure_0" { env: struct.new "inspect_closure_escaped_to_fn_param.wado//$Closure_0" {  }, inspect: ref.func "closure/inspect_closure_escaped_to_fn_param.wado/$closure_inspect_wrapper_0", func: ref.func "closure/inspect_closure_escaped_to_fn_param.wado/$closure_wrapper_0" };
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
-    self_10 = block -> i32 {
+    is_negative = local.tee self_12(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(g)).env, 1);
-    };
-    f_11 = $local_2;
-    is_negative = self_10 < 0;
-    self_10 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_10); select i64(x < 0_i64, 0_i64 - x, x)));
+    }) < 0;
+    self_12 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self_12); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
         let $mv_arg_4: ref "core:prelude/string.wado//String";
         $mv_arg_4 = global:inspect_closure_escaped_to_fn_param.wado::$const_obj_4;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f_11, is_negative, $mv_arg_4.repr, $mv_arg_4.used, self_10);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"($local_2, is_negative, $mv_arg_4.repr, $mv_arg_4.used, self_12);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_4(f_11.buf).repr, is_negative, x, self_10);
-    if @unlikely(local.tee self_10($local_1.used + 1) > builtin::array_len($local_1.repr)) {
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_4($local_2.buf).repr, is_negative, x, self_12);
+    if @unlikely(local.tee self_12($local_1.used + 1) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, self_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, self_12);
     }
     is_negative = $local_1.used;
-    $local_1.used = self_10;
+    $local_1.used = self_12;
     builtin::array_copy<u8>($local_1.repr, is_negative, global:inspect_closure_escaped_to_fn_param.wado::$const_obj_3, 0, 1);
-    $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 };
+    $local_2.fill = 32;
+    $local_2.align = 2;
+    $local_2.sign_plus = 0;
+    $local_2.alternate = 0;
+    $local_2.zero_pad = 0;
+    $local_2.width = -1;
+    $local_2.precision = -2;
+    $local_2.indent = 0;
+    $local_2.buf = $local_1;
     "inspect_closure_escaped_to_fn_param.wado/fn(i32)->i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: g }, $local_2);
     is_negative = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
-    self_10 = builtin::i32_wrap_i64(x >> 32_i64);
+    self_12 = builtin::i32_wrap_i64(x >> 32_i64);
     is_negative = "inspect_closure_escaped_to_fn_param.wado/$cm_binding__Stdout_write_via_stream"(is_negative);
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_10, $local_1.repr, $local_1.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_12, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(is_negative);
 }
 

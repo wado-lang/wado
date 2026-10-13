@@ -14,7 +14,7 @@ use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::tir::{EffectRef, ResolvedType, TypeTable};
 use crate::unparse::unparse_with_row_into;
 use crate::{nir, tir};
@@ -566,7 +566,6 @@ impl<'a> NirUnparser<'a> {
     /// the freeze touches. Falls back to `%id` for a value with no expression
     /// form (a flow merge, a heap read whose receiver is itself opaque).
     fn unparse_value(&mut self, body: &Body, v: ValueId) {
-        use crate::nir_value_graph::{OpaqueSource, ValueKind};
         match body.values.kind(v).clone() {
             ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
                 Some(OpaqueSource::Local(idx)) => match self.locals.get(idx as usize) {

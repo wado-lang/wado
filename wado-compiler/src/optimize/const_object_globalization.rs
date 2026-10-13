@@ -41,7 +41,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::GlobalInit;
 use crate::token::Span;
 use crate::wir_build::packed_array_is_eager;
-use crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT;
+use crate::wir_optimize::array::{ARRAY_NEW_FIXED_LIMIT, ConstOperand, data_promotion_pays};
 use crate::{compiler_trace, nir};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
@@ -2626,9 +2626,6 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
 /// its type are read off the operand; a `Null` is a ref the promotion cannot
 /// pack, and a non-constant element leaves the literal on the fixed path.
 fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate<'_>) -> bool {
-    use crate::nir_value_graph::ValueKind;
-    use crate::wir_optimize::array::{ConstOperand, data_promotion_pays};
-
     let type_table = gate.type_table;
     let mut width = None;
     let mut operand_bytes = 0;

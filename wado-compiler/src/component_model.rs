@@ -15,8 +15,8 @@ use wasm_encoder::ValType;
 use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
-    NamedType, NamespacedGenericType, Type, cm_function_path, cm_import_of, declares_unrestricted,
-    world_import_of,
+    Module as AstModule, NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
+    cm_import_of, declares_unrestricted, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
@@ -26,8 +26,10 @@ use crate::cm_abi::{
     layout_tuple_with_registry, layout_variant_with_registry, plain_size_align,
 };
 use crate::defs::{DefId, DefTable};
+use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_cm_name};
+use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::stdlib;
@@ -232,7 +234,6 @@ fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
 /// On an element it cannot classify. Ask [`stream_payload_rejection`] first,
 /// for a diagnostic instead.
 pub fn classify_stream_payload(type_table: &TypeTable, element: TypeId) -> CmStreamPayload {
-    use crate::canonical::CmStreamPayload;
     let element = peel_newtypes(type_table, element);
     if is_u8_stream_element(type_table, element) {
         return CmStreamPayload::U8;
@@ -365,8 +366,6 @@ pub fn cm_payload_type_from_ast(
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> Option<CmPayloadType> {
-    use crate::ast::Type;
-    use crate::canonical::CmPayloadType;
     let resolved = registry.resolve_type(ty);
     match &resolved {
         Type::Named(n) if n.name == "String" => Some(CmPayloadType::String),
@@ -434,8 +433,6 @@ pub fn classify_stream_payload_from_ast(
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> CmStreamPayload {
-    use crate::ast::Type;
-    use crate::canonical::CmStreamPayload;
     let resolved = registry.resolve_type(ty);
     if let Type::Named(n) = &resolved
         && n.name == "u8"
@@ -461,7 +458,6 @@ pub fn classify_future_payload_from_ast(
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> CmFuturePayload {
-    use crate::ast::Type;
     let resolved = registry.resolve_type(ty);
     if let Type::Named(n) = &resolved
         && let Some(scalar) = cm_scalar_from_ast_name(&n.name)
@@ -510,7 +506,6 @@ fn wasi_error_code_decl_from_ast(
 
 /// `result<option<resource>, _>`.
 fn is_trailers_payload_from_ast(resolved: &ast::Type, registry: &CmInterfaceRegistry) -> bool {
-    use crate::ast::Type;
     let Type::Generic(g) = resolved else {
         return false;
     };
@@ -1103,8 +1098,6 @@ enum CmBindingKind {
 /// both who has bindings at all and which of them are functions: two walks drift,
 /// and a module an incomplete one skips loses declarations where nothing looks.
 fn cm_imports(module: &ast::Module) -> Vec<(CmBindingKind, &CmImport)> {
-    use crate::ast::Item;
-
     fn binds(
         kind: CmBindingKind,
         attrs: &[Attribute],
@@ -1509,8 +1502,6 @@ impl InterfaceDeclTable {
 }
 
 fn collect_interface_decls(modules: &[(&'static str, ast::Module)]) -> InterfaceDeclTable {
-    use crate::ast::Item;
-
     let mut table = InterfaceDeclTable::default();
     for (_, module) in modules {
         for item in &module.items {
@@ -1625,7 +1616,6 @@ fn build_local_name_resolver(
     module: &ast::Module,
     defs_by_module: &IndexMap<&'static str, IndexMap<String, String>>,
 ) -> IndexMap<String, String> {
-    use crate::ast::{Item, UseItem};
     let mut local: IndexMap<String, String> = IndexMap::default();
     if let Some(defs) = defs_by_module.get(module_path) {
         for (name, source) in defs {
@@ -2074,11 +2064,6 @@ impl CmInterfaceRegistry {
     }
 
     fn build_from_stdlib_inner() -> (Self, WorldRegistry) {
-        use crate::ast::Module as AstModule;
-        use crate::lexer::lex;
-        use crate::parser::Parser;
-        use crate::world_registry::WorldRegistry;
-
         fn parse_module(source: &str) -> AstModule {
             let r = lex(source);
             assert!(r.errors.is_empty(), "lexer error in stdlib: {:?}", r.errors);
@@ -2146,8 +2131,6 @@ impl CmInterfaceRegistry {
         module: &ast::Module,
         scope: &CmDeclScope,
     ) -> Result<(), String> {
-        use crate::ast::Item;
-
         // First, collect newtypes from this module
         for item in &module.items {
             if let Item::Newtype(alias) = item {
@@ -2621,7 +2604,7 @@ impl CmInterfaceRegistry {
         // types' module source (and detect lib-local provenance) without
         // prefix-sniffing the FQ.
         self.cm_interface_module_sources
-            .insert(iface_fq.to_string(), entry_source.clone());
+            .insert(iface_fq.to_string(), entry_source);
 
         // Every entry type is registered, not just the `pub` ones: a type an
         // `export fn` names crosses the boundary whether or not it is marked,
@@ -2736,7 +2719,6 @@ impl CmInterfaceRegistry {
     /// `item`'s type references must already answer their source interface: the
     /// caller binds them by declaration.
     fn register_lib_local_item(&mut self, item: &Item, iface_fq: &str) {
-        use crate::ast::Item;
         match item {
             Item::Newtype(alias) => register_unique(
                 &mut self.newtypes,
@@ -2822,8 +2804,6 @@ impl CmInterfaceRegistry {
         world_registry: &mut WorldRegistry,
         interface_decls: &InterfaceDeclTable,
     ) {
-        use crate::ast::Item;
-
         for item in &module.items {
             if let Item::World(world) = item {
                 world_registry.register(
@@ -3827,7 +3807,6 @@ impl CmInterfaceRegistry {
     }
 
     fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<CmValType>) {
-        use crate::cm_abi::CmValType;
         let resolved = self.resolve_type(ty);
         match &resolved {
             Type::Named(named) => match named.name.as_str() {
@@ -3903,7 +3882,6 @@ impl CmInterfaceRegistry {
         payloads: impl Iterator<Item = Option<Type>>,
         out: &mut Vec<CmValType>,
     ) {
-        use crate::cm_abi::CmValType;
         let groups: Vec<Vec<CmValType>> = payloads
             .map(|p| p.map(|t| self.cm_flatten(&t)).unwrap_or_default())
             .collect();
@@ -5219,6 +5197,7 @@ mod tests {
     use super::*;
     use crate::ast::{AstId, GenericType, NamedType};
     use crate::lexer::lex;
+    use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
     use crate::parser;
     use crate::token::Span;
     use std::assert_matches;
@@ -5854,8 +5833,6 @@ mod tests {
 
     #[test]
     fn a_component_s_later_interface_declares_as_much_as_its_first() {
-        use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
-
         let mut interner = ModuleSourceInterner::new();
         let dep = interner.wasm("./brotli.wasm", WasmAssetKind::Wasm);
         let mut registry = CmInterfaceRegistry::new();
@@ -5889,8 +5866,6 @@ mod tests {
 
     #[test]
     fn resource_cm_name_by_module_bridges_loader_identity_to_registration_key() {
-        use crate::module_source::ModuleSourceInterner;
-
         let mut interner = ModuleSourceInterner::new();
         let mut registry = CmInterfaceRegistry::new();
 

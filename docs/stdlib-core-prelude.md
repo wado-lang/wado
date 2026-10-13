@@ -2215,6 +2215,14 @@ IEEE 754's `>=`, on the values widened to f32.
 The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
 as negating it does.
 
+#### `pub fn div_floor(&self, rhs: i64) -> i64`
+
+`self / rhs` rounded toward negative infinity. Traps where `/` does.
+
+#### `pub fn div_ceil(&self, rhs: i64) -> i64`
+
+`self / rhs` rounded toward positive infinity. Traps where `/` does.
+
 #### `pub fn clz(x: i64) -> i64`
 
 Counts the leading zeros in this integer.
@@ -2355,6 +2363,10 @@ Counts the number of set bits (population count).
 
 The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
 
+#### `pub fn div_ceil(&self, rhs: u64) -> u64`
+
+`self / rhs` rounded up. Traps where `/` does.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
@@ -2472,6 +2484,14 @@ The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
 The magnitude of `x`. `MIN` has none in `i8` and wraps to itself,
 as negating it does.
 
+#### `pub fn div_floor(&self, rhs: i8) -> i8`
+
+`self / rhs` rounded toward negative infinity. Traps where `/` does.
+
+#### `pub fn div_ceil(&self, rhs: i8) -> i8`
+
+`self / rhs` rounded toward positive infinity. Traps where `/` does.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
@@ -2576,6 +2596,14 @@ as negating it does.
 
 The magnitude of `x`. `MIN` has none in `i16` and wraps to itself,
 as negating it does.
+
+#### `pub fn div_floor(&self, rhs: i16) -> i16`
+
+`self / rhs` rounded toward negative infinity. Traps where `/` does.
+
+#### `pub fn div_ceil(&self, rhs: i16) -> i16`
+
+`self / rhs` rounded toward positive infinity. Traps where `/` does.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -2685,6 +2713,14 @@ as negating it does.
 
 The magnitude of `x`. `MIN` has none in `i32` and wraps to itself,
 as negating it does.
+
+#### `pub fn div_floor(&self, rhs: i32) -> i32`
+
+`self / rhs` rounded toward negative infinity. Traps where `/` does.
+
+#### `pub fn div_ceil(&self, rhs: i32) -> i32`
+
+`self / rhs` rounded toward positive infinity. Traps where `/` does.
 
 #### `pub fn clz(x: i32) -> i32`
 
@@ -2813,6 +2849,10 @@ Counts the number of set bits (population count).
 #### `pub fn wrapping_neg(&self) -> u8`
 
 The negation modulo 2^8: `0` for `0`, `MAX - self + 1` otherwise.
+
+#### `pub fn div_ceil(&self, rhs: u8) -> u8`
+
+`self / rhs` rounded up. Traps where `/` does.
 
 #### `pub fn is_ascii_digit(&self) -> bool`
 
@@ -2956,6 +2996,10 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
 
+#### `pub fn div_ceil(&self, rhs: u16) -> u16`
+
+`self / rhs` rounded up. Traps where `/` does.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
@@ -3055,6 +3099,10 @@ The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn wrapping_neg(&self) -> u32`
 
 The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
+
+#### `pub fn div_ceil(&self, rhs: u32) -> u32`
+
+`self / rhs` rounded up. Traps where `/` does.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -3880,6 +3928,10 @@ The smaller of two values.
 
 The negation modulo 2^128: `0` for `0`, `MAX - self + 1` otherwise.
 
+#### `pub fn div_ceil(&self, rhs: u128) -> u128`
+
+`self / rhs` rounded up. Traps where `/` does.
+
 #### `pub fn low(&self) -> u64`
 
 `#[compiler_item("u128_low")]`
@@ -4119,6 +4171,14 @@ The smaller of two values.
 
 The magnitude of `x`. `MIN` has none in `i128` and wraps to itself,
 as negating it does.
+
+#### `pub fn div_floor(&self, rhs: i128) -> i128`
+
+`self / rhs` rounded toward negative infinity. Traps where `/` does.
+
+#### `pub fn div_ceil(&self, rhs: i128) -> i128`
+
+`self / rhs` rounded toward positive infinity. Traps where `/` does.
 
 #### `pub fn low(&self) -> u64`
 
@@ -5545,6 +5605,8 @@ Joins elements into a string with the given separator.
 #### `impl IndexAssign<i32> for List<T>`
 
 ##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
+
+`#[compiler_item("list_index_assign")]`
 
 #### `impl IndexRef<i32> for List<T>`
 

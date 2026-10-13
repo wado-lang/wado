@@ -8,9 +8,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::ast::BinaryOp;
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::reify::ord_bool_from_cmp;
+use crate::elaborator::util::{parse_i128_literal, parse_u128_literal};
 use crate::name::LocalMethodName;
 use crate::synthesis::common::not_expr;
 use crate::tir::{
@@ -209,7 +211,6 @@ pub(crate) fn literal_from_repr(
     type_table: &TypeTable,
     span: Span,
 ) -> TirExpr {
-    use crate::elaborator::util::{parse_i128_literal, parse_u128_literal};
     let bits = parse_i128_literal(repr)
         .or_else(|_| parse_u128_literal(repr).map(u128::cast_signed))
         .unwrap_or_else(|e| panic!("a wide-int literal reaching `lower` parses: {repr}: {e}"));
@@ -227,8 +228,6 @@ pub(crate) fn compare(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Option<TirExpr> {
-    use crate::ast::BinaryOp;
-
     let eq = || {
         trait_method_call(
             item,

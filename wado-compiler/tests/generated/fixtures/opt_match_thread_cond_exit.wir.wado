@@ -66,42 +66,27 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:opt_match_thread_cond_exit.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
 
 fn "opt_match_thread_cond_exit.wado/run"() with Stdout {
+    let v_21: i32;
     let packed: i64;
-    let $sroa_slot_48: i32;
     let $sroa_slot_49: i32;
     let $sroa_slot_50: i32;
-    let $sroa_slot_51: i32;
+    $sroa_slot_49 = 0;
     $sroa_slot_50 = 0;
-    $sroa_slot_51 = 0;
     $inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1: block {
-        $sroa_slot_48 = 0;
-        $sroa_slot_49 = 0;
-        $inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block {
-            $sroa_slot_48 = 1;
-            $sroa_slot_49 = -1;
-            if break _i0 {
-                $sroa_slot_48 = 0;
-                $sroa_slot_49 = 1;
-                break $inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2;
-            }
-            $sroa_slot_48 = 0;
-            $sroa_slot_49 = 2;
-            break $inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2;
-        };
-        $sroa_slot_49 = (if $sroa_slot_48 == 0 -> i32 {
-            $sroa_slot_49;
-        } else if @unlikely($sroa_slot_48 == 1) -> i32 {
+        v_21 = $fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block -> i32 {
             cold_path;
-            $sroa_slot_50 = 1;
-            break $inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1: $sroa_slot_51 = $sroa_slot_49;
-        } else {
-            unreachable;
-        });
-        $sroa_slot_50 = 0;
-        $sroa_slot_51 = $sroa_slot_49 + 100;
+            $sroa_slot_49 = 1;
+            $sroa_slot_50 = -1;
+            if break $fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2 {
+                break $fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: 1;
+            }
+            break $fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: 2;
+        };
+        $sroa_slot_49 = 0;
+        $sroa_slot_50 = v_21 + 100;
         break $inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1;
     };
-    if @unlikely(local.tee $sroa_slot_51((if ($sroa_slot_50 == 1) & ($sroa_slot_51 == -1) -> bool {
+    if @unlikely(local.tee $sroa_slot_50((if ($sroa_slot_49 == 1) & ($sroa_slot_50 == -1) -> bool {
         1;
     } else {
         0;
@@ -110,13 +95,13 @@ fn "opt_match_thread_cond_exit.wado/run"() with Stdout {
         "opt_match_thread_cond_exit.wado/run$cold2"();
         unreachable;
     }
-    $sroa_slot_51 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    $sroa_slot_50 = builtin::i32_wrap_i64(packed >> 32_i64);
-    $sroa_slot_51 = "opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream"($sroa_slot_51);
+    $sroa_slot_50 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    $sroa_slot_49 = builtin::i32_wrap_i64(packed >> 32_i64);
+    $sroa_slot_50 = "opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream"($sroa_slot_50);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:opt_match_thread_cond_exit.wado::$const_obj_3;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_50, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_slot_51);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_49, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"($sroa_slot_50);
 }
 
 fn "opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -169,17 +154,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b7: block {
-        l8: loop {
-            break_if b7 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b5: block {
+        l6: loop {
+            break_if b5 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l8;
+            continue l6;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l10: loop {
+        l8: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -209,7 +194,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l10;
+            continue l8;
         };
     };
 }

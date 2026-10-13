@@ -10,6 +10,7 @@
 
 use cranelift_entity::EntityRef;
 
+use super::value_copy::mutation::{Witness, expr_witnesses};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::nir::{FuncId, FunctionRef, NirBinaryOp, NirLocal, NirUnaryOp};
@@ -846,7 +847,6 @@ impl MutRefAliases {
         param_count: usize,
         type_table: &TypeTable,
     ) -> Self {
-        use crate::tir::ResolvedType;
         let mut map = Self::default();
         for (i, l) in locals.iter().enumerate().skip(param_count) {
             if matches!(type_table.get(l.type_id), ResolvedType::MutRef(_)) {
@@ -1046,7 +1046,6 @@ pub(super) fn for_each_mutated_root(
     aliases: &MutRefAliases,
     sink: &mut impl FnMut(RootMutation),
 ) {
-    use super::value_copy::mutation::{Witness, expr_witnesses};
     let through_storage = |sink: &mut dyn FnMut(RootMutation), e: ExprId| {
         // A rootless chain here is a fresh temporary (e.g. a `Box { … }`
         // literal receiver): mutating it cannot touch a named local.

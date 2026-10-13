@@ -1,0 +1,30 @@
+// `if a && b { … }` with no `else`, where `b` reads an array.
+//
+// `&&` stays one `Binary` node through NIR, and WIR lowers it to a value:
+// `if (if a { b } else { 0 }) { … }`. Cranelift does not thread a branch on
+// that value, so the `false` of `a` was materialized and tested a second time.
+// With no `else` to duplicate, `if a { if b { … } }` says the same with one
+// branch per operand. A pure `b` stays a branchless `a & b`.
+fn count_triples(bytes: &List<u8>) -> i32 {
+    let mut n = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b0 = bytes[i];
+        if (b0 >= 0xE1) & (i + 2 < bytes.len()) && (bytes[i + 1] ^ 0x80) < 0x40 {
+            n += 1;
+        }
+        i += 1;
+    }
+    return n;
+}
+
+export fn run() {
+    let bytes: List<u8> = [0xE3, 0x81, 0x82, 0x41, 0xE3, 0x41];
+    assert count_triples(&builtin::black_box(bytes)) == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["if (if "]
+}

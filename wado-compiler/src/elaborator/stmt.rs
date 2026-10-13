@@ -12,6 +12,7 @@ use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 use crate::unparse::unparse_instance_pattern;
 
+use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
 use super::tysys::TypeSystem;
@@ -2865,8 +2866,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         into_iter_receiver_type: TypeId,
         ctx: &mut FunctionContext,
     ) {
-        use super::method_call::MethodCallInput;
-
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
         let iter_var = format!("$iter_{unique_id}");

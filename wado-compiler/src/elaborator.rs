@@ -1527,7 +1527,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_id: tir::TypeId,
         impl_name: &str,
     ) -> Option<DefId> {
-        use crate::tir::ResolvedType;
         let mut current = self.tysys.type_table.borrow().peel_refs(type_id);
         loop {
             // `impl_name` is a receiver name, so it carries its declaring
@@ -2320,7 +2319,6 @@ impl TypeSystem {
     /// The name the prelude declares a primitive, `()`, `!` or the raw
     /// `Array<T>` under.
     fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
-        use crate::tir::ResolvedType;
         let tt = self.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),

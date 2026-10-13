@@ -29,6 +29,7 @@ mod util;
 use crate::codegen_flags::CodegenFlags;
 use crate::compiler_host::SpanEmitter;
 use crate::optimize::OptLevel;
+use crate::optimize::pass_dump::{self, Phase};
 use crate::wir::WirPackage;
 
 pub use dce::{compact_dead_items, dce_unreachable_types, mark_unreachable_defined_functions};
@@ -82,7 +83,6 @@ fn wir_pass(
     profiler: &dyn SpanEmitter,
     f: impl FnOnce(&mut WirPackage),
 ) {
-    use crate::optimize::pass_dump::{self, Phase};
     let name = scope.name(pass);
     pass_dump::list_pass(&name);
     if pass_dump::should_skip_pass(&name) {

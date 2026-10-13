@@ -544,7 +544,7 @@ impl WebGpuBackend {
         let out_extents = row_extents(&extents, row_axes, reduced);
         let out = contiguous(self.allocated(element_count(&out_extents), false), 0, out_extents);
         let x = i32::min(rows, MAX_GROUPS);
-        let y = covering(rows, x);
+        let y = rows.div_ceil(x);
         let mut params: List<u32> = [rows as u32, x as u32, row as u32];
         push_all(&mut params, &extents);
         for let o of bound.views {
@@ -760,8 +760,8 @@ impl WebGpuBackend {
         }
         let count = element_count(&batch);
         let fits = count <= MAX_GROUPS
-            && covering(rows, TILE) <= MAX_GROUPS
-            && covering(cols, TILE) <= MAX_GROUPS
+            && rows.div_ceil(TILE) <= MAX_GROUPS
+            && cols.div_ceil(TILE) <= MAX_GROUPS
             && count * rows * cols <= self.max_binding;
         let epilogue: List<DeviceTensor> = match then {
             Some(e) => e.operands.into_iter().map(|o| o.view).collect(),
@@ -793,7 +793,7 @@ impl WebGpuBackend {
         };
         // Every chunk binds before the first is recorded, so none is wasted.
         // The middle chunks bind as the first does, plus the partial sums.
-        let last_start = (covering(inner, i32::max(chunk, 1)) - 1) * chunk;
+        let last_start = (inner.div_ceil(i32::max(chunk, 1)) - 1) * chunk;
         let pending = if last_start > 0 { Option::Some(contiguous(PENDING, 0, matrices)) } else { null };
         if !self.binds(&chunk_operands(0, pending)) || !self.binds(&chunk_operands(last_start, pending)) {
             return self.product_on_cpu(a, b, then);
@@ -842,8 +842,8 @@ impl WebGpuBackend {
             let mut spans = bound.spans;
             spans.push(fresh(&out));
             self.dispatch(key, spans, params, [
-                covering(cols, TILE),
-                covering(rows, TILE),
+                cols.div_ceil(TILE),
+                rows.div_ceil(TILE),
                 count,
             ]);
             if last {
@@ -870,7 +870,7 @@ impl WebGpuBackend {
             if chunk <= TILE {
                 return null;
             }
-            chunk = covering(covering(chunk, 2), TILE) * TILE;
+            chunk = chunk.div_ceil(2).div_ceil(TILE) * TILE;
         }
     }
 
@@ -1659,9 +1659,9 @@ fn internal_strides(over_result: &List<i32>, a: &List<i32>, b: &List<i32>, batch
 /// The workgroups covering `count` invocations of `LANES` each: as many as one
 /// dimension takes along `x`, the rest along `y`.
 fn grid(count: i32) -> [i32, i32] {
-    let groups = covering(count, LANES);
+    let groups = count.div_ceil(LANES);
     let x = i32::min(groups, MAX_GROUPS);
-    return [x, if x == 0 { 0 } else { covering(groups, x) }];
+    return [x, if x == 0 { 0 } else { groups.div_ceil(x) }];
 }
 
 /// The parameters every shader with one invocation per element starts with:
@@ -1676,11 +1676,6 @@ fn element_params(count: i32, x: i32, extents: &List<i32>) -> List<u32> {
 /// `i32::MAX`, which a driver may report as unbounded, is `i32::MAX`.
 fn saturated(limit: u64) -> i32 {
     return if limit > i32::MAX as u64 { i32::MAX } else { limit as i32 };
-}
-
-/// How many runs of `size` cover `count`.
-fn covering(count: i32, size: i32) -> i32 {
-    return (count + size - 1) / size;
 }
 
 /// The bytes `count` f32 elements take, at least one element's: WebGPU binds

@@ -73,12 +73,19 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // here as well as after closure lifting: a write-back needs the answer
     // before boxing, while `&mut T` still names its referent.
     let builtins = flat.builtin_declarations.clone();
-    let retained = value_copy::retention::compute_retention(flat, &pre_boxing_calls, &builtins);
+    let closure_captures = value_copy::reach::ClosureCaptures::collect(flat);
+    let retained = value_copy::retention::compute_retention(
+        flat,
+        &pre_boxing_calls,
+        &builtins,
+        &closure_captures,
+    );
     mut_ref_writeback::insert_write_backs(
         flat,
         &pre_boxing_calls,
         &retained.calls,
         &retained.rows,
+        &closure_captures,
         errors,
     )?;
     // Confinement and receiver-ref capture run before boxing collapses `&mut T`

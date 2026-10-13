@@ -10,7 +10,7 @@ use crate::analyze::Analyzer;
 use crate::ast::{
     AstId, AstIdSpace, AstVisitor, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
 };
-use crate::ast_index::AstIndex;
+use crate::ast_index::{AstIndex, FunctionLocation};
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageRequest, plan_module, render_plan};
@@ -19,7 +19,7 @@ use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
 use crate::elaborator::orchestration::{AnnotateState, rt_unreachable_calls};
-use crate::elaborator::sem::types::MethodDispatch;
+use crate::elaborator::sem::types::{CoercionKind, DesugarKind, MethodDispatch};
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::from_marker::write_out_from_markers;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -589,7 +589,6 @@ impl Semantics {
     /// `crate::elaborator::sem::types::CoercionKind` variant, snake-cased.
     #[must_use]
     pub fn coercion_view(&self, id: AstId) -> Option<(String, TypeId)> {
-        use crate::elaborator::sem::types::CoercionKind;
         let choice = self.fact_at(ModuleSemantics::COERCIONS, id)?;
         let kind = match choice.kind {
             CoercionKind::NumericLiteral => "numeric_literal",
@@ -622,7 +621,6 @@ impl Semantics {
     /// variant set.
     #[must_use]
     pub fn desugar_view(&self, id: AstId) -> Option<String> {
-        use crate::elaborator::sem::types::DesugarKind;
         let kind = self.fact_at(ModuleSemantics::DESUGARS, id)?;
         let name = match kind {
             DesugarKind::Assert => "assert",
@@ -767,7 +765,6 @@ impl Semantics {
 
     /// The function [`Semantics::function_at`] answers, with the item holding it.
     fn function_and_item_at(&self, id: AstId) -> Option<(&ast::Function, &Item)> {
-        use crate::ast_index::FunctionLocation;
         let owning = self.module_of_id(id)?;
         let module = self.modules.get(owning)?;
         let location = self.ast_indices.get(owning)?.function_location(id)?;
@@ -846,7 +843,6 @@ impl Semantics {
         receiver: &symbol_notation::Receiver,
         member: &str,
     ) -> Result<Definition, SymbolResolveError> {
-        use crate::ast::Item;
         let ast = self
             .modules
             .get(module)
@@ -890,7 +886,6 @@ impl Semantics {
         receiver: &symbol_notation::Receiver,
         public_only: bool,
     ) -> Vec<String> {
-        use crate::ast::Item;
         let mut names: Vec<String> = Vec::new();
         let Some(ast) = self.modules.get(module) else {
             return names;
@@ -964,7 +959,6 @@ impl Semantics {
     /// listed; otherwise every declared item is.
     #[must_use]
     pub fn module_symbol_names(&self, module: &ModuleSource, public_only: bool) -> Vec<String> {
-        use crate::ast::Item;
         let mut names: Vec<String> = Vec::new();
         if let Some(ast) = self.modules.get(module) {
             for item in &ast.items {

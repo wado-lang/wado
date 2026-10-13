@@ -9,9 +9,10 @@ use crate::name::{FqTraitName, FqTypeName, LocalMethodName, minted_name};
 use crate::primitive::PrimitiveType;
 use crate::synthesis::common::bool_lit;
 use crate::tir::{
-    CallArg, FunctionRef, LetStorage, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, LetStorage, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
+    TirExpr, TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
+    TirPattern, TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId,
+    TypeTable, struct_fields,
 };
 use crate::token::Span;
 
@@ -129,7 +130,7 @@ fn peel_refs_and_box(
 /// scrutinees and synthesised references alike arrive box-shaped.
 pub struct Lowering {
     /// Map from a struct type's head-and-args to its field definitions.
-    struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+    struct_fields_map: StructFields,
     text_eq: TextEq,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
@@ -198,12 +199,6 @@ impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
     pub fn new(flat: &FlatPackage, returns_receiver_alias: &FuncKeySet) -> Self {
-        let mut struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>> =
-            IndexMap::default();
-        for s in &flat.structs {
-            struct_fields_map.insert((s.def, s.type_args.clone()), s.fields.clone());
-        }
-
         let mut const_int_globals: IndexMap<(ModuleSource, String), i128> = IndexMap::default();
         for g in &flat.globals {
             // A `global mut` can change, and a deferred global holds a
@@ -220,7 +215,7 @@ impl Lowering {
         }
 
         Self {
-            struct_fields_map,
+            struct_fields_map: struct_fields(&flat.structs),
             text_eq: TextEq::new(flat),
             const_int_globals,
             returns_receiver_alias: returns_receiver_alias.clone(),
@@ -260,7 +255,7 @@ struct PatternLowerer<'a> {
     temp_counter: u32,
     text_eq: &'a TextEq,
     /// Map from a struct type's head-and-args to its field definitions.
-    struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+    struct_fields_map: &'a StructFields,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
     returns_receiver_alias: &'a FuncKeySet,
@@ -356,7 +351,7 @@ impl<'a> PatternLowerer<'a> {
         local_count: u32,
         locals: Vec<TirLocal>,
         text_eq: &'a TextEq,
-        struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+        struct_fields_map: &'a StructFields,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
         returns_receiver_alias: &'a FuncKeySet,
     ) -> Self {

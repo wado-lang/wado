@@ -737,7 +737,6 @@ impl<'a> Interpreter<'a> {
     /// Recording the aliasing analysis first is what lets [`Self::bind_local`]
     /// keep an unaliased `elements = […]` rather than demote it.
     pub fn bind_block_lets(&mut self, body: &nir_arena::Body, block: BlockId) {
-        use crate::nir_arena::StmtKind;
         let stmts = body.blocks[block].stmts.clone();
         let Some((_, lets)) = stmts.split_last() else {
             return;

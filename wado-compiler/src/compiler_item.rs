@@ -434,6 +434,10 @@ pub enum CompilerItem {
     /// `List`'s `IndexValue<i32>::index_value` — the element read a `list<T>`
     /// lower walks.
     ListIndexValue,
+    /// `List`'s `IndexAssign<i32>::index_assign` — `xs[i] = v`, which writes
+    /// into the element's storage where a borrow of it may be read after
+    /// (WEP 2026-10-13).
+    ListIndexAssign,
     /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
     /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
     /// call it.
@@ -854,6 +858,7 @@ impl CompilerItem {
         Self::ListWithCapacity,
         Self::ListLen,
         Self::ListIndexValue,
+        Self::ListIndexAssign,
         Self::ListFromTuple,
         Self::ListFromLeBytes,
         Self::ReflectTypeName,
@@ -1099,6 +1104,7 @@ impl CompilerItem {
             Self::ListWithCapacity => "list_with_capacity",
             Self::ListLen => "list_len",
             Self::ListIndexValue => "list_index_value",
+            Self::ListIndexAssign => "list_index_assign",
             Self::ListFromTuple => "list_from_tuple",
             Self::ListFromLeBytes => "list_from_le_bytes",
             Self::ReflectTypeName => "reflect_type_name",
@@ -1341,6 +1347,7 @@ impl CompilerItem {
             | Self::ListWithCapacity
             | Self::ListLen
             | Self::ListIndexValue
+            | Self::ListIndexAssign
             | Self::ListFromTuple
             | Self::ListFromLeBytes
             | Self::ReflectTypeName
@@ -1641,6 +1648,7 @@ impl CompilerItem {
             | Self::ListWithCapacity
             | Self::ListLen
             | Self::ListIndexValue
+            | Self::ListIndexAssign
             | Self::ListFromTuple
             | Self::ListFromLeBytes
             | Self::ReflectTypeName
@@ -2448,6 +2456,12 @@ impl CompilerItems {
         };
         let def = def.unwrap_or_else(|| panic!("compiler item `{item}` records no declaration"));
         TemplateId::Declared { def, block }
+    }
+
+    /// [`Self::require_template`], or `None` where the item is not registered.
+    pub fn template(&self, item: CompilerItem) -> Option<TemplateId> {
+        self.get(item)?;
+        Some(self.require_template(item))
     }
 
     /// Module + name of a [`CompilerItemKind::Function`] item.

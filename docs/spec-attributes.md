@@ -461,6 +461,8 @@ fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 
 Module-level inner attribute. All items in this module are compiled into a separate Wasm core module with the given name, which owns its own linear memory.
 
+That core module holds this module's code and nothing else, so that it stays small. A function in it calls only the module's own functions and `builtin::` functions, and a call to anything else, a prelude method or a Wasm asset's function included, is an error.
+
 The Component Model requires a component to provide a linear memory and a `realloc` function for data crossing the boundary. `core:allocator` provides both as the core module `"mem"`, the only `wasm_module` in the standard library. Its header is quoted under [`#![stdlib]`](#stdlibpath).
 
 ### `#[allocator("name")]`

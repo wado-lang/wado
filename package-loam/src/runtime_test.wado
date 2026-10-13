@@ -10,7 +10,6 @@ use {
     operand,
     Window,
     axis_mismatch,
-    ceil_div,
     checked_element_count,
     concat,
     conv,
@@ -18,7 +17,6 @@ use {
     conv_grouped,
     conv_grouped_bias,
     extent_mismatch,
-    floor_div,
     from_end,
     gather,
     gather_rows,
@@ -705,10 +703,7 @@ test "concat of an empty operand is the other" {
     assert concat::<f32, [Batch], Row, Row, Row, [Col]>(&none, &none, 1).extents == [0, 2, 2] as List<i32>;
 }
 
-test "ceil_div and floor_div round a quotient, and from_end counts a negative index from the end" {
-    assert ceil_div(7, 2) == 4 && ceil_div(6, 2) == 3 && ceil_div(-7, 2) == -3;
-    assert floor_div(7, 2) == 3 && floor_div(6, 2) == 3 && floor_div(-7, 2) == -4;
-    assert floor_div(i64::MIN, 2) == i64::MIN / 2 && floor_div(i64::MIN + 1, 2) == i64::MIN / 2;
+test "from_end counts a negative index from the end" {
     assert from_end(-1, 8) == 7 && from_end(3, 8) == 3;
 }
 

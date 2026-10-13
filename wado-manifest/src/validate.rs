@@ -424,25 +424,14 @@ authors = ["Alice"]
         let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
         let m = toml.parse::<Manifest>().unwrap();
         let errs = validate_for_publish(&m);
-        use super::PublishError::*;
-        assert!(errs.contains(&MissingNamespace), "{errs:?}");
-        assert!(errs.contains(&MissingLicense), "{errs:?}");
-        assert!(
-            errs.contains(&MissingMetadata {
-                field: "description"
-            }),
-            "{errs:?}"
-        );
-        assert!(
-            errs.contains(&MissingMetadata {
-                field: "repository"
-            }),
-            "{errs:?}"
-        );
-        assert!(
-            errs.contains(&MissingMetadata { field: "authors" }),
-            "{errs:?}"
-        );
+        assert!(errs.contains(&PublishError::MissingNamespace), "{errs:?}");
+        assert!(errs.contains(&PublishError::MissingLicense), "{errs:?}");
+        for field in ["description", "repository", "authors"] {
+            assert!(
+                errs.contains(&PublishError::MissingMetadata { field }),
+                "{errs:?}"
+            );
+        }
     }
 
     #[test]

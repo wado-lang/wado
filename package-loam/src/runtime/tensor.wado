@@ -20,7 +20,7 @@ pub struct Packed<K, N> {
 
 /// The `rows` by `cols` matrix whose element `[r, c]` is `at(r, c)`, packed.
 fn packed_matrix<K, N>(rows: i32, cols: i32, at: fn(i32, i32) -> f32) -> Packed<K, N> {
-    let per_row = (cols + 3) / 4;
+    let per_row = cols.div_ceil(4);
     let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
     for let r of 0..<rows {
         for let v of 0..<per_row {
@@ -154,20 +154,6 @@ pub fn unmet(slack: i64, condition: String) -> Option<String> {
         return null;
     }
     return Option::Some(`${condition}, and the inputs miss it by ${-slack}`);
-}
-
-/// `a / d` rounded up, for a positive `d`, as `Slice` and `Range` count steps.
-pub fn ceil_div(a: i64, d: i64) -> i64 {
-    assert d > 0;
-    let q = a / d;
-    return if a % d > 0 { q + 1 } else { q };
-}
-
-/// `a / d` rounded down, for a positive `d`.
-pub fn floor_div(a: i64, d: i64) -> i64 {
-    assert d > 0;
-    let q = a / d;
-    return if a % d < 0 { q - 1 } else { q };
 }
 
 /// An ONNX index into an axis of `extent` positions, which counts from the end

@@ -70,7 +70,7 @@ pub mod signature_reach;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
-use crate::ast::UseDecl;
+use crate::ast::{Item, Type, UseDecl, attrs_allow, inner_attrs_allow, lint};
 use std::convert::Infallible;
 use std::sync::Arc;
 
@@ -81,10 +81,12 @@ use crate::component_model::{
 };
 use crate::coverage::CoverageRequest;
 use crate::defs::DefId;
+use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
+use crate::resolve::Shadowed;
 use crate::wit_consume::module_host_leaf_imports;
-use crate::world_registry::TEST_WORLD;
+use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo};
 pub use stdlib_snapshot::prelude_names;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
@@ -99,6 +101,7 @@ pub mod trace;
 pub mod trait_solver;
 pub mod unparse;
 pub mod unresolved_types;
+pub mod wasm_module_calls;
 pub mod wir;
 pub mod wir_build;
 pub mod wir_optimize;
@@ -152,6 +155,7 @@ use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
+use wasm_module_calls::calls_out_of_wasm_modules;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
@@ -498,9 +502,6 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks).
 /// Pure over `Semantics`; `is_test_world` suppresses the `TestOnly*` warnings.
 fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Vec<Diagnostic> {
-    use crate::ast::Item;
-    use crate::compiler_host::{Code, DiagnosticSpan};
-
     let mut out = Vec::new();
     let mut collect = |ids: &[AstId], fn_code: Code, global_code: Code, reason: &str| {
         for id in ids {
@@ -581,10 +582,6 @@ pub fn lint_diagnostics(
 /// taking a name that already reached a declaration or an enclosing binder.
 /// Stdlib modules are left alone, as the unused lints leave them.
 fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
-    use crate::compiler_host::{Code, DiagnosticSpan};
-    use crate::elaborator::liveness::is_user_authored;
-    use crate::resolve::Shadowed;
-
     let Some(resolutions) = sem.resolutions() else {
         return Vec::new();
     };
@@ -618,10 +615,6 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
 /// Source-level `UndecidedEffects` diagnostics: every trait head that says
 /// nothing about the effects its impls may declare.
 fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
-    use crate::ast::{Item, attrs_allow, inner_attrs_allow, lint};
-    use crate::compiler_host::{Code, DiagnosticSpan};
-    use crate::elaborator::liveness::is_user_authored;
-
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
         if !is_user_authored(src)
@@ -701,9 +694,6 @@ fn collect_lib_surface(
     entry_source: &ModuleSource,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
 ) -> LibSurface {
-    use crate::ast::Item;
-    use crate::world_registry::WorldExportInfo;
-
     let mut submodule_exports = Vec::new();
     let mut submodule_type_decls = Vec::new();
     let mut submodule_interfaces = Vec::new();
@@ -767,22 +757,21 @@ fn adopt_types(
     let defs = resolutions.defs();
     for (def, published) in defs.adopted_by(entry_source) {
         let ast_id = defs.ast_id(def);
-        let item = match surface
+        let item = if let Some((_, item)) = surface
             .submodule_type_decls
             .iter_mut()
             .find(|(_, item)| item.id() == ast_id)
         {
-            Some((_, item)) => item,
-            None => {
-                let source = defs.module(def);
-                let item = modules[source]
-                    .items
-                    .iter()
-                    .find(|item| item.id() == ast_id)
-                    .expect("`export use` adopts a module-level declaration");
-                surface.foreign_types.push((source.clone(), item.clone()));
-                &mut surface.foreign_types.last_mut().expect("just pushed").1
-            }
+            item
+        } else {
+            let source = defs.module(def);
+            let item = modules[source]
+                .items
+                .iter()
+                .find(|item| item.id() == ast_id)
+                .expect("`export use` adopts a module-level declaration");
+            surface.foreign_types.push((source.clone(), item.clone()));
+            &mut surface.foreign_types.last_mut().expect("just pushed").1
         };
         *item
             .type_decl_name_mut()
@@ -799,7 +788,6 @@ fn stdlib_newtypes_in_lib_surface(
     entry: Option<&ast::Module>,
     surface: &LibSurface,
 ) -> Vec<(ModuleSource, ast::Item)> {
-    use crate::ast::Item;
     let defs = resolutions.defs();
     let stdlib_newtypes: hashmap::IndexMap<DefId, (&ModuleSource, &Item)> = modules
         .iter()
@@ -877,9 +865,6 @@ fn synthesize_lib_world_info(
     entry_module: &ast::Module,
     reexports: &[world_registry::WorldExportInfo],
 ) -> world_registry::WorldInfo {
-    use crate::ast::Item;
-    use crate::world_registry::{WorldExportInfo, WorldInfo};
-
     let mut exports: Vec<WorldExportInfo> = entry_module
         .items
         .iter()
@@ -986,7 +971,6 @@ impl<'a> LibTypeBinder<'a> {
 /// The types a library declaration carries: a struct's fields, a variant's
 /// payloads, a newtype's base. What [`resource_in_lib_sig`] follows a name into.
 fn declared_member_types(item: &ast::Item) -> Vec<&ast::Type> {
-    use crate::ast::Item;
     match item {
         Item::Struct(s) => s.fields.iter().map(|f| &f.ty).collect(),
         Item::Variant(v) => v.cases.iter().filter_map(|c| c.payload.as_ref()).collect(),
@@ -1006,7 +990,6 @@ fn resource_in_lib_sig<'a>(
     ty: &ast::Type,
     entered: &mut hashmap::IndexSet<ast::AstId>,
 ) -> Option<&'a str> {
-    use crate::ast::Type;
     let mut follow =
         |t: &ast::Type| resource_in_lib_sig(registry, resolutions, declared, t, entered);
     match ty {
@@ -1158,8 +1141,6 @@ async fn resolve_inline_providers<H: CompilerHost>(
     parent: &CompilerOptions,
     logger: &Logger<'_, H>,
 ) -> Result<Vec<ProviderComponent>, Bail> {
-    use crate::ast::Item;
-
     let entry_source = load_result.entry_module_source.clone();
     let entry_dir = entry_dir_of(Some(&entry_source));
 
@@ -1843,6 +1824,13 @@ fn compile_after_load<H: CompilerHost>(
 
     // Rejected here rather than at emit, where the split leaves a call to a
     // function the separated module never holds.
+    let calls_out = calls_out_of_wasm_modules(&flat);
+    for (module, diagnostic) in &calls_out {
+        let _ = logger.error_in(module, diagnostic.clone());
+    }
+    if !calls_out.is_empty() {
+        return Err(Bail);
+    }
     if let Some(name) = flat.wasm_module_sources.get(&flat.entry_module_source) {
         let _ = logger.error_in(
             &flat.entry_module_source,
@@ -2465,7 +2453,6 @@ struct DroppedComment {
 /// A comment present in `before` but missing from `after` (by delimiter+text
 /// multiset; `emit_comment` is verbatim so relocation keeps the same key).
 fn dropped_comment(before: &str, after: &str) -> Option<DroppedComment> {
-    use crate::hashmap::IndexMap;
     fn delim(kind: comment::CommentKind) -> &'static str {
         match kind {
             comment::CommentKind::Line => "//",
