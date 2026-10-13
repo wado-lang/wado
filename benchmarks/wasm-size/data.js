@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791831242736,
+  "lastUpdate": 1791872771961,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66673,6 +66673,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/19ac7137f02e27e1791b26ba83d60f97e88b3f4e"
         },
         "date": 1791831241789,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2943,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7320,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21814,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 342404,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a1237aa3428edf22e586daf8a7605dee31806cfb",
+          "message": "Merge pull request #2343 from wado-lang/ccr-6a7160a7-ois7bx\n\nfeat(doc): an impl method shows the contract its trait binds it to, in doc and hover",
+          "timestamp": "2026-10-13T15:11:20+09:00",
+          "tree_id": "e938f7448e5c72b19c99a031bc5f4c0532d949b4",
+          "url": "https://github.com/wado-lang/wado/commit/a1237aa3428edf22e586daf8a7605dee31806cfb"
+        },
+        "date": 1791872771376,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
