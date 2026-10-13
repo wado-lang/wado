@@ -166,9 +166,7 @@ impl LiftContext<'_> {
             .cm_decl_in(name, &module_source)
             // A lib-local type declared outside the entry module: the interface
             // FQ maps to the entry module, so resolve via the type's recorded
-            // declaration. One name reaches one declaration here, since a
-            // surface carrying the same public name twice is refused before
-            // synthesis.
+            // declaration.
             .or_else(|| self.cm_interface_registry.lib_local_type_def(name))
             .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
     }

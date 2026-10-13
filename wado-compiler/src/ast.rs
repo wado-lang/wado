@@ -1444,7 +1444,6 @@ impl Item {
             name,
             is_export,
             type_params,
-            is_cm_bound: self.attrs().iter().any(|a| a.cm_boundary.is_some()),
         })
     }
 
@@ -1526,8 +1525,6 @@ pub struct TypeDeclHead<'a> {
     /// `export`: the package's Component Model interface publishes it.
     pub is_export: bool,
     pub type_params: &'a [GenericParam],
-    /// A `#[cm(…)]` binds it to an interface of its own.
-    pub is_cm_bound: bool,
 }
 
 /// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].

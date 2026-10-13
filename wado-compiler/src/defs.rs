@@ -8,6 +8,7 @@ use crate::ast;
 use crate::ast::{
     AstId, AstVisitor, ImplBlock, Item, Module, Stmt, UseItem, Visibility, walk_item,
 };
+use crate::component_model::cm_definition;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::TUPLE_TYPE_NAME;
@@ -366,7 +367,7 @@ impl DefTable {
             let def = self.def_at(item.id());
             self.publish(def, module, &self.name(def).to_string());
         }
-        if item.attrs().iter().any(|attr| attr.cm_boundary.is_some())
+        if cm_definition(item).is_some()
             && let Some(def) = self.of_ast_id(item.id())
             && self.kind(def).is_type()
         {
@@ -376,9 +377,14 @@ impl DefTable {
 
     fn publish(&mut self, def: DefId, module: &ModuleSource, name: &str) {
         let publishers = self.publishers.entry(def).or_default();
-        if !publishers.iter().any(|(m, n)| m == module && n == name) {
-            publishers.push((module.clone(), name.to_string()));
+        if let Some((_, earlier)) = publishers.iter().find(|(m, _)| m.same_package(module)) {
+            assert_eq!(
+                earlier, name,
+                "analyze rejects an `export use` publishing a type under a second name"
+            );
+            return;
         }
+        publishers.push((module.clone(), name.to_string()));
     }
 
     /// The types `module`'s package publishes that another package declares,

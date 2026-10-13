@@ -12,6 +12,7 @@ use crate::ast::{
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
+use crate::component_model::cm_definition;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
@@ -1583,7 +1584,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     .or_insert_with(|| published.to_string());
                 if symbol.module_source().same_package(from) {
                     AnalyzeError::ExportUseOwnType { name, span }
-                } else if decl.is_cm_bound {
+                } else if cm_definition(item).is_some() {
                     unpublishable(Unpublishable::CmBound)
                 } else if !decl.type_params.is_empty() {
                     unpublishable(Unpublishable::Generic)

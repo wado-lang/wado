@@ -99,6 +99,8 @@ pub struct Semantics {
     /// What each `export(World::name)` in the entry module names. Empty unless
     /// lowering succeeded.
     pub(crate) export_mappings: ExportMappings,
+    /// The name each type the entry's `export use` adopts is published under.
+    published_names: IndexMap<DefId, String>,
     /// The coverage plan reify instrumented this compile with, under
     /// `wado test --coverage`.
     pub(crate) coverage: Option<CoverageMap>,
@@ -203,22 +205,14 @@ impl Semantics {
             world_registry: self.world_registry(),
             wit_contract: self.wit_contract.as_ref(),
             export_mappings: &self.export_mappings,
-            published_names: self.published_names(),
+            published_names: &self.published_names,
         }
     }
 
     /// The name each type the entry's `export use` adopts is published under.
     #[must_use]
-    pub fn published_names(&self) -> IndexMap<DefId, String> {
-        self.resolutions()
-            .map(|resolutions| {
-                resolutions
-                    .defs()
-                    .adopted_by(&self.entry_module_source)
-                    .map(|(def, name)| (def, name.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default()
+    pub fn published_names(&self) -> &IndexMap<DefId, String> {
+        &self.published_names
     }
 
     /// A cloned handle to the CM interface registry `Arc` (`None` before it is
@@ -295,6 +289,7 @@ impl Semantics {
             is_complete: false,
             wit_contract: None,
             export_mappings: ExportMappings::default(),
+            published_names: IndexMap::default(),
             coverage: None,
         }
     }
@@ -1327,6 +1322,13 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     } else {
         ExportMappings::default()
     };
+    let published_names = state
+        .tysys
+        .resolutions
+        .defs()
+        .adopted_by(&load_result.entry_module_source)
+        .map(|(def, name)| (def, name.to_string()))
+        .collect();
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1342,6 +1344,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         is_complete: cm_bound && no_syntax_errors,
         wit_contract: None,
         export_mappings,
+        published_names,
         coverage,
     }
 }

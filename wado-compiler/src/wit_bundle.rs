@@ -74,7 +74,7 @@ pub fn encode_component_type_from(
     let opts = WitEmitOptions {
         scope: WitScope::Full,
     };
-    let text = wit_emit::emit_wit_text_from(input.clone(), &opts, surface)?;
+    let text = wit_emit::emit_wit_text_from(input, &opts, surface)?;
 
     let mut resolve = wit_parser::Resolve::new();
     let pkg = resolve

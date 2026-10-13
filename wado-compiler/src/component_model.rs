@@ -1572,7 +1572,7 @@ pub fn cm_bound_defs<'i>(
 
 /// The name `item` declares and the interface its `#[cm(…)]` binds it to, or
 /// `None` for an item binding none.
-fn cm_definition(item: &Item) -> Option<(&str, String)> {
+pub fn cm_definition(item: &Item) -> Option<(&str, String)> {
     let (name, attrs) = match item {
         Item::Newtype(a) => (&a.name, a.attrs.as_slice()),
         Item::Resource(r) => (&r.name, r.attrs.as_slice()),
@@ -2703,8 +2703,14 @@ impl CmInterfaceRegistry {
             let decl = item
                 .type_decl()
                 .expect("a library publishes only types beyond its entry module");
-            self.lib_local_type_defs
+            let earlier = self
+                .lib_local_type_defs
                 .insert(decl.name.to_string(), defs.def_at(item.id()));
+            assert!(
+                earlier.is_none(),
+                "a surface publishing `{}` twice is refused before registration",
+                decl.name
+            );
             self.register_lib_local_item(item, iface_fq);
         }
     }

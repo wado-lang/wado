@@ -115,7 +115,7 @@ pub fn wit_contract(
 /// and a detached [`WitEmitSnapshot`] both feed the emitter through this view,
 /// so `wado compile` and `wado wit` derive WIT from the same analysis codegen
 /// ran (issue #1654).
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct WitEmitInput<'a> {
     /// Whether the analysis ran to completion; emission refuses partial state.
     pub is_complete: bool,
@@ -133,7 +133,7 @@ pub struct WitEmitInput<'a> {
     /// Which world export each `export(…)` function provides.
     pub export_mappings: &'a ExportMappings,
     /// The name each type the entry's `export use` adopts is published under.
-    pub published_names: IndexMap<DefId, String>,
+    pub published_names: &'a IndexMap<DefId, String>,
 }
 
 /// A detached, owned copy of the WIT-relevant frontend subset, cloned before
@@ -183,7 +183,7 @@ impl WitEmitSnapshot {
             world_registry: Some(&self.world_registry),
             wit_contract: Some(&self.wit_contract),
             export_mappings: &self.export_mappings,
-            published_names: self.published_names.clone(),
+            published_names: &self.published_names,
         }
     }
 }
@@ -293,7 +293,7 @@ struct Emitter<'a> {
     pending: BTreeSet<(String, DefId)>,
     /// Declarations already emitted as a `TypeDef`.
     emitted: BTreeSet<DefId>,
-    published_names: IndexMap<DefId, String>,
+    published_names: &'a IndexMap<DefId, String>,
 }
 
 /// One exported function gathered from the frontend, before WIT rendering.
