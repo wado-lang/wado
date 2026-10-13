@@ -260,8 +260,8 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
     build_world_components(targets, &opts.knobs, opts.embed).await
 }
 
-/// Build every target concurrently, announcing each as it lands and reporting
-/// each failure as it lands, so one broken world does not hide another. The
+/// Build every target concurrently, announcing each artifact and printing each
+/// failure as it lands, so one broken world does not hide another. The
 /// builds share the cores, so unless `--optimize-threads` says otherwise each
 /// optimizes on its share of them.
 pub async fn build_world_components(
@@ -296,21 +296,18 @@ pub async fn build_world_components(
             Ok(())
         });
     }
-    let mut failed = false;
+    let mut exit_code = None;
     while let Some(joined) = builds.join_next().await {
         match joined {
             Ok(Ok(())) => {}
             Ok(Err(failure)) => {
                 eprint!("{}", failure.message);
-                failed = true;
+                exit_code.get_or_insert(failure.exit_code);
             }
             Err(join) => std::panic::resume_unwind(join.into_panic()),
         }
     }
-    if failed {
-        return Err(CliExit::silent_failure(1));
-    }
-    Ok(())
+    exit_code.map_or(Ok(()), |code| Err(CliExit::silent_failure(code)))
 }
 
 /// The single project-build path: compile one world with `[package]` metadata
