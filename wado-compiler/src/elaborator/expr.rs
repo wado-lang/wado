@@ -11,7 +11,7 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclName, FqTypeName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
+    FqTraitName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
     split_local_method,
 };
 use crate::tir::{
@@ -46,7 +46,6 @@ use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
-use crate::elaborator::trait_env::{ImplTargetKey, written_type_arg};
 use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
@@ -5310,7 +5309,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 outer_err_type,
                 &from,
             ) {
-                self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
+                self.resolve_from_call(outer_err_type, inner_err_type, &from, qm_id);
             } else {
                 let (outer, inner) = {
                     let tt = self.tysys.type_table.borrow();
@@ -5337,7 +5336,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `impl From<from_type> for target_type`, under the `?` that converts
     /// through it, so reify rebuilds the `Call` without re-walking impl blocks
     /// or re-mangling.
-    fn resolve_from_call(&mut self, target_type: TypeId, from_type: TypeId, qm_id: AstId) {
+    fn resolve_from_call(
+        &mut self,
+        target_type: TypeId,
+        from_type: TypeId,
+        from: &FqTraitName,
+        qm_id: AstId,
+    ) {
         let tt = self.tysys.type_table.borrow();
         // Reify reads the names below back as written, so an unsolved type
         // would mangle into a callee no monomorphization produces.
@@ -5345,16 +5350,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let target_name = DeclName::new(tt.type_name(target_type));
-        let from_name = tt.fq_type_name(from_type);
-        let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         let type_param = match tt.get(target_type) {
             ResolvedType::TypeParam { name, .. } => Some(name.clone()),
             _ => None,
         };
         drop(tt);
 
-        let (impl_def, module_source) = self.find_from_impl(target_type, &target_name, &from_name);
+        let (impl_def, module_source) = self.find_from_impl(target_type, from);
         let target_receiver = match (impl_def, &type_param) {
             (Some(def), _) => {
                 self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type)
@@ -5363,6 +5365,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (None, None) => self.tysys.fq_receiver_head(target_type),
         };
 
+        // The trait as the selected block writes it, which names its function:
+        // `From<T>` for `impl<T> From<T> for Slot<T>`.
+        let trait_name = match impl_def {
+            Some(def) => self
+                .tysys
+                .trait_env
+                .fq_trait_of_impl(
+                    &self.tysys.trait_env.impl_headers[&def],
+                    &self.tysys.resolutions,
+                )
+                .expect("a `From` impl names its trait"),
+            None => from.clone(),
+        };
+        // A generic block's function is instantiated at the target's arguments.
+        let impl_type_args = impl_def
+            .filter(|def| !self.tysys.trait_env.impl_headers[def].is_concrete())
+            .and_then(|_| {
+                self.tysys
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(target_type)
+            })
+            .unwrap_or_default();
         let type_param_receiver = impl_def.is_none() && type_param.is_some();
         // Through a bound the trait's own method is the callee, whose edges
         // keep every impl live until monomorphization picks one.
@@ -5380,57 +5405,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 module_source,
                 target_name: target_receiver,
                 type_param_receiver,
-                from_name,
-                from_trait_name,
+                trait_name,
+                impl_type_args,
             },
         );
     }
 
-    /// The `impl From<from_name> for target_type` block and the module that
-    /// wrote it. No block where the target is a type parameter.
+    /// The block the solver selects for `target_type: from` and the module
+    /// that wrote it. No block where the target is a type parameter, whose
+    /// impl monomorphization picks.
     fn find_from_impl(
         &self,
         target_type: TypeId,
-        target_name: &DeclName,
-        from_name: &FqTypeName,
+        from: &FqTraitName,
     ) -> (Option<DefId>, ModuleSource) {
-        let target_args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(target_type)
-            .unwrap_or_default();
-        let mut keys =
-            self.impl_keys_of_from(&self.impl_target_of(target_type, target_name), from_name);
-        keys.retain(|&key| !self.impl_at_other_instantiation(key, &target_args));
+        let keys = self.tysys.solver().bound_impls(
+            &self.tysys,
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            target_type,
+            from,
+        );
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()
             .find(|key| *defs.module(**key) == self.current_module_source)
             .or_else(|| keys.first())
-            .map(|key| (Some(*key), defs.module(*key).clone()))
-            // The caller asked the solver first, so a miss is a type parameter
-            // whose impl monomorphization picks.
-            .unwrap_or_else(|| (None, self.current_module_source.clone()))
-    }
-
-    /// The `impl From<from> for …` blocks on `target`. The argument is compared
-    /// by the declaration it names.
-    fn impl_keys_of_from(&self, target: &ImplTargetKey, from: &FqTypeName) -> Vec<DefId> {
-        let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
-            return Vec::new();
-        };
-        let env = &self.tysys.trait_env;
-        env.all_impl_keys(target)
-            .into_iter()
-            .filter(|key| {
-                let header = &env.impl_headers[key];
-                header.trait_def() == Some(from_trait)
-                    && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
-                        if g.args.len() == 1
-                            && written_type_arg(&g.args[0], &self.tysys.resolutions) == *from)
-            })
-            .collect()
+            .map_or_else(
+                || (None, self.current_module_source.clone()),
+                |key| (Some(*key), defs.module(*key).clone()),
+            )
     }
 }
 

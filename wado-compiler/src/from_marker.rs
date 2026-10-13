@@ -2,7 +2,7 @@
 //!
 //! ```wado
 //! impl From<P> for V {
-//!     fn from(value: P) -> Self { return builtin::wrap_in_case::<Self, P>(value); }
+//!     fn from($value: P) -> Self { return builtin::wrap_in_case::<Self, P>($value); }
 //! }
 //! ```
 //!
@@ -23,6 +23,7 @@ use crate::compiler_item::{CompilerItem, parse_compiler_item_attrs};
 use crate::defs::DefTable;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::INTERNAL_PREFIX;
 use crate::resolve::TraitHeads;
 use crate::symbol::SymbolTable;
 use crate::token::Span;
@@ -118,7 +119,7 @@ fn marker_payload(block: &ImplBlock) -> Option<&Type> {
     }
 }
 
-/// `fn from(value: P) -> Self { return builtin::wrap_in_case::<Self, P>(value); }`,
+/// `fn from($value: P) -> Self { return builtin::wrap_in_case::<Self, P>($value); }`,
 /// every node at the marker's span, so what is reported against it points
 /// there.
 fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
@@ -148,9 +149,10 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
         type_args: Vec::new(),
         type_args_on_prefix: false,
     });
+    let value_name = format!("{INTERNAL_PREFIX}value");
     let value = Expr::Ident(IdentExpr {
         id: fresh(),
-        name: "value".to_string(),
+        name: value_name.clone(),
         span,
         segments: Vec::new(),
         type_args: Vec::new(),
@@ -177,7 +179,7 @@ fn from_method(module: &mut Module, source: &Type, span: Span) -> Function {
     let param = Param {
         id: fresh(),
         attrs: Vec::new(),
-        name: "value".to_string(),
+        name: value_name,
         name_span: span,
         ty: param_type,
         self_kind: SelfKind::None,

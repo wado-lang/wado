@@ -1677,14 +1677,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // rebuilds the `Cast` from the recorded `DesugarKind`;
                     // project only the result type.
                     let tt = self.tysys.type_table.borrow();
-                    if tt.newtype_chain_reaches(arg_type, receiver_type) {
-                        drop(tt);
-                        self.record_desugar(call.id, DesugarKind::NewtypeFromUnwrap);
-                        return receiver_type;
-                    }
-                    if tt.newtype_chain_reaches(receiver_type, arg_type) {
-                        drop(tt);
-                        self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
+                    let kind = if tt.newtype_chain_holds(arg_type, receiver_type) {
+                        Some(DesugarKind::NewtypeFromUnwrap)
+                    } else if tt.newtype_chain_holds(receiver_type, arg_type) {
+                        Some(DesugarKind::NewtypeFromWrap)
+                    } else {
+                        None
+                    };
+                    drop(tt);
+                    if let Some(kind) = kind {
+                        self.record_desugar(call.id, kind);
                         return receiver_type;
                     }
                 }

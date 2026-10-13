@@ -1304,19 +1304,21 @@ impl SolverBridge {
     }
 
     /// Every type converts to itself: `impl<T> From<T> for T`, which no source
-    /// can write, since a blanket needs a bound to say what it covers. A
-    /// newtype inherits it from its base, so it also states `From<Base>`.
+    /// can write, since a blanket needs a bound to say what it covers. Nothing
+    /// inherits it: a `flags` type wraps `u32` with no conversion between them,
+    /// and a newtype's conversions are stated per chain level instead.
     fn state_reflexive_from(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
         let Some(from) = tysys.compiler_trait_def(CompilerItem::From) else {
             return;
         };
-        program.push_impl(ImplDef {
+        let id = program.push_impl(ImplDef {
             trait_: Some(lowering.trait_decl(from)),
             trait_args: vec![SolverType::Param(0)],
             target: SolverType::Param(0),
             params: vec![ParamDef::default()],
             origin: ImplOrigin::Written,
         });
+        program.not_inherited.insert(id);
     }
 
     /// Each trait's supertraits, argument defaults and reference rule;
@@ -1445,9 +1447,8 @@ impl SolverBridge {
     }
 
     /// A newtype inherits its base's impls, and a `flags` type its primitive's.
-    /// Inheriting the reflexive `From` gives a newtype `From` of each type down
-    /// its chain; the converse is stated here. Answers the heads whose base it
-    /// stated.
+    /// A newtype's conversions along its chain are stated here, since none of
+    /// them is inherited. Answers the heads whose base it stated.
     fn state_newtype_bases(
         tysys: &TypeSystem,
         data: &DataDecls,
@@ -1503,9 +1504,10 @@ impl SolverBridge {
         stated
     }
 
-    /// `From<N> for B` for every `B` down newtype `N`'s chain of bases, none
-    /// of which a newtype of `B` inherits: `Meters` converts into `i64`, and
-    /// `Feet`, another newtype of `i64`, does not convert from `Meters`.
+    /// `From<N> for B` and `From<B> for N` for every `B` down newtype `N`'s
+    /// chain of bases, none of which a newtype of `B` inherits: `Meters`
+    /// converts to and from `i64`, and `Feet`, another newtype of `i64`, does
+    /// not convert from `Meters`.
     fn state_from_newtype(
         program: &mut Program,
         from: TraitDeclId,
@@ -1526,14 +1528,16 @@ impl SolverBridge {
             // A newtype cycle is reported where it is declared.
             && !seen.contains(&base)
         {
-            let id = program.push_impl(ImplDef {
-                trait_: Some(from),
-                trait_args: vec![own.clone()],
-                target: base.clone(),
-                params: vec![ParamDef::default(); params],
-                origin: ImplOrigin::Written,
-            });
-            program.not_inherited.insert(id);
+            for [source, target] in [[&own, &base], [&base, &own]] {
+                let id = program.push_impl(ImplDef {
+                    trait_: Some(from),
+                    trait_args: vec![source.clone()],
+                    target: target.clone(),
+                    params: vec![ParamDef::default(); params],
+                    origin: ImplOrigin::Written,
+                });
+                program.not_inherited.insert(id);
+            }
             seen.push(base.clone());
             level = base;
         }
@@ -2111,21 +2115,59 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<Option<DefId>> {
-        let Ok(q) = self.question(tysys, ctx, scope, type_id, asked) else {
-            return Vec::new();
-        };
-        let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
-        match rank(&found) {
-            Selection::AmbiguousBlankets(live) => live
-                .iter()
-                .map(|&i| self.impl_def_of(found[i].impl_))
-                .collect(),
+        self.bound_order(tysys, ctx, scope, type_id, asked, |selection| match selection {
+            Selection::AmbiguousBlankets(live) => live,
             Selection::None
             | Selection::One(_)
             | Selection::AmbiguousTraits(_)
             | Selection::Overloaded(_)
             | Selection::Duplicated(_) => Vec::new(),
-        }
+        })
+    }
+
+    /// The blocks the order selects to answer a bound `asked` on `type_id`:
+    /// one, or the duplicates coherence reports where they are written.
+    /// A derived answer, or a type parameter's, names no block.
+    pub(super) fn bound_impls(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Vec<DefId> {
+        self.bound_order(tysys, ctx, scope, type_id, asked, |selection| match selection {
+            Selection::One(index) => vec![index],
+            Selection::Duplicated(live) => live,
+            Selection::None
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_) => Vec::new(),
+        })
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    /// The blocks of the candidates `pick` keeps from the order's selection
+    /// for a bound `asked` on `type_id`.
+    fn bound_order(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+        pick: impl FnOnce(Selection) -> Vec<usize>,
+    ) -> Vec<Option<DefId>> {
+        let Ok(q) = self.question(tysys, ctx, scope, type_id, asked) else {
+            return Vec::new();
+        };
+        let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
+        pick(rank(&found))
+            .into_iter()
+            .map(|i| self.impl_def_of(found[i].impl_))
+            .collect()
     }
 
     /// What the order selects for a call of `method_name` on `type_id` made in

@@ -604,11 +604,12 @@ pub(crate) struct FromCallFacts {
     /// Whether the receiver is a type parameter, which each instance's
     /// dispatch resolves: `F` in `fn f<F: From<E>>() -> Result<T, F>`.
     pub(crate) type_param_receiver: bool,
-    /// `fq_type_name(from_type)` — the conversion source type, used to build
-    /// `LocalMethodName::trait_name`'s `From<…>` form.
-    pub(crate) from_name: FqTypeName,
-    /// The `From` trait, named by the module that declares it.
-    pub(crate) from_trait_name: FqTraitName,
+    /// The `From<…>` the callee's name carries: as the selected block writes
+    /// it, or as the `?` asks it where no block is selected.
+    pub(crate) trait_name: FqTraitName,
+    /// The target's arguments a generic block is instantiated at; empty for
+    /// a concrete one.
+    pub(crate) impl_type_args: Vec<TypeId>,
 }
 
 /// The trait method a literal lowers to (WEP 2026-08-24): an

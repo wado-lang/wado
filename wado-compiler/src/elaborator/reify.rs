@@ -6402,10 +6402,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         facts: FromCallFacts,
     ) -> TirExpr {
-        let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
-        let mut method_info =
-            LocalMethodName::new(facts.target_name, Some(from_trait), "from".to_string());
+        let generic =
+            LocalMethodName::new(facts.target_name, Some(facts.trait_name), "from".to_string());
+        let arg_names: Vec<FqTypeName> = {
+            let table = self.tysys.type_table.borrow();
+            facts
+                .impl_type_args
+                .iter()
+                .map(|&arg| table.fq_type_name_rowless(arg))
+                .collect()
+        };
+        let mut method_info = generic.with_type_args(&arg_names, &[]);
         method_info.is_type_param_receiver = facts.type_param_receiver;
+        let monomorph_info = (!facts.impl_type_args.is_empty()).then(|| MonomorphInfo {
+            generic_name: generic.to_mangled_name(),
+            impl_type_args: facts.impl_type_args,
+            method_type_args: vec![],
+            is_blanket: false,
+        });
 
         TirExpr::new(
             TirExprKind::Call {
@@ -6421,7 +6435,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     },
                     module_source: facts.module_source,
                     name: method_info.to_mangled_name(),
-                    monomorph_info: None,
+                    monomorph_info,
                     method_info: Some(method_info),
                 }),
                 type_args: vec![],

@@ -322,15 +322,18 @@ any written impl does, and an impl whose variant has no matching case, or more
 than one, is reported at the marker.
 
 The reflexive `From<T> for T` and a newtype's `From` impls are stated to the
-trait solver, so a bound holds for them as it does for a written impl. A
-newtype inherits the reflexive impl from each base down its chain, which gives
-it `From` of each; each base's `From<Newtype>` is stated on its own and is not
-inherited, or every other newtype of that base would convert from this one. No
-body backs them: a call through a bound that monomorphization finds converting
-to the same type, or along a newtype chain, becomes a cast.
+trait solver, so a bound holds for them as it does for a written impl. None of
+them is inherited: a `flags` type, which inherits from `u32`, would otherwise
+meet a `From<u32>` bound with no conversion behind it, and every newtype of a
+base would convert from every other. So each newtype's `From` in both
+directions is stated per base down its chain. No body backs them: a call
+through a bound that monomorphization finds converting to the same type, or
+along a newtype chain, becomes a cast. A reference is not on the chain, so
+`i64::from(&m)` asks for an impl like any other argument.
 
 `?` asks the solver for `From<E>` while it types the operator, so a missing
-impl is reported in a function nothing calls.
+impl is reported in a function nothing calls, and converts through the block
+the solver selects, a generic marker's included.
 
 ## Future Considerations
 

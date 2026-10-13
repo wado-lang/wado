@@ -5128,9 +5128,16 @@ impl TypeTable {
     /// (WEP: Conversion Traits).
     #[must_use]
     pub fn converts_without_impl(&self, target: TypeId, source: TypeId) -> bool {
-        self.type_key(target) == self.type_key(source)
-            || self.newtype_chain_reaches(target, source)
-            || self.newtype_chain_reaches(source, target)
+        self.newtype_chain_holds(target, source) || self.newtype_chain_holds(source, target)
+    }
+
+    /// Whether `link` is `id` or lies down its newtype chain. A reference is a
+    /// type of its own here, never stepped over: `&Meters` does not wrap `i64`
+    /// the way `Meters` does.
+    #[must_use]
+    pub fn newtype_chain_holds(&self, id: TypeId, link: TypeId) -> bool {
+        let link = self.type_key(link);
+        self.newtype_chain(id).any(|t| self.type_key(t) == link)
     }
 
     /// A newtype's representation head, or `None` for anything else. The head
