@@ -513,11 +513,11 @@ fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> 
 
 /// `&candidate` — the shape a callee that does not store its parameter may hold
 /// without forcing an escape.
-fn is_immut_ref_to_candidate(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> bool {
-    matches!(
-        ref_to_candidate_local(body, expr, candidates),
-        Some((_, false))
-    )
+fn immut_ref_to_candidate(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> Option<u32> {
+    match ref_to_candidate_local(body, expr, candidates) {
+        Some((index, false)) => Some(index),
+        _ => None,
+    }
 }
 
 /// The shared place classification every walker keys on: if `expr` is a
@@ -924,11 +924,17 @@ impl SoftCtx<'_> {
             ExprKind::Call { func_id, args, .. } => {
                 let callee_id = *func_id;
                 let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                // Each borrow is rebuilt as its own literal, so a callee handed
+                // one candidate twice could tell the two apart (`ref_eq`).
+                let mut lent: IndexSet<u32> = IndexSet::default();
                 for (i, arg) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
-                    if is_immut_ref_to_candidate(body, arg, self.candidates)
+                    if let Some(index) = immut_ref_to_candidate(body, arg, self.candidates)
                         && !callee_stores_param_at(callee_id, i, self.stores_lookup)
                     {
+                        if !lent.insert(index) {
+                            hard_escaped.insert(index);
+                        }
                         continue;
                     }
                     self.expr(body, arg, false, hard_escaped);
