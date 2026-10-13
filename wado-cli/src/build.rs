@@ -9,7 +9,12 @@
 //! path deps from the nearest manifest itself.
 
 use std::fmt::Write as _;
+use std::num::NonZero;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, CompileOptions};
@@ -248,15 +253,66 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
         ));
     }
 
+    let targets = targets
+        .into_iter()
+        .map(|target| match &opts.output {
+            Some(path) => BuildTarget {
+                output: PathBuf::from(path),
+                ..target
+            },
+            None => target,
+        })
+        .collect();
+    build_world_components(targets, &opts.knobs, opts.embed).await
+}
+
+/// Build every target concurrently, announcing each as it lands, and fail with
+/// the first failure only once all have finished, so one broken world does not
+/// hide another. The builds share the cores, so unless `--optimize-threads`
+/// says otherwise each optimizes on its share of them.
+pub async fn build_world_components(
+    targets: Vec<BuildTarget>,
+    knobs: &CompileKnobs,
+    embed: EmbedOptions,
+) -> Result<(), CliExit> {
+    let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
+    let mut knobs = knobs.clone();
+    knobs.opt_threads = knobs
+        .opt_threads
+        .or(Some((cores / targets.len().max(1)).max(1)));
+    let knobs = Arc::new(knobs);
+    let slots = Arc::new(Semaphore::new(cores));
+    let mut builds = JoinSet::new();
     for target in targets {
-        let output = match &opts.output {
-            Some(path) => PathBuf::from(path),
-            None => target.output.clone(),
-        };
-        build_world_component(&target, &output, &opts.knobs, opts.embed).await?;
-        compile::announce_artifact(&output);
+        let slot = Arc::clone(&slots)
+            .acquire_owned()
+            .await
+            .expect("the build semaphore is never closed");
+        let knobs = Arc::clone(&knobs);
+        // A compile future is not `Send`, so each build runs on a blocking
+        // thread under a runtime of its own, as `wado test`'s compiles do.
+        builds.spawn_blocking(move || {
+            let _slot = slot;
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| CliExit::error(format!("unable to create a build runtime: {e}")))?
+                .block_on(build_world_component(&target, &target.output, &knobs, embed))?;
+            compile::announce_artifact(&target.output);
+            Ok(())
+        });
     }
-    Ok(())
+    let mut first_failure = None;
+    while let Some(joined) = builds.join_next().await {
+        match joined {
+            Ok(Ok(())) => {}
+            Ok(Err(failure)) => {
+                first_failure.get_or_insert(failure);
+            }
+            Err(join) => std::panic::resume_unwind(join.into_panic()),
+        }
+    }
+    first_failure.map_or(Ok(()), Err)
 }
 
 /// The single project-build path: compile one world with `[package]` metadata

@@ -1208,27 +1208,6 @@ pub fn build_dir(root: &Path) -> PathBuf {
     root.join(BUILD_DIR)
 }
 
-/// Build one of a package's worlds for publishing.
-///
-/// Compiles `entry` for the selected world and embeds the WIT and `[package]`
-/// metadata exactly like a default `wado compile`, writing the component to
-/// `output`. Exactly one of `lib_world` / `target_world` is `Some`, selecting
-/// the world as `--lib` / `--world` do.
-pub async fn build_publish_world(
-    entry: &Path,
-    output: &Path,
-    lib_world: Option<String>,
-    target_world: Option<String>,
-) -> Result<(), CliExit> {
-    let opts = CompileOptions::for_world_build(
-        entry.to_string_lossy().into_owned(),
-        output.to_path_buf(),
-        lib_world,
-        target_world,
-    );
-    run(opts).await
-}
-
 /// The default output path when `-o` is absent. A manifest-driven build writes
 /// `<manifest_root>/build/<world>.<ext>` — keeping artifacts out of the source
 /// tree and giving each world its own file, mirroring kiln's `build/` layout.
