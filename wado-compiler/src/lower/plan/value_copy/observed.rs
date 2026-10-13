@@ -14,7 +14,7 @@
 use super::funcset::FuncKeySet;
 use super::modref::ModRef;
 use super::place::field_owner;
-use super::reach::StorageReach;
+use super::reach::{ClosureCaptures, StorageReach};
 use super::retention::{CallRetention, RESULT};
 use super::{is_reference_type, is_scalar_type};
 use crate::flat_package::FlatPackage;
@@ -46,10 +46,11 @@ pub fn compute(
     retention: &CallRetention,
     mod_ref: &ModRef,
     ref_receiver_methods: &FuncKeySet,
+    closure_captures: &ClosureCaptures,
 ) -> ObservedFields {
     let type_table = flat.type_table.borrow();
     let fields = struct_fields(&flat.structs);
-    let reach = StorageReach::new(&type_table, &fields);
+    let reach = StorageReach::new(&type_table, &fields, closure_captures);
     let mut observed = IndexSet::default();
     for func in &flat.functions {
         let func = func.borrow();

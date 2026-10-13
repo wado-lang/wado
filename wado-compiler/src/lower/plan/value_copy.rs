@@ -119,6 +119,8 @@ pub struct ValueCopyPlan {
     /// The fields a borrow may observe from outside the body assigning them, so
     /// an assignment through a parameter or a reference writes in place.
     pub observed_fields: observed::ObservedFields,
+    /// What a `fn` value of each shape can hold, for `reach::StorageReach`.
+    pub closure_captures: reach::ClosureCaptures,
     /// The projection each accessor returns out of its receiver, so a name
     /// taken from one resolves to the storage it stands for.
     pub return_paths: place::ReturnPaths,
@@ -206,7 +208,8 @@ pub fn plan(
         &builtins,
         &confined_params,
     );
-    let retained = retention::compute_retention(flat, &call_graph, &builtins);
+    let closure_captures = reach::ClosureCaptures::collect(flat);
+    let retained = retention::compute_retention(flat, &call_graph, &builtins, &closure_captures);
     let list_index_assign = match flat
         .type_table
         .borrow()
@@ -244,11 +247,18 @@ pub fn plan(
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
     let mod_ref =
         modref::compute_mod_ref(flat, &return_paths, &conventions.returns_owned, &builtins);
-    let observed_fields = observed::compute(flat, &retained.calls, &mod_ref, &ref_receiver_methods);
+    let observed_fields = observed::compute(
+        flat,
+        &retained.calls,
+        &mod_ref,
+        &ref_receiver_methods,
+        &closure_captures,
+    );
     ValueCopyPlan {
         helpers,
         mod_ref,
         observed_fields,
+        closure_captures,
         return_paths,
         returns_owned: conventions.returns_owned,
         returns_projection: conventions.returns_projection,

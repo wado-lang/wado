@@ -497,7 +497,11 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &resolver,
                     base.value_copy,
                     &base.moved_local_spans,
-                    &value_copy::reach::StorageReach::new(&type_table, &base.struct_fields_map),
+                    &value_copy::reach::StorageReach::new(
+                        &type_table,
+                        &base.struct_fields_map,
+                        &base.value_copy.closure_captures,
+                    ),
                 ),
                 value_copy::last_use::compute_ref_targets(func, &resolver),
             )

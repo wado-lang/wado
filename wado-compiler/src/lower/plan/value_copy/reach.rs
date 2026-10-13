@@ -8,8 +8,81 @@
 //! `List<&mut Value>` of its own, but no reference to one, so the result
 //! reaches none of `x`'s storage whatever its body does.
 
-use crate::hashmap::IndexSet;
-use crate::tir::{ResolvedType, StructFields, TypeId, TypeKey, TypeTable};
+use crate::flat_package::FlatPackage;
+use crate::hashmap::{IndexMap, IndexSet};
+use crate::tir::{ResolvedType, StructFields, TirExpr, TirExprKind, TypeId, TypeKey, TypeTable};
+use crate::tir_visitor::TirRefVisitor;
+
+/// A `fn` type's parameter and return types. A `fn` value passes where a
+/// `fn mut`, or one with other effects, is expected, so only the shape says
+/// which closures a value of the type can be.
+type FnShape = (Vec<TypeKey>, TypeKey);
+
+/// The types the closures of each shape capture: what a `fn` value of that
+/// shape can hold.
+#[derive(Default)]
+pub struct ClosureCaptures(IndexMap<FnShape, Vec<TypeId>>);
+
+impl ClosureCaptures {
+    #[must_use]
+    pub fn collect(flat: &FlatPackage) -> Self {
+        struct Scan<'a> {
+            type_table: &'a TypeTable,
+            captures: IndexMap<FnShape, Vec<TypeId>>,
+        }
+        impl TirRefVisitor for Scan<'_> {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                if let TirExprKind::Closure { captures, .. } = &expr.kind {
+                    let shape = fn_shape(expr.type_id, self.type_table)
+                        .expect("a closure is of a `fn` type");
+                    let types = self.captures.entry(shape).or_default();
+                    for capture in captures {
+                        if !types.contains(&capture.type_id) {
+                            types.push(capture.type_id);
+                        }
+                    }
+                }
+                self.walk_expr(expr);
+            }
+        }
+        let type_table = flat.type_table.borrow();
+        let mut scan = Scan {
+            type_table: &type_table,
+            captures: IndexMap::default(),
+        };
+        for func in &flat.functions {
+            if let Some(body) = &func.borrow().body {
+                scan.visit_block(body);
+            }
+        }
+        ClosureCaptures(scan.captures)
+    }
+
+    /// The types a `fn` value of type `ty` can hold.
+    #[must_use]
+    pub fn of(&self, ty: TypeId, type_table: &TypeTable) -> &[TypeId] {
+        fn_shape(ty, type_table)
+            .and_then(|shape| self.0.get(&shape))
+            .map_or(&[], Vec::as_slice)
+    }
+}
+
+/// The shape of `ty`, past any newtype over it, `None` for a type that is no
+/// `fn`.
+fn fn_shape(ty: TypeId, type_table: &TypeTable) -> Option<FnShape> {
+    match type_table.get(ty) {
+        ResolvedType::Newtype { base_type, .. } => fn_shape(*base_type, type_table),
+        ResolvedType::Function {
+            params,
+            return_type,
+            ..
+        } => Some((
+            params.iter().map(|&p| type_table.type_key(p)).collect(),
+            type_table.type_key(*return_type),
+        )),
+        _ => None,
+    }
+}
 
 /// One kind of storage: a value of a type, or the backing array of elements of
 /// one, which a `List` holds without naming its type.
@@ -22,12 +95,21 @@ enum Storage {
 pub struct StorageReach<'a> {
     type_table: &'a TypeTable,
     fields: &'a StructFields,
+    captures: &'a ClosureCaptures,
 }
 
 impl<'a> StorageReach<'a> {
     #[must_use]
-    pub fn new(type_table: &'a TypeTable, fields: &'a StructFields) -> Self {
-        Self { type_table, fields }
+    pub fn new(
+        type_table: &'a TypeTable,
+        fields: &'a StructFields,
+        captures: &'a ClosureCaptures,
+    ) -> Self {
+        Self {
+            type_table,
+            fields,
+            captures,
+        }
     }
 
     /// Whether a `holder` can reach storage a `target` value owns. A fresh
@@ -180,8 +262,9 @@ impl<'a> StorageReach<'a> {
                 }
                 None => Members::Unknown,
             },
-            // A closure holds what it captured, which its type does not name.
-            ResolvedType::Function { .. } => Members::Unknown,
+            // A closure holds what it captured, which its type does not name:
+            // whatever any closure of its shape captured.
+            ResolvedType::Function { .. } => Members::Held(self.captures.of(ty, tt).to_vec()),
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never

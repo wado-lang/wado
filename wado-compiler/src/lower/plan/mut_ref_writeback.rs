@@ -2,6 +2,7 @@
 //! call. See `docs/wep-2026-06-13-reference-representation.md`.
 
 use super::value_copy::callgraph::CallGraph;
+use super::value_copy::reach::ClosureCaptures;
 use super::value_copy::retention::{CallRetention, FunctorRows, RefCarrying};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -22,11 +23,12 @@ pub fn insert_write_backs(
     call_graph: &CallGraph,
     calls: &CallRetention,
     functor_rows: &FunctorRows,
+    closure_captures: &ClosureCaptures,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
-    let carrying = RefCarrying::new(&flat.structs, &type_table);
+    let carrying = RefCarrying::new(&flat.structs, &type_table, closure_captures);
     let replaced = whole_value_writes::compute(flat, call_graph, &carrying);
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();

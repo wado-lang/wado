@@ -19,6 +19,7 @@ use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
 use super::place::unwrap_borrow;
+use super::reach::ClosureCaptures;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -755,6 +756,7 @@ pub fn compute_retention(
     project: &FlatPackage,
     call_graph: &CallGraph,
     builtins: &BuiltinDeclarations,
+    closure_captures: &ClosureCaptures,
 ) -> RetentionSummary {
     let type_table = project.type_table.borrow();
     let mut calls = CallRetention {
@@ -772,7 +774,7 @@ pub fn compute_retention(
         }
     }
 
-    let carrying = RefCarrying::new(&project.structs, &type_table);
+    let carrying = RefCarrying::new(&project.structs, &type_table, closure_captures);
     let functor_params: Vec<FunctorParams> = project
         .functions
         .iter()
@@ -936,15 +938,21 @@ fn declared_facts(declaration: &BuiltinDeclaration) -> RetentionFacts {
 pub struct RefCarrying<'a> {
     structs: &'a [TirStruct],
     type_table: &'a TypeTable,
+    captures: &'a ClosureCaptures,
     memo: RefCell<IndexMap<TypeId, bool>>,
 }
 
 impl<'a> RefCarrying<'a> {
     #[must_use]
-    pub fn new(structs: &'a [TirStruct], type_table: &'a TypeTable) -> Self {
+    pub fn new(
+        structs: &'a [TirStruct],
+        type_table: &'a TypeTable,
+        captures: &'a ClosureCaptures,
+    ) -> Self {
         Self {
             structs,
             type_table,
+            captures,
             memo: RefCell::new(IndexMap::default()),
         }
     }
@@ -1054,11 +1062,14 @@ impl RefCarrying<'_> {
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
             | ResolvedType::Error => (true, false),
-            // A functor is a value; the environment it closed over is not
-            // reachable from a caller's parameter through its type. Neither is
-            // anything reachable from the rest: they carry no member at all.
-            ResolvedType::Function { .. }
-            | ResolvedType::Primitive(_)
+            // A closure holds what it captured, which its type does not name:
+            // whatever any closure of its shape captured. `make_reader(p)`
+            // returns a closure holding `p`.
+            ResolvedType::Function { .. } => {
+                let captured = self.captures.of(type_id, self.type_table).to_vec();
+                self.any(captured, open)
+            }
+            ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
