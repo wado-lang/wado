@@ -221,12 +221,12 @@ pub struct DocFlagsMember {
 /// The program a page's module is loaded in, read at that module. The page
 /// parses its own source, for the comments, and asks this what a name in it
 /// resolves to. The program has no errors, so every name resolves.
-pub struct Resolution<'a> {
+pub struct DocScope<'a> {
     sem: &'a Semantics,
     module: ModuleSource,
 }
 
-impl<'a> Resolution<'a> {
+impl<'a> DocScope<'a> {
     /// The program's entry module.
     #[must_use]
     pub fn of_entry(sem: &'a Semantics) -> Self {
@@ -241,17 +241,26 @@ impl<'a> Resolution<'a> {
 
     fn in_module(sem: &'a Semantics, module: ModuleSource) -> Self {
         assert!(sem.is_complete(), "a page reads a complete analysis");
+        assert!(
+            sem.modules.contains_key(&module),
+            "the analysis loaded the page's module {module}"
+        );
         Self { sem, module }
     }
 
-    /// The same program, read at `module_spec`.
+    /// The module `module_spec` names, imported from this one.
     fn at(&self, module_spec: &str) -> Self {
-        Self::new(self.sem, module_spec)
+        Self::in_module(
+            self.sem,
+            self.sem.resolve_module_from(&self.module, module_spec),
+        )
     }
 
-    /// The trait or interface `b` implements.
+    /// The trait or interface `b`, a block of this module in the page's own
+    /// parse, implements.
     fn implemented(&self, b: &ImplBlock) -> Option<&'a Item> {
-        self.sem.implemented_at(&self.module, b.span)
+        self.sem
+            .implemented(self.sem.impl_block_at(&self.module, b.span))
     }
 }
 
@@ -271,7 +280,7 @@ pub fn extract_doc_with(
     source: &str,
     module_name: &str,
     include_private: bool,
-    resolution: &Resolution,
+    scope: &DocScope,
 ) -> DocModule {
     extract_doc_filtered(
         module,
@@ -280,22 +289,23 @@ pub fn extract_doc_with(
         module_name,
         include_private,
         false,
-        resolution,
+        Some(scope),
     )
 }
 
 /// Like [`extract_doc_with`], but `include_internal` also admits top-level
 /// `internal` items, while their members stay at the `include_private` level.
 /// Lets a `pub use` re-export publish an `internal` item without leaking its
-/// own private fields / methods.
-pub fn extract_doc_filtered(
+/// own private fields / methods. `scope` is `None` for a module the analysis
+/// did not load: a component's bindings, which implement no trait.
+fn extract_doc_filtered(
     module: &Module,
     trivia: &TriviaMap,
     source: &str,
     module_name: &str,
     include_private: bool,
     include_internal: bool,
-    resolution: &Resolution,
+    scope: Option<&DocScope>,
 ) -> DocModule {
     let module_doc = extract_module_doc(trivia, module);
     let synopsis = collect_synopsis(module, source);
@@ -310,7 +320,7 @@ pub fn extract_doc_filtered(
     let mut effects: Vec<DocEffect> = Vec::new();
     let mut resources: Vec<DocResource> = Vec::new();
     let mut functions: Vec<DocFunction> = Vec::new();
-    let impls = documented_impls(module, include_private, resolution);
+    let impls = documented_impls(module, include_private, scope);
 
     for item in &module.items {
         let visible = include_private
@@ -764,7 +774,7 @@ fn is_internal_item(item: &Item) -> bool {
 fn documented_impls<'a>(
     module: &'a Module,
     include_private: bool,
-    resolution: &Resolution<'a>,
+    scope: Option<&DocScope<'a>>,
 ) -> Vec<DocImpl<'a>> {
     module
         .items
@@ -773,11 +783,12 @@ fn documented_impls<'a>(
             let Item::Impl(block) = item else {
                 return None;
             };
-            let implemented = resolution.implemented(block);
-            let below_pub = implemented
-                .and_then(Item::visibility)
-                .is_some_and(|v| !v.is_public());
-            (include_private || !below_pub).then(|| DocImpl {
+            let implemented = block.trait_type.as_ref().and_then(|_| {
+                scope
+                    .expect("a module no analysis loaded implements no trait")
+                    .implemented(block)
+            });
+            (include_private || implemented.is_none_or(Item::is_public)).then(|| DocImpl {
                 block,
                 implemented: implemented.and_then(Item::as_trait),
             })
@@ -907,14 +918,14 @@ pub fn extract_stdlib_doc_with(
 ) -> Option<DocModule> {
     let source = stdlib::get_stdlib_module(module_name)?;
     let parsed = parse_stdlib_for_doc(module_name, source);
-    let resolution = Resolution::new(sem, module_name);
+    let scope = DocScope::new(sem, module_name);
     let mut doc = extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         source,
         module_name,
         include_private,
-        &resolution,
+        &scope,
     );
 
     // For modules with pub use re-exports, follow them to get the actual items
@@ -922,8 +933,7 @@ pub fn extract_stdlib_doc_with(
     if !reexport_sources.is_empty() {
         let exported_names = collect_pub_use_names(&parsed.ast);
         for reexport_source in &reexport_sources {
-            if let Some(sub_doc) = component_reexport_doc(module_name, reexport_source, &resolution)
-            {
+            if let Some(sub_doc) = component_reexport_doc(module_name, reexport_source) {
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
                 continue;
             }
@@ -938,7 +948,7 @@ pub fn extract_stdlib_doc_with(
                     reexport_source,
                     false,
                     true,
-                    &resolution.at(reexport_source),
+                    Some(&scope.at(reexport_source)),
                 );
                 merge_reexported_items(&mut doc, &sub_doc, &exported_names);
             }
@@ -954,7 +964,7 @@ pub fn extract_stdlib_doc_with(
                 &sub_parsed.ast,
                 &sub_parsed.trivia,
                 include_private,
-                &resolution.at(se_source),
+                &scope.at(se_source),
             );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
@@ -964,6 +974,7 @@ pub fn extract_stdlib_doc_with(
     for reexport_source in &reexport_sources {
         if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
             let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
+            let sub_scope = scope.at(reexport_source);
             // Recursively follow side-effect imports from re-exported sub-modules
             let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
             for sub_se in &sub_se_sources {
@@ -973,7 +984,7 @@ pub fn extract_stdlib_doc_with(
                         &se_parsed.ast,
                         &se_parsed.trivia,
                         include_private,
-                        &resolution.at(sub_se),
+                        &sub_scope.at(sub_se),
                     );
                     merge_primitive_types(&mut doc.primitive_types, prim_types);
                 }
@@ -983,7 +994,7 @@ pub fn extract_stdlib_doc_with(
                 &sub_parsed.ast,
                 &sub_parsed.trivia,
                 include_private,
-                &resolution.at(reexport_source),
+                &sub_scope,
             );
             merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
@@ -996,11 +1007,7 @@ pub fn extract_stdlib_doc_with(
 /// Items a stdlib module re-exports from a bundled component asset
 /// (`pub use { X } from "./icu.wat"`). The types come from the component's WIT
 /// rather than from Wado source, so they carry no doc comments.
-fn component_reexport_doc(
-    module_name: &str,
-    reexport_source: &str,
-    resolution: &Resolution,
-) -> Option<DocModule> {
+fn component_reexport_doc(module_name: &str, reexport_source: &str) -> Option<DocModule> {
     let mut interner = ModuleSourceInterner::new();
     let from = interner.core(module_name.strip_prefix("core:")?);
     let path = resolve_wasm_asset_path(&from, reexport_source, "").ok()?;
@@ -1018,7 +1025,7 @@ fn component_reexport_doc(
         &path,
         false,
         true,
-        &resolution.at(&path),
+        None,
     ))
 }
 
@@ -1227,11 +1234,11 @@ fn collect_primitive_types_from_module(
     module: &Module,
     trivia: &TriviaMap,
     include_private: bool,
-    resolution: &Resolution,
+    scope: &DocScope,
 ) -> Vec<DocPrimitiveType> {
     use crate::hashmap::IndexMap;
 
-    let impls = documented_impls(module, include_private, resolution);
+    let impls = documented_impls(module, include_private, Some(scope));
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
     for prim_name in PrimitiveType::all_primitive_names() {

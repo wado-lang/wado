@@ -102,6 +102,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         Some("entry.wado"),
         Some("core:kiln/generator"),
         wado_compiler::kiln::InvocationIndex::new(),
+        true,
     ));
     assert!(sem.is_complete(), "generator semantics did not complete");
     sem.set_wit_contract(wit_emit::wit_contract(

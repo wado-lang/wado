@@ -119,7 +119,15 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
         if b.ty.head_base_name() != Some(symbol.name.as_str()) {
             continue;
         }
-        let block = unparse::unparse_impl_block_signature(b, public_only);
+        let implemented = sem.implemented(b);
+        if public_only && !implemented.is_none_or(Item::is_public) {
+            continue;
+        }
+        let block = unparse::unparse_impl_block_signature(
+            b,
+            implemented.and_then(Item::as_trait),
+            public_only,
+        );
         if !block.is_empty() {
             out.push_str("\n\n");
             out.push_str(&block);
@@ -467,7 +475,6 @@ mod tests {
             assert_eq!(decl.contents.value, expected);
         });
     }
-
     #[test]
     fn builtin_type_decl_hover() {
         futures::executor::block_on(async {

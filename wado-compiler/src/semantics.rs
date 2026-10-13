@@ -673,24 +673,27 @@ impl Semantics {
         Some((f, f.binding_contracts(declaring_trait)))
     }
 
-    /// The trait or interface implemented by the `impl` block of `module`
-    /// spanning `impl_span`. A reader holding its own parse of the module's
-    /// source names the block by its span, which every parse of that source
-    /// agrees on.
+    /// The `impl` block of `module` spanning `impl_span`. A reader holding its
+    /// own parse of the module's source names the block by its span, which
+    /// every parse of that source agrees on.
     #[must_use]
-    pub fn implemented_at(&self, module: &ModuleSource, impl_span: Span) -> Option<&Item> {
-        let block = self.modules.get(module)?.items.iter().find_map(|item| {
-            let Item::Impl(b) = item else {
-                return None;
-            };
-            (b.span.start == impl_span.start && b.span.end == impl_span.end).then_some(b)
-        })?;
-        self.implemented(block)
+    pub fn impl_block_at(&self, module: &ModuleSource, impl_span: Span) -> &ImplBlock {
+        self.modules[module]
+            .items
+            .iter()
+            .find_map(|item| {
+                let Item::Impl(b) = item else {
+                    return None;
+                };
+                (b.span.start == impl_span.start && b.span.end == impl_span.end).then_some(b)
+            })
+            .expect("every parse of a module's source spans its impl blocks alike")
     }
 
     /// The item declaring the trait or interface `b` implements; `None` for an
     /// inherent block.
-    fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
+    #[must_use]
+    pub fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
         let resolutions = self.resolutions()?;
         let id = resolutions
             .defs()
@@ -878,12 +881,17 @@ impl Semantics {
     /// `core:` / `wasi:` location-independent).
     #[must_use]
     pub fn resolve_notation_module(&self, module_spec: &str) -> ModuleSource {
-        let from = self.entry_module_source.clone();
+        self.resolve_module_from(&self.entry_module_source, module_spec)
+    }
+
+    /// The module `module_spec` names when `from` imports it.
+    #[must_use]
+    pub fn resolve_module_from(&self, from: &ModuleSource, module_spec: &str) -> ModuleSource {
         resolve_import_with_entry(
             &mut self.interner.borrow_mut(),
-            &from,
+            from,
             module_spec,
-            Some(&from),
+            Some(&self.entry_module_source),
         )
     }
 
@@ -1094,7 +1102,8 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    semantics_for_world(source, host, filename, None, InvocationIndex::new()).await
+    // TIR too, for the consumers that read `tir_modules`.
+    semantics_for_world(source, host, filename, None, InvocationIndex::new(), true).await
 }
 
 /// [`semantics`] with the target world and kiln redirects threaded through, so a
@@ -1104,13 +1113,14 @@ pub async fn semantics<H: CompilerHost>(
 /// `core:kiln/generator` world; `invocations` redirects `use … with { generator }`
 /// clauses to their generated modules. A caller re-analyzing a kiln consumer must
 /// pass the same values the compile used, or the load fails and analysis reports
-/// incomplete.
+/// incomplete. `build_tir` is as in [`semantics_of`].
 pub async fn semantics_for_world<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
     target_world: Option<&str>,
     invocations: InvocationIndex,
+    build_tir: bool,
 ) -> Semantics {
     let parsed = parse(source);
     // Surface every recovered lex/parse error, then analyze the partial AST
@@ -1126,9 +1136,6 @@ pub async fn semantics_for_world<H: CompilerHost>(
         host.emit_diagnostic(e.diagnostic(filename));
     }
     match load(parsed, filename, host, invocations, LogLevel::default()).await {
-        // General entry: build TIR so consumers that read `tir_modules`
-        // (kiln options extraction) work. The LSP engine uses its own
-        // annotate-only path (`semantics_of(.., build_tir = false)`).
         Ok(mut loaded) => {
             inject_kiln_request_adapter(
                 target_world,
@@ -1136,7 +1143,7 @@ pub async fn semantics_for_world<H: CompilerHost>(
                 &mut loaded.modules,
                 &mut loaded.cm_source_interfaces,
             );
-            semantics_of(loaded, host, LogLevel::default(), true)
+            semantics_of(loaded, host, LogLevel::default(), build_tir)
         }
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());

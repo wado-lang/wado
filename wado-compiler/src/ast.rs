@@ -1349,6 +1349,12 @@ pub enum Item {
 }
 
 impl Item {
+    /// Whether a reader in another package can name this item.
+    #[must_use]
+    pub fn is_public(&self) -> bool {
+        self.visibility().is_some_and(Visibility::is_public)
+    }
+
     #[must_use]
     pub fn as_trait(&self) -> Option<&TraitDecl> {
         let Item::Trait(t) = self else {

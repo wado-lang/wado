@@ -4381,8 +4381,14 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
 /// Render an `impl` block as Wado with member **signatures** only, for type
 /// overviews. Under `public_only` an inherent `impl` shows only `pub` members,
 /// while a trait `impl`'s are always shown, being the trait's public surface.
-/// Empty when nothing is visible, so the caller can drop the block.
-pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
+/// Empty when nothing is visible, so the caller can drop the block. A method
+/// lists the `contract` clauses that bind it, which `implemented`, the trait
+/// the block implements, declares where there is one.
+pub fn unparse_impl_block_signature(
+    b: &ImplBlock,
+    implemented: Option<&TraitDecl>,
+    public_only: bool,
+) -> String {
     let inherent = b.trait_type.is_none();
     let visible = |visibility| member_visible(public_only, inherent, visibility);
 
@@ -4395,6 +4401,11 @@ pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String 
     for m in &b.methods {
         if visible(m.visibility) {
             lines.push(unparse_function_signature(m));
+            lines.extend(
+                m.binding_contracts(implemented)
+                    .into_iter()
+                    .map(|clause| format!("    {}", unparse_contract_clause(clause))),
+            );
         }
     }
     if lines.is_empty() {

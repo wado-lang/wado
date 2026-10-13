@@ -5,13 +5,15 @@ use std::path::Path;
 use lexopt::Arg::Value;
 use wado_compiler::LogLevel;
 use wado_compiler::doc::{
-    DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocPrimitiveType, DocResource, DocStruct,
-    DocTrait, DocTraitImpl, DocVariant, Resolution, extract_doc_with, extract_stdlib_doc_with,
+    DocEffect, DocEnum, DocFlags, DocFunction, DocModule, DocPrimitiveType, DocResource, DocScope,
+    DocStruct, DocTrait, DocTraitImpl, DocVariant, extract_doc_with, extract_stdlib_doc_with,
     stdlib_doc_entry,
 };
-use wado_compiler::semantics::{Semantics, semantics};
+use wado_compiler::kiln::InvocationIndex;
+use wado_compiler::semantics::{Semantics, semantics_for_world};
 
 use crate::args::{self, CliExit};
+use crate::compile::{build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
 
 const MODULE_PLACEHOLDER: &str = "{module}";
@@ -235,21 +237,37 @@ pub async fn run(opts: DocOptions) -> Result<(), CliExit> {
     Ok(())
 }
 
-/// The analysis of `source`, entered as `filename` in `dir`, that a page reads
-/// to resolve the names its module uses. A page is written only of a program
-/// without errors: they are reported, and the run fails.
-async fn analyze(source: &str, dir: &Path, filename: &str) -> Result<Semantics, CliExit> {
-    let host = FilesystemCompilerHost::with_log_level(dir.to_path_buf(), LogLevel::Error);
-    let sem = semantics(source, &host, Some(filename)).await;
-    if host.has_errors() || !sem.is_complete() {
+/// The host a page's analysis reports through: errors only, since a page is
+/// written only of a program without them.
+fn doc_host(dir: &Path) -> FilesystemCompilerHost {
+    FilesystemCompilerHost::with_log_level(dir.to_path_buf(), LogLevel::Error)
+}
+
+/// The analysis of `source`, entered as `filename`, that a page reads to
+/// resolve the names its module uses. Errors are reported, and the run fails.
+/// Bodies are annotated but not reified: a page reads names, not TIR.
+async fn analyze(
+    source: &str,
+    host: &FilesystemCompilerHost,
+    filename: &str,
+    invocations: InvocationIndex,
+) -> Result<Semantics, CliExit> {
+    let sem = semantics_for_world(source, host, Some(filename), None, invocations, false).await;
+    if host.has_errors() {
         return Err(CliExit::silent_failure(1));
     }
+    assert!(
+        sem.is_complete(),
+        "an analysis that reports no error completes"
+    );
     Ok(sem)
 }
 
 async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     if is_stdlib_module(input) {
-        let sem = analyze(&stdlib_doc_entry(input), Path::new("."), "doc.wado").await?;
+        let host = doc_host(Path::new("."));
+        let entry = stdlib_doc_entry(input);
+        let sem = analyze(&entry, &host, "doc.wado", InvocationIndex::new()).await?;
         return Ok(extract_stdlib_doc_with(input, include_private, &sem)
             .expect("an analyzed stdlib module is bundled"));
     }
@@ -257,27 +275,26 @@ async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliEx
     let path = Path::new(input);
     let source = fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
-    let filename = path
-        .file_name()
-        .and_then(|name| name.to_str())
+    let module_name = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
         .ok_or_else(|| CliExit::error(format!("not a file: '{}'", path.display())))?;
+    let project = load_nearest_manifest(path).map_err(CliExit::error)?;
     let dir = path.parent().unwrap_or(Path::new(""));
-    let sem = analyze(&source, dir, filename).await?;
+    let (host, invocations) =
+        build_load(path, &source, project, doc_host(dir), false, "doc").await?;
+    let sem = analyze(&source, &host, input, invocations).await?;
 
     let parsed = wado_compiler::parse(&source)
         .into_fail_fast()
         .expect("an analyzed source parses");
-    let module_name = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .expect("a UTF-8 file name has a UTF-8 stem");
     Ok(extract_doc_with(
         &parsed.ast,
         &parsed.trivia,
         &source,
         module_name,
         include_private,
-        &Resolution::of_entry(&sem),
+        &DocScope::of_entry(&sem),
     ))
 }
 
@@ -487,7 +504,14 @@ mod format_contract_tests {
                 .zip(deps.iter().map(|(_, s)| *s)),
         );
         let host = in_memory_host(&files);
-        let sem = block_on(semantics(source, &host, Some("./demo.wado")));
+        let sem = block_on(semantics_for_world(
+            source,
+            &host,
+            Some("./demo.wado"),
+            None,
+            InvocationIndex::new(),
+            false,
+        ));
         assert!(
             !host.has_errors(),
             "a page's program has no errors: {:?}",
@@ -502,7 +526,7 @@ mod format_contract_tests {
             source,
             "demo",
             include_private,
-            &Resolution::of_entry(&sem),
+            &DocScope::of_entry(&sem),
         )
     }
 
