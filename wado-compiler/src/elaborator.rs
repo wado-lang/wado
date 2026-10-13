@@ -1249,6 +1249,52 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Why `impl From<source> for target;` has no case to wrap into: the
+    /// marker needs exactly one case whose payload is `source`.
+    fn from_marker_withheld(
+        &self,
+        target: TypeId,
+        source: TypeId,
+        target_name: &str,
+    ) -> Option<String> {
+        let tt = self.tysys.type_table.borrow();
+        let Some(info) = tt
+            .nominal_def(target)
+            .and_then(|def| self.type_lookup().variant_cases_of(def))
+        else {
+            return Some("only a variant derives `From`; write the impl".to_string());
+        };
+        // The synthesized `from` and the calls to it name the variant's
+        // template, never an instance, so a generic one would reach codegen
+        // calling a function nothing defines. A known gap of WEP: Conversion
+        // Traits.
+        if !info.type_param_type_ids.is_empty() {
+            return Some(
+                "a generic variant does not derive `From` yet; write the impl".to_string(),
+            );
+        }
+        let carrying: Vec<String> = info
+            .cases
+            .iter()
+            .filter(|case| {
+                case.payload != tir::TypeTable::UNIT
+                    && tt.type_key(case.payload) == tt.type_key(source)
+            })
+            .map(|case| format!("`{}`", case.name))
+            .collect();
+        let source_name = tt.type_name(source);
+        match carrying.as_slice() {
+            [_] => None,
+            [] => Some(format!(
+                "no case of `{target_name}` carries a `{source_name}` payload"
+            )),
+            [first, rest @ ..] => Some(format!(
+                "cases {first} and {} both carry a `{source_name}` payload; write the impl",
+                rest.join(" and ")
+            )),
+        }
+    }
+
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
@@ -1347,6 +1393,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             );
         } else if let Some(trait_ref) = self.classify_from_marker(trait_type, marked) {
             let target_type_id = self.resolve_type(&impl_block.ty);
+            let tir::SynthTrait::From { source } = trait_ref else {
+                unreachable!("`classify_from_marker` answers only `From`")
+            };
+            if let Some(why) = self.from_marker_withheld(target_type_id, source, struct_name) {
+                let _ = self.emit(types::TypeError::MarkerWithheld {
+                    trait_name: self.get_type_name_full(trait_type),
+                    type_name: struct_name.to_string(),
+                    why,
+                    span: impl_block.span,
+                });
+                return;
+            }
             let type_params: Vec<_> = self
                 .annotate_ctx
                 .trait_ctx

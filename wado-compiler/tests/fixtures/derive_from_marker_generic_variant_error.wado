@@ -1,0 +1,28 @@
+// A `From` marker on a generic variant, for one instance or for all of them,
+// is rejected at the marker: the synthesized impl is not instantiated yet (a
+// known gap of WEP: Conversion Traits), and it used to crash the compiler.
+
+variant Lookup<T> {
+    Hit(T),
+    Miss(String),
+}
+
+variant Slot<T> {
+    Full(T),
+    Empty,
+}
+
+impl From<String> for Lookup<i32>;
+impl<T> From<T> for Slot<T>;
+
+test {
+    assert Lookup::<i32>::from("absent") matches { Miss(_) };
+}
+
+__DATA__
+{
+    "compile_error": ":15:1: analysis error: cannot derive `From<String>` for `Lookup`: a generic variant does not derive `From` yet; write the impl",
+    "compile_errors_contains": [
+        "cannot derive `From<T>` for `Slot`: a generic variant does not derive `From` yet; write the impl"
+    ]
+}

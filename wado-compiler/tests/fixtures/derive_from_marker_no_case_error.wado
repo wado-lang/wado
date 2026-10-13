@@ -1,0 +1,17 @@
+// A `From` marker names the payload of the case it wraps into, so a payload
+// no case carries is an error at the marker, not at a later call.
+
+variant Shape {
+    Circle(f64),
+    Label(String),
+    Dot,
+}
+
+impl From<bool> for Shape;
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":10:1: analysis error: cannot derive `From<bool>` for `Shape`: no case of `Shape` carries a `bool` payload"
+}

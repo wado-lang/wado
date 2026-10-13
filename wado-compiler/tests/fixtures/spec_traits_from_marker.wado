@@ -1,0 +1,20 @@
+// A `From` marker on a variant wraps the value into the one case carrying it,
+// which is what lets `?` lift a narrower error into a wider one.
+
+variant AppError {
+    Parse(ParseIntError),
+    Message(String),
+}
+
+impl From<ParseIntError> for AppError;
+impl From<String> for AppError;
+
+fn port(text: String) -> Result<i32, AppError> {
+    return Ok(i32::from_str(text)?);
+}
+
+test {
+    assert AppError::from("closed") matches { Message(m) && m == "closed" };
+    assert port("80").unwrap() == 80;
+    assert port("x") matches { Err(Parse(_)) };
+}

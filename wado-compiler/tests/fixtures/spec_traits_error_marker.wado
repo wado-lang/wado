@@ -1,0 +1,17 @@
+// `Error` declares no method, but it takes no marker: an error type writes the
+// empty impl beside its `Display`.
+
+struct Timeout {}
+
+impl Display for Timeout {
+    fn fmt(&self, f: &mut Formatter) { f.write_str("timed out"); }
+}
+
+impl Error for Timeout;
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":10:1: analysis error: cannot synthesize trait `Error` for `Timeout`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`."
+}

@@ -310,6 +310,21 @@ The standard library provides `From` impls for common lossless conversions:
 - **More verbose than `.into()`**: `String::from(value)` is longer than `value.into()`. This is intentional — explicitness over brevity.
 - **No generic "accepts any convertible type" parameter**: Without `impl Into<T>`, functions cannot accept multiple types via a single parameter. Users call `Type::from(value)` at the call site instead. This avoids monomorphization bloat but requires the caller to be explicit.
 
+## Known gaps
+
+- A `From` marker on a generic variant, `impl<T> From<T> for W<T>;` or
+  `impl From<i32> for W<i32>;`, is rejected at the marker. The synthesized
+  `from` and the calls to it name the variant's template, never an instance,
+  so the marker used to crash the compiler instead. A written impl works.
+- The reflexive `From<T> for T` and a newtype's two `From` impls answer a call,
+  `T::from(x)`, but not a bound. `fn conv<T: From<i64>>` rejects
+  `conv::<i64>` and `conv::<Meters>` (`type Meters = i64`), so the
+  `print_id::<UserId>` example in §7 does not compile. The three are
+  recognized at the call rather than declared as impls.
+- `?` that needs a `From` impl nobody wrote is reported only where its
+  function is reached from the entry point: the check runs when the call is
+  lowered to WIR. In a function nothing calls it compiles.
+
 ## Future Considerations
 
 ### `into T` Operator

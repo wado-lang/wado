@@ -59,9 +59,8 @@ pub fn synthesize_from(module: &mut TirModule) {
         if existing.contains(&key) {
             continue;
         }
-        if let Some(func) = generate_variant_from(module, req, source, &from_trait) {
-            generated.push(Rc::new(RefCell::new(func)));
-        }
+        let func = generate_variant_from(module, req, source, &from_trait);
+        generated.push(Rc::new(RefCell::new(func)));
     }
 
     module.functions.extend(generated);
@@ -98,18 +97,20 @@ fn generate_variant_from(
     req: &SynthesisRequest,
     source: TypeId,
     from_trait: &FqTraitName,
-) -> Option<TirFunction> {
+) -> TirFunction {
     let variant_def = module
         .variants
         .iter()
-        .find(|v| v.name == req.target_type_name)?;
+        .find(|v| v.name == req.target_type_name)
+        .expect("the elaborator admits a `From` marker only on a variant");
 
     // Match the case by resolved type identity, not by type-name string, so two
     // distinct same-named payload types never collide.
     let matching_case = variant_def
         .cases
         .iter()
-        .find(|c| c.payload != TypeTable::UNIT && c.payload == source)?;
+        .find(|c| c.payload != TypeTable::UNIT && c.payload == source)
+        .expect("the elaborator admits a `From` marker only with one case carrying its source");
 
     let case_name = matching_case.name.clone();
     let case_index = matching_case.index;
@@ -140,7 +141,7 @@ fn generate_variant_from(
         LocalMethodName::new(target.clone(), Some(from_trait.clone()), "from".to_string());
     let qualified_name = MethodName::format_local(&target, Some(from_trait), "from");
 
-    Some(make_synthetic_method(
+    make_synthetic_method(
         qualified_name,
         method_info,
         vec![TirParam {
@@ -154,5 +155,5 @@ fn generate_variant_from(
         variant_type,
         body,
         locals,
-    ))
+    )
 }

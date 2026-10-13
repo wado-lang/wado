@@ -1,0 +1,13 @@
+// `Error` requires `Display`, so an error type states its reason before it
+// can be one.
+
+struct Timeout {}
+
+impl Error for Timeout { }
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":6:1: analysis error: type 'Timeout' implements trait 'Error' but not its supertrait 'Display'"
+}
