@@ -8,15 +8,14 @@ use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
-use super::{is_reference_type, needs_value_copy};
+use super::{is_reference_type, is_scalar_type, needs_value_copy};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
 use crate::tir::{
-    FunctionRef, LetStorage, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
-    capture_source_locals,
+    FunctionRef, LetStorage, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm, TirPattern,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -2717,14 +2716,6 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
         }
         _ => {}
     }
-}
-
-fn is_scalar_type(type_id: tir::TypeId, type_table: &TypeTable) -> bool {
-    type_table.is_primitive_like(type_id)
-        || matches!(
-            type_table.get(type_id),
-            ResolvedType::Enum { .. } | ResolvedType::Unit
-        )
 }
 
 fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {

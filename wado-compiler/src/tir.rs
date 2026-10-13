@@ -9525,6 +9525,17 @@ pub struct TirStruct {
     pub wire_name_policy: Option<NamePolicy>,
 }
 
+/// Each reified struct's fields, keyed as `ResolvedType::Struct` names it.
+pub type StructFields = IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>;
+
+#[must_use]
+pub fn struct_fields(structs: &[TirStruct]) -> StructFields {
+    structs
+        .iter()
+        .map(|s| ((s.def, s.type_args.clone()), s.fields.clone()))
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct TirField {
     pub name: String,

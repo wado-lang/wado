@@ -48,11 +48,11 @@ use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
-    ResolvedType, StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind,
-    TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal,
-    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    ResolvedType, StructDef, StructFields, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr,
+    TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern,
+    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
     TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
-    TypeTable, receiver_value,
+    TypeTable, receiver_value, struct_fields,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -123,12 +123,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         pruned,
     } = flat;
 
-    // For `try_expand_deref_aggregate_assign`.
-    let mut struct_fields_map: IndexMap<(StructDef, Vec<tir::TypeId>), Vec<TirField>> =
-        IndexMap::default();
-    for s in &structs {
-        struct_fields_map.insert((s.def, s.type_args.clone()), s.fields.clone());
-    }
+    let struct_fields_map = struct_fields(&structs);
     // Pre-register every in-package function's canonical `FuncId` (its position,
     // 1:1 with the final function list). Calls stamp against this at construction.
     let mut ids: IndexMap<FunctionId, FuncId> = IndexMap::default();
@@ -262,7 +257,7 @@ struct Translator<'a> {
     value_copy: &'a value_copy::ValueCopyPlan,
     closure: &'a closure::ClosurePlan,
     type_table: Rc<RefCell<TypeTable>>,
-    struct_fields_map: IndexMap<(StructDef, Vec<tir::TypeId>), Vec<TirField>>,
+    struct_fields_map: StructFields,
     /// Mints each call's canonical `FuncId` at construction ("born resolved"),
     /// so the call node never carries a `FunctionRef`. In-package callees resolve
     /// against the pre-built `FunctionId → FuncId` map (positions in

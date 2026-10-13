@@ -7,8 +7,8 @@
 //! returns a fresh list of references to values, and no `&List<…>` or
 //! `&Array<…>`, so it holds none of `x`'s storage whatever its body does.
 
-use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::{ResolvedType, StructDef, TirField, TypeId, TypeKey, TypeTable};
+use crate::hashmap::IndexSet;
+use crate::tir::{ResolvedType, StructFields, TypeId, TypeKey, TypeTable};
 
 /// One kind of storage: a value of a type, or the backing array of elements of
 /// one, which a `List` holds without naming its type.
@@ -20,15 +20,12 @@ enum Storage {
 
 pub struct StorageReach<'a> {
     type_table: &'a TypeTable,
-    fields: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+    fields: &'a StructFields,
 }
 
 impl<'a> StorageReach<'a> {
     #[must_use]
-    pub fn new(
-        type_table: &'a TypeTable,
-        fields: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
-    ) -> Self {
+    pub fn new(type_table: &'a TypeTable, fields: &'a StructFields) -> Self {
         Self { type_table, fields }
     }
 

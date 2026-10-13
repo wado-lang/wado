@@ -12,16 +12,16 @@
 //! - is lent to a call that may write the field.
 
 use super::funcset::FuncKeySet;
-use super::is_reference_type;
 use super::modref::ModRef;
 use super::place::field_owner;
 use super::reach::StorageReach;
 use super::retention::{CallRetention, RESULT};
+use super::{is_reference_type, is_scalar_type};
 use crate::flat_package::FlatPackage;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexSet;
 use crate::tir::{
-    FunctionRef, ResolvedType, StructDef, TirExpr, TirExprKind, TirField, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, StructFields, TirExpr, TirExprKind, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable, struct_fields,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -48,11 +48,7 @@ pub fn compute(
     ref_receiver_methods: &FuncKeySet,
 ) -> ObservedFields {
     let type_table = flat.type_table.borrow();
-    let fields: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>> = flat
-        .structs
-        .iter()
-        .map(|s| ((s.def, s.type_args.clone()), s.fields.clone()))
-        .collect();
+    let fields = struct_fields(&flat.structs);
     let reach = StorageReach::new(&type_table, &fields);
     let mut observed = IndexSet::default();
     for func in &flat.functions {
@@ -82,7 +78,7 @@ pub fn compute(
 
 struct Scan<'a> {
     type_table: &'a TypeTable,
-    fields: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+    fields: &'a StructFields,
     reach: &'a StorageReach<'a>,
     retention: &'a CallRetention,
     mod_ref: &'a ModRef,
@@ -183,11 +179,11 @@ impl Scan<'_> {
         let TirExprKind::Call { args, .. } = &call.kind else {
             unreachable!("a lent borrow is a call's argument")
         };
-        let holds = !matches!(
-            self.type_table.get(call.type_id),
-            ResolvedType::Primitive(_) | ResolvedType::Unit
+        let retained = self.retention.of_call(
+            func,
+            args.len(),
+            !is_scalar_type(call.type_id, self.type_table),
         );
-        let retained = self.retention.of_call(func, args.len(), holds);
         if retained.keeps(position) {
             let into_result_only = retained
                 .destinations(position)
@@ -275,19 +271,12 @@ impl Scan<'_> {
         while let TirExprKind::Cast { expr, .. } = &value.kind {
             value = expr;
         }
-        match &value.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                expr: place,
-            } => {
-                let steps = self.steps(place);
-                self.held.push(steps);
-                self.lent.insert(std::ptr::from_ref(value));
-            }
-            TirExprKind::Call { .. } => {
-                self.frame_bound.insert(std::ptr::from_ref(value));
-            }
-            _ => {}
+        if let Some(place) = borrowed_place(value) {
+            let steps = self.steps(place);
+            self.held.push(steps);
+            self.lent.insert(std::ptr::from_ref(value));
+        } else if matches!(value.kind, TirExprKind::Call { .. }) {
+            self.frame_bound.insert(std::ptr::from_ref(value));
         }
     }
 }

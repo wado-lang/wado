@@ -284,6 +284,16 @@ pub fn is_reference_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     )
 }
 
+/// Whether a value of `type_id` copies on every read and so carries no
+/// storage or reference.
+pub fn is_scalar_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_primitive_like(type_id)
+        || matches!(
+            type_table.get(type_id),
+            ResolvedType::Enum { .. } | ResolvedType::Unit
+        )
+}
+
 /// True when a value of `type_id` must be deep-copied on assignment
 /// or parameter passing.
 ///
