@@ -184,6 +184,7 @@ pub fn analyze_ownership(
         pending_bounded: Vec::new(),
         value_holds: Vec::new(),
         handed_away: IndexSet::default(),
+        contents_escaped: IndexSet::default(),
         result_kept: None,
         functor_rows: &plan.functor_rows,
         mut_receiver_methods,
@@ -1115,6 +1116,10 @@ struct Analyzer<'a> {
     /// result, a callee keeping it out of sight — so whatever it holds is
     /// readable anywhere.
     handed_away: IndexSet<u32>,
+    /// Locals what whose references lead to went out of sight, and not their
+    /// own storage: a call keeping a borrow's referent's references, not the
+    /// borrow ([`Kept::Contents`]).
+    contents_escaped: IndexSet<u32>,
     /// What keeps the value being walked, taken by the call that produces it:
     /// where that call hands a borrow back, the borrow is kept the same way.
     result_kept: Option<Kept>,
@@ -1192,6 +1197,47 @@ enum Kept {
     /// Only what the argument's references lead to, in these locals: they hold
     /// what the argument holds, and none of its own storage.
     Through(Vec<u32>),
+    /// Only what the argument's references lead to, somewhere the caller
+    /// cannot name: what the argument holds is readable for the rest of the
+    /// frame, and its own storage is not. The types of the values that escape,
+    /// where known, decide the same for what the argument was itself made of.
+    Contents(Option<Vec<TypeId>>),
+}
+
+impl Kept {
+    /// What keeping an argument both ways keeps of it.
+    fn join(self, other: Kept) -> Kept {
+        match (self, other) {
+            (Kept::Frame, _) | (_, Kept::Frame) => Kept::Frame,
+            (Kept::Transient, kept) | (kept, Kept::Transient) => kept,
+            (Kept::Contents(a), Kept::Contents(b)) => Kept::Contents(merge_contents(a, b)),
+            (Kept::Contents(c), Kept::Through(_)) | (Kept::Through(_), Kept::Contents(c)) => {
+                Kept::Contents(c)
+            }
+            // Its own storage held here and its contents out of sight is no one
+            // answer this can give.
+            (Kept::Contents(_), Kept::Into(_)) | (Kept::Into(_), Kept::Contents(_)) => Kept::Frame,
+            (Kept::Through(mut a), Kept::Through(b)) => {
+                a.extend(b);
+                Kept::Through(a)
+            }
+            (Kept::Into(mut a) | Kept::Through(mut a), Kept::Into(b) | Kept::Through(b)) => {
+                a.extend(b);
+                Kept::Into(a)
+            }
+        }
+    }
+}
+
+/// Contents escaping as either description: any value where either says so.
+fn merge_contents(a: Option<Vec<TypeId>>, b: Option<Vec<TypeId>>) -> Option<Vec<TypeId>> {
+    let (mut a, b) = (a?, b?);
+    for ty in b {
+        if !a.contains(&ty) {
+            a.push(ty);
+        }
+    }
+    Some(a)
 }
 
 /// Which fields of a local an escaped borrow reaches. A whole-local or imprecise
@@ -1342,32 +1388,100 @@ impl Analyzer<'_> {
                     return Kept::Transient;
                 }
                 let arg = args[pos];
-                let destinations = retained.destinations(position);
-                // What a borrow lends is the storage it names; any other value
-                // lands in the result whole.
-                let Some((ty, fresh)) =
-                    result_type.filter(|_| is_reference_type(arg.type_id, self.type_table))
-                else {
-                    return self.landing(args, result, destinations, true);
+                let Some(escape) = retained.escape(position) else {
+                    return self.kept_at(
+                        args,
+                        arg,
+                        result,
+                        result_type,
+                        retained.destinations(position),
+                    );
                 };
-                if self.reach.reaches(ty, arg.type_id, !fresh) {
-                    return self.landing(args, result, destinations, true);
-                }
-                if !self.reach.reaches_through(ty, arg.type_id, !fresh) {
-                    return self.landing(args, result, destinations, false);
-                }
-                // The result holds none of what the borrow names, only what
-                // that storage's references lead to. Kept anywhere else too,
-                // the borrow pins as a whole.
-                match (
-                    self.landing(args, result, destinations, false),
-                    self.landing(args, result, destinations, true),
-                ) {
-                    (Kept::Transient, Kept::Into(locals)) => Kept::Through(locals),
-                    (_, all) => all,
-                }
+                // Out of sight, the argument is pinned where what escapes can
+                // reach its own storage; otherwise only what it holds escapes.
+                let out_of_sight = match &escape.types {
+                    None => Kept::Frame,
+                    Some(types) => {
+                        let escaping: Vec<(TypeId, bool)> =
+                            types.iter().map(|&t| (t, true)).collect();
+                        self.contents_kept(arg, &escaping, Some(types.iter().copied().collect()))
+                    }
+                };
+                let landed = if escape.landings.is_empty() {
+                    Kept::Transient
+                } else {
+                    self.kept_at(args, arg, result, result_type, Some(&escape.landings))
+                };
+                out_of_sight.join(landed)
             })
             .collect()
+    }
+
+    /// What landing at `destinations` keeps of `arg`.
+    fn kept_at(
+        &self,
+        args: &[&TirExpr],
+        arg: &TirExpr,
+        result: &Kept,
+        result_type: Option<(TypeId, bool)>,
+        destinations: Option<&IndexSet<u32>>,
+    ) -> Kept {
+        let landing = |into_result: bool| {
+            self.landing(
+                args,
+                arg,
+                result,
+                result_type.map(|(ty, _)| ty),
+                destinations,
+                into_result,
+            )
+        };
+        // What a borrow lends is the storage it names; any other value lands
+        // in the result whole.
+        let Some((ty, fresh)) =
+            result_type.filter(|_| is_reference_type(arg.type_id, self.type_table))
+        else {
+            return landing(true);
+        };
+        if self.reach.reaches(ty, arg.type_id, !fresh) {
+            return landing(true);
+        }
+        if !self.reach.reaches_through(ty, arg.type_id, !fresh) {
+            return landing(false);
+        }
+        // The result holds none of what the borrow names, only what that
+        // storage's references lead to. Kept anywhere else too, the borrow pins
+        // as a whole.
+        match (landing(false), landing(true)) {
+            (Kept::Transient, Kept::Into(locals)) => Kept::Through(locals),
+            (Kept::Transient, Kept::Frame) => Kept::Contents(None),
+            (Kept::Transient, contents @ Kept::Contents(_)) => contents,
+            (_, all) => all,
+        }
+    }
+
+    /// What values `escaping` out of sight keep of `arg`, each with whether it
+    /// may hold storage by value: its own storage where one can reach it, else
+    /// what it holds, described by `contents`.
+    fn contents_kept(
+        &self,
+        arg: &TirExpr,
+        escaping: &[(TypeId, bool)],
+        contents: Option<Vec<TypeId>>,
+    ) -> Kept {
+        if escaping
+            .iter()
+            .any(|&(ty, by_value)| self.reach.reaches(ty, arg.type_id, by_value))
+        {
+            Kept::Frame
+        } else if escaping
+            .iter()
+            .any(|&(ty, by_value)| self.reach.reaches_through(ty, arg.type_id, by_value))
+        {
+            Kept::Contents(contents)
+        } else {
+            Kept::Transient
+        }
     }
 
     /// A kept position read as a pin: where the destinations are all locals of
@@ -1377,7 +1491,9 @@ impl Analyzer<'_> {
     fn landing(
         &self,
         args: &[&TirExpr],
+        arg: &TirExpr,
         result: &Kept,
+        result_type: Option<TypeId>,
         destinations: Option<&IndexSet<u32>>,
         into_result: bool,
     ) -> Kept {
@@ -1385,6 +1501,7 @@ impl Analyzer<'_> {
             return Kept::Frame;
         };
         let mut locals = Vec::new();
+        let mut contents: Option<Option<Vec<TypeId>>> = None;
         for &position in destinations {
             if position == RESULT {
                 if !into_result {
@@ -1397,6 +1514,25 @@ impl Analyzer<'_> {
                     Kept::Frame => return Kept::Frame,
                     Kept::Into(holders) | Kept::Through(holders) => {
                         locals.extend(holders.iter().copied());
+                    }
+                    // The result's contents escape: the argument goes with them
+                    // as far as what escapes reaches it.
+                    Kept::Contents(escaped) => {
+                        let escaping: Vec<(TypeId, bool)> = match (escaped, result_type) {
+                            (Some(types), _) => types.iter().map(|&t| (t, true)).collect(),
+                            (None, Some(ty)) => vec![(ty, false)],
+                            (None, None) => return Kept::Frame,
+                        };
+                        match self.contents_kept(arg, &escaping, escaped.clone()) {
+                            Kept::Frame => return Kept::Frame,
+                            Kept::Contents(c) => {
+                                contents = Some(match contents {
+                                    Some(prior) => merge_contents(prior, c),
+                                    None => c,
+                                });
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 continue;
@@ -1411,10 +1547,11 @@ impl Analyzer<'_> {
             };
             locals.push(root);
         }
-        if locals.is_empty() {
-            Kept::Transient
-        } else {
-            Kept::Into(locals)
+        match (contents, locals.is_empty()) {
+            (Some(contents), true) => Kept::Contents(contents),
+            (Some(_), false) => Kept::Frame,
+            (None, true) => Kept::Transient,
+            (None, false) => Kept::Into(locals),
         }
     }
 
@@ -1433,7 +1570,9 @@ impl Analyzer<'_> {
 
     /// [`Self::pin`] for a `&place` / `&mut place` argument naming `root`.
     fn pin_borrow(&mut self, op: TirUnaryOp, root: u32, place: &TirExpr, kept: &Kept) {
-        if op == TirUnaryOp::MutRef && !matches!(kept, Kept::Transient | Kept::Through(_)) {
+        if op == TirUnaryOp::MutRef
+            && !matches!(kept, Kept::Transient | Kept::Through(_) | Kept::Contents(_))
+        {
             self.written_through_escape.insert(root);
         }
         self.pin(root, top_field_of(place), kept);
@@ -1449,6 +1588,9 @@ impl Analyzer<'_> {
                     .push((root, field, destinations.clone()));
             }
             Kept::Through(destinations) => self.value_holds.push((root, destinations.clone())),
+            Kept::Contents(_) => {
+                self.contents_escaped.insert(root);
+            }
         }
     }
 
@@ -1470,10 +1612,13 @@ impl Analyzer<'_> {
             .flat_map(|(from, destinations)| destinations.iter().map(move |to| (from, *to)))
             .chain(reference_copies.iter().copied())
             .collect();
+        // A local whose contents escaped holds what it holds anywhere, which is
+        // all a holder is asked; its own storage it keeps.
         let anywhere: IndexSet<u32> = self
             .handed_away
             .iter()
             .chain(self.borrow_escaped.keys())
+            .chain(&self.contents_escaped)
             .copied()
             .collect();
         (holds, readable_storage(paths, &anywhere))
@@ -1738,6 +1883,9 @@ impl Analyzer<'_> {
                     Kept::Transient => {}
                     Kept::Frame => {
                         self.handed_away.insert(root);
+                    }
+                    Kept::Contents(_) => {
+                        self.contents_escaped.insert(root);
                     }
                     Kept::Into(destinations) | Kept::Through(destinations) => {
                         self.value_holds.push((root, destinations.clone()));

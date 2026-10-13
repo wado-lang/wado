@@ -125,6 +125,20 @@ fn element_out_of_iterator() -> i32 {
     return first.a;
 }
 
+// A closure call keeps what it is handed, as far as the item's own type
+// reaches: a `&P` out of `xs` is `xs`'s storage.
+fn element_kept_through_a_closure() -> i32 {
+    let xs: List<P> = [P { a: 1, b: 1 }];
+    let mut kept: List<&P> = [];
+    let mut keep = |p: &P| kept.push(p);
+    for let p of &xs {
+        keep(p);
+    }
+    let mut moved = xs;
+    moved[0].a = 9;
+    return kept[0].a;
+}
+
 fn swap_under_live_ref() -> i32 {
     let mut a: List<i32> = [1];
     let mut b: List<i32> = [5];
@@ -140,10 +154,10 @@ export fn run() with Stdout {
     println(`${ref_local()} ${copied_ref()} ${call_result()} ${branch_result(true)}`);
     println(`${match_binding()} ${live_iterator()} ${iterator_handed_away()}`);
     println(`${swap_under_live_ref()}`);
-    println(`${element_field_ref()} ${element_out_of_iterator()}`);
+    println(`${element_field_ref()} ${element_out_of_iterator()} ${element_kept_through_a_closure()}`);
 }
 
 __DATA__
 {
-    "stdout": "1 1 1 1\n1 1 1\n11\n1 1\n"
+    "stdout": "1 1 1 1\n1 1 1\n11\n1 1 1\n"
 }

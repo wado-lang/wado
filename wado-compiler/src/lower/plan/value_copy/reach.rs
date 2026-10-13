@@ -4,8 +4,9 @@
 //!
 //! A call whose retention puts a borrowed argument into its result answers
 //! for every argument it might return. `rmsnorm(g, &x) -> List<&mut Value>`
-//! returns a fresh list of references to values, and no `&List<…>` or
-//! `&Array<…>`, so it holds none of `x`'s storage whatever its body does.
+//! returns a fresh list of references to values. A `Value` owns a
+//! `List<&mut Value>` of its own, but no reference to one, so the result
+//! reaches none of `x`'s storage whatever its body does.
 
 use crate::hashmap::IndexSet;
 use crate::tir::{ResolvedType, StructFields, TypeId, TypeKey, TypeTable};
@@ -84,18 +85,21 @@ impl<'a> StorageReach<'a> {
         ty: TypeId,
         owned: &IndexSet<Storage>,
         by_value: bool,
-        open: &mut IndexSet<TypeKey>,
+        open: &mut IndexSet<(TypeKey, bool)>,
     ) -> bool {
-        let key = self.type_table.type_key(ty);
-        if !open.insert(key) {
+        if !open.insert((self.type_table.type_key(ty), by_value)) {
             return false;
         }
         match self.members(ty) {
-            // A reference reaches whatever its referent leads to, references
-            // included, and so does one this walk cannot read.
-            Members::Reference(referent) => self
-                .storage(referent, true)
-                .is_none_or(|held| held.iter().any(|s| owned.contains(s))),
+            // A reference may point at a target object of its referent's kind,
+            // and leads on through the references that object carries. What the
+            // object owns by value is its own, not the target's: one storage
+            // has one owner, and a sharing the walk made it is the alias chains'
+            // to answer, as for a fresh holder.
+            Members::Reference(referent) => {
+                self.storage_of(referent).iter().any(|s| owned.contains(s))
+                    || self.walk(referent, owned, false, open)
+            }
             Members::Unknown => true,
             Members::Held(members) => {
                 (by_value && self.storage_of(ty).iter().any(|s| owned.contains(s)))
