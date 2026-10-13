@@ -1054,10 +1054,18 @@ impl FunctionTranslator<'_, '_> {
         let TirStmtKind::Expr(call) = &stmt.kind else {
             return None;
         };
-        let TirExprKind::Call { args, .. } = &call.kind else {
+        let TirExprKind::Call { func, args, .. } = &call.kind else {
             return None;
         };
-        if !self.in_place_assigns.contains_key(&call.span) {
+        // A span is no identity: a call the translator synthesizes for a
+        // closure carries the span of the source it stands for.
+        if !self.in_place_assigns.contains_key(&call.span)
+            || !self
+                .base
+                .value_copy
+                .list_element_assigns
+                .contains(&func.module_source, &func.name)
+        {
             return None;
         }
         let [list, index, value] = args.iter().map(|a| &a.expr).collect::<Vec<_>>()[..] else {
