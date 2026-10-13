@@ -5174,12 +5174,8 @@ impl TypeTable {
     /// one peel down, which a longer chain steps past.
     #[must_use]
     pub fn newtype_chain_reaches(&self, id: TypeId, link: TypeId) -> bool {
-        let link = self.type_key(link);
-        self.newtype_link_owning(id, |tid| {
-            self.get_newtype_base(tid)
-                .is_some_and(|base| self.type_key(base) == link)
-        })
-        .is_some()
+        self.newtype_link_owning(id, |tid| self.get_newtype_base(tid) == Some(link))
+            .is_some()
     }
 
     /// The declaration a newtype inherits from: its chain peeled to what it

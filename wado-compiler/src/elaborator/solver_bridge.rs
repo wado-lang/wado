@@ -2115,14 +2115,21 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<Option<DefId>> {
-        self.bound_order(tysys, ctx, scope, type_id, asked, |selection| match selection {
-            Selection::AmbiguousBlankets(live) => live,
-            Selection::None
-            | Selection::One(_)
-            | Selection::AmbiguousTraits(_)
-            | Selection::Overloaded(_)
-            | Selection::Duplicated(_) => Vec::new(),
-        })
+        self.bound_order(
+            tysys,
+            ctx,
+            scope,
+            type_id,
+            asked,
+            |selection| match selection {
+                Selection::AmbiguousBlankets(live) => live,
+                Selection::None
+                | Selection::One(_)
+                | Selection::AmbiguousTraits(_)
+                | Selection::Overloaded(_)
+                | Selection::Duplicated(_) => Vec::new(),
+            },
+        )
     }
 
     /// The blocks the order selects to answer a bound `asked` on `type_id`:
@@ -2136,14 +2143,21 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<DefId> {
-        self.bound_order(tysys, ctx, scope, type_id, asked, |selection| match selection {
-            Selection::One(index) => vec![index],
-            Selection::Duplicated(live) => live,
-            Selection::None
-            | Selection::AmbiguousTraits(_)
-            | Selection::AmbiguousBlankets(_)
-            | Selection::Overloaded(_) => Vec::new(),
-        })
+        self.bound_order(
+            tysys,
+            ctx,
+            scope,
+            type_id,
+            asked,
+            |selection| match selection {
+                Selection::One(index) => vec![index],
+                Selection::Duplicated(live) => live,
+                Selection::None
+                | Selection::AmbiguousTraits(_)
+                | Selection::AmbiguousBlankets(_)
+                | Selection::Overloaded(_) => Vec::new(),
+            },
+        )
         .into_iter()
         .flatten()
         .collect()

@@ -1,0 +1,32 @@
+// A type converts to itself with no `from` of its own, whether the receiver is
+// written bare, with its arguments, or not written as a generic at all.
+
+struct Point {
+    x: i32,
+}
+
+struct Holder<T> {
+    value: T,
+}
+
+type Wrapped = Holder<i32>;
+
+test "a struct with no impl converts to itself" {
+    let p = Point { x: 1 };
+    assert Point::from(p).x == 1;
+}
+
+test "a generic receiver written bare" {
+    let h = Holder { value: 2 };
+    assert Holder::from(h).value == 2;
+}
+
+test "a generic receiver written with its arguments" {
+    let h = Holder { value: 3 };
+    assert Holder::<i32>::from(h).value == 3;
+}
+
+test "a newtype of a generic instance, through a turbofish" {
+    let w = Holder { value: 4 } as Wrapped;
+    assert Holder::<i32>::from(w).value == 4;
+}

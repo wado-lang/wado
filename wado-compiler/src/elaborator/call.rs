@@ -1069,6 +1069,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::InvalidLiteral { message, span });
     }
 
+    /// `receiver::from(arg)` where no impl body backs the conversion: the
+    /// type of the result, with the cast reify rebuilds recorded at `call`.
+    /// A receiver written without its type arguments converts an instance of
+    /// its own declaration to itself.
+    pub(super) fn convert_without_impl(
+        &mut self,
+        call: AstId,
+        receiver: TypeId,
+        arg: TypeId,
+    ) -> Option<TypeId> {
+        let (kind, result) = {
+            let tt = self.tysys.type_table.borrow();
+            let bare_generic_of_arg = matches!(
+                tt.get(arg),
+                ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
+            ) && tt.nominal_def(arg).is_some()
+                && tt.nominal_def(arg) == tt.nominal_def(receiver)
+                && tt
+                    .nominal_type_args(receiver)
+                    .is_none_or(|args| args.is_empty());
+            if tt.type_key(arg) == tt.type_key(receiver) || bare_generic_of_arg {
+                (DesugarKind::NewtypeFromCollapse, arg)
+            } else if tt.newtype_chain_holds(arg, receiver) {
+                (DesugarKind::NewtypeFromUnwrap, receiver)
+            } else if tt.newtype_chain_holds(receiver, arg) {
+                (DesugarKind::NewtypeFromWrap, receiver)
+            } else {
+                return None;
+            }
+        };
+        self.record_desugar(call, kind);
+        Some(result)
+    }
+
     /// Check a `builtin::wrap_in_case::<V, P>` call, the body of a written-out
     /// `impl From<P> for V;`, and record the case it builds: the one case of
     /// `V` whose payload is `P`.
@@ -1645,50 +1679,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         call.span,
                     );
                 }
-                // Handle From conversions with no explicit impl: reflexive and newtype.
-                if suffix == "from" && args.len() == 1 {
-                    let arg_type = args[0];
-                    let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
-
-                    // Reflexive `T::from(T_val)`: the outer Call evaporates, so
-                    // tag it `NewtypeFromCollapse` or reify emits a `Call` the
-                    // elaborator never built. Matched by canonical decl identity,
-                    // since two modules' `Instant` share a bare name. Generic
-                    // instances compare by name: a decl key drops type args.
-                    let arg_is_generic = {
-                        let tt = self.tysys.type_table.borrow();
-                        matches!(
-                            tt.get(tt.peel_refs(arg_type)),
-                            ResolvedType::GenericInstance { .. }
-                                | ResolvedType::GenericResource { .. }
-                        )
-                    };
-                    let same_key = {
-                        let tt = self.tysys.type_table.borrow();
-                        tt.type_key(arg_type) == tt.type_key(receiver_type)
-                    };
-                    if same_key || (arg_is_generic && arg_type_name == prefix) {
-                        self.record_desugar(call.id, DesugarKind::NewtypeFromCollapse);
-                        return args[0];
-                    }
-
-                    // Along a newtype chain, either way: `u64::from(id)` and
-                    // `UserId::from(raw)` where `type UserId = u64`. Reify
-                    // rebuilds the `Cast` from the recorded `DesugarKind`;
-                    // project only the result type.
-                    let tt = self.tysys.type_table.borrow();
-                    let kind = if tt.newtype_chain_holds(arg_type, receiver_type) {
-                        Some(DesugarKind::NewtypeFromUnwrap)
-                    } else if tt.newtype_chain_holds(receiver_type, arg_type) {
-                        Some(DesugarKind::NewtypeFromWrap)
-                    } else {
-                        None
-                    };
-                    drop(tt);
-                    if let Some(kind) = kind {
-                        self.record_desugar(call.id, kind);
-                        return receiver_type;
-                    }
+                if suffix == "from"
+                    && let [arg_type] = args[..]
+                    && let Some(converted) =
+                        self.convert_without_impl(call.id, receiver_type, arg_type)
+                {
+                    return converted;
                 }
 
                 // Literal args resolved against `TypeParam`/`Unknown` fell back to
@@ -1836,6 +1832,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // constant from the AST + flags info; the body walk
                 // projects only the result type.
                 return named.unwrap_or(flags_info.type_id);
+            }
+            // A type with no `from` of its own still converts to itself.
+            else if suffix == "from"
+                && let [arg_type] = args[..]
+                && self.names_type_at(receiver_site, prefix)
+                && let receiver_type = self.resolve_unsited_type_name(prefix, call.span)
+                && let Some(converted) = self.convert_without_impl(call.id, receiver_type, arg_type)
+            {
+                self.record_receiver_reference(ident, prefix);
+                return converted;
             }
             // A variant's own case was constructed above; any other name is a static.
             else if self

@@ -2164,18 +2164,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // A conversion no impl writes: to the same type, or along a newtype
-        // chain, which shares one representation. Reify rebuilds it as a
-        // `Cast`; the body walk projects only the result type.
         if static_call.method == "from"
             && let [arg_type] = args[..]
-            && self
-                .tysys
-                .type_table
-                .borrow()
-                .converts_without_impl(target_type_id, arg_type)
+            && let Some(converted) =
+                self.convert_without_impl(static_call.id, target_type_id, arg_type)
         {
-            return target_type_id;
+            return converted;
         }
 
         let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();

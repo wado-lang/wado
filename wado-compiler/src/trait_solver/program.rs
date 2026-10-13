@@ -424,8 +424,10 @@ pub struct Program {
     /// where it is written, and no candidate set holds one, so a copy never
     /// ties with its original. Set by [`super::mark_duplicates`].
     pub duplicates: IndexSet<ImplId>,
-    /// Impls a newtype does not inherit from its base: `From<Meters> for i64`,
-    /// which would make every other newtype of `i64` convert from `Meters`.
+    /// Impls that answer at their own level alone, never through a newtype's
+    /// or a `flags` type's base: the stated `From` impls. Inheriting
+    /// `From<Meters> for i64` would make every newtype of `i64` convert from
+    /// `Meters`.
     pub not_inherited: IndexSet<ImplId>,
 }
 

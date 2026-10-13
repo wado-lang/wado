@@ -6402,8 +6402,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         facts: FromCallFacts,
     ) -> TirExpr {
-        let generic =
-            LocalMethodName::new(facts.target_name, Some(facts.trait_name), "from".to_string());
+        let generic = LocalMethodName::new(
+            facts.target_name,
+            Some(facts.trait_name),
+            "from".to_string(),
+        );
         let arg_names: Vec<FqTypeName> = {
             let table = self.tysys.type_table.borrow();
             facts
@@ -6810,6 +6813,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// `Type::from(x)` with no impl behind it, as annotate recorded it at
+    /// `call`: a reflexive or newtype conversion.
+    fn reify_conversion_without_impl(
+        &mut self,
+        call: AstId,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+        span: Span,
+    ) -> Option<TirExpr> {
+        let kind = self.ann_desugars(call)?;
+        let arg = match kind {
+            DesugarKind::NewtypeFromCollapse
+            | DesugarKind::NewtypeFromUnwrap
+            | DesugarKind::NewtypeFromWrap => self.reify_expr(&args[0], ctx, None),
+            _ => return None,
+        };
+        Some(match kind {
+            DesugarKind::NewtypeFromCollapse => arg,
+            _ => bare_cast(arg, recorded_type, span),
+        })
+    }
+
     /// Reify a `StaticMethodCallExpr` — a fully-qualified static call like
     /// `Stream<u8>::new()`, whose target parses as a `Type` node rather than an
     /// `Ident` callee. Same shape as `reify_call`'s qualified-callee branch:
@@ -6873,6 +6899,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 static_call.span,
             );
             return Self::hoist_block(call, prelude);
+        }
+
+        if let Some(converted) = self.reify_conversion_without_impl(
+            static_call.id,
+            &static_call.args,
+            ctx,
+            recorded_type,
+            static_call.span,
+        ) {
+            return converted;
         }
 
         // Variant constructor in turbofish form (`Option::<T>::Some(x)`).
@@ -7338,17 +7374,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Self::hoist_block(call, prelude);
         }
 
-        // `Type::from(x)` resolved inline, with no `static_method_dispatch`:
-        // a reflexive or newtype conversion.
-        match self.ann_desugars(call.id) {
-            Some(DesugarKind::NewtypeFromCollapse) => {
-                return self.reify_expr(&call.args[0], ctx, None);
-            }
-            Some(DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap) => {
-                let arg = self.reify_expr(&call.args[0], ctx, None);
-                return bare_cast(arg, recorded_type, span);
-            }
-            _ => {}
+        if let Some(converted) =
+            self.reify_conversion_without_impl(call.id, &call.args, ctx, recorded_type, span)
+        {
+            return converted;
         }
 
         // Indirect call: the callee is a value rather than a named function.
