@@ -806,14 +806,10 @@ mod tests {
         let mut iface = None;
         let mut type_names = Vec::new();
         for item in &b.module.items {
-            match item {
-                Item::Interface(d) => iface = Some(d),
-                Item::Struct(d) => type_names.push(d.name.clone()),
-                Item::Enum(d) => type_names.push(d.name.clone()),
-                Item::Variant(d) => type_names.push(d.name.clone()),
-                Item::Flags(d) => type_names.push(d.name.clone()),
-                Item::Newtype(d) => type_names.push(d.name.clone()),
-                _ => {}
+            if let Item::Interface(d) = item {
+                iface = Some(d);
+            } else if let Some(decl) = item.type_decl() {
+                type_names.push(decl.name.to_string());
             }
         }
         let iface = iface.expect("interface present");
