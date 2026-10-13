@@ -176,7 +176,8 @@ Whole program and backend:
   `select`.
 - `multi_value_return` — return a tuple or struct as one Wasm result per field.
 - `multi_value_param` — pass an aggregate read only by field as one parameter
-  per field.
+  per field. A `&S` qualifies where nothing the call runs stores into memory
+  its caller holds.
 - `const_object_globalization` — share a constant aggregate as an immutable
   global ([WEP](./wep-2026-05-31-const-object-globalization.md)).
 

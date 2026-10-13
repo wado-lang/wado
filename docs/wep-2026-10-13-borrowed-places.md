@@ -245,8 +245,6 @@ The clients are:
 - Move and share in value-copy elision
   ([WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md#value-copy-elision-the-second-client)).
 - An assignment to a borrowed place, above.
-- A multi-value `&S` parameter: an immutable reference whose referent no write
-  reaches while the call runs may arrive as one Wasm parameter per field.
 
 ## Roadmap
 
@@ -263,8 +261,11 @@ The clients are:
   through `index_assign`. `List`'s own code relies on repointing its backing
   array's slots (`push` fills an empty one, a swap moves handles), so the
   rewrite is the user-level assignment's, not every `Array` store's.
-- [ ] Take a multi-value `&S` parameter, asking this analysis whether a write
-  reaches the referent while the call runs.
+- [x] Take a multi-value `&S` parameter where no write reaches the referent
+  while the call runs (`opt_multi_value_param_ref`). The callee's own
+  transitive summary answers that (`FnEffect::writes_shared_heap`): it stores
+  into no memory its caller holds. The call site reads the fields after every
+  argument, as the callee would have.
 
 ## Known gaps
 
