@@ -1349,6 +1349,14 @@ pub enum Item {
 }
 
 impl Item {
+    #[must_use]
+    pub fn as_trait(&self) -> Option<&TraitDecl> {
+        let Item::Trait(t) = self else {
+            return None;
+        };
+        Some(t)
+    }
+
     /// The `AstId` of this item's declaration node. Every variant carries
     /// one — there is no id-less item — so this is the canonical way to
     /// find an item by identity (e.g. resolving an index built during

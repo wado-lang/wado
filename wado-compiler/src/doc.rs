@@ -779,12 +779,7 @@ fn documented_impls<'a>(
                 .is_some_and(|v| !v.is_public());
             (include_private || !below_pub).then(|| DocImpl {
                 block,
-                implemented: implemented.and_then(|item| {
-                    let Item::Trait(t) = item else {
-                        return None;
-                    };
-                    Some(t)
-                }),
+                implemented: implemented.and_then(Item::as_trait),
             })
         })
         .collect()

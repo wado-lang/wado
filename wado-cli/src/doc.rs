@@ -250,8 +250,8 @@ async fn analyze(source: &str, dir: &Path, filename: &str) -> Result<Semantics, 
 async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliExit> {
     if is_stdlib_module(input) {
         let sem = analyze(&stdlib_doc_entry(input), Path::new("."), "doc.wado").await?;
-        return extract_stdlib_doc_with(input, include_private, &sem)
-            .ok_or_else(|| CliExit::error(format!("Unknown stdlib module: {input}")));
+        return Ok(extract_stdlib_doc_with(input, include_private, &sem)
+            .expect("an analyzed stdlib module is bundled"));
     }
 
     let path = Path::new(input);
@@ -269,7 +269,8 @@ async fn load_doc(input: &str, include_private: bool) -> Result<DocModule, CliEx
         .expect("an analyzed source parses");
     let module_name = path
         .file_stem()
-        .map_or("unknown", |s| s.to_str().unwrap_or("unknown"));
+        .and_then(|stem| stem.to_str())
+        .expect("a UTF-8 file name has a UTF-8 stem");
     Ok(extract_doc_with(
         &parsed.ast,
         &parsed.trivia,

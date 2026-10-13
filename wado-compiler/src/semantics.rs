@@ -665,12 +665,10 @@ impl Semantics {
         id: AstId,
     ) -> Option<(&ast::Function, Vec<&ast::AssertStmt>)> {
         let (f, item) = self.function_and_item_at(id)?;
-        let declaring_trait = if let Item::Trait(t) = item {
-            Some(t)
-        } else if let Item::Impl(b) = item {
-            self.implemented_trait(b)
+        let declaring_trait = if let Item::Impl(b) = item {
+            self.implemented(b).and_then(Item::as_trait)
         } else {
-            None
+            item.as_trait()
         };
         Some((f, f.binding_contracts(declaring_trait)))
     }
@@ -690,16 +688,8 @@ impl Semantics {
         self.implemented(block)
     }
 
-    /// The trait `b` implements; `None` for an inherent block or one that
-    /// handles an effect.
-    fn implemented_trait(&self, b: &ImplBlock) -> Option<&ast::TraitDecl> {
-        let Item::Trait(t) = self.implemented(b)? else {
-            return None;
-        };
-        Some(t)
-    }
-
-    /// The item declaring the trait or interface `b` implements.
+    /// The item declaring the trait or interface `b` implements; `None` for an
+    /// inherent block.
     fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
         let resolutions = self.resolutions()?;
         let id = resolutions
