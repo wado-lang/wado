@@ -35,7 +35,7 @@ version = "0.1.0"
         gen_pkg.join("src/generator.wado"),
         r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 

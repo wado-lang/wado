@@ -739,6 +739,7 @@ mod tests {
             id: AstId::fresh(),
             attrs: Vec::new(),
             visibility: Visibility::Private,
+            is_export: false,
             source: source.to_string(),
             source_span: span(),
             source_id: AstId::fresh(),

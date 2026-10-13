@@ -1446,6 +1446,58 @@ impl Item {
         }
     }
 
+    /// The head of a `struct`, `enum`, `variant`, `flags` or newtype: the
+    /// declarations a Component Model interface can publish.
+    pub fn type_decl(&self) -> Option<TypeDeclHead<'_>> {
+        let (name, is_export, type_params): (&str, bool, &[GenericParam]) = match self {
+            Item::Struct(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Enum(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Variant(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Flags(d) => (&d.name, d.is_export, &[]),
+            Item::Newtype(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Use(_)
+            | Item::Function(_)
+            | Item::Interface(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::Trait(_)
+            | Item::Resource(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => return None,
+        };
+        Some(TypeDeclHead {
+            name,
+            is_export,
+            type_params,
+        })
+    }
+
+    /// [`Self::type_decl`]'s name, to rename the declaration.
+    pub fn type_decl_name_mut(&mut self) -> Option<&mut String> {
+        match self {
+            Item::Struct(d) => Some(&mut d.name),
+            Item::Enum(d) => Some(&mut d.name),
+            Item::Variant(d) => Some(&mut d.name),
+            Item::Flags(d) => Some(&mut d.name),
+            Item::Newtype(d) => Some(&mut d.name),
+            Item::Use(_)
+            | Item::Function(_)
+            | Item::Interface(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::Trait(_)
+            | Item::Resource(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => None,
+        }
+    }
+
     /// The span of the item's own name, or its whole span where it writes none.
     pub fn name_span(&self) -> Span {
         match self {
@@ -1492,6 +1544,15 @@ impl Item {
             Item::Error(_) => &[],
         }
     }
+}
+
+/// What [`Item::type_decl`] answers.
+#[derive(Debug, Clone, Copy)]
+pub struct TypeDeclHead<'a> {
+    pub name: &'a str,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
+    pub type_params: &'a [GenericParam],
 }
 
 /// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].
@@ -2434,6 +2495,9 @@ pub struct UseDecl {
     pub attrs: Vec<Attribute>,
     /// Re-export visibility; `Private` is a local import, not re-exported.
     pub visibility: Visibility,
+    /// `export use`: the importing package's Component Model interface
+    /// publishes each type it names.
+    pub is_export: bool,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
     pub source: String,
     /// Span of the source string literal (without surrounding quotes in the
@@ -4395,12 +4459,22 @@ pub struct StructDecl {
     /// Span of the struct name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
     /// Generic type parameters: `struct Pair<T, U> { ... }`
     pub type_params: Vec<GenericParam>,
     pub fields: Vec<StructField>,
     /// Attributes like `#[cm("...")]`
     pub attrs: Vec<Attribute>,
     pub span: Span,
+}
+
+impl StructDecl {
+    /// The first field a WIT record could not show: WIT has no private field.
+    #[must_use]
+    pub fn first_private_field(&self) -> Option<&StructField> {
+        self.fields.iter().find(|f| !f.visibility.is_public())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -4426,6 +4500,8 @@ pub struct EnumDecl {
     /// Span of the enum name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
     /// Generic type parameters: `enum Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<EnumCase>,
@@ -4462,6 +4538,8 @@ pub struct FlagsDecl {
     /// Span of the flags name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
     pub attributes: Option<Vec<Attribute>>,
     pub flags: Vec<FlagsVariant>,
     pub span: Span,
@@ -4492,6 +4570,8 @@ pub struct VariantDecl {
     /// Span of the variant name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
     /// Generic type parameters: `variant Option<T> { Some(T), None }`
     pub type_params: Vec<GenericParam>,
     pub cases: Vec<VariantCase>,
@@ -4528,6 +4608,8 @@ pub struct Newtype {
     /// Span of the newtype name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
     pub type_params: Vec<GenericParam>,
     pub ty: Type,
     pub attrs: Vec<Attribute>,

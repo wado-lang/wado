@@ -94,8 +94,8 @@ is an error rather than a precedence rule.
 Types can be exported with the same syntax:
 
 ```wado
-export struct MyRecord { x: i32 }
-export(SomeWorld::MyType) struct AliasedRecord { x: i32 }
+export struct MyRecord { pub x: i32 }
+export(SomeWorld::MyType) struct AliasedRecord { pub x: i32 }
 ```
 
 ### World Imports and Effect System

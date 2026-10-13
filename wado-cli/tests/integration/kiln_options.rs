@@ -10,7 +10,7 @@ use crate::common::wado_in;
 /// A generator declaring one required `verbose` option.
 const VERBOSE_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
-pub struct Options {
+export struct Options {
     pub verbose: bool,
 }
 
@@ -30,7 +30,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 const MAP_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 use { TreeMap } from "core:collections";
 
-pub struct Options {
+export struct Options {
     pub sizes: TreeMap<String, i32>,
 }
 
@@ -166,7 +166,7 @@ fn type_mismatch_points_at_the_field_key() {
 #[test]
 fn unknown_option_stops_the_run_before_the_generator() {
     let no_options = VERBOSE_GENERATOR
-        .replace("pub struct Options {\n    pub verbose: bool,\n}\n", "")
+        .replace("export struct Options {\n    pub verbose: bool,\n}\n", "")
         .replace("Request<Options>", "Request")
         .replace("    let _ = req.options.verbose;\n", "");
     for generator in [VERBOSE_GENERATOR, no_options.as_str()] {
@@ -209,13 +209,13 @@ fn map_option_reaches_the_generator() {
 fn reexported_options_reach_the_generator() {
     let tmp = tempfile::tempdir().unwrap();
     let (declaration, rest) = MAP_GENERATOR
-        .split_once("pub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
+        .split_once("export struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
         .unwrap();
     let generator = format!("{declaration}pub use {{ Options }} from \"./options.wado\";\n{rest}");
     let app = write_project(tmp.path(), &generator, "{ sizes: { small: 1, large: 3 } }");
     fs::write(
         tmp.path().join("gen/src/options.wado"),
-        "use { TreeMap } from \"core:collections\";\n\npub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n",
+        "use { TreeMap } from \"core:collections\";\n\nexport struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n",
     )
     .unwrap();
 
@@ -294,14 +294,14 @@ fn a_computed_list_default_stops_the_build() {
 fn a_narrowing_reexport_of_options_is_refused() {
     let tmp = tempfile::tempdir().unwrap();
     let (declaration, rest) = MAP_GENERATOR
-        .split_once("pub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
+        .split_once("export struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
         .unwrap();
     let generator =
         format!("{declaration}internal use {{ Options }} from \"./options.wado\";\n{rest}");
     let app = write_project(tmp.path(), &generator, "{}");
     fs::write(
         tmp.path().join("gen/src/options.wado"),
-        "use { TreeMap } from \"core:collections\";\n\npub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n",
+        "use { TreeMap } from \"core:collections\";\n\nexport struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n",
     )
     .unwrap();
 
@@ -381,10 +381,10 @@ fn options_past_the_flat_parameter_limit_reach_the_generator() {
 #[test]
 fn wide_options_from_a_submodule_reach_the_generator() {
     let tmp = tempfile::tempdir().unwrap();
-    let rule = "pub struct Rule {\n    pub pattern: String,\n    pub axes: List<String>,\n}\n";
-    let options = "use { TreeMap } from \"core:collections\";\nuse { Rule } from \"./rule.wado\";\n\npub struct Options {\n    pub sizes: TreeMap<String, i32>,\n    pub rules: List<Rule> = [],\n    pub a: List<String> = [],\n    pub b: List<String> = [],\n    pub on: bool = true,\n}\n";
+    let rule = "export struct Rule {\n    pub pattern: String,\n    pub axes: List<String>,\n}\n";
+    let options = "use { TreeMap } from \"core:collections\";\nuse { Rule } from \"./rule.wado\";\n\nexport struct Options {\n    pub sizes: TreeMap<String, i32>,\n    pub rules: List<Rule> = [],\n    pub a: List<String> = [],\n    pub b: List<String> = [],\n    pub on: bool = true,\n}\n";
     let (declaration, rest) = MAP_GENERATOR
-        .split_once("pub struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
+        .split_once("export struct Options {\n    pub sizes: TreeMap<String, i32>,\n}\n")
         .unwrap();
     let generator = format!("{declaration}pub use {{ Options }} from \"./options.wado\";\n{rest}").replace(
         "spelled.join(\",\")",

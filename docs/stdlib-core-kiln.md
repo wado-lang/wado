@@ -87,7 +87,7 @@ See WEP 2026-04-12 §"Options are a typed argument in each generator's own world
 #### `module: String`
 
 How the use site named this generator: its `module:` specifier as
-written, or for a path, that path from the project root.
+written, or for a path, that path from the package root.
 
 #### `options: T`
 

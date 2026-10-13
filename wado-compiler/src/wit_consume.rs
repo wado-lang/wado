@@ -213,6 +213,7 @@ impl Builder {
             id: self.id(),
             attrs: Vec::new(),
             visibility: Visibility::Private,
+            is_export: false,
             source: "core:collections".to_string(),
             source_span: syn(),
             source_id: self.id(),
@@ -457,6 +458,7 @@ impl Builder {
                     name: wado_name,
                     name_span: syn(),
                     visibility: Visibility::Public,
+                    is_export: false,
                     type_params: Vec::new(),
                     fields,
                     attrs: vec![cm],
@@ -481,6 +483,7 @@ impl Builder {
                     name: wado_name,
                     name_span: syn(),
                     visibility: Visibility::Public,
+                    is_export: false,
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
@@ -506,6 +509,7 @@ impl Builder {
                     name: wado_name,
                     name_span: syn(),
                     visibility: Visibility::Public,
+                    is_export: false,
                     type_params: Vec::new(),
                     cases,
                     attrs: vec![cm],
@@ -530,6 +534,7 @@ impl Builder {
                     name: wado_name,
                     name_span: syn(),
                     visibility: Visibility::Public,
+                    is_export: false,
                     attributes: Some(vec![cm]),
                     flags,
                     span: syn(),
@@ -543,6 +548,7 @@ impl Builder {
                     name: wado_name,
                     name_span: syn(),
                     visibility: Visibility::Public,
+                    is_export: false,
                     type_params: Vec::new(),
                     ty,
                     attrs: vec![cm],
@@ -800,14 +806,10 @@ mod tests {
         let mut iface = None;
         let mut type_names = Vec::new();
         for item in &b.module.items {
-            match item {
-                Item::Interface(d) => iface = Some(d),
-                Item::Struct(d) => type_names.push(d.name.clone()),
-                Item::Enum(d) => type_names.push(d.name.clone()),
-                Item::Variant(d) => type_names.push(d.name.clone()),
-                Item::Flags(d) => type_names.push(d.name.clone()),
-                Item::Newtype(d) => type_names.push(d.name.clone()),
-                _ => {}
+            if let Item::Interface(d) = item {
+                iface = Some(d);
+            } else if let Some(decl) = item.type_decl() {
+                type_names.push(decl.name.to_string());
             }
         }
         let iface = iface.expect("interface present");

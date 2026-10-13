@@ -1344,6 +1344,15 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A named type an `export fn` reaches whose package does not publish it,
+    /// by `export` or `export use`, and no `#[cm(…)]` binds.
+    UnpublishedAtCmBoundary {
+        function: String,
+        position: String,
+        ty: String,
+        span: Span,
+    },
+
     /// `export fn` cannot declare default parameter values. The Component
     /// Model ABI requires every parameter at the CM boundary, so defaults
     /// would diverge from the WIT signature.
@@ -2779,6 +2788,18 @@ impl TypeError {
                 Code::CmBoundaryType,
                 format!(
                     "`{borrow}` in {position} of `{function}` is not allowed: a reference or a view points into storage it does not own and has no Component Model representation; pass an owned value such as a `List<T>` or a `String`"
+                ),
+                *span,
+            ),
+            TypeError::UnpublishedAtCmBoundary {
+                function,
+                position,
+                ty,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "`{ty}` in {position} of `{function}` is not published: an `export fn` puts every type it reaches into the package's Component Model interface; declare it `export`, or adopt it with `export use`"
                 ),
                 *span,
             ),

@@ -746,7 +746,7 @@ struct IndexedGenerator {
     /// Hash of `sources`; names the component, and is the identity the driver
     /// records in `Metadata::generator_source_hash`.
     source_hash: String,
-    /// `null` for a generator with no `pub struct Options`.
+    /// `null` for a generator with no `export struct Options`.
     descriptor: Option<OptionsDescriptor>,
     /// Every file the compile loaded — `.wado` modules and assets routed
     /// through `CompilerHost::load_source`; stdlib bypasses the host and never
@@ -1245,7 +1245,7 @@ mod tests {
         let generator_src = "\
 use { Request, Response, Error } from \"core:kiln\";\n\
 \n\
-pub struct Options {\n\
+export struct Options {\n\
     pub verbose: bool,\n\
 }\n\
 \n\
@@ -1347,7 +1347,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {\n\
         let generator_src = "\
 use { Request, Response, Error } from \"core:kiln\";\n\
 \n\
-pub struct Options {\n\
+export struct Options {\n\
     pub highlight: bool,\n\
     pub depth: i32,\n\
 }\n\

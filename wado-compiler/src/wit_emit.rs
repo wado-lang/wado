@@ -20,6 +20,7 @@ use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
     parse_resource_func,
 };
+use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
 use crate::name::to_cm_name;
@@ -131,6 +132,8 @@ pub struct WitEmitInput<'a> {
     pub wit_contract: Option<&'a WitContract>,
     /// Which world export each `export(…)` function provides.
     pub export_mappings: &'a ExportMappings,
+    /// The name each type the entry's `export use` adopts is published under.
+    pub published_names: &'a IndexMap<DefId, String>,
 }
 
 /// A detached, owned copy of the WIT-relevant frontend subset, cloned before
@@ -144,6 +147,7 @@ pub struct WitEmitSnapshot {
     world_registry: Arc<WorldRegistry>,
     wit_contract: WitContract,
     export_mappings: ExportMappings,
+    published_names: IndexMap<DefId, String>,
 }
 
 impl WitEmitSnapshot {
@@ -155,6 +159,7 @@ impl WitEmitSnapshot {
         world_registry: Arc<WorldRegistry>,
         wit_contract: WitContract,
         export_mappings: ExportMappings,
+        published_names: IndexMap<DefId, String>,
     ) -> Self {
         Self {
             tir_modules,
@@ -163,6 +168,7 @@ impl WitEmitSnapshot {
             world_registry,
             wit_contract,
             export_mappings,
+            published_names,
         }
     }
 
@@ -177,6 +183,7 @@ impl WitEmitSnapshot {
             world_registry: Some(&self.world_registry),
             wit_contract: Some(&self.wit_contract),
             export_mappings: &self.export_mappings,
+            published_names: &self.published_names,
         }
     }
 }
@@ -281,11 +288,12 @@ struct Emitter<'a> {
     /// CM interface FQs referenced by the world (imports + exports), to inline
     /// under `full` scope. Populated by `build_package`.
     referenced_interfaces: BTreeSet<String>,
-    /// Named user types referenced by emitted signatures, in discovery order,
-    /// awaiting a `TypeDef`. Keyed by source name to dedupe.
-    pending: BTreeMap<String, TypeId>,
-    /// Source names already emitted as a `TypeDef`.
-    emitted: BTreeSet<String>,
+    /// Named user types referenced by emitted signatures, awaiting a `TypeDef`,
+    /// in source-name order so the output is stable.
+    pending: BTreeSet<(String, DefId)>,
+    /// Declarations already emitted as a `TypeDef`.
+    emitted: BTreeSet<DefId>,
+    published_names: &'a IndexMap<DefId, String>,
 }
 
 /// One exported function gathered from the frontend, before WIT rendering.
@@ -298,14 +306,14 @@ struct ExportedFn {
     is_async: bool,
 }
 
-/// Name-indexed view of the user-authored type declarations.
+/// Declaration-indexed view of the user-authored type declarations.
 #[derive(Default)]
 struct TypeDecls<'a> {
-    structs: BTreeMap<String, &'a TirStruct>,
-    enums: BTreeMap<String, &'a TirEnum>,
-    variants: BTreeMap<String, &'a TirVariantDecl>,
-    flags: BTreeMap<String, &'a TirFlags>,
-    newtypes: BTreeMap<String, &'a TirNewtype>,
+    structs: IndexMap<DefId, &'a TirStruct>,
+    enums: IndexMap<DefId, &'a TirEnum>,
+    variants: IndexMap<DefId, &'a TirVariantDecl>,
+    flags: IndexMap<DefId, &'a TirFlags>,
+    newtypes: IndexMap<DefId, &'a TirNewtype>,
 }
 
 impl<'a> Emitter<'a> {
@@ -313,22 +321,23 @@ impl<'a> Emitter<'a> {
         let mut decls = TypeDecls::default();
         for module in input.tir_modules.values() {
             for s in &module.structs {
-                decls.structs.insert(s.name.clone(), s);
+                if let Some(def) = s.def.decl() {
+                    decls.structs.insert(def, s);
+                }
             }
             for e in &module.enums {
-                decls.enums.insert(e.name.clone(), e);
+                decls.enums.insert(e.def, e);
             }
             for v in &module.variants {
-                decls.variants.insert(v.name.clone(), v);
+                decls.variants.insert(v.def, v);
             }
             for fl in &module.flags {
-                decls.flags.insert(fl.name.clone(), fl);
+                decls.flags.insert(fl.def, fl);
             }
             // A generic declaration names no single type and has no WIT form —
-            // WIT takes no type parameters — so it never enters the map, where
-            // it would shadow a concrete declaration of the same name.
+            // WIT takes no type parameters.
             for nt in module.newtypes.iter().filter(|nt| nt.type_id.is_some()) {
-                decls.newtypes.insert(nt.name.clone(), nt);
+                decls.newtypes.insert(nt.def, nt);
             }
         }
         Self {
@@ -340,8 +349,9 @@ impl<'a> Emitter<'a> {
             types: input.types,
             decls,
             referenced_interfaces: BTreeSet::new(),
-            pending: BTreeMap::new(),
+            pending: BTreeSet::new(),
             emitted: BTreeSet::new(),
+            published_names: input.published_names,
         }
     }
 
@@ -852,31 +862,19 @@ impl<'a> Emitter<'a> {
 
     fn drain_pending_type_defs(&mut self) -> Result<Vec<TypeDef>, WitEmitError> {
         let mut out = Vec::new();
-        while let Some((name, type_id)) = self.next_pending() {
-            if self.emitted.contains(&name) {
-                continue;
-            }
-            self.emitted.insert(name.clone());
-            if let Some(def) = self.emit_type_def(&name, type_id)? {
-                out.push(def);
+        while let Some((_, def)) = self.pending.pop_first() {
+            if self.emitted.insert(def)
+                && let Some(type_def) = self.emit_type_def(def)?
+            {
+                out.push(type_def);
             }
         }
         Ok(out)
     }
 
-    fn next_pending(&mut self) -> Option<(String, TypeId)> {
-        let key = self.pending.keys().next().cloned()?;
-        let id = self.pending.remove(&key)?;
-        Some((key, id))
-    }
-
-    fn emit_type_def(
-        &mut self,
-        name: &str,
-        _type_id: TypeId,
-    ) -> Result<Option<TypeDef>, WitEmitError> {
-        let cm_name = to_cm_name(name);
-        if let Some(s) = self.decls.structs.get(name).copied() {
+    fn emit_type_def(&mut self, def: DefId) -> Result<Option<TypeDef>, WitEmitError> {
+        let cm_name = self.wit_type_name(def);
+        if let Some(s) = self.decls.structs.get(&def).copied() {
             let mut fields = Vec::new();
             for field in &s.fields {
                 fields.push(Field::new(
@@ -886,11 +884,11 @@ impl<'a> Emitter<'a> {
             }
             return Ok(Some(TypeDef::record(cm_name, fields)));
         }
-        if let Some(e) = self.decls.enums.get(name).copied() {
+        if let Some(e) = self.decls.enums.get(&def).copied() {
             let cases = e.cases.iter().map(|c| to_cm_name(&c.name));
             return Ok(Some(TypeDef::enum_(cm_name, cases)));
         }
-        if let Some(v) = self.decls.variants.get(name).copied() {
+        if let Some(v) = self.decls.variants.get(&def).copied() {
             let mut cases = Vec::new();
             for case in &v.cases {
                 let payload = self.map_variant_payload(case.payload)?;
@@ -901,14 +899,14 @@ impl<'a> Emitter<'a> {
             }
             return Ok(Some(TypeDef::variant(cm_name, cases)));
         }
-        if let Some(fl) = self.decls.flags.get(name).copied() {
+        if let Some(fl) = self.decls.flags.get(&def).copied() {
             let members = fl.members.iter().map(|m| Flag::new(to_cm_name(&m.name)));
             return Ok(Some(TypeDef::flags(cm_name, members)));
         }
         if let Some(type_id) = self
             .decls
             .newtypes
-            .get(name)
+            .get(&def)
             .copied()
             .and_then(|nt| nt.type_id)
         {
@@ -922,7 +920,10 @@ impl<'a> Emitter<'a> {
             return Ok(Some(TypeDef::type_(cm_name, base)));
         }
         Err(WitEmitError::UnrepresentableType {
-            description: format!("`{name}` has no emittable declaration"),
+            description: format!(
+                "`{}` has no emittable declaration",
+                self.types.def_name(def)
+            ),
         })
     }
 
@@ -1005,12 +1006,11 @@ impl<'a> Emitter<'a> {
             | ResolvedType::Variant { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Newtype { .. } => {
-                let name = self
+                let def = self
                     .types
-                    .nominal_head(id)
-                    .expect("a nominal type names a declaration")
-                    .0;
-                Ok(self.named(&name, id))
+                    .nominal_def(id)
+                    .expect("a nominal type names a declaration");
+                Ok(self.named(def))
             }
             ResolvedType::Resource { def } if self.types.is_unrestricted_resource(*def) => {
                 Ok(Type::F64)
@@ -1059,11 +1059,22 @@ impl<'a> Emitter<'a> {
     }
 
     /// Reference a named user type, queuing it for `TypeDef` emission.
-    fn named(&mut self, name: &str, type_id: TypeId) -> Type {
-        if !self.emitted.contains(name) {
-            self.pending.entry(name.to_string()).or_insert(type_id);
+    fn named(&mut self, def: DefId) -> Type {
+        if !self.emitted.contains(&def) {
+            self.pending
+                .insert((self.types.def_name(def).to_string(), def));
         }
-        Type::named(to_cm_name(name))
+        Type::named(self.wit_type_name(def))
+    }
+
+    /// The WIT name of `def`: the one an `export use` publishes it under, or
+    /// its own.
+    fn wit_type_name(&self, def: DefId) -> String {
+        to_cm_name(
+            self.published_names
+                .get(&def)
+                .map_or(self.types.def_name(def), String::as_str),
+        )
     }
 }
 

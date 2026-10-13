@@ -12,11 +12,12 @@ use crate::ast::{
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
+use crate::component_model::cm_definition;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name::{mangle_local_method, namespace_member_alias, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
@@ -232,6 +233,28 @@ pub enum AnalyzeError {
         reexport_visibility: Visibility,
         span: Span,
     },
+    /// A struct a package publishes, by `export` or by `export use`, with a
+    /// field that is not `pub`: WIT has no private field.
+    PrivateFieldPublished {
+        owner: String,
+        field: String,
+        adopted: bool,
+        span: Span,
+    },
+    /// An `export use` naming something its package cannot publish.
+    ExportUseUnpublishable {
+        name: String,
+        why: Unpublishable,
+        span: Span,
+    },
+    /// An `export use` publishing a type its package already publishes under
+    /// another name: WIT gives a type one name.
+    ExportUseRenamedTwice {
+        name: String,
+        earlier: String,
+        published: String,
+        span: Span,
+    },
 }
 
 /// What is wrong with an `#[unavailable]` declaration.
@@ -382,8 +405,64 @@ impl AnalyzeError {
                 ),
                 *span,
             ),
+            AnalyzeError::PrivateFieldPublished {
+                owner,
+                field,
+                adopted,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "`{owner}` is {}, so its field `{field}` must be `pub`: WIT shows every field of a record",
+                    if *adopted {
+                        "published by `export use`"
+                    } else {
+                        "`export`"
+                    }
+                ),
+                *span,
+            ),
+            AnalyzeError::ExportUseUnpublishable { name, why, span } => (
+                Code::CmBoundaryType,
+                match why {
+                    Unpublishable::NotType => {
+                        format!("`export use` publishes a type, and `{name}` is not one")
+                    }
+                    Unpublishable::Resource => format!(
+                        "`{name}` is a resource, and `export use` publishes only a struct, enum, variant, flags or newtype"
+                    ),
+                    Unpublishable::CmBound => format!(
+                        "`{name}` belongs to the interface its `#[cm]` binds, so `export use` cannot publish it again"
+                    ),
+                    Unpublishable::Generic => format!(
+                        "`{name}` is generic, and WIT has no generic type, so `export use` cannot publish it"
+                    ),
+                },
+                *span,
+            ),
+            AnalyzeError::ExportUseRenamedTwice {
+                name,
+                earlier,
+                published,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "`{name}` is already published as `{earlier}`, so `export use` cannot publish it as `{published}` too: WIT gives a type one name"
+                ),
+                *span,
+            ),
         }
     }
+}
+
+/// Why an `export use` cannot publish what it names.
+#[derive(Debug, Clone, Copy)]
+pub enum Unpublishable {
+    NotType,
+    Resource,
+    CmBound,
+    Generic,
 }
 
 fn reexport_widens_message(
@@ -457,6 +536,8 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// The operations a component's default interfaces share, which no bare
     /// name imports, each with the interfaces that declare it.
     shared_default_ops: hashmap::IndexMap<(ModuleSource, String), Vec<String>>,
+    /// The name each package's `export use` publishes an adopted type under.
+    adopted_names: hashmap::IndexMap<(PackageId, AstId), String>,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -470,6 +551,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             invocations: InvocationIndex::new(),
             interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
             shared_default_ops: hashmap::IndexMap::default(),
+            adopted_names: hashmap::IndexMap::default(),
         }
     }
 
@@ -599,6 +681,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 }
 
                 Item::Struct(struct_decl) => {
+                    if struct_decl.is_export
+                        && let Some(field) = struct_decl.first_private_field()
+                    {
+                        let _ = self.logger.error_in(
+                            module_source,
+                            AnalyzeError::PrivateFieldPublished {
+                                owner: struct_decl.name.clone(),
+                                field: field.name.clone(),
+                                adopted: false,
+                                span: field.span,
+                            },
+                        );
+                    }
                     let kind = SymbolKind::Struct(StructSymbol {
                         fields: struct_decl.fields.iter().map(|f| f.name.clone()).collect(),
                     });
@@ -1366,6 +1461,16 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 *local_span,
                                 use_decl.visibility,
                             )?;
+                            if use_decl.is_export {
+                                self.check_adoption(
+                                    from_module_source,
+                                    &module_source,
+                                    name,
+                                    *name_span,
+                                    alias.as_ref().map(|alias| (alias.as_str(), *local_span)),
+                                    all_modules,
+                                );
+                            }
                         }
                         UseItem::InterfaceFunctions {
                             interface_name,
@@ -1382,6 +1487,16 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     func_item.local_span,
                                     use_decl.visibility,
                                 )?;
+                                if use_decl.is_export {
+                                    let _ = self.logger.error_in(
+                                        from_module_source,
+                                        AnalyzeError::ExportUseUnpublishable {
+                                            name: func_item.name.clone(),
+                                            why: Unpublishable::NotType,
+                                            span: func_item.name_span,
+                                        },
+                                    );
+                                }
                             }
                         }
                         UseItem::Wildcard => {
@@ -1414,6 +1529,91 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             }
         }
         Ok(())
+    }
+
+    /// Diagnose an `export use` of `name` from `target`, published under
+    /// `alias` where it gives one, that cannot publish it: it names no type,
+    /// one a `#[cm]` binds to an interface of its own, a generic one, a type
+    /// the package already publishes under another name (an `export` on its
+    /// declaration publishes it under its own), or a struct with a field WIT
+    /// could not show.
+    fn check_adoption(
+        &mut self,
+        from: &ModuleSource,
+        target: &ModuleSource,
+        name: &str,
+        span: Span,
+        alias: Option<(&str, Span)>,
+        all_modules: &hashmap::IndexMap<ModuleSource, Module>,
+    ) {
+        let Some(symbol) = self.symbols.lookup_in_module(target, name) else {
+            return; // `import_symbol` reported it.
+        };
+        let (published, published_span) = alias.unwrap_or((name, span));
+        let name = name.to_string();
+        let unpublishable = |why| AnalyzeError::ExportUseUnpublishable {
+            name: name.clone(),
+            why,
+            span,
+        };
+        let error = match &symbol.kind {
+            SymbolKind::Struct(_)
+            | SymbolKind::Enum(_)
+            | SymbolKind::Variant(_)
+            | SymbolKind::Flags(_)
+            | SymbolKind::Newtype(_) => {
+                let item = all_modules[symbol.module_source()]
+                    .items
+                    .iter()
+                    .find(|item| item.id() == symbol.defined_at)
+                    .expect("a type symbol is defined by a module item");
+                let decl = item.type_decl().expect("a type symbol names a type item");
+                let declared_export = decl.is_export && symbol.module_source().same_package(from);
+                let earlier = self
+                    .adopted_names
+                    .entry((from.package_id(), symbol.defined_at))
+                    .or_insert_with(|| {
+                        if declared_export {
+                            decl.name
+                        } else {
+                            published
+                        }
+                        .to_string()
+                    });
+                if cm_definition(item).is_some() {
+                    unpublishable(Unpublishable::CmBound)
+                } else if !decl.type_params.is_empty() {
+                    unpublishable(Unpublishable::Generic)
+                } else if earlier != published {
+                    AnalyzeError::ExportUseRenamedTwice {
+                        name,
+                        earlier: earlier.clone(),
+                        published: published.to_string(),
+                        span: published_span,
+                    }
+                } else if let Item::Struct(decl) = item
+                    && let Some(field) = decl.first_private_field()
+                {
+                    AnalyzeError::PrivateFieldPublished {
+                        owner: name,
+                        field: field.name.clone(),
+                        adopted: true,
+                        span,
+                    }
+                } else {
+                    return;
+                }
+            }
+            SymbolKind::Resource(_) => unpublishable(Unpublishable::Resource),
+            SymbolKind::Function(_)
+            | SymbolKind::Effect(_)
+            | SymbolKind::Trait(_)
+            | SymbolKind::BuiltinType
+            | SymbolKind::Variable(_)
+            | SymbolKind::World(_)
+            | SymbolKind::Global(_) => unpublishable(Unpublishable::NotType),
+        };
+        let _ = self.logger.error_in(from, error);
     }
 
     /// Get a copy of the implicit modules set

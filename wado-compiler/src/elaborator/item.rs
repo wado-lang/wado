@@ -1469,6 +1469,61 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
+    /// The first named type within `type_id` that an `export fn` in `module`
+    /// cannot name, since its package does not publish it: WIT copies every
+    /// type such a signature reaches into the package's interface.
+    pub(super) fn unpublished_within(
+        &self,
+        type_id: TypeId,
+        module: &ModuleSource,
+    ) -> Option<TypeId> {
+        self.first_type_within(type_id, true, &|scope: &Self, t| {
+            let tt = scope.tysys.type_table.borrow();
+            if !matches!(
+                tt.get(t),
+                ResolvedType::Struct { .. }
+                    | ResolvedType::Enum { .. }
+                    | ResolvedType::Variant { .. }
+                    | ResolvedType::Flags { .. }
+                    | ResolvedType::Newtype { .. }
+            ) {
+                return false;
+            }
+            tt.nominal_def(t).is_some_and(|def| {
+                tt.compiler_type_item(def).is_none()
+                    && !scope
+                        .tysys
+                        .resolutions
+                        .defs()
+                        .crosses_cm_boundary_from(def, module)
+            })
+        })
+    }
+
+    /// Diagnose the first type in `position` of the `export fn` `function`
+    /// that [`Self::unpublished_within`] finds.
+    fn check_published(
+        &mut self,
+        function: &Function,
+        position: &str,
+        type_id: TypeId,
+        span: Span,
+    ) {
+        let module = self
+            .tysys
+            .resolutions
+            .defs()
+            .module(self.tysys.def_at(function.id));
+        if let Some(ty) = self.unpublished_within(type_id, module) {
+            let _ = self.emit(TypeError::UnpublishedAtCmBoundary {
+                function: function.name.clone(),
+                position: position.to_string(),
+                ty: self.tysys.type_table.borrow().type_name(ty),
+                span,
+            });
+        }
+    }
+
     /// `Slice<T>`, or a struct with a field that holds a reference, through
     /// anything but another struct (`StrSlice`, `Option<&T>`).
     fn is_cm_view(&self, type_id: TypeId) -> bool {
@@ -1529,6 +1584,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         if hit(self, type_id) {
             return Some(type_id);
+        }
+        // One layer at a time, so `hit` sees each named base of a newtype chain.
+        let base = match self.tysys.type_table.borrow().get(type_id) {
+            ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+            _ => None,
+        };
+        if let Some(base) = base {
+            return self.first_type_within_inner(base, into_fields, hit, visited);
         }
         let (head, resolved) = {
             let tt = self.tysys.type_table.borrow();
@@ -2598,6 +2661,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut param_types = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
+            if func.is_export {
+                scope.check_published(
+                    func,
+                    &format!("parameter '{}'", param.name),
+                    type_id,
+                    param.span,
+                );
+            }
             if func.is_cm_import() {
                 scope.check_import_param_closure(&func.name, &param.name, type_id, param.span);
             } else if func.is_export && scope.type_contains_closure(type_id) {
@@ -2638,6 +2709,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 position: "return type".to_string(),
                 span: func.span,
             });
+        }
+        if func.is_export {
+            scope.check_published(func, "return type", declared_return_type, func.span);
         }
         if crosses_cm_boundary && let Some(borrow) = scope.cm_borrow_within(declared_return_type) {
             let _ = scope.emit(TypeError::BorrowAtCmBoundary {

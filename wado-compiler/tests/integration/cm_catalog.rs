@@ -1246,9 +1246,9 @@ struct Point {
 }
 
 const RECORD_FUTURE_SOURCE: &str = r#"
-pub struct Point {
-    x: f64,
-    y: f64,
+export struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 export async fn id_future_point(v: Future<Point>) -> Future<Point> {
     let value = v.read();
@@ -1306,9 +1306,9 @@ fn cm_future_record_identity_o2() {
 }
 
 const RECORD_STREAM_SOURCE: &str = r#"
-pub struct Point {
-    x: f64,
-    y: f64,
+export struct Point {
+    pub x: f64,
+    pub y: f64,
 }
 export async fn id_stream_point(v: Stream<Point>) -> Stream<Point> {
     let [rx, tx] = Stream::<Point>::new();
@@ -1423,17 +1423,17 @@ wasmtime::component::flags! {
 /// `future<T>` / `stream<T>` over the named non-record shapes, which carry a
 /// discriminant — and, for `variant`, a per-case payload union.
 const NAMED_ASYNC_SOURCE: &str = r#"
-pub enum Color {
+export enum Color {
     Red,
     Green,
     Blue,
 }
-pub variant Shape {
+export variant Shape {
     Circle(f64),
     Rect([f64, f64]),
     Nothing,
 }
-pub flags Perms {
+export flags Perms {
     Read,
     Write,
     Execute,
@@ -1807,7 +1807,7 @@ fn cm_lib_rejects_an_unclassifiable_future_new() {
 fn cm_lib_accepts_newtype_future_payloads() {
     for ty in ["Meters", "Option<Meters>", "List<Meters>", "[Meters, u32]"] {
         let source = format!(
-            "pub type Meters = f64;\n\
+            "export type Meters = f64;\n\
              export async fn id(v: Future<{ty}>) -> Future<{ty}> {{\n    \
              let value = v.read();\n    v.drop();\n    \
              let [rx, tx] = Future::<{ty}>::new();\n    \
@@ -1823,7 +1823,7 @@ fn cm_lib_accepts_newtype_future_payloads() {
 #[test]
 fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
     try_compile_lib(
-        "pub enum ErrorCode {\n    Io,\n    Timeout,\n}\n\
+        "export enum ErrorCode {\n    Io,\n    Timeout,\n}\n\
          export async fn id(v: Future<ErrorCode>) -> Future<ErrorCode> {\n    \
          let value = v.read();\n    v.drop();\n    \
          let [rx, tx] = Future::<ErrorCode>::new();\n    \
@@ -1839,7 +1839,7 @@ fn cm_lib_builds_a_type_whose_cm_name_collides_with_wasi() {
 #[test]
 fn cm_lib_rejects_empty_record_boundary_type() {
     let err = try_compile_lib(
-        "pub struct Empty {}\nexport fn id_empty(v: Empty) -> Empty {\n    return v;\n}\n",
+        "export struct Empty {}\nexport fn id_empty(v: Empty) -> Empty {\n    return v;\n}\n",
     )
     .expect_err("empty-record export should fail to compile");
     assert!(
@@ -1856,7 +1856,7 @@ fn cm_lib_rejects_empty_record_boundary_type() {
 #[test]
 fn cm_lib_rejects_export_name_colliding_with_type_name() {
     let err = try_compile_lib(
-        "pub variant Shape {\n    Dot,\n    Line(u32),\n}\n\
+        "export variant Shape {\n    Dot,\n    Line(u32),\n}\n\
          export fn shape(v: u32) -> u32 {\n    return v;\n}\n\
          export fn make(v: u32) -> Shape {\n    if v == 0 {\n        \
          return Shape::Dot;\n    } else {\n        return Shape::Line(v);\n    }\n}\n",
@@ -1875,7 +1875,7 @@ fn cm_lib_rejects_export_name_colliding_with_type_name() {
 #[test]
 fn cm_lib_rejects_recursive_type_before_the_name_check_walks_it() {
     let err = try_compile_lib(
-        "pub struct Node {\n    next: Option<Node>,\n    value: u32,\n}\n\
+        "export struct Node {\n    pub next: Option<Node>,\n    pub value: u32,\n}\n\
          export fn depth(n: Node) -> u32 {\n    return n.value;\n}\n",
     )
     .expect_err("a recursive boundary type should fail to compile");
@@ -1890,8 +1890,8 @@ fn cm_lib_rejects_recursive_type_before_the_name_check_walks_it() {
 #[test]
 fn cm_lib_rejects_two_types_sharing_a_cm_name() {
     let err = try_compile_lib(
-        "pub struct HTTPServer {\n    port: u32,\n}\n\
-         pub struct HttpServer {\n    host: String,\n}\n\
+        "export struct HTTPServer {\n    pub port: u32,\n}\n\
+         export struct HttpServer {\n    pub host: String,\n}\n\
          export fn a(v: HTTPServer) -> u32 {\n    return v.port;\n}\n\
          export fn b(v: HttpServer) -> String {\n    return v.host;\n}\n",
     )
@@ -1973,7 +1973,7 @@ fn cm_lib_accepts_a_tree_map_boundary_type() {
 fn cm_lib_rejects_a_map_key_outside_the_component_model_key_types() {
     let err = try_compile_lib(
         "use { TreeMap } from \"core:collections\";\n\
-         pub struct Point {\n    x: u32,\n    y: u32,\n}\n\
+         export struct Point {\n    pub x: u32,\n    pub y: u32,\n}\n\
          export fn id_map(v: TreeMap<Point, u32>) -> TreeMap<Point, u32> {\n    return v;\n}\n",
     )
     .expect_err("a record-keyed map export should fail to compile");

@@ -1,7 +1,7 @@
 //! Recover a Kiln generator's options descriptor from a *prebuilt* component.
 //!
 //! A path/source generator's [`OptionsDescriptor`] is extracted from its Wado
-//! `pub struct Options` at compile time. A registry generator arrives as an
+//! `export struct Options` at compile time. A registry generator arrives as an
 //! already-compiled Component Model artifact, so its options shape is read back
 //! from the component's embedded WIT instead: the `generate` export takes an
 //! `options: <record>` parameter, and

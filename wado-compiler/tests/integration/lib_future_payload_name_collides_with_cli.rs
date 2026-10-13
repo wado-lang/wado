@@ -13,9 +13,9 @@ const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.23";
 /// interface spells as an enum, so a per-kind search by name finds exactly this
 /// one and no ambiguity check declines it.
 const SOURCE: &str = r#"
-pub struct ErrorCode {
-    a: i64,
-    b: i64,
+export struct ErrorCode {
+    pub a: i64,
+    pub b: i64,
 }
 
 export fn sum_of(rx: Future<ErrorCode>) -> i64 {

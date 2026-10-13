@@ -49,7 +49,7 @@ Only items explicitly marked with `export` appear in the generated WIT and Compo
 
 ```wado
 export fn process() -> Result<T, E>   // function
-export struct Point { x: i32, y: i32 } // record
+export struct Point { pub x: i32, pub y: i32 } // record
 export variant Shape { ... }           // variant
 export enum Color { ... }              // enum
 export type ID = String;               // type alias
@@ -133,8 +133,8 @@ Bare `export` declarations (not inside an explicit `interface` block) are automa
 
 ```wado
 // [package].name = "geometry"
-export struct Point { x: i32, y: i32 }
-export fn distance(p1: &Point, p2: &Point) -> f64 { ... }
+export struct Point { pub x: i32, pub y: i32 }
+export fn distance(p1: Point, p2: Point) -> f64 { ... }
 export fn origin() -> Point { ... }
 ```
 
