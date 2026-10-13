@@ -86,10 +86,11 @@ fn a_wasm_module_entry_is_rejected() {
     );
 }
 
-/// That separate core module holds its own module's code and nothing else, so a
-/// call out of it is rejected where it is written rather than crashing emit.
-#[test]
-fn a_call_out_of_a_wasm_module_is_rejected() {
+/// The allocator, with `pages` rounding as `rounded` and `uses` appended.
+fn compile_allocator_rounding_with(
+    uses: &str,
+    rounded: &str,
+) -> Result<wado_compiler::CompileResult, wado_compiler::CompileError> {
     let path = core_dir().join("allocator.wado");
     let source = std::fs::read_to_string(&path).expect("allocator.wado should be readable");
     let hand_rounded = "((bytes + PAGE_SIZE - 1) / PAGE_SIZE)";
@@ -97,14 +98,37 @@ fn a_call_out_of_a_wasm_module_is_rejected() {
         source.contains(hand_rounded),
         "`pages` should round up by hand"
     );
-    let probed = source.replace(hand_rounded, "bytes.div_ceil(PAGE_SIZE)");
+    let probed = format!("{}\n{uses}\n", source.replace(hand_rounded, rounded));
+    compile_as_test_world_entry(&path, &probed)
+}
 
-    let Err(err) = compile_as_test_world_entry(&path, &probed) else {
+/// That separate core module holds its own module's code and nothing else, so a
+/// call out of it is rejected where it is written rather than crashing emit.
+#[test]
+fn a_call_out_of_a_wasm_module_is_rejected() {
+    let Err(err) = compile_allocator_rounding_with("", "bytes.div_ceil(PAGE_SIZE)") else {
         panic!("a call out of a `#![wasm_module(…)]` module must be rejected");
     };
     assert!(
         err.to_string()
             .contains("`pages` calls `u64::div_ceil`, which the core module `mem` does not hold"),
+        "unexpected error: {err}"
+    );
+}
+
+/// A Wasm asset's functions are imports of the program's own core module, never
+/// of the separate one.
+#[test]
+fn a_call_from_a_wasm_module_to_a_wasm_asset_is_rejected() {
+    let Err(err) = compile_allocator_rounding_with(
+        "use { libm_cbrt } from \"./libm.wat\" with { type: \"wat\" };",
+        "(libm_cbrt(bytes as f64) as u64)",
+    ) else {
+        panic!("a call to a Wasm asset from a `#![wasm_module(…)]` module must be rejected");
+    };
+    assert!(
+        err.to_string()
+            .contains("`pages` calls `libm_cbrt`, which the core module `mem` does not hold"),
         "unexpected error: {err}"
     );
 }

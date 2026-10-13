@@ -52,7 +52,9 @@ struct CallsOut<'a> {
 
 impl CallsOut<'_> {
     fn is_held(&self, module_source: &ModuleSource) -> bool {
-        module_source.is_builtin()
+        // Not `is_builtin`: a Wasm asset's functions are imports of the
+        // program's own core module.
+        module_source.is_core_builtin()
             || self
                 .flat
                 .wasm_module_sources
