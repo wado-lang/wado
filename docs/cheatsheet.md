@@ -1375,6 +1375,8 @@ i32::from_str("xyz42abc".as_str_slice().slice(3, 5))  // no substring alloc
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi
 i32::abs(x)                           // i32::MIN wraps to itself
+x.div_floor(2)                        // x = -7: -4, toward -Inf (signed types only)
+x.div_ceil(2)                         // x = -7: -3, toward +Inf (every integer type)
 
 // char classification and conversion
 let code = 'A' as i32;                // 65

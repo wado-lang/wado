@@ -751,18 +751,12 @@ fn product(a: i128, b: i128) -> i128 {
     return a * b;
 }
 
-/// `a / d` rounded up, for a positive `d`. Wide, since a bound on a
+/// `a / d` rounded as the quotient `op` rounds it. Wide, since a bound on a
 /// polynomial, and the span between any two `i64`, lie past `i64`.
-pub fn ceiling(a: i128, d: i128) -> i128 {
-    assert d > 0;
-    return if a >= 0 { (a + d - 1) / d } else { a / d };
-}
-
-/// `a / d` rounded as the quotient `op` rounds it, for a positive `d`.
 fn rounded(op: Op, a: i128, d: i128) -> i128 {
     return match op {
-        CeilDiv => ceiling(a, d),
-        FloorDiv => -ceiling(-a, d),
+        CeilDiv => a.div_ceil(d),
+        FloorDiv => a.div_floor(d),
         _ => unreachable(),
     };
 }
