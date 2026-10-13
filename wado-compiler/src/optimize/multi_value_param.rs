@@ -131,21 +131,25 @@ fn fields_read_on_entry<'a>(
             | StmtKind::Continue
             | StmtKind::LabeledBlock { .. } => break,
         };
-        if let Some(op) = evaluated {
-            if let Some(e) = op.as_expr()
-                && branches(body, e)
-            {
-                break;
-            }
-            let root = match op {
-                Operand::Expr(e) => NodeRef::Expr(e),
-                Operand::Value(_) => NodeRef::Stmt(s),
-            };
-            out.extend(
-                fields_read(body, root, local, field_names)
+        match evaluated {
+            Some(Operand::Expr(e)) if branches(body, e) => break,
+            Some(Operand::Expr(e)) => out.extend(
+                fields_read(body, NodeRef::Expr(e), local, field_names)
                     .into_iter()
                     .flatten(),
-            );
+            ),
+            // A promoted value is pure, so its whole tree is evaluated.
+            Some(Operand::Value(v)) => {
+                body.values
+                    .for_each_local_read(v, &mut IndexSet::default(), |index, field| {
+                        if index == local
+                            && let Some(i) = field
+                        {
+                            out.insert(field_names[i as usize].as_str());
+                        }
+                    });
+            }
+            None => {}
         }
         if ends_prefix {
             break;
