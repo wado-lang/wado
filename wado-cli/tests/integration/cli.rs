@@ -208,7 +208,7 @@ fn test_build_lib_embeds_component_type_without_interface_collision() {
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
         dir.join("src").join("lib.wado"),
-        "pub struct Point { x: f64, y: f64 }\nexport fn identity(p: Point) -> Point { return p; }\n",
+        "export struct Point { pub x: f64, pub y: f64 }\nexport fn identity(p: Point) -> Point { return p; }\n",
     )
     .unwrap();
     let out = dir.join("out.wasm");
@@ -240,7 +240,7 @@ fn test_wit_lib_emits_root_world() {
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
         dir.join("src").join("lib.wado"),
-        "pub struct Point { x: f64, y: f64 }\nexport fn identity(p: Point) -> Point { return p; }\n",
+        "export struct Point { pub x: f64, pub y: f64 }\nexport fn identity(p: Point) -> Point { return p; }\n",
     )
     .unwrap();
 
@@ -607,11 +607,11 @@ fn test_library_export_reaching_a_resource_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let cases = [
         "export fn take(d: Descriptor) -> i32 { return 1; }",
-        "pub struct Holder { d: Descriptor }\n\
+        "export struct Holder { pub d: Descriptor }\n\
          export fn take(h: Holder) -> i32 { return 1; }",
-        "pub variant Payload { Open(Descriptor), Closed }\n\
+        "export variant Payload { Open(Descriptor), Closed }\n\
          export fn take(p: Payload) -> i32 { return 1; }",
-        "pub type Handle = Descriptor;\n\
+        "export type Handle = Descriptor;\n\
          export fn take(h: Handle) -> i32 { return 1; }",
     ];
     for (i, case) in cases.iter().enumerate() {
@@ -638,7 +638,7 @@ fn test_library_export_reaching_a_resource_through_an_alias_is_refused() {
     std::fs::write(
         dir.path().join("other.wado"),
         "use { Descriptor } from \"wasi:filesystem\";\n\
-         pub struct Holder { d: Descriptor }\n",
+         export struct Holder { pub d: Descriptor }\n",
     )
     .unwrap();
     let src = dir.path().join("lib.wado");
@@ -1410,8 +1410,8 @@ fn test_lib_facade_submodule_export_with_nested_records() {
     .unwrap();
     std::fs::write(
         dir.join("src").join("render.wado"),
-        "pub struct Node { pub level: u8, pub text: String }\n\
-         pub struct Doc { pub html: String, pub nodes: List<Node> }\n\
+        "export struct Node { pub level: u8, pub text: String }\n\
+         export struct Doc { pub html: String, pub nodes: List<Node> }\n\
          export fn render(s: String) -> Doc { return Doc { html: s, nodes: [Node { level: 1, text: s }] }; }\n",
     )
     .unwrap();
@@ -1592,10 +1592,10 @@ fn test_lib_with_only_internal_submodule_types_is_rejected() {
         .stderr(predicate::str::contains("exports nothing"));
 }
 
-/// A lowered type carries its fields whatever their scope, so an `internal`
-/// type reaches the CM interface through a `pub` one that holds it.
+/// An `internal` type can never be published, since `export` implies `pub` and
+/// `export use` cannot widen, so one a published type holds is refused.
 #[test]
-fn test_lib_exports_an_internal_type_held_by_a_published_one() {
+fn test_lib_refuses_an_internal_type_held_by_a_published_one() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     std::fs::write(
@@ -1607,7 +1607,7 @@ fn test_lib_exports_an_internal_type_held_by_a_published_one() {
     std::fs::write(
         dir.join("src").join("geom.wado"),
         "internal struct Point { internal x: i32, internal y: i32 }\n\
-         pub struct Marker { at: Point }\n\
+         export struct Marker { pub at: Point }\n\
          impl Marker {\n\
          pub fn new() -> Marker { return Marker { at: Point { x: 0, y: 0 } }; }\n\
          }\n",
@@ -1620,7 +1620,14 @@ fn test_lib_exports_an_internal_type_held_by_a_published_one() {
     )
     .unwrap();
 
-    wado_in(dir).arg("build").arg("--lib").assert().success();
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "`Point` in return type of `origin` is not published",
+        ));
 }
 
 #[test]
@@ -1640,12 +1647,12 @@ fn test_lib_duplicate_type_name_rejected() {
     .unwrap();
     std::fs::write(
         dir.join("src").join("a.wado"),
-        "pub struct Node { pub v: String }\nexport fn f(s: String) -> Node { return Node { v: s }; }\n",
+        "export struct Node { pub v: String }\nexport fn f(s: String) -> Node { return Node { v: s }; }\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("src").join("b.wado"),
-        "pub struct Node { pub v: String }\nexport fn g(s: String) -> Node { return Node { v: s }; }\n",
+        "export struct Node { pub v: String }\nexport fn g(s: String) -> Node { return Node { v: s }; }\n",
     )
     .unwrap();
 
