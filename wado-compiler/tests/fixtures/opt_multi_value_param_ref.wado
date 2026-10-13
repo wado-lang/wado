@@ -51,6 +51,21 @@ fn with_stream(p: &Pair) -> i32 {
     return p.a + p.b;
 }
 
+struct Bytes {
+    data: List<u8>,
+    start: i32,
+    end: i32,
+}
+
+// The bounds check on `b.data[b.start]` branches to a panic, which never
+// returns: neither what it prints nor where it branches is seen past it, so
+// the fields stay read on every path that goes on.
+#[inline("never")]
+fn first_byte(b: &Bytes) -> i32 {
+    let n = b.end - b.start;
+    return b.data[b.start] as i32 + n;
+}
+
 // A `&mut` handed to a `&S` reads at the call all the same.
 #[inline("never")]
 fn through_mut(w: &mut Pair) -> i32 {
@@ -98,6 +113,8 @@ export fn run() {
     assert total(&x) == 3;
     assert guarded(&x) == 3;
     assert with_stream(&x) == 3;
+    let bytes = Bytes { data: builtin::black_box([7 as u8, 8, 9]), start: builtin::black_box(1), end: builtin::black_box(3) };
+    assert first_byte(&bytes) == 10;
     assert total_plus(&x, bump_a(&mut x)) == 1003;
     let mut m = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
     assert total_plus(&mut m, bump_a(&mut m)) == 1003;
@@ -117,7 +134,8 @@ __DATA__
         "total\" = fn(i32, i32) -> i32",
         "total_plus\" = fn(i32, i32, i32) -> i32",
         "span_head\" = fn(i32, i32) -> i32",
-        "with_stream\" = fn(i32, i32) -> i32",        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "with_stream\" = fn(i32, i32) -> i32",
+        "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
     ]

@@ -262,10 +262,12 @@ The clients are:
   array's slots (`push` fills an empty one, a swap moves handles), so the
   rewrite is the user-level assignment's, not every `Array` store's.
 - [x] Take a multi-value `&S` parameter where no write reaches the referent
-  while the call runs (`opt_multi_value_param_ref`). The callee's own
-  transitive summary answers that (`FnEffect::writes_shared_heap`): it stores
-  into no memory its caller holds. The call site reads the fields after every
-  argument, as the callee would have.
+  while the call runs (`opt_multi_value_param_ref`). The callee's heap-effect
+  summary answers that (`HeapEffects::function_may_write`): it writes no
+  object of the referent's type that it did not allocate, leaving out a call
+  typed `!`, after which nothing reads. Every field it reads is read on every
+  path that goes on, a bounds check's panic branch being no such path. The
+  call site reads the fields after every argument, as the callee would have.
 
 ## Known gaps
 
@@ -293,13 +295,3 @@ A pattern-destructured field's path is marked as borrowing, because the pattern
 carries no type saying whether that field does, and the mark refuses those paths
 a share outright. Every WIR golden is byte-identical with the mark removed, so
 nothing measured pays for it.
-
-### A multi-value `&S` asks a coarser question than it needs
-
-A `&S` parameter stays whole wherever the callee may store into any memory its
-caller holds (`FnEffect::writes_shared_heap`). What a split needs answered is
-narrower: whether the referent's fields change while the callee can still read
-them. A store into memory of another type, or one on a path that never returns
-(a bounds-check panic prints before it traps), cannot stale a split field, yet
-each keeps the reference whole. A callee that indexes a `List` field of its
-`&S` is refused this way, for the panic its bounds check reaches.
