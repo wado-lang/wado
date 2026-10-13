@@ -62,14 +62,15 @@ fn reexported_component_type_compiles_and_decodes() {
 }
 
 /// A stdlib type that `export use` adopts is published in the library's own
-/// interface, as a type the library declares would be.
+/// interface, under the name the `export use` gives it, as a type the library
+/// declares would be.
 #[test]
 fn adopted_stdlib_type_is_published_by_the_library() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/adopt.wado");
     let source = r#"
-export use { FileType } from "core:fs";
-export fn kind(t: FileType) -> FileType {
-    return t;
+export use { DirEntry, FileType as Kind } from "core:fs";
+export fn kind_of(e: DirEntry) -> Kind {
+    return e.type;
 }
 "#;
     let options = CompilerOptions {
@@ -85,17 +86,17 @@ export fn kind(t: FileType) -> FileType {
     else {
         panic!("expected a component");
     };
-    let published = resolve.worlds[world]
+    let published: Vec<&str> = resolve.worlds[world]
         .exports
         .iter()
-        .find_map(|(_, item)| match item {
-            wit_parser::WorldItem::Interface { id, .. } => {
-                resolve.interfaces[*id].types.get("file-type")
-            }
-            _ => None,
-        });
-    assert!(
-        published.is_some(),
-        "the library interface publishes file-type"
-    );
+        .flat_map(|(_, item)| match item {
+            wit_parser::WorldItem::Interface { id, .. } => resolve.interfaces[*id]
+                .types
+                .keys()
+                .map(String::as_str)
+                .collect(),
+            _ => Vec::new(),
+        })
+        .collect();
+    assert_eq!(published, ["kind", "dir-entry"]);
 }

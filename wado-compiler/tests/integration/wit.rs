@@ -211,6 +211,23 @@ fn adopted_type_emits_into_default_interface() {
     );
 }
 
+/// `export use { T as U }` publishes the type as `U`, and every reference to it
+/// says `U`, the adopted `DirEntry`'s field included.
+#[test]
+fn adopted_type_is_published_under_its_alias() {
+    check(
+        "export use { DirEntry, FileType as Kind } from \"core:fs\";\n\
+         export fn kind_of(e: DirEntry) -> Kind { return e.type; }",
+        "package root:component;\n\n\
+         interface entry {\n  \
+           record dir-entry {\n    name: string,\n    %type: kind,\n  }\n  \
+           variant kind {\n    file,\n    directory,\n    other,\n  }\n  \
+           kind-of: func(e: dir-entry) -> kind;\n\
+         }\n\n\
+         world command {\n  export entry;\n}",
+    );
+}
+
 /// A stdlib newtype is an alias of its base, as a package's own newtype is.
 #[test]
 fn stdlib_newtype_export_emits_its_alias() {

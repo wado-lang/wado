@@ -1418,6 +1418,53 @@ impl Item {
         }
     }
 
+    /// The name of a `struct`, `enum`, `variant`, `flags` or newtype: the
+    /// declarations a Component Model interface can publish.
+    pub fn type_decl_name(&self) -> Option<&str> {
+        match self {
+            Item::Struct(d) => Some(&d.name),
+            Item::Enum(d) => Some(&d.name),
+            Item::Variant(d) => Some(&d.name),
+            Item::Flags(d) => Some(&d.name),
+            Item::Newtype(d) => Some(&d.name),
+            Item::Use(_)
+            | Item::Function(_)
+            | Item::Interface(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::Trait(_)
+            | Item::Resource(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => None,
+        }
+    }
+
+    /// [`Self::type_decl_name`], to rename the declaration.
+    pub fn type_decl_name_mut(&mut self) -> Option<&mut String> {
+        match self {
+            Item::Struct(d) => Some(&mut d.name),
+            Item::Enum(d) => Some(&mut d.name),
+            Item::Variant(d) => Some(&mut d.name),
+            Item::Flags(d) => Some(&mut d.name),
+            Item::Newtype(d) => Some(&mut d.name),
+            Item::Use(_)
+            | Item::Function(_)
+            | Item::Interface(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::Trait(_)
+            | Item::Resource(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => None,
+        }
+    }
+
     /// Whether this is a type the package's Component Model interface
     /// publishes by its own `export`.
     pub fn is_export_type(&self) -> bool {

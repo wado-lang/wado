@@ -734,7 +734,7 @@ fn collect_lib_surface(
                 // Not `is_public`: a lowered type carries its fields whatever
                 // their scope, so an `internal` type reaches the CM interface
                 // through a `pub` one that holds it.
-                _ if lib_type_decl_name(item).is_some()
+                _ if item.type_decl_name().is_some()
                     && item
                         .visibility()
                         .is_some_and(ast::Visibility::reaches_beyond_file) =>
@@ -753,7 +753,8 @@ fn collect_lib_surface(
     }
 }
 
-/// The declarations of the types the package's `export use` adopts.
+/// The declarations of the types the package's `export use` adopts, each
+/// renamed to the name the `export use` publishes it under.
 fn adopted_type_decls(
     resolutions: &resolve::Resolutions,
     modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
@@ -761,14 +762,18 @@ fn adopted_type_decls(
 ) -> Vec<(ModuleSource, ast::Item)> {
     let defs = resolutions.defs();
     defs.adopted_by(entry_source)
-        .map(|def| {
+        .map(|(def, published)| {
             let source = defs.module(def);
-            let item = modules[source]
+            let mut item = modules[source]
                 .items
                 .iter()
                 .find(|item| item.id() == defs.ast_id(def))
-                .expect("`export use` adopts a module-level declaration");
-            (source.clone(), item.clone())
+                .expect("`export use` adopts a module-level declaration")
+                .clone();
+            *item
+                .type_decl_name_mut()
+                .expect("`export use` adopts a type") = published.to_string();
+            (source.clone(), item)
         })
         .collect()
 }
@@ -852,19 +857,6 @@ fn first_duplicate<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<Strin
     None
 }
 
-/// The declared name of a type-kind item, or `None` for non-type items.
-fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
-    use crate::ast::Item;
-    match item {
-        Item::Struct(d) => Some(d.name.clone()),
-        Item::Enum(d) => Some(d.name.clone()),
-        Item::Variant(d) => Some(d.name.clone()),
-        Item::Flags(d) => Some(d.name.clone()),
-        Item::Newtype(d) => Some(d.name.clone()),
-        _ => None,
-    }
-}
-
 /// Synthesize a `--lib` [`WorldInfo`] from the entry module's `export fn`
 /// signatures, every one in the interface `fq` names, with parameter and return
 /// types taken straight from the AST.
@@ -911,12 +903,14 @@ fn synthesize_lib_world_info(
     }
 }
 
-/// Names each type a synthesized world's surface writes by its declaration, and
-/// answers the site with the world's interface or the `#[cm(…)]` one it binds.
+/// Names each type a synthesized world's surface writes by the name the world
+/// publishes it under, and answers the site with the world's interface or the
+/// `#[cm(…)]` one it binds.
 struct LibTypeBinder<'a> {
     resolutions: &'a resolve::Resolutions,
     registry: &'a CmInterfaceRegistry,
     interfaces: hashmap::IndexMap<DefId, String>,
+    published_names: hashmap::IndexMap<DefId, String>,
 }
 
 impl<'a> LibTypeBinder<'a> {
@@ -928,8 +922,15 @@ impl<'a> LibTypeBinder<'a> {
         published: impl Iterator<Item = &'m ast::Item>,
     ) -> Self {
         let defs = resolutions.defs();
-        let mut interfaces: hashmap::IndexMap<DefId, String> = published
-            .map(|item| (defs.def_at(item.id()), fq.to_string()))
+        let published_names: hashmap::IndexMap<DefId, String> = published
+            .map(|item| {
+                let name = item.type_decl_name().expect("a world publishes types");
+                (defs.def_at(item.id()), name.to_string())
+            })
+            .collect();
+        let mut interfaces: hashmap::IndexMap<DefId, String> = published_names
+            .keys()
+            .map(|def| (*def, fq.to_string()))
             .collect();
         let items = modules.values().flat_map(|module| &module.items);
         for (def, source) in cm_bound_defs(items, defs) {
@@ -939,6 +940,7 @@ impl<'a> LibTypeBinder<'a> {
             resolutions,
             registry,
             interfaces,
+            published_names,
         }
     }
 
@@ -947,7 +949,7 @@ impl<'a> LibTypeBinder<'a> {
             if let Some(source) = self.interfaces.get(&def) {
                 self.registry.set_source_interface(named.id, source.clone());
             }
-            Ok(())
+            Ok(self.published_names.get(&def).cloned())
         })
     }
 
@@ -1332,6 +1334,7 @@ fn compile_after_load<H: CompilerHost>(
                 .expect("world_registry present when is_complete"),
             contract.clone(),
             sem.export_mappings.clone(),
+            sem.wit_emit_input().published_names,
         )
     });
 
@@ -1435,7 +1438,12 @@ fn compile_after_load<H: CompilerHost>(
     let entry_type_names: Vec<String> = sem
         .modules
         .get(&sem.entry_module_source)
-        .map(|m| m.items.iter().filter_map(lib_type_decl_name).collect())
+        .map(|m| {
+            m.items
+                .iter()
+                .filter_map(|item| Some(item.type_decl_name()?.to_string()))
+                .collect()
+        })
         .unwrap_or_default();
 
     // A data-model library exposes public types with no `export fn`; those types
@@ -1443,8 +1451,7 @@ fn compile_after_load<H: CompilerHost>(
     // — what the CM interface publishes, `internal` included — so the library
     // API is asked for separately here, of every module.
     let is_public_type_decl = |item: &ast::Item| {
-        lib_type_decl_name(item).is_some()
-            && item.visibility().is_some_and(ast::Visibility::is_public)
+        item.type_decl_name().is_some() && item.visibility().is_some_and(ast::Visibility::is_public)
     };
     let lib_has_public_type = lib_surface
         .submodule_type_decls
@@ -1467,7 +1474,7 @@ fn compile_after_load<H: CompilerHost>(
                 lib_surface
                     .published_type_decls()
                     .filter_map(|(source, item)| {
-                        Some((lib_type_decl_name(item)?, source.to_string()))
+                        Some((item.type_decl_name()?.to_string(), source.to_string()))
                     }),
             )
             .collect();
@@ -1507,7 +1514,7 @@ fn compile_after_load<H: CompilerHost>(
         let published = entry
             .into_iter()
             .flat_map(|module| &module.items)
-            .filter(|item| lib_type_decl_name(item).is_some())
+            .filter(|item| item.type_decl_name().is_some())
             .chain(lib_surface.published_type_decls().map(|(_, item)| item));
         let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
         let mut entry = entry.cloned();
@@ -1592,7 +1599,7 @@ fn compile_after_load<H: CompilerHost>(
             .modules
             .iter()
             .flat_map(|(_, module)| &module.items)
-            .filter(|item| lib_type_decl_name(item).is_some())
+            .filter(|item| item.type_decl_name().is_some())
             .map(|item| (item.id(), item))
             .collect();
         let mut refused = false;
@@ -1661,7 +1668,11 @@ fn compile_after_load<H: CompilerHost>(
         let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
-        registry.register_lib_local_items(lib_surface.published_type_decls(), fq);
+        registry.register_lib_local_items(
+            lib_surface.published_type_decls(),
+            fq,
+            tysys.resolutions.defs(),
+        );
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every
         // submodule, since a library spreads its effects (like its types).

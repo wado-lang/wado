@@ -219,9 +219,9 @@ pub struct DefTable {
     defs: Vec<Def>,
     by_ast_id: IndexMap<AstId, DefId>,
     /// Each type a package's Component Model interface publishes, with the
-    /// modules publishing it: its own where it is declared `export`, and each
-    /// one whose `export use` adopts it.
-    publishers: IndexMap<DefId, Vec<ModuleSource>>,
+    /// modules publishing it and the name each publishes it under: its own
+    /// where it is declared `export`, and each one whose `export use` adopts it.
+    publishers: IndexMap<DefId, Vec<(ModuleSource, String)>>,
     /// The types a `#[cm(…)]` binds to an interface of their own.
     cm_bound: IndexSet<DefId>,
 }
@@ -351,18 +351,20 @@ impl DefTable {
             && decl.is_export
         {
             for use_item in &decl.items {
-                if let UseItem::Simple { name, alias, .. } = use_item
-                    && let Some(symbol) =
-                        symbols.lookup_in_module(module, alias.as_ref().unwrap_or(name))
-                    && let Some(def) = self.of_ast_id(symbol.defined_at)
-                {
-                    self.publish(def, module);
+                if let UseItem::Simple { name, alias, .. } = use_item {
+                    let published = alias.as_ref().unwrap_or(name);
+                    if let Some(symbol) = symbols.lookup_in_module(module, published)
+                        && let Some(def) = self.of_ast_id(symbol.defined_at)
+                    {
+                        self.publish(def, module, published);
+                    }
                 }
             }
             return;
         }
         if item.is_export_type() {
-            self.publish(self.def_at(item.id()), module);
+            let def = self.def_at(item.id());
+            self.publish(def, module, &self.name(def).to_string());
         }
         if item.attrs().iter().any(|attr| attr.cm_boundary.is_some())
             && let Some(def) = self.of_ast_id(item.id())
@@ -372,20 +374,25 @@ impl DefTable {
         }
     }
 
-    fn publish(&mut self, def: DefId, module: &ModuleSource) {
+    fn publish(&mut self, def: DefId, module: &ModuleSource, name: &str) {
         let publishers = self.publishers.entry(def).or_default();
-        if !publishers.contains(module) {
-            publishers.push(module.clone());
+        if !publishers.iter().any(|(m, n)| m == module && n == name) {
+            publishers.push((module.clone(), name.to_string()));
         }
     }
 
-    /// The types `module`'s package publishes that another package declares:
-    /// what its `export use` adopts.
-    pub fn adopted_by<'a>(&'a self, module: &'a ModuleSource) -> impl Iterator<Item = DefId> + 'a {
+    /// The types `module`'s package publishes that another package declares,
+    /// each with the name its `export use` publishes it under.
+    pub fn adopted_by<'a>(
+        &'a self,
+        module: &'a ModuleSource,
+    ) -> impl Iterator<Item = (DefId, &'a str)> + 'a {
         self.publishers.iter().filter_map(move |(def, publishers)| {
-            (!self.module(*def).same_package(module)
-                && publishers.iter().any(|p| p.same_package(module)))
-            .then_some(*def)
+            if self.module(*def).same_package(module) {
+                return None;
+            }
+            let (_, name) = publishers.iter().find(|(p, _)| p.same_package(module))?;
+            Some((*def, name.as_str()))
         })
     }
 
@@ -401,7 +408,7 @@ impl DefTable {
             || self
                 .publishers
                 .get(&def)
-                .is_some_and(|publishers| publishers.iter().any(|p| p.same_package(module)))
+                .is_some_and(|publishers| publishers.iter().any(|(p, _)| p.same_package(module)))
     }
 
     /// Identify a function-local item (`Stmt::Item`) and its members.

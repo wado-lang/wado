@@ -1026,11 +1026,13 @@ pub struct CmInterfaceRegistry {
     /// source is derived from the FQ by `module_source_for_cm_interface`.
     cm_interface_module_sources: IndexMap<String, ModuleSource>,
 
-    /// Lib-local named type -> the module that actually defines it. A library
-    /// spreads its public types across submodules, so the interface FQ (which
-    /// maps to the entry module) cannot alone locate a submodule-defined type
-    /// like `HeadingInfo`. Keyed by name — unique within a library's API.
-    lib_local_type_sources: IndexMap<String, ModuleSource>,
+    /// Lib-local named type published from outside the entry module -> its
+    /// declaration. A library spreads its public types across submodules and
+    /// adopts others' under its own names, so the interface FQ (which maps to
+    /// the entry module) cannot alone locate `HeadingInfo` or an
+    /// `export use { T as U }`. Keyed by published name — unique within a
+    /// library's API.
+    lib_local_type_defs: IndexMap<String, DefId>,
 
     /// FQs of interfaces imported from a CM component dependency. The plan
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
@@ -1752,7 +1754,7 @@ impl UserCmTypeBinder<'_> {
                      no interface; bind it with `#[cm(\"<interface>#<name>\")]`"
                 ));
             }
-            Ok(())
+            Ok(None)
         })
     }
 }
@@ -1852,11 +1854,13 @@ impl<'a> TypeSlotSite<'a> {
 }
 
 /// Rewrite every type name `ty` writes to its declaration's name, so no consumer
-/// reads an alias's spelling. `leaf` sees each name with its declaration first.
+/// reads an alias's spelling. `leaf` sees each name with its declaration first,
+/// and answers the name to write instead where the declaration is published
+/// under another (`export use { T as U }`).
 pub fn bind_type_names<E>(
     ty: &mut Type,
     resolutions: &Resolutions,
-    leaf: &mut impl FnMut(&NamedType, DefId) -> Result<(), E>,
+    leaf: &mut impl FnMut(&NamedType, DefId) -> Result<Option<String>, E>,
 ) -> Result<(), E> {
     let children: Vec<&mut Type> = match ty {
         Type::Named(named) => {
@@ -1867,8 +1871,7 @@ pub fn bind_type_names<E>(
             if !defs.kind(def).is_type() {
                 return Ok(());
             }
-            leaf(named, def)?;
-            named.name = defs.name(def).to_string();
+            named.name = leaf(named, def)?.unwrap_or_else(|| defs.name(def).to_string());
             return Ok(());
         }
         Type::Generic(g) => {
@@ -2606,7 +2609,7 @@ impl CmInterfaceRegistry {
         // `export fn` names crosses the boundary whether or not it is marked,
         // and nothing here computes that reachability.
         for item in &module.items {
-            self.register_lib_local_item(item, iface_fq, &entry_source);
+            self.register_lib_local_item(item, iface_fq);
         }
     }
 
@@ -2687,39 +2690,29 @@ impl CmInterfaceRegistry {
     /// and an `export fn` signature names them), or the stdlib for a newtype the
     /// surface names. Registered under the same lib-local interface FQ as the
     /// entry module's own types, so lift/lower resolves them uniformly. Each
-    /// carries the module that defines it, so resolution can locate a type the
+    /// is registered under the name it carries, which may be an `export use`
+    /// alias, and keeps its declaration, so resolution can locate a type the
     /// entry-FQ mapping cannot.
     pub fn register_lib_local_items<'a>(
         &mut self,
         items: impl IntoIterator<Item = &'a (ModuleSource, Item)>,
         iface_fq: &str,
+        defs: &DefTable,
     ) {
-        for (source, item) in items {
-            self.register_lib_local_item(item, iface_fq, source);
+        for (_, item) in items {
+            let name = item
+                .type_decl_name()
+                .expect("a library publishes only types beyond its entry module");
+            self.lib_local_type_defs
+                .insert(name.to_string(), defs.def_at(item.id()));
+            self.register_lib_local_item(item, iface_fq);
         }
     }
 
     /// `item`'s type references must already answer their source interface: the
     /// caller binds them by declaration.
-    fn register_lib_local_item(
-        &mut self,
-        item: &Item,
-        iface_fq: &str,
-        module_source: &ModuleSource,
-    ) {
+    fn register_lib_local_item(&mut self, item: &Item, iface_fq: &str) {
         use crate::ast::Item;
-        if let Some(name) = match item {
-            Item::Newtype(d) => Some(&d.name),
-            Item::Struct(d) => Some(&d.name),
-            Item::Flags(d) => Some(&d.name),
-            Item::Enum(d) => Some(&d.name),
-            Item::Variant(d) => Some(&d.name),
-            _ => None,
-        } {
-            self.lib_local_type_sources
-                .insert(name.clone(), module_source.clone());
-        }
-
         match item {
             Item::Newtype(alias) => register_unique(
                 &mut self.newtypes,
@@ -3206,11 +3199,11 @@ impl CmInterfaceRegistry {
             .find_map(|kind| first_name_in_interface(self.kind_keys(kind), iface_fq))
     }
 
-    /// The module that defines a lib-local named type, when known. Locates a
-    /// submodule-defined public type (e.g. `HeadingInfo` inside a facade
-    /// library) that the interface-FQ mapping alone cannot.
-    pub fn lib_local_type_source(&self, name: &str) -> Option<&ModuleSource> {
-        self.lib_local_type_sources.get(name)
+    /// The declaration a lib-local named type publishes, when it lies outside
+    /// the entry module: a submodule's (`HeadingInfo` inside a facade library)
+    /// or an adopted one, which the interface-FQ mapping alone cannot locate.
+    pub fn lib_local_type_def(&self, name: &str) -> Option<DefId> {
+        self.lib_local_type_defs.get(name).copied()
     }
 
     /// The source interface of a named type: its own where the reference carries

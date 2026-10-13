@@ -74,8 +74,14 @@ publishes each one, in one of two ways:
 - It declares the type `export`: `export struct`, `export enum`,
   `export variant`, `export flags`, or `export type`.
 - It adopts a type another package declares, with
-  `export use { T } from "…";`. An `export use` names types only, under their
-  declared names, and never a type of its own package.
+  `export use { T } from "…";`. An `export use` names types only, and never a
+  type of its own package.
+
+An adopted type takes the name the `export use` gives it:
+`export use { FileType as Kind } from "core:fs";` publishes `variant kind`, and
+every reference to the type in the interface says `kind`, a field of another
+adopted type included. A package publishes a type under one name, so adopting
+it again under another is a compile error.
 
 A reached type the package does not publish is a compile error at the
 parameter, or at the function's declaration for its result. Two kinds of type

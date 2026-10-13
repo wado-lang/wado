@@ -20,6 +20,7 @@ use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
     parse_resource_func,
 };
+use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
 use crate::name::to_cm_name;
@@ -114,7 +115,7 @@ pub fn wit_contract(
 /// and a detached [`WitEmitSnapshot`] both feed the emitter through this view,
 /// so `wado compile` and `wado wit` derive WIT from the same analysis codegen
 /// ran (issue #1654).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct WitEmitInput<'a> {
     /// Whether the analysis ran to completion; emission refuses partial state.
     pub is_complete: bool,
@@ -131,6 +132,8 @@ pub struct WitEmitInput<'a> {
     pub wit_contract: Option<&'a WitContract>,
     /// Which world export each `export(…)` function provides.
     pub export_mappings: &'a ExportMappings,
+    /// The name each type the entry's `export use` adopts is published under.
+    pub published_names: IndexMap<DefId, String>,
 }
 
 /// A detached, owned copy of the WIT-relevant frontend subset, cloned before
@@ -144,6 +147,7 @@ pub struct WitEmitSnapshot {
     world_registry: Arc<WorldRegistry>,
     wit_contract: WitContract,
     export_mappings: ExportMappings,
+    published_names: IndexMap<DefId, String>,
 }
 
 impl WitEmitSnapshot {
@@ -155,6 +159,7 @@ impl WitEmitSnapshot {
         world_registry: Arc<WorldRegistry>,
         wit_contract: WitContract,
         export_mappings: ExportMappings,
+        published_names: IndexMap<DefId, String>,
     ) -> Self {
         Self {
             tir_modules,
@@ -163,6 +168,7 @@ impl WitEmitSnapshot {
             world_registry,
             wit_contract,
             export_mappings,
+            published_names,
         }
     }
 
@@ -177,6 +183,7 @@ impl WitEmitSnapshot {
             world_registry: Some(&self.world_registry),
             wit_contract: Some(&self.wit_contract),
             export_mappings: &self.export_mappings,
+            published_names: self.published_names.clone(),
         }
     }
 }
@@ -286,6 +293,7 @@ struct Emitter<'a> {
     pending: BTreeMap<String, TypeId>,
     /// Source names already emitted as a `TypeDef`.
     emitted: BTreeSet<String>,
+    published_names: IndexMap<DefId, String>,
 }
 
 /// One exported function gathered from the frontend, before WIT rendering.
@@ -342,6 +350,7 @@ impl<'a> Emitter<'a> {
             referenced_interfaces: BTreeSet::new(),
             pending: BTreeMap::new(),
             emitted: BTreeSet::new(),
+            published_names: input.published_names,
         }
     }
 
@@ -867,9 +876,9 @@ impl<'a> Emitter<'a> {
     fn emit_type_def(
         &mut self,
         name: &str,
-        _type_id: TypeId,
+        type_id: TypeId,
     ) -> Result<Option<TypeDef>, WitEmitError> {
-        let cm_name = to_cm_name(name);
+        let cm_name = self.wit_type_name(name, type_id);
         if let Some(s) = self.decls.structs.get(name).copied() {
             let mut fields = Vec::new();
             for field in &s.fields {
@@ -1057,7 +1066,17 @@ impl<'a> Emitter<'a> {
         if !self.emitted.contains(name) {
             self.pending.entry(name.to_string()).or_insert(type_id);
         }
-        Type::named(to_cm_name(name))
+        Type::named(self.wit_type_name(name, type_id))
+    }
+
+    /// The WIT name of the user type `name`: the one an `export use` publishes
+    /// it under, or its own.
+    fn wit_type_name(&self, name: &str, type_id: TypeId) -> String {
+        let published = self
+            .types
+            .nominal_def(type_id)
+            .and_then(|def| self.published_names.get(&def));
+        to_cm_name(published.map_or(name, String::as_str))
     }
 }
 

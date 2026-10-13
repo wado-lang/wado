@@ -202,6 +202,16 @@ impl Semantics {
             world_registry: self.world_registry(),
             wit_contract: self.wit_contract.as_ref(),
             export_mappings: &self.export_mappings,
+            published_names: self
+                .resolutions()
+                .map(|resolutions| {
+                    resolutions
+                        .defs()
+                        .adopted_by(&self.entry_module_source)
+                        .map(|(def, name)| (def, name.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 

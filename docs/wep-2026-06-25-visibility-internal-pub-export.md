@@ -110,6 +110,10 @@ and a type is published only that way:
 - A package publishes each named type its `export fn`s reach. It declares the
   type `export`, or adopts one another package declares with
   `export use { T } from "…";`.
+- `export use { T as U }` publishes the type as `U`. A rename is how a package
+  avoids a clash between an adopted name and one of its own, and the CM
+  record, variant, enum and flags types are structural, so the name changes no
+  type identity. One type has one name in WIT, so it is adopted under one.
 - Every field of a published struct is `pub`. WIT shows every field of a
   record, so a private one would leak.
 - `#[cm]` types are exempt, their own interface publishing them. So are the
@@ -187,6 +191,11 @@ record from the component's WIT.
   reached type and for a published struct's private field
   (`cm_export_unpublished_type_rejected.wado`,
   `cm_export_published_struct_private_field_rejected.wado`).
+- [x] `export use { T as U }` publishes under `U`: `DefTable` records each
+  publisher's name, the library surface and `wado wit` name the type and every
+  reference to it by that name, and synthesis finds the declaration by
+  `DefId` (`adopted_type_is_published_under_its_alias`,
+  `adopted_stdlib_type_is_published_by_the_library`).
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
 
@@ -203,8 +212,6 @@ record from the component's WIT.
 - A library (`--lib`) still publishes every `pub` and `internal` type of its
   submodules in its default interface, `export` or not. So two submodule types
   sharing a name collide though neither is surface.
-- `export use { T as U }` is refused, since WIT would still name the type `T`.
-  Whether a rename should reach the WIT name is undecided.
 - The standard library newtype exemption means a stdlib `struct` such as
   `DirEntry` needs `export use` to cross while a stdlib newtype such as
   `ByteList` does not.

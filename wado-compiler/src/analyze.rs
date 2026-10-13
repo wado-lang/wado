@@ -16,7 +16,7 @@ use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name::{mangle_local_method, namespace_member_alias, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
@@ -245,9 +245,14 @@ pub enum AnalyzeError {
     /// An `export use` naming a type of its own package, which `export` on the
     /// declaration publishes.
     ExportUseOwnType { name: String, span: Span },
-    /// An `export use` renaming the type it adopts: WIT would still name it as
-    /// declared.
-    ExportUseRenamed { name: String, span: Span },
+    /// An `export use` publishing a type its package already publishes under
+    /// another name: WIT gives a type one name.
+    ExportUseRenamedTwice {
+        name: String,
+        earlier: String,
+        published: String,
+        span: Span,
+    },
 }
 
 /// What is wrong with an `#[unavailable]` declaration.
@@ -427,10 +432,15 @@ impl AnalyzeError {
                 ),
                 *span,
             ),
-            AnalyzeError::ExportUseRenamed { name, span } => (
+            AnalyzeError::ExportUseRenamedTwice {
+                name,
+                earlier,
+                published,
+                span,
+            } => (
                 Code::CmBoundaryType,
                 format!(
-                    "`export use` publishes `{name}` under its declared name, so it cannot rename it"
+                    "`{name}` is already published as `{earlier}`, so `export use` cannot publish it as `{published}` too: WIT gives a type one name"
                 ),
                 *span,
             ),
@@ -509,6 +519,8 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// The operations a component's default interfaces share, which no bare
     /// name imports, each with the interfaces that declare it.
     shared_default_ops: hashmap::IndexMap<(ModuleSource, String), Vec<String>>,
+    /// The name each package's `export use` publishes an adopted type under.
+    adopted_names: hashmap::IndexMap<(PackageId, AstId), String>,
 }
 
 impl<'a, H: CompilerHost> Analyzer<'a, H> {
@@ -522,6 +534,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             invocations: InvocationIndex::new(),
             interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
             shared_default_ops: hashmap::IndexMap::default(),
+            adopted_names: hashmap::IndexMap::default(),
         }
     }
 
@@ -1437,7 +1450,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     &module_source,
                                     name,
                                     *name_span,
-                                    alias.as_ref().map(|_| *local_span),
+                                    alias.as_ref().map(|alias| (alias.as_str(), *local_span)),
                                     all_modules,
                                 );
                             }
@@ -1500,22 +1513,24 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Ok(())
     }
 
-    /// Diagnose an `export use` of `name` from `target` that cannot publish it:
-    /// it names no type, a type of the importing package (published by its own
-    /// `export`), a type under a new name (`alias_span`), or a struct with a
+    /// Diagnose an `export use` of `name` from `target`, published under
+    /// `alias` where it gives one, that cannot publish it: it names no type, a
+    /// type of the importing package (published by its own `export`), a type
+    /// the package already publishes under another name, or a struct with a
     /// field WIT could not show.
     fn check_adoption(
-        &self,
+        &mut self,
         from: &ModuleSource,
         target: &ModuleSource,
         name: &str,
         span: Span,
-        alias_span: Option<Span>,
+        alias: Option<(&str, Span)>,
         all_modules: &hashmap::IndexMap<ModuleSource, Module>,
     ) {
         let Some(symbol) = self.symbols.lookup_in_module(target, name) else {
             return; // `import_symbol` reported it.
         };
+        let (published, published_span) = alias.unwrap_or((name, span));
         let name = name.to_string();
         let error = match &symbol.kind {
             SymbolKind::Struct(_)
@@ -1523,10 +1538,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             | SymbolKind::Variant(_)
             | SymbolKind::Flags(_)
             | SymbolKind::Newtype(_) => {
+                let earlier = self
+                    .adopted_names
+                    .entry((from.package_id(), symbol.defined_at))
+                    .or_insert_with(|| published.to_string());
                 if symbol.module_source().same_package(from) {
                     AnalyzeError::ExportUseOwnType { name, span }
-                } else if let Some(span) = alias_span {
-                    AnalyzeError::ExportUseRenamed { name, span }
+                } else if earlier != published {
+                    AnalyzeError::ExportUseRenamedTwice {
+                        name,
+                        earlier: earlier.clone(),
+                        published: published.to_string(),
+                        span: published_span,
+                    }
                 } else if let Some(field) = all_modules[symbol.module_source()]
                     .items
                     .iter()
