@@ -1230,11 +1230,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-    fn classify_from_marker(
+    /// The source type of a `From<source>` marker.
+    fn from_marker_source(
         &mut self,
         trait_type: &ast::Type,
         marked: Option<DefId>,
-    ) -> Option<tir::SynthTrait> {
+    ) -> Option<TypeId> {
         let from = self.tysys.compiler_trait_def(CompilerItem::From);
         if marked.is_none_or(|trait_| from != Some(trait_)) {
             return None;
@@ -1242,8 +1243,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let ast::Type::Generic(generic) = trait_type
             && generic.args.len() == 1
         {
-            let source = self.resolve_type(&generic.args[0]);
-            Some(tir::SynthTrait::From { source })
+            Some(self.resolve_type(&generic.args[0]))
         } else {
             None
         }
@@ -1391,11 +1391,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 struct_name,
                 impl_block.span,
             );
-        } else if let Some(trait_ref) = self.classify_from_marker(trait_type, marked) {
+        } else if let Some(source) = self.from_marker_source(trait_type, marked) {
             let target_type_id = self.resolve_type(&impl_block.ty);
-            let tir::SynthTrait::From { source } = trait_ref else {
-                unreachable!("`classify_from_marker` answers only `From`")
-            };
             if let Some(why) = self.from_marker_withheld(target_type_id, source, struct_name) {
                 let _ = self.emit(types::TypeError::MarkerWithheld {
                     trait_name: self.get_type_name_full(trait_type),
@@ -1413,7 +1410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .map(|(name, b)| (name.clone(), b.index, b.type_id))
                 .collect();
             self.record_pending_synthesis_request(tir::SynthesisRequest {
-                trait_ref,
+                trait_ref: tir::SynthTrait::From { source },
                 target_type_name: struct_name.to_string(),
                 target_type_id,
                 type_params,

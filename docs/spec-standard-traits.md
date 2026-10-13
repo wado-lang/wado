@@ -603,8 +603,7 @@ test "written" {
 ## Conversion Traits
 
 Two prelude traits convert a value of one type into another. `From` cannot
-fail. `TryFrom` returns a `Result`, and its failure is an `Error`, the trait
-every error type implements:
+fail. `TryFrom` returns a `Result`, and its failure is an `Error`:
 
 <!-- {"fixture":"spec_traits_conversion_decls.wado"} -->
 
@@ -663,7 +662,7 @@ Two conversions need no written impl:
 - A type converts to itself: `T::from(x)` with `x: T` is `x`.
 - A newtype converts to and from its base, both ways, as `as` does.
 
-The prelude implements `From` for the lossless numeric widenings, such as
+The prelude implements `From` for lossless numeric widenings, such as
 `i32` to `i64` and `f32` to `f64`. It implements `TryFrom` for the numeric
 conversions that can lose a value: a narrowing, a change of sign, and a
 conversion to a float that would round the value. Every one of those `TryFrom`

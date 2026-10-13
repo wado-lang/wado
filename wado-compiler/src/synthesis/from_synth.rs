@@ -106,10 +106,11 @@ fn generate_variant_from(
 
     // Match the case by resolved type identity, not by type-name string, so two
     // distinct same-named payload types never collide.
+    let tt = module.type_table.borrow();
     let matching_case = variant_def
         .cases
         .iter()
-        .find(|c| c.payload != TypeTable::UNIT && c.payload == source)
+        .find(|c| c.payload != TypeTable::UNIT && tt.type_key(c.payload) == tt.type_key(source))
         .expect("the elaborator admits a `From` marker only with one case carrying its source");
 
     let case_name = matching_case.name.clone();
@@ -133,10 +134,8 @@ fn generate_variant_from(
     let body = block(vec![return_stmt(Some(variant_construct))]);
     let locals = vec![param_local("value", from_type, false)];
 
-    let target = module
-        .type_table
-        .borrow()
-        .fq_base_type_name(req.target_type_id);
+    let target = tt.fq_base_type_name(req.target_type_id);
+    drop(tt);
     let method_info =
         LocalMethodName::new(target.clone(), Some(from_trait.clone()), "from".to_string());
     let qualified_name = MethodName::format_local(&target, Some(from_trait), "from");
