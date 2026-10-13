@@ -13,6 +13,7 @@ pub mod modref;
 pub mod observed;
 pub mod ownership;
 pub mod place;
+pub mod reach;
 pub mod retention;
 pub mod synthesize;
 

@@ -144,6 +144,24 @@ impl ModRef {
     pub fn writes(&self, module: &ModuleSource, name: &str) -> &Writes {
         self.per_func.get(module, name).unwrap_or(&self.unknown)
     }
+
+    /// Whether calling `(module, name)` may write field `field` of an `owner`
+    /// it is not handed. A `core:builtin` with no body writes only through
+    /// the arguments it is handed, which are arrays and scalars, never a
+    /// struct field.
+    #[must_use]
+    pub fn may_write_field_unhanded(
+        &self,
+        module: &ModuleSource,
+        name: &str,
+        owner: TypeId,
+        field: u32,
+    ) -> bool {
+        match self.per_func.get(module, name) {
+            Some(writes) => writes.may_write_field(owner, field),
+            None => !module.is_builtin(),
+        }
+    }
 }
 
 /// What a path naming no field of its own writes.

@@ -1,15 +1,20 @@
 //! The fields whose storage a reference may observe across an assignment the
-//! assigning body cannot see (WEP 2026-10-13): a borrow of a place through the
-//! field that outlives the expression taking it, or one lent to a call that may
-//! write the field.
+//! assigning body cannot see (WEP 2026-10-13).
 //!
-//! A body that owns the root of a place answers for its own borrows from its
-//! liveness. A place reached through a parameter or a reference is the caller's,
-//! and so is any borrow of it, which is what this set stands for.
+//! A body answers for its own borrows from its liveness, whatever the place's
+//! root. What it cannot see is a borrow another body holds while it runs, and
+//! that is this set: a field a borrow is taken through, where the borrow
+//!
+//! - outlives the borrowing body: returned, stored, or kept by a callee where
+//!   the body cannot name it;
+//! - is held in one of the borrowing body's locals while it makes a call that
+//!   may write the field;
+//! - is lent to a call that may write the field.
 
 use super::funcset::FuncKeySet;
 use super::modref::ModRef;
-use super::retention::CallRetention;
+use super::reach::StorageReach;
+use super::retention::{CallRetention, RESULT};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
@@ -31,6 +36,10 @@ impl ObservedFields {
     }
 }
 
+/// The fields a place passes through, outermost first: `h.p.q` is
+/// `(H, p), (P, q)`.
+type Steps = Vec<(TypeId, u32)>;
+
 pub fn compute(
     flat: &FlatPackage,
     retention: &CallRetention,
@@ -38,40 +47,79 @@ pub fn compute(
     ref_receiver_methods: &FuncKeySet,
 ) -> ObservedFields {
     let type_table = flat.type_table.borrow();
-    let mut scan = Scan {
-        type_table: &type_table,
-        fields: flat
-            .structs
-            .iter()
-            .map(|s| ((s.def, s.type_args.clone()), s.fields.clone()))
-            .collect(),
-        retention,
-        mod_ref,
-        ref_receiver_methods,
-        lent: IndexSet::default(),
-        observed: IndexSet::default(),
-    };
+    let fields: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>> = flat
+        .structs
+        .iter()
+        .map(|s| ((s.def, s.type_args.clone()), s.fields.clone()))
+        .collect();
+    let reach = StorageReach::new(&type_table, &fields);
+    let mut observed = IndexSet::default();
     for func in &flat.functions {
-        if let Some(body) = &func.borrow().body {
-            scan.visit_block(body);
-        }
+        let func = func.borrow();
+        let Some(body) = &func.body else {
+            continue;
+        };
+        let mut scan = Scan {
+            type_table: &type_table,
+            fields: &fields,
+            reach: &reach,
+            retention,
+            mod_ref,
+            ref_receiver_methods,
+            lent: IndexSet::default(),
+            frame_bound: IndexSet::default(),
+            escaping: Vec::new(),
+            held: Vec::new(),
+            callees: Vec::new(),
+            indirect: false,
+        };
+        scan.visit_block(body);
+        scan.finish(&mut observed);
     }
-    ObservedFields(scan.observed)
+    ObservedFields(observed)
 }
 
 struct Scan<'a> {
     type_table: &'a TypeTable,
-    fields: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+    fields: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
+    reach: &'a StorageReach<'a>,
     retention: &'a CallRetention,
     mod_ref: &'a ModRef,
     ref_receiver_methods: &'a FuncKeySet,
     /// The borrows a call argument already answered for, by address, so the
-    /// walk below them does not count them again as held.
+    /// walk below them does not count them again.
     lent: IndexSet<*const TirExpr>,
-    observed: IndexSet<(TypeId, u32)>,
+    /// Calls whose result a local of this body holds, by address.
+    frame_bound: IndexSet<*const TirExpr>,
+    escaping: Vec<Steps>,
+    held: Vec<Steps>,
+    callees: Vec<FunctionRef>,
+    indirect: bool,
 }
 
 impl Scan<'_> {
+    fn finish(self, observed: &mut IndexSet<(TypeId, u32)>) {
+        for steps in self.escaping {
+            observed.extend(steps);
+        }
+        for steps in self.held {
+            let written = |&(owner, field): &(TypeId, u32)| {
+                self.indirect
+                    || self.callees.iter().any(|c| {
+                        self.mod_ref.may_write_field_unhanded(
+                            &c.module_source,
+                            &c.name,
+                            owner,
+                            field,
+                        )
+                    })
+            };
+            if let Some(first) = steps.iter().position(written) {
+                observed.extend(steps[first..].iter().copied());
+            }
+        }
+    }
+
     /// The declared type of field `index` of struct `owner`.
     fn field_type_of(&self, owner: TypeId, index: u32) -> TypeId {
         let ResolvedType::Struct { def, type_args } = self.type_table.get(owner) else {
@@ -80,9 +128,7 @@ impl Scan<'_> {
         self.fields[&(*def, type_args.clone())][index as usize].type_id
     }
 
-    /// The fields a place passes through, outermost first: `h.p.q` is
-    /// `(H, p), (P, q)`.
-    fn field_steps(&self, place: &TirExpr, out: &mut Vec<(TypeId, u32)>) {
+    fn field_steps(&self, place: &TirExpr, out: &mut Steps) {
         match &place.kind {
             TirExprKind::FieldAccess {
                 expr, field_index, ..
@@ -90,57 +136,87 @@ impl Scan<'_> {
                 self.field_steps(expr, out);
                 out.push((field_owner(expr.type_id, self.type_table), *field_index));
             }
+            // A reborrow `&*&place` names `place`.
             TirExprKind::Index { expr, .. }
             | TirExprKind::Cast { expr, .. }
             | TirExprKind::VariantPayload { expr, .. }
-            | TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr,
-            } => self.field_steps(expr, out),
+            | TirExprKind::Unary { expr, .. } => self.field_steps(expr, out),
             _ => {}
         }
     }
 
-    /// A borrow of `place` lent to `func` at `position`, which keeps it past the
-    /// call or not. Lent and not kept, it is observed only from the outermost
-    /// field the callee may write, since only an assignment the call makes can
-    /// meet it.
-    fn lend(&mut self, place: &TirExpr, func: Option<&FunctionRef>, position: u32, call: &TirExpr) {
-        let mut steps = Vec::new();
-        self.field_steps(place, &mut steps);
-        let Some(func) = func else {
-            self.observed.extend(steps);
-            return;
+    /// The steps `place` passes through, its inner borrows answered by the
+    /// borrow of `place` itself.
+    fn steps(&mut self, place: &TirExpr) -> Steps {
+        let mut out = Vec::new();
+        self.field_steps(place, &mut out);
+        self.mark_inner_borrows(place);
+        out
+    }
+
+    fn mark_inner_borrows(&mut self, place: &TirExpr) {
+        match &place.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr,
+            } => {
+                self.lent.insert(std::ptr::from_ref(place));
+                self.mark_inner_borrows(expr);
+            }
+            TirExprKind::FieldAccess { expr, .. }
+            | TirExprKind::Index { expr, .. }
+            | TirExprKind::Cast { expr, .. }
+            | TirExprKind::VariantPayload { expr, .. }
+            | TirExprKind::Unary { expr, .. } => self.mark_inner_borrows(expr),
+            _ => {}
+        }
+    }
+
+    /// A borrow of `place` lent to `func` at `position` of `call`. Kept only in
+    /// the result, it is held where the result is: in this body's local for a
+    /// frame-bound call, anywhere otherwise. Not kept, it is observed only from
+    /// the outermost field the callee may write, since only an assignment the
+    /// call makes can meet it.
+    fn lend(&mut self, place: &TirExpr, func: &FunctionRef, position: u32, call: &TirExpr) {
+        let steps = self.steps(place);
+        let TirExprKind::Call { args, .. } = &call.kind else {
+            unreachable!("a lent borrow is a call's argument")
         };
         let holds = !matches!(
             self.type_table.get(call.type_id),
             ResolvedType::Primitive(_) | ResolvedType::Unit
         );
-        let arity = match &call.kind {
-            TirExprKind::Call { args, .. } => args.len(),
-            _ => unreachable!("a lent borrow is a call's argument"),
-        };
-        if self.retention.of_call(func, arity, holds).keeps(position) {
-            self.observed.extend(steps);
-            return;
+        let retained = self.retention.of_call(func, args.len(), holds);
+        if retained.keeps(position) {
+            let into_result_only = retained
+                .destinations(position)
+                .is_some_and(|d| !d.is_empty() && d.iter().all(|&p| p == RESULT));
+            if !into_result_only {
+                self.escaping.push(steps);
+                return;
+            }
+            // A result that cannot hold the place's storage keeps none of it.
+            if self.reach.reaches(call.type_id, place.type_id, true) {
+                if self.frame_bound.contains(&std::ptr::from_ref(call)) {
+                    self.held.push(steps);
+                } else {
+                    self.escaping.push(steps);
+                }
+                return;
+            }
         }
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
         if let Some(first) = steps
             .iter()
             .position(|(owner, field)| writes.may_write_field(*owner, *field))
         {
-            self.observed.extend(steps[first..].iter().copied());
+            self.escaping.push(steps[first..].to_vec());
         }
     }
 
     /// A pattern binding a reference to a field of what it matches: the
-    /// binding holds that field's storage.
-    fn visit_binding_pattern(
-        &mut self,
-        pattern: &TirPattern,
-        owner: TypeId,
-        path: &mut Vec<(TypeId, u32)>,
-    ) {
+    /// binding, a local, holds that field's storage.
+    fn visit_binding_pattern(&mut self, pattern: &TirPattern, owner: TypeId, path: &mut Steps) {
         match pattern {
             TirPattern::Binding { type_id, .. } => {
                 if !path.is_empty()
@@ -149,7 +225,7 @@ impl Scan<'_> {
                         ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                     )
                 {
-                    self.observed.extend(path.iter().copied());
+                    self.held.push(path.clone());
                 }
             }
             TirPattern::Struct {
@@ -193,17 +269,48 @@ impl Scan<'_> {
             _ => {}
         }
     }
+
+    /// A value a local of this body takes: a borrow there is held, and so is
+    /// one a call keeps in the result the local takes.
+    fn bind_local(&mut self, value: &TirExpr) {
+        let mut value = value;
+        while let TirExprKind::Cast { expr, .. } = &value.kind {
+            value = expr;
+        }
+        match &value.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => {
+                let steps = self.steps(place);
+                self.held.push(steps);
+                self.lent.insert(std::ptr::from_ref(value));
+            }
+            TirExprKind::Call { .. } => {
+                self.frame_bound.insert(std::ptr::from_ref(value));
+            }
+            _ => {}
+        }
+    }
 }
 
 impl TirRefVisitor for Scan<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::LetDestructure { pattern, value } = &stmt.kind
-            && matches!(
-                self.type_table.get(value.type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
-        {
-            self.visit_binding_pattern(pattern, value.type_id, &mut Vec::new());
+        match &stmt.kind {
+            TirStmtKind::Let { value, .. } => self.bind_local(value),
+            TirStmtKind::Expr(TirExpr {
+                kind: TirExprKind::Assign { target, value },
+                ..
+            }) if matches!(target.kind, TirExprKind::Local { .. }) => self.bind_local(value),
+            TirStmtKind::LetDestructure { pattern, value }
+                if matches!(
+                    self.type_table.get(value.type_id),
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+                ) =>
+            {
+                self.visit_binding_pattern(pattern, value.type_id, &mut Vec::new());
+            }
+            _ => {}
         }
         self.walk_stmt(stmt);
     }
@@ -211,6 +318,7 @@ impl TirRefVisitor for Scan<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Call { func, args, .. } => {
+                self.callees.push((**func).clone());
                 for (position, arg) in args.iter().enumerate() {
                     let position = u32::try_from(position).expect("arity");
                     if let TirExprKind::Unary {
@@ -218,7 +326,7 @@ impl TirRefVisitor for Scan<'_> {
                         expr: place,
                     } = &arg.expr.kind
                     {
-                        self.lend(place, Some(func), position, expr);
+                        self.lend(place, func, position, expr);
                         self.lent.insert(std::ptr::from_ref(&arg.expr));
                     }
                 }
@@ -228,28 +336,30 @@ impl TirRefVisitor for Scan<'_> {
                         .ref_receiver_methods
                         .contains(&func.module_source, &func.name)
                 {
-                    self.lend(receiver, Some(func), 0, expr);
+                    self.lend(receiver, func, 0, expr);
                 }
             }
             TirExprKind::IndirectCall { args, .. } => {
+                self.indirect = true;
                 for arg in args {
                     if let TirExprKind::Unary {
                         op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                         expr: place,
                     } = &arg.kind
                     {
-                        self.lend(place, None, 0, expr);
+                        let steps = self.steps(place);
+                        self.escaping.push(steps);
                         self.lent.insert(std::ptr::from_ref(arg));
                     }
                 }
             }
+            TirExprKind::CmRawCall { .. } => self.indirect = true,
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
             } if !self.lent.contains(&std::ptr::from_ref(expr)) => {
-                let mut steps = Vec::new();
-                self.field_steps(place, &mut steps);
-                self.observed.extend(steps);
+                let steps = self.steps(place);
+                self.escaping.push(steps);
             }
             TirExprKind::Match {
                 expr: scrutinee,
@@ -260,8 +370,11 @@ impl TirRefVisitor for Scan<'_> {
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 ) {
                     for arm in arms {
-                        let mut path = Vec::new();
-                        self.visit_binding_pattern(&arm.pattern, scrutinee.type_id, &mut path);
+                        self.visit_binding_pattern(
+                            &arm.pattern,
+                            scrutinee.type_id,
+                            &mut Vec::new(),
+                        );
                     }
                 }
             }

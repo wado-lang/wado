@@ -6,6 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
+use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_reference_type, needs_value_copy};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -141,8 +142,9 @@ pub struct Ownership {
     pub share_eligible: IndexSet<u32>,
     /// Assignments to a place of an in-place type that write into the storage
     /// the place holds, by the assignment's span: a holder of that storage may
-    /// be read afterwards (WEP 2026-10-13).
-    pub in_place_assigns: IndexSet<Span>,
+    /// be read afterwards (WEP 2026-10-13). Each names the fields of the root
+    /// a borrow in this body holds, written into their own storage too.
+    pub in_place_assigns: IndexMap<Span, IndexSet<u32>>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -157,6 +159,7 @@ pub fn analyze_ownership(
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
     final_reads: &IndexSet<Span>,
+    reach: &StorageReach<'_>,
 ) -> Ownership {
     let Some(body) = &func.body else {
         return Ownership::default();
@@ -208,6 +211,8 @@ pub fn analyze_ownership(
         value_reads: IndexMap::default(),
         mutations: Vec::new(),
         assign_sites: Vec::new(),
+        reach,
+        returns_owned: &plan.returns_owned,
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
@@ -903,12 +908,12 @@ pub fn unanalyzed_in_place_assigns(
     func: &TirFunction,
     type_table: &TypeTable,
     observed: &ObservedFields,
-) -> IndexSet<Span> {
+) -> IndexMap<Span, IndexSet<u32>> {
     struct Scan<'a> {
         type_table: &'a TypeTable,
         observed: &'a ObservedFields,
         held: IndexSet<u32>,
-        out: IndexSet<Span>,
+        out: IndexMap<Span, IndexSet<u32>>,
     }
     impl TirRefVisitor for Scan<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
@@ -931,7 +936,7 @@ pub fn unanalyzed_in_place_assigns(
                         _ => false,
                     };
                     if in_place {
-                        self.out.insert(expr.span);
+                        self.out.insert(expr.span, IndexSet::default());
                     }
                 }
                 _ => {}
@@ -950,7 +955,7 @@ pub fn unanalyzed_in_place_assigns(
         }
     }
     let Some(body) = &func.body else {
-        return IndexSet::default();
+        return IndexMap::default();
     };
     let mut captures = Captures(func.address_taken_locals.clone());
     captures.visit_block(body);
@@ -958,7 +963,7 @@ pub fn unanalyzed_in_place_assigns(
         type_table,
         observed,
         held: captures.0,
-        out: IndexSet::default(),
+        out: IndexMap::default(),
     };
     scan.visit_block(body);
     scan.out
@@ -1096,6 +1101,9 @@ struct Analyzer<'a> {
     /// Assignments to a place of an in-place type, decided once every borrow
     /// this body makes is known.
     assign_sites: Vec<AssignSite>,
+    /// Whether a call's result can hold the storage an argument lends.
+    reach: &'a StorageReach<'a>,
+    returns_owned: &'a FuncKeySet,
 }
 
 /// What a call does with a reference handed at one argument position.
@@ -1233,28 +1241,49 @@ impl Analyzer<'_> {
         )
     }
 
-    /// The same for a call through a function value, off the row the site
-    /// resolved rather than a name.
-    fn kept_through(&self, retained: &Retained, args: &[&TirExpr], result: &Kept) -> Vec<Kept> {
+    /// What a call keeps of each argument, off what `retained` says of its
+    /// positions. `result` is the call's result type and whether the callee
+    /// returns it fresh, where known.
+    fn kept_through(
+        &self,
+        retained: &Retained,
+        args: &[&TirExpr],
+        result: &Kept,
+        result_type: Option<(TypeId, bool)>,
+    ) -> Vec<Kept> {
         (0..args.len())
             .map(|pos| {
                 let position = u32::try_from(pos).unwrap();
                 if !retained.keeps(position) {
                     return Kept::Transient;
                 }
-                self.landing(args, result, retained.destinations(position))
+                let into_result =
+                    result_type.is_none_or(|(ty, fresh)| self.result_reaches(args[pos], ty, fresh));
+                self.landing(args, result, retained.destinations(position), into_result)
             })
             .collect()
     }
 
+    /// Whether a result of `result_type` can hold what `arg` lends: for a
+    /// borrow, the storage it names. Anything else is answered "yes".
+    fn result_reaches(&self, arg: &TirExpr, result_type: TypeId, fresh: bool) -> bool {
+        let referent = match self.type_table.get(arg.type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => return true,
+        };
+        self.reach.reaches(result_type, referent, !fresh)
+    }
+
     /// A kept position read as a pin: where the destinations are all locals of
     /// this body, or a result kept no longer, it lasts only as long as they do,
-    /// and otherwise the frame.
+    /// and otherwise the frame. A result that cannot hold the argument is no
+    /// destination.
     fn landing(
         &self,
         args: &[&TirExpr],
         result: &Kept,
         destinations: Option<&IndexSet<u32>>,
+        into_result: bool,
     ) -> Kept {
         let Some(destinations) = destinations.filter(|d| !d.is_empty()) else {
             return Kept::Frame;
@@ -1262,6 +1291,9 @@ impl Analyzer<'_> {
         let mut locals = Vec::new();
         for &position in destinations {
             if position == RESULT {
+                if !into_result {
+                    continue;
+                }
                 match result {
                     Kept::Transient => {}
                     Kept::Frame => return Kept::Frame,
@@ -1347,47 +1379,72 @@ impl Analyzer<'_> {
     }
 
     /// The assignments that write in place, each turning the writes it recorded
-    /// from a repoint into a write inside the storage. A place this body owns
-    /// asks its own borrows: one a reference outlives, or one whose holder is
-    /// readable after the assignment. A place past a reference is the caller's,
-    /// so it asks the borrows every body makes of that field.
+    /// from a repoint into a write inside the storage. Every place asks the
+    /// borrows this body makes of it: one a reference outlives, or one whose
+    /// holder is readable after the assignment. A place past a reference is the
+    /// caller's as well, so it also asks the borrows other bodies may hold
+    /// across the call that reaches this one.
     fn in_place_assigns(
         &mut self,
         func: &TirFunction,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         reference_copies: &[(u32, u32)],
         observed: &ObservedFields,
-    ) -> IndexSet<Span> {
+    ) -> IndexMap<Span, IndexSet<u32>> {
         let (holds, readable_anywhere) = self.holder_graph(paths, reference_copies);
-        let mut out = IndexSet::default();
+        let mut out = IndexMap::default();
         for site in &self.assign_sites {
             let external =
                 site.through_borrow || is_reference_local(func, site.root, self.type_table);
-            let in_place = if external {
-                site.last
-                    .is_some_and(|(owner, field)| observed.contains(owner, field))
-            } else {
-                let readable = readable_storage(paths, &site.live);
-                self.place_escaped(site.root, site.top)
-                    || self
-                        .pending_bounded
-                        .iter()
-                        .any(|(root, field, destinations)| {
-                            *root == site.root
-                                && (field.is_none() || site.top.is_none() || *field == site.top)
-                                && holders_of(destinations, &holds).iter().any(|holder| {
-                                    readable.contains(holder) || readable_anywhere.contains(holder)
-                                })
+            let readable = readable_storage(paths, &site.live);
+            // Which of the root's fields a borrow still holds after the site:
+            // `None` stands for the whole root, or a borrow too imprecise to
+            // name a field.
+            let held: IndexSet<Option<u32>> = self
+                .pending_bounded
+                .iter()
+                .filter(|(root, _, destinations)| {
+                    *root == site.root
+                        && holders_of(destinations, &holds).iter().any(|holder| {
+                            readable.contains(holder) || readable_anywhere.contains(holder)
                         })
-            };
+                })
+                .map(|(_, field, _)| *field)
+                .chain(self.escaped_fields(site.root))
+                .collect();
+            // A borrow of the whole root reads a field through the root, which
+            // a repoint of the field leaves it able to follow.
+            let in_place = match site.top {
+                None => !held.is_empty(),
+                Some(top) => held.contains(&Some(top)),
+            } || (external
+                && site
+                    .last
+                    .is_some_and(|(owner, field)| observed.contains(owner, field)));
             if in_place {
-                out.insert(site.span);
+                // Writing the whole root in place, a field a borrow holds is
+                // written into its own storage too.
+                let recurse = match site.top {
+                    None => held.iter().flatten().copied().collect(),
+                    Some(_) => IndexSet::default(),
+                };
+                out.insert(site.span, recurse);
                 for m in site.mutations.clone() {
                     self.mutations[m].rebinds_place = false;
                 }
             }
         }
         out
+    }
+
+    /// The fields of `root` a borrow that outlives the frame reaches, `None`
+    /// for the whole root.
+    fn escaped_fields(&self, root: u32) -> Vec<Option<u32>> {
+        match self.borrow_escaped.get(&root) {
+            None => Vec::new(),
+            Some(FieldEscape::Whole) => vec![None],
+            Some(FieldEscape::Fields(fields)) => fields.iter().map(|f| Some(*f)).collect(),
+        }
     }
 
     fn resolve_pending_bounded(
@@ -2266,7 +2323,13 @@ impl Analyzer<'_> {
                         .contains(&func.module_source, &func.name);
                 let kept = if record {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    self.kept_through(&self.retained_by(func, args.len(), expr), &exprs, &result)
+                    let fresh = self.returns_owned.contains(&func.module_source, &func.name);
+                    self.kept_through(
+                        &self.retained_by(func, args.len(), expr),
+                        &exprs,
+                        &result,
+                        Some((expr.type_id, fresh)),
+                    )
                 } else {
                     Vec::new()
                 };
@@ -2292,7 +2355,7 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = args.iter().collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                     let retained = self.functor_rows.retained(callee, args.len());
-                    self.kept_through(&retained, &exprs, &result)
+                    self.kept_through(&retained, &exprs, &result, None)
                 } else {
                     Vec::new()
                 };

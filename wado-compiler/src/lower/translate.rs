@@ -344,9 +344,9 @@ fn tir_function_key(f: &TirFunction) -> FunctionId {
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
 /// assignment in `in_place` replaces whole.
-fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32> {
+fn guarded_locals(func: &TirFunction, in_place: &IndexMap<Span, IndexSet<u32>>) -> IndexSet<u32> {
     struct Scan<'a> {
-        in_place: &'a IndexSet<Span>,
+        in_place: &'a IndexMap<Span, IndexSet<u32>>,
         deferred: IndexSet<u32>,
         replaced: IndexSet<u32>,
     }
@@ -368,7 +368,7 @@ fn guarded_locals(func: &TirFunction, in_place: &IndexSet<Span>) -> IndexSet<u32
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Assign { target, .. } = &expr.kind
                 && let TirExprKind::Local { index, .. } = target.kind
-                && self.in_place.contains(&expr.span)
+                && self.in_place.contains_key(&expr.span)
             {
                 self.replaced.insert(index);
             }
@@ -424,9 +424,9 @@ struct FunctionTranslator<'a, 'p> {
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
     alias_components: value_copy::last_use::AliasComponents,
-    /// Assignments that write into the storage their place holds, by span
-    /// (WEP 2026-10-13).
-    in_place_assigns: IndexSet<Span>,
+    /// Assignments that write into the storage their place holds, by span, each
+    /// with the root's fields a borrow here holds (WEP 2026-10-13).
+    in_place_assigns: IndexMap<Span, IndexSet<u32>>,
     /// Locals declared without a value that such an assignment replaces whole.
     /// One holds no storage before its first assignment, so a flag local says
     /// whether to write in place or to store.
@@ -502,6 +502,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &resolver,
                     base.value_copy,
                     &base.moved_local_spans,
+                    &value_copy::reach::StorageReach::new(&type_table, &base.struct_fields_map),
                 ),
                 value_copy::last_use::compute_ref_targets(func, &resolver),
             )
@@ -586,7 +587,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
-            in_place_assigns: IndexSet::default(),
+            in_place_assigns: IndexMap::default(),
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
             arena: RefCell::new(Body::empty()),
@@ -995,7 +996,8 @@ impl FunctionTranslator<'_, '_> {
         let TirExprKind::Assign { target, value } = &expr.kind else {
             return None;
         };
-        let (handle, handle_type, place_type) = match &target.kind {
+        let empty = IndexSet::default();
+        let (handle, handle_type, place_type, held) = match &target.kind {
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: ref_expr,
@@ -1005,12 +1007,12 @@ impl FunctionTranslator<'_, '_> {
                 else {
                     return None;
                 };
-                (&**ref_expr, ref_expr.type_id, inner)
+                (&**ref_expr, ref_expr.type_id, inner, &empty)
             }
-            _ if self.in_place_assigns.contains(&expr.span) => {
-                (&**target, target.type_id, target.type_id)
-            }
-            _ => return None,
+            _ => match self.in_place_assigns.get(&expr.span) {
+                Some(held) => (&**target, target.type_id, target.type_id, held),
+                None => return None,
+            },
         };
         let fields = self.aggregate_fields(place_type)?;
 
@@ -1039,6 +1041,7 @@ impl FunctionTranslator<'_, '_> {
             (val_idx, place_type),
             place_type,
             &fields,
+            held,
             span,
             &mut out,
         );
@@ -1069,13 +1072,15 @@ impl FunctionTranslator<'_, '_> {
     /// Write each field of the value in local `val` into the storage local
     /// `handle` names. A field of an in-place type that a borrow may observe is
     /// written into its own storage the same way, since repointing it would
-    /// leave that borrow on the old one.
+    /// leave that borrow on the old one: one in `held`, which this body's walk
+    /// found borrowed, or one some body's borrow may observe.
     fn write_fields(
         &self,
         (handle, handle_type): (u32, tir::TypeId),
         (val, val_type): (u32, tir::TypeId),
         place_type: tir::TypeId,
         fields: &[(String, u32, tir::TypeId)],
+        held: &IndexSet<u32>,
         span: Span,
         out: &mut Vec<StmtId>,
     ) {
@@ -1107,11 +1112,12 @@ impl FunctionTranslator<'_, '_> {
                 .type_table
                 .borrow()
                 .is_in_place_aggregate(*field_type)
-                && self
-                    .base
-                    .value_copy
-                    .observed_fields
-                    .contains(owner, *field_index);
+                && (held.contains(field_index)
+                    || self
+                        .base
+                        .value_copy
+                        .observed_fields
+                        .contains(owner, *field_index));
             if observed && let Some(inner) = self.aggregate_fields(*field_type) {
                 let inner_handle = self.alloc_local(*field_type, "$deref_ref".to_string());
                 let inner_val = self.alloc_local(*field_type, "$deref_val".to_string());
@@ -1134,6 +1140,7 @@ impl FunctionTranslator<'_, '_> {
                     (inner_val, *field_type),
                     *field_type,
                     &inner,
+                    &IndexSet::default(),
                     span,
                     out,
                 );
