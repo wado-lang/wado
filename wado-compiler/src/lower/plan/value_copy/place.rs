@@ -382,7 +382,9 @@ impl<'a> Resolver<'a> {
                         Names::Value if path.through_borrow => Names::Unknown,
                         other => other,
                     },
-                    None if self.returns_owned.contains(&func.module_source, &func.name) => {
+                    None if self.returns_owned.contains(&func.module_source, &func.name)
+                        || !carries_storage(expr.type_id, self.type_table) =>
+                    {
                         Names::Value
                     }
                     None => Names::Unknown,
@@ -400,6 +402,8 @@ impl<'a> Resolver<'a> {
             | TirExprKind::VariantConstruct { .. }
             | TirExprKind::EnumConstruct { .. }
             | TirExprKind::Binary { .. } => Names::Value,
+            // A result carrying no storage aliases nothing, whatever computed it.
+            _ if !carries_storage(expr.type_id, self.type_table) => Names::Value,
             _ => Names::Unknown,
         }
     }
