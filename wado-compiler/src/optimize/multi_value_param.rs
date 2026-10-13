@@ -2,8 +2,8 @@
 //! a heap struct. The mirror of [`super::multi_value_return`].
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirStruct, ParamAbi};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
+use crate::nir::{NirBinaryOp, NirStruct, ParamAbi};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::parallel::Executor;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -68,9 +68,16 @@ fn collect_candidates(
             else {
                 continue;
             };
-            let Some(read) = fields_read(body, param.local_index, &all_names) else {
+            let whole_body = NodeRef::Block(body.root());
+            let Some(read) = fields_read(body, whole_body, param.local_index, &all_names) else {
                 continue;
             };
+            // A borrow's fields are loaded at every call, so one the callee
+            // reads only on some paths costs a load where it reads none.
+            if is_ref && !read.is_subset(&fields_read_on_entry(body, param.local_index, &all_names))
+            {
+                continue;
+            }
             // A by-value argument is often a literal or a multi-value result,
             // which hands over every field; a borrow's are loaded at the call,
             // so it takes only those the callee reads.
@@ -104,13 +111,87 @@ fn collect_candidates(
     out
 }
 
-/// The fields of `local` its reads name, `None` unless every read is the
+/// The fields of `local` read on every path through `body`: those its
+/// statements read before the first one that branches, jumps or loops.
+fn fields_read_on_entry<'a>(
+    body: &Body,
+    local: u32,
+    field_names: &'a [String],
+) -> IndexSet<&'a str> {
+    let mut out = IndexSet::default();
+    for &s in &body.blocks[body.root()].stmts {
+        let (evaluated, ends_prefix) = match &body.stmts[s].kind {
+            StmtKind::Let { value, .. }
+            | StmtKind::Expr(value)
+            | StmtKind::LetDestructure { value, .. } => (Some(*value), false),
+            StmtKind::Return { value } => (*value, true),
+            StmtKind::If { condition, .. } => (Some(*condition), true),
+            StmtKind::Loop { .. }
+            | StmtKind::Break { .. }
+            | StmtKind::Continue
+            | StmtKind::LabeledBlock { .. } => break,
+        };
+        if let Some(op) = evaluated {
+            if let Some(e) = op.as_expr()
+                && branches(body, e)
+            {
+                break;
+            }
+            let root = match op {
+                Operand::Expr(e) => NodeRef::Expr(e),
+                Operand::Value(_) => NodeRef::Stmt(s),
+            };
+            out.extend(
+                fields_read(body, root, local, field_names)
+                    .into_iter()
+                    .flatten(),
+            );
+        }
+        if ends_prefix {
+            break;
+        }
+    }
+    out
+}
+
+/// Whether evaluating `expr` takes a path some evaluations skip: a branch, a
+/// jump, a loop, or the right side of a short-circuit `&&` / `||`. A block an
+/// inlined call left holds none of these, and runs straight through.
+fn branches(body: &Body, expr: ExprId) -> bool {
+    body.find_in_nodes_under(NodeRef::Expr(expr), |node| {
+        let branching = match node {
+            NodeRef::Stmt(s) => !matches!(
+                body.stmts[s].kind,
+                StmtKind::Let { .. }
+                    | StmtKind::Expr(_)
+                    | StmtKind::LetDestructure { .. }
+                    | StmtKind::LabeledBlock { .. }
+            ),
+            NodeRef::Expr(e) => matches!(
+                body.exprs[e].kind,
+                ExprKind::If { .. }
+                    | ExprKind::Match { .. }
+                    | ExprKind::Switch { .. }
+                    | ExprKind::Binary {
+                        op: NirBinaryOp::And | NirBinaryOp::Or,
+                        ..
+                    }
+            ),
+            NodeRef::Block(_) | NodeRef::Pat(_) => false,
+        };
+        branching.then_some(())
+    })
+    .is_some()
+}
+
+/// The fields of `local` read under `root`, `None` unless every read is the
 /// subject of one of `field_names`. A promoted operand reads as an expression
 /// does, so its value tree is read too.
 // A read of the whole binding refutes: an aggregate rebuilt from the split
 // locals is not the one the caller passed.
 fn fields_read<'a>(
     body: &Body,
+    root: NodeRef,
     local: u32,
     field_names: &'a [String],
 ) -> Option<IndexSet<&'a str>> {
@@ -121,7 +202,7 @@ fn fields_read<'a>(
     let mut read_whole = false;
     let mut seen = IndexSet::default();
 
-    body.for_each_live_node_under(NodeRef::Block(body.root()), |node| {
+    body.for_each_live_node_under(root, |node| {
         body.for_each_operand(node, |op| {
             if let Some(v) = op.as_value() {
                 body.values

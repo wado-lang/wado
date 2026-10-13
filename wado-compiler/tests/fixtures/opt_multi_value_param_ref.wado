@@ -40,6 +40,16 @@ fn span_head(s: &Span) -> i32 {
     return s.start * 3 + len;
 }
 
+// `p.b` is read only past an early return, so splitting would load it at
+// every call where the callee loads it on one path: the reference stays whole.
+#[inline("never")]
+fn guarded(p: &Pair) -> i32 {
+    if p.a < 0 {
+        return 0;
+    }
+    return p.a + p.b;
+}
+
 #[inline("never")]
 fn bump_a(w: &mut Pair) -> i32 {
     w.a += 1000;
@@ -69,6 +79,7 @@ fn read_around_a_callee(w: &mut Pair, r: &Pair) -> i32 {
 export fn run() {
     let mut x = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
     assert total(&x) == 3;
+    assert guarded(&x) == 3;
     assert total_plus(&x, bump_a(&mut x)) == 1003;
     assert store_then_read(&mut x, &x) == 12;
     assert read_around_a_callee(&mut x, &x) == 100;
@@ -85,6 +96,7 @@ __DATA__
         "total\" = fn(i32, i32) -> i32",
         "total_plus\" = fn(i32, i32, i32) -> i32",
         "span_head\" = fn(i32, i32) -> i32",
+        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
     ]
