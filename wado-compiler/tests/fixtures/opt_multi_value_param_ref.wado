@@ -1,0 +1,68 @@
+// A `&S` parameter whose every use is a field read takes the multi-value ABI
+// too, where nothing the call runs stores into memory its caller holds: the
+// fields the referent held at the call are what every read would see.
+//
+// Where the call may store (through a `&mut` the caller handed it, or in a
+// callee), a read after the store sees it, so the reference stays whole.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn total(p: &Pair) -> i32 {
+    return p.a + p.b;
+}
+
+// The fields are read at the call, after every argument, so a later
+// argument's store is seen as the callee would have seen it.
+#[inline("never")]
+fn total_plus(p: &Pair, k: i32) -> i32 {
+    return p.a + p.b + k;
+}
+
+#[inline("never")]
+fn bump_a(w: &mut Pair) -> i32 {
+    w.a += 1000;
+    return 0;
+}
+
+// `w` and `r` may be one place, so `r.a` is read after the store.
+#[inline("never")]
+fn store_then_read(w: &mut Pair, r: &Pair) -> i32 {
+    w.a = 10;
+    return r.a + r.b;
+}
+
+#[inline("never")]
+fn bump(w: &mut Pair) {
+    w.b += 100;
+}
+
+// The store is a callee's.
+#[inline("never")]
+fn read_around_a_callee(w: &mut Pair, r: &Pair) -> i32 {
+    let before = r.b;
+    bump(w);
+    return r.b - before;
+}
+
+export fn run() {
+    let mut x = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert total(&x) == 3;
+    assert total_plus(&x, bump_a(&mut x)) == 1003;
+    assert store_then_read(&mut x, &x) == 12;
+    assert read_around_a_callee(&mut x, &x) == 100;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "total\" = fn(i32, i32) -> i32",
+        "total_plus\" = fn(i32, i32, i32) -> i32",
+        "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
+    ]
+}

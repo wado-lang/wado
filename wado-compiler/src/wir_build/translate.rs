@@ -2234,11 +2234,27 @@ impl FunctionTranslator<'_, '_> {
             let ty = this.operand_type_id(op);
             this.is_stackless_type(ty) && !this.type_table.is_never(ty)
         };
+        // A split `&S` reads its referent's fields at the call, as the callee
+        // would have, so every argument after it runs before those reads.
+        let first_split_ref = ordered
+            .iter()
+            .enumerate()
+            .find(|(i, op)| {
+                split.contains_key(i)
+                    && matches!(
+                        self.type_table.get(self.operand_type_id(**op)),
+                        ResolvedType::Ref(_)
+                    )
+            })
+            .map(|(i, _)| i);
+        let runs_before_split_reads = |i: usize| first_split_ref.is_some_and(|r| i > r);
         // An argument evaluated into the prelude runs ahead of every argument
         // left on the stack, so each one to its left is spilled to hold source
         // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
-            split.contains_key(&i) || (erased(this, op) && unit_needs_eval(this, op))
+            split.contains_key(&i)
+                || runs_before_split_reads(i)
+                || (erased(this, op) && unit_needs_eval(this, op))
         };
         let last_early = ordered
             .iter()
@@ -2258,7 +2274,7 @@ impl FunctionTranslator<'_, '_> {
                 if unit_needs_eval(self, op) {
                     prelude.push(self.translate_operand(op));
                 }
-            } else if last_early.is_some_and(|last| i < last) {
+            } else if last_early.is_some_and(|last| i < last) || runs_before_split_reads(i) {
                 let (p, read) = self.spill_operand(op, "$arg_spill");
                 prelude.extend(p);
                 call_args.push(read);
