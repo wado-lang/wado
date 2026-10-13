@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791928512759,
+  "lastUpdate": 1791930864492,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66849,6 +66849,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2cb77d1268091b2bf47cbc3a57581ce158266802"
         },
         "date": 1791928512256,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339773,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85291eb249ffa6a1dd6ee5a86c7965ef7eee7a37",
+          "message": "Merge pull request #2347 from wado-lang/ccr-f696b8d5-o18f5b\n\nfeat(prelude): div_floor and div_ceil on every integer type",
+          "timestamp": "2026-10-14T06:36:33+09:00",
+          "tree_id": "404a54e5a7420f9931f77601fd4efb3f83b120b3",
+          "url": "https://github.com/wado-lang/wado/commit/85291eb249ffa6a1dd6ee5a86c7965ef7eee7a37"
+        },
+        "date": 1791930863636,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
