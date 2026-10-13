@@ -291,7 +291,7 @@ fn count_digits_u64_base(val_i64: i64, bits_per_digit: i32) -> i32 {
     if val_i64 == 0 {
         return 1;
     }
-    return (u64_bit_len(val_i64 as u64) - 1) / bits_per_digit + 1;
+    return u64_bit_len(val_i64 as u64).div_ceil(bits_per_digit);
 }
 
 /// Write digits of a u64 value (as raw i64 bits) in a power-of-2 base.

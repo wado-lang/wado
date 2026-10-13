@@ -1050,6 +1050,8 @@ test "i128 div_floor and div_ceil round toward each infinity" {
     assert builtin::black_box(-7 as i128).div_ceil(2) == -3;
     assert builtin::black_box(-7 as i128).div_ceil(-2) == 4;
     assert builtin::black_box(8 as i128).div_ceil(2) == 4;
+    assert builtin::black_box(i128::MIN).div_floor(3) == i128::MIN / 3 - 1;
+    assert builtin::black_box(i128::MIN).div_ceil(-3) == i128::MIN / -3 + 1;
 }
 
 test "u128 div_ceil rounds up" {

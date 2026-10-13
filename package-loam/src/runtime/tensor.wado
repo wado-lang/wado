@@ -20,7 +20,7 @@ pub struct Packed<K, N> {
 
 /// The `rows` by `cols` matrix whose element `[r, c]` is `at(r, c)`, packed.
 fn packed_matrix<K, N>(rows: i32, cols: i32, at: fn(i32, i32) -> f32) -> Packed<K, N> {
-    let per_row = (cols + 3) / 4;
+    let per_row = cols.div_ceil(4);
     let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
     for let r of 0..<rows {
         for let v of 0..<per_row {
