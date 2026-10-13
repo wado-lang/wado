@@ -263,12 +263,7 @@ impl<'a> DocScope<'a> {
         let contracts = block
             .methods
             .iter()
-            .map(|m| {
-                self.sem
-                    .function_with_contracts_at(m.id)
-                    .expect("an analyzed impl's method is a function")
-                    .1
-            })
+            .map(|m| self.sem.method_contracts(m))
             .collect();
         (self.sem.implemented(block), contracts)
     }

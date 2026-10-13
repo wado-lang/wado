@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::analyze::Analyzer;
 use crate::ast::{
-    AstId, AstIdSpace, AstVisitor, ImplBlock, Item, Module, SelfKind, Visibility, walk_expr,
+    AstId, AstIdSpace, AstVisitor, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
 };
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
@@ -681,6 +681,15 @@ impl Semantics {
         Some((f, contracts))
     }
 
+    /// The clauses [`Semantics::function_with_contracts_at`] answers for `m`,
+    /// a method of an analyzed `impl` block.
+    #[must_use]
+    pub fn method_contracts(&self, m: &ast::Function) -> Vec<String> {
+        self.function_with_contracts_at(m.id)
+            .expect("an analyzed impl's method is a function")
+            .1
+    }
+
     /// Where `t`'s clauses on its method name a parameter that the impl
     /// method `f` names otherwise: each identifier resolving to that
     /// parameter, mapped to `f`'s name for it.
@@ -688,45 +697,25 @@ impl Semantics {
         let Some(holder) = t.contract_holder(&f.name) else {
             return IndexMap::default();
         };
-        let method = t
-            .methods
-            .iter()
-            .find(|m| m.name == f.name)
-            .expect("a holder holds the clauses of a method of its trait");
         let renamed: IndexMap<AstId, &str> = holder
             .params
             .iter()
-            .zip(&method.params)
             .zip(&f.params)
-            .filter(|((held, _), own)| held.name != own.name)
-            .flat_map(|((held, declared), own)| {
-                [
-                    (held.id, own.name.as_str()),
-                    (declared.id, own.name.as_str()),
-                ]
-            })
+            .filter(|(held, own)| held.name != own.name)
+            .map(|(held, own)| (held.id, own.name.as_str()))
             .collect();
         if renamed.is_empty() {
             return IndexMap::default();
         }
-        struct Idents(Vec<AstId>);
-        impl AstVisitor for Idents {
-            fn visit_expr(&mut self, expr: &ast::Expr) {
-                if let ast::Expr::Ident(i) = expr {
-                    self.0.push(i.id);
-                }
-                walk_expr(self, expr);
-            }
-        }
-        let mut idents = Idents(Vec::new());
-        idents.visit_block(
+        let mut collector = IdCollector::default();
+        collector.visit_block(
             holder
                 .body
                 .as_ref()
                 .expect("a holder's body is its clauses"),
         );
-        idents
-            .0
+        collector
+            .ids
             .into_iter()
             .filter_map(|id| {
                 let param = self.referenced_symbol(id)?;

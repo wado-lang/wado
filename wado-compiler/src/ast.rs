@@ -788,6 +788,20 @@ pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     walk_effect_names(v, &func.effects);
 }
 
+/// Every [`AstId`] the walk announces: names, fields and method segments, plus
+/// each statement's and expression's own — the node a dispatch fact is keyed
+/// under.
+#[derive(Default)]
+pub struct IdCollector {
+    pub ids: Vec<AstId>,
+}
+
+impl AstVisitor for IdCollector {
+    fn visit_id(&mut self, id: AstId, _span: Span) {
+        self.ids.push(id);
+    }
+}
+
 pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
     v.visit_id(block.id, block.span);
     for stmt in &block.stmts {

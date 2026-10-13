@@ -122,11 +122,8 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
         if public_only && !sem.implemented(b).is_none_or(Item::is_public) {
             continue;
         }
-        let block = unparse::unparse_impl_block_signature(b, public_only, |m| {
-            sem.function_with_contracts_at(m.id)
-                .expect("an analyzed impl's method is a function")
-                .1
-        });
+        let block =
+            unparse::unparse_impl_block_signature(b, public_only, |m| sem.method_contracts(m));
         if !block.is_empty() {
             out.push_str("\n\n");
             out.push_str(&block);
@@ -476,6 +473,7 @@ mod tests {
             );
         });
     }
+
     #[test]
     fn builtin_type_decl_hover() {
         futures::executor::block_on(async {
