@@ -28,9 +28,11 @@ use std::process::Command;
 use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
 
 use crate::args::{self, CliExit};
-use crate::compile::{build_output_path, build_publish_world, world_path_segment};
+use crate::build::{BuildTarget, build_world_components, declared_worlds};
+use crate::compile::world_path_segment;
+use crate::knobs::{CompileKnobs, EmbedOptions, OptLevel};
 use crate::manifest::{
-    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir, lib_world_fq,
+    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir,
     workspace_member_dirs,
 };
 use crate::metadata_embed::working_tree_dirty;
@@ -161,7 +163,7 @@ fn classify(manifest: &Manifest) -> Verdict {
 async fn publish_single(project: &ProjectManifest, dry_run: bool) -> Result<(), CliExit> {
     match classify(&project.manifest) {
         Verdict::Ready(coord) => {
-            publish_package(project, &coord, &project.manifest.registries, dry_run).await
+            publish_ready(&[(coord, project)], &project.manifest.registries, dry_run).await
         }
         Verdict::Failed(problems) => Err(problems_error(
             "package is not ready to publish:",
@@ -237,9 +239,7 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
 
     // Publish is a root-only operation, so every member resolves against the
     // workspace root's `[registries]`, not its own.
-    for (coord, project) in &ready {
-        publish_package(project, coord, &root.manifest.registries, dry_run).await?;
-    }
+    publish_ready(&ready, &root.manifest.registries, dry_run).await?;
     if dry_run {
         let coords: Vec<&str> = ready.iter().map(|(c, _)| c.as_str()).collect();
         eprintln!(
@@ -251,106 +251,112 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
     Ok(())
 }
 
-/// Which world a publish target builds. The library world lives at the bare
-/// repository; a hosted world gets the `/<segment>` sub-path. Modeling it as an
-/// enum keeps "exactly one world kind" structural instead of a pair of
-/// `Option`s with an implicit invariant.
-enum BuildWorld {
-    /// Library world; the value is its FQ name (passed as `--lib`).
-    Lib(String),
-    /// Hosted `[world]` entry; the value is its FQ name (passed as `--world`).
-    Hosted(String),
+/// A ready package's publishable worlds, each beside the OCI reference its
+/// component goes to.
+struct Release<'a> {
+    coord: &'a str,
+    worlds: Vec<(BuildTarget, String)>,
 }
 
-/// One world to publish: where its component is built and the OCI sub-path it
-/// targets (`None` for the library world, which lives at the bare repository).
-struct PublishTarget {
-    subpath: Option<String>,
-    entry: std::path::PathBuf,
-    output: std::path::PathBuf,
-    world: BuildWorld,
+/// `lib`, or the world's path segment.
+fn world_label(target: &BuildTarget) -> String {
+    target
+        .target_world
+        .as_deref()
+        .map_or_else(|| "lib".to_string(), world_path_segment)
 }
 
 /// Every world a package publishes: the library world (bare repository) plus
 /// each `[world]` entry not opted out with `publish = false`.
-fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<PublishTarget>, CliExit> {
-    let pkg = project
-        .manifest
-        .package
-        .as_ref()
-        .ok_or_else(|| CliExit::error("no [package] to publish"))?;
-    let root = &project.root;
-    let mut targets = Vec::new();
-    if let Some(lib_rel) = pkg.lib.as_deref() {
-        targets.push(PublishTarget {
-            subpath: None,
-            entry: root.join(lib_rel),
-            output: build_output_path(root, "lib"),
-            world: BuildWorld::Lib(lib_world_fq(pkg)?),
-        });
-    }
-    for (world_fq, entry) in &project.manifest.world {
-        if !entry.publish {
-            continue;
-        }
-        let segment = world_path_segment(world_fq);
-        targets.push(PublishTarget {
-            entry: root.join(&entry.entry),
-            output: build_output_path(root, &segment),
-            subpath: Some(segment),
-            world: BuildWorld::Hosted(world_fq.clone()),
-        });
-    }
+fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<BuildTarget>, CliExit> {
+    let mut targets = declared_worlds(project)?;
+    targets.retain(|t| {
+        t.target_world
+            .as_deref()
+            .is_none_or(|fq| project.manifest.world[fq].publish)
+    });
     Ok(targets)
 }
 
-/// Build and push every publishable world of one ready package: build each
-/// world's component, resolve its OCI reference, then `wkg oci push` it.
-/// `registries` is the workspace root's (or the package's own, when standalone)
-/// `[registries]`, since publish is a root-only operation.
-async fn publish_package(
-    project: &ProjectManifest,
-    coord: &str,
+/// Build every publishable world of the ready packages at once, then push each
+/// in turn. `registries` is the workspace root's (or the package's own, when
+/// standalone) `[registries]`, since publish is a root-only operation.
+///
+/// A dry run builds too: that is what catches a package that no longer compiles
+/// into a publishable component (e.g. a `--lib` that exports nothing). It
+/// builds at `-O0`, since it asks whether a component builds, not how well it
+/// is optimized, and into a scratch directory, so the `build/` artifacts that
+/// `wado build` wrote stay optimized.
+async fn publish_ready(
+    ready: &[(String, &ProjectManifest)],
     registries: &indexmap::IndexMap<String, String>,
     dry_run: bool,
 ) -> Result<(), CliExit> {
-    let pkg = project
-        .manifest
-        .package
-        .as_ref()
-        .ok_or_else(|| CliExit::error("no [package] to publish"))?;
-    let targets = publishable_worlds(project)?;
-    if targets.is_empty() {
-        return Err(CliExit::error(format!(
-            "{coord} declares no publishable world; add `[package].lib` or a `[world]` entry"
-        )));
-    }
-    if !dry_run && working_tree_dirty(&project.root) == Some(true) {
-        eprintln!(
-            "warning: working tree has uncommitted changes; publishing {coord} \
-             without a `revision` annotation"
-        );
-    }
-    for target in &targets {
-        let reference = resolve_push_target(registries, pkg, target.subpath.as_deref())?;
-        let (lib_world, target_world) = match &target.world {
-            BuildWorld::Lib(fq) => (Some(fq.clone()), None),
-            BuildWorld::Hosted(fq) => (None, Some(fq.clone())),
-        };
-        // Build even on a dry run: it is what catches a package that no longer
-        // compiles into a publishable component (e.g. a `--lib` that exports
-        // nothing), the failure mode a dry run exists to surface before release.
-        build_publish_world(&target.entry, &target.output, lib_world, target_world).await?;
-        let world = target.subpath.as_deref().unwrap_or("lib");
-        if dry_run {
-            eprintln!("(dry-run) {coord} ({world}) builds; would push -> {reference}");
-        } else {
-            eprintln!("Publishing {coord} ({world}) -> {reference}");
-            wkg_oci_push(&reference, &target.output)?;
+    let scratch = dry_run
+        .then(tempfile::tempdir)
+        .transpose()
+        .map_err(|e| CliExit::error(format!("creating a dry-run build directory: {e}")))?;
+    let mut releases = Vec::new();
+    for (coord, project) in ready {
+        let pkg = project
+            .manifest
+            .package
+            .as_ref()
+            .expect("a ready package has a [package]");
+        let worlds = publishable_worlds(project)?;
+        if worlds.is_empty() {
+            return Err(CliExit::error(format!(
+                "{coord} declares no publishable world; add `[package].lib` or a `[world]` entry"
+            )));
         }
+        if !dry_run && working_tree_dirty(&project.root) == Some(true) {
+            eprintln!(
+                "warning: working tree has uncommitted changes; publishing {coord} \
+                 without a `revision` annotation"
+            );
+        }
+        let worlds = worlds
+            .into_iter()
+            .map(|mut target| {
+                let subpath = target.target_world.as_deref().map(world_path_segment);
+                let reference = resolve_push_target(registries, pkg, subpath.as_deref())?;
+                if let Some(scratch) = &scratch {
+                    let world = world_label(&target);
+                    target.output = scratch.path().join(format!("{}-{world}.wasm", pkg.name));
+                }
+                Ok((target, reference))
+            })
+            .collect::<Result<_, CliExit>>()?;
+        releases.push(Release { coord, worlds });
     }
-    if !dry_run {
-        eprintln!("Published {coord} ({} artifact(s))", targets.len());
+
+    let knobs = CompileKnobs {
+        opt_level: if dry_run {
+            OptLevel::O0
+        } else {
+            OptLevel::default()
+        },
+        ..CompileKnobs::default()
+    };
+    let targets = releases
+        .iter()
+        .flat_map(|release| release.worlds.iter().map(|(target, _)| target.clone()))
+        .collect();
+    build_world_components(targets, &knobs, EmbedOptions::default()).await?;
+
+    for Release { coord, worlds } in &releases {
+        for (target, reference) in worlds {
+            let world = world_label(target);
+            if dry_run {
+                eprintln!("(dry-run) {coord} ({world}) builds; would push -> {reference}");
+            } else {
+                eprintln!("Publishing {coord} ({world}) -> {reference}");
+                wkg_oci_push(reference, &target.output)?;
+            }
+        }
+        if !dry_run {
+            eprintln!("Published {coord} ({} artifact(s))", worlds.len());
+        }
     }
     Ok(())
 }
