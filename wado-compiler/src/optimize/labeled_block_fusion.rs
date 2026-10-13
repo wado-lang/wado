@@ -64,10 +64,6 @@ impl Rule for LabeledBlockFusionRule {
         if stmts.len() < 2 {
             return false;
         }
-        // The fused block uses value-less `break $fused_L;` to terminate each
-        // arm, so the original consumer site cannot be in a position where its
-        // value is observed. Refusing fusion here matches the standalone pass's
-        // `yields_value && i + 2 == stmts.len()` guard.
         let yields = block_yields_value(engine, block);
         for i in 0..stmts.len() - 1 {
             let Some(info) =
