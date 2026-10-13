@@ -240,8 +240,12 @@ pub enum AnalyzeError {
         adopted: bool,
         span: Span,
     },
-    /// An `export use` naming something other than a type.
-    ExportUseNotType { name: String, span: Span },
+    /// An `export use` naming something its package cannot publish.
+    ExportUseUnpublishable {
+        name: String,
+        why: Unpublishable,
+        span: Span,
+    },
     /// An `export use` naming a type of its own package, which `export` on the
     /// declaration publishes.
     ExportUseOwnType { name: String, span: Span },
@@ -420,9 +424,22 @@ impl AnalyzeError {
                 ),
                 *span,
             ),
-            AnalyzeError::ExportUseNotType { name, span } => (
+            AnalyzeError::ExportUseUnpublishable { name, why, span } => (
                 Code::CmBoundaryType,
-                format!("`export use` publishes a type, and `{name}` is not one"),
+                match why {
+                    Unpublishable::NotType => {
+                        format!("`export use` publishes a type, and `{name}` is not one")
+                    }
+                    Unpublishable::Resource => format!(
+                        "`{name}` is a resource, and `export use` publishes only a struct, enum, variant, flags or newtype"
+                    ),
+                    Unpublishable::CmBound => format!(
+                        "`{name}` belongs to the interface its `#[cm]` binds, so `export use` cannot publish it again"
+                    ),
+                    Unpublishable::Generic => format!(
+                        "`{name}` is generic, and WIT has no generic type, so `export use` cannot publish it"
+                    ),
+                },
                 *span,
             ),
             AnalyzeError::ExportUseOwnType { name, span } => (
@@ -446,6 +463,15 @@ impl AnalyzeError {
             ),
         }
     }
+}
+
+/// Why an `export use` cannot publish what it names.
+#[derive(Debug, Clone, Copy)]
+pub enum Unpublishable {
+    NotType,
+    Resource,
+    CmBound,
+    Generic,
 }
 
 fn reexport_widens_message(
@@ -1473,8 +1499,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                 if use_decl.is_export {
                                     let _ = self.logger.error_in(
                                         from_module_source,
-                                        AnalyzeError::ExportUseNotType {
+                                        AnalyzeError::ExportUseUnpublishable {
                                             name: func_item.name.clone(),
+                                            why: Unpublishable::NotType,
                                             span: func_item.name_span,
                                         },
                                     );
@@ -1515,9 +1542,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     /// Diagnose an `export use` of `name` from `target`, published under
     /// `alias` where it gives one, that cannot publish it: it names no type, a
-    /// type of the importing package (published by its own `export`), a type
-    /// the package already publishes under another name, or a struct with a
-    /// field WIT could not show.
+    /// type of the importing package (published by its own `export`), one a
+    /// `#[cm]` binds to an interface of its own, a generic one, a type the
+    /// package already publishes under another name, or a struct with a field
+    /// WIT could not show.
     fn check_adoption(
         &mut self,
         from: &ModuleSource,
@@ -1532,18 +1560,33 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         };
         let (published, published_span) = alias.unwrap_or((name, span));
         let name = name.to_string();
+        let unpublishable = |why| AnalyzeError::ExportUseUnpublishable {
+            name: name.clone(),
+            why,
+            span,
+        };
         let error = match &symbol.kind {
             SymbolKind::Struct(_)
             | SymbolKind::Enum(_)
             | SymbolKind::Variant(_)
             | SymbolKind::Flags(_)
             | SymbolKind::Newtype(_) => {
+                let item = all_modules[symbol.module_source()]
+                    .items
+                    .iter()
+                    .find(|item| item.id() == symbol.defined_at)
+                    .expect("a type symbol is defined by a module item");
+                let decl = item.type_decl().expect("a type symbol names a type item");
                 let earlier = self
                     .adopted_names
                     .entry((from.package_id(), symbol.defined_at))
                     .or_insert_with(|| published.to_string());
                 if symbol.module_source().same_package(from) {
                     AnalyzeError::ExportUseOwnType { name, span }
+                } else if decl.is_cm_bound {
+                    unpublishable(Unpublishable::CmBound)
+                } else if !decl.type_params.is_empty() {
+                    unpublishable(Unpublishable::Generic)
                 } else if earlier != published {
                     AnalyzeError::ExportUseRenamedTwice {
                         name,
@@ -1551,15 +1594,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         published: published.to_string(),
                         span: published_span,
                     }
-                } else if let Some(field) = all_modules[symbol.module_source()]
-                    .items
-                    .iter()
-                    .find_map(|item| match item {
-                        Item::Struct(decl) if decl.id == symbol.defined_at => {
-                            decl.first_private_field()
-                        }
-                        _ => None,
-                    })
+                } else if let Item::Struct(decl) = item
+                    && let Some(field) = decl.first_private_field()
                 {
                     AnalyzeError::PrivateFieldPublished {
                         owner: name,
@@ -1571,14 +1607,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     return;
                 }
             }
+            SymbolKind::Resource(_) => unpublishable(Unpublishable::Resource),
             SymbolKind::Function(_)
             | SymbolKind::Effect(_)
             | SymbolKind::Trait(_)
             | SymbolKind::BuiltinType
             | SymbolKind::Variable(_)
-            | SymbolKind::Resource(_)
             | SymbolKind::World(_)
-            | SymbolKind::Global(_) => AnalyzeError::ExportUseNotType { name, span },
+            | SymbolKind::Global(_) => unpublishable(Unpublishable::NotType),
         };
         let _ = self.logger.error_in(from, error);
     }

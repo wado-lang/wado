@@ -1418,15 +1418,15 @@ impl Item {
         }
     }
 
-    /// The name of a `struct`, `enum`, `variant`, `flags` or newtype: the
+    /// The head of a `struct`, `enum`, `variant`, `flags` or newtype: the
     /// declarations a Component Model interface can publish.
-    pub fn type_decl_name(&self) -> Option<&str> {
-        match self {
-            Item::Struct(d) => Some(&d.name),
-            Item::Enum(d) => Some(&d.name),
-            Item::Variant(d) => Some(&d.name),
-            Item::Flags(d) => Some(&d.name),
-            Item::Newtype(d) => Some(&d.name),
+    pub fn type_decl(&self) -> Option<TypeDeclHead<'_>> {
+        let (name, is_export, type_params): (&str, bool, &[GenericParam]) = match self {
+            Item::Struct(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Enum(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Variant(d) => (&d.name, d.is_export, &d.type_params),
+            Item::Flags(d) => (&d.name, d.is_export, &[]),
+            Item::Newtype(d) => (&d.name, d.is_export, &d.type_params),
             Item::Use(_)
             | Item::Function(_)
             | Item::Interface(_)
@@ -1438,11 +1438,17 @@ impl Item {
             | Item::World(_)
             | Item::Test(_)
             | Item::Global(_)
-            | Item::Error(_) => None,
-        }
+            | Item::Error(_) => return None,
+        };
+        Some(TypeDeclHead {
+            name,
+            is_export,
+            type_params,
+            is_cm_bound: self.attrs().iter().any(|a| a.cm_boundary.is_some()),
+        })
     }
 
-    /// [`Self::type_decl_name`], to rename the declaration.
+    /// [`Self::type_decl`]'s name, to rename the declaration.
     pub fn type_decl_name_mut(&mut self) -> Option<&mut String> {
         match self {
             Item::Struct(d) => Some(&mut d.name),
@@ -1462,30 +1468,6 @@ impl Item {
             | Item::Test(_)
             | Item::Global(_)
             | Item::Error(_) => None,
-        }
-    }
-
-    /// Whether this is a type the package's Component Model interface
-    /// publishes by its own `export`.
-    pub fn is_export_type(&self) -> bool {
-        match self {
-            Item::Struct(d) => d.is_export,
-            Item::Enum(d) => d.is_export,
-            Item::Variant(d) => d.is_export,
-            Item::Flags(d) => d.is_export,
-            Item::Newtype(d) => d.is_export,
-            Item::Use(_)
-            | Item::Function(_)
-            | Item::Interface(_)
-            | Item::TupleTypeDecl(_)
-            | Item::BuiltinTypeDecl(_)
-            | Item::Impl(_)
-            | Item::Trait(_)
-            | Item::Resource(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Global(_)
-            | Item::Error(_) => false,
         }
     }
 
@@ -1535,6 +1517,17 @@ impl Item {
             Item::Error(_) => &[],
         }
     }
+}
+
+/// What [`Item::type_decl`] answers.
+#[derive(Debug, Clone, Copy)]
+pub struct TypeDeclHead<'a> {
+    pub name: &'a str,
+    /// `export`: the package's Component Model interface publishes it.
+    pub is_export: bool,
+    pub type_params: &'a [GenericParam],
+    /// A `#[cm(…)]` binds it to an interface of its own.
+    pub is_cm_bound: bool,
 }
 
 /// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].

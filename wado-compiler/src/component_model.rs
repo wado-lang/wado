@@ -2700,11 +2700,11 @@ impl CmInterfaceRegistry {
         defs: &DefTable,
     ) {
         for (_, item) in items {
-            let name = item
-                .type_decl_name()
+            let decl = item
+                .type_decl()
                 .expect("a library publishes only types beyond its entry module");
             self.lib_local_type_defs
-                .insert(name.to_string(), defs.def_at(item.id()));
+                .insert(decl.name.to_string(), defs.def_at(item.id()));
             self.register_lib_local_item(item, iface_fq);
         }
     }

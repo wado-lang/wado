@@ -74,8 +74,9 @@ publishes each one, in one of two ways:
 - It declares the type `export`: `export struct`, `export enum`,
   `export variant`, `export flags`, or `export type`.
 - It adopts a type another package declares, with
-  `export use { T } from "…";`. An `export use` names types only, and never a
-  type of its own package.
+  `export use { T } from "…";`. An `export use` names a non-generic struct,
+  enum, variant, flags or newtype of another package. It never names a type of
+  its own package or a `#[cm]` type, whose own interface publishes it.
 
 An adopted type takes the name the `export use` gives it:
 `export use { FileType as Kind } from "core:fs";` publishes `variant kind`, and

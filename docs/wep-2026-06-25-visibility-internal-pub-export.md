@@ -116,7 +116,10 @@ and a type is published only that way:
   type identity. One type has one name in WIT, so it is adopted under one.
 - Every field of a published struct is `pub`. WIT shows every field of a
   record, so a private one would leak.
-- `#[cm]` types are exempt, their own interface publishing them. So are the
+- `export use` adopts a struct, enum, variant, flags or newtype, and only a
+  non-generic one, since WIT has no generic type.
+- `#[cm]` types are exempt, their own interface publishing them, so
+  `export use` cannot publish one a second time. So are the
   standard library's newtypes (`ByteList`), which cross as aliases and which
   packages already published without saying so.
 
@@ -215,6 +218,10 @@ record from the component's WIT.
 - The standard library newtype exemption means a stdlib `struct` such as
   `DirEntry` needs `export use` to cross while a stdlib newtype such as
   `ByteList` does not.
+- The publication check covers `export fn` signatures only. A guest effect
+  `interface` whose operations cross as Component Model imports, such as
+  `wado-lang:marl`'s `RenderHook`, also puts the types its operations reach into
+  the package's WIT, and nothing requires the package to publish them.
 
 ## References
 

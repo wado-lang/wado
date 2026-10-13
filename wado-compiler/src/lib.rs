@@ -734,7 +734,7 @@ fn collect_lib_surface(
                 // Not `is_public`: a lowered type carries its fields whatever
                 // their scope, so an `internal` type reaches the CM interface
                 // through a `pub` one that holds it.
-                _ if item.type_decl_name().is_some()
+                _ if item.type_decl().is_some()
                     && item
                         .visibility()
                         .is_some_and(ast::Visibility::reaches_beyond_file) =>
@@ -924,8 +924,8 @@ impl<'a> LibTypeBinder<'a> {
         let defs = resolutions.defs();
         let published_names: hashmap::IndexMap<DefId, String> = published
             .map(|item| {
-                let name = item.type_decl_name().expect("a world publishes types");
-                (defs.def_at(item.id()), name.to_string())
+                let decl = item.type_decl().expect("a world publishes types");
+                (defs.def_at(item.id()), decl.name.to_string())
             })
             .collect();
         let mut interfaces: hashmap::IndexMap<DefId, String> = published_names
@@ -1441,8 +1441,8 @@ fn compile_after_load<H: CompilerHost>(
         .map(|m| {
             m.items
                 .iter()
-                .filter_map(ast::Item::type_decl_name)
-                .map(str::to_string)
+                .filter_map(ast::Item::type_decl)
+                .map(|decl| decl.name.to_string())
                 .collect()
         })
         .unwrap_or_default();
@@ -1452,7 +1452,7 @@ fn compile_after_load<H: CompilerHost>(
     // — what the CM interface publishes, `internal` included — so the library
     // API is asked for separately here, of every module.
     let is_public_type_decl = |item: &ast::Item| {
-        item.type_decl_name().is_some() && item.visibility().is_some_and(ast::Visibility::is_public)
+        item.type_decl().is_some() && item.visibility().is_some_and(ast::Visibility::is_public)
     };
     let lib_has_public_type = lib_surface
         .submodule_type_decls
@@ -1475,7 +1475,7 @@ fn compile_after_load<H: CompilerHost>(
                 lib_surface
                     .published_type_decls()
                     .filter_map(|(source, item)| {
-                        Some((item.type_decl_name()?.to_string(), source.to_string()))
+                        Some((item.type_decl()?.name.to_string(), source.to_string()))
                     }),
             )
             .collect();
@@ -1515,7 +1515,7 @@ fn compile_after_load<H: CompilerHost>(
         let published = entry
             .into_iter()
             .flat_map(|module| &module.items)
-            .filter(|item| item.type_decl_name().is_some())
+            .filter(|item| item.type_decl().is_some())
             .chain(lib_surface.published_type_decls().map(|(_, item)| item));
         let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
         let mut entry = entry.cloned();
@@ -1600,7 +1600,7 @@ fn compile_after_load<H: CompilerHost>(
             .modules
             .iter()
             .flat_map(|(_, module)| &module.items)
-            .filter(|item| item.type_decl_name().is_some())
+            .filter(|item| item.type_decl().is_some())
             .map(|item| (item.id(), item))
             .collect();
         let mut refused = false;

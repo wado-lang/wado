@@ -362,7 +362,7 @@ impl DefTable {
             }
             return;
         }
-        if item.is_export_type() {
+        if item.type_decl().is_some_and(|decl| decl.is_export) {
             let def = self.def_at(item.id());
             self.publish(def, module, &self.name(def).to_string());
         }
