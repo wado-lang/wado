@@ -7,7 +7,9 @@
 use std::sync::Arc;
 
 use crate::analyze::Analyzer;
-use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
+use crate::ast::{
+    AstId, AstIdSpace, AstVisitor, ImplBlock, Item, Module, SelfKind, Visibility, walk_expr,
+};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
@@ -30,6 +32,7 @@ use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
 use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
+use crate::unparse::unparse_contract_clause_renamed;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
 use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
@@ -657,20 +660,79 @@ impl Semantics {
     }
 
     /// The function [`Semantics::function_at`] answers for `id`, with the
-    /// `contract` clauses that bind it. A trait method's live in its trait's
-    /// hidden holder, and bind every impl of it as well.
+    /// `contract` clauses that bind it, written as source. A trait method's
+    /// live in its trait's hidden holder, and bind every impl of it as well,
+    /// read there under the impl's parameter names.
     #[must_use]
-    pub fn function_with_contracts_at(
-        &self,
-        id: AstId,
-    ) -> Option<(&ast::Function, Vec<&ast::AssertStmt>)> {
+    pub fn function_with_contracts_at(&self, id: AstId) -> Option<(&ast::Function, Vec<String>)> {
         let (f, item) = self.function_and_item_at(id)?;
-        let declaring_trait = if let Item::Impl(b) = item {
-            self.implemented(b).and_then(Item::as_trait)
+        let (declaring_trait, renames) = if let Item::Impl(b) = item {
+            let implemented = self.implemented(b).and_then(Item::as_trait);
+            let renames = implemented.map(|t| self.impl_param_renames(t, f));
+            (implemented, renames.unwrap_or_default())
         } else {
-            item.as_trait()
+            (item.as_trait(), IndexMap::default())
         };
-        Some((f, f.binding_contracts(declaring_trait)))
+        let contracts = f
+            .binding_contracts(declaring_trait)
+            .into_iter()
+            .map(|clause| unparse_contract_clause_renamed(clause, &renames))
+            .collect();
+        Some((f, contracts))
+    }
+
+    /// Where `t`'s clauses on its method name a parameter that the impl
+    /// method `f` names otherwise: each identifier resolving to that
+    /// parameter, mapped to `f`'s name for it.
+    fn impl_param_renames(&self, t: &ast::TraitDecl, f: &ast::Function) -> IndexMap<AstId, String> {
+        let Some(holder) = t.contract_holder(&f.name) else {
+            return IndexMap::default();
+        };
+        let method = t
+            .methods
+            .iter()
+            .find(|m| m.name == f.name)
+            .expect("a holder holds the clauses of a method of its trait");
+        let renamed: IndexMap<AstId, &str> = holder
+            .params
+            .iter()
+            .zip(&method.params)
+            .zip(&f.params)
+            .filter(|((held, _), own)| held.name != own.name)
+            .flat_map(|((held, declared), own)| {
+                [
+                    (held.id, own.name.as_str()),
+                    (declared.id, own.name.as_str()),
+                ]
+            })
+            .collect();
+        if renamed.is_empty() {
+            return IndexMap::default();
+        }
+        struct Idents(Vec<AstId>);
+        impl AstVisitor for Idents {
+            fn visit_expr(&mut self, expr: &ast::Expr) {
+                if let ast::Expr::Ident(i) = expr {
+                    self.0.push(i.id);
+                }
+                walk_expr(self, expr);
+            }
+        }
+        let mut idents = Idents(Vec::new());
+        idents.visit_block(
+            holder
+                .body
+                .as_ref()
+                .expect("a holder's body is its clauses"),
+        );
+        idents
+            .0
+            .into_iter()
+            .filter_map(|id| {
+                let param = self.referenced_symbol(id)?;
+                Some((id, (*renamed.get(&param)?).to_owned()))
+            })
+            .collect()
     }
 
     /// The `impl` block of `module` spanning `impl_span`. A reader holding its

@@ -256,19 +256,29 @@ impl<'a> DocScope<'a> {
         )
     }
 
-    /// The trait or interface `b`, a block of this module in the page's own
-    /// parse, implements.
-    fn implemented(&self, b: &ImplBlock) -> Option<&'a Item> {
-        self.sem
-            .implemented(self.sem.impl_block_at(&self.module, b.span))
+    /// What `b`, a block of this module in the page's own parse, implements,
+    /// and the `contract` clauses that bind each of its methods.
+    fn analyzed_impl(&self, b: &ImplBlock) -> (Option<&'a Item>, Vec<Vec<String>>) {
+        let block = self.sem.impl_block_at(&self.module, b.span);
+        let contracts = block
+            .methods
+            .iter()
+            .map(|m| {
+                self.sem
+                    .function_with_contracts_at(m.id)
+                    .expect("an analyzed impl's method is a function")
+                    .1
+            })
+            .collect();
+        (self.sem.implemented(block), contracts)
     }
 }
 
-/// An `impl` block the page documents, with the trait it implements, whose
-/// `contract` clauses bind its methods.
+/// An `impl` block the page documents, with the `contract` clauses that bind
+/// each of its methods, in their order.
 struct DocImpl<'a> {
     block: &'a ImplBlock,
-    implemented: Option<&'a TraitDecl>,
+    method_contracts: Vec<Vec<String>>,
 }
 
 /// Extract the documentation of a module. `include_private` documents non-`pub`
@@ -411,7 +421,10 @@ fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
         .methods
         .iter()
         .filter(|m| !m.is_contract_holder())
-        .map(|m| build_doc_function_with(m, Some(t), trivia))
+        .map(|m| {
+            let contracts = t.method_contracts(&m.name).map(unparse_contract_clause);
+            build_doc_function_with(m, contracts.collect(), trivia)
+        })
         .collect();
 
     DocTrait {
@@ -659,24 +672,24 @@ fn build_doc_operation(m: &Function, trivia: &TriviaMap) -> DocFunction {
 }
 
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
-    build_doc_function_with(f, None, trivia)
+    build_doc_function_with(f, own_contracts(f), trivia)
 }
 
-/// A method of `declaring_trait`, or of an impl of it, is bound by the
-/// clauses the trait declares.
+fn own_contracts(f: &Function) -> Vec<String> {
+    f.contracts().map(unparse_contract_clause).collect()
+}
+
+/// `contracts` are the clauses that bind `f`, which a trait method's trait
+/// declares.
 fn build_doc_function_with(
     f: &Function,
-    declaring_trait: Option<&TraitDecl>,
+    contracts: Vec<String>,
     trivia: &TriviaMap,
 ) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
         attrs: unparse_attributes(&f.attrs),
-        contracts: f
-            .binding_contracts(declaring_trait)
-            .into_iter()
-            .map(unparse_contract_clause)
-            .collect(),
+        contracts,
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -783,14 +796,18 @@ fn documented_impls<'a>(
             let Item::Impl(block) = item else {
                 return None;
             };
-            let implemented = block.trait_type.as_ref().and_then(|_| {
-                scope
-                    .expect("a module no analysis loaded implements no trait")
-                    .implemented(block)
-            });
-            (include_private || implemented.is_none_or(Item::is_public)).then(|| DocImpl {
+            let (implemented, method_contracts) = if let Some(scope) = scope {
+                scope.analyzed_impl(block)
+            } else {
+                assert!(
+                    block.trait_type.is_none(),
+                    "a module no analysis loaded implements no trait"
+                );
+                (None, block.methods.iter().map(own_contracts).collect())
+            };
+            (include_private || implemented.is_none_or(Item::is_public)).then_some(DocImpl {
                 block,
-                implemented: implemented.and_then(Item::as_trait),
+                method_contracts,
             })
         })
         .collect()
@@ -1144,18 +1161,17 @@ fn collect_impl_methods_for_type(
 
     for DocImpl {
         block: i,
-        implemented,
+        method_contracts,
     } in impls
     {
         if type_head_name(&i.ty) != Some(type_name) {
             continue;
         }
+        let methods = i.methods.iter().zip(method_contracts);
 
         if let Some(ref trait_ty) = i.trait_type {
-            let methods: Vec<DocFunction> = i
-                .methods
-                .iter()
-                .map(|m| build_doc_function_with(m, *implemented, trivia))
+            let methods: Vec<DocFunction> = methods
+                .map(|(m, contracts)| build_doc_function_with(m, contracts.clone(), trivia))
                 .collect();
             if methods.is_empty() {
                 continue;
@@ -1167,9 +1183,9 @@ fn collect_impl_methods_for_type(
                 methods,
             });
         } else {
-            for m in &i.methods {
+            for (m, contracts) in methods {
                 if include_private || m.visibility.is_public() || m.is_export {
-                    inherent_methods.push(build_doc_function(m, trivia));
+                    inherent_methods.push(build_doc_function_with(m, contracts.clone(), trivia));
                 }
             }
         }

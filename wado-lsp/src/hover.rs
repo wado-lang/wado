@@ -119,15 +119,14 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
         if b.ty.head_base_name() != Some(symbol.name.as_str()) {
             continue;
         }
-        let implemented = sem.implemented(b);
-        if public_only && !implemented.is_none_or(Item::is_public) {
+        if public_only && !sem.implemented(b).is_none_or(Item::is_public) {
             continue;
         }
-        let block = unparse::unparse_impl_block_signature(
-            b,
-            implemented.and_then(Item::as_trait),
-            public_only,
-        );
+        let block = unparse::unparse_impl_block_signature(b, public_only, |m| {
+            sem.function_with_contracts_at(m.id)
+                .expect("an analyzed impl's method is a function")
+                .1
+        });
         if !block.is_empty() {
             out.push_str("\n\n");
             out.push_str(&block);
@@ -138,10 +137,7 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
 /// Hover for a method or free function reached by [`AstId`] (e.g. a symbol
 /// notation `Type::m`), where there is no item-level [`Symbol`] to render.
 #[must_use]
-pub(crate) fn hover_for_function<'a>(
-    f: &ast::Function,
-    contracts: impl IntoIterator<Item = &'a ast::AssertStmt>,
-) -> HoverResult {
+pub(crate) fn hover_for_function(f: &ast::Function, contracts: Vec<String>) -> HoverResult {
     fenced_hover(function_hover_text(f, contracts))
 }
 
@@ -149,17 +145,10 @@ pub(crate) fn hover_for_function<'a>(
 /// below it. The fence carries more than one line, so a reader sees what the
 /// declaration states as the declaration writes it — every attribute, with no
 /// allowlist, and every clause the caller owes.
-fn function_hover_text<'a>(
-    f: &ast::Function,
-    contracts: impl IntoIterator<Item = &'a ast::AssertStmt>,
-) -> String {
+fn function_hover_text(f: &ast::Function, contracts: Vec<String>) -> String {
     let mut out = unparse::unparse_attributes(&f.attrs);
     out.push(unparse::unparse_function_signature(f));
-    out.extend(
-        contracts
-            .into_iter()
-            .map(|clause| format!("    {}", unparse::unparse_contract_clause(clause))),
-    );
+    out.extend(contracts.into_iter().map(|clause| format!("    {clause}")));
     out.join("\n")
 }
 
@@ -473,6 +462,18 @@ mod tests {
             assert_eq!(call.contents.value, expected);
             let decl = hover_at(source, 6, 8).await.expect("hover on pick decl");
             assert_eq!(decl.contents.value, expected);
+        });
+    }
+
+    #[test]
+    fn impl_method_hover_reads_the_trait_contract_under_its_own_names() {
+        futures::executor::block_on(async {
+            let source = "trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\nstruct Deck {}\nimpl Pick for Deck {\n    fn pick(&self, j: i32) -> i32 { return j; }\n}\nfn run() -> i32 {\n    let d = Deck {};\n    return d.pick(1);\n}\n";
+            let call = hover_at(source, 10, 14).await.expect("hover on pick call");
+            assert_eq!(
+                call.contents.value,
+                "```wado\nfn pick(&self, j: i32) -> i32\n    contract j >= 0\n```"
+            );
         });
     }
     #[test]

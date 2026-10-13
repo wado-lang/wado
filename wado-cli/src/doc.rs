@@ -681,6 +681,18 @@ mod format_contract_tests {
         );
     }
 
+    /// The trait's clause reads the impl's parameter names, so it names what
+    /// the signature beside it declares.
+    #[test]
+    fn an_impl_method_reads_its_trait_methods_contract_under_its_own_names() {
+        let source = "//! Demo.\n\npub trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\n\npub struct Deck {\n    top: i32,\n}\n\nimpl Pick for Deck {\n    fn pick(&self, j: i32) -> i32 {\n        let i = j;\n        return self.top + i;\n    }\n}\n";
+        let out = markdown_of(source);
+        assert!(
+            out.contains("`contract i >= 0`") && out.contains("`contract j >= 0`"),
+            "the trait reads its own name, the impl its own:\n{out}"
+        );
+    }
+
     #[test]
     fn a_type_parameter_renders_its_default() {
         let out = markdown_of(
