@@ -788,6 +788,20 @@ pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     walk_effect_names(v, &func.effects);
 }
 
+/// Every [`AstId`] the walk announces: names, fields and method segments, plus
+/// each statement's and expression's own — the node a dispatch fact is keyed
+/// under.
+#[derive(Default)]
+pub struct IdCollector {
+    pub ids: Vec<AstId>,
+}
+
+impl AstVisitor for IdCollector {
+    fn visit_id(&mut self, id: AstId, _span: Span) {
+        self.ids.push(id);
+    }
+}
+
 pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {
     v.visit_id(block.id, block.span);
     for stmt in &block.stmts {
@@ -1349,6 +1363,20 @@ pub enum Item {
 }
 
 impl Item {
+    /// Whether a reader in another package can name this item.
+    #[must_use]
+    pub fn is_public(&self) -> bool {
+        self.visibility().is_some_and(Visibility::is_public)
+    }
+
+    #[must_use]
+    pub fn as_trait(&self) -> Option<&TraitDecl> {
+        let Item::Trait(t) = self else {
+            return None;
+        };
+        Some(t)
+    }
+
     /// The `AstId` of this item's declaration node. Every variant carries
     /// one — there is no id-less item — so this is the canonical way to
     /// find an item by identity (e.g. resolving an index built during
@@ -2493,6 +2521,18 @@ impl Function {
             .iter()
             .flat_map(|body| &body.stmts)
             .map_while(Stmt::as_contract)
+    }
+
+    /// The `contract` clauses that bind this function, declared by the trait
+    /// it is a method of or implements, else by itself.
+    pub fn binding_contracts<'a>(
+        &'a self,
+        declaring_trait: Option<&'a TraitDecl>,
+    ) -> Vec<&'a AssertStmt> {
+        match declaring_trait {
+            Some(t) => t.method_contracts(&self.name).collect(),
+            None => self.contracts().collect(),
+        }
     }
 
     /// Whether this is the default method a trait declares, hidden, to hold

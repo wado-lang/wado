@@ -7,7 +7,9 @@
 use std::sync::Arc;
 
 use crate::analyze::Analyzer;
-use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
+use crate::ast::{
+    AstId, AstIdSpace, AstVisitor, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
+};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
@@ -30,6 +32,7 @@ use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
 use crate::tir::{EffectRows, ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
+use crate::unparse::unparse_contract_clause_renamed;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::{ExportMapping, ExportMappings, WorldRegistry, world_key};
 use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
@@ -656,19 +659,98 @@ impl Semantics {
         self.function_and_item_at(id).map(|(f, _)| f)
     }
 
-    /// The function [`Semantics::function_at`] answers for `id`, with its
-    /// `contract` clauses. A trait method's live in its trait's hidden holder.
+    /// The function [`Semantics::function_at`] answers for `id`, with the
+    /// `contract` clauses that bind it, written as source. A trait method's
+    /// live in its trait's hidden holder, and bind every impl of it as well,
+    /// read there under the impl's parameter names.
     #[must_use]
-    pub fn function_with_contracts_at(
-        &self,
-        id: AstId,
-    ) -> Option<(&ast::Function, Vec<&ast::AssertStmt>)> {
+    pub fn function_with_contracts_at(&self, id: AstId) -> Option<(&ast::Function, Vec<String>)> {
         let (f, item) = self.function_and_item_at(id)?;
-        let contracts = match item {
-            Item::Trait(t) => t.method_contracts(&f.name).collect(),
-            _ => f.contracts().collect(),
+        let (declaring_trait, renames) = if let Item::Impl(b) = item {
+            let implemented = self.implemented(b).and_then(Item::as_trait);
+            let renames = implemented.map(|t| self.impl_param_renames(t, f));
+            (implemented, renames.unwrap_or_default())
+        } else {
+            (item.as_trait(), IndexMap::default())
         };
+        let contracts = f
+            .binding_contracts(declaring_trait)
+            .into_iter()
+            .map(|clause| unparse_contract_clause_renamed(clause, &renames))
+            .collect();
         Some((f, contracts))
+    }
+
+    /// The clauses [`Semantics::function_with_contracts_at`] answers for `m`,
+    /// a method of an analyzed `impl` block.
+    #[must_use]
+    pub fn method_contracts(&self, m: &ast::Function) -> Vec<String> {
+        self.function_with_contracts_at(m.id)
+            .expect("an analyzed impl's method is a function")
+            .1
+    }
+
+    /// Where `t`'s clauses on its method name a parameter that the impl
+    /// method `f` names otherwise: each identifier resolving to that
+    /// parameter, mapped to `f`'s name for it.
+    fn impl_param_renames(&self, t: &ast::TraitDecl, f: &ast::Function) -> IndexMap<AstId, String> {
+        let Some(holder) = t.contract_holder(&f.name) else {
+            return IndexMap::default();
+        };
+        let renamed: IndexMap<AstId, &str> = holder
+            .params
+            .iter()
+            .zip(&f.params)
+            .filter(|(held, own)| held.name != own.name)
+            .map(|(held, own)| (held.id, own.name.as_str()))
+            .collect();
+        if renamed.is_empty() {
+            return IndexMap::default();
+        }
+        let mut collector = IdCollector::default();
+        collector.visit_block(
+            holder
+                .body
+                .as_ref()
+                .expect("a holder's body is its clauses"),
+        );
+        collector
+            .ids
+            .into_iter()
+            .filter_map(|id| {
+                let param = self.referenced_symbol(id)?;
+                Some((id, (*renamed.get(&param)?).to_owned()))
+            })
+            .collect()
+    }
+
+    /// The `impl` block of `module` spanning `impl_span`. A reader holding its
+    /// own parse of the module's source names the block by its span, which
+    /// every parse of that source agrees on.
+    #[must_use]
+    pub fn impl_block_at(&self, module: &ModuleSource, impl_span: Span) -> &ImplBlock {
+        self.modules[module]
+            .items
+            .iter()
+            .find_map(|item| {
+                let Item::Impl(b) = item else {
+                    return None;
+                };
+                (b.span.start == impl_span.start && b.span.end == impl_span.end).then_some(b)
+            })
+            .expect("every parse of a module's source spans its impl blocks alike")
+    }
+
+    /// The item declaring the trait or interface `b` implements; `None` for an
+    /// inherent block.
+    #[must_use]
+    pub fn implemented(&self, b: &ImplBlock) -> Option<&Item> {
+        let resolutions = self.resolutions()?;
+        let id = resolutions
+            .defs()
+            .ast_id(resolutions.head_decl(b.trait_type.as_ref()?)?);
+        let module = self.modules.get(self.module_of_id(id)?)?;
+        module.items.iter().find(|item| item.id() == id)
     }
 
     /// The function [`Semantics::function_at`] answers, with the item holding it.
@@ -850,12 +932,17 @@ impl Semantics {
     /// `core:` / `wasi:` location-independent).
     #[must_use]
     pub fn resolve_notation_module(&self, module_spec: &str) -> ModuleSource {
-        let from = self.entry_module_source.clone();
+        self.resolve_module_from(&self.entry_module_source, module_spec)
+    }
+
+    /// The module `module_spec` names when `from` imports it.
+    #[must_use]
+    pub fn resolve_module_from(&self, from: &ModuleSource, module_spec: &str) -> ModuleSource {
         resolve_import_with_entry(
             &mut self.interner.borrow_mut(),
-            &from,
+            from,
             module_spec,
-            Some(&from),
+            Some(&self.entry_module_source),
         )
     }
 
@@ -1066,7 +1153,8 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    semantics_for_world(source, host, filename, None, InvocationIndex::new()).await
+    // TIR too, for the consumers that read `tir_modules`.
+    semantics_for_world(source, host, filename, None, InvocationIndex::new(), true).await
 }
 
 /// [`semantics`] with the target world and kiln redirects threaded through, so a
@@ -1076,13 +1164,14 @@ pub async fn semantics<H: CompilerHost>(
 /// `core:kiln/generator` world; `invocations` redirects `use … with { generator }`
 /// clauses to their generated modules. A caller re-analyzing a kiln consumer must
 /// pass the same values the compile used, or the load fails and analysis reports
-/// incomplete.
+/// incomplete. `build_tir` is as in [`semantics_of`].
 pub async fn semantics_for_world<H: CompilerHost>(
     source: &str,
     host: &H,
     filename: Option<&str>,
     target_world: Option<&str>,
     invocations: InvocationIndex,
+    build_tir: bool,
 ) -> Semantics {
     let parsed = parse(source);
     // Surface every recovered lex/parse error, then analyze the partial AST
@@ -1098,9 +1187,6 @@ pub async fn semantics_for_world<H: CompilerHost>(
         host.emit_diagnostic(e.diagnostic(filename));
     }
     match load(parsed, filename, host, invocations, LogLevel::default()).await {
-        // General entry: build TIR so consumers that read `tir_modules`
-        // (kiln options extraction) work. The LSP engine uses its own
-        // annotate-only path (`semantics_of(.., build_tir = false)`).
         Ok(mut loaded) => {
             inject_kiln_request_adapter(
                 target_world,
@@ -1108,7 +1194,7 @@ pub async fn semantics_for_world<H: CompilerHost>(
                 &mut loaded.modules,
                 &mut loaded.cm_source_interfaces,
             );
-            semantics_of(loaded, host, LogLevel::default(), true)
+            semantics_of(loaded, host, LogLevel::default(), build_tir)
         }
         Err(e) => {
             let logger = Logger::new(host, LogLevel::default());

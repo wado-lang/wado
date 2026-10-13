@@ -5,11 +5,8 @@ use std::path::Path;
 use lexopt::Arg::Value;
 
 use crate::args::{self, CliExit};
-use crate::compile::{
-    attach_manifest_and_component_deps, load_nearest_manifest, maybe_run_pipeline,
-};
+use crate::compile::{build_load, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::dep_component::Acquisition;
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 
 pub struct DumpOptions {
@@ -344,26 +341,16 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let host = FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level);
-
     let manifest_pair = load_nearest_manifest(path).map_err(CliExit::error)?;
-    let host = attach_manifest_and_component_deps(
-        host,
-        manifest_pair.as_ref(),
-        &base_path,
+    let (host, invocations) = build_load(
+        path,
         &source,
-        Acquisition::Build,
+        manifest_pair,
+        FilesystemCompilerHost::with_log_level(base_path, opts.knobs.log_level),
+        opts.knobs.no_cache,
+        "dump",
     )
-    .await
-    .map_err(CliExit::error)?;
-
-    // Run any Kiln generators the entry declares (`use x from "<schema>" with
-    // { generator: ... }`), so the loader below redirects to their generated
-    // output instead of falling through to the raw (non-Wado) schema file.
-    let invocations = maybe_run_pipeline(path, &host, opts.knobs.no_cache, manifest_pair)
-        .await
-        .map_err(|e| CliExit::error(format!("wado dump: {e}")))?
-        .invocations;
+    .await?;
 
     let knobs = &opts.knobs;
     // Diagnostics are already emitted by the host; signal silently on failure.

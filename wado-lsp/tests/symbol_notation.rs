@@ -305,6 +305,30 @@ fn hover_type_lists_impl_methods() {
     });
 }
 
+/// A type's hover lists its impls as `wado doc` does: with the clauses that
+/// bind each method, and without an impl of a trait below `pub`.
+#[test]
+fn hover_type_lists_impls_as_the_page_does() {
+    futures::executor::block_on(async {
+        let lib = concat!(
+            "pub trait Pick with () {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0;\n}\n",
+            "trait Hid {\n    fn hid(&self) -> i32;\n}\n",
+            "pub struct Deck {}\n",
+            "impl Pick for Deck {\n    fn pick(&self, i: i32) -> i32 { return i; }\n}\n",
+            "impl Hid for Deck {\n    fn hid(&self) -> i32 { return 0; }\n}\n",
+        );
+        let result = hover("./d.wado", lib, "./d.wado", "./d.wado#Deck")
+            .await
+            .expect("resolves hover");
+        let v = &result.contents.value;
+        assert!(
+            v.contains("impl Pick for Deck {\n    fn pick(&self, i: i32) -> i32\n        contract i >= 0\n}"),
+            "got: {v}"
+        );
+        assert!(!v.contains("Hid"), "an impl of a private trait leaked: {v}");
+    });
+}
+
 #[test]
 fn hover_renders_enum_definition_with_cases() {
     futures::executor::block_on(async {

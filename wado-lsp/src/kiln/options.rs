@@ -113,6 +113,7 @@ async fn descriptor_of<H: CompilerHost>(entry: &Path, host: &H) -> Option<Option
         Some(&filename),
         Some(GENERATOR_WORLD_FQ),
         InvocationIndex::new(),
+        true,
     )
     .await;
     extract_options_descriptor(&sem, &sem.entry_module_source).ok()

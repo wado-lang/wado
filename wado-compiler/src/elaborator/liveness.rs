@@ -9,8 +9,8 @@
 //! emitted only when a call reaches it.
 
 use crate::ast::{
-    self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
-    type_head_name,
+    self, AstId, AstVisitor, Block, Expr, Function, IdCollector, Item, Module,
+    for_each_pattern_binding, type_head_name,
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -1089,20 +1089,6 @@ impl Graph {
             }
         }
         reached
-    }
-}
-
-/// Every [`AstId`] the walk announces: names, fields and method segments, plus
-/// each statement's and expression's own — the node a dispatch fact is keyed
-/// under.
-#[derive(Default)]
-struct IdCollector {
-    ids: Vec<AstId>,
-}
-
-impl AstVisitor for IdCollector {
-    fn visit_id(&mut self, id: AstId, _span: Span) {
-        self.ids.push(id);
     }
 }
 

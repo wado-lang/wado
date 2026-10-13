@@ -22,7 +22,7 @@ use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::member_visible;
 use crate::tir;
 use crate::tir::{EffectRef, ResolvedType, TirCapture, TirTemplatePart};
@@ -320,6 +320,9 @@ pub struct Unparser<'a> {
     /// count them: what follows it on the line is the rest of the construct,
     /// not the caller's text.
     reserved_width: Option<(usize, usize)>,
+    /// The name each listed identifier is written under instead of its own:
+    /// a trait's clause shown on an impl reads the impl's parameter names.
+    renames: Option<&'a IndexMap<AstId, String>>,
 }
 
 /// Where a list entry's line-end comment is found.
@@ -1849,7 +1852,8 @@ impl<'a> Unparser<'a> {
                     self.output.push_str("::");
                     self.output.push_str(suffix);
                 } else {
-                    self.output.push_str(&i.name);
+                    let renamed = self.renames.and_then(|renames| renames.get(&i.id));
+                    self.output.push_str(renamed.unwrap_or(&i.name));
                     self.unparse_turbofish(&i.type_args);
                 }
             }
@@ -3546,8 +3550,28 @@ pub fn unparse_contract_clause(clause: &AssertStmt) -> String {
     unparse_one_line(|u| u.unparse_contract_clause(clause))
 }
 
+/// [`unparse_contract_clause`] with each identifier `renames` lists written
+/// under the name it gives.
+#[must_use]
+pub fn unparse_contract_clause_renamed(
+    clause: &AssertStmt,
+    renames: &IndexMap<AstId, String>,
+) -> String {
+    let unparser = Unparser {
+        renames: Some(renames),
+        ..Unparser::default()
+    };
+    unparse_one_line_with(unparser, |u| u.unparse_contract_clause(clause))
+}
+
 fn unparse_one_line(emit: impl FnOnce(&mut Unparser)) -> String {
-    let mut unparser = Unparser::new();
+    unparse_one_line_with(Unparser::new(), emit)
+}
+
+fn unparse_one_line_with<'a>(
+    mut unparser: Unparser<'a>,
+    emit: impl FnOnce(&mut Unparser<'a>),
+) -> String {
     emit(&mut unparser);
     let mut out = String::with_capacity(unparser.output.len());
     let mut lines = unparser
@@ -4381,8 +4405,13 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
 /// Render an `impl` block as Wado with member **signatures** only, for type
 /// overviews. Under `public_only` an inherent `impl` shows only `pub` members,
 /// while a trait `impl`'s are always shown, being the trait's public surface.
-/// Empty when nothing is visible, so the caller can drop the block.
-pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
+/// Empty when nothing is visible, so the caller can drop the block. Each
+/// method lists the `contract` clauses `contracts` answers for it.
+pub fn unparse_impl_block_signature(
+    b: &ImplBlock,
+    public_only: bool,
+    contracts: impl Fn(&Function) -> Vec<String>,
+) -> String {
     let inherent = b.trait_type.is_none();
     let visible = |visibility| member_visible(public_only, inherent, visibility);
 
@@ -4395,6 +4424,11 @@ pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String 
     for m in &b.methods {
         if visible(m.visibility) {
             lines.push(unparse_function_signature(m));
+            lines.extend(
+                contracts(m)
+                    .into_iter()
+                    .map(|clause| format!("    {clause}")),
+            );
         }
     }
     if lines.is_empty() {
