@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791881409407,
+  "lastUpdate": 1791904889038,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66781,6 +66781,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 342404,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "91d6c5d4cc463c55338873a596581b5fdc609972",
+          "message": "Merge pull request #2345 from wado-lang/perf-cbor-twitter\n\nfix(compiler): a reference sees a later assignment to the place it borrows",
+          "timestamp": "2026-10-14T00:04:32+09:00",
+          "tree_id": "4fe604d66efd02afcf9e6d74419529046566e5a9",
+          "url": "https://github.com/wado-lang/wado/commit/91d6c5d4cc463c55338873a596581b5fdc609972"
+        },
+        "date": 1791904888384,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339773,
             "unit": "bytes"
           }
         ]
