@@ -1107,18 +1107,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(result)
     }
 
-    /// Whether the method `def` is declared by an inherent `impl` block.
-    fn declared_in_inherent_block(&self, def: DefId) -> bool {
+    /// Whether the method `def` is a `from` the type declares itself.
+    fn declares_own_from(&self, def: DefId) -> bool {
         self.tysys
             .signatures
             .method_sig(def)
-            .is_some_and(|sig| self.inherent_sig(sig))
+            .is_some_and(|sig| self.own_from_sig(sig))
     }
 
-    /// Whether `sig` is a method of an inherent `impl` block.
-    pub(super) fn inherent_sig(&self, sig: &MethodSig) -> bool {
-        sig.declaring_impl
-            .is_some_and(|block| !self.tysys.trait_env.impl_headers[&block].is_trait_impl())
+    /// Whether `sig` is a method of an `impl` block other than one of the
+    /// compiler's `From`: an inherent block, or another trait's. Its body is
+    /// the call, where a `From` impl's is never reached for a conversion the
+    /// language provides.
+    pub(super) fn own_from_sig(&self, sig: &MethodSig) -> bool {
+        sig.declaring_impl.is_some_and(|block| {
+            self.tysys.signatures.impl_trait(block)
+                != self.tysys.compiler_trait_def(CompilerItem::From)
+        })
     }
 
     /// Check a `builtin::wrap_in_case::<V, P>` call, the body of a written-out
@@ -1140,10 +1145,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Err(WrappedCase::Missing) => {
                 format!("no case of `{target_name}` carries a `{source_name}` payload")
             }
-            Err(WrappedCase::Ambiguous(cases)) => format!(
-                "cases {} both carry a `{source_name}` payload; write the impl",
-                cases.join(" and ")
-            ),
+            Err(WrappedCase::Ambiguous(cases)) => {
+                let [init @ .., last] = &cases[..] else {
+                    unreachable!("an ambiguity names more than one case")
+                };
+                format!(
+                    "cases {} and {last} each carry a `{source_name}` payload; write the impl",
+                    init.join(", ")
+                )
+            }
         };
         let _ = self.emit(TypeError::MarkerWithheld {
             trait_name: format!("From<{source_name}>"),
@@ -1622,7 +1632,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let method_def = selection
                     .flatten()
                     .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
-                let inherent = method_def.is_some_and(|def| self.declared_in_inherent_block(def));
+                let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
                 if let Some(suffix_seg) = ident.segments.get(1) {
                     if let Some(method_def) = method_def
                         && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
@@ -1704,7 +1714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
                 if suffix == "from"
-                    && !inherent
+                    && !own_from
                     && let [arg_type] = args[..]
                     && let Some(converted) = self.convert_without_impl(
                         call.id,

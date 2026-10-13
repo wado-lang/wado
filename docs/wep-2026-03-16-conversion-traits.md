@@ -334,7 +334,8 @@ along a newtype chain, becomes a cast. A reference is not on the chain, so
 Since a provided conversion answers before any written one, an impl it overlaps
 would never run, and `record_impl_sig` rejects it (`FromOverlapsProvided`). A
 `from` the type declares is still looked up first: the elaborator folds a call
-into a cast only when no inherent `fn from` is declared, and folds a bare
+into a cast only when the `from` it selects is no inherent one or another
+trait's, and folds a bare
 generic receiver (`Slot::from(inner)` with `inner: Slot<i32>`) only when no
 `From` impl is selected, since the impl's own type argument is then the inner
 one.
