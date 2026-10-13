@@ -118,7 +118,7 @@ impl CompileKnobOpt {
                 long: Some("optimize-threads"),
                 short: None,
                 value: Some("<n>"),
-                desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores; 1 under `wado test`, which\ncompiles several files at once)",
+                desc: "Threads the optimizer runs on; the output does not depend on it\n(default: the available cores, shared among the files compiled\nat once: 1 each under `wado test`)",
             },
             Self::LogLevel => OptSpec {
                 long: Some("log-level"),
@@ -202,8 +202,9 @@ impl Default for CompileKnobs {
 
 impl CompileKnobs {
     /// The threads the optimizer runs on: `--optimize-threads`, else every
-    /// available core. A subcommand compiling several files at once sets 1
-    /// before this is read.
+    /// available core. A subcommand compiling several files at once sets its
+    /// share before this is read: 1 under `wado test`, the cores divided by the
+    /// worlds under `wado build` and `wado publish`.
     #[must_use]
     pub fn optimize_threads(&self) -> usize {
         self.opt_threads.unwrap_or_else(|| {

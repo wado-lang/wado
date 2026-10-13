@@ -22,7 +22,7 @@
 //! at the root.
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
@@ -251,14 +251,19 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
     Ok(())
 }
 
-/// One world a ready package publishes: the component its build writes and the
-/// OCI reference that component goes to.
-struct Upload<'a> {
+/// A ready package's publishable worlds, each beside the OCI reference its
+/// component goes to.
+struct Release<'a> {
     coord: &'a str,
-    /// `lib`, or the world's path segment.
-    world: String,
-    reference: String,
-    component: PathBuf,
+    worlds: Vec<(BuildTarget, String)>,
+}
+
+/// `lib`, or the world's path segment.
+fn world_label(target: &BuildTarget) -> String {
+    target
+        .target_world
+        .as_deref()
+        .map_or_else(|| "lib".to_string(), world_path_segment)
 }
 
 /// Every world a package publishes: the library world (bare repository) plus
@@ -280,14 +285,18 @@ fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<BuildTarget>, Cli
 /// A dry run builds too: that is what catches a package that no longer compiles
 /// into a publishable component (e.g. a `--lib` that exports nothing). It
 /// builds at `-O0`, since it asks whether a component builds, not how well it
-/// is optimized.
+/// is optimized, and into a scratch directory, so the `build/` artifacts that
+/// `wado build` wrote stay optimized.
 async fn publish_ready(
     ready: &[(String, &ProjectManifest)],
     registries: &indexmap::IndexMap<String, String>,
     dry_run: bool,
 ) -> Result<(), CliExit> {
-    let mut targets = Vec::new();
-    let mut uploads = Vec::new();
+    let scratch = dry_run
+        .then(tempfile::tempdir)
+        .transpose()
+        .map_err(|e| CliExit::error(format!("creating a dry-run build directory: {e}")))?;
+    let mut releases = Vec::new();
     for (coord, project) in ready {
         let pkg = project
             .manifest
@@ -306,16 +315,19 @@ async fn publish_ready(
                  without a `revision` annotation"
             );
         }
-        for target in worlds {
-            let subpath = target.target_world.as_deref().map(world_path_segment);
-            uploads.push(Upload {
-                coord,
-                reference: resolve_push_target(registries, pkg, subpath.as_deref())?,
-                world: subpath.unwrap_or_else(|| "lib".to_string()),
-                component: target.output.clone(),
-            });
-            targets.push(target);
-        }
+        let worlds = worlds
+            .into_iter()
+            .map(|mut target| {
+                let subpath = target.target_world.as_deref().map(world_path_segment);
+                let reference = resolve_push_target(registries, pkg, subpath.as_deref())?;
+                if let Some(scratch) = &scratch {
+                    let world = world_label(&target);
+                    target.output = scratch.path().join(format!("{}-{world}.wasm", pkg.name));
+                }
+                Ok((target, reference))
+            })
+            .collect::<Result<_, CliExit>>()?;
+        releases.push(Release { coord, worlds });
     }
 
     let knobs = CompileKnobs {
@@ -326,26 +338,24 @@ async fn publish_ready(
         },
         ..CompileKnobs::default()
     };
+    let targets = releases
+        .iter()
+        .flat_map(|release| release.worlds.iter().map(|(target, _)| target.clone()))
+        .collect();
     build_world_components(targets, &knobs, EmbedOptions::default()).await?;
 
-    for Upload {
-        coord,
-        world,
-        reference,
-        component,
-    } in &uploads
-    {
-        if dry_run {
-            eprintln!("(dry-run) {coord} ({world}) builds; would push -> {reference}");
-        } else {
-            eprintln!("Publishing {coord} ({world}) -> {reference}");
-            wkg_oci_push(reference, component)?;
+    for Release { coord, worlds } in &releases {
+        for (target, reference) in worlds {
+            let world = world_label(target);
+            if dry_run {
+                eprintln!("(dry-run) {coord} ({world}) builds; would push -> {reference}");
+            } else {
+                eprintln!("Publishing {coord} ({world}) -> {reference}");
+                wkg_oci_push(reference, &target.output)?;
+            }
         }
-    }
-    if !dry_run {
-        for (coord, _) in ready {
-            let count = uploads.iter().filter(|u| u.coord == coord).count();
-            eprintln!("Published {coord} ({count} artifact(s))");
+        if !dry_run {
+            eprintln!("Published {coord} ({} artifact(s))", worlds.len());
         }
     }
     Ok(())
