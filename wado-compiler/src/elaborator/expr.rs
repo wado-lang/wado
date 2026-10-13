@@ -5310,7 +5310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 outer_err_type,
                 &from,
             ) {
-                let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
+                self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
             } else {
                 let (outer, inner) = {
                     let tt = self.tysys.type_table.borrow();
@@ -5334,17 +5334,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Record the facts for `target_type::from(value)` off the
-    /// `impl From<from_type> for target_type`, and answer with the conversion's
-    /// result type. `caller_id` is the source expression that triggered the
-    /// conversion — the `?` operator, an explicit `T::from(v)` — and the facts
-    /// are recorded under it so reify rebuilds the `Call` without re-walking
-    /// impl blocks or re-mangling.
-    pub(super) fn resolve_from_call(
-        &mut self,
-        target_type: TypeId,
-        from_type: TypeId,
-        caller_id: AstId,
-    ) -> TypeId {
+    /// `impl From<from_type> for target_type`, under the `?` that converts
+    /// through it, so reify rebuilds the `Call` without re-walking impl blocks
+    /// or re-mangling.
+    fn resolve_from_call(&mut self, target_type: TypeId, from_type: TypeId, qm_id: AstId) {
         let tt = self.tysys.type_table.borrow();
         // Reify reads the names below back as written, so an unsolved type
         // would mangle into a callee no monomorphization produces.
@@ -5381,7 +5374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_def.and_then(|def| self.tysys.declared_method(def, "from"))
         };
         self.sem.types.from_call_facts.insert(
-            caller_id,
+            qm_id,
             FromCallFacts {
                 method_def,
                 module_source,
@@ -5391,8 +5384,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 from_trait_name,
             },
         );
-
-        target_type
     }
 
     /// The `impl From<from_name> for target_type` block and the module that

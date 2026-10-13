@@ -57,9 +57,9 @@ use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
-    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch, MethodNames,
-    OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
+    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, FromCallFacts, ImplFacts,
+    IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch,
+    MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -5558,12 +5558,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             inner_err_type,
             span,
         );
-        // `<OuterErr>::from(e)` where annotate found the impl; otherwise the
-        // two convert with no impl, and `e` is cast.
-        let converted_err = if self.ann_from_call_facts(qm_id).is_some() {
-            self.reify_from_call(outer_err_type, e_expr, span, qm_id)
-        } else {
-            bare_cast(e_expr, outer_err_type, span)
+        // `<OuterErr>::from(e)` where an impl converts, or a bound promises
+        // one; otherwise the two convert with no impl, and `e` is cast.
+        let converted_err = match self.ann_from_call_facts(qm_id) {
+            Some(facts) => self.reify_from_call(outer_err_type, e_expr, span, facts),
+            None => bare_cast(e_expr, outer_err_type, span),
         };
         let err_variant = TirExpr::new(
             TirExprKind::VariantConstruct {
@@ -6394,22 +6393,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Synthesise a `From<From>::from(value)` call from the facts the
-    /// body walk's [`super::Elaborator::resolve_from_call`] recorded
-    /// under `caller_id`. Every caller has a source-level handle (`?`
-    /// operator, `Type::from(x)` static call, `Type::<…>::from(x)`); the
-    /// recording is unconditional, so reify is a pure read.
+    /// The `From::from(value)` call a `?` converts its error through, from
+    /// the facts [`super::Elaborator::resolve_from_call`] recorded.
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
         value: TirExpr,
         span: Span,
-        caller_id: AstId,
+        facts: FromCallFacts,
     ) -> TirExpr {
-        let facts = self.ann_from_call_facts(caller_id).expect(
-            "resolve_from_call records FromCallFacts at every site reify hits — \
-                 ?-op, Type::from(x), and Type::<…>::from(x)",
-        );
         let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
         let mut method_info =
             LocalMethodName::new(facts.target_name, Some(from_trait), "from".to_string());
@@ -7333,12 +7325,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // `Type::from(x)` resolved inline, with no `static_method_dispatch`:
-        // a bodyless `impl From<X> for Type;` (shared with the `?` operator),
-        // or a reflexive or newtype conversion.
-        if self.ann_from_call_facts(call.id).is_some() {
-            let arg = self.reify_expr(&call.args[0], ctx, None);
-            return self.reify_from_call(recorded_type, arg, span, call.id);
-        }
+        // a reflexive or newtype conversion.
         match self.ann_desugars(call.id) {
             Some(DesugarKind::NewtypeFromCollapse) => {
                 return self.reify_expr(&call.args[0], ctx, None);

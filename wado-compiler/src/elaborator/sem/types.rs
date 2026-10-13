@@ -219,11 +219,8 @@ macro_rules! with_body_facts {
             /// 2026-08-24), so only elements the elaborator saw as literals
             /// leave an entry.
             ann_literal_conversions => literal_conversions: $crate::elaborator::sem::types::LiteralFromCall,
-            /// `From<T>::from` call facts recorded at every site that
-            /// synthesises a conversion call: the `?` operator's err-arm
-            /// conversion, and the bodyless-impl static-call inline path.
-            /// Keyed by the caller's [`AstId`] (the `?` expr / static-call
-            /// expr). See [`FromCallFacts`].
+            /// The `From<T>::from` call a `?` converts its error through,
+            /// keyed by the `?` expression's [`AstId`]. See [`FromCallFacts`].
             ann_from_call_facts => from_call_facts: $crate::elaborator::sem::types::FromCallFacts,
             /// `IndexAssign` dispatch for `arr[i] = v` and `arr[i] OP= v`,
             /// keyed by the *inner* [`crate::ast::IndexExpr`]'s [`AstId`] and
@@ -590,19 +587,17 @@ pub(crate) struct MethodNames {
     pub(crate) mangled: String,
 }
 
-/// Resolved `From<T>::from` call facts recorded at every site that
-/// invokes the conversion: the `?` operator's error-arm conversion
-/// (`expr.rs:resolve_question_mark_result`), the bodyless
-/// `impl From<X> for T;` static-call inline (`call.rs` /
-/// `method_call.rs`). Reify reads these to rebuild the same
-/// `TirExprKind::Call` without re-walking loaded modules to find the
+/// The `From<T>::from` call a `?` converts its error through
+/// (`expr.rs:resolve_question_mark_result`). Reify reads these to rebuild the
+/// same `TirExprKind::Call` without re-walking loaded modules to find the
 /// impl's home or re-mangling the method name.
 #[derive(Clone)]
 pub(crate) struct FromCallFacts {
-    /// The `from` method the conversion calls.
+    /// The `from` method the conversion calls: the impl's, or the trait's
+    /// where the receiver is a type parameter.
     pub(crate) method_def: Option<DefId>,
-    /// Module that hosts the `impl From<From> for Target` block (or
-    /// the auto-derived synthesis site).
+    /// Module that hosts the `impl From<From> for Target` block, or the `?`'s
+    /// own where the receiver is a type parameter.
     pub(crate) module_source: ModuleSource,
     /// The receiver the call's method name is built from.
     pub(crate) target_name: FqTypeName,

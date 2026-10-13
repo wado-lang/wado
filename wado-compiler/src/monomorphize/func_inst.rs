@@ -1283,9 +1283,9 @@ impl Monomorphizer {
         }
     }
 
-    /// `T::from(x)` at an instance where `T` is `x`'s own type, or a newtype
-    /// and its base, which convert with no impl body behind them (WEP:
-    /// Conversion Traits): the instance is `x`, cast to `T`. `expr`'s own type
+    /// `T::from(x)` at an instance where `T` and `x`'s type convert with no
+    /// impl body behind them, [`TypeTable::converts_without_impl`]: the
+    /// instance is `x`, cast to `T`. `expr`'s own type
     /// is already substituted, and it is `T`.
     fn cast_for_implicit_from(
         &self,
