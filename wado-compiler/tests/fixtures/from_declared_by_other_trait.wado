@@ -17,17 +17,12 @@ impl Make for Point {
 
 struct Holder<T> {
     value: T,
+    made: i32,
 }
 
 impl<T> Make for Holder<T> {
     fn from(h: Holder<T>) -> Holder<T> {
-        return Holder { value: h.value };
-    }
-}
-
-impl Holder<i32> {
-    fn bumped(&self) -> i32 {
-        return self.value + 1;
+        return Holder { value: h.value, made: h.made + 1 };
     }
 }
 
@@ -48,8 +43,9 @@ test "to the same type" {
 }
 
 test "to the same type under a turbofish" {
-    let h = Holder::<i32>::from(Holder { value: 4 });
-    assert h.bumped() == 5;
+    let h = Holder::<i32>::from(Holder { value: 4, made: 0 });
+    assert h.made == 1;
+    assert h.value == 4;
 }
 
 test "along a newtype chain" {
