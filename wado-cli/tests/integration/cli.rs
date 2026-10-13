@@ -1604,10 +1604,16 @@ fn test_publish_dry_run_reports_every_broken_world() {
         std::fs::create_dir_all(&src).unwrap();
         std::fs::write(
             dir.join(member).join("wado.toml"),
-            format!("[package]\nname = \"{member}\"\ndescription = \"d\"\nlib = \"src/lib.wado\"\n"),
+            format!(
+                "[package]\nname = \"{member}\"\ndescription = \"d\"\nlib = \"src/lib.wado\"\n"
+            ),
         )
         .unwrap();
-        std::fs::write(src.join("lib.wado"), "pub fn helper() -> i32 { return 0; }\n").unwrap();
+        std::fs::write(
+            src.join("lib.wado"),
+            "pub fn helper() -> i32 { return 0; }\n",
+        )
+        .unwrap();
     }
 
     wado_in(dir)

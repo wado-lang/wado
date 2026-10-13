@@ -275,12 +275,12 @@ pub async fn build_world_components(
     knobs: &CompileKnobs,
     embed: EmbedOptions,
 ) -> Result<(), CliExit> {
+    assert!(!targets.is_empty(), "every caller has a world to build");
     let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
     let mut knobs = knobs.clone();
-    knobs.opt_threads = knobs
+    knobs
         .opt_threads
-        .or(Some((cores / targets.len().max(1)).max(1)));
-    let knobs = Arc::new(knobs);
+        .get_or_insert((cores / targets.len()).max(1));
     let slots = Arc::new(Semaphore::new(cores));
     let mut builds = JoinSet::new();
     for target in targets {
@@ -288,16 +288,21 @@ pub async fn build_world_components(
             .acquire_owned()
             .await
             .expect("the build semaphore is never closed");
-        let knobs = Arc::clone(&knobs);
-        // A compile future is not `Send`, so each build runs on a blocking
-        // thread under a runtime of its own, as `wado test`'s compiles do.
+        let knobs = knobs.clone();
+        // A compile blocks its thread for its whole run, so each one gets a
+        // blocking thread and a runtime of its own, as `wado test`'s do.
         builds.spawn_blocking(move || {
             let _slot = slot;
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .map_err(|e| CliExit::error(format!("unable to create a build runtime: {e}")))?
-                .block_on(build_world_component(&target, &target.output, &knobs, embed))?;
+                .block_on(build_world_component(
+                    &target,
+                    &target.output,
+                    &knobs,
+                    embed,
+                ))?;
             compile::announce_artifact(&target.output);
             Ok(())
         });
