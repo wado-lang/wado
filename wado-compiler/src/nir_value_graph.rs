@@ -884,6 +884,44 @@ impl ValuePool {
         });
     }
 
+    /// Every read of a local under `v`: the field index where the local is the
+    /// receiver of a `FieldAccess`, `None` where it is read whole.
+    pub fn for_each_local_read(
+        &self,
+        v: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut f: impl FnMut(u32, Option<u32>),
+    ) {
+        let local_of = |id: ValueId| match self.kind(id) {
+            ValueKind::Opaque(oid) => match self.opaque_source(*oid) {
+                Some(OpaqueSource::Local(idx)) => Some(idx),
+                _ => None,
+            },
+            _ => None,
+        };
+        let mut stack = vec![v];
+        while let Some(v) = stack.pop() {
+            if !seen.insert(v) {
+                continue;
+            }
+            if let ValueKind::FieldAccess {
+                receiver,
+                field_index,
+                ..
+            } = self.kind(v)
+                && let Some(idx) = local_of(*receiver)
+            {
+                f(idx, Some(*field_index));
+                continue;
+            }
+            if let Some(idx) = local_of(v) {
+                f(idx, None);
+                continue;
+            }
+            self.push_value_children(v, &mut stack);
+        }
+    }
+
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
     /// [`Self::type_of`] answers for.
     pub fn for_each_opaque_local(

@@ -3,11 +3,10 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirStruct, ParamAbi};
-use crate::nir_arena::{Body, ExprId, ExprKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::mod_ref::{FnEffect, compute_fn_effects};
 use super::multi_value_return::{aggregate_field_info, is_eligible_field_type};
@@ -57,16 +56,30 @@ fn collect_candidates(
             }
             // A `&S` arrives as the fields its referent held at the call, so
             // nothing the call runs may store into memory the caller holds.
-            let aggregate = match type_table.get(param.type_id) {
-                ResolvedType::Ref(referent) if !effects[func_idx].writes_shared_heap => *referent,
+            let (aggregate, is_ref) = match type_table.get(param.type_id) {
+                ResolvedType::Ref(referent) if !effects[func_idx].writes_shared_heap => {
+                    (*referent, true)
+                }
                 ResolvedType::Ref(_) => continue,
-                _ => param.type_id,
+                _ => (param.type_id, false),
             };
-            let Some((field_types, field_names, _)) =
+            let Some((all_types, all_names, _)) =
                 aggregate_field_info(aggregate, type_table, structs)
             else {
                 continue;
             };
+            let Some(read) = fields_read(body, param.local_index, &all_names) else {
+                continue;
+            };
+            // A by-value argument is often a literal or a multi-value result,
+            // which hands over every field; a borrow's are loaded at the call,
+            // so it takes only those the callee reads.
+            let (field_types, field_names): (Vec<TypeId>, Vec<String>) = all_types
+                .into_iter()
+                .zip(&all_names)
+                .filter(|(_, name)| !is_ref || read.contains(name.as_str()))
+                .map(|(ty, name)| (ty, name.clone()))
+                .unzip();
             if !(2..=MAX_PARAM_FIELDS).contains(&field_types.len()) {
                 continue;
             }
@@ -77,9 +90,6 @@ fn collect_candidates(
                 .iter()
                 .all(|&t| is_eligible_field_type(t, type_table))
             {
-                continue;
-            }
-            if !only_field_reads(body, param.local_index, &field_names) {
                 continue;
             }
             out.insert(
@@ -94,31 +104,64 @@ fn collect_candidates(
     out
 }
 
-/// Whether every read of `local` is the subject of one of `field_names`.
+/// The fields of `local` its reads name, `None` unless every read is the
+/// subject of one of `field_names`. A promoted operand reads as an expression
+/// does, so its value tree is read too.
 // A read of the whole binding refutes: an aggregate rebuilt from the split
 // locals is not the one the caller passed.
-fn only_field_reads(body: &Body, local: u32, field_names: &[String]) -> bool {
+fn fields_read<'a>(
+    body: &Body,
+    local: u32,
+    field_names: &'a [String],
+) -> Option<IndexSet<&'a str>> {
     let names: IndexSet<&str> = field_names.iter().map(String::as_str).collect();
-    let mut whole_reads: IndexSet<ExprId> = IndexSet::default();
-    let mut field_subjects: IndexSet<ExprId> = IndexSet::default();
+    let mut whole_reads: Vec<ExprId> = Vec::new();
+    let mut field_subjects: IndexMap<ExprId, &str> = IndexMap::default();
+    let mut read: IndexSet<&str> = IndexSet::default();
+    let mut read_whole = false;
+    let mut seen = IndexSet::default();
 
-    for expr in reachable_exprs(body) {
-        match &body.exprs[expr].kind {
-            ExprKind::Local { index, .. } if *index == local => {
-                whole_reads.insert(expr);
+    body.for_each_live_node_under(NodeRef::Block(body.root()), |node| {
+        body.for_each_operand(node, |op| {
+            if let Some(v) = op.as_value() {
+                body.values
+                    .for_each_local_read(v, &mut seen, |index, field| {
+                        if index == local {
+                            match field {
+                                Some(i) => {
+                                    read.insert(field_names[i as usize].as_str());
+                                }
+                                None => read_whole = true,
+                            }
+                        }
+                    });
             }
+        });
+        let NodeRef::Expr(expr) = node else {
+            return;
+        };
+        match &body.exprs[expr].kind {
+            ExprKind::Local { index, .. } if *index == local => whole_reads.push(expr),
             ExprKind::FieldAccess {
                 expr: inner,
                 field_name,
                 ..
-            } if names.contains(field_name.as_str()) => {
-                if let Some(inner) = inner.as_expr() {
-                    field_subjects.insert(inner);
+            } => {
+                if let Some(&name) = names.get(field_name.as_str())
+                    && let Some(inner) = inner.as_expr()
+                {
+                    field_subjects.insert(inner, name);
                 }
             }
             _ => {}
         }
-    }
+    });
 
-    whole_reads.is_subset(&field_subjects)
+    if read_whole {
+        return None;
+    }
+    for expr in whole_reads {
+        read.insert(field_subjects.get(&expr).copied()?);
+    }
+    Some(read)
 }
