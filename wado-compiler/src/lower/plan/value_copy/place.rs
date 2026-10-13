@@ -579,6 +579,18 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
         .is_some()
 }
 
+/// The place an argument names, past the `&`/`&mut` it is wrapped in.
+#[must_use]
+pub fn unwrap_borrow(argument: &TirExpr) -> &TirExpr {
+    match &argument.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr,
+        } => expr,
+        _ => argument,
+    }
+}
+
 /// The root local a place expression is taken over. Needs no types, so a
 /// consumer wanting only the root needs no resolver.
 #[must_use]

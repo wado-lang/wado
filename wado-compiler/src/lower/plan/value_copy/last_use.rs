@@ -708,15 +708,8 @@ impl Analyzer<'_> {
             self.note_site(call.span, receiver, true, start, live);
             // A list reached through a reference (`*capture` in a closure) is
             // the referent's, which no field of this body owns.
-            let list = match &receiver.kind {
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                    expr,
-                } => expr,
-                _ => receiver,
-            };
             if matches!(
-                list.kind,
+                place::unwrap_borrow(receiver).kind,
                 TirExprKind::Unary {
                     op: TirUnaryOp::Deref,
                     ..
@@ -1018,13 +1011,7 @@ pub fn unanalyzed_in_place_assigns(
                         .type_table
                         .as_list(receiver.type_id)
                         .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
-                    let list = match &receiver.kind {
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                            expr,
-                        } => expr,
-                        _ => receiver,
-                    };
+                    let list = place::unwrap_borrow(receiver);
                     if in_place_elements && self.writes_in_place(list, self.owning_field(list)) {
                         self.out.insert(expr.span);
                     }

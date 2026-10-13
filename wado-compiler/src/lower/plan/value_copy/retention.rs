@@ -18,6 +18,7 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
+use super::place::unwrap_borrow;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -195,17 +196,6 @@ impl Carried {
 
     fn absorb(&mut self, other: &Carried) -> bool {
         extend(&mut self.is, &other.is) | extend(&mut self.holds, &other.holds)
-    }
-}
-
-/// The place an argument names, past the `&`/`&mut` it is wrapped in.
-fn unwrap_borrow(argument: &TirExpr) -> &TirExpr {
-    match &argument.kind {
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr,
-        } => expr,
-        _ => argument,
     }
 }
 

@@ -53,19 +53,24 @@ the place reaches every reference to it. Nothing in the spec changes.
 
 An assignment `place = v` to an in-place type writes into the storage the place
 holds when a holder of that storage may be read afterwards. It lowers as
-`*&mut place = v` does, field by field into the existing storage
-([D7](./wep-2026-06-13-reference-representation.md#known-implementation-divergences)),
-recursing into a field a holder may read. Anywhere else it stays a repoint, which
-is what makes it cheap: the old storage is unread, and every elision that relies
-on a repoint still holds.
+`*&mut place = v` does
+([D7](./wep-2026-06-13-reference-representation.md#known-implementation-divergences)):
+through a `&mut` handle, leaf by leaf, following every field of an in-place type
+into its own fields, so a reference into any part of the storage reads the new
+value. A value made of the place's own parts (`x = X { f: x.g, g: x.f }`, the
+copies elided) is read in full before any leaf is written. Anywhere else the
+assignment stays a repoint, which is what makes it cheap: the old storage is
+unread, and every elision that relies on a repoint still holds.
 
 The ownership walk decides it at the assignment (`in_place_assigns`), and
-lowering expands what it marked. The walk counts the assignment as a write into
-the old storage and not as a rebinding, so every decision it makes past the
-assignment already sees the write. An answer the analysis cannot give is
-"readable", so imprecision costs a repoint, never correctness. A function the
-walk does not analyze writes in place wherever a holder can exist at all: a
-local that is borrowed or captured, a field some borrow in the function reads.
+lowering expands what it marked, in whatever position the assignment sits. The
+walk counts the assignment as a write into the old storage and not as a
+rebinding, so every decision it makes past the assignment already sees the
+write. An answer the analysis cannot give is "readable", so imprecision costs a
+repoint, never correctness: a borrow naming no field may hold any, and a place
+no local roots writes in place. A function the walk does not analyze decides
+without liveness: in place through a borrowed or captured local, and through a
+reference as the observed fields say.
 
 A body answers for its own holders from its liveness. What it cannot see is a
 borrow another body holds while it runs, so a field assignment also writes in
@@ -83,8 +88,7 @@ An element assignment `xs[i] = v` reaches the element through
 an in-place type and decides it as it decides a field. An element is borrowed
 through a call (`index_ref`, an iterator's `next`), which names no field, so a
 borrow of the whole list counts as one of the element. In bounds, lowering
-writes the value field by field into the element, and every field of an
-in-place type into that field's own storage. Out of bounds it calls
+writes the value into the element as above. Out of bounds it calls
 `index_assign`, which traps with its message. `List`'s own code assigns its
 backing array's slots, not a `List` element, so it keeps repointing them.
 
@@ -266,19 +270,20 @@ The clients are:
 
 ### An unanalyzed function writes in place on any borrow
 
-A function the ownership walk does not analyze (`has_unsupported_form`) reads
-no liveness. It writes in place to every borrowed or captured local, and to every
-field some borrow in it reads, even where the holder is already dead. That costs
-a field-by-field store where a repoint would do.
+A function the ownership walk does not analyze (`has_unsupported_form`, or no
+local that needs a copy) reads no liveness. It writes in place through every
+borrowed or captured local, even where the holder is already dead. That costs a
+leaf-by-leaf store where a repoint would do.
 
-### An element assignment writes the whole element in place
+### An in-place write writes every leaf
 
-What an element's borrows reach is not tracked below the element. An element
-assignment that writes in place writes every field of an in-place type into
-that field's own storage, where one borrowed field would do, and a borrow of
-the whole list counts as one of every element. An element of a `List` reached
-through a reference writes in place wherever some body's borrow through the
-field holding the list is observed (`observed.rs`), and always where the
+A borrow is recorded by the first field it takes, or by none, so what it reaches
+below that is not known. An assignment that writes in place writes every leaf of
+the value, where the leaves under the borrowed part would do. A borrow naming
+no field (a whole-root `&h` among them) counts as one of every field, and a
+borrow of the whole list as one of every element. An element of a `List`
+reached through a reference writes in place wherever some body's borrow through
+the field holding the list is observed (`observed.rs`), and always where the
 reference is to the list itself.
 
 ### A destructured field's path is assumed to borrow
