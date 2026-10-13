@@ -1334,7 +1334,7 @@ fn compile_after_load<H: CompilerHost>(
                 .expect("world_registry present when is_complete"),
             contract.clone(),
             sem.export_mappings.clone(),
-            sem.wit_emit_input().published_names,
+            sem.published_names(),
         )
     });
 
@@ -1441,7 +1441,8 @@ fn compile_after_load<H: CompilerHost>(
         .map(|m| {
             m.items
                 .iter()
-                .filter_map(|item| Some(item.type_decl_name()?.to_string()))
+                .filter_map(ast::Item::type_decl_name)
+                .map(str::to_string)
                 .collect()
         })
         .unwrap_or_default();

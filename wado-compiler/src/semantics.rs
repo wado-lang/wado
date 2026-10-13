@@ -12,6 +12,7 @@ use crate::ast_index::AstIndex;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageRequest, plan_module, render_plan};
+use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -202,17 +203,22 @@ impl Semantics {
             world_registry: self.world_registry(),
             wit_contract: self.wit_contract.as_ref(),
             export_mappings: &self.export_mappings,
-            published_names: self
-                .resolutions()
-                .map(|resolutions| {
-                    resolutions
-                        .defs()
-                        .adopted_by(&self.entry_module_source)
-                        .map(|(def, name)| (def, name.to_string()))
-                        .collect()
-                })
-                .unwrap_or_default(),
+            published_names: self.published_names(),
         }
+    }
+
+    /// The name each type the entry's `export use` adopts is published under.
+    #[must_use]
+    pub fn published_names(&self) -> IndexMap<DefId, String> {
+        self.resolutions()
+            .map(|resolutions| {
+                resolutions
+                    .defs()
+                    .adopted_by(&self.entry_module_source)
+                    .map(|(def, name)| (def, name.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// A cloned handle to the CM interface registry `Arc` (`None` before it is
