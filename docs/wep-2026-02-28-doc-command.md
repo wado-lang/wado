@@ -114,8 +114,10 @@ implements, wherever the trait is declared. The page's own parse keeps the
 comments, which the analysis drops, and names an `impl` block to the analysis
 by its span. A stdlib module is analyzed through a program importing it.
 
-`wado doc` documents a program the analysis accepts. Given one with errors, it
-reports them and fails, and whatever it wrote is not a page. It checks no more
+`wado doc` documents a program the analysis accepts. It loads what a build
+loads: the manifest's dependencies and the output of the entry's Kiln
+generators. Given a program with errors, it reports them and fails, and
+whatever it wrote is not a page. It checks no more
 than the analysis does, so a program it documents may still fail to compile.
 
 ### CommentKind Extension
