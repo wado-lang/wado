@@ -234,7 +234,10 @@ Any other public `_unchecked` name is removed.
 `Sequence` has no index operator. It becomes `Sequence::at`, which returns the
 element under `contract 0 <= index < self.len()`, written on the trait. A
 concrete `List`, `Slice` or `ByteList` reads with `unchecked xs[i]`, so
-`ByteList::get_byte_unchecked`, a name Rust lacks, is removed.
+`ByteList::get_byte_unchecked`, a name Rust lacks, is removed. `at` is a
+prelude name, so a program's own trait method `at` on one of these types makes
+a call ambiguous until the call names the trait. That cost was accepted for the
+short name.
 
 No name carries `_unchecked`, so each operation has one name per shape:
 
