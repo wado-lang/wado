@@ -153,7 +153,7 @@ compile error: it would vouch for clauses the caller never saw.
 ```wado
 impl Get for Small {
     fn get(&self, i: i32) -> i32
-        contract i < 10, "i must be below 10"
+        contract i < 10
     {
         return self.value + i;
     }

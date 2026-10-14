@@ -139,6 +139,8 @@ convergence once it is small.
    candidates the threshold admitted **only** because the cold discount put
    them under it — with what those are worth in growth. A handful of callees
    accounting for most of a round's growth is that pattern.
+   `WADO_TRACE=inline_verdict` gives each callee's verdict: its hot cost, its
+   call sites, and which of them it reaches.
 3. `WADO_TRACE=cold_outline` says why such a callee was not split: control
    leaving the region, or a local the call cannot hand over.
 4. `--optimize-inline-growth <pct>` caps unit growth, and `--log-level debug`

@@ -670,7 +670,7 @@ test "char::try_from takes a scalar value" {
     assert `${char::try_from(0xD800 as u32).unwrap_err()}` == "0xd800 is not a Unicode scalar value";
     assert char::try_from(0x110000 as u32) matches { Err(_) };
     assert char::try_from(0x3042 as i32) matches { Ok(c) && c == 'あ' };
-    assert char::try_from(-1 as i32) matches { Err(_) };
+    assert `${char::try_from(-1 as i32).unwrap_err()}` == "0xffffffff is not a Unicode scalar value";
 }
 
 test "from_str reads a view without copying out of it" {

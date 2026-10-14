@@ -854,7 +854,7 @@ struct SoftCtx<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
     type_table: &'a TypeTable,
     /// Inside a block that ends unseen ([`Body::ends_unseen`]): the candidates
-    /// the block writes a field of. Nothing after the block runs, so a call
+    /// [`candidates_pinned_under`] it. Nothing after the block runs, so a call
     /// there may keep a borrow of any other candidate: the rebuilt literal it
     /// keeps and the scalars agree for as long as anything runs.
     unseen: Option<&'a IndexSet<u32>>,
@@ -864,9 +864,9 @@ impl SoftCtx<'_> {
     fn walk(&self, body: &Body, node: NodeRef, hard_escaped: &mut IndexSet<u32>) {
         match node {
             NodeRef::Block(b) if self.unseen.is_none() && body.ends_unseen(b, self.type_table) => {
-                let written = candidates_written_under(body, b, self.candidates);
+                let pinned = candidates_pinned_under(body, b, self.candidates);
                 let inner = SoftCtx {
-                    unseen: Some(&written),
+                    unseen: Some(&pinned),
                     ..*self
                 };
                 body.for_each_child(node, |c| inner.walk(body, c, hard_escaped));
@@ -955,7 +955,7 @@ impl SoftCtx<'_> {
                     let Some(arg) = arg.as_expr() else { continue };
                     let lent_candidate = immut_ref_to_candidate(body, arg, self.candidates)
                         .filter(|index| {
-                            self.unseen.is_some_and(|written| !written.contains(index))
+                            self.unseen.is_some_and(|pinned| !pinned.contains(index))
                                 || !callee_stores_param_at(callee_id, i, self.stores_lookup)
                         })
                         .or_else(|| {
@@ -981,25 +981,34 @@ impl SoftCtx<'_> {
     }
 }
 
-/// The candidates something under `block` writes a field of, or assigns whole.
-fn candidates_written_under(
+/// The candidates a borrow kept under `block` could tell from its rebuilt
+/// literal: one something there writes a field of or assigns whole, or one
+/// borrowed there more than once, since each borrow is rebuilt as its own
+/// literal and `ref_eq` tells two kept ones apart.
+fn candidates_pinned_under(
     body: &Body,
     block: BlockId,
     candidates: &IndexSet<u32>,
 ) -> IndexSet<u32> {
-    let mut written = IndexSet::default();
+    let mut pinned = IndexSet::default();
+    let mut borrowed = IndexSet::default();
     body.find_in_nodes_under(NodeRef::Block(block), |node| {
-        if let NodeRef::Expr(e) = node
-            && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+        let NodeRef::Expr(e) = node else { return None::<()> };
+        if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
             && let Some(index) = field_access_of_candidate(body, *target, candidates)
                 .map(|(index, _)| index)
                 .or_else(|| is_candidate_local(body, *target, candidates))
         {
-            written.insert(index);
+            pinned.insert(index);
         }
-        None::<()>
+        if let Some((index, _)) = ref_to_candidate_local(body, e, candidates)
+            && !borrowed.insert(index)
+        {
+            pinned.insert(index);
+        }
+        None
     });
-    written
+    pinned
 }
 
 fn callee_stores_param_at(

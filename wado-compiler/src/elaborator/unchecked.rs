@@ -1,7 +1,5 @@
 //! Where `unchecked` may stand: before a call whose callee a `contract` clause
-//! binds, by its own clauses or by its trait's. An impl states clauses of its
-//! own only on a method its trait leaves unbound, so a call through a bound
-//! sees the trait's clauses or none.
+//! binds, by its own clauses or by its trait's.
 
 use crate::ast::{self, AstVisitor, Expr, Item, Module, UnaryOp};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -16,13 +14,11 @@ const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contrac
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
 const TRAIT_NO_CONTRACT: &str = "this trait method declares no `contract` clause, and `unchecked` \
                                  on a call to it vouches for the trait's alone";
-const IMPL_CLAUSE: &str = "an impl writes no `contract` on a method its trait's clauses bind";
 const INNER_CALL: &str = "postfix operators bind tighter than `unchecked`, so it marks the \
                           whole chain; write `(unchecked …)` around the call it vouches for";
 
 /// An error for each `unchecked` in `module` that marks no call a `contract`
-/// clause binds, and for each clause an impl writes on a method its trait's
-/// clauses bind. `sem` holds the facts the body walk recorded for `module`.
+/// clause binds. `sem` holds the facts the body walk recorded for `module`.
 pub(super) fn misplaced_unchecked(
     module: &Module,
     sem: &ModuleSemantics,
@@ -38,9 +34,6 @@ pub(super) fn misplaced_unchecked(
         found: Vec::new(),
     };
     for item in &module.items {
-        if let Item::Impl(block) = item {
-            finder.impl_clauses_under_trait_clauses(block);
-        }
         finder.visit_item(item);
     }
     finder.found
@@ -53,22 +46,6 @@ struct Finder<'a> {
 }
 
 impl Finder<'_> {
-    /// An error for each clause `block` writes on a method its trait binds:
-    /// a caller through a bound vouches for the trait's clauses, never an
-    /// impl's.
-    fn impl_clauses_under_trait_clauses(&mut self, block: &ast::ImplBlock) {
-        let Some(decl) = self.contracts.implemented_trait(block) else {
-            return;
-        };
-        for method in &block.methods {
-            if let Some(clause) = method.contracts().next()
-                && trait_binds(decl, method)
-            {
-                self.report(Code::TraitDeclInvalid, IMPL_CLAUSE, &clause.span);
-            }
-        }
-    }
-
     fn report(&mut self, code: Code, message: &str, span: &Span) {
         self.found.push(Diagnostic {
             severity: Severity::Error,

@@ -11,7 +11,7 @@ struct Small { value: i32 }
 
 impl Get for Small {
     fn get(&self, i: i32) -> i32
-        contract i < 10, "i must be below 10"
+        contract i < 10
     {
         return self.value + i;
     }
@@ -31,6 +31,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3\n4\n",
-    "stderr_contains": ["i must be below 10"],
+    "stderr_contains": ["condition: i < 10"],
     "trapped": true
 }
