@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791930864492,
+  "lastUpdate": 1791936926769,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66893,6 +66893,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/85291eb249ffa6a1dd6ee5a86c7965ef7eee7a37"
         },
         "date": 1791930863636,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339773,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5f10d5c11fe00584efe8da0c1115ca565a6f7ac9",
+          "message": "Merge pull request #2349 from wado-lang/ccr-14b59f21-p9251f\n\nperf(publish): build every world at once, at -O0 on a dry run",
+          "timestamp": "2026-10-14T08:59:45+09:00",
+          "tree_id": "5b85e92546b5563cc329de69e3a34ff8e1f2869b",
+          "url": "https://github.com/wado-lang/wado/commit/5f10d5c11fe00584efe8da0c1115ca565a6f7ac9"
+        },
+        "date": 1791936926268,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
