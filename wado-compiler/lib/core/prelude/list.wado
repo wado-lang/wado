@@ -178,7 +178,7 @@ impl<T> List<T> {
     /// Removes and returns the element at the given index, shifting all elements after it to the left.
     /// Releases the last slot, under the contract on `List`.
     pub fn remove(&mut self, index: i32) -> T
-        contract 0 <= index < self.len(), "index out of bounds"
+        contract 0 <= index < self.len()
     {
         let value = self.repr[index];
         // Shift elements left
@@ -353,7 +353,7 @@ impl<T> IndexValue<i32> for List<T> {
     // only the end a read past the length but within the capacity would miss.
     #[compiler_item("list_index_value")]
     fn index_value(&self, index: i32) -> Self::Output
-        contract index < self.len(), "index out of bounds"
+        contract index < self.len()
     {
         return builtin::array_get_value(&self.repr, index);
     }
@@ -364,7 +364,7 @@ impl<T> IndexAssign<i32> for List<T> {
 
     #[compiler_item("list_index_assign")]
     fn index_assign(&mut self, index: i32, value: Self::Output) {
-        assert 0 <= index < self.used, "index out of bounds";
+        assert 0 <= index < self.used;
         self.repr[index] = value;
     }
 }
@@ -373,7 +373,7 @@ impl<T: Ref> IndexRef<i32> for List<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T
-        contract index < self.len(), "index out of bounds"
+        contract index < self.len()
     {
         return builtin::array_get_ref(&self.repr, index);
     }
@@ -383,7 +383,7 @@ impl<T: RefMut> IndexRefMut<i32> for List<T> {
     type Output = T;
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T
-        contract index < self.len(), "index out of bounds"
+        contract index < self.len()
     {
         return builtin::array_get_ref_mut(&mut self.repr, index);
     }

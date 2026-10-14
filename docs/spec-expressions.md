@@ -867,6 +867,7 @@ assert steps == [0, 3, 6, 9];
 ```
 
 Iteration never steps past `T`'s maximum. `0 as u8..=255` yields all 256 values
-and stops. A float range does not iterate, but `contains` still works on it.
+and stops. A `char` range steps from `'\u{D7FF}'` straight to `'\u{E000}'`,
+since the surrogates between are no `char`. A float range does not iterate, but `contains` still works on it.
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).
