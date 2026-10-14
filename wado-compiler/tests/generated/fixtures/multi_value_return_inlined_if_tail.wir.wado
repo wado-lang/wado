@@ -192,7 +192,7 @@ type "functype//core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i3
 
 type "functype//multi_value_return_inlined_if_tail.wado/multi_value_return_inlined_if_tail.wado/RunCli^core:serde/FieldSchema::lookup$sroa[return]" = fn(ref Array<u8>, i32, i32) -> [i32, i32];  // TypeId(66)
 
-type "functype//core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String"];  // TypeId(67)
+type "functype//core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>" = fn(ref Array<u8>, i32) -> [ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref null "core:prelude/string.wado//String"];  // TypeId(67)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//StrSlice", ref Array<u8>, i32) -> bool;  // TypeId(68)
 
@@ -2718,31 +2718,29 @@ fn "multi_value_return_inlined_if_tail.wado/multi_value_return_inlined_if_tail.w
     return 0, 0;
 }
 
-fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"(tok) {
-    let $load_0: i32;
+fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"($mv$tok$repr, $mv$tok$used) {
+    let raw: ref "core:prelude/string.wado//String";
     let inline: ref null "core:prelude/string.wado//String";
     let self_13: ref "core:prelude/string.wado//StrSlice";
-    let repr_37: ref Array<u8>;
     let part: ref Array<u8>;
-    $load_0 = tok.used;
-    self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee repr_37(tok.repr), start: 0, end: $load_0 };
+    self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$tok$repr, start: 0, end: $mv$tok$used };
     let $mv_end_3: i32;
-    multivalue_bind [repr_37, $load_0, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$dae[start]"(self_13, $load_0);
-    repr_37 = local.tee self_13(struct.new "core:prelude/string.wado//StrSlice" { repr: repr_37, start: $load_0, end: $mv_end_3 }).repr;
-    builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $load_0))), 0, repr_37, $load_0, $mv_end_3);
-    tok = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee repr_37(builtin::array_new<u8>($mv_end_3)), 0, part, 0, $mv_end_3); repr_37, used: $mv_end_3 };
+    multivalue_bind [$mv$tok$repr, $mv$tok$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$dae[start]"(self_13, $mv$tok$used);
+    $mv$tok$repr = local.tee self_13(struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$tok$repr, start: $mv$tok$used, end: $mv_end_3 }).repr;
+    builtin::array_copy<u8>(local.tee part(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv$tok$used))), 0, $mv$tok$repr, $mv$tok$used, $mv_end_3);
+    raw = struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee $mv$tok$repr(builtin::array_new<u8>($mv_end_3)), 0, part, 0, $mv_end_3); $mv$tok$repr, used: $mv_end_3 };
     inline = ref.null none;
     let $mv$$match_6$1: i32;
-    multivalue_bind [$load_0, $mv$$match_6$1] = (self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: $mv_end_3 }; let $mv_arg_8: ref "core:prelude/string.wado//String"; $mv_arg_8 = global:core:args::$const_obj_24; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"(self_13, $mv_arg_8.repr, $mv_arg_8.used));
-    if $load_0 == 1 {
-        multivalue_bind [repr_37, $load_0] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes$spec0$dae[start]"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: $mv_end_3 }, $mv$$match_6$1);
-        tok = struct.new "core:prelude/string.wado//String" { repr: repr_37, used: $load_0 };
+    multivalue_bind [$mv$tok$used, $mv$$match_6$1] = (self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: $mv_end_3 }; let $mv_arg_8: ref "core:prelude/string.wado//String"; $mv_arg_8 = global:core:args::$const_obj_24; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"(self_13, $mv_arg_8.repr, $mv_arg_8.used));
+    if $mv$tok$used == 1 {
+        multivalue_bind [$mv$tok$repr, $mv$tok$used] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes$spec0$dae[start]"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: $mv_end_3 }, $mv$$match_6$1);
+        raw = struct.new "core:prelude/string.wado//String" { repr: $mv$tok$repr, used: $mv$tok$used };
         $mv$$match_6$1 = $mv$$match_6$1 + 1;
         inline = multivalue_bind [part, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes"(struct.new "core:prelude/string.wado//StrSlice" { repr: part, start: 0, end: $mv_end_3 }, $mv$$match_6$1, $mv_end_3); struct.new "core:prelude/string.wado//String" { repr: part, used: $mv_end_3 };
     } else {
     }
-    $mv_end_3 = local.tee $mv_arg_17((if self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(tok.repr), start: 0, end: tok.used }; multivalue_bind [$mv_end_3, $mv$$match_6$1] = ($mv_arg_8 = global:core:args::$const_obj_21; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"(self_13, $mv_arg_8.repr, $mv_arg_8.used)); $mv_end_3 == 1 -> ref "core:prelude/string.wado//String" {
-        self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(tok.repr), start: 0, end: tok.used };
+    $mv_end_3 = local.tee $mv_arg_17((if self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(raw.repr), start: 0, end: raw.used }; multivalue_bind [$mv_end_3, $mv$$match_6$1] = ($mv_arg_8 = global:core:args::$const_obj_21; "core:prelude/string.wado/core:prelude/string.wado/StrSlice::find<core:prelude/string.wado/String>$sroa[return]"(self_13, $mv_arg_8.repr, $mv_arg_8.used)); $mv_end_3 == 1 -> ref "core:prelude/string.wado//String" {
+        self_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part(raw.repr), start: 0, end: raw.used };
         block -> ref "core:prelude/string.wado//String" {
             $mv_arg_8 = global:core:args::$const_obj_21;
             let $mv_arg_17: ref "core:prelude/string.wado//String";
@@ -2750,10 +2748,10 @@ fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/S
             "core:prelude/string.wado/core:prelude/string.wado/StrSlice::replacen<core:prelude/string.wado/String,core:prelude/string.wado/String>$dae[count]"(self_13, $mv_arg_8.repr, $mv_arg_8.used, $mv_arg_17.repr, $mv_arg_17.used);
         };
     } else {
-        tok;
+        raw;
     })).used;
-    $mv_arg_17 = struct.new "core:prelude/string.wado//String" { repr: part = $mv_arg_17.repr; builtin::array_copy<u8>(local.tee repr_37(builtin::array_new<u8>($mv_end_3)), 0, part, 0, $mv_end_3); repr_37, used: $mv_end_3 };
-    return tok, $mv_arg_17, inline;
+    $mv_arg_17 = struct.new "core:prelude/string.wado//String" { repr: part = $mv_arg_17.repr; builtin::array_copy<u8>(local.tee $mv$tok$repr(builtin::array_new<u8>($mv_end_3)), 0, part, 0, $mv_end_3); $mv$tok$repr, used: $mv_end_3 };
+    return raw, $mv_arg_17, inline;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(self, $mv$pat$repr, $mv$pat$used) {
@@ -2859,8 +2857,8 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"(self) {
 
 fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_field<multi_value_return_inlined_if_tail.wado/RunCli>$sroa[return]"(self) {
     let $load_3: i32;
-    let $load_23: i32;
-    let $load_25: i32;
+    let $load_24: i32;
+    let $load_26: i32;
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/string.wado//String";
@@ -2995,7 +2993,7 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
                     let $mv$lo$raw: ref "core:prelude/string.wado//String";
                     let $mv$lo$folded: ref "core:prelude/string.wado//String";
                     let $mv$lo$inline: ref null "core:prelude/string.wado//String";
-                    multivalue_bind [$mv$lo$raw, $mv$lo$folded, $mv$lo$inline] = "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2, used: $hfs_pos_288 });
+                    multivalue_bind [$mv$lo$raw, $mv$lo$folded, $mv$lo$inline] = "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2, used: $hfs_pos_288 }.repr, $hfs_pos_288);
                     if $inline_core_prelude_array_wado_seq_eq_u8__spec1_3: block -> bool {
                         a_235 = $mv$lo$raw.repr;
                         a_end_237 = $mv$lo$raw.used;
@@ -3040,16 +3038,16 @@ fn "core:args/core:args/ArgvStructAccess^core:serde/DeserializeStruct::next_fiel
                     repr_243 = $mv$lo$folded.repr;
                     let $mv$$match_12$0: i32;
                     let $mv$$match_12$1: i32;
-                    multivalue_bind [$mv$$match_12$0, $mv$$match_12$1] = (let $mv_field_6: i32; $mv_field_6 = $mv$lo$folded.used; "multi_value_return_inlined_if_tail.wado/multi_value_return_inlined_if_tail.wado/RunCli^core:serde/FieldSchema::lookup$sroa[return]"(repr_243, 0, $mv_field_6));
+                    multivalue_bind [$mv$$match_12$0, $mv$$match_12$1] = (let $mv_field_7: i32; $mv_field_7 = $mv$lo$folded.used; "multi_value_return_inlined_if_tail.wado/multi_value_return_inlined_if_tail.wado/RunCli^core:serde/FieldSchema::lookup$sroa[return]"(repr_243, 0, $mv_field_7));
                     if $mv$$match_12$0 == 1 {
                         $licm_de_199.cur_is_option = 1;
                         $licm_de_199.cur_inline = (if ref.is_null($mv$lo$inline) -> ref null "core:prelude/string.wado//String" {
                             $mv$lo$inline;
                         } else {
                             $vc_payload_1 = ref.as_non_null($mv$lo$inline);
-                            struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = $vc_payload_1.repr; $load_23 = $vc_payload_1.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_23)), 0, $array_clone_src_7, 0, $load_23); $array_clone_dst_8, used: $load_23 };
+                            struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_8: ref Array<u8>; $array_clone_src_8 = $vc_payload_1.repr; $load_24 = $vc_payload_1.used; let $array_clone_dst_9: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_9(builtin::array_new<u8>($load_24)), 0, $array_clone_src_8, 0, $load_24); $array_clone_dst_9, used: $load_24 };
                         });
-                        $licm_de_199.cur_name = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_10: ref Array<u8>; $array_clone_src_10 = $mv$lo$folded.repr; $load_25 = $mv$lo$folded.used; let $array_clone_dst_11: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_11(builtin::array_new<u8>($load_25)), 0, $array_clone_src_10, 0, $load_25); $array_clone_dst_11, used: $load_25 };
+                        $licm_de_199.cur_name = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_11: ref Array<u8>; $array_clone_src_11 = $mv$lo$folded.repr; $load_26 = $mv$lo$folded.used; let $array_clone_dst_12: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_12(builtin::array_new<u8>($load_26)), 0, $array_clone_src_11, 0, $load_26); $array_clone_dst_12, used: $load_26 };
                         return 0, 1, $mv$$match_12$1, ref.null none;
                     } else {
                     }
