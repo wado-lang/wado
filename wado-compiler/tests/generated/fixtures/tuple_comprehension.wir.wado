@@ -1019,6 +1019,7 @@ fn "tuple_comprehension.wado/[i32,core:prelude/string.wado/String,i32]^tuple_com
     let start_40: i32;
     let elements: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$f_buf_143: ref "core:prelude/string.wado//String";
+    let $sroa_$f_buf_152: ref "core:prelude/string.wado//String";
     v_12 = self.0;
     $sroa_$f_buf_143 = local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(0, $sroa_$f_buf_143);
@@ -1044,13 +1045,12 @@ fn "tuple_comprehension.wado/[i32,core:prelude/string.wado/String,i32]^tuple_com
     builtin::array_copy<u8>($local_16.repr, start_40, global:tuple_comprehension.wado::$const_obj_15, 0, 1);
     $local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_16 };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__17: block {
-        let $arg_spill_1: ref "core:prelude/string.wado//String";
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(local.tee $arg_spill_1($local_17.buf), $sroa_$f_buf_143.repr, $sroa_$f_buf_143.used);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($local_17.buf, $sroa_$f_buf_143.repr, $sroa_$f_buf_143.used);
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__17;
     };
     start_40 = self.2;
-    $arg_spill_1 = local.tee $sroa_$f_buf_143(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(2, $arg_spill_1);
+    $sroa_$f_buf_152 = local.tee $sroa_$f_buf_143(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(2, $sroa_$f_buf_152);
     if @unlikely(local.tee v_12($sroa_$f_buf_143.used + 1) > builtin::array_len($sroa_$f_buf_143.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_$f_buf_143, v_12);
@@ -1058,8 +1058,8 @@ fn "tuple_comprehension.wado/[i32,core:prelude/string.wado/String,i32]^tuple_com
     new_used_39 = $sroa_$f_buf_143.used;
     $sroa_$f_buf_143.used = v_12;
     builtin::array_copy<u8>($sroa_$f_buf_143.repr, new_used_39, global:tuple_comprehension.wado::$const_obj_15, 0, 1);
-    $arg_spill_1 = $sroa_$f_buf_143;
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(start_40, $arg_spill_1);
+    $sroa_$f_buf_152 = $sroa_$f_buf_143;
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(start_40, $sroa_$f_buf_152);
     parts = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: local.tee elements(array.new_fixed<ref "core:prelude/string.wado//String">()), used: 0 };
     if @unlikely(0 >= builtin::array_len(parts.repr)) {
         cold_path;

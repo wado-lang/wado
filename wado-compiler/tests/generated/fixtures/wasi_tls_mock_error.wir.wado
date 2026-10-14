@@ -182,29 +182,29 @@ fn "wasi_tls_mock_error.wado/run"() with Stdout, Connector, Error {
         conn = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
         rx_17 = builtin::i32_wrap_i64(packed_16 >> 32_i64);
         conn = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(conn);
-        let $mv_arg_4: ref "core:prelude/string.wado//String";
-        $mv_arg_4 = global:wasi_tls_mock_error.wado::$const_obj_5;
-        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(rx_17, $mv_arg_4.repr, $mv_arg_4.used);
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:wasi_tls_mock_error.wado::$const_obj_5;
+        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(rx_17, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(conn);
     } else {
         conn = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"($match_15).payload_0;
-        local.tee $mv_arg_4(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
-        builtin::array_copy<u8>($mv_arg_4.repr, 0, global:wasi_tls_mock_error.wado::$const_obj_4, 0, 8);
+        local.tee $mv_arg_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }).used = 8;
+        builtin::array_copy<u8>($mv_arg_2.repr, 0, global:wasi_tls_mock_error.wado::$const_obj_4, 0, 8);
         other_47 = "wasi_tls_mock_error.wado/$cm_binding__Error_to_debug_string"(conn);
         $inline_core_prelude_string_wado_String__internal_push_string_13: block {
             break_if $inline_core_prelude_string_wado_String__internal_push_string_13 local.tee rx_17(other_47.used) == 0;
-            if @unlikely(local.tee tx_18($mv_arg_4.used + rx_17) > builtin::array_len($mv_arg_4.repr)) {
+            if @unlikely(local.tee tx_18($mv_arg_2.used + rx_17) > builtin::array_len($mv_arg_2.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_4, tx_18);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($mv_arg_2, tx_18);
             }
-            start_57 = $mv_arg_4.used;
-            $mv_arg_4.used = tx_18;
-            builtin::array_copy<u8>($mv_arg_4.repr, start_57, other_47.repr, 0, rx_17);
+            start_57 = $mv_arg_2.used;
+            $mv_arg_2.used = tx_18;
+            builtin::array_copy<u8>($mv_arg_2.repr, start_57, other_47.repr, 0, rx_17);
         };
         rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
         start_57 = builtin::i32_wrap_i64(packed_16 >> 32_i64);
         rx_17 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_17);
-        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_57, $mv_arg_4.repr, $mv_arg_4.used);
+        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(start_57, $mv_arg_2.repr, $mv_arg_2.used);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_17);
         "wasi/resource-drop:wasi/tls/types.wado#error"(conn);
     }

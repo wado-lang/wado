@@ -115,10 +115,7 @@ fn "opt_multi_value_tail_block_prefix.wado/g"(n) {
 fn "opt_multi_value_tail_block_prefix.wado/f"(n) {
     let t: ref "tuple//[i32, i32]";
     let s: i32;
-    t = "opt_multi_value_tail_block_prefix.wado/h"(n);
-    s = block -> i32 {
-        "opt_multi_value_tail_block_prefix.wado/sink"(t.0, t.1);
-    };
+    s = "opt_multi_value_tail_block_prefix.wado/sink"(local.tee t("opt_multi_value_tail_block_prefix.wado/h"(n)).0, t.1);
     return "opt_multi_value_tail_block_prefix.wado/g"(n + s);
 }
 
@@ -359,16 +356,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b17: block {
-        l18: loop {
-            break_if b17 (digit_count - offset) < 2;
+    b16: block {
+        l17: loop {
+            break_if b16 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l18;
+            continue l17;
         };
     };
     if digit_count > offset {
@@ -467,17 +464,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b41: block {
-        l42: loop {
-            break_if b41 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b40: block {
+        l41: loop {
+            break_if b40 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l42;
+            continue l41;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l44: loop {
+        l43: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -507,7 +504,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l44;
+            continue l43;
         };
     };
 }
