@@ -2256,11 +2256,12 @@ impl FunctionTranslator<'_, '_> {
             this.is_stackless_type(ty) && !this.type_table.is_never(ty)
         };
         // A split `&S` reads its referent's fields at the call, as the callee
-        // would have, so every argument after it that runs code runs before
+        // would have, so every argument after it that may write runs before
         // those reads.
         let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
+        let may_write: Vec<bool> = ordered.iter().map(|&op| !self.writes_nothing(op)).collect();
         let runs_before_split_reads =
-            |i: usize| first_borrowed.is_some_and(|r| i > r) && runs_code[i];
+            |i: usize| first_borrowed.is_some_and(|r| i > r) && may_write[i];
         // A local read stays cheap to repeat, so a split parameter takes its
         // fields off one at the call, with nothing evaluated ahead.
         let split_ahead = |i: usize| split.contains_key(&i) && !local_read[i];
@@ -2333,6 +2334,28 @@ impl FunctionTranslator<'_, '_> {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr,
             } => self.reads_a_local(*expr),
+            _ => false,
+        }
+    }
+
+    /// Whether evaluating `op` stores nothing: reads and arithmetic alone.
+    fn writes_nothing(&self, op: Operand) -> bool {
+        let e = match op {
+            Operand::Value(v) => return !self.body.values.names_extraction_source(v),
+            Operand::Expr(e) => e,
+        };
+        match &self.body.exprs[e].kind {
+            ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => {
+                true
+            }
+            ExprKind::Unary { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::FieldAccess { expr, .. } => self.writes_nothing(*expr),
+            ExprKind::Binary { left, right, .. }
+            | ExprKind::Index {
+                expr: left,
+                index: right,
+            } => self.writes_nothing(*left) && self.writes_nothing(*right),
             _ => false,
         }
     }
