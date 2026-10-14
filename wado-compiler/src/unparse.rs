@@ -428,12 +428,7 @@ impl<'a> Unparser<'a> {
         );
         for comment in &self.pending_comments_in(lo, hi) {
             self.emitted_comments.insert(comment.span.start);
-            if spacing == Spacing::KeepBlankLines {
-                self.emit_blank_lines_to(comment.span.line);
-            }
-            self.write_indent();
-            self.emit_comment(comment);
-            self.output.push('\n');
+            self.emit_on_own_line(comment, spacing);
         }
     }
 
@@ -2850,14 +2845,10 @@ impl<'a> Unparser<'a> {
                     continue;
                 }
                 if comment.span.line == attr.span.line {
-                    self.output.pop();
-                    self.output.push_str("  ");
+                    self.emit_at_line_end(comment);
                 } else {
-                    self.emit_blank_lines_to(comment.span.line);
-                    self.write_indent();
+                    self.emit_on_own_line(comment, Spacing::KeepBlankLines);
                 }
-                self.emit_comment(comment);
-                self.output.push('\n');
             }
         }
         self.write_indent();
@@ -2995,33 +2986,46 @@ impl<'a> Unparser<'a> {
         let mut last_was_doc = false;
         for comment in self.leading_of(id) {
             if comment.span.start < end && self.emitted_comments.insert(comment.span.start) {
-                self.emit_blank_lines_to(comment.span.line);
-                self.write_indent();
-                self.emit_comment(comment);
-                self.output.push('\n');
+                self.emit_on_own_line(comment, Spacing::KeepBlankLines);
                 last_was_doc = comment.kind == CommentKind::DocLine;
             }
         }
         last_was_doc
     }
 
+    /// Emit `comment` on an indented line of its own, after the blank lines
+    /// written above it unless `spacing` drops them.
+    fn emit_on_own_line(&mut self, comment: &Comment, spacing: Spacing) {
+        if spacing == Spacing::KeepBlankLines {
+            self.emit_blank_lines_to(comment.span.line);
+        }
+        self.write_indent();
+        self.emit_comment(comment);
+        self.output.push('\n');
+    }
+
     /// Emit `trivia.trailing_of(id)` after the node, inserting it
     /// *before* a trailing newline if the output already ended with one
     /// — keeping the comment glued to the node on the same line.
     fn emit_trailing_for(&mut self, id: AstId) {
-        let comments: Vec<Comment> = self.trailing_of(id).to_vec();
-        for comment in &comments {
+        for comment in self.trailing_of(id) {
             if self.emitted_comments.insert(comment.span.start) {
-                if self.output.ends_with('\n') {
-                    self.output.pop();
-                    self.output.push_str("  ");
-                    self.emit_comment(comment);
-                    self.output.push('\n');
-                } else {
-                    self.output.push_str("  ");
-                    self.emit_comment(comment);
-                }
+                self.emit_at_line_end(comment);
             }
+        }
+    }
+
+    /// Emit `comment` at the end of the last line written, ahead of its
+    /// newline if it has one.
+    fn emit_at_line_end(&mut self, comment: &Comment) {
+        let ended = self.output.ends_with('\n');
+        if ended {
+            self.output.pop();
+        }
+        self.output.push_str("  ");
+        self.emit_comment(comment);
+        if ended {
+            self.output.push('\n');
         }
     }
 
@@ -3057,13 +3061,9 @@ impl<'a> Unparser<'a> {
     /// Flush comments that fall inside a block but after its last
     /// statement (its `inner_tail`), each on its own indented line.
     fn emit_inner_tail_for(&mut self, id: AstId) {
-        let comments: Vec<Comment> = self.inner_tail_of(id).to_vec();
-        for comment in &comments {
+        for comment in self.inner_tail_of(id) {
             if self.emitted_comments.insert(comment.span.start) {
-                self.emit_blank_lines_to(comment.span.line);
-                self.write_indent();
-                self.emit_comment(comment);
-                self.output.push('\n');
+                self.emit_on_own_line(comment, Spacing::KeepBlankLines);
             }
         }
     }
