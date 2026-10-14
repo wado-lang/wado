@@ -79,6 +79,28 @@ fn returns_before_panic(p: &Pair, c: bool, d: bool) -> i32 {
     return p.a + p.b;
 }
 
+struct Queue {
+    at: i32,
+    step: i32,
+    cap: i32,
+}
+
+#[inline("always")]
+fn next_at(q: &Queue) -> i32 {
+    if q.at >= 100 {
+        panic(`past ${q.cap}`);
+    }
+    return q.at + q.step;
+}
+
+// Inlined, `next_at` leaves its panic branch inside a block, where `q.cap` is
+// read on the panic path alone, as at the top level: the reference stays
+// whole rather than load `cap` at every call.
+#[inline("never")]
+fn advanced(q: &Queue) -> i32 {
+    return q.step * 2 + next_at(q);
+}
+
 // A `&mut` handed to a `&S` reads at the call all the same.
 #[inline("never")]
 fn through_mut(w: &mut Pair) -> i32 {
@@ -128,6 +150,8 @@ export fn run() {
     assert with_stream(&x) == 3;
     let bytes = Bytes { data: builtin::black_box([7 as u8, 8, 9]), start: builtin::black_box(1), end: builtin::black_box(3) };
     assert first_byte(&bytes) == 10;
+    let q = Queue { at: builtin::black_box(1), step: builtin::black_box(2), cap: builtin::black_box(9) };
+    assert advanced(&q) == 7;
     assert returns_before_panic(&x, builtin::black_box(true), builtin::black_box(true)) == 0;
     assert returns_before_panic(&x, builtin::black_box(false), builtin::black_box(false)) == 3;
     assert total_plus(&x, bump_a(&mut x)) == 1003;
@@ -158,6 +182,7 @@ __DATA__
         "with_stream\" = fn(i32, i32) -> i32",
         "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
         "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "advanced\" = fn(ref \"opt_multi_value_param_ref.wado//Queue\") -> i32",
         "returns_before_panic\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", bool, bool) -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
