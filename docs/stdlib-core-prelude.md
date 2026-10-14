@@ -3277,14 +3277,14 @@ The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn from_u32(value: u32) -> char`
 
-- `contract char::is_scalar_value(value), "value must be a Unicode scalar value"`
+- `contract char::is_scalar_value(value)`
 
 The char whose scalar value is `value`. `char::try_from` answers for a
 value that may not be one.
 
 #### `pub fn from_i32(value: i32) -> char`
 
-- `contract value >= 0 && char::is_scalar_value(value as u32), "value must be a Unicode scalar value"`
+- `contract value >= 0 && char::is_scalar_value(value as u32)`
 
 The char whose scalar value is `value`. `char::try_from` answers for a
 value that may not be one.
