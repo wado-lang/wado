@@ -1,0 +1,31 @@
+// Arguments are evaluated left to right, and a by-value one is copied as it is
+// taken. A later argument that writes the same value, through a `&mut` it
+// hands on or by assigning a field, runs before the callee does, so a
+// parameter that keeps nothing of its argument still needs the copy.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn bump_a(w: &mut Pair) {
+    w.a += 1000;
+}
+
+#[inline("never")]
+fn two(p: Pair, q: Pair) -> i32 {
+    return p.a * 10 + q.a;
+}
+
+export fn run() {
+    let mut x = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert two(x, then: { bump_a(&mut x); x }) == 1011;
+    let mut y = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert two(y, then: { y.a = 1001; y }) == 1011;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

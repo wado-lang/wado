@@ -2318,6 +2318,14 @@ impl FunctionTranslator<'_, '_> {
         }
         let ordered = self.call_args_in_param_order(func, args);
         let mut_roots = self.call_mut_roots(func, &ordered);
+        // An argument is taken before the ones after it run, so what they write
+        // lands in storage it may still share when the call reads it.
+        let mut written_later: Vec<Vec<u32>> = vec![Vec::new(); ordered.len()];
+        for i in (1..ordered.len()).rev() {
+            let mut roots = written_later[i].clone();
+            roots.extend(self.written_roots(ordered[i].0));
+            written_later[i - 1] = roots;
+        }
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
         let has_receiver = args.receiver().is_some();
@@ -2340,7 +2348,9 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: *is_mut,
                     }
                 } else {
-                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                    let mut roots = mut_roots.clone();
+                    roots.extend_from_slice(&written_later[i]);
+                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &roots)
                 }
             })
             .collect();
@@ -2941,6 +2951,39 @@ impl FunctionTranslator<'_, '_> {
             }
         }
         roots
+    }
+
+    /// The storage roots evaluating `expr` may write: a place it assigns, a
+    /// `&mut` it takes, the referent of a call's `&mut` parameter.
+    fn written_roots(&self, expr: &TirExpr) -> Vec<u32> {
+        struct Scan<'t, 'a, 'p> {
+            translator: &'t FunctionTranslator<'a, 'p>,
+            roots: Vec<u32>,
+        }
+        impl TirRefVisitor for Scan<'_, '_, '_> {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                match &expr.kind {
+                    TirExprKind::Assign { target: place, .. }
+                    | TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: place,
+                    } => self.roots.extend(value_copy::last_use::alias_root(place)),
+                    TirExprKind::Call { func, args, .. } => {
+                        let ordered = self.translator.call_args_in_param_order(func, args);
+                        self.roots
+                            .extend(self.translator.call_mut_roots(func, &ordered));
+                    }
+                    _ => {}
+                }
+                self.walk_expr(expr);
+            }
+        }
+        let mut scan = Scan {
+            translator: self,
+            roots: Vec::new(),
+        };
+        scan.visit_expr(expr);
+        scan.roots
     }
 
     /// A call's arguments paired with their declared `mut`-ness, in the callee's
