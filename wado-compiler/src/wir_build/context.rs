@@ -75,6 +75,15 @@ impl UnregisteredType {
     }
 }
 
+/// A parameter a call site hands over field by field: `ParamAbi::MultiValue`.
+#[derive(Clone, Debug)]
+pub struct SplitParam {
+    /// `(field_name, type_id)` of each Wasm slot, in order.
+    pub fields: Vec<(String, TypeId)>,
+    /// The fields are loaded off a borrow at the call.
+    pub borrowed: bool,
+}
+
 /// Builder context for the `tir_to_wir` translation.
 ///
 /// Accumulates all WIR entities and provides lookup maps for resolving
@@ -184,9 +193,13 @@ pub struct WirContext<'a> {
     /// Functions whose `return_abi` is `MultiValue`, and the per-result
     /// `(field_name, type_id)` each returns in declaration order.
     pub multi_value_return_funcs: IndexMap<FuncId, Vec<(String, TypeId)>>,
-    /// Which parameter positions of a callee arrive as one Wasm slot per field,
-    /// and the `(field_name, type_id)` of each.
-    pub multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>>,
+    /// Which parameter positions of a callee arrive as one Wasm slot per field.
+    pub multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, SplitParam>>,
+    /// The NIR field names, `()` ones included, of each struct or tuple type
+    /// (by `WirTypeId::index`) whose Wasm fields leave out its `()` ones. A
+    /// NIR field index counts these; any other struct's Wasm fields match its
+    /// NIR fields one to one.
+    pub nir_field_names: IndexMap<u32, Vec<String>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<TraitBoundViolation>,
@@ -273,7 +286,7 @@ impl<'a> WirContext<'a> {
         // already resolves its callee by. A name is not an identity.
         let mut multi_value_return_funcs: IndexMap<FuncId, Vec<(String, TypeId)>> =
             IndexMap::default();
-        let mut multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>> =
+        let mut multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, SplitParam>> =
             IndexMap::default();
         for f in &package.functions {
             let f = f.borrow();
@@ -299,14 +312,18 @@ impl<'a> WirContext<'a> {
                 let nir::ParamAbi::MultiValue {
                     field_types,
                     field_names,
+                    borrowed,
                 } = &param.param_abi
                 else {
                     continue;
                 };
-                multi_value_param_funcs
-                    .entry(id())
-                    .or_default()
-                    .insert(param_idx, abi_fields(field_names, field_types));
+                multi_value_param_funcs.entry(id()).or_default().insert(
+                    param_idx,
+                    SplitParam {
+                        fields: abi_fields(field_names, field_types),
+                        borrowed: *borrowed,
+                    },
+                );
             }
         }
 
@@ -353,6 +370,7 @@ impl<'a> WirContext<'a> {
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,
             multi_value_param_funcs,
+            nir_field_names: IndexMap::default(),
             trait_bound_violations: Vec::new(),
             cm_import_violations: Vec::new(),
         }

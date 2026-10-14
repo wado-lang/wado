@@ -216,11 +216,7 @@ impl FunctionTranslator<'_, '_> {
         // Translate default body (wrapped in num_arms + 1 blocks)
         let default_block_count = num_arms + 1;
         for _ in 0..default_block_count {
-            self.label_stack.push(LabelEntry {
-                label: None,
-                is_loop_break: false,
-                is_loop_continue: false,
-            });
+            self.label_stack.push(LabelEntry::ANONYMOUS);
         }
         let default_body = if has_result {
             self.translate_stmts_as_value(&arena.blocks[default].stmts)
@@ -238,11 +234,7 @@ impl FunctionTranslator<'_, '_> {
             .map(|(i, arm)| {
                 let block_count = num_arms - i;
                 for _ in 0..block_count {
-                    self.label_stack.push(LabelEntry {
-                        label: None,
-                        is_loop_break: false,
-                        is_loop_continue: false,
-                    });
+                    self.label_stack.push(LabelEntry::ANONYMOUS);
                 }
                 let body = if has_result {
                     self.translate_stmts_as_value(&arena.blocks[*arm].stmts)
@@ -484,11 +476,8 @@ impl FunctionTranslator<'_, '_> {
         // stack of placeholders serves every arm, trimmed as the walk goes.
         let base_labels = self.label_stack.len();
         let deepest = if_depths.last().copied().unwrap_or(0);
-        self.label_stack.extend((0..deepest).map(|_| LabelEntry {
-            label: None,
-            is_loop_break: false,
-            is_loop_continue: false,
-        }));
+        self.label_stack
+            .extend((0..deepest).map(|_| LabelEntry::ANONYMOUS));
         for (reverse_idx, arm) in arms.iter().rev().enumerate() {
             let source_idx = arms.len() - 1 - reverse_idx;
             let if_nesting = if_depths[source_idx];

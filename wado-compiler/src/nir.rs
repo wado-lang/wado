@@ -769,6 +769,9 @@ pub enum ParamAbi {
     MultiValue {
         field_types: Vec<TypeId>,
         field_names: Vec<String>,
+        /// The parameter is a `&S`: its fields are loaded at the call, after
+        /// every argument that runs code, as the callee would have read them.
+        borrowed: bool,
     },
 }
 
@@ -1002,6 +1005,34 @@ pub struct NirStruct {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<ast::NamePolicy>,
+}
+
+/// The field types and names of a tuple or non-generic struct type, in field
+/// order (what a field index counts, `()` fields included), and whether it is
+/// a struct. `None` for anything else.
+pub fn aggregate_field_info(
+    type_id: TypeId,
+    type_table: &TypeTable,
+    structs: &[NirStruct],
+) -> Option<(Vec<TypeId>, Vec<String>, bool)> {
+    if let Some(elems) = type_table.as_tuple(type_id) {
+        let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
+        return Some((elems, names, false));
+    }
+    let tir::ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
+        return None;
+    };
+    let module_source = type_table.struct_head_module(*def);
+    let name = type_table.struct_rendered_name(*def, type_args);
+    let s = structs
+        .iter()
+        .find(|s| s.name == name && s.module_source == *module_source)?;
+    if !s.type_params.is_empty() {
+        return None;
+    }
+    let types: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
+    let names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
+    Some((types, names, true))
 }
 
 #[derive(Debug, Clone)]

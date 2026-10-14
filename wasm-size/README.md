@@ -52,7 +52,7 @@ Reads gzip data from stdin and decompresses it.
 
 | Language | Size (bytes) | Notes                                  |
 | -------- | -----------: | -------------------------------------- |
-| wado     |       21,697 | stdin + gzip decompress (core:zlib)    |
+| wado     |       21,710 | stdin + gzip decompress (core:zlib)    |
 | c        |       34,571 | stdin + gzip decompress (zlib 1.3.1)   |
 | zig      |       48,300 | stdin + gzip decompress (std.compress) |
 | rust     |       89,688 | stdin + gzip decompress (zlib-rs)      |
@@ -63,7 +63,7 @@ Reads SQL from stdin and writes syntax-highlighted HTML to stdout.
 
 | Language | Size (bytes) | Notes                                       |
 | -------- | -----------: | ------------------------------------------- |
-| wado     |      339,773 | Gale-generated highlighter from `SQLite.g4` |
+| wado     |      339,797 | Gale-generated highlighter from `SQLite.g4` |
 | rust     |    3,485,289 | tree-sitter + tree-sitter-sequel            |
 
 ## Usage
