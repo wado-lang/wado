@@ -44,7 +44,7 @@ use crate::elaborator::trait_env::{
 };
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
 use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
-use crate::resolve::{Resolution, head_site};
+use crate::resolve::Resolution;
 use crate::unparse::unparse_type_into;
 
 /// A static call named the way [symbol notation] writes it — the receiver's
@@ -1990,6 +1990,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let strict = callee_sig
             .as_ref()
             .is_some_and(|sig| sig.declaring_slot_count > 0);
+        let own_from = callee_sig
+            .as_ref()
+            .is_some_and(|sig| self.own_from_sig(sig));
         if let Some(sig) = callee_sig
             && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
             && !sig.own_params.is_empty()
@@ -2164,41 +2167,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Handle From<T>::from calls resolved via bodyless `impl From<T> for Type;`
-        // The synthesized function doesn't exist during resolution, so we generate the call inline.
         if static_call.method == "from"
-            && args.len() == 1
-            && self.requests_from_synthesis(
-                &self.impl_target_at(
-                    head_site(&static_call.target_type),
-                    &get_type_name_static(&static_call.target_type),
-                ),
-                args[0],
-            )
+            && !own_from
+            && let [arg_type] = args[..]
+            && let Some(converted) =
+                self.convert_without_impl(static_call.id, target_type_id, arg_type, false)
         {
-            return self.resolve_from_call(target_type_id, args[0], static_call.id);
-        }
-
-        // Reflexive identity: From<T> for T — return the value unchanged.
-        if static_call.method == "from" && args.len() == 1 && args[0] == target_type_id {
-            return args.into_iter().next().unwrap();
-        }
-
-        // Newtype From conversions: From<Base> for Newtype and From<Newtype> for Base.
-        // Newtypes share the same representation as their base type, so this is a Cast.
-        if static_call.method == "from" && args.len() == 1 {
-            let arg_type = args[0];
-            let base_of_target = self
-                .tysys
-                .type_table
-                .borrow()
-                .get_newtype_base(target_type_id);
-            let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
-            if base_of_target == Some(arg_type) || base_of_arg == Some(target_type_id) {
-                // Reify rebuilds the newtype `Cast`; the body walk projects
-                // only the result type.
-                return target_type_id;
-            }
+            return converted;
         }
 
         let resolved = self.tysys.type_table.borrow().get(target_type_id).clone();
@@ -2932,31 +2907,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.signatures.method_sig(only.method_id)
     }
 
-    /// Whether `impl From<from_type> for target;` requests a body-less derivation,
-    /// so a call may name a conversion no impl block declares yet.
-    pub(super) fn requests_from_synthesis(
-        &self,
-        target: &ImplTargetKey,
-        from_type: TypeId,
-    ) -> bool {
-        let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
-            return false;
-        };
-        let table = self.tysys.type_table.borrow();
-        let from_key = table.type_key(from_type);
-        self.tysys
-            .trait_env
-            .all_impl_keys(target)
-            .iter()
-            .any(|&impl_def| {
-                let sig = self.tysys.signatures.impl_sig(impl_def);
-                self.tysys.trait_env.impl_headers[&impl_def].is_synthesize_request
-                    && sig.trait_decl == Some(from_trait)
-                    && matches!(sig.trait_type_args.as_slice(),
-                        [arg] if table.type_key(*arg) == from_key)
-            })
-    }
-
     /// Report why a static call's arguments matched no impl, when the
     /// receiver's impls explain it: a blanket impl this path cannot
     /// instantiate, or concrete impls none of which accept the arguments'
@@ -3020,12 +2970,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return true;
         }
+        let mut candidates: Vec<String> = survey
+            .candidates
+            .iter()
+            .map(|c| c.spelling.clone())
+            .collect();
+        let mut arg_type = spelled;
+        // Two modules' same-named types spell alike, and the message would
+        // name the argument as both unaccepted and available.
+        if candidates.contains(&arg_type) {
+            let table = self.tysys.type_table.borrow();
+            arg_type = render_type_list_qualified(&table, arg_types);
+            candidates = survey
+                .candidates
+                .iter()
+                .map(|c| render_type_list_qualified(&table, &c.params))
+                .collect();
+        }
         let _ = self.emit(TypeError::NoMatchingTraitArgument {
             trait_name,
             receiver: struct_name.to_string(),
             method: method_name.to_string(),
-            arg_type: spelled,
-            candidates: survey.candidates.into_iter().map(|c| c.spelling).collect(),
+            arg_type,
+            candidates,
             span,
         });
         true
@@ -3830,7 +3797,20 @@ pub(super) struct ArgCandidate {
 /// A parameter or argument list as one spelling: the type alone where there is
 /// one, a parenthesised list where there are several.
 pub(super) fn render_type_list(table: &TypeTable, types: &[TypeId]) -> String {
-    let names: Vec<String> = types.iter().map(|&t| table.type_name(t)).collect();
+    render_names(types.iter().map(|&t| table.type_name(t)).collect())
+}
+
+/// [`render_type_list`], each type qualified by its declaring module.
+fn render_type_list_qualified(table: &TypeTable, types: &[TypeId]) -> String {
+    render_names(
+        types
+            .iter()
+            .map(|&t| table.type_name_qualified(t))
+            .collect(),
+    )
+}
+
+fn render_names(names: Vec<String>) -> String {
     match names.as_slice() {
         [one] => one.clone(),
         _ => format!("({})", names.join(", ")),

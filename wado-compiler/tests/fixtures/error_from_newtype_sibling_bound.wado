@@ -1,0 +1,14 @@
+// Two newtypes of one base do not convert into each other: neither lies down
+// the other's chain, so `Meters: From<Feet>` does not hold.
+
+type Meters = i64;
+type Feet = i64;
+
+fn convert<T: From<Feet>>(f: Feet) -> T { return T::from(f); }
+
+export fn run() {
+    let m = convert::<Meters>(3 as Feet);
+}
+
+__DATA__
+{"compile_error": ":10:13: analysis error: type 'Meters' does not implement trait 'From<Feet>' required by bound on 'T'", "compile_error_count": 1}

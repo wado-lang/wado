@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use wado_compiler::ast::{
     self, AstVisitor, ClosureParam, Expr, ForOfStmt, Function, LetStmt, Pattern, Stmt,
 };
+use wado_compiler::name::INTERNAL_PREFIX;
 use wado_compiler::symbol::SymbolKind;
 use wado_compiler::token::Span;
 
@@ -237,7 +238,8 @@ impl<'a> HintCollector<'a> {
         // elaborator flags that as a diagnostic on its own path.
         for (param_name, arg) in param_names.iter().zip(args.iter()) {
             // A receiver reads as the receiver; `self:` in front of it is noise.
-            if *param_name == SELF_PARAM {
+            // A name the compiler minted is no name the source wrote.
+            if *param_name == SELF_PARAM || param_name.starts_with(INTERNAL_PREFIX) {
                 continue;
             }
             self.push_param_hint(param_name, arg.span());
@@ -454,6 +456,24 @@ mod tests {
                 param_labels.contains(&"a: ".to_string())
                     && param_labels.contains(&"b: ".to_string()),
                 "expected `a:` and `b:` parameter hints at `add(1, 2)`; got {param_labels:?}",
+            );
+        });
+    }
+
+    #[test]
+    fn compiler_minted_parameter_emits_no_hint() {
+        block_on(async {
+            let src = concat!(
+                "variant Event { Count(i32), Label(String) }\n",
+                "impl From<i32> for Event;\n",
+                "fn run() -> Event {\n",
+                "    return Event::from(1);\n",
+                "}\n",
+            );
+            let hints = hints_for(src).await;
+            assert!(
+                !hints.iter().any(|h| h.kind == InlayHintKind::Parameter),
+                "a `From` marker's parameter is no name the source wrote; got {hints:?}",
             );
         });
     }

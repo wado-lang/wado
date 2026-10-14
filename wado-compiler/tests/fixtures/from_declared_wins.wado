@@ -1,0 +1,30 @@
+// A `from` the source declares is what a call runs: a conversion the language
+// provides with no impl never stands in for it.
+
+struct Thing {
+    n: i32,
+}
+
+impl Thing {
+    fn from(other: Thing) -> Thing {
+        return Thing { n: other.n + 1 };
+    }
+}
+
+variant Slot<T> {
+    Full(T),
+    Empty,
+}
+
+impl<T> From<T> for Slot<T>;
+
+test "an inherent `from` on the type itself" {
+    let t = Thing { n: 1 };
+    assert Thing::from(t).n == 2;
+}
+
+test "a generic receiver wraps an instance of itself" {
+    let inner: Slot<i32> = Slot::Full(1);
+    let outer: Slot<Slot<i32>> = Slot::from(inner);
+    assert outer matches { Full(Full(1)) };
+}

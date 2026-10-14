@@ -15,7 +15,6 @@ use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
-use crate::tir;
 use crate::tir::{AnonStructId, EffectRef, TirEffectOp, TirStruct};
 
 /// A function's canonical signature, resolved once by its module's decl
@@ -143,14 +142,6 @@ pub(crate) struct ModuleDecls {
     /// resolution. Reify reads them back into the [`crate::tir::TirModule`]
     /// in `reify_module`.
     pub(crate) pending_anonymous_structs: Vec<TirStruct>,
-
-    /// Synthesis requests recorded by `impl Trait for Type;`.
-    /// The elaborator pushes one per
-    /// `is_synthesize_request` impl block; `reify_module` reads
-    /// this list and pushes each onto the emitted
-    /// `TirModule::synthesis_requests`. Decouples annotate
-    /// (which records) from reify (which emits).
-    pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
 
     /// Bounds the decl pass met before the solver that answers them was built.
     pub(in crate::elaborator) pending_bounds: Vec<PendingBounds>,

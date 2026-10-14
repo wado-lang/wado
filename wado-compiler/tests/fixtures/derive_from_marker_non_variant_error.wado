@@ -1,0 +1,29 @@
+// A `From` marker wraps its value in a variant case, so only a variant derives
+// one, and a marker on any other type says so at the marker.
+
+struct Meters {
+    value: i32,
+}
+
+enum Color {
+    Red,
+}
+
+flags Perms {
+    Read,
+}
+
+impl From<i32> for Meters;
+impl From<i32> for Color;
+impl From<u32> for Perms;
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":16:1: analysis error: cannot derive `From<i32>` for `Meters`: only a variant derives `From`; write the impl",
+    "compile_errors_contains": [
+        "cannot derive `From<i32>` for `Color`: only a variant derives `From`; write the impl",
+        "cannot derive `From<u32>` for `Perms`: only a variant derives `From`; write the impl"
+    ]
+}

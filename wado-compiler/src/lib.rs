@@ -32,6 +32,7 @@ pub(crate) mod escape;
 pub mod flat_package;
 pub mod float_literal_pattern;
 pub mod format_spec;
+pub(crate) mod from_marker;
 pub(crate) mod graph;
 pub mod hashmap;
 pub mod hex_suffix_lookalike;

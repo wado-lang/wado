@@ -1,0 +1,18 @@
+// The method a `From` marker writes out names its parameter with a name no
+// source can spell, so it neither shadows nor is shadowed by a `value` in
+// the module.
+
+fn value() -> i32 {
+    return 1;
+}
+
+variant Event {
+    Count(i32),
+    Label(String),
+}
+
+impl From<i32> for Event;
+
+test {
+    assert Event::from(value()) matches { Count(1) };
+}

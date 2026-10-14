@@ -1,0 +1,17 @@
+// What the prelude converts: a widening, a checked narrowing, a newtype in
+// either direction, and a type to itself.
+
+type Meters = i64;
+
+test {
+    let n: i32 = 42;
+    assert i64::from(n) == 42;
+
+    let wide: i64 = 300;
+    assert i16::try_from(wide).unwrap() == 300;
+    assert `${i8::try_from(wide).unwrap_err()}` == "300 out of range for i8";
+
+    let m = Meters::from(wide);
+    assert i64::from(m) == 300;
+    assert i64::from(wide) == wide;
+}

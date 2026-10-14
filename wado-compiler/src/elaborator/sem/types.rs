@@ -219,11 +219,8 @@ macro_rules! with_body_facts {
             /// 2026-08-24), so only elements the elaborator saw as literals
             /// leave an entry.
             ann_literal_conversions => literal_conversions: $crate::elaborator::sem::types::LiteralFromCall,
-            /// `From<T>::from` call facts recorded at every site that
-            /// synthesises a conversion call: the `?` operator's err-arm
-            /// conversion, and the bodyless-impl static-call inline path.
-            /// Keyed by the caller's [`AstId`] (the `?` expr / static-call
-            /// expr). See [`FromCallFacts`].
+            /// The `From<T>::from` call a `?` converts its error through,
+            /// keyed by the `?` expression's [`AstId`]. See [`FromCallFacts`].
             ann_from_call_facts => from_call_facts: $crate::elaborator::sem::types::FromCallFacts,
             /// `IndexAssign` dispatch for `arr[i] = v` and `arr[i] OP= v`,
             /// keyed by the *inner* [`crate::ast::IndexExpr`]'s [`AstId`] and
@@ -254,6 +251,9 @@ macro_rules! with_body_facts {
             /// `static_method_dispatch` / `generic_instantiations`, as a
             /// call's would.
             ann_tagged_template => tagged_templates: $crate::tir::TypeId,
+            /// The case a `builtin::wrap_in_case` call builds, keyed by the
+            /// call's [`AstId`]: the one whose payload is the call's `P`.
+            ann_wrapped_case => wrapped_cases: u32,
         }
     };
 }
@@ -451,8 +451,8 @@ impl BodyFacts {
     /// `(use site, declaration)` pairs.
     ///
     /// A pair is absent where no declaration backs the callee — an auto-derived
-    /// `Eq` / `Ord`, a `From` impl synthesis mints later, a receiver that is a
-    /// type parameter whose block monomorphization picks.
+    /// `Eq` / `Ord`, a receiver that is a type parameter whose block
+    /// monomorphization picks.
     fn dispatch_edges(&self) -> impl Iterator<Item = (AstId, DefId)> + '_ {
         let methods = self
             .method_dispatch
@@ -587,27 +587,29 @@ pub(crate) struct MethodNames {
     pub(crate) mangled: String,
 }
 
-/// Resolved `From<T>::from` call facts recorded at every site that
-/// invokes the conversion: the `?` operator's error-arm conversion
-/// (`expr.rs:resolve_question_mark_result`), the bodyless
-/// `impl From<X> for T;` static-call inline (`call.rs` /
-/// `method_call.rs`). Reify reads these to rebuild the same
-/// `TirExprKind::Call` without re-walking loaded modules to find the
+/// The `From<T>::from` call a `?` converts its error through
+/// (`expr.rs:resolve_question_mark_result`). Reify reads these to rebuild the
+/// same `TirExprKind::Call` without re-walking loaded modules to find the
 /// impl's home or re-mangling the method name.
 #[derive(Clone)]
 pub(crate) struct FromCallFacts {
-    /// The `from` method the conversion calls.
+    /// The `from` method the conversion calls: the impl's, or the trait's
+    /// where the receiver is a type parameter.
     pub(crate) method_def: Option<DefId>,
-    /// Module that hosts the `impl From<From> for Target` block (or
-    /// the auto-derived synthesis site).
+    /// Module that hosts the `impl From<From> for Target` block, or the `?`'s
+    /// own where the receiver is a type parameter.
     pub(crate) module_source: ModuleSource,
     /// The receiver the call's method name is built from.
     pub(crate) target_name: FqTypeName,
-    /// `fq_type_name(from_type)` — the conversion source type, used to build
-    /// `LocalMethodName::trait_name`'s `From<…>` form.
-    pub(crate) from_name: FqTypeName,
-    /// The `From` trait, named by the module that declares it.
-    pub(crate) from_trait_name: FqTraitName,
+    /// Whether the receiver is a type parameter, which each instance's
+    /// dispatch resolves: `F` in `fn f<F: From<E>>() -> Result<T, F>`.
+    pub(crate) type_param_receiver: bool,
+    /// The `From<…>` the callee's name carries: as the selected block writes
+    /// it, or as the `?` asks it where no block is selected.
+    pub(crate) trait_name: FqTraitName,
+    /// The target's arguments a generic block is instantiated at; empty for
+    /// a concrete one.
+    pub(crate) impl_type_args: Vec<TypeId>,
 }
 
 /// The trait method a literal lowers to (WEP 2026-08-24): an
@@ -1160,17 +1162,18 @@ pub(crate) enum DesugarKind {
     /// `IndexExpr` keeps its own `expression_types` entry so reify
     /// types the synthesised initialiser correctly.
     IndexMutMethodCall,
-    /// `Newtype::from(x)` where `x` is already of the newtype's base
-    /// type — the elaborator collapses the call to `x` itself. Reify
-    /// reads this tag on the outer `Call`'s [`AstId`] and emits the
-    /// inner argument's TIR directly, skipping the call construction.
+    /// `T::from(x)` where `x` is already a `T` — the elaborator collapses
+    /// the call to `x` itself. Reify reads this tag on the outer `Call`'s
+    /// [`AstId`] and emits the inner argument's TIR directly, skipping the
+    /// call construction.
     NewtypeFromCollapse,
-    /// `Base::from(Newtype_val)` where `Newtype = Base` — the elaborator
-    /// lowers to a `Cast` of the argument to the base type. Reify reads
-    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    /// `Base::from(x)` where `Base` lies down the newtype chain of `x`'s
+    /// type — the elaborator lowers to a `Cast` of the argument to the base.
+    /// Reify reads this tag on the outer `Call`'s `AstId` and emits the same
+    /// shape.
     NewtypeFromUnwrap,
-    /// `Newtype::from(Base_val)` where `Newtype = Base` — the elaborator
-    /// lowers to a `Cast` of the argument to the newtype. Reify reads
-    /// this tag on the outer `Call`'s `AstId` and emits the same shape.
+    /// `Newtype::from(x)` where `x`'s type lies down `Newtype`'s chain — the
+    /// elaborator lowers to a `Cast` of the argument to the newtype. Reify
+    /// reads this tag on the outer `Call`'s `AstId` and emits the same shape.
     NewtypeFromWrap,
 }

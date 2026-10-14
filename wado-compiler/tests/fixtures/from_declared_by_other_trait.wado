@@ -1,0 +1,53 @@
+// A `from` another trait declares is the call, even where the language would
+// convert the argument with no impl: the conversion answers `From` alone.
+
+trait Make {
+    fn from(x: Self) -> Self;
+}
+
+struct Point {
+    x: i32,
+}
+
+impl Make for Point {
+    fn from(p: Point) -> Point {
+        return Point { x: p.x + 1 };
+    }
+}
+
+struct Holder<T> {
+    value: T,
+    made: i32,
+}
+
+impl<T> Make for Holder<T> {
+    fn from(h: Holder<T>) -> Holder<T> {
+        return Holder { value: h.value, made: h.made + 1 };
+    }
+}
+
+type Meters = i64;
+
+trait Scale {
+    fn from(m: i64) -> Self;
+}
+
+impl Scale for Meters {
+    fn from(m: i64) -> Meters {
+        return (m * 1000) as Meters;
+    }
+}
+
+test "to the same type" {
+    assert Point::from(Point { x: 1 }).x == 2;
+}
+
+test "to the same type under a turbofish" {
+    let h = Holder::<i32>::from(Holder { value: 4, made: 0 });
+    assert h.made == 1;
+    assert h.value == 4;
+}
+
+test "along a newtype chain" {
+    assert Meters::from(2 as i64) == 2000 as Meters;
+}

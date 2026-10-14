@@ -1,0 +1,39 @@
+// The conversions no impl writes satisfy a `From` bound: a type to itself, and
+// a newtype to and from its base.
+
+type Meters = i64;
+type UserId = u64;
+
+struct Point { x: i32 }
+
+fn convert<T: From<i64>>(v: i64) -> T { return T::from(v); }
+fn unwrap_meters<T: From<Meters>>(m: Meters) -> T { return T::from(m); }
+fn same<T: From<T>>(v: T) -> T { return T::from(v); }
+fn id_of<T: From<u64>>(raw: u64) -> T { return T::from(raw); }
+
+test "a type converts to itself through a bound" {
+    assert convert::<i64>(3) == 3;
+    assert same(Point { x: 6 }).x == 6;
+    assert same("s") == "s";
+}
+
+test "a newtype converts from its base through a bound" {
+    assert convert::<Meters>(3) == 3 as Meters;
+    assert id_of::<UserId>(42) == 42 as UserId;
+}
+
+test "a newtype converts to its base through a bound" {
+    assert unwrap_meters::<i64>(4 as Meters) == 4;
+    assert unwrap_meters::<Meters>(5 as Meters) == 5 as Meters;
+}
+
+type Span = Meters;
+
+fn unwrap_span<T: From<Span>>(s: Span) -> T { return T::from(s); }
+
+test "a newtype converts along its whole chain of bases" {
+    assert convert::<Span>(6) == 6 as Span;
+    assert unwrap_span::<i64>(7 as Span) == 7;
+    assert Span::from(8 as i64) == 8 as Span;
+    assert i64::from(9 as Span) == 9;
+}

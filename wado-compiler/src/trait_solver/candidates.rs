@@ -87,7 +87,13 @@ pub fn bound_candidates(
 #[must_use]
 pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &SolverType) -> bool {
     let def = &program.impls[&id];
-    chain(program, ty)
+    let levels = chain(program, ty);
+    let reached = if program.not_inherited.contains(&id) {
+        &levels[..(own_levels(ty) as usize).min(levels.len())]
+    } else {
+        &levels[..]
+    };
+    reached
         .iter()
         .any(|level| impl_applies(program, env, scope, id, def, level).is_some())
 }
@@ -105,6 +111,7 @@ fn collect(
     // What a level withholds, no impl on it answers and no level below it
     // lends.
     let mut withheld: Vec<TraitDeclId> = Vec::new();
+    let own_levels = own_levels(receiver);
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
         let depth = u32::try_from(depth).expect("a chain shorter than 2^32");
         withheld.extend(withheld_at(program, ty));
@@ -112,7 +119,9 @@ fn collect(
             let Some(trait_) = def.trait_ else {
                 continue;
             };
-            if program.duplicates.contains(&impl_) {
+            if program.duplicates.contains(&impl_)
+                || (depth >= own_levels && program.not_inherited.contains(&impl_))
+            {
                 continue;
             }
             let own = program
@@ -144,6 +153,16 @@ fn collect(
         found.out_of_scope.clear();
     }
     found
+}
+
+/// How many of [`chain`]'s levels are the receiver's own, before any newtype
+/// base: `&W` and `W` under a reference, else the receiver alone.
+fn own_levels(receiver: &SolverType) -> u32 {
+    if matches!(receiver, SolverType::Ref { .. }) {
+        2
+    } else {
+        1
+    }
 }
 
 /// The levels of the receiver, nearest first. The index of a type here is the

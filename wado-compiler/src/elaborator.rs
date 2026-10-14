@@ -58,7 +58,6 @@ use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility,
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
-use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
 pub(crate) use crate::elaborator::method_lookup::ImplParamSlots;
@@ -1223,32 +1222,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.impl_facts.insert(key, info);
     }
 
-    /// Record an `impl Trait for Type;` synthesis request. `reify_module` reads
-    /// [`sem::decls::ModuleDecls::pending_synthesis_requests`] and
-    /// pushes each onto the emitted [`tir::TirModule::synthesis_requests`].
-    pub(super) fn record_pending_synthesis_request(&mut self, req: tir::SynthesisRequest) {
-        self.sem.decls.pending_synthesis_requests.push(req);
-    }
-
-    fn classify_from_marker(
-        &mut self,
-        trait_type: &ast::Type,
-        marked: Option<DefId>,
-    ) -> Option<tir::SynthTrait> {
-        let from = self.tysys.compiler_trait_def(CompilerItem::From);
-        if marked.is_none_or(|trait_| from != Some(trait_)) {
-            return None;
-        }
-        if let ast::Type::Generic(generic) = trait_type
-            && generic.args.len() == 1
-        {
-            let source = self.resolve_type(&generic.args[0]);
-            Some(tir::SynthTrait::From { source })
-        } else {
-            None
-        }
-    }
-
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
@@ -1345,22 +1318,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 struct_name,
                 impl_block.span,
             );
-        } else if let Some(trait_ref) = self.classify_from_marker(trait_type, marked) {
-            let target_type_id = self.resolve_type(&impl_block.ty);
-            let type_params: Vec<_> = self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .iter()
-                .map(|(name, b)| (name.clone(), b.index, b.type_id))
-                .collect();
-            self.record_pending_synthesis_request(tir::SynthesisRequest {
-                trait_ref,
-                target_type_name: struct_name.to_string(),
-                target_type_id,
-                type_params,
-                span: impl_block.span,
-            });
         } else {
             let is_display = marked.is_some_and(|trait_| self.tysys.is_display_trait_of(trait_));
             let _ = self.emit(types::TypeError::UnsupportedSynthesisTrait {

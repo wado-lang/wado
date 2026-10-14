@@ -1236,7 +1236,10 @@ is never derived.
 A marker `impl Trait for Type;` (a semicolon instead of a block) asks the
 compiler to write the impl's methods. It is accepted for `From`, `Serialize`,
 `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`, on a struct, enum,
-variant, or flags type.
+variant, or flags type, except where the trait narrows it: `Default` derives
+only for a struct ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)),
+and `From` only for a variant
+([Deriving `From` for a Variant](./spec-standard-traits.md#deriving-from-for-a-variant)).
 
 <!-- {"fixture":"spec_traits_marker_impl.wado"} -->
 

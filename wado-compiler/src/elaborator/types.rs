@@ -1030,6 +1030,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Coherence violation: a `From` impl whose conversion the language
+    /// already provides, to the same type or along a newtype chain. The
+    /// provided cast answers every call, so the body would never run.
+    FromOverlapsProvided {
+        /// `From<P> for T`, as the type table names it.
+        header: String,
+        /// Which provided conversion answers it.
+        provided: &'static str,
+        span: Span,
+    },
+
     /// Coherence violation: one impl written twice, at the same trait arguments,
     /// target and bounds. No rank separates them, so without this the
     /// collection order decides which body every call runs.
@@ -2370,6 +2381,17 @@ impl TypeError {
                 Code::OrphanRule,
                 format!(
                     "orphan rule violation: cannot implement foreign trait `{trait_name}` for foreign type `{self_type_name}`"
+                ),
+                *span,
+            ),
+            TypeError::FromOverlapsProvided {
+                header,
+                provided,
+                span,
+            } => (
+                Code::OrphanRule,
+                format!(
+                    "`impl {header}` overlaps a conversion the language provides: {provided}, so this body would never run"
                 ),
                 *span,
             ),
