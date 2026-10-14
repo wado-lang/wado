@@ -2951,7 +2951,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The storage roots evaluating `expr` may write: a place it assigns, a
-    /// `&mut` it takes, the referent of a call's `&mut` parameter.
+    /// `&mut` it takes, a handle a call is given, a `fn mut` it calls.
     fn written_roots(&self, expr: &TirExpr) -> Vec<u32> {
         struct Scan<'t, 'a, 'p> {
             translator: &'t FunctionTranslator<'a, 'p>,
@@ -2983,7 +2983,8 @@ impl FunctionTranslator<'_, '_> {
                         expr: place,
                     } => self.roots.extend(value_copy::last_use::alias_root(place)),
                     TirExprKind::Call { func, args, .. } => {
-                        // A receiver written through is a place, not a handle.
+                        // A receiver the callee writes through is a place, not
+                        // a handle, so only its declaration says so.
                         let ordered = self.translator.call_args_in_param_order(func, args);
                         self.roots
                             .extend(self.translator.call_mut_roots(func, &ordered));
