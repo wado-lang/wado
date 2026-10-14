@@ -2225,8 +2225,8 @@ impl FunctionTranslator<'_, '_> {
         ordered: &[Operand],
         split: &IndexMap<usize, SplitParam>,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        // Anything but a local read or a promoted value, which run nothing, and
-        // a promoted value does where its tree names an extraction source.
+        // Whether evaluating each argument runs code: a local read runs none,
+        // and a promoted value none unless its tree names an extraction source.
         let runs_code: Vec<bool> = ordered
             .iter()
             .map(|&op| match op {
