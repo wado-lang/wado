@@ -1848,11 +1848,7 @@ impl FunctionTranslator<'_, '_> {
                     let else_block = *else_block;
                     if let Some(result_type) = self.infer_stmts_result_type(then_block) {
                         let cond = self.translate_operand(condition);
-                        self.label_stack.push(LabelEntry {
-                            label: None,
-                            is_loop_break: false,
-                            is_loop_continue: false,
-                        });
+                        self.label_stack.push(LabelEntry::ANONYMOUS);
                         let then_body =
                             self.translate_stmts_as_value(&arena.blocks[then_block].stmts);
                         let else_body =
@@ -1932,11 +1928,7 @@ impl FunctionTranslator<'_, '_> {
                 let else_branch = *else_branch;
                 if let Some(result_type) = self.infer_stmts_result_type(then_branch) {
                     let cond = self.translate_operand(condition);
-                    self.label_stack.push(LabelEntry {
-                        label: None,
-                        is_loop_break: false,
-                        is_loop_continue: false,
-                    });
+                    self.label_stack.push(LabelEntry::ANONYMOUS);
                     let then_body = self.translate_stmts_as_value(&arena.blocks[then_branch].stmts);
                     let else_body =
                         else_branch.map(|b| self.translate_stmts_as_value(&arena.blocks[b].stmts));
@@ -2123,12 +2115,7 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => {
                 let cond = self.translate_operand(*condition);
-                // Push a label entry for the if block scope
-                self.label_stack.push(LabelEntry {
-                    label: None,
-                    is_loop_break: false,
-                    is_loop_continue: false,
-                });
+                self.label_stack.push(LabelEntry::ANONYMOUS);
                 let then_body = self.translate_stmts(&arena.blocks[*then_block].stmts);
                 let else_body = else_block
                     .as_ref()
@@ -2333,15 +2320,15 @@ impl FunctionTranslator<'_, '_> {
             return call;
         }
         prelude.push(call);
-        if !self.prelude_block_holds(result_type, multi_value) {
-            WirInstr::Seq(prelude)
-        } else {
+        if self.prelude_block_holds(result_type, multi_value) {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
             WirInstr::Block {
                 label: None,
                 result: Some(result_wir),
                 body: prelude,
             }
+        } else {
+            WirInstr::Seq(prelude)
         }
     }
 
@@ -2725,7 +2712,8 @@ impl FunctionTranslator<'_, '_> {
                 };
                 let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
                 let value_block = self.prelude_block_holds(expr.type_id, false);
-                let (prelude, field_instrs) = self.translate_args_erasing_unit(&values, value_block);
+                let (prelude, field_instrs) =
+                    self.translate_args_erasing_unit(&values, value_block);
                 let new = self.struct_new(type_id, field_instrs);
                 self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }
@@ -2863,11 +2851,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let cond = self.translate_operand(*condition);
                 let has_result = !self.is_stackless_type(expr.type_id);
-                self.label_stack.push(LabelEntry {
-                    label: None,
-                    is_loop_break: false,
-                    is_loop_continue: false,
-                });
+                self.label_stack.push(LabelEntry::ANONYMOUS);
                 let then_body = if has_result {
                     self.translate_stmts_as_value(&arena.blocks[*then_branch].stmts)
                 } else {

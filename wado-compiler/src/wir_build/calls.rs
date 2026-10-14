@@ -1457,17 +1457,16 @@ impl FunctionTranslator<'_, '_> {
             args: call_args,
         };
 
-        if !in_block {
-            stmts.push(call_ref);
-            WirInstr::Seq(stmts)
-        } else {
-            stmts.push(call_ref);
+        stmts.push(call_ref);
+        if in_block {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
             WirInstr::Block {
                 label: None,
                 result: Some(result_wir),
                 body: stmts,
             }
+        } else {
+            WirInstr::Seq(stmts)
         }
     }
 
