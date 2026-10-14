@@ -4,19 +4,19 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AstVisitor, AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block,
-    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    EffectsSource, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt,
-    ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-    LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound,
-    TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WithHandlerExpr, WorldDecl, WorldExport, written_params,
+    AttrArg, AttrItem, AttrObject, AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt,
+    BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, EffectsSource, EnumCase,
+    EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
+    FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes,
+    IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt,
+    Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module,
+    Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr,
+    Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
+    TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
+    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
+    WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
 use crate::comment::{Comment, CommentKind, TriviaMap};
@@ -380,8 +380,9 @@ impl<'a> Unparser<'a> {
     /// line, and the body must not adopt it, so it takes a line of its own and
     /// the brace another, as after a `contract` clause (#2331). No `{` is there
     /// where comments are not kept, nor for the block the parser builds around
-    /// an `else if` or a bare `return`.
-    fn open_brace(&mut self, head: usize, brace: usize) {
+    /// an `else if` or a bare `return`, and then the body's statements own the
+    /// comments the head left. Returns where the body's comments start.
+    fn open_brace(&mut self, head: usize, brace: usize) -> usize {
         let is_token = self
             .trivia
             .is_some_and(|trivia| trivia.is_open_brace(brace));
@@ -390,6 +391,7 @@ impl<'a> Unparser<'a> {
         } else {
             self.output.push_str(" {\n");
         }
+        if is_token { brace } else { 0 }
     }
 
     /// Open the body whose `{` is at `brace` on a line of its own, the
@@ -1033,12 +1035,13 @@ impl<'a> Unparser<'a> {
         self.indent_level -= 1;
 
         if let Some(body) = &f.body {
-            if contracts.is_empty() {
-                self.open_brace(f.span.start, body.span.start);
+            let floor = if contracts.is_empty() {
+                self.open_brace(f.span.start, body.span.start)
             } else {
                 self.open_brace_on_own_line(f.span.start, body.span.start);
-            }
-            self.block_rest(body);
+                body.span.start
+            };
+            self.block_rest(body, floor);
             self.output.push('\n');
         } else {
             self.output.push_str(";\n");
@@ -1532,20 +1535,10 @@ impl<'a> Unparser<'a> {
         unparse_fn_signature_in_bound_into(sig, &mut self.output);
     }
 
-    fn unparse_block(&mut self, block: &Block) {
+    /// `block`'s statements, taking no comment written before `floor`.
+    fn unparse_block(&mut self, block: &Block, floor: usize) {
         let saved_line = self.last_source_line;
         self.last_source_line = block.span.line;
-        // A block takes no comment written before its `{`. One the parser
-        // builds, around an `else if` or a bare `return`, has no brace, and its
-        // statement's comments are its own.
-        let floor = if self
-            .trivia
-            .is_some_and(|t| t.is_open_brace(block.span.start))
-        {
-            block.span.start
-        } else {
-            0
-        };
 
         for stmt in &block.stmts {
             if stmt.as_contract().is_some() {
@@ -1687,7 +1680,7 @@ impl<'a> Unparser<'a> {
         if let Some(else_block) = &i.else_block {
             if else_block.stmts.len() == 1
                 && let Stmt::If(nested_if) = &else_block.stmts[0]
-                && self.else_if_has_no_comment(&i.then_block, nested_if.span)
+                && self.else_if_has_no_comment(&i.then_block, else_block, nested_if.span)
             {
                 self.output.push_str(" else ");
                 self.unparse_if_stmt(nested_if);
@@ -1867,9 +1860,12 @@ impl<'a> Unparser<'a> {
             Expr::StaticMethodCall(s) => self.unparse_static_method_call(s),
             Expr::FieldAccess(f) => self.unparse_field_access(f),
             Expr::Index(i) => self.unparse_index(i),
-            // A closure's or a match arm's body, printed without the head
-            // `unparse_body` would bound its comments by.
-            Expr::Block(b) => self.braced_block(b.span.start, b),
+            // A closure's or a match arm's body, printed apart from the head
+            // `unparse_body` prints it after.
+            Expr::Block(b) => {
+                self.output.push_str("{\n");
+                self.block_rest(b, b.span.start);
+            }
             Expr::If(i) => self.unparse_if_expr(i),
             Expr::Match(m) => self.unparse_match(m),
             Expr::Matches(m) => self.unparse_matches(m),
@@ -2327,8 +2323,8 @@ impl<'a> Unparser<'a> {
     /// A construct's `{ … }` body after the head starting at `head`: the brace,
     /// the statements one level in, and the `}`, with nothing after it.
     fn braced_block(&mut self, head: usize, b: &Block) {
-        self.open_brace(head, b.span.start);
-        self.block_rest(b);
+        let floor = self.open_brace(head, b.span.start);
+        self.block_rest(b, floor);
     }
 
     /// A closure's or a match arm's body after the head starting at `head`, a
@@ -2343,9 +2339,9 @@ impl<'a> Unparser<'a> {
     }
 
     /// A block after its `{` line: the statements one level in, and the `}`.
-    fn block_rest(&mut self, b: &Block) {
+    fn block_rest(&mut self, b: &Block, floor: usize) {
         self.indent_level += 1;
-        self.unparse_block(b);
+        self.unparse_block(b, floor);
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
@@ -2424,7 +2420,7 @@ impl<'a> Unparser<'a> {
                     expr: Expr::If(nested_if),
                     ..
                 }) = &else_block.stmts[0]
-                && self.else_if_has_no_comment(&i.then_block, nested_if.span)
+                && self.else_if_has_no_comment(&i.then_block, else_block, nested_if.span)
             {
                 self.output.push_str(" else ");
                 self.unparse_if_expr_multiline(nested_if);
@@ -2437,9 +2433,15 @@ impl<'a> Unparser<'a> {
 
     /// Whether `else` and the `if` it chains to may share a line. A comment
     /// between them has no slot there, so the chain keeps the braces of the
-    /// `else` block it is, and the comment leads the nested `if` inside them.
-    fn else_if_has_no_comment(&self, then_block: &Block, nested_if: Span) -> bool {
+    /// `else` block it is, and the comment stays inside them, around the `if`.
+    fn else_if_has_no_comment(
+        &self,
+        then_block: &Block,
+        else_block: &Block,
+        nested_if: Span,
+    ) -> bool {
         !self.has_comment_in_range(then_block.span.end, nested_if.start)
+            && !self.has_comment_in_range(nested_if.end, else_block.span.end)
     }
 
     fn unparse_match(&mut self, m: &MatchExpr) {
@@ -2455,11 +2457,11 @@ impl<'a> Unparser<'a> {
         if m.arms.len() >= 2 {
             return false;
         }
-        // All arms must have inline-safe bodies, and no comments inside the match body
         if m.arms.iter().any(|arm| !is_inline_safe_expr(&arm.body)) {
             return false;
         }
-        if self.subtree_has_trivia(m) {
+        // The one-line form has no slot for a comment.
+        if self.has_comment_in_range(m.span.start, m.span.end) {
             return false;
         }
 
@@ -2831,22 +2833,31 @@ impl<'a> Unparser<'a> {
     /// Emit each outer attribute on its own indented line, then write the indent
     /// for the line that follows. Replaces the `write_indent + for attr {...}` prologue
     /// shared by every item and member declaration. `id`'s leading comments
-    /// written after an attribute follow it, where they were written.
+    /// written after an attribute follow it, where they were written: on its
+    /// line, or below it with their blank lines.
     fn emit_outer_attrs(&mut self, id: AstId, attrs: &[Attribute]) {
         let leading = self.leading_of(id);
         for (i, attr) in attrs.iter().enumerate() {
             self.write_indent();
             self.unparse_attribute(attr);
             self.output.push('\n');
+            self.last_source_line = self.last_source_line.max(attr.span.line);
             let next = attrs.get(i + 1).map_or(usize::MAX, |next| next.span.start);
             for comment in leading {
-                if (attr.span.end..next).contains(&comment.span.start)
-                    && self.emitted_comments.insert(comment.span.start)
+                if !(attr.span.end..next).contains(&comment.span.start)
+                    || !self.emitted_comments.insert(comment.span.start)
                 {
-                    self.write_indent();
-                    self.emit_comment(comment);
-                    self.output.push('\n');
+                    continue;
                 }
+                if comment.span.line == attr.span.line {
+                    self.output.pop();
+                    self.output.push_str("  ");
+                } else {
+                    self.emit_blank_lines_to(comment.span.line);
+                    self.write_indent();
+                }
+                self.emit_comment(comment);
+                self.output.push('\n');
             }
         }
         self.write_indent();
@@ -3041,45 +3052,6 @@ impl<'a> Unparser<'a> {
                 self.emit_comment(comment);
             }
         }
-    }
-
-    /// Returns true iff any node nested inside the match expression
-    /// `m` has any leading, trailing, or inner-tail trivia attached —
-    /// i.e. any comment lives strictly inside `m`'s source range.
-    /// Used by `try_inline_match` to bail out of single-line rendering
-    /// when collapsing arms onto one line would silently drop comments.
-    fn subtree_has_trivia(&self, m: &MatchExpr) -> bool {
-        let trivia = match self.trivia {
-            Some(t) => t,
-            None => return false,
-        };
-        struct Probe<'t> {
-            trivia: &'t TriviaMap,
-            found: bool,
-        }
-        impl AstVisitor for Probe<'_> {
-            fn visit_id(&mut self, id: AstId, _span: Span) {
-                if self.found {
-                    return;
-                }
-                if !self.trivia.leading_of(id).is_empty()
-                    || !self.trivia.trailing_of(id).is_empty()
-                    || !self.trivia.inner_tail_of(id).is_empty()
-                {
-                    self.found = true;
-                }
-            }
-        }
-        let mut probe = Probe {
-            trivia,
-            found: false,
-        };
-        // `walk_match_expr` deliberately omits `m.id` itself (its caller
-        // emits it). For this probe we only care about *interior*
-        // trivia, so leaving `m.id` out is exactly the behaviour we
-        // want — leading/trailing of `m` itself live outside `m.span`.
-        AstVisitor::visit_match_expr(&mut probe, m);
-        probe.found
     }
 
     /// Flush comments that fall inside a block but after its last

@@ -4335,6 +4335,74 @@ fn test_format_comment_among_attributes_stays_put() {
     assert_format_preserves_ast(source);
 }
 
+/// A form that would place a comment inside it never collapses to the one-line
+/// form, which has no slot for one.
+#[test]
+fn test_format_comment_keeps_the_multiline_form() {
+    let source = concat!(
+        "fn f(n: i32, b: bool) -> i32 {\n",
+        "    let c = match n { _ /* z */ => 0 };\n",
+        "    let d = match n {\n",
+        "        _ => 0,\n",
+        "        // last\n",
+        "    };\n",
+        "    if b {\n",
+        "        return 0;\n",
+        "    } else {\n",
+        "        if n > 0 {\n",
+        "            return 1;\n",
+        "        }\n",
+        "        // tail of else\n",
+        "    }\n",
+        "    return c + d;\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(n: i32, b: bool) -> i32 {\n",
+        "    let c = match n {\n",
+        "        _ => 0,\n",
+        "        /* z */\n",
+        "    };\n",
+        "    let d = match n {\n",
+        "        _ => 0,\n",
+        "        // last\n",
+        "    };\n",
+        "    if b {\n",
+        "        return 0;\n",
+        "    } else {\n",
+        "        if n > 0 {\n",
+        "            return 1;\n",
+        "        }\n",
+        "        // tail of else\n",
+        "    }\n",
+        "    return c + d;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
+/// A comment among attributes keeps its blank lines, and one on an attribute's
+/// line stays on it.
+#[test]
+fn test_format_comment_among_attributes_keeps_its_line() {
+    let source = concat!(
+        "#[inline(never)]  // same line\n",
+        "#[allow(shadowed_name)]\n",
+        "\n",
+        "// spaced\n",
+        "fn g() {\n",
+        "}\n",
+    );
+    assert_eq!(wado_compiler::format(source).expect("format failed"), source);
+    assert_format_preserves_ast(source);
+}
+
 /// A resource keeps the blank line between its methods, as an interface does.
 #[test]
 fn test_format_keeps_blank_line_between_resource_methods() {
