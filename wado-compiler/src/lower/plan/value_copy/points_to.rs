@@ -70,6 +70,11 @@ pub struct PointsTo {
     global_reach: IndexSet<u32>,
 }
 
+/// Record `node` for `expr` in `sites`, keyed by the expression's address.
+fn note_site(sites: &mut IndexMap<usize, (u32, Span)>, expr: &TirExpr, node: u32) {
+    sites.insert(std::ptr::from_ref(expr).addr(), (node, expr.span));
+}
+
 /// The node `expr` was recorded under in `sites`.
 fn site_of(sites: &IndexMap<usize, (u32, Span)>, expr: &TirExpr) -> u32 {
     let &(node, span) = sites
@@ -1074,14 +1079,8 @@ impl Builder<'_> {
             }
             self.naming(temp)
         });
-        self.note_written(expr, place);
+        note_site(&mut self.written, expr, place);
         place
-    }
-
-    /// Note `place` as the storage a write to `expr` denotes.
-    fn note_written(&mut self, expr: &TirExpr, place: u32) {
-        self.written
-            .insert(std::ptr::from_ref(expr).addr(), (place, expr.span));
     }
 
     /// Evaluate `expr` once: its value, and the storage it names where it is
@@ -1117,8 +1116,7 @@ impl Builder<'_> {
         let recorded = self
             .join([writable_value, writable_own])
             .unwrap_or_else(|| self.g.node());
-        self.handed
-            .insert(std::ptr::from_ref(arg).addr(), (recorded, arg.span));
+        note_site(&mut self.handed, arg, recorded);
         self.join([value, own])
     }
 
@@ -1272,7 +1270,7 @@ impl Builder<'_> {
                 let place = self
                     .place(target)
                     .expect("an assignment's target is a place");
-                self.note_written(target, place);
+                note_site(&mut self.written, target, place);
                 if let Some(v) = value {
                     self.g.store(place, v);
                 }

@@ -575,8 +575,8 @@ impl<'a> Analyzer<'a> {
         }
     }
 
-    /// Record what a call writes through `handle`, its argument `arg` and a
-    /// `&mut` receiver or not: the fields the callee names, re-rooted at the
+    /// Record what a call writes through `handle`, the place its argument `arg`
+    /// lends, receiver or not: the fields the callee names, re-rooted at the
     /// handle's own path.
     fn record_call_mutation(
         &mut self,
