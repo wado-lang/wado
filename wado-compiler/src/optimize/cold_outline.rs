@@ -362,7 +362,10 @@ fn bound_ahead_of(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
     body.blocks[body.root()]
         .stmts
         .iter()
-        .take_while(|&&s| body.find_in_nodes_under(NodeRef::Stmt(s), |n| (n == first).then_some(())).is_none())
+        .take_while(|&&s| {
+            body.find_in_nodes_under(NodeRef::Stmt(s), |n| (n == first).then_some(()))
+                .is_none()
+        })
         .filter_map(|&s| match &body.stmts[s].kind {
             StmtKind::Let { local_index, .. } => Some(*local_index),
             _ => None,

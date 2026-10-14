@@ -389,8 +389,7 @@ fn licm_block(
 
         if let Some(lb) = loop_body {
             let preheader = preheader_field_hoists(engine.body, &new_stmts, ctx);
-            let (hoist_stmts, loop_changed) =
-                licm_loop(engine, lb, ctx, outer_aliases, &preheader);
+            let (hoist_stmts, loop_changed) = licm_loop(engine, lb, ctx, outer_aliases, &preheader);
             changed |= loop_changed;
             new_stmts.extend(hoist_stmts);
         } else {

@@ -60,8 +60,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:range_cast_bound.wado::$const_obj_8: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
-global global:range_cast_bound.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(32);
+global global:range_cast_bound.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+global global:range_cast_bound.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "range_cast_bound.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
@@ -73,7 +73,7 @@ fn "range_cast_bound.wado/run"() with Stdout {
     let $arg_spill_1: ref "core:prelude/string.wado//String";
     $arg_spill_1 = $sroa_$f_buf_71;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
-    $mv_arg_2 = global:range_cast_bound.wado::$const_obj_8;
+    $mv_arg_2 = global:range_cast_bound.wado::$const_obj_0;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
     if @unlikely(local.tee new_used($local_2.used + 1) > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -81,9 +81,9 @@ fn "range_cast_bound.wado/run"() with Stdout {
     }
     start_33 = $local_2.used;
     $local_2.used = new_used;
-    builtin::array_copy<u8>($local_2.repr, start_33, global:range_cast_bound.wado::$const_obj_9, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_33, global:range_cast_bound.wado::$const_obj_1, 0, 1);
     $sroa_$f_buf_71 = $local_2;
-    $mv_arg_2 = global:range_cast_bound.wado::$const_obj_8;
+    $mv_arg_2 = global:range_cast_bound.wado::$const_obj_0;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"($sroa_$f_buf_71, $mv_arg_2.repr, $mv_arg_2.used);
     start_33 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     new_used = builtin::i32_wrap_i64(packed >> 32_i64);

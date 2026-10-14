@@ -5474,7 +5474,7 @@ Inserts an element at the given index, shifting all elements after it to the rig
 
 #### `pub fn remove(&mut self, index: i32) -> T`
 
-- `contract 0 <= index < self.len()`
+- `contract 0 <= index < self.len(), "index out of bounds"`
 
 Removes and returns the element at the given index, shifting all elements after it to the left.
 Releases the last slot, under the contract on `List`.

@@ -55,15 +55,15 @@ fn "include_str_basic.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdo
 
 fn "include_str_basic.wado/$cm_export__run"() {
     let packed: i64;
-    let rx_22: i32;
-    let tx_23: i32;
-    rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_22 = "include_str_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
+    let rx_20: i32;
+    let tx_21: i32;
+    rx_20 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_21 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_20 = "include_str_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(111, 107);
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_23, $mv_field_2, 2);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_21, $mv_field_2, 2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_20);
     "wasi/task-return"(0);
 }
 

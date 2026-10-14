@@ -290,6 +290,14 @@ test "inspect array" {
     assert `${arr:?}` == "[1, 2, 3]";
 }
 
+test "inspect a reference marks it" {
+    let mut arr: List<i32> = [1, 2];
+    let shared = &arr;
+    assert `${shared:?}` == "&[1, 2]";
+    let exclusive = &mut arr;
+    assert `${exclusive:?}` == "&mut [1, 2]";
+}
+
 test "pretty-print empty array" {
     let arr: List<i32> = [];
     assert `${arr:#?}` == "[]";

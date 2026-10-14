@@ -13,50 +13,45 @@ struct core:prelude/string.wado//String {  // TypeId(2)
 
 array Array<i32> (mut i32);  // TypeId(3)
 
-struct core:prelude//List<i32> {  // TypeId(4)
-    mut repr: ref Array<i32>,
-    mut used: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//optimize_bce_field_access_equiv.wado/run" = fn();  // TypeId(11)
 
-type "functype//optimize_bce_field_access_equiv.wado/run" = fn();  // TypeId(12)
+type "functype//optimize_bce_field_access_equiv.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//optimize_bce_field_access_equiv.wado/$cm_export__run" = fn();  // TypeId(13)
+type "functype//optimize_bce_field_access_equiv.wado/run$cold0" = fn(i32);  // TypeId(13)
 
-type "functype//optimize_bce_field_access_equiv.wado/run$cold0" = fn(i32);  // TypeId(14)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(14)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(15)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(15)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(16)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(17)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(18)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(18)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(20)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -71,25 +66,22 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:optimize_bce_field_access_equiv.wado::$const_obj_41: ref Array<u8> = array.new_fixed<u8>(10);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_42: ref Array<u8> = array.new_fixed<u8>(115, 117, 109, 58, 32);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_43: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 115, 117, 109, 32, 61, 61, 32, 52, 50, 48, 48, 10);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_44: ref Array<u8> = array.new_fixed<u8>(58);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_45: ref Array<u8> = array.new_fixed<u8>(111, 112, 116, 105, 109, 105, 122, 101, 95, 98, 99, 101, 95, 102, 105, 101, 108, 100, 95, 97, 99, 99, 101, 115, 115, 95, 101, 113, 117, 105, 118, 46, 119, 97, 100, 111);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_46: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_47: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
-global global:optimize_bce_field_access_equiv.wado::$const_obj_48: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(10);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(115, 117, 109, 58, 32);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 115, 117, 109, 32, 61, 61, 32, 52, 50, 48, 48, 10);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(58);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(111, 112, 116, 105, 109, 105, 122, 101, 95, 98, 99, 101, 95, 102, 105, 101, 108, 100, 95, 97, 99, 99, 101, 115, 115, 95, 101, 113, 117, 105, 118, 46, 119, 97, 100, 111);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
+global global:optimize_bce_field_access_equiv.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "optimize_bce_field_access_equiv.wado/run"() {
-    let arr: ref "core:prelude//List<i32>";
     let sum: i32;
     let i: i32;
     let repr: ref Array<i32>;
     builtin::array_fill<i32>(local.tee repr(builtin::array_new<i32>(100)), 0, 42, 100);
-    arr = struct.new "core:prelude//List<i32>" { repr: repr, used: 100 };
     sum = 0;
     i = 0;
-    repr = arr.repr;
     b0: block {
         l1: loop {
             break_if b0 i >= 100;
@@ -124,15 +116,15 @@ fn "optimize_bce_field_access_equiv.wado/run$cold0"(sum) {
     }
     start_14 = $local_5.used;
     $local_5.used = new_used_13;
-    builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_14, global:optimize_bce_field_access_equiv.wado::$const_obj_48, 0, 20);
+    builtin::array_copy<u8>(local.tee $load_2($local_5.repr), start_14, global:optimize_bce_field_access_equiv.wado::$const_obj_11, 0, 20);
     new_used_13 = start_14 + 20;
-    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_47, 0, 3);
+    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_10, 0, 3);
     new_used_13 = start_14 + 23;
-    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_46, 0, 4);
+    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_9, 0, 4);
     new_used_13 = start_14 + 27;
-    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_45, 0, 36);
+    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_8, 0, 36);
     start_14 = start_14 + 63;
-    builtin::array_copy<u8>($load_2, start_14, global:optimize_bce_field_access_equiv.wado::$const_obj_44, 0, 1);
+    builtin::array_copy<u8>($load_2, start_14, global:optimize_bce_field_access_equiv.wado::$const_obj_7, 0, 1);
     start_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(local.tee $sroa_$f_buf_112($local_5), 0, 2);
     "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_112.repr, start_14, 10_i64, 2);
     if @unlikely(local.tee start_14($local_5.used + 29) > builtin::array_len($local_5.repr)) {
@@ -141,9 +133,9 @@ fn "optimize_bce_field_access_equiv.wado/run$cold0"(sum) {
     }
     new_used_13 = $local_5.used;
     $local_5.used = start_14;
-    builtin::array_copy<u8>(local.tee $load_2($local_5.repr), new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_43, 0, 24);
+    builtin::array_copy<u8>(local.tee $load_2($local_5.repr), new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_6, 0, 24);
     new_used_13 = new_used_13 + 24;
-    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_42, 0, 5);
+    builtin::array_copy<u8>($load_2, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_5, 0, 5);
     $sroa_$f_buf_112 = $local_5;
     new_used_13 = sum < 0;
     sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_73(x_73 = builtin::i64_extend_i32_s(sum); select i64(x_73 < 0_i64, 0_i64 - x_73, x_73)));
@@ -155,7 +147,7 @@ fn "optimize_bce_field_access_equiv.wado/run$cold0"(sum) {
     }
     new_used_13 = $local_5.used;
     $local_5.used = sum;
-    builtin::array_copy<u8>($local_5.repr, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_41, 0, 1);
+    builtin::array_copy<u8>($local_5.repr, new_used_13, global:optimize_bce_field_access_equiv.wado::$const_obj_4, 0, 1);
     "core:rt/panic"($local_5.repr, $local_5.used);
     unreachable;
 }

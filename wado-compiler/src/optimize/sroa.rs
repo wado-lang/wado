@@ -944,7 +944,8 @@ impl SoftCtx<'_> {
             }
             ExprKind::Call { func_id, args, .. } => {
                 let callee_id = *func_id;
-                let arg_ops: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
+                let arg_ops: Vec<(Operand, bool)> =
+                    args.iter().map(|a| (a.expr, a.is_mut)).collect();
                 // Each borrow is rebuilt as its own literal, so a callee handed
                 // one candidate twice could tell the two apart (`ref_eq`).
                 let mut lent: IndexSet<u32> = IndexSet::default();

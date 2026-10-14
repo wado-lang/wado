@@ -1462,8 +1462,7 @@ fn splice_barred(
     // overflow at higher iteration counts). A bridge is the exception
     // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
     // identity the set is built on, so a cross-module cycle is not missed.
-    func.id.is_some_and(|id| barred_cycle_members.contains(&id))
-        || never_spliced(func, type_table)
+    func.id.is_some_and(|id| barred_cycle_members.contains(&id)) || never_spliced(func, type_table)
 }
 
 /// Whether this pass declines `func` whatever calls it. A call into such a
@@ -2136,7 +2135,7 @@ pub fn inline_functions(
             call_sites[i],
             verdict.reach
         );
-        let candidate =(verdict.reach != Reach::Nowhere).then(|| {
+        let candidate = (verdict.reach != Reach::Nowhere).then(|| {
             let hot = match func.inline_hint {
                 InlineHint::Always => inline_cost(
                     func.body.as_ref().expect("a candidate has a body"),
