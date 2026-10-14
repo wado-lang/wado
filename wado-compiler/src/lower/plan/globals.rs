@@ -34,7 +34,7 @@ struct LazyInit {
     /// What the global is assigned, in the frame `frame` describes.
     value: TirExpr,
     frame: LocalFrame,
-    /// What `value` names and calls.
+    /// What `value` reads, assigns and calls.
     scan: BodyReads,
 }
 
@@ -111,7 +111,6 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
             topological_sort_global_inits(module_inits, &call_graph, &must_reads, errors)
         })
         .collect::<Result<Vec<_>, Bail>>()?;
-    drop(call_graph);
     let span = Span::new(0, 0, 1, 1);
     for ((module_source, module_inits), order) in by_module.into_iter().zip(orders) {
         let mut taken: Vec<Option<LazyInit>> = module_inits.into_iter().map(Some).collect();
@@ -289,7 +288,7 @@ impl<'a> CallGraph<'a> {
     }
 
     /// The globals each function the initializers reach reads on every path
-    /// through it, before anything it reaches may assign them.
+    /// through it, leaving out any it or what it reaches may assign.
     ///
     /// A least fixpoint, rising from nothing known: a recursive function's
     /// answer under-approximates, and the same whatever order it is asked in.
