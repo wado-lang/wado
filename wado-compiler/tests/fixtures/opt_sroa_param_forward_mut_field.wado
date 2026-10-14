@@ -1,0 +1,45 @@
+// `put` reads no field of `self` itself: it forwards the whole receiver to
+// `put_at`, which writes through `&mut self.repr`. Scalarized, `put_at` takes
+// `&mut Array<u8>`, so `put` must take the field by `&mut` as well. Taken by
+// value, `put` held a copy of the array, and constant folding dropped the
+// write: `a()` came back with a zero byte.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    repr: Array<u8>,
+    used: i32,
+}
+
+impl Buf {
+    fn reserve(&mut self) -> i32 {
+        let start = self.used;
+        self.used += 1;
+        return start;
+    }
+
+    fn put(&mut self, i: i32, v: u8) {
+        self.put_at(i, v);
+    }
+
+    fn put_at(&mut self, i: i32, v: u8) {
+        self.repr[i] = v;
+    }
+}
+
+fn a() -> Buf {
+    let mut s = Buf { repr: builtin::array_new(4), used: 0 };
+    let at = s.reserve();
+    s.put(at, 45);
+    return s;
+}
+
+export fn run() with Stdout {
+    let b = a();
+    println(`${b.repr[0]} ${b.used}`);
+}
+
+__DATA__
+{
+    "stdout": "45 1\n"
+}

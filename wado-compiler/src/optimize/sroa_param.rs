@@ -255,6 +255,7 @@ fn collect_and_validate(
     loop {
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
+        let mut widened: Vec<(FnKey, usize)> = Vec::new();
         for ((key, pi), info) in &candidates {
             let func = project.functions[key.index()].borrow();
             let local_index = func.params[*pi].local_index;
@@ -262,6 +263,11 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
+            if info.form == FieldForm::Value
+                && forwards_to_mutable(body, local_index, &candidates)
+            {
+                widened.push((*key, *pi));
+            }
             match param_field_use(body, local_index, &candidates) {
                 FieldUse::Invalid => {
                     invalid.insert((*key, *pi));
@@ -288,7 +294,12 @@ fn collect_and_validate(
             info.field_name = name;
             info.inner_type_id = ty;
         }
-        if invalid.is_empty() && resolved.is_empty() {
+        for k in &widened {
+            if let Some(info) = candidates.get_mut(k) {
+                info.form = FieldForm::Mutable;
+            }
+        }
+        if invalid.is_empty() && resolved.is_empty() && widened.is_empty() {
             // Converged, so a param still holding no field never names one, and
             // a field the rewrite cannot make a parameter is out too. Both are
             // dropped inside the loop, not after it: a param that forwards to a
@@ -899,6 +910,28 @@ fn check_call_arg(
         return FieldUse::Unresolved;
     };
     check_expr(body, arg, idx, candidates)
+}
+
+/// Whether param `idx` is handed whole to a position that takes its field as
+/// `&mut`. The forwarded local becomes that argument as it stands, so it must
+/// hold the field the same way: held by value it is a copy, and the callee's
+/// writes land on the copy.
+fn forwards_to_mutable(
+    body: &Body,
+    idx: u32,
+    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
+) -> bool {
+    reachable_exprs(body).into_iter().any(|e| {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            return false;
+        };
+        args.iter().enumerate().any(|(pos, arg)| {
+            is_local_operand(body, arg.expr, idx)
+                && candidates
+                    .get(&(*func_id, pos))
+                    .is_some_and(|info| info.form == FieldForm::Mutable)
+        })
+    })
 }
 
 /// Whether scalarizing this parameter would strand the call: a sibling position
