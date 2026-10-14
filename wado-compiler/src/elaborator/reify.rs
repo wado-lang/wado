@@ -10275,7 +10275,7 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
             }
             match &mut expr.kind {
                 TirExprKind::Call { func, .. } if expr.span == self.call_span => {
-                    retarget_call(func);
+                    func.retarget_to_unchecked_twin();
                     self.found = true;
                 }
                 _ => self.walk_expr(expr),
@@ -10288,17 +10288,6 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
     };
     marked.visit_expr(expr);
     assert!(marked.found, "`unchecked` marks a call: {:?}", expr.kind);
-}
-
-fn retarget_call(func: &mut FunctionRef) {
-    func.name = unchecked_twin_name(&func.name);
-    if let Some(info) = &mut func.method_info {
-        info.mark_unchecked();
-    }
-    if let Some(mono) = &mut func.monomorph_info {
-        mono.generic_name = unchecked_twin_name(&mono.generic_name);
-    }
-    func.template = func.template.as_ref().map(TemplateId::unchecked_twin);
 }
 
 /// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a

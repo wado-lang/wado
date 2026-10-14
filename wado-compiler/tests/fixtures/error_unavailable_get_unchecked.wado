@@ -1,0 +1,11 @@
+// `get_unchecked` gave way to `unchecked xs.at(i)`, which a contract-checking
+// build checks; a call to the old name says what to write instead.
+export fn run() {
+    let xs: List<i32> = [1, 2, 3];
+    let _ = xs.get_unchecked(1);
+}
+
+__DATA__
+{
+    "compile_error": ":5:13: error: `Sequence::get_unchecked` is unavailable: write `unchecked xs.at(i)`"
+}

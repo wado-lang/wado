@@ -26,6 +26,7 @@ use crate::name::{
     FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME, Receiver, RefKind,
     TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name,
     mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
+    unchecked_twin_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -6550,6 +6551,18 @@ impl FunctionRef {
             monomorph_info: func.monomorph_info.clone(),
             method_info: func.method_info.clone(),
         }
+    }
+
+    /// Point this call at its callee's `unchecked` twin.
+    pub fn retarget_to_unchecked_twin(&mut self) {
+        self.name = unchecked_twin_name(&self.name);
+        if let Some(info) = &mut self.method_info {
+            info.mark_unchecked();
+        }
+        if let Some(mono) = &mut self.monomorph_info {
+            mono.generic_name = unchecked_twin_name(&mono.generic_name);
+        }
+        self.template = self.template.as_ref().map(TemplateId::unchecked_twin);
     }
 
     /// Get the module path (for backwards compatibility)

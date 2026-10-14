@@ -116,7 +116,7 @@ Whether reaching a behavior is a bug is independent of its class:
 
 | Class         | Not a bug                                     | Contract violation                                                         |
 | ------------- | --------------------------------------------- | -------------------------------------------------------------------------- |
-| Unspecified   | initialization order, ambient calls, `ref_eq` | `get_unchecked` out of range                                               |
+| Unspecified   | initialization order, ambient calls, `ref_eq` | `unchecked xs[i]` out of range                                             |
 | Host-defined  | NaN bits, relaxed SIMD, `InsecureSeed`        | none                                                                       |
 | Unconstrained | none                                          | `unchecked char::from_u32` on a non-scalar, `unchecked slice` off the view |
 
@@ -133,7 +133,7 @@ legitimate undefined behavior out of the language.
 The suffix does not decide the class. What decides it is whether a violation
 breaks a type's invariant.
 
-- A violation that breaks none is unspecified. `get_unchecked` out of range
+- A violation that breaks none is unspecified. `unchecked xs[i]` out of range
   returns an element of the backing array, which is a valid `T`.
 - A violation that breaks one is unconstrained: a `char` that is not a scalar
   value, a `String` that is not UTF-8, a `StrSlice` whose ends are not

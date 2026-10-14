@@ -63,7 +63,8 @@ enough: the inliner sized the `if false` body before any pass pruned it, and
 
 A disabled check is not evaluated, and the compiler does not assume its
 condition holds. Assuming it would turn a violation the specification calls
-unspecified, such as `get_unchecked` out of range, into unconstrained behavior.
+unspecified, such as `unchecked xs.at(i)` out of range, into unconstrained
+behavior.
 Zig's `std.debug.assert` and Swift's `-Ounchecked` do that, and their users
 report the damage as worse than removing the check.
 
@@ -79,9 +80,6 @@ Each `_unchecked` function checks the clauses of its contract that cost
 constant time: an index in range, an end on a character boundary, a value that
 is a Unicode scalar, a byte below `0x80`. A function that forwards to another
 `_unchecked` function relies on that one's check.
-
-`Sequence::get_unchecked` on an `Array` checks nothing: the array access
-already traps out of range.
 
 ### The caller decides whether a check can be removed
 
@@ -231,6 +229,12 @@ old name stays, as an `#[unavailable]` declaration pointing at the new call,
 only where Rust has a method of that name, such as `get_unchecked` or
 `from_utf8_unchecked`, since that is the name a reader from Rust reaches for.
 Any other public `_unchecked` name is removed.
+
+`Sequence::get_unchecked` has no checked twin to mark: a generic body over
+`Sequence` has no index operator. It becomes `Sequence::at`, which returns the
+element under `contract 0 <= index < self.len()`, written on the trait. A
+concrete `List`, `Slice` or `ByteList` reads with `unchecked xs[i]`, so
+`ByteList::get_byte_unchecked`, a name Rust lacks, is removed.
 
 No name carries `_unchecked`, so each operation has one name per shape:
 
@@ -382,8 +386,8 @@ API waits for a program outside the standard library that needs one.
    - [x] The functions with no checked twin, or one returning an `Option`:
      `String::push_ascii`, `char_at_byte`, `char::from_u32` and
      `String::byte_at` take a contract, and the `_unchecked` names go.
-   - [ ] `ByteList::get_byte_unchecked` and `Sequence::get_unchecked` become
-     `unchecked xs[i]`, after step 6.
+   - [x] `Sequence::get_unchecked` becomes `unchecked xs.at(i)`, and
+     `ByteList::get_byte_unchecked` becomes `unchecked xs[i]`.
 8. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps

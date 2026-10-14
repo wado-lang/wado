@@ -523,16 +523,16 @@ pub enum CompilerItem {
     /// `String::internal_write_str_at` — the raw string write `append_fuse`
     /// emits into space `internal_reserve_uninit` already claimed.
     StringWriteStrAt,
-    /// `ByteSlice::get_unchecked` (`Slice<u8>`) — the unchecked byte
-    /// read used by synthesised deserializers (`serde_synth`) when comparing
-    /// a wire key against a struct's `FieldSchema`. Routed through this item
-    /// so renames in the stdlib do not silently break code generation. See
-    /// issue #1077.
-    ByteSliceGetUnchecked,
+    /// `Slice<u8>`'s `IndexValue<i32>::index_value` — the byte read
+    /// synthesised deserializers (`serde_synth`) make, through its `unchecked`
+    /// twin, when comparing a wire key against a struct's `FieldSchema`.
+    /// Routed through this item so renames in the stdlib do not silently break
+    /// code generation. See issue #1077.
+    ByteSliceIndexValue,
     /// `ByteSlice::len` (`Slice<u8>`) — the byte-length accessor the
     /// synthesised `FieldSchema::lookup` uses to size the wire key. Routed
     /// through a compiler item for the same rename-safety reason as
-    /// [`Self::ByteSliceGetUnchecked`].
+    /// [`Self::ByteSliceIndexValue`].
     ByteSliceLen,
     /// `i128::from_i64` — sign-extending constructor used by the
     /// wide-int literal lowering pass.
@@ -889,7 +889,7 @@ impl CompilerItem {
         Self::StringReserveUninit,
         Self::StringSetByteUnchecked,
         Self::StringWriteStrAt,
-        Self::ByteSliceGetUnchecked,
+        Self::ByteSliceIndexValue,
         Self::ByteSliceLen,
         Self::I128FromI64,
         Self::I128FromU64,
@@ -1173,7 +1173,7 @@ impl CompilerItem {
             Self::StringReserveUninit => "string_reserve_uninit",
             Self::StringSetByteUnchecked => "string_set_byte_unchecked",
             Self::StringWriteStrAt => "string_write_str_at",
-            Self::ByteSliceGetUnchecked => "byte_slice_get_unchecked",
+            Self::ByteSliceIndexValue => "byte_slice_index_value",
             Self::ByteSliceLen => "byte_slice_len",
             Self::I128FromI64 => "i128_from_i64",
             Self::I128FromU64 => "i128_from_u64",
@@ -1374,7 +1374,7 @@ impl CompilerItem {
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt
-            | Self::ByteSliceGetUnchecked
+            | Self::ByteSliceIndexValue
             | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromU64
@@ -1676,7 +1676,7 @@ impl CompilerItem {
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt
-            | Self::ByteSliceGetUnchecked
+            | Self::ByteSliceIndexValue
             | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromU64

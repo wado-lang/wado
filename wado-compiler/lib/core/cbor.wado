@@ -934,7 +934,7 @@ impl CborDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        let b = self.input.get_unchecked(self.pos);
+        let b = unchecked self.input[self.pos];
         self.pos += 1;
         return Result::Ok(b);
     }
@@ -944,7 +944,7 @@ impl CborDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::eof(self.pos as i64));
         }
-        return Result::Ok(self.input.get_unchecked(self.pos));
+        return Result::Ok(unchecked self.input[self.pos]);
     }
 
     fn inner_depth(&self) -> Result<i32, DeserializeError> {
@@ -966,7 +966,7 @@ impl CborDeserializer {
         let mut v: u64 = 0;
         let mut i = 0;
         while i < n {
-            v = v << 8 | self.input.get_unchecked(self.pos + i) as u64;
+            v = v << 8 | unchecked self.input[self.pos + i] as u64;
             i += 1;
         }
         self.pos += n;

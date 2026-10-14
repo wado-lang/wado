@@ -71,7 +71,7 @@ fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
     let mut chunk = from >> 4;
     let mut skip = from & 15;
     while chunk << 4 < len {
-        let m = delimiters(&chunks.get_unchecked(chunk), &quote, &escape) >> skip << skip;
+        let m = delimiters(&chunks[chunk], &quote, &escape) >> skip << skip;
         if m != 0 {
             return (chunk << 4) + i32::ctz(m);
         }
@@ -99,7 +99,7 @@ fn pack(s: &String) -> Array<u8x16> {
 // vector load, a swizzle to bring the byte to lane 0, and a lane read, where
 // today it reads one `array.get_u`.
 fn byte_at_packed(chunks: &Array<u8x16>, i: i32) -> u8 {
-    let v = chunks.get_unchecked(i >> 4).swizzle(&u8x16::splat(i & 15));
+    let v = chunks[i >> 4].swizzle(&u8x16::splat(i & 15));
     return v.extract_lane(0) as u8;
 }
 

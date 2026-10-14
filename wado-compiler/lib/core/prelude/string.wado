@@ -256,7 +256,7 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
         let advance = if n == 0 { String::utf8_invalid_len(&bytes, start) } else { len - start };
         return Utf8Scalar { code: 0, advance, valid: false };
     }
-    let b0 = bytes.get_unchecked(start) as u32;
+    let b0 = unchecked bytes[start] as u32;
     if n == 1 {
         return Utf8Scalar { code: b0, advance: 1, valid: true };
     }
@@ -268,7 +268,7 @@ fn decode_utf8_scalar(bytes: ByteSlice, start: i32, len: i32) -> Utf8Scalar {
     };
     let mut code = b0 & lead_mask;
     for let mut i = 1; i < n; i += 1 {
-        code = code << 6 | bytes.get_unchecked(start + i) as u32 & 0x3F;
+        code = code << 6 | unchecked bytes[start + i] as u32 & 0x3F;
     }
     return Utf8Scalar { code, advance: n, valid: true };
 }
@@ -1026,23 +1026,21 @@ impl String {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
-            let b0 = bytes.get_unchecked(i);
+            let b0 = unchecked bytes[i];
             if b0 < 0x80 {
                 i += 1;
                 while i + 4 <= len
-                    && bytes.get_unchecked(i) | bytes.get_unchecked(i + 1) | bytes.get_unchecked(i + 2) | bytes.get_unchecked(
-                        i + 3,
-                    ) < 0x80 {
+                    && unchecked bytes[i] | unchecked bytes[i + 1] | unchecked bytes[i + 2] | unchecked bytes[i + 3] < 0x80 {
                     i += 4;
                 }
                 continue;
             }
             if (b0 >= 0xE1) & (b0 < 0xF0) & (b0 != 0xED) & (i + 2 < len)
-                && bytes.get_unchecked(i + 1) ^ 0x80 | bytes.get_unchecked(i + 2) ^ 0x80 < 0x40 {
+                && unchecked bytes[i + 1] ^ 0x80 | unchecked bytes[i + 2] ^ 0x80 < 0x40 {
                 i += 3;
                 continue;
             }
-            if (b0 >= 0xC2) & (b0 < 0xE0) & (i + 1 < len) && bytes.get_unchecked(i + 1) ^ 0x80 < 0x40 {
+            if (b0 >= 0xC2) & (b0 < 0xE0) & (i + 1 < len) && unchecked bytes[i + 1] ^ 0x80 < 0x40 {
                 i += 2;
                 continue;
             }
@@ -1073,14 +1071,14 @@ impl String {
     /// Length (1–3) of the malformed sequence at `start`: how many of its bytes
     /// `utf8_sequence_len` accepted before the one nothing could rescue.
     internal fn utf8_invalid_len(bytes: &ByteSlice, start: i32) -> i32 {
-        let b0 = bytes.get_unchecked(start);
+        let b0 = unchecked bytes[start];
         if b0 < 0xC2 || b0 >= 0xF5 {
             return 1;
         }
-        if !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
+        if !utf8_second_byte_ok(b0, unchecked bytes[start + 1]) {
             return 1;
         }
-        if is_char_start(bytes.get_unchecked(start + 2)) {
+        if is_char_start(unchecked bytes[start + 2]) {
             return 2;
         }
         return 3;
@@ -1094,7 +1092,7 @@ impl String {
     /// length is, so a sequence no further byte could rescue answers `0` even
     /// when short.
     internal fn utf8_sequence_len(bytes: &ByteSlice, start: i32, len: i32) -> i32 {
-        let b0 = bytes.get_unchecked(start);
+        let b0 = unchecked bytes[start];
         if b0 < 0x80 {
             return 1;
         }
@@ -1109,14 +1107,14 @@ impl String {
                 builtin::cold_path();
                 return -1;
             }
-            if !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
+            if !utf8_second_byte_ok(b0, unchecked bytes[start + 1]) {
                 builtin::cold_path();
                 return 0;
             }
             return 2;
         }
         if b0 < 0xF0 {
-            if available >= 2 && !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
+            if available >= 2 && !utf8_second_byte_ok(b0, unchecked bytes[start + 1]) {
                 builtin::cold_path();
                 return 0;
             }
@@ -1124,18 +1122,18 @@ impl String {
                 builtin::cold_path();
                 return -1;
             }
-            if is_char_start(bytes.get_unchecked(start + 2)) {
+            if is_char_start(unchecked bytes[start + 2]) {
                 builtin::cold_path();
                 return 0;
             }
             return 3;
         }
         if b0 < 0xF5 {
-            if available >= 2 && !utf8_second_byte_ok(b0, bytes.get_unchecked(start + 1)) {
+            if available >= 2 && !utf8_second_byte_ok(b0, unchecked bytes[start + 1]) {
                 builtin::cold_path();
                 return 0;
             }
-            if available >= 3 && is_char_start(bytes.get_unchecked(start + 2)) {
+            if available >= 3 && is_char_start(unchecked bytes[start + 2]) {
                 builtin::cold_path();
                 return 0;
             }
@@ -1143,7 +1141,7 @@ impl String {
                 builtin::cold_path();
                 return -1;
             }
-            if is_char_start(bytes.get_unchecked(start + 3)) {
+            if is_char_start(unchecked bytes[start + 3]) {
                 builtin::cold_path();
                 return 0;
             }

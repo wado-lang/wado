@@ -27,19 +27,22 @@ use { panic } from "core:rt";
 
 /// Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
 ///
-/// Implementors supply `len` and `get_unchecked`; everything else is a default
-/// body over those two, so no default constructs a `Slice`. Methods needing an
-/// `Elem` bound (`contains`, `binary_search`, …) cannot live here — an
-/// associated type carries no bound — and stay bounded inherent impls.
+/// Implementors supply `len` and `at`; everything else is a default body over
+/// those two, so no default constructs a `Slice`. Methods needing an `Elem`
+/// bound (`contains`, `binary_search`, …) cannot live here — an associated
+/// type carries no bound — and stay bounded inherent impls.
 pub trait Sequence with () {
     type Elem;
 
     fn len(&self) -> i32;
 
-    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
-    /// contract violation, and the result is unspecified: some valid `Elem`,
-    /// or a trap.
-    fn get_unchecked(&self, index: i32) -> Self::Elem;
+    /// The element at `index`. `get` answers for an index that may be out of
+    /// range.
+    fn at(&self, index: i32) -> Self::Elem
+        contract 0 <= index < self.len();
+
+    #[unavailable("write `unchecked xs.at(i)`")]
+    fn get_unchecked(&self);
 
     fn is_empty(&self) -> bool {
         return self.len() == 0;
@@ -49,7 +52,7 @@ pub trait Sequence with () {
         if index < 0 || index >= self.len() {
             return null;
         }
-        return Option::Some(self.get_unchecked(index));
+        return Option::Some(unchecked self.at(index));
     }
 
     fn first(&self) -> Option<Self::Elem> {
@@ -62,7 +65,7 @@ pub trait Sequence with () {
 
     fn position(&self, mut pred: fn mut(Self::Elem) -> bool with _) -> Option<i32> with _ {
         for let mut i = 0; i < self.len(); i += 1 {
-            if pred(self.get_unchecked(i)) {
+            if pred(unchecked self.at(i)) {
                 return Option::Some(i);
             }
         }
@@ -94,15 +97,6 @@ impl<T> Slice<T> {
     #[compiler_item("byte_slice_len")]
     pub fn len(&self) -> i32 {
         return self.end - self.start;
-    }
-
-    /// The caller must guarantee `0 <= index < len()`. Any other `index` is a
-    /// contract violation, and the result is unspecified: an element of the
-    /// backing array outside the view, or a trap. Also the byte-read
-    /// anchor for `FieldSchema::lookup`, as `len` is for byte length.
-    #[compiler_item("byte_slice_get_unchecked")]
-    pub fn get_unchecked(&self, index: i32) -> T {
-        return unchecked self[index];
     }
 
     /// Sub-slice over `[start, end)` relative to this one, clamped to its
@@ -173,8 +167,8 @@ impl<T> Sequence for Slice<T> {
         return self.end - self.start;
     }
 
-    fn get_unchecked(&self, index: i32) -> T {
-        return Slice::get_unchecked(self, index);
+    fn at(&self, index: i32) -> T {
+        return unchecked self[index];
     }
 }
 
@@ -199,6 +193,9 @@ impl<T: Eq> Slice<T> {
 impl<T> IndexValue<i32> for Slice<T> {
     type Output = T;
 
+    /// Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+    /// (on `Slice<u8>`), as `len` is for byte length.
+    #[compiler_item("byte_slice_index_value")]
     fn index_value(&self, index: i32) -> Self::Output
         contract 0 <= index < self.len()
     {

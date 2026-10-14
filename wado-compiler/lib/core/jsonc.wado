@@ -273,7 +273,7 @@ impl Editor {
     }
 
     fn byte(&self, i: i32) -> i32 {
-        return self.bytes.get_unchecked(i) as i32;
+        return unchecked self.bytes[i] as i32;
     }
 
     /// The indentation of the first indented line holding JSON rather than
@@ -677,13 +677,13 @@ impl Blanker {
         let mut pending_comma = -1;
         let mut i = 0;
         while i < len {
-            let b = self.input.get_unchecked(i) as i32;
+            let b = unchecked self.input[i] as i32;
             if !json_ws_end(b) {
                 i += 1;
                 continue;
             }
             if b == b'/' && i + 1 < len {
-                let next = self.input.get_unchecked(i + 1) as i32;
+                let next = unchecked self.input[i + 1] as i32;
                 if next == b'/' {
                     let end = line_end(&self.input, i + 2);
                     self.blank(i, end);
@@ -732,7 +732,7 @@ impl Blanker {
 fn line_end(input: &ByteSlice, from: i32) -> i32 {
     let len = input.len();
     let mut i = from;
-    while i < len && input.get_unchecked(i) as i32 != b'\n' {
+    while i < len && unchecked input[i] as i32 != b'\n' {
         i += 1;
     }
     return i;
@@ -743,7 +743,7 @@ fn line_end(input: &ByteSlice, from: i32) -> i32 {
 fn block_comment_end(input: &ByteSlice, from: i32) -> i32 {
     let len = input.len();
     for let mut i = from; i + 1 < len; i += 1 {
-        if input.get_unchecked(i) as i32 == b'*' && input.get_unchecked(i + 1) as i32 == b'/' {
+        if unchecked input[i] as i32 == b'*' && unchecked input[i + 1] as i32 == b'/' {
             return i + 2;
         }
     }
@@ -757,7 +757,7 @@ fn string_end(input: &ByteSlice, from: i32) -> i32 {
     let len = input.len();
     let mut i = from;
     while i < len {
-        let b = input.get_unchecked(i) as i32;
+        let b = unchecked input[i] as i32;
         if b == b'"' {
             return i + 1;
         }

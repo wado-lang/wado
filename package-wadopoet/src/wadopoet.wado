@@ -1137,7 +1137,7 @@ pub fn byte_string_literal<S: AsByteSlice>(bytes: S) -> String {
     let mut out = String::with_capacity(view.len() * 4 + 3);
     out.push_str("b\"");
     for let mut i = 0; i < view.len(); i += 1 {
-        let b = view.get_unchecked(i);
+        let b = unchecked view[i];
         if b'\x20' <= b <= b'\x7e' && b != b'"' && b != b'\\' {
             unchecked out.push_ascii(b);
         } else {

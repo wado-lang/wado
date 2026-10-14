@@ -554,8 +554,10 @@ backing array holds an element, since a view never reads outside itself. The
 trap is the whole contract: its message may be any text, and which text is
 [unspecified](./spec-overview.md#behavior-classes).
 
-`get_unchecked(i)` leaves the check to the caller, who must guarantee
-`0 <= i < len()`. Calling it with any other `i` is a
+`at(i)` reads as `xs[i]` does, through `Sequence`, so a generic body can read
+an element. Marked [`unchecked`](./spec-assertions.md#contract-checks),
+`xs.at(i)` and `xs[i]` leave the check to the caller, who must guarantee
+`0 <= i < len()`. A marked read with any other `i` is a
 [contract violation](./spec-overview.md#behavior-classes), and the result is
 unspecified: an element of the backing array, or a trap. Either way the result
 is a valid value of the element type, because every element read is
