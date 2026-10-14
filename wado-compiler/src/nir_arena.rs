@@ -2003,6 +2003,23 @@ impl Body {
             .is_some_and(|s| self.terminates(*s))
     }
 
+    /// Whether `block`, jumping nowhere on the way, ends in a call typed `!`
+    /// (a failed check's panic), which traps or runs forever: nothing after it
+    /// runs, so nothing it reads or writes is seen by what follows.
+    pub fn ends_unseen(&self, block: BlockId, types: &TypeTable) -> bool {
+        let ends_in_never = self.blocks[block].stmts.last().is_some_and(|&last| {
+            matches!(&self.stmts[last].kind, StmtKind::Expr(op)
+                if op.as_expr().is_some_and(|e| types.is_never(self.exprs[e].type_id)))
+        });
+        ends_in_never
+            && self
+                .find_in_nodes_under(NodeRef::Block(block), |node| match node {
+                    NodeRef::Stmt(inner) => self.terminates(inner).then_some(()),
+                    NodeRef::Expr(_) | NodeRef::Block(_) | NodeRef::Pat(_) => None,
+                })
+                .is_none()
+    }
+
     /// Every point that produces the value of the labeled block at `e`: what
     /// each `break LABEL:` carries — `None` for a value-less one — and the
     /// trailing statement where control can reach it. `None` for anything but a

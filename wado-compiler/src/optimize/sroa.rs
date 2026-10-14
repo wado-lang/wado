@@ -92,6 +92,8 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
     let stores_lookup = build_stores_lookup(project);
     let value_copy_ids = project.value_copy_func_ids();
     let builtins = build_ctfe_builtin_map(project);
+    let type_table = project.type_table.borrow();
+    let type_table = &*type_table;
     let functions = &project.functions;
     gate.run_gated_par(GatedPass::Sroa, functions.len(), |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
@@ -103,6 +105,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
             stores_lookup: &stores_lookup,
             value_copy_ids: &value_copy_ids,
             builtins: &builtins,
+            type_table,
             stores_aliased: stores_aliased_snapshot,
             newly_aliased: RefCell::new(IndexSet::default()),
             applied: Cell::new(false),
@@ -136,6 +139,7 @@ pub(super) struct SroaRule<'a> {
     value_copy_ids: &'a IndexSet<FuncId>,
     /// Which sequence builtin each callee is, for an array candidate's reads.
     builtins: &'a CtfeBuiltinMap,
+    type_table: &'a TypeTable,
     /// Snapshot of `func.stores_aliased_locals` at session start. Used as a
     /// blacklist when picking candidates so a local that the existing alias
     /// analysis already flagged is never decomposed.
@@ -183,6 +187,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         &uses,
         rule.stores_lookup,
         rule.value_copy_ids,
+        rule.type_table,
     );
 
     let mut decomposed: IndexSet<u32> = IndexSet::default();
@@ -813,6 +818,7 @@ fn find_soft_escaped_locals(
     uses: &CandidateUses,
     stores_lookup: &StoresLookup,
     value_copy_ids: &IndexSet<FuncId>,
+    type_table: &TypeTable,
 ) -> IndexSet<u32> {
     let escaped_candidates: IndexSet<u32> = candidates
         .iter()
@@ -827,6 +833,8 @@ fn find_soft_escaped_locals(
         candidates: &escaped_candidates,
         stores_lookup,
         value_copy_ids,
+        type_table,
+        unseen: false,
     };
     let mut hard_escaped = IndexSet::default();
     soft.walk(body, NodeRef::Block(body.root()), &mut hard_escaped);
@@ -839,15 +847,28 @@ fn find_soft_escaped_locals(
 
 /// The shared immutable inputs of the soft-escape walk, bundled so the walk
 /// threads one borrow instead of the former seven positional params.
+#[derive(Clone, Copy)]
 struct SoftCtx<'a> {
     candidates: &'a IndexSet<u32>,
     stores_lookup: &'a StoresLookup,
     value_copy_ids: &'a IndexSet<FuncId>,
+    type_table: &'a TypeTable,
+    /// Inside a block that ends unseen ([`Body::ends_unseen`]). Nothing after
+    /// it runs, so a call there may keep what it is handed, and a rebuilt
+    /// literal is the only object anyone reads from then on.
+    unseen: bool,
 }
 
 impl SoftCtx<'_> {
     fn walk(&self, body: &Body, node: NodeRef, hard_escaped: &mut IndexSet<u32>) {
         match node {
+            NodeRef::Block(b) if !self.unseen && body.ends_unseen(b, self.type_table) => {
+                let inner = SoftCtx {
+                    unseen: true,
+                    ..*self
+                };
+                body.for_each_child(node, |c| inner.walk(body, c, hard_escaped));
+            }
             NodeRef::Stmt(s) => {
                 // Return / Break value's top expression is a soft context.
                 if let StmtKind::Return { value: Some(v) }
@@ -923,15 +944,26 @@ impl SoftCtx<'_> {
             }
             ExprKind::Call { func_id, args, .. } => {
                 let callee_id = *func_id;
-                let arg_ops: Vec<Operand> = args.iter().map(|a| a.expr).collect();
+                let arg_ops: Vec<(Operand, bool)> = args.iter().map(|a| (a.expr, a.is_mut)).collect();
                 // Each borrow is rebuilt as its own literal, so a callee handed
                 // one candidate twice could tell the two apart (`ref_eq`).
                 let mut lent: IndexSet<u32> = IndexSet::default();
-                for (i, arg) in arg_ops.into_iter().enumerate() {
+                for (i, (arg, is_mut)) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
-                    if let Some(index) = immut_ref_to_candidate(body, arg, self.candidates)
-                        && !callee_stores_param_at(callee_id, i, self.stores_lookup)
-                    {
+                    let lent_candidate = immut_ref_to_candidate(body, arg, self.candidates)
+                        .filter(|_| {
+                            self.unseen || !callee_stores_param_at(callee_id, i, self.stores_lookup)
+                        })
+                        .or_else(|| {
+                            // Handed whole where nothing follows: the callee
+                            // cannot write it, and no later read can tell.
+                            let ExprKind::Local { index, .. } = body.exprs[arg].kind else {
+                                return None;
+                            };
+                            (self.unseen && !is_mut && self.candidates.contains(&index))
+                                .then_some(index)
+                        });
+                    if let Some(index) = lent_candidate {
                         if !lent.insert(index) {
                             hard_escaped.insert(index);
                         }
