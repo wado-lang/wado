@@ -4185,6 +4185,62 @@ fn test_format_comment_before_body_brace_every_construct() {
     assert_format_preserves_ast(source);
 }
 
+/// Only a comment in the gap right before a `{` moves ahead of it. One between
+/// `else` and `if` keeps the `else` block's braces and leads the `if`; one
+/// ahead of a bare `return` arm, which has no brace, stays in the body; an
+/// if expression with a comment takes its multi-line form.
+#[test]
+fn test_format_comment_near_body_brace_stays_put() {
+    let source = concat!(
+        "fn f(a: bool, n: i32) -> i32 {\n",
+        "    if a {\n",
+        "        return 0;\n",
+        "    } else /* e */ if n > 0 {\n",
+        "        return 1;\n",
+        "    }\n",
+        "    let x = if a // why\n",
+        "    { 1 } else { 2 };\n",
+        "    return match n {\n",
+        "        0 => /* c */ return 1,\n",
+        "        _ => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(a: bool, n: i32) -> i32 {\n",
+        "    if a {\n",
+        "        return 0;\n",
+        "    } else {\n",
+        "        /* e */\n",
+        "        if n > 0 {\n",
+        "            return 1;\n",
+        "        }\n",
+        "    }\n",
+        "    let x = if a\n",
+        "        // why\n",
+        "    {\n",
+        "        1;\n",
+        "    } else {\n",
+        "        2;\n",
+        "    };\n",
+        "    return match n {\n",
+        "        0 => {\n",
+        "            /* c */\n",
+        "            return 1;\n",
+        "        },\n",
+        "        _ => x,\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
 /// A function's body is one of those braces.
 #[test]
 fn test_format_comment_before_body_brace() {

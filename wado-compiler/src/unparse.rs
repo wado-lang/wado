@@ -375,24 +375,34 @@ impl<'a> Unparser<'a> {
         self.flush_comments_in(0, pos, spacing);
     }
 
-    /// Open the body whose `{` is at `brace`, after its head. A comment still
-    /// pending before the brace has no slot on the head's line, and the body
-    /// must not adopt it, so it takes a line of its own and the brace another,
-    /// as after a `contract` clause (#2331).
+    /// Open the body whose `{` is at `brace`, after its head. A comment in the
+    /// gap before the brace has no slot on the head's line, and the body must
+    /// not adopt it, so it takes a line of its own and the brace another, as
+    /// after a `contract` clause (#2331).
     fn open_brace(&mut self, brace: usize) {
-        if self.has_comment_in_range(0, brace) {
-            self.open_brace_on_own_line(brace);
-        } else {
-            self.output.push_str(" {\n");
+        match self.brace_gap_start(brace) {
+            Some(gap_start) if self.has_comment_in_range(gap_start, brace) => {
+                self.open_brace_on_own_line(gap_start, brace);
+            }
+            _ => self.output.push_str(" {\n"),
         }
     }
 
+    /// Where the gap before the `{` at `brace` starts. `None` where comments
+    /// are not kept, or for the block the parser builds around a bare
+    /// `return`, which has no brace.
+    fn brace_gap_start(&self, brace: usize) -> Option<usize> {
+        self.trivia
+            .and_then(|trivia| trivia.open_brace_at(brace))
+            .map(|b| b.gap_start)
+    }
+
     /// Open the body whose `{` is at `brace` on a line of its own, the
-    /// comments still pending before it indented under the head.
-    fn open_brace_on_own_line(&mut self, brace: usize) {
+    /// comments in `gap_start..brace` indented under the head.
+    fn open_brace_on_own_line(&mut self, gap_start: usize, brace: usize) {
         self.output.push('\n');
         self.indent_level += 1;
-        self.flush_comments_before(brace, Spacing::Tight);
+        self.flush_comments_in(gap_start, brace, Spacing::Tight);
         self.indent_level -= 1;
         self.write_indent();
         self.output.push_str("{\n");
@@ -408,7 +418,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" {\n");
             return head_line;
         };
-        let brace = trivia.open_brace_from(pos);
+        let brace = trivia.open_brace_from(pos).span;
         self.open_brace(brace.start);
         brace.line
     }
@@ -489,11 +499,11 @@ impl<'a> Unparser<'a> {
 
     /// The comments in `lo..hi` no construct has placed, in source order.
     fn pending_comments(&self, lo: usize, hi: usize) -> impl Iterator<Item = &Comment> {
-        self.all_comments.iter().filter(move |c| {
-            c.span.start >= lo
-                && c.span.start < hi
-                && !self.emitted_comments.contains(&c.span.start)
-        })
+        let first = self.all_comments.partition_point(|c| c.span.start < lo);
+        self.all_comments[first..]
+            .iter()
+            .take_while(move |c| c.span.start < hi)
+            .filter(|c| !self.emitted_comments.contains(&c.span.start))
     }
 
     /// [`Self::pending_comments`] as an owned list, for a caller that emits
@@ -1032,7 +1042,7 @@ impl<'a> Unparser<'a> {
             if contracts.is_empty() {
                 self.open_brace(body.span.start);
             } else {
-                self.open_brace_on_own_line(body.span.start);
+                self.open_brace_on_own_line(0, body.span.start);
             }
             self.block_rest(body);
             self.output.push('\n');
@@ -1567,7 +1577,10 @@ impl<'a> Unparser<'a> {
             Stmt::Expr(e) => self.unparse_expr_stmt(e),
             Stmt::Return(r) => self.unparse_return(r),
             Stmt::TaskReturn(tr) => self.unparse_task_return(tr),
-            Stmt::If(i) => self.unparse_if_stmt(i),
+            Stmt::If(i) => {
+                self.write_indent();
+                self.unparse_if_stmt(i);
+            }
             Stmt::While(w) => self.unparse_while(w),
             Stmt::For(f) => self.unparse_for(f),
             Stmt::ForOf(f) => self.unparse_for_of(f),
@@ -1649,25 +1662,20 @@ impl<'a> Unparser<'a> {
         self.output.push_str(";\n");
     }
 
+    /// An if statement from its `if` on: the indent is the caller's, so an
+    /// `else if` continues the line its `else` is on.
     fn unparse_if_stmt(&mut self, i: &IfStmt) {
-        self.write_indent();
-        self.unparse_if_stmt_continuation(i);
-    }
-
-    /// An if statement from its `if` on, so an `else if` continues the line
-    /// its `else` is on.
-    fn unparse_if_stmt_continuation(&mut self, i: &IfStmt) {
         self.output.push_str("if ");
         self.with_reserved_width(" {".len(), |s| s.unparse_condition(&i.condition));
         self.braced_block(&i.then_block);
 
         if let Some(else_block) = &i.else_block {
-            // Check if this is an `else if` (else block contains only an if statement)
             if else_block.stmts.len() == 1
                 && let Stmt::If(nested_if) = &else_block.stmts[0]
+                && self.else_if_has_no_comment(&i.then_block, nested_if.span)
             {
                 self.output.push_str(" else ");
-                self.unparse_if_stmt_continuation(nested_if);
+                self.unparse_if_stmt(nested_if);
                 return;
             }
             self.output.push_str(" else");
@@ -1844,7 +1852,9 @@ impl<'a> Unparser<'a> {
             Expr::StaticMethodCall(s) => self.unparse_static_method_call(s),
             Expr::FieldAccess(f) => self.unparse_field_access(f),
             Expr::Index(i) => self.unparse_index(i),
-            Expr::Block(b) => self.unparse_block_expr(b),
+            // Only a closure's or a match arm's body, after a head that leaves
+            // the space before the brace to it.
+            Expr::Block(b) => self.braced_block(b),
             Expr::If(i) => self.unparse_if_expr(i),
             Expr::Match(m) => self.unparse_match(m),
             Expr::Matches(m) => self.unparse_matches(m),
@@ -2296,14 +2306,6 @@ impl<'a> Unparser<'a> {
         });
     }
 
-    /// A block in expression position. The context writes the space an
-    /// expression follows, and the brace brings its own.
-    fn unparse_block_expr(&mut self, b: &Block) {
-        let head_end = self.output.trim_end_matches(' ').len();
-        self.output.truncate(head_end);
-        self.braced_block(b);
-    }
-
     /// A construct's `{ … }` body after its head: the brace, the statements one
     /// level in, and the `}`, with nothing after it.
     fn braced_block(&mut self, b: &Block) {
@@ -2359,6 +2361,10 @@ impl<'a> Unparser<'a> {
         if !is_inline_safe_expr(then_expr) || !is_inline_safe_expr(else_expr) {
             return false;
         }
+        // The one-line form has no slot for a comment.
+        if self.has_comment_in_range(i.span.start, i.span.end) {
+            return false;
+        }
 
         let snap = self.snapshot();
         self.output.push_str("if ");
@@ -2389,6 +2395,7 @@ impl<'a> Unparser<'a> {
                     expr: Expr::If(nested_if),
                     ..
                 }) = &else_block.stmts[0]
+                && self.else_if_has_no_comment(&i.then_block, nested_if.span)
             {
                 self.output.push_str(" else ");
                 self.unparse_if_expr_multiline(nested_if);
@@ -2397,6 +2404,13 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" else");
             self.braced_block(else_block);
         }
+    }
+
+    /// Whether `else` and the `if` it chains to may share a line. A comment
+    /// between them has no slot there, so the chain keeps the braces of the
+    /// `else` block it is, and the comment leads the nested `if` inside them.
+    fn else_if_has_no_comment(&self, then_block: &Block, nested_if: Span) -> bool {
+        !self.has_comment_in_range(then_block.span.end, nested_if.start)
     }
 
     fn unparse_match(&mut self, m: &MatchExpr) {
@@ -2441,8 +2455,18 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" && ");
             self.unparse_expr(guard);
         }
-        self.output.push_str(" => ");
+        self.output.push_str(" =>");
+        self.space_before_body(&arm.body);
         self.unparse_expr(&arm.body);
+    }
+
+    /// The space between a closure's or a match arm's head and its `body`. A
+    /// block writes its own, since a comment ahead of its `{` breaks the line
+    /// there instead.
+    fn space_before_body(&mut self, body: &Expr) {
+        if !matches!(body, Expr::Block(_)) {
+            self.output.push(' ');
+        }
     }
 
     fn unparse_match_multiline(&mut self, m: &MatchExpr) {
@@ -2569,7 +2593,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_closure(&mut self, c: &ClosureExpr) {
-        self.delimited("|", "| ", &c.params, |s, param| {
+        self.delimited("|", "|", &c.params, |s, param| {
             s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_mut, "mut ");
             s.output.push_str(&param.name);
@@ -2579,10 +2603,10 @@ impl<'a> Unparser<'a> {
             }
         });
         if let Some(ty) = &c.return_type {
-            self.output.push_str("-> ");
+            self.output.push_str(" -> ");
             self.unparse_type(ty);
-            self.output.push(' ');
         }
+        self.space_before_body(&c.body);
         self.with_parens_if(closure_body_needs_parens(&c.body), |s| {
             s.unparse_expr(&c.body);
         });

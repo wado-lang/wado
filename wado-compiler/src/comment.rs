@@ -46,7 +46,15 @@ pub struct TriviaMap {
     /// Every `{` token, in source order. No node records where its body's
     /// brace sits, and a comment before it is the head's while one after it is
     /// the body's.
-    open_braces: Vec<Span>,
+    open_braces: Vec<OpenBrace>,
+}
+
+/// A `{` token, and where the gap before it starts: the end of the token
+/// ahead of it. A comment in that gap is written between a head and its body.
+#[derive(Debug, Clone, Copy)]
+pub struct OpenBrace {
+    pub gap_start: usize,
+    pub span: Span,
 }
 
 impl TriviaMap {
@@ -74,18 +82,28 @@ impl TriviaMap {
     }
 
     /// Record the `{` token offsets. Called once at parse end.
-    pub fn set_open_braces(&mut self, open_braces: Vec<Span>) {
-        assert!(open_braces.is_sorted_by_key(|span| span.start));
+    pub fn set_open_braces(&mut self, open_braces: Vec<OpenBrace>) {
+        assert!(open_braces.is_sorted_by_key(|b| b.span.start));
         self.open_braces = open_braces;
     }
 
     /// The first `{` token at or after `pos`.
-    pub fn open_brace_from(&self, pos: usize) -> Span {
-        let i = self.open_braces.partition_point(|b| b.start < pos);
+    pub fn open_brace_from(&self, pos: usize) -> OpenBrace {
+        let i = self.open_braces.partition_point(|b| b.span.start < pos);
         *self
             .open_braces
             .get(i)
             .unwrap_or_else(|| panic!("no `{{` at or after offset {pos}"))
+    }
+
+    /// The `{` token at `pos`, if one is there. A block the parser builds
+    /// around a bare `return` has none.
+    pub fn open_brace_at(&self, pos: usize) -> Option<OpenBrace> {
+        let i = self.open_braces.partition_point(|b| b.span.start < pos);
+        self.open_braces
+            .get(i)
+            .filter(|b| b.span.start == pos)
+            .copied()
     }
 
     /// Leading trivia for `id`, or an empty slice if none.
