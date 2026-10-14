@@ -3616,6 +3616,12 @@ impl BinaryOp {
         )
     }
 
+    /// Whether this is `&&` or `||`, whose right operand may not run.
+    #[must_use]
+    pub fn is_short_circuit(self) -> bool {
+        matches!(self, Self::And | Self::Or)
+    }
+
     /// Whether this answers a number: an arithmetic, bitwise or shift operator.
     #[must_use]
     pub fn is_numeric(self) -> bool {

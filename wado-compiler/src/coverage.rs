@@ -12,8 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
 use crate::ast::{
-    self, AstId, AstVisitor, BinaryOp, Block, Expr, Function, Item, MatchExpr, Stmt, walk_expr,
-    walk_stmt,
+    self, AstId, AstVisitor, Block, Expr, Function, Item, MatchExpr, Stmt, walk_expr, walk_stmt,
 };
 use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -891,10 +890,7 @@ impl AstVisitor for Planner<'_> {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Binary(b)
-                if matches!(b.op, BinaryOp::And | BinaryOp::Or)
-                    && !self.is_unreachable_call(&b.right) =>
-            {
+            Expr::Binary(b) if b.op.is_short_circuit() && !self.is_unreachable_call(&b.right) => {
                 self.visit_expr(&b.left);
                 let right = b.right.span();
                 let region = self.new_region(

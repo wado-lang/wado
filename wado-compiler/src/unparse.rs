@@ -2094,7 +2094,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_binary(&mut self, b: &BinaryExpr) {
-        if matches!(b.op, BinaryOp::And | BinaryOp::Or) {
+        if b.op.is_short_circuit() {
             let snap = self.snapshot();
             self.unparse_binary_inline(b);
             if !self.added_since(snap).contains('\n') && !self.exceeds_width_since(snap) {
@@ -3519,7 +3519,7 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // tightly as comparison, and inside another comparison (which would
         // extend or invalidate the chain). Only the looser-binding logical
         // `&&` / `||` can hold a bare chain.
-        Expr::ComparisonChain(_) => !matches!(parent_op, BinaryOp::And | BinaryOp::Or),
+        Expr::ComparisonChain(_) => !parent_op.is_short_circuit(),
         // Range expressions have lower precedence than all binary operators,
         // so they always need parentheses when nested inside a binary expression.
         Expr::Range(_) => true,
@@ -4013,7 +4013,7 @@ fn chain_operand_needs_parens(expr: &Expr) -> bool {
     matches!(
         expr,
         Expr::Range(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
-    ) || matches!(expr, Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or))
+    ) || matches!(expr, Expr::Binary(b) if b.op.is_short_circuit())
 }
 
 /// One pattern as source.
