@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791944694994,
+  "lastUpdate": 1791955040807,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67001,6 +67001,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 339773,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b04b4ab5fa1320ca81d7e517521622264d23b6eb",
+          "message": "Merge pull request #2350 from wado-lang/perf-multi-value-ref-param\n\nperf(compiler): a `&S` read only by field takes one Wasm parameter per field",
+          "timestamp": "2026-10-14T13:58:14+09:00",
+          "tree_id": "35aa19a5cb24c01c3ae0e9c5b8c150274c03c083",
+          "url": "https://github.com/wado-lang/wado/commit/b04b4ab5fa1320ca81d7e517521622264d23b6eb"
+        },
+        "date": 1791955039838,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21710,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339797,
             "unit": "bytes"
           }
         ]
