@@ -4241,6 +4241,58 @@ fn test_format_comment_near_body_brace_stays_put() {
     assert_format_preserves_ast(source);
 }
 
+/// A comment the head leaves unplaced goes before the brace with one written
+/// there, and one written before the construct stays out of its body.
+#[test]
+fn test_format_comment_in_head_before_body_brace() {
+    let source = concat!(
+        "fn f(n: i32, b: i32) -> i32 {\n",
+        "    let m = match /* scrut */ n {\n",
+        "        0 /* pat */ => {\n",
+        "            return 1;\n",
+        "        },\n",
+        "        _ => 2,\n",
+        "    };\n",
+        "    let t = [for let v /* head */ of [1, 2] { v }];\n",
+        "    let y = b /* a */ + found: {\n",
+        "        break found: 1;\n",
+        "    };\n",
+        "    return m;\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(n: i32, b: i32) -> i32 {\n",
+        "    let m = match n\n",
+        "        /* scrut */\n",
+        "    {\n",
+        "        0 =>\n",
+        "            /* pat */\n",
+        "        {\n",
+        "            return 1;\n",
+        "        },\n",
+        "        _ => 2,\n",
+        "    };\n",
+        "    let t = [for let v of [1, 2]\n",
+        "        /* head */\n",
+        "    {\n",
+        "        v\n",
+        "    }];\n",
+        "    let y = b + found: {\n",
+        "        break found: 1;\n",
+        "    };\n",
+        "    /* a */\n",
+        "    return m;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
 /// A function's body is one of those braces.
 #[test]
 fn test_format_comment_before_body_brace() {

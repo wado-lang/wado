@@ -46,15 +46,7 @@ pub struct TriviaMap {
     /// Every `{` token, in source order. No node records where its body's
     /// brace sits, and a comment before it is the head's while one after it is
     /// the body's.
-    open_braces: Vec<OpenBrace>,
-}
-
-/// A `{` token, and where the gap before it starts: the end of the token
-/// ahead of it. A comment in that gap is written between a head and its body.
-#[derive(Debug, Clone, Copy)]
-pub struct OpenBrace {
-    pub gap_start: usize,
-    pub span: Span,
+    open_braces: Vec<Span>,
 }
 
 impl TriviaMap {
@@ -82,27 +74,27 @@ impl TriviaMap {
     }
 
     /// Record the `{` tokens. Called once at parse end.
-    pub fn set_open_braces(&mut self, open_braces: Vec<OpenBrace>) {
-        assert!(open_braces.is_sorted_by_key(|b| b.span.start));
+    pub fn set_open_braces(&mut self, open_braces: Vec<Span>) {
+        assert!(open_braces.is_sorted_by_key(|b| b.start));
         self.open_braces = open_braces;
     }
 
-    /// The first `{` token at or after `pos`.
-    pub fn open_brace_from(&self, pos: usize) -> OpenBrace {
-        let i = self.open_braces.partition_point(|b| b.span.start < pos);
-        *self
-            .open_braces
-            .get(i)
-            .unwrap_or_else(|| panic!("no `{{` at or after offset {pos}"))
+    /// The one `{` token in `lo..hi`.
+    pub fn only_open_brace_in(&self, lo: usize, hi: usize) -> Span {
+        let first = self.open_braces.partition_point(|b| b.start < lo);
+        let end = self.open_braces.partition_point(|b| b.start < hi);
+        match self.open_braces[first..end] {
+            [brace] => brace,
+            ref braces => panic!("{} `{{` tokens in {lo}..{hi}, not one", braces.len()),
+        }
     }
 
-    /// The `{` token at `pos`, if one is there. A block the parser builds
-    /// around a bare `return` has none.
-    pub fn open_brace_at(&self, pos: usize) -> Option<OpenBrace> {
+    /// Whether a `{` token is at `pos`. A block the parser builds around an
+    /// `else if` or a bare `return` starts at none.
+    pub fn is_open_brace(&self, pos: usize) -> bool {
         self.open_braces
-            .binary_search_by_key(&pos, |b| b.span.start)
-            .ok()
-            .map(|i| self.open_braces[i])
+            .binary_search_by_key(&pos, |b| b.start)
+            .is_ok()
     }
 
     /// Leading trivia for `id`, or an empty slice if none.

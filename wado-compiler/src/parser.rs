@@ -23,7 +23,7 @@ use crate::ast::{
     WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::attribute::{CANONICAL, CM, TODO};
-use crate::comment::{Comment, OpenBrace, TriviaMap};
+use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
@@ -73,7 +73,7 @@ pub struct Parser {
     comment_cursor: usize,
     /// The `{` tokens of the interpolations parsed so far, which the template
     /// token hides from `tokens` as it hides their comments.
-    interpolation_braces: Vec<OpenBrace>,
+    interpolation_braces: Vec<Span>,
     /// Trivia attached to AST nodes during parsing. Exposed via
     /// [`Parser::take_trivia`] for the formatter pipeline.
     trivia: TriviaMap,
@@ -317,9 +317,9 @@ impl Parser {
         trivia.set_dangling(dangling);
         let mut open_braces = self.open_brace_tokens();
         open_braces.append(&mut self.interpolation_braces);
-        open_braces.sort_by_key(|b| b.span.start);
+        open_braces.sort_by_key(|b| b.start);
         // A speculative branch that backtracked parsed its interpolations twice.
-        open_braces.dedup_by_key(|b| b.span.start);
+        open_braces.dedup_by_key(|b| b.start);
         trivia.set_open_braces(open_braces);
         trivia
     }
@@ -6906,21 +6906,12 @@ impl Parser {
         Ok(expr)
     }
 
-    fn open_brace_tokens(&self) -> Vec<OpenBrace> {
-        // An interpolation's tokens start mid-file, past the `${` that ends the
-        // gap ahead of its first token.
-        let mut gap_start = self.tokens.first().map_or(0, |t| t.span.start);
-        let mut open_braces = Vec::new();
-        for token in &self.tokens {
-            if matches!(token.kind, TokenKind::LBrace) {
-                open_braces.push(OpenBrace {
-                    gap_start,
-                    span: token.span,
-                });
-            }
-            gap_start = token.span.end;
-        }
-        open_braces
+    fn open_brace_tokens(&self) -> Vec<Span> {
+        self.tokens
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::LBrace))
+            .map(|token| token.span)
+            .collect()
     }
 
     /// Merge `comments` into this parse's stream, keeping it ordered by
