@@ -15,11 +15,15 @@ use crate::name::{
 };
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
-    FunctionRef, GlobalInit, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
-    TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
+    FunctionRef, GlobalInit, LocalFrame, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirGlobal, TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
+
+/// A global, by the module declaring it and its name: two modules may each
+/// declare one of the same name.
+type GlobalKey = (ModuleSource, String);
 
 /// One global initializer, taken out of the `$init$` function reify put it in.
 /// It lives only in `functions` until here, so no pass between reify and this
@@ -94,9 +98,16 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
 
     // An initializer depends on every global the functions it calls read.
     let reads_by_function = global_reads_by_function(&flat.functions);
+    let mut must_reads = MustReadsByFunction::new(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
+    let mut init_funcs = Vec::with_capacity(by_module.len());
     for (module_source, module_inits) in by_module {
-        let order = topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
+        let order = topological_sort_global_inits(
+            &module_inits,
+            &reads_by_function,
+            &mut must_reads,
+            errors,
+        )?;
         let mut taken: Vec<Option<LazyInit>> = module_inits.into_iter().map(Some).collect();
         let sorted_inits = order
             .into_iter()
@@ -106,9 +117,18 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
                     .expect("the order names each initializer once")
             })
             .collect();
-        let init_func = build_module_init_function(module_source, sorted_inits, span);
-        flat.functions.push(Rc::new(RefCell::new(init_func)));
+        init_funcs.push(build_module_init_function(
+            module_source,
+            sorted_inits,
+            span,
+        ));
     }
+    drop(must_reads);
+    flat.functions.extend(
+        init_funcs
+            .into_iter()
+            .map(|func| Rc::new(RefCell::new(func))),
+    );
     Ok(())
 }
 
@@ -156,12 +176,11 @@ fn build_module_init_function(
 
 /// What a function body reads and calls, in one walk.
 ///
-/// Globals are keyed by `(module_source, name)` so two modules each declaring a
-/// global with the same name don't collide in the dependency graph; callees by
-/// [`FunctionRef::full_name`], the same key [`global_reads_by_function`] maps.
+/// Callees are keyed by [`FunctionRef::full_name`], the same key
+/// [`global_reads_by_function`] maps.
 #[derive(Default)]
 struct BodyReads {
-    globals: IndexSet<(ModuleSource, String)>,
+    globals: IndexSet<GlobalKey>,
     callees: IndexSet<String>,
 }
 
@@ -217,8 +236,8 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
 /// each member's own reads and terminates.
 fn global_reads_by_function(
     functions: &[Rc<RefCell<TirFunction>>],
-) -> IndexMap<String, IndexSet<(ModuleSource, String)>> {
-    let mut reads: IndexMap<String, IndexSet<(ModuleSource, String)>> = IndexMap::default();
+) -> IndexMap<String, IndexSet<GlobalKey>> {
+    let mut reads: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
     let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
     for func_rc in functions {
         let func = func_rc.borrow();
@@ -233,7 +252,7 @@ fn global_reads_by_function(
     }
 
     loop {
-        let mut grown: Vec<(String, IndexSet<(ModuleSource, String)>)> = Vec::new();
+        let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
         for (name, called) in &callees {
             let known = reads.get(name);
             let mut fresh = IndexSet::default();
@@ -260,22 +279,263 @@ fn global_reads_by_function(
     }
 }
 
-/// The globals an initializer depends on, kept apart by how certainly: those it
-/// names, and those the functions it reaches read.
+/// The globals each function reads on every path through it, worked out on
+/// demand from the functions an initializer calls.
+struct MustReadsByFunction<'a> {
+    functions: IndexMap<String, &'a Rc<RefCell<TirFunction>>>,
+    known: IndexMap<String, IndexSet<GlobalKey>>,
+}
+
+impl<'a> MustReadsByFunction<'a> {
+    fn new(functions: &'a [Rc<RefCell<TirFunction>>]) -> Self {
+        let functions = functions
+            .iter()
+            .map(|func_rc| {
+                let func = func_rc.borrow();
+                let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
+                (key, func_rc)
+            })
+            .collect();
+        Self {
+            functions,
+            known: IndexMap::default(),
+        }
+    }
+
+    /// A function on the call stack answers nothing, which under-approximates
+    /// a recursive one: a missed read only leaves an edge to yield.
+    fn of(&mut self, name: &str) -> IndexSet<GlobalKey> {
+        if let Some(reads) = self.known.get(name) {
+            return reads.clone();
+        }
+        self.known.insert(name.to_string(), IndexSet::default());
+        let Some(&func_rc) = self.functions.get(name) else {
+            return IndexSet::default();
+        };
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            return IndexSet::default();
+        };
+        let mut walk = MustReads::new(self);
+        walk.visit_block(body);
+        let reads = walk.reads;
+        self.known.insert(name.to_string(), reads.clone());
+        reads
+    }
+}
+
+/// The globals read on every path through what it walks, up to the first point
+/// a path can leave it.
+///
+/// Once a `return`, `break` or `continue` may have been taken, what follows is
+/// not on every path, so it counts only after the construct that exit leaves.
+/// Branches count what they all read. A closure body runs only when called, and
+/// a callee read through a function value is unknown, so neither counts.
+struct MustReads<'w, 'a> {
+    by_function: &'w mut MustReadsByFunction<'a>,
+    reads: IndexSet<GlobalKey>,
+    /// The loops and labeled blocks being walked, innermost last.
+    targets: Vec<Option<String>>,
+    /// The outermost construct a path may have left so far, as its depth in
+    /// `targets` (`0` is the function). While set, nothing counts.
+    exited_to: Option<usize>,
+}
+
+impl<'w, 'a> MustReads<'w, 'a> {
+    fn new(by_function: &'w mut MustReadsByFunction<'a>) -> Self {
+        Self {
+            by_function,
+            reads: IndexSet::default(),
+            targets: Vec::new(),
+            exited_to: None,
+        }
+    }
+
+    fn exit_to(&mut self, depth: usize) {
+        self.exited_to = Some(self.exited_to.map_or(depth, |d| d.min(depth)));
+    }
+
+    /// The depth of the construct a `break` or `continue` leaves.
+    fn target_depth(&self, label: Option<&str>) -> usize {
+        let index = self
+            .targets
+            .iter()
+            .rposition(|target| match label {
+                Some(label) => target.as_deref() == Some(label),
+                None => target.is_none(),
+            })
+            .expect("a break or continue sits inside its target");
+        index + 1
+    }
+
+    /// Walk a loop or labeled block: an exit to it lands right after it.
+    fn within(&mut self, label: Option<String>, block: &TirBlock) {
+        self.targets.push(label);
+        let depth = self.targets.len();
+        self.visit_block(block);
+        self.targets.pop();
+        if self.exited_to == Some(depth) {
+            self.exited_to = None;
+        }
+    }
+
+    /// What each alternative reads on every path, and the outermost exit any
+    /// of them may take.
+    fn alternatives<'e>(&mut self, branches: impl IntoIterator<Item = Branch<'e>>) {
+        let mut common: Option<IndexSet<GlobalKey>> = None;
+        let mut exited_to = None;
+        for branch in branches {
+            let mut walk = MustReads {
+                by_function: &mut *self.by_function,
+                reads: IndexSet::default(),
+                targets: self.targets.clone(),
+                exited_to: None,
+            };
+            match branch {
+                Branch::Block(block) => walk.visit_block(block),
+                Branch::Expr(expr) => walk.visit_expr(expr),
+                Branch::Empty => {}
+            }
+            common = Some(match common {
+                None => walk.reads,
+                Some(common) => common.intersection(&walk.reads).cloned().collect(),
+            });
+            if let Some(depth) = walk.exited_to {
+                exited_to = Some(exited_to.map_or(depth, |d: usize| d.min(depth)));
+            }
+        }
+        self.reads.extend(common.into_iter().flatten());
+        if let Some(depth) = exited_to {
+            self.exit_to(depth);
+        }
+    }
+}
+
+enum Branch<'e> {
+    Block(&'e TirBlock),
+    Expr(&'e TirExpr),
+    Empty,
+}
+
+impl TirRefVisitor for MustReads<'_, '_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if self.exited_to.is_some() {
+            return;
+        }
+        match &stmt.kind {
+            TirStmtKind::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                self.visit_expr(condition);
+                if self.exited_to.is_none() {
+                    let otherwise = else_block.as_ref().map_or(Branch::Empty, Branch::Block);
+                    self.alternatives([Branch::Block(then_block), otherwise]);
+                }
+            }
+            TirStmtKind::Loop { body } => self.within(None, body),
+            TirStmtKind::LabeledBlock { label, block } => self.within(Some(label.clone()), block),
+            TirStmtKind::Return { value } => {
+                if let Some(value) = value {
+                    self.visit_expr(value);
+                }
+                self.exit_to(0);
+            }
+            TirStmtKind::Break { label, value } => {
+                if let Some(value) = value {
+                    self.visit_expr(value);
+                }
+                let depth = self.target_depth(label.as_deref());
+                self.exit_to(depth);
+            }
+            TirStmtKind::Continue => {
+                let depth = self.target_depth(None);
+                self.exit_to(depth);
+            }
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("monomorphization expands a variadic for-of")
+            }
+            _ => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.exited_to.is_some() {
+            return;
+        }
+        match &expr.kind {
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                self.reads.insert((module_source.clone(), name.clone()));
+            }
+            TirExprKind::Call { func, args, .. } => {
+                for arg in args {
+                    self.visit_expr(&arg.expr);
+                }
+                if self.exited_to.is_none() {
+                    let callee_reads = self.by_function.of(&func.full_name());
+                    self.reads.extend(callee_reads);
+                }
+            }
+            TirExprKind::Binary {
+                left,
+                op: TirBinaryOp::And | TirBinaryOp::Or,
+                ..
+            } => self.visit_expr(left),
+            TirExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.visit_expr(condition);
+                if self.exited_to.is_none() {
+                    let otherwise = else_branch.as_ref().map_or(Branch::Empty, Branch::Block);
+                    self.alternatives([Branch::Block(then_branch), otherwise]);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                self.visit_expr(scrutinee);
+                if self.exited_to.is_none() {
+                    self.alternatives(arms.iter().map(|arm| Branch::Expr(&arm.body)));
+                }
+            }
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.within(Some(label.clone()), block);
+            }
+            TirExprKind::Closure { .. } => {}
+            _ => self.walk_expr(expr),
+        }
+    }
+}
+
+/// The globals an initializer depends on, kept apart by how certainly: those
+/// it names or reads on every path, and those the functions it reaches may
+/// read.
 #[derive(Default)]
 struct InitRefs {
-    direct: IndexSet<(ModuleSource, String)>,
-    via_calls: IndexSet<(ModuleSource, String)>,
+    definite: IndexSet<GlobalKey>,
+    via_calls: IndexSet<GlobalKey>,
 }
 
 fn collect_global_refs(
     value: &TirExpr,
-    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
+    reads_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
+    must_reads: &mut MustReadsByFunction,
 ) -> InitRefs {
     let mut scan = BodyReads::default();
     scan.visit_expr(value);
+    let mut walk = MustReads::new(must_reads);
+    walk.visit_expr(value);
+    let mut definite = scan.globals;
+    definite.extend(walk.reads);
     let mut refs = InitRefs {
-        direct: scan.globals,
+        definite,
         via_calls: IndexSet::default(),
     };
     for callee in &scan.callees {
@@ -283,7 +543,7 @@ fn collect_global_refs(
             continue;
         };
         for global in callee_reads {
-            if !refs.direct.contains(global) {
+            if !refs.definite.contains(global) {
                 refs.via_calls.insert(global.clone());
             }
         }
@@ -312,7 +572,8 @@ fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
 /// every one it depends on.
 fn topological_sort_global_inits(
     lazy_inits: &[LazyInit],
-    reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
+    reads_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
+    must_reads: &mut MustReadsByFunction,
     errors: &dyn ErrorSink,
 ) -> Result<Vec<usize>, Bail> {
     if lazy_inits.len() <= 1 {
@@ -324,7 +585,7 @@ fn topological_sort_global_inits(
     // globals separated when both happen to share a topo-sort input
     // (today the planner partitions by module, but the keying is
     // defensive against any future re-merge).
-    let key_to_idx: IndexMap<(ModuleSource, String), usize> = lazy_inits
+    let key_to_idx: IndexMap<GlobalKey, usize> = lazy_inits
         .iter()
         .enumerate()
         .map(|(i, init)| ((init.module_source.clone(), init.global.clone()), i))
@@ -332,7 +593,7 @@ fn topological_sort_global_inits(
 
     // Build dependency graph: deps[i] = set of indices that i depends on.
     let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); lazy_inits.len()];
-    let edges = |refs: IndexSet<(ModuleSource, String)>, i: usize| -> Vec<usize> {
+    let edges = |refs: IndexSet<GlobalKey>, i: usize| -> Vec<usize> {
         refs.into_iter()
             .filter_map(|key| key_to_idx.get(&key).copied())
             .filter(|&dep| dep != i)
@@ -341,20 +602,21 @@ fn topological_sort_global_inits(
 
     let scanned: Vec<InitRefs> = lazy_inits
         .iter()
-        .map(|init| collect_global_refs(&init.value, reads_by_function))
+        .map(|init| collect_global_refs(&init.value, reads_by_function, must_reads))
         .collect();
 
-    // A reference written in the initializer is a definite dependency.
+    // A reference written in the initializer, or read on every path through
+    // the calls it makes, is a definite dependency, and a cycle among those is
+    // an error.
     for (i, refs) in scanned.iter().enumerate() {
-        for dep in edges(refs.direct.clone(), i) {
+        for dep in edges(refs.definite.clone(), i) {
             deps[i].insert(dep);
         }
     }
-    // What a callee reads is inferred, and the inference is path-insensitive: a
-    // helper that reads two globals makes each initializer calling it look
-    // dependent on the other, even when no execution reads both. Such an edge
-    // yields rather than manufacturing a cycle out of a program that has none —
-    // the definite edges above already fix every order that is really required.
+    // What a callee may read is path-insensitive: a helper that reads two
+    // globals makes each initializer calling it look dependent on the other,
+    // even when no execution reads both. Such an edge yields rather than
+    // manufacturing a cycle out of a program that has none.
     for (i, refs) in scanned.iter().enumerate() {
         for dep in edges(refs.via_calls.clone(), i) {
             if !depends_on(&deps, dep, i) {
