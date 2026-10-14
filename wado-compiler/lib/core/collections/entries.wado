@@ -113,6 +113,14 @@ impl<K, V> EntryLog<K, V> {
         return Option::Some(self.values[e]);
     }
 
+    /// `e`, which a lookup of `key` answered; its miss (`e < 0`) panics.
+    internal fn found(&self, e: i32, key: &K) -> i32 {
+        if e < 0 {
+            panic(`key not found: ${*key:?}`);
+        }
+        return e;
+    }
+
     /// The first live entry from `from` on, or `count` for none. A log nothing
     /// was removed from has no dead entry to skip.
     fn next_live(&self, from: i32) -> i32 {

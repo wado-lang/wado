@@ -25,10 +25,6 @@ struct NumHolder {
 impl IndexRefMut<i32> for NumHolder {
     type Output = Number;
 
-    fn contains_index(&self, _idx: &i32) -> bool {
-        return true;
-    }
-
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         while builtin::black_box(false) { builtin::black_box(_idx); }
         return &mut self.num;

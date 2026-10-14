@@ -256,32 +256,35 @@ was kept despite that because it continues the `_unchecked` names it replaces.
 
 A trait method's clauses are written on the trait's declaration, a signature
 without a body included, and bind every impl, as its default arguments do. An
-impl writes none: it neither restates them nor adds one. Trait dispatch is
-static, so a call through a bound reaches a known impl, and each impl checks the
-trait's clauses at its head.
+impl of such a method writes none: it neither restates them nor adds one.
+Trait dispatch is static, so a call through a bound reaches a known impl, and
+each impl checks the trait's clauses at its head.
 
-An impl that added a clause would make `unchecked` remove a check its caller
-never saw: generic code marks a call vouching for the trait's clauses, not for
-those of whichever impl it reaches. Removing a check takes a marker at the
-call, and that marker means only what the call site can read.
+An impl that added a clause to the trait's would make `unchecked` remove a
+check its caller never saw: generic code marks a call vouching for the trait's
+clauses, not for those of whichever impl it reaches. Removing a check takes a
+marker at the call, and that marker means only what the call site can read.
 
-Where what an impl accepts differs between impls, the trait declares a
-predicate method and its clause calls it. The indexing traits are the case:
-a list takes an index in range, a range index takes any ends since it clamps
-them, and a map takes a key it holds, so `len` would not do. Each declares `contains_index`,
-and `index_value` and its siblings require it:
+A trait method that declares no clause leaves its impls free to state their
+own. An unmarked call checks them however it reaches the impl, since static
+dispatch reaches the impl's body after monomorphization. `unchecked` vouches
+for them only where the call names the impl itself. Through a bound the
+caller reads the trait's declaration, which states nothing, so `unchecked`
+there is a compile error, for the reason above.
 
-```text
-trait IndexValue<I> {
-    type Output;
-    fn contains_index(&self, index: &I) -> bool;
-    fn index_value(&self, index: I) -> Self::Output
-        contract self.contains_index(&index);
-}
-```
+The indexing traits are the case. What an index must satisfy differs by
+container: a list takes an index in range, a range index takes any ends since
+it clamps them, and a map takes a key it holds. A trait clause would have to
+call a predicate each impl defines, such as `contains_index`, and that
+predicate is exactly the clause a caller cannot read: it says only "whatever
+this impl accepts". A map would also look the key up twice on a checked read,
+once for the predicate and once to read. So the indexing traits declare no
+clause. `List` and `Slice` state `contract 0 <= index < self.len()` on their
+index methods. `Array` states none, since the Wasm array access traps on its
+own, and a map states none, since a missing key panics as it always did.
 
-An impl whose type cannot take every input its trait admits is a design error
-in that impl, not a contract to add.
+An impl whose type cannot take every input its trait admits, where the trait
+states a clause, is a design error in that impl, not a contract to add.
 
 ### A clause may cost as much as the function
 
@@ -356,11 +359,12 @@ API waits for a program outside the standard library that needs one.
 5. An `interface` operation's contract: written on the operation, checked in
    its default body and in every handler of it, and held to the purity check.
    Until then the parser rejects one.
-6. The indexing traits declare `contains_index` and require it, so
+6. An impl states its own clauses on a trait method that declares none, and
+   `List` and `Slice` state the range on their index methods, so
    `unchecked xs[i]` is an index read with no range check. Done. The
-   operand's dispatch already names the trait method, so the marker reaches
-   its twin as it does for a call. A map's checked `m[k]` looks the key up
-   twice, once for the contract and once to read.
+   operand's dispatch already names the impl method, so the marker reaches its
+   twin as it does for a call. `unchecked` through a bound whose trait method
+   declares no clause is a compile error.
 7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
    `#[unavailable]` declaration where Rust has a method of the same name.
    - [x] The UTF-8 functions, in the shapes

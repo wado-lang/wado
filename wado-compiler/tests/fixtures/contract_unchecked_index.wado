@@ -1,4 +1,4 @@
-// `unchecked xs[i]` vouches for the indexing trait's `contains_index`, so a
+// `unchecked xs[i]` vouches for the range `List`'s index impl requires, so a
 // build without contract checks reads with no range check, and only a marked
 // read skips it.
 use { println, Stdout } from "core:cli";
@@ -16,6 +16,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "20\nB\n",
-    "stderr_contains": ["self.contains_index(&index)"],
+    "stderr_contains": ["0 <= index < self.len()"],
     "trapped": true
 }

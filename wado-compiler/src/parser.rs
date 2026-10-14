@@ -6345,16 +6345,7 @@ impl Parser {
                     });
                 } else {
                     let id = self.alloc_ast_id();
-                    let method = self.parse_function(id, member_vis, false, false, attrs, true)?;
-                    if trait_type.is_some()
-                        && let Some(clause) = method.contracts().next()
-                    {
-                        return Err(self.error_at_span(
-                            clause.span,
-                            "an impl writes no `contract`: the trait's clauses bind it",
-                        ));
-                    }
-                    methods.push(method);
+                    methods.push(self.parse_function(id, member_vis, false, false, attrs, true)?);
                 }
             }
         }

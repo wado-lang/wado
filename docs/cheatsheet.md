@@ -1222,11 +1222,11 @@ trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 // Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
 
-// For [] operators. A read requires `contains_index`; `unchecked xs[i]` vouches
-// for it, so the read skips the check as a marked call does.
-trait IndexRef<I> { type Output: Ref; fn contains_index(&self, index: &I) -> bool; fn index_ref(&self, index: I) -> &Self::Output contract self.contains_index(&index); }
-trait IndexRefMut<I> { type Output: RefMut; fn contains_index(&self, index: &I) -> bool; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output contract self.contains_index(&index); }
-trait IndexValue<I> { type Output; fn contains_index(&self, index: &I) -> bool; fn index_value(&self, index: I) -> Self::Output contract self.contains_index(&index); }
+// For [] operators. List's and Slice's impls require `0 <= index < self.len()`,
+// so `unchecked xs[i]` on one skips the range check as a marked call does.
+trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
+trait IndexRefMut<I> { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
+trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }
 trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
 
 // For string template interpolation

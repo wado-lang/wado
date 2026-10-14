@@ -469,36 +469,24 @@ impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
 impl<K: Ord, V> IndexValue<K> for TreeMap<K, V> {
     type Output = V;
 
-    fn contains_index(&self, key: &K) -> bool {
-        return self.find_index(*key) >= 0;
-    }
-
     fn index_value(&self, key: K) -> Self::Output {
-        return self.log.values[self.find_index(key)];
+        return self.log.values[self.log.found(self.find_index(key), &key)];
     }
 }
 
 impl<K: Ord, V: Ref> IndexRef<K> for TreeMap<K, V> {
     type Output = V;
 
-    fn contains_index(&self, key: &K) -> bool {
-        return self.find_index(*key) >= 0;
-    }
-
     fn index_ref(&self, key: K) -> &V {
-        return &self.log.values[self.find_index(key)];
+        return &self.log.values[self.log.found(self.find_index(key), &key)];
     }
 }
 
 impl<K: Ord, V: RefMut> IndexRefMut<K> for TreeMap<K, V> {
     type Output = V;
 
-    fn contains_index(&self, key: &K) -> bool {
-        return self.find_index(*key) >= 0;
-    }
-
     fn index_ref_mut(&mut self, key: K) -> &mut V {
-        let index = self.find_index(key);
+        let index = self.log.found(self.find_index(key), &key);
         return &mut self.log.values[index];
     }
 }

@@ -97,7 +97,7 @@ message included. A caller that guarantees the contract itself marks the call
 with the prefix operator `unchecked`, and a marked call is checked only where
 the build checks contracts. A call without the marker is checked in every
 build. The operand of `unchecked` is a call to a function with a contract, or
-an index `c[i]` whose trait method has one (see
+an index `c[i]` whose index method has one (see
 [Indexing Traits](./spec-standard-traits.md#indexing-traits)); anything else is
 a compile error. Postfix operators bind tighter, so
 `unchecked f(x)?` marks the `?`, an error, and `(unchecked f(x))?` marks the
@@ -133,8 +133,27 @@ wado compile -O2 -f contract-checks app.wado    # checks
 
 A trait method's clauses are written on the trait's declaration, one without a
 body included, and bind every impl of the method and the trait's default body.
-An impl writes no clause; one that does is a compile error. A call through a
-bound checks the trait's clauses, and `unchecked` vouches for them.
+An impl of such a method writes no clause; one that does is a compile error. A
+call through a bound checks the trait's clauses, and `unchecked` vouches for
+them.
+
+An impl of a trait method that declares no clause may state its own. A call
+checks them however it reaches the impl, through a bound included. `unchecked`
+vouches for them only where the impl is the callee the call names. Through a
+bound the caller sees the trait's declaration alone, so `unchecked` there is a
+compile error: it would vouch for clauses the caller never saw.
+
+<!-- {"fixture":"contract_impl_clause.wado", "assert": false} -->
+
+```wado
+impl Get for Small {
+    fn get(&self, i: i32) -> i32
+        contract i < 10, "i must be below 10"
+    {
+        return self.value + i;
+    }
+}
+```
 
 <!-- {"fixture":"contract_trait_method.wado", "assert": false} -->
 

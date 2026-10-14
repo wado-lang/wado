@@ -1,5 +1,7 @@
 //! Where `unchecked` may stand: before a call whose callee a `contract` clause
-//! binds, by its own clauses or by its trait's.
+//! binds, by its own clauses or by its trait's. An impl states clauses of its
+//! own only on a method its trait leaves unbound, so a call through a bound
+//! sees the trait's clauses or none.
 
 use crate::ast::{self, AstVisitor, Expr, Item, Module, UnaryOp};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -11,6 +13,9 @@ use crate::resolve::Resolutions;
 
 const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
+const BOUND_NO_CONTRACT: &str = "through a bound, `unchecked` vouches for the trait's clauses, \
+                                 and this trait method declares none";
+const IMPL_CLAUSE: &str = "an impl writes no `contract` on a method its trait's clauses bind";
 const INNER_CALL: &str = "postfix operators bind tighter than `unchecked`, so it marks the \
                           whole chain; write `(unchecked …)` around the call it vouches for";
 
@@ -31,6 +36,9 @@ pub(super) fn misplaced_unchecked(
         found: Vec::new(),
     };
     for item in &module.items {
+        if let Item::Impl(block) = item {
+            finder.impl_clauses_under_trait_clauses(block);
+        }
         finder.visit_item(item);
     }
     finder.found
@@ -43,6 +51,26 @@ struct Finder<'a> {
 }
 
 impl Finder<'_> {
+    /// An error for each clause `block` writes on a method its trait binds:
+    /// a caller through a bound vouches for the trait's clauses, never an
+    /// impl's.
+    fn impl_clauses_under_trait_clauses(&mut self, block: &ast::ImplBlock) {
+        let Some(decl) = self.contracts.implemented_trait(block) else {
+            return;
+        };
+        for method in &block.methods {
+            if let Some(clause) = method.contracts().next()
+                && trait_binds(decl, method)
+            {
+                self.found.push(Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::TraitDeclInvalid,
+                    message: IMPL_CLAUSE.to_string(),
+                    span: Some(DiagnosticSpan::from_span(&clause.span, None)),
+                });
+            }
+        }
+    }
     /// The declarations the call `expr` reaches, one per walk that reached it.
     fn callees(&self, expr: &Expr) -> Vec<DefId> {
         let types = &self.sem.types;
@@ -82,6 +110,16 @@ impl Finder<'_> {
         }
     }
 
+    /// Whether every callee of `expr` is a trait method left without clauses:
+    /// a call through a bound, where an impl's own clauses are out of sight.
+    fn reaches_unbound_trait_method(&self, expr: &Expr) -> bool {
+        let callees = self.callees(expr);
+        !callees.is_empty()
+            && callees
+                .iter()
+                .all(|&def| self.contracts.unbound_trait_method(def))
+    }
+
     /// Whether `expr` reaches a call a `contract` clause binds.
     fn binds(&self, expr: &Expr) -> bool {
         let callees = self.callees(expr);
@@ -113,6 +151,8 @@ impl AstVisitor for Finder<'_> {
                 Some(INNER_CALL)
             } else if self.callees(&unary.expr).is_empty() {
                 Some(NOT_A_CALL)
+            } else if self.reaches_unbound_trait_method(&unary.expr) {
+                Some(BOUND_NO_CONTRACT)
             } else {
                 Some(NO_CONTRACT)
             };
@@ -139,21 +179,14 @@ impl<'a> Contracts<'_, 'a> {
     /// Whether the function `def` declares is bound by a `contract` clause:
     /// one it writes, or one its trait declares for it.
     pub(super) fn binds(&self, def: DefId) -> bool {
-        let has_contract = |func: &ast::Function| func.contracts().next().is_some();
-        let trait_binds = |decl: &ast::TraitDecl, method: &ast::Function| {
-            decl.contract_holder(&method.name).is_some()
-        };
         let target = self.resolutions.defs().ast_id(def);
         self.items_declaring(def).iter().any(|item| match item {
             Item::Function(func) => func.id == target && has_contract(func),
             Item::Impl(block) => block.methods.iter().any(|method| {
                 method.id == target
                     && (has_contract(method)
-                        || block
-                            .trait_type
-                            .as_ref()
-                            .and_then(|ty| self.resolutions.head_decl(ty))
-                            .and_then(|decl| self.trait_decl(decl))
+                        || self
+                            .implemented_trait(block)
                             .is_some_and(|decl| trait_binds(decl, method)))
             }),
             Item::Trait(decl) => decl
@@ -162,6 +195,28 @@ impl<'a> Contracts<'_, 'a> {
                 .any(|method| method.id == target && trait_binds(decl, method)),
             _ => false,
         })
+    }
+
+    /// Whether `def` declares a trait method its trait gives no clause, which
+    /// a call through a bound reaches without seeing any impl's.
+    fn unbound_trait_method(&self, def: DefId) -> bool {
+        let target = self.resolutions.defs().ast_id(def);
+        self.items_declaring(def).iter().any(|item| match item {
+            Item::Trait(decl) => decl
+                .methods
+                .iter()
+                .any(|method| method.id == target && !trait_binds(decl, method)),
+            _ => false,
+        })
+    }
+
+    /// The trait `block` implements, if it implements one.
+    fn implemented_trait(&self, block: &ast::ImplBlock) -> Option<&'a ast::TraitDecl> {
+        block
+            .trait_type
+            .as_ref()
+            .and_then(|ty| self.resolutions.head_decl(ty))
+            .and_then(|decl| self.trait_decl(decl))
     }
 
     /// The trait `def` declares.
@@ -180,4 +235,12 @@ impl<'a> Contracts<'_, 'a> {
         let module = self.resolutions.defs().module(def);
         self.modules.get(module).map_or(&[], |m| m.items.as_slice())
     }
+}
+
+fn has_contract(func: &ast::Function) -> bool {
+    func.contracts().next().is_some()
+}
+
+fn trait_binds(decl: &ast::TraitDecl, method: &ast::Function) -> bool {
+    decl.contract_holder(&method.name).is_some()
 }

@@ -335,12 +335,11 @@ impl<K: Ord, V> TreeMap<K, V> {
 impl<K: Ord, V> IndexValue<K> for TreeMap<K, V> {
     type Output = V;
 
-    fn contains_index(&self, key: &K) -> bool {
-        return self.get(key) matches { Some(_) };
-    }
-
     fn index_value(&self, key: K) -> Self::Output {
-        return self.get(&key).unwrap();
+        if let Some(val) = self.get(&key) {
+            return val;
+        }
+        panic(`key not found: ${key:?}`);
     }
 }
 

@@ -17,10 +17,6 @@ struct Holder<T> {
 impl<T> IndexRefMut<i32> for Holder<T> {
     type Output = Cell;
 
-    fn contains_index(&self, _idx: &i32) -> bool {
-        return true;
-    }
-
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.cell;
     }
@@ -32,10 +28,6 @@ struct Outer {
 
 impl IndexRefMut<i32> for Outer {
     type Output = Holder<i32>;
-
-    fn contains_index(&self, _idx: &i32) -> bool {
-        return true;
-    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.inner;
@@ -76,10 +68,6 @@ impl IndexAssign<i32> for Slot {
 
 impl IndexRefMut<i32> for Bag {
     type Output = Slot;
-
-    fn contains_index(&self, _idx: &i32) -> bool {
-        return true;
-    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.slot;

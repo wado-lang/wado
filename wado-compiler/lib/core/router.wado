@@ -129,16 +129,16 @@ impl PathParams {
     }
 }
 
-/// `params["id"]` is `params.get("id")` for a parameter the route has.
+/// `params["id"]` is `params.get("id")`, but panics when the route has no
+/// such parameter.
 impl IndexValue<String> for PathParams {
     type Output = String;
 
-    fn contains_index(&self, name: &String) -> bool {
-        return self.get(name) matches { Some(_) };
-    }
-
     fn index_value(&self, name: String) -> String {
-        return self.get(name).unwrap();
+        return match self.get(name) {
+            Some(v) => v,
+            None => panic(`path param '${name}' not found`),
+        };
     }
 }
 
