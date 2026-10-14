@@ -1377,8 +1377,7 @@ impl<'a> Unparser<'a> {
                 this.output.push(';');
             }),
             Member::Method(method) => {
-                self.open_member(id, span.start, attrs);
-                self.emit_blank_lines_to(effective_start_line(attrs, span.line));
+                self.open_method(method);
                 match trait_ {
                     Some(t) => {
                         let contracts: Vec<&AssertStmt> =
@@ -1400,13 +1399,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str(&e.name);
 
         self.with_braced_body(e.span, e.methods.first().map(|m| m.span), |this| {
-            for method in &e.methods {
-                let effective_line = effective_start_line(&method.attrs, method.span.line);
-                this.open_member(method.id, method.span.start, &method.attrs);
-                this.emit_blank_lines_to(effective_line);
-                this.unparse_function(method);
-                this.last_source_line = method.span.end_line();
-            }
+            this.unparse_methods(&e.methods);
         });
     }
 
@@ -1428,12 +1421,23 @@ impl<'a> Unparser<'a> {
         }
 
         self.with_braced_body(r.span, r.methods.first().map(|m| m.span), |this| {
-            for method in &r.methods {
-                this.open_member(method.id, method.span.start, &method.attrs);
-                this.unparse_function(method);
-                this.last_source_line = method.span.end_line();
-            }
+            this.unparse_methods(&r.methods);
         });
+    }
+
+    /// An interface's or a resource's methods, one member each.
+    fn unparse_methods(&mut self, methods: &[Function]) {
+        for method in methods {
+            self.open_method(method);
+            self.unparse_function(method);
+            self.last_source_line = method.span.end_line();
+        }
+    }
+
+    /// [`Self::open_member`] for `method`, and the blank lines above it.
+    fn open_method(&mut self, method: &Function) {
+        self.open_member(method.id, method.span.start, &method.attrs);
+        self.emit_blank_lines_to(effective_start_line(&method.attrs, method.span.line));
     }
 
     fn unparse_world(&mut self, w: &WorldDecl) {
@@ -1863,8 +1867,8 @@ impl<'a> Unparser<'a> {
             Expr::StaticMethodCall(s) => self.unparse_static_method_call(s),
             Expr::FieldAccess(f) => self.unparse_field_access(f),
             Expr::Index(i) => self.unparse_index(i),
-            // Only a closure's or a match arm's body, which `unparse_body`
-            // prints with its head; this one is printed on its own.
+            // A closure's or a match arm's body, printed without the head
+            // `unparse_body` would bound its comments by.
             Expr::Block(b) => self.braced_block(b.span.start, b),
             Expr::If(i) => self.unparse_if_expr(i),
             Expr::Match(m) => self.unparse_match(m),

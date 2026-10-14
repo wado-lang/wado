@@ -2804,13 +2804,11 @@ impl Parser {
     /// Used in for loop init: `for (let mut i = 0; ...)`
     fn parse_let_stmt_inner(&mut self, allow_else: bool) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
-        // Allocate the let-stmt id BEFORE descending into children so
-        // leading comments preceding `let` (e.g. `// note\nlet x = ...`)
+        // Allocate the let-stmt id before descending into children so the
+        // comments preceding `let`, those among its attributes included,
         // attach to the stmt itself rather than to its first child id.
-        // Matches the `alloc_ast_id`-at-start convention used by every
-        // outermost-first parser (`parse_block`, `parse_function`,
-        // `parse_match_arm`, …). Attributes allocate none, so it comes after
-        // them, as an item's does: a comment among them is the stmt's too.
+        // Attributes allocate none, so the id comes after them, as an item's
+        // does.
         let attrs = self.parse_attributes()?;
         let id = self.alloc_ast_id();
 

@@ -4335,6 +4335,19 @@ fn test_format_comment_among_attributes_stays_put() {
     assert_format_preserves_ast(source);
 }
 
+/// A resource keeps the blank line between its methods, as an interface does.
+#[test]
+fn test_format_keeps_blank_line_between_resource_methods() {
+    let source = concat!(
+        "resource R {\n",
+        "    fn a(&self);\n",
+        "\n",
+        "    fn b(&self);\n",
+        "}\n",
+    );
+    assert_eq!(wado_compiler::format(source).expect("format failed"), source);
+}
+
 /// A function's body is one of those braces.
 #[test]
 fn test_format_comment_before_body_brace() {
