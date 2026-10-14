@@ -14,7 +14,7 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
 use super::primitive_ops::FloatWidth;
-use super::translate::{FunctionTranslator, declare_and_set_local};
+use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
 use crate::lower::plan::value_copy;
 use crate::lower::wide_int_literal::{WideIntCtor, classify_ctor};
 use crate::nir;
@@ -1347,6 +1347,12 @@ impl FunctionTranslator<'_, '_> {
         args: &[Operand],
         result_type: TypeId,
     ) -> WirInstr {
+        // A call with a value is held in a `Block` with everything it
+        // evaluates, so a break out of the callee or an argument counts it.
+        let in_block = result_type != TypeTable::UNIT && result_type != TypeTable::NEVER;
+        if in_block {
+            self.label_stack.push(LabelEntry::ANONYMOUS);
+        }
         let callee_wir = self.translate_operand(callee);
         let callee_ty = self.operand_type_id(callee);
 
@@ -1425,7 +1431,10 @@ impl FunctionTranslator<'_, '_> {
         // callee's own evaluation (the temp set above) and before the call,
         // keeping callee-then-args order; `env_arg` reads the immutable temp,
         // so leaving it inline cannot observe the prelude's effects.
-        let (arg_prelude, user_args) = self.translate_args_erasing_unit(args);
+        let (arg_prelude, user_args) = self.translate_args_erasing_unit(args, false);
+        if in_block {
+            self.label_stack.pop();
+        }
         stmts.extend(arg_prelude);
         let mut call_args = vec![env_arg];
         call_args.extend(user_args);
@@ -1448,11 +1457,10 @@ impl FunctionTranslator<'_, '_> {
             args: call_args,
         };
 
-        if result_type == TypeTable::UNIT || result_type == TypeTable::NEVER {
+        if !in_block {
             stmts.push(call_ref);
             WirInstr::Seq(stmts)
         } else {
-            // Need to return the call result as the block value
             stmts.push(call_ref);
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
             WirInstr::Block {

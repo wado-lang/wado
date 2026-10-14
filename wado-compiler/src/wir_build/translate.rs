@@ -982,6 +982,15 @@ pub(super) struct LabelEntry {
     pub(super) is_loop_continue: bool,
 }
 
+impl LabelEntry {
+    /// A block no break names: an `if`, or one built around translated code.
+    pub(super) const ANONYMOUS: LabelEntry = LabelEntry {
+        label: None,
+        is_loop_break: false,
+        is_loop_continue: false,
+    };
+}
+
 /// Translator state for a single function.
 pub(super) struct FunctionTranslator<'a, 'b> {
     pub(super) ctx: &'a mut WirContext<'b>,
@@ -1193,6 +1202,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         func_id: FuncId,
         ordered: &[Operand],
+        value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
         let split = self
             .ctx
@@ -1200,7 +1210,7 @@ impl FunctionTranslator<'_, '_> {
             .get(&func_id)
             .cloned()
             .unwrap_or_default();
-        self.without_multi_value_results(|t| t.translate_args(ordered, &split))
+        self.without_multi_value_results(|t| t.translate_args(ordered, &split, value_block))
     }
 
     /// One argument as N values, taken off a multi-value call's results or a
@@ -1519,7 +1529,8 @@ impl FunctionTranslator<'_, '_> {
                 elements.len()
             );
         };
-        let (prelude, raw_fields) = self.translate_args_erasing_unit(elements);
+        let value_block = self.prelude_block_holds(tuple_type_id, false);
+        let (prelude, raw_fields) = self.translate_args_erasing_unit(elements, value_block);
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, prelude, fields)
     }
@@ -2211,11 +2222,15 @@ impl FunctionTranslator<'_, '_> {
 
     /// The `(prelude, values)` of a call's arguments or a literal's fields, the
     /// `()` ones erased but still run in order; wrap with [`Self::wrap_call_with_prelude`].
+    /// `value_block` says whether that wraps a prelude in a `Block`
+    /// ([`Self::prelude_block_holds`]), whose label a break out of an argument
+    /// counts.
     pub(super) fn translate_args_erasing_unit(
         &mut self,
         ordered: &[Operand],
+        value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        self.translate_args(ordered, &IndexMap::default())
+        self.translate_args(ordered, &IndexMap::default(), value_block)
     }
 
     /// As above, with the positions in `split` handed over field by field. One
@@ -2224,6 +2239,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         ordered: &[Operand],
         split: &IndexMap<usize, SplitParam>,
+        value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
         // Whether evaluating each argument runs code: a local read runs none,
         // and a promoted value none unless its tree names an extraction source.
@@ -2261,6 +2277,10 @@ impl FunctionTranslator<'_, '_> {
             .map(|(i, _)| i)
             .next_back();
 
+        let in_block = value_block && last_early.is_some();
+        if in_block {
+            self.label_stack.push(LabelEntry::ANONYMOUS);
+        }
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
@@ -2286,12 +2306,22 @@ impl FunctionTranslator<'_, '_> {
                 call_args.push(self.translate_operand(op));
             }
         }
+        if in_block {
+            self.label_stack.pop();
+        }
+        assert_eq!(last_early.is_some(), !prelude.is_empty());
         (prelude, call_args)
     }
 
+    /// Whether [`Self::wrap_call_with_prelude`] holds a prelude and the call's
+    /// value in a `Block`: everywhere but where its one result cannot hold the
+    /// value — a void call, or a `multi_value` callee returning N.
+    pub(super) fn prelude_block_holds(&self, result_type: TypeId, multi_value: bool) -> bool {
+        !multi_value && !self.is_stackless_type(result_type)
+    }
+
     /// Run `prelude` before `call`, preserving the call's value: a value-typed
-    /// `Block`, or a `Seq` where a `Block`'s one result cannot hold it — a void
-    /// call, or a `multi_value` callee returning N.
+    /// `Block` where [`Self::prelude_block_holds`], else a `Seq`.
     pub(super) fn wrap_call_with_prelude(
         &mut self,
         mut prelude: Vec<WirInstr>,
@@ -2303,7 +2333,7 @@ impl FunctionTranslator<'_, '_> {
             return call;
         }
         prelude.push(call);
-        if multi_value || self.is_stackless_type(result_type) {
+        if !self.prelude_block_holds(result_type, multi_value) {
             WirInstr::Seq(prelude)
         } else {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
@@ -2654,27 +2684,22 @@ impl FunctionTranslator<'_, '_> {
                     .then(|| self.multi_value_result_fields(*func_id).map(<[_]>::to_vec))
                     .flatten();
 
+                let result_type = expr.type_id;
+                let multi_value = rebuild.is_none() && self.callee_returns_multi_value(*func_id);
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let (prelude, translated_args) = self.translate_args_for_callee(*func_id, &ordered);
+                let value_block = self.prelude_block_holds(result_type, multi_value);
+                let (prelude, translated_args) =
+                    self.translate_args_for_callee(*func_id, &ordered, value_block);
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
-                    let call = WirInstr::Call {
+                    let mut call = WirInstr::Call {
                         func_id: wir_func_id,
                         args: translated_args,
                     };
-                    let result_type = expr.type_id;
-                    match rebuild {
-                        Some(fields) => {
-                            let whole = self.rebuild_multi_value_result(call, result_type, &fields);
-                            self.wrap_call_with_prelude(prelude, whole, result_type, false)
-                        }
-                        None => self.wrap_call_with_prelude(
-                            prelude,
-                            call,
-                            result_type,
-                            self.callee_returns_multi_value(*func_id),
-                        ),
+                    if let Some(fields) = rebuild {
+                        call = self.rebuild_multi_value_result(call, result_type, &fields);
                     }
+                    self.wrap_call_with_prelude(prelude, call, result_type, multi_value)
                 } else {
                     self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
@@ -2699,7 +2724,8 @@ impl FunctionTranslator<'_, '_> {
                     );
                 };
                 let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
-                let (prelude, field_instrs) = self.translate_args_erasing_unit(&values);
+                let value_block = self.prelude_block_holds(expr.type_id, false);
+                let (prelude, field_instrs) = self.translate_args_erasing_unit(&values, value_block);
                 let new = self.struct_new(type_id, field_instrs);
                 self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }
