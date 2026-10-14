@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791987462106,
+  "lastUpdate": 1792005577769,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67133,6 +67133,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 339797,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "777c240d1212d007b9bc454b9df7d107edd15a26",
+          "message": "Merge pull request #2351 from wado-lang/perf-multi-value-ref-param\n\nfix(compiler): a by-value argument keeps its copy wherever the call may write it",
+          "timestamp": "2026-10-15T04:00:30+09:00",
+          "tree_id": "faa48bee756a62a34edc397a55d7128a08a62187",
+          "url": "https://github.com/wado-lang/wado/commit/777c240d1212d007b9bc454b9df7d107edd15a26"
+        },
+        "date": 1792005577265,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339761,
             "unit": "bytes"
           }
         ]
