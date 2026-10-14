@@ -103,6 +103,28 @@ test "char range for-of" {
     assert s == "abcde";
 }
 
+struct Capped {
+    n: i32,
+}
+
+impl Step for Capped {
+    fn next_step(&self) -> Option<Capped> {
+        if self.n >= 1 {
+            return null;
+        }
+        return Option::Some(Capped { n: self.n + 1 });
+    }
+}
+
+test "inclusive range ends where its Step stops short of the end" {
+    let range = Capped { n: 0 }..=Capped { n: 5 };
+    let mut seen: List<i32> = [];
+    for let c of range {
+        seen.push(c.n);
+    }
+    assert seen == [0, 1];
+}
+
 test "char range steps over the surrogates and stops past the last scalar" {
     let mut s = "";
     for let c of '\u{D7FE}'..='\u{E001}' {
