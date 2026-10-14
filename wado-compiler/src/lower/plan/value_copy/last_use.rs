@@ -107,6 +107,7 @@ pub fn analyze_ownership(
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
         pending_writes: Vec::new(),
+        handed: Vec::new(),
         written_args: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
@@ -186,6 +187,28 @@ pub fn analyze_ownership(
 }
 
 use super::place::{Names, Place as AccessPath, Resolver, Selector};
+
+/// Where a by-value argument's storage lives, for the write check.
+enum Storage {
+    Local(u32),
+    /// Storage a reference this frame holds lends it.
+    Lent,
+    /// Storage this frame cannot name, a global's say, which anyone may write,
+    /// the callee included.
+    Unnamed,
+}
+
+/// A by-value argument rooted at `root`, read at `span`, checked once the
+/// alias chains are whole.
+struct WriteCheck {
+    root: u32,
+    span: Span,
+    /// The roots written while the callee holds the argument.
+    writes: Vec<u32>,
+    /// Whether a handle to lent storage may be written through meanwhile,
+    /// which decides where `root` is a reference.
+    lent_written: bool,
+}
 
 /// A write this body makes, and the locals live where it runs. A binding absent
 /// from `live` cannot observe the write: nothing reads it afterwards.
@@ -1098,9 +1121,11 @@ struct Analyzer<'a> {
     written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
-    /// `(by-value arg root, arg span, roots written while the callee holds
-    /// it)`, resolved once the alias chains are complete.
-    pending_writes: Vec<(u32, Span, Vec<u32>)>,
+    /// Resolved once the alias chains are complete.
+    pending_writes: Vec<WriteCheck>,
+    /// The type of every value handed to a call, in walk order, so a check
+    /// reads what the later arguments handed on.
+    handed: Vec<TypeId>,
     /// [`Ownership::written_args`].
     written_args: IndexSet<Span>,
     exits: Vec<Exit>,
@@ -1931,33 +1956,46 @@ impl Analyzer<'_> {
 
     /// Resolve the deferred write checks: a by-value argument whose storage may
     /// be written before its callee is done with it keeps its copy. Storage a
-    /// `&mut` outlives, or a reference lends, may be written through a handle
-    /// at any call, so it never skips one.
+    /// `&mut` outlives may be written through it at any call, so it never
+    /// skips one; storage a reference lends, wherever [`WriteCheck::lent_written`]
+    /// says.
     fn resolve_write_checks(
         &mut self,
         func: &TirFunction,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         released: &IndexSet<(u32, u32)>,
     ) {
-        for (arg, span, writes) in std::mem::take(&mut self.pending_writes) {
-            let targets: IndexSet<u32> = writes
-                .into_iter()
-                .chain(self.written_through_escape.iter().copied())
-                .collect();
-            if is_reference_local(func, arg, self.type_table)
-                || storage_shared(paths, released, arg, None, None, &targets)
-            {
-                self.aliases_live.insert(arg);
-                self.written_args.insert(span);
+        for check in std::mem::take(&mut self.pending_writes) {
+            let written = if is_reference_local(func, check.root, self.type_table) {
+                check.lent_written
+            } else {
+                let targets: IndexSet<u32> = check
+                    .writes
+                    .into_iter()
+                    .chain(self.written_through_escape.iter().copied())
+                    .collect();
+                storage_shared(paths, released, check.root, None, None, &targets)
+            };
+            if written {
+                self.aliases_live.insert(check.root);
+                self.written_args.insert(check.span);
             }
         }
     }
 
     /// Defer the check of call argument `arg` against what may write its
     /// storage while the callee holds it (wado-lang/wado#1544): `mut_roots`,
-    /// the call's own `&mut` handles, and the writes recorded since
-    /// `call_writes`, which the later arguments make after `arg` is taken.
-    fn defer_write_check(&mut self, arg: &TirExpr, mut_roots: &[u32], call_writes: usize) {
+    /// the call's own `&mut` handles, the writes recorded since `call_writes`,
+    /// which the later arguments make after `arg` is taken, and the values
+    /// handed to a call since `handed_from`.
+    fn defer_write_check(
+        &mut self,
+        arg: &TirExpr,
+        mut_roots: &[u32],
+        call_writes: usize,
+        handed_from: usize,
+        own: usize,
+    ) {
         let is_borrow = matches!(
             &arg.kind,
             TirExprKind::Unary {
@@ -1974,37 +2012,67 @@ impl Analyzer<'_> {
             .copied()
             .chain(self.mutations[call_writes..].iter().map(|m| m.path.root))
             .collect();
-        let mut roots = Vec::new();
-        self.storage_roots(arg, &mut roots);
-        if roots.contains(&None) {
-            self.written_args.insert(span);
-            return;
-        }
-        for root in roots.into_iter().flatten() {
-            self.pending_writes.push((root, span, writes.clone()));
+        // Storage a reference lends is written only through another handle to
+        // it: one this evaluation writes through, or a value handed to a call
+        // that can reach it.
+        let lent_written = self.mutations[call_writes..]
+            .iter()
+            .any(|m| m.path.through_borrow)
+            || self.handed[handed_from..]
+                .iter()
+                .enumerate()
+                .any(|(i, holder)| {
+                    handed_from + i != own && self.reach.reaches(*holder, arg.type_id, false)
+                });
+        let mut storages = Vec::new();
+        self.storage_roots(arg, &mut storages);
+        for storage in storages {
+            match storage {
+                Storage::Local(root) => self.pending_writes.push(WriteCheck {
+                    root,
+                    span,
+                    writes: writes.clone(),
+                    lent_written,
+                }),
+                Storage::Lent if !lent_written => {}
+                Storage::Lent | Storage::Unnamed => {
+                    self.written_args.insert(span);
+                }
+            }
         }
     }
 
-    /// The local each storage `expr` may hand on is rooted at, `None` for one
-    /// this frame only borrows or cannot name (a global's, say), which anyone
-    /// may write, the callee included.
-    fn storage_roots(&self, expr: &TirExpr, out: &mut Vec<Option<u32>>) {
+    /// Note what `args` hand a call. A borrow of storage this frame owns hands
+    /// on only what that storage carries, so it is noted as the place's type.
+    fn hand(&mut self, args: &[&TirExpr]) {
+        for arg in args {
+            let place = place::unwrap_borrow(arg);
+            let owned = !std::ptr::eq(place, *arg)
+                && matches!(self.resolver.names(place), Names::Place(p) if !p.through_borrow);
+            self.handed
+                .push(if owned { place.type_id } else { arg.type_id });
+        }
+    }
+
+    /// The storage each value `expr` may hand on.
+    fn storage_roots(&self, expr: &TirExpr, out: &mut Vec<Storage>) {
         yielded_leaves(
             expr,
             self.type_table,
             &mut |leaf| match self.resolver.names(leaf) {
                 Names::Value => {}
-                Names::Place(place) => out.push((!place.through_borrow).then_some(place.root)),
-                Names::Unknown => match (alias_root(leaf), &leaf.kind) {
-                    (Some(root), _) => out.push(Some(root)),
+                Names::Place(place) if place.through_borrow => out.push(Storage::Lent),
+                Names::Place(place) => out.push(Storage::Local(place.root)),
+                Names::Unknown => match (alias_root(leaf), &projected_from(leaf).kind) {
+                    (Some(root), _) => out.push(Storage::Local(root)),
                     // A named call hands back storage of its own or reached
-                    // through its arguments.
+                    // through its arguments, and so does a part of it.
                     (None, TirExprKind::Call { args, .. }) => {
                         for a in args.iter() {
                             self.storage_roots(place::unwrap_borrow(&a.expr), out);
                         }
                     }
-                    (None, _) => out.push(None),
+                    (None, _) => out.push(Storage::Unnamed),
                 },
             },
         );
@@ -2544,7 +2612,9 @@ impl Analyzer<'_> {
                     Vec::new()
                 };
                 let call_writes = self.mutations.len();
+                let handed_from = self.handed.len();
                 if record {
+                    self.hand(&exprs);
                     if let Some(receiver) = mutated_receiver {
                         let start = self.mutations.len();
                         self.record_call_mutation(func, receiver, 0, live);
@@ -2573,7 +2643,13 @@ impl Analyzer<'_> {
                     // what the other arguments are checked against, not one of
                     // them.
                     if record && !(pos == 0 && mutated_receiver.is_some()) {
-                        self.defer_write_check(&arg.expr, &mut_roots, call_writes);
+                        self.defer_write_check(
+                            &arg.expr,
+                            &mut_roots,
+                            call_writes,
+                            handed_from,
+                            handed_from + pos,
+                        );
                     }
                     self.walk_call_arg(
                         &arg.expr,
@@ -2594,7 +2670,11 @@ impl Analyzer<'_> {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let call_writes = self.mutations.len();
                 let exprs: Vec<&TirExpr> = args.iter().collect();
+                let handed_from = self.handed.len();
                 let (kept, mut_roots) = if record {
+                    // The closure called hands on what it captured.
+                    self.handed.push(callee.type_id);
+                    self.hand(&exprs);
                     let retained = self.functor_rows.retained(callee, args.len());
                     (
                         self.kept_through(&retained, &exprs, &result, None),
@@ -2605,7 +2685,14 @@ impl Analyzer<'_> {
                 };
                 for (pos, arg) in args.iter().enumerate().rev() {
                     if record {
-                        self.defer_write_check(arg, &mut_roots, call_writes);
+                        // The callee is noted first, then each argument.
+                        self.defer_write_check(
+                            arg,
+                            &mut_roots,
+                            call_writes,
+                            handed_from,
+                            handed_from + 1 + pos,
+                        );
                     }
                     self.walk_indirect_arg(
                         arg,
@@ -2791,6 +2878,14 @@ impl TirRefVisitor for BreakValues<'_> {
         }
         self.walk_stmt(stmt);
     }
+}
+
+/// What a chain of projections is taken over.
+fn projected_from(mut expr: &TirExpr) -> &TirExpr {
+    while let Some(base) = place::projection_base(expr) {
+        expr = base;
+    }
+    expr
 }
 
 /// The roots a call writes through its arguments: each `&mut place`, and each
