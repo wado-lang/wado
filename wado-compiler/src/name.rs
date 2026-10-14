@@ -697,13 +697,6 @@ pub fn global_init_target(name: &str) -> Option<&str> {
         .strip_prefix(INTERNAL_PREFIX)
 }
 
-/// The flag a global's initializer sets once the global holds its value, for a
-/// global some initializer ordered before it may read.
-#[must_use]
-pub fn global_ready_flag(global: &str) -> String {
-    format!("{INTERNAL_PREFIX}ready{INTERNAL_PREFIX}{global}")
-}
-
 /// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
 /// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
 /// over the latter still covers both.

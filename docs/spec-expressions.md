@@ -379,9 +379,11 @@ initializers that do not depend on each other is
 [unspecified](./spec-overview.md#behavior-classes).
 
 A cycle among them is an error. When each initializer on the cycle names the
-next or reads it on every path, the error is at compile time. A cycle that only
-some executions take is not detected until it is: reading a global before its
-initializer has run traps.
+next, or reads it on every path through it, the compiler reports the cycle. A
+cycle that only some executions take is not reported. Taking one reads a global
+before its initializer has run, which is a
+[contract violation](./spec-overview.md#behavior-classes) with unconstrained
+behavior.
 
 ## Operators
 

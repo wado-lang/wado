@@ -1,0 +1,32 @@
+// What a recursive function reads on every path does not depend on which
+// function the analysis reaches first. `read_twice` always reaches `read_b`,
+// which reads `B` before it may recurse, so `A` and `B` wait on each other.
+
+use { println, Stdout } from "core:cli";
+
+global C: i32 = read_b(builtin::black_box(0));
+global A: i32 = read_twice(builtin::black_box(1));
+global B: i32 = A + 1;
+
+#[inline(never)]
+fn read_b(n: i32) -> i32 {
+    let b = B;
+    if n > 0 {
+        return read_twice(n - 1);
+    }
+    return b;
+}
+
+#[inline(never)]
+fn read_twice(n: i32) -> i32 {
+    return read_b(n);
+}
+
+export fn run() with Stdout {
+    println(`${A} ${C}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializers form a cycle: A, B"
+}
