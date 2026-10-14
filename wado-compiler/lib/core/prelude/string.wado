@@ -36,8 +36,9 @@ pub struct Utf8Error {
 
 impl Utf8Error {
     /// A sequence no further byte could complete, `len` bytes long.
-    pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error {
-        assert len >= 1 && len <= 3;
+    pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error
+        contract 1 <= len <= 3, "no invalid sequence is that long"
+    {
         return Utf8Error { valid_up_to, error_len: Option::Some(len) };
     }
 
@@ -1086,8 +1087,9 @@ impl String {
 
     /// The failure a `utf8_valid_prefix` answer other than `len` stands for.
     /// Measured here rather than in the scan, being off the hot path.
-    internal fn utf8_error_at(bytes: &ByteSlice, prefix: i32) -> Utf8Error {
-        assert prefix != bytes.len();
+    internal fn utf8_error_at(bytes: &ByteSlice, prefix: i32) -> Utf8Error
+        contract prefix != bytes.len(), "the bytes are valid"
+    {
         if prefix >= 0 {
             return Utf8Error::incomplete(prefix);
         }

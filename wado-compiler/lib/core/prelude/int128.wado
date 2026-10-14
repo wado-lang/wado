@@ -199,8 +199,9 @@ impl u128 {
     /// a `mant_bits`-bit mantissa rounded to nearest with ties to even,
     /// plus the exponent of the value's leading bit. Shared core of the
     /// float conversions; mirrors compiler-rt's `__floatuntidf`.
-    fn round_to_mantissa(&self, mant_bits: i32) -> [u64, i64] {
-        assert self.high != 0;
+    fn round_to_mantissa(&self, mant_bits: i32) -> [u64, i64]
+        contract self.high != 0, "fits in 64 bits"
+    {
         let hbits = u64_bit_len(self.high) as i64;  // 1..=64
         // Shift down to mant_bits + 2 bits: the mantissa, a guard bit,
         // and one bit for the rest.
@@ -286,8 +287,9 @@ impl u128 {
 
     /// Divide `[hi, lo]` by `d`, returning (quotient, remainder): the 128÷64
     /// step Wasm lacks, by Knuth Algorithm D over 32-bit limbs.
-    fn div_rem_wide(hi: u64, lo: u64, d: u64) -> [u64, u64] {
-        assert hi < d;
+    fn div_rem_wide(hi: u64, lo: u64, d: u64) -> [u64, u64]
+        contract hi < d, "quotient overflows 64 bits"
+    {
         if hi == 0 {
             return [lo / d, lo % d];
         }

@@ -123,8 +123,9 @@ pub trait FromLeBytes with () {
     fn from_le_at(bytes: ByteSlice, at: i32) -> Self;
 }
 
-fn le_bits(bytes: ByteSlice, at: i32, width: i32) -> u64 {
-    assert 0 <= at && at <= bytes.len() - width;
+fn le_bits(bytes: ByteSlice, at: i32, width: i32) -> u64
+    contract 0 <= at && at <= bytes.len() - width, "bytes out of bounds"
+{
     let mut bits: u64 = 0;
     for let mut i = width - 1; i >= 0; i -= 1 {
         bits = bits << 8 | bytes.get_unchecked(at + i) as u64;

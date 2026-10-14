@@ -274,9 +274,9 @@ pub struct FormatResult {
 }
 
 // FixedWidth returns the n-digit decimal form of f
-pub fn fixed_width(f: f64, n: i32) -> FormatResult {
-    assert n <= 18, "digits must be <= 18";
-
+pub fn fixed_width(f: f64, n: i32) -> FormatResult
+    contract n <= 18, "digits must be <= 18"
+{
     let unpack = unpack64(f);
     let m = unpack.mantissa;
     let e = unpack.exponent;
@@ -908,8 +908,9 @@ pub global PARSE_EXP_MIN: i32 = -351;
 
 /// `d * 10^p` rounded once, ties to even, into `format`, as its bits with the
 /// sign clear. `d` is nonzero with at most `PARSE_DIGITS_MAX` digits.
-pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
-    assert d != 0;
+pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64
+    contract d != 0, "zero significand"
+{
     let precision = format.precision;
     let tiny = format.tiny();
     let b = u64_bit_len(d);

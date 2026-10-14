@@ -758,8 +758,9 @@ impl InflateState {
     // Pulls input bytes until at least `n` bits are held. The whole stream is at
     // hand, so input that ends first is a stream cut short. The buffer holds 64
     // bits, and a pull adds up to 7 past `n`.
-    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError> {
-        assert n <= 57;
+    fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError>
+        contract n <= 57, "more bits than the buffer holds"
+    {
         while self.bits < n {
             if self.next == self.end {
                 builtin::cold_path();
@@ -949,8 +950,9 @@ fn inflate_raw_ex(
     input_offset: i32,
     input_length: i32,
     max_output: i32,
-) -> Result<[ByteList, i32], ZlibError> {
-    assert max_output >= 0, "max_output must not be negative";
+) -> Result<[ByteList, i32], ZlibError>
+    contract max_output >= 0, "max_output must not be negative"
+{
     let mut state = InflateState::new(input_offset, input_offset + input_length);
     let mut output: ByteList = [];
 
@@ -3016,18 +3018,24 @@ impl DeflateStream {
         return *self;
     }
 
-    /// Appends `chunk` to the input buffer. Panics if the stream has already
-    /// been finished.
-    pub fn update(&mut self, chunk: &ByteList) {
-        assert !self.finished, "DeflateStream already finished";
+    /// Whether `finish` or `compress` has run since the stream was made or
+    /// last `reset`.
+    pub fn is_finished(&self) -> bool {
+        return self.finished;
+    }
+
+    /// Appends `chunk` to the input buffer.
+    pub fn update(&mut self, chunk: &ByteList)
+        contract !self.is_finished(), "DeflateStream already finished"
+    {
         self.buffer.extend(chunk);
     }
 
     /// Compresses all buffered input and returns the wrapped output. Marks
-    /// the stream as finished; further `update`/`finish`/`compress` calls
-    /// panic until `reset` is invoked.
-    pub fn finish(&mut self) -> ByteList {
-        assert !self.finished, "DeflateStream already finished";
+    /// the stream as finished until `reset` is invoked.
+    pub fn finish(&mut self) -> ByteList
+        contract !self.is_finished(), "DeflateStream already finished"
+    {
         self.finished = true;
         let result = self.compress_internal(&self.buffer);
         self.total_in += self.buffer.len();
@@ -3037,8 +3045,9 @@ impl DeflateStream {
 
     /// Compresses `input` in one shot, bypassing the internal buffer. Marks
     /// the stream as finished.
-    pub fn compress(&mut self, input: &ByteList) -> ByteList {
-        assert !self.finished, "DeflateStream already finished";
+    pub fn compress(&mut self, input: &ByteList) -> ByteList
+        contract !self.is_finished(), "DeflateStream already finished"
+    {
         self.finished = true;
         let result = self.compress_internal(input);
         self.total_in += input.len();

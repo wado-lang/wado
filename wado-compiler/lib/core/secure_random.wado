@@ -31,8 +31,9 @@ pub fn seed() -> Seed with Random {
 /// Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
 /// nonce. Whatever length the installed `Random` hands back is absorbed here,
 /// never passed on.
-pub fn bytes(n: i32) -> ByteList with Random {
-    assert n >= 0;
+pub fn bytes(n: i32) -> ByteList with Random
+    contract n >= 0, "negative length"
+{
     let mut out = Random::get_random_bytes(n as u64) as ByteList;
     while out.len() < n {
         let chunk = Random::get_random_bytes((n - out.len()) as u64) as ByteList;
@@ -92,8 +93,9 @@ pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random 
 pub fn with_buffered<T, effect E>(
     mut body: fn mut() -> T with (Random, E),
     pool_bytes: i32 = POOL_BYTES,
-) -> T with (Random, E) {
-    assert pool_bytes > 0;
+) -> T with (Random, E)
+    contract pool_bytes > 0, "empty pool"
+{
     let mut rng = BufferedRandom { pool_bytes };
     return with Random => &mut rng do {
         body();
