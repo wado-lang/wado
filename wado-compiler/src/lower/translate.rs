@@ -2317,14 +2317,13 @@ impl FunctionTranslator<'_, '_> {
             return rewritten;
         }
         let ordered = self.call_args_in_param_order(func, args);
-        let mut_roots = self.call_mut_roots(func, &ordered);
-        // An argument is taken before the ones after it run, so what they write
-        // lands in storage it may still share when the call reads it.
-        let mut written_later: Vec<Vec<u32>> = vec![Vec::new(); ordered.len()];
+        // What may write each argument's storage while the callee holds it:
+        // the call, through its `&mut` parameters, and every later argument,
+        // which runs after this one is taken.
+        let mut mut_roots = vec![self.call_mut_roots(func, &ordered); ordered.len()];
         for i in (1..ordered.len()).rev() {
-            let mut roots = written_later[i].clone();
-            roots.extend(self.written_roots(ordered[i].0));
-            written_later[i - 1] = roots;
+            let written = self.written_roots(ordered[i].0);
+            mut_roots[i - 1] = [mut_roots[i].as_slice(), &written].concat();
         }
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
@@ -2348,9 +2347,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: *is_mut,
                     }
                 } else {
-                    let mut roots = mut_roots.clone();
-                    roots.extend_from_slice(&written_later[i]);
-                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &roots)
+                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots[i])
                 }
             })
             .collect();

@@ -2261,16 +2261,14 @@ impl FunctionTranslator<'_, '_> {
         let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
         let runs_before_split_reads =
             |i: usize| first_borrowed.is_some_and(|r| i > r) && runs_code[i];
-        // An argument evaluated into the prelude runs ahead of every argument
-        // left on the stack, so each one to its left is spilled to hold source
-        // order.
         // A local read stays cheap to repeat, so a split parameter takes its
         // fields off one at the call, with nothing evaluated ahead.
         let split_ahead = |i: usize| split.contains_key(&i) && !local_read[i];
+        // An argument evaluated into the prelude runs ahead of every argument
+        // left on the stack, so each one to its left is spilled to hold source
+        // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
-            split_ahead(i)
-                || runs_before_split_reads(i)
-                || (erased(this, op) && runs_code[i])
+            split_ahead(i) || runs_before_split_reads(i) || (erased(this, op) && runs_code[i])
         };
         let last_early = ordered
             .iter()
