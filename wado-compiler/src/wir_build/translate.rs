@@ -2531,11 +2531,9 @@ impl FunctionTranslator<'_, '_> {
                 };
                 // The index counts NIR fields; the Wasm struct leaves out `()`
                 // ones, so its position for a field differs past one.
-                let receiver_type = self.type_table.strip_handles(recv_nir_ty);
                 let receiver_type = self
                     .type_table
-                    .monomorphized_struct(receiver_type)
-                    .unwrap_or(receiver_type);
+                    .monomorphized_or_self(self.type_table.strip_handles(recv_nir_ty));
                 let (_, names, _) =
                     aggregate_field_info(receiver_type, self.type_table, &self.ctx.package.structs)
                         .expect("a promoted FieldAccess reads a tuple or struct");

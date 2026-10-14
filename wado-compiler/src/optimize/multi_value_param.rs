@@ -52,14 +52,16 @@ fn chooses_param_abi(f: &NirFunction) -> bool {
     !f.is_dead && f.only_reached_by_direct_call() && f.body.is_some()
 }
 
-/// Whether some function [`chooses_param_abi`] and takes a borrow.
+/// Whether some function [`chooses_param_abi`] and takes a borrow of an
+/// aggregate it could split.
 fn takes_a_borrow(project: &NirPackage, type_table: &TypeTable) -> bool {
     project.functions.iter().any(|f| {
         let f = f.borrow();
         chooses_param_abi(&f)
-            && f.params
-                .iter()
-                .any(|p| matches!(type_table.get(p.type_id), ResolvedType::Ref(_)))
+            && f.params.iter().any(|p| {
+                matches!(type_table.get(p.type_id), ResolvedType::Ref(referent)
+                    if aggregate_field_info(*referent, type_table, &project.structs).is_some())
+            })
     })
 }
 
@@ -197,8 +199,9 @@ impl<'a> ParamScope<'_, 'a> {
     }
 
     /// Whether the `if` at `s` leaves one way on: it has no `else`, and its
-    /// branch ends in a call typed `!` (a bounds check's panic), which traps
-    /// or runs forever, so whatever it reads goes unseen by what follows.
+    /// branch, jumping nowhere on the way, ends in a call typed `!` (a bounds
+    /// check's panic), which traps or runs forever, so whatever it reads goes
+    /// unseen by what follows.
     fn only_one_way_on(&self, s: StmtId) -> bool {
         let body = self.body;
         let StmtKind::If {
@@ -209,10 +212,17 @@ impl<'a> ParamScope<'_, 'a> {
         else {
             return false;
         };
-        body.blocks[then_block].stmts.last().is_some_and(|&last| {
+        let ends_in_never = body.blocks[then_block].stmts.last().is_some_and(|&last| {
             matches!(&body.stmts[last].kind, StmtKind::Expr(op)
                 if op.as_expr().is_some_and(|e| self.type_table.is_never(body.exprs[e].type_id)))
-        })
+        });
+        let jumps = body
+            .find_in_nodes_under(NodeRef::Block(then_block), |node| match node {
+                NodeRef::Stmt(inner) if body.terminates(inner) => Some(()),
+                _ => None,
+            })
+            .is_some();
+        ends_in_never && !jumps
     }
 
     /// The reads under `root`, the expressions its promoted operands name as
@@ -333,7 +343,19 @@ impl<'a> ParamScope<'_, 'a> {
                     reads.branches = true;
                     true
                 }
-                _ => true,
+                ValueKind::FieldAccess { .. }
+                | ValueKind::Binary { .. }
+                | ValueKind::Unary { .. }
+                | ValueKind::Cast { .. }
+                | ValueKind::Select { .. }
+                | ValueKind::LoopPhi { .. } => true,
+                ValueKind::Int(..)
+                | ValueKind::Float(..)
+                | ValueKind::Bool(_)
+                | ValueKind::Char(_)
+                | ValueKind::Null
+                | ValueKind::Unit
+                | ValueKind::Const(..) => false,
             };
             ControlFlow::Continue(descend)
         });

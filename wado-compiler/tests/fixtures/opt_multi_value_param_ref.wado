@@ -66,6 +66,19 @@ fn first_byte(b: &Bytes) -> i32 {
     return b.data[b.start] as i32 + n;
 }
 
+// The branch may return before it panics, so `p.a` and `p.b` are not read
+// on every path that goes on: the reference stays whole.
+#[inline("never")]
+fn returns_before_panic(p: &Pair, c: bool, d: bool) -> i32 {
+    if c {
+        if d {
+            return 0;
+        }
+        panic("c without d");
+    }
+    return p.a + p.b;
+}
+
 // A `&mut` handed to a `&S` reads at the call all the same.
 #[inline("never")]
 fn through_mut(w: &mut Pair) -> i32 {
@@ -115,6 +128,8 @@ export fn run() {
     assert with_stream(&x) == 3;
     let bytes = Bytes { data: builtin::black_box([7 as u8, 8, 9]), start: builtin::black_box(1), end: builtin::black_box(3) };
     assert first_byte(&bytes) == 10;
+    assert returns_before_panic(&x, builtin::black_box(true), builtin::black_box(true)) == 0;
+    assert returns_before_panic(&x, builtin::black_box(false), builtin::black_box(false)) == 3;
     assert total_plus(&x, bump_a(&mut x)) == 1003;
     let mut m = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
     assert total_plus(&mut m, bump_a(&mut m)) == 1003;
@@ -143,6 +158,7 @@ __DATA__
         "with_stream\" = fn(i32, i32) -> i32",
         "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
         "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "returns_before_panic\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", bool, bool) -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
     ],
