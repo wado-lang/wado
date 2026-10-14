@@ -597,12 +597,11 @@ Returns an adapter that discards the first `n` elements before yielding the rest
 
 #### `fn step_by(&self, step: i32) -> IterStepBy<Self> with ()`
 
+- `contract step > 0, "step must be positive"`
+
 Returns an adapter that yields the first element, then every `step`-th after it.
-Panics unless `step` is positive.
 
 #### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> with ()`
-
-Returns an adapter that yields all elements of `self`, then all elements of `other`.
 
 #### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> with ()`
 
@@ -780,13 +779,13 @@ Sub-view over `[start, end)`, clamped to this sequence.
 
 #### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem>`
 
-Overlapping windows of `size` consecutive elements. Panics if `size` is
-not positive.
+- `contract size > 0, "window size must be positive"`
+
+Overlapping windows of `size` consecutive elements.
 
 #### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
 
-Non-overlapping chunks of up to `size` elements; the last may be
-shorter. Panics if `size` is not positive.
+- `contract size > 0, "chunk size must be positive"`
 
 ### `pub trait AsStrSlice: Eq<String> with ()`
 
@@ -812,7 +811,11 @@ literals stops folding to one.
 
 #### `fn floor_char_boundary(&self, index: i32) -> i32`
 
+- `contract index >= 0, "negative byte index"`
+
 #### `fn ceil_char_boundary(&self, index: i32) -> i32`
+
+- `contract index >= 0, "negative byte index"`
 
 #### `fn slice(&self, start: i32, end: i32) -> StrSlice`
 
@@ -848,6 +851,8 @@ literals stops folding to one.
 #### `fn eq_ignore_ascii_case<P: AsStrSlice>(&self, other: P) -> bool`
 
 #### `fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+
+- `contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"`
 
 #### `fn trim_ascii_start(&self) -> StrSlice`
 
@@ -1347,8 +1352,10 @@ IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
 
 #### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
 
+- `contract !high.is_nan() && low <= high, "empty or NaN range"`
+
 `x` confined to `low..=high` by the order, except that a NaN `x` stays
-NaN. A NaN bound traps, as `low > high` does.
+NaN.
 
 #### `pub fn copysign(x: f32, y: f32) -> f32`
 
@@ -1706,8 +1713,10 @@ IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
 
 #### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
 
+- `contract !high.is_nan() && low <= high, "empty or NaN range"`
+
 `x` confined to `low..=high` by the order, except that a NaN `x` stays
-NaN. A NaN bound traps, as `low > high` does.
+NaN.
 
 #### `pub fn copysign(x: f64, y: f64) -> f64`
 
@@ -2210,7 +2219,9 @@ IEEE 754's `>=`, on the values widened to f32.
 
 #### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i64) -> i64`
 
@@ -2242,6 +2253,8 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl TryFrom<u128> for i64`
 
@@ -2359,7 +2372,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u64`
 
@@ -2374,6 +2389,8 @@ The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl TryFrom<u128> for u64`
 
@@ -2479,7 +2496,9 @@ The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn clamp(value: i8, low: i8, high: i8) -> i8`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i8) -> i8`
 
@@ -2499,6 +2518,8 @@ as negating it does.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl FromStr for i8`
 
@@ -2592,7 +2613,9 @@ as negating it does.
 
 #### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i16) -> i16`
 
@@ -2612,6 +2635,8 @@ as negating it does.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl FromStr for i16`
 
@@ -2709,7 +2734,9 @@ as negating it does.
 
 #### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i32) -> i32`
 
@@ -2741,6 +2768,8 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl FromStr for i32`
 
@@ -2846,7 +2875,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: u8, low: u8, high: u8) -> u8`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u8`
 
@@ -2903,6 +2934,8 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl FromStr for u8`
 
@@ -2992,7 +3025,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn clamp(value: u16, low: u16, high: u16) -> u16`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u16`
 
@@ -3007,6 +3042,8 @@ The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl FromStr for u16`
 
@@ -3096,7 +3133,9 @@ The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u32`
 
@@ -3111,6 +3150,8 @@ The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 #### `impl FromStr for u32`
 
@@ -3310,8 +3351,9 @@ Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
 
 #### `pub fn hex_digit_value(&self) -> i32`
 
+- `contract self.is_hexdigit(), "not a hex digit"`
+
 Returns the numeric value of an ASCII hexadecimal digit (0–15).
-Panics if the character is not a valid hex digit.
 
 #### `pub fn len_utf8(&self) -> i32`
 
@@ -3904,9 +3946,13 @@ Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u128, ParseIntError>`
 
-Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
+
+Parse a `u128` from a string in the given radix.
 
 #### `pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<u128, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 Parse the view as a `u128` in the given radix, allocating no substring.
 
@@ -3928,7 +3974,9 @@ The smaller of two values.
 
 #### `pub fn clamp(value: u128, low: u128, high: u128) -> u128`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u128`
 
@@ -4147,9 +4195,13 @@ Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i128, ParseIntError>`
 
-Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
+
+Parse an `i128` from a string in the given radix.
 
 #### `pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<i128, ParseIntError>`
+
+- `contract 2 <= radix <= 36, "radix must be in 2..=36"`
 
 Parse the view as an `i128` in the given radix, allocating no substring.
 
@@ -4171,7 +4223,9 @@ The smaller of two values.
 
 #### `pub fn clamp(value: i128, low: i128, high: i128) -> i128`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high, "empty range"`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i128) -> i128`
 
@@ -4540,13 +4594,16 @@ bounds.
 
 #### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
 
-Overlapping windows of `size` consecutive elements. Panics if `size` is
-not positive.
+- `contract size > 0, "window size must be positive"`
+
+Overlapping windows of `size` consecutive elements.
 
 #### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
 
+- `contract size > 0, "chunk size must be positive"`
+
 Non-overlapping chunks of up to `size` elements; the last may be
-shorter. Panics if `size` is not positive.
+shorter.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
@@ -4796,10 +4853,11 @@ Decode the whole string into a `List<char>`.
 
 #### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
 
+- `contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"`
+
 Decodes the UTF-8 character starting at the given byte index.
 Returns None if `byte_index` is past the end of the string or there
 aren't enough bytes to form a full UTF-8 sequence.
-Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
 
 #### `pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
 
@@ -4851,13 +4909,16 @@ UTF-8 character in this string.
 
 #### `pub fn floor_char_boundary(&self, byte_index: i32) -> i32`
 
+- `contract byte_index >= 0, "negative byte index"`
+
 The largest character boundary `<= byte_index`, or `len()` beyond it:
-cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
+cuts to a byte budget with `truncate` or `substr_bytes`.
 
 #### `pub fn ceil_char_boundary(&self, byte_index: i32) -> i32`
 
+- `contract byte_index >= 0, "negative byte index"`
+
 The smallest character boundary `>= byte_index`, or `len()` beyond it.
-Panics if `byte_index` is negative.
 
 #### `pub fn pop(&mut self) -> Option<char>`
 
@@ -5190,13 +5251,15 @@ or the start of a character.
 
 #### `pub fn floor_char_boundary(&self, index: i32) -> i32`
 
+- `contract index >= 0, "negative byte index"`
+
 The largest character boundary `<= index`, or `len()` beyond it.
-Panics if `index` is negative.
 
 #### `pub fn ceil_char_boundary(&self, index: i32) -> i32`
 
+- `contract index >= 0, "negative byte index"`
+
 The smallest character boundary `>= index`, or `len()` beyond it.
-Panics if `index` is negative.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> StrSlice`
 
@@ -5269,6 +5332,8 @@ Checks that two views are an ASCII case-insensitive match.
 Non-ASCII bytes are compared exactly.
 
 #### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+
+- `contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"`
 
 The character starting at `byte_index`, counted from the view's start,
 or None past the end.
@@ -5416,11 +5481,14 @@ Appends a single element to the end.
 
 #### `pub fn push_within_capacity(&mut self, value: T)`
 
+- `contract self.len() < self.capacity(), "no capacity reserved"`
+
 Appends a single element assuming the capacity was already reserved
 (see `reserve`). Skips the grow check `push` performs on every call, so
 a burst of appends after one `reserve` pays a single capacity check
-instead of one per element. The Wasm array bounds check still guards the
-store, so an under-reserved call traps rather than corrupting memory.
+instead of one per element, when the call is marked `unchecked`. The
+Wasm array bounds check still guards the store, so an under-reserved call
+traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
 
@@ -5434,24 +5502,29 @@ generated parser over a fixed token stream) avoid that per-access cost.
 
 #### `pub fn insert(&mut self, index: i32, value: T)`
 
+- `contract 0 <= index <= self.len(), "index out of bounds"`
+
 Inserts an element at the given index, shifting all elements after it to the right.
-Panics if `index > len()`.
 
 #### `pub fn remove(&mut self, index: i32) -> T`
 
+- `contract 0 <= index < self.len(), "index out of bounds"`
+
 Removes and returns the element at the given index, shifting all elements after it to the left.
-Panics if `index >= len()`. Releases the last slot, under the contract on `List`.
+Releases the last slot, under the contract on `List`.
 
 #### `pub fn swap(&mut self, a: i32, b: i32)`
 
+- `contract 0 <= a < self.len() && 0 <= b < self.len(), "index out of bounds"`
+
 Swaps two elements by index.
-Panics if either index is out of bounds.
 
 #### `pub fn truncate(&mut self, len: i32)`
 
+- `contract len >= 0, "negative length"`
+
 Shortens the list to `len` elements; a longer `len` changes nothing.
-Panics if `len` is negative. Releases the dropped slots, under the
-contract on `List`.
+Releases the dropped slots, under the contract on `List`.
 
 #### `pub fn clear(&mut self)`
 
@@ -5496,8 +5569,10 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 `#[compiler_item("list_from_le_bytes")]`
 
-The `T`s `bytes` holds, little-endian and back to back; panics on a partial
-`T`. A literal argument folds to a constant, with no decode loop.
+- `contract bytes.as_byte_slice().len() % (T::bits() / 8) == 0, "not a whole number of elements"`
+
+The `T`s `bytes` holds, little-endian and back to back. A literal
+argument folds to a constant, with no decode loop.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 

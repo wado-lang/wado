@@ -556,8 +556,9 @@ engine. Faster where the hardware swizzle differs from Wasm's.
 
 #### `pub fn from_string<S: AsStrSlice>(s: S, offset: i32) -> u8x16`
 
+- `contract 0 <= offset && offset + 16 <= s.len(), "16 bytes out of bounds"`
+
 Load 16 bytes from a String at the given byte offset into a u8x16.
-The caller must ensure `offset + 16 <= s.len()`.
 
 #### `pub fn store_to_string(&self, s: &mut String)`
 
