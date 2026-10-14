@@ -37,7 +37,7 @@ pub struct Utf8Error {
 impl Utf8Error {
     /// A sequence no further byte could complete, `len` bytes long.
     pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error
-        contract 1 <= len <= 3, "no invalid sequence is that long"
+        contract 1 <= len <= 3
     {
         return Utf8Error { valid_up_to, error_len: Option::Some(len) };
     }
@@ -200,7 +200,7 @@ fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
 /// The nearest character boundary at or below `index`, counted from `start`;
 /// `len` when `index >= len`.
 fn floor_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32
-    contract index >= 0, "negative byte index"
+    contract index >= 0
 {
     if index >= len {
         builtin::cold_path();
@@ -212,7 +212,7 @@ fn floor_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32
 /// The nearest character boundary at or above `index`, counted from `start`;
 /// `len` when `index >= len`.
 fn ceil_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32
-    contract index >= 0, "negative byte index"
+    contract index >= 0
 {
     if index >= len {
         builtin::cold_path();
@@ -538,7 +538,7 @@ impl String {
     }
 
     fn byte_at(&self, index: i32) -> u8
-        contract 0 <= index < self.len(), "index out of bounds"
+        contract 0 <= index < self.len()
     {
         return self.repr[index];
     }
@@ -553,7 +553,7 @@ impl String {
     }
 
     fn set_byte_at(&mut self, index: i32, value: u8)
-        contract 0 <= index < self.len(), "index out of bounds"
+        contract 0 <= index < self.len()
     {
         self.repr[index] = value;
     }
@@ -681,7 +681,7 @@ impl String {
     /// A marked call that breaks the contract leaves the string invalid, and
     /// the behavior is unconstrained.
     pub fn push_bytes<S: AsByteSlice>(&mut self, bytes: &S)
-        contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"
+        contract String::is_valid_utf8(bytes.as_byte_slice())
     {
         let slice = bytes.as_byte_slice();
         let n = slice.len();
@@ -716,7 +716,7 @@ impl String {
     /// Returns None if `byte_index` is past the end of the string or there
     /// aren't enough bytes to form a full UTF-8 sequence.
     pub fn char_at_byte(&self, byte_index: i32) -> Option<char>
-        contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"
+        contract byte_index >= self.len() || self.is_char_boundary(byte_index)
     {
         return unchecked self.as_str_slice().char_at_byte(byte_index);
     }
@@ -761,7 +761,7 @@ impl String {
     }
 
     fn push_ascii_byte(&mut self, byte: u8)
-        contract byte < 0x80, "not an ASCII byte"
+        contract byte < 0x80
     {
         let start = self.internal_reserve_uninit(1);
         self.internal_set_byte_unchecked(start, byte);
@@ -770,8 +770,8 @@ impl String {
     /// Truncates the string to the given byte length. Round a byte budget with
     /// `floor_char_boundary` first.
     pub fn truncate(&mut self, byte_len: i32)
-        contract byte_len >= 0, "negative length"
-        contract byte_len >= self.len() || self.is_char_boundary(byte_len), "not on a UTF-8 character boundary"
+        contract byte_len >= 0
+        contract byte_len >= self.len() || self.is_char_boundary(byte_len)
     {
         if byte_len < self.used {
             self.used = byte_len;
@@ -793,14 +793,14 @@ impl String {
     /// The largest character boundary `<= byte_index`, or `len()` beyond it:
     /// cuts to a byte budget with `truncate` or `substr_bytes`.
     pub fn floor_char_boundary(&self, byte_index: i32) -> i32
-        contract byte_index >= 0, "negative byte index"
+        contract byte_index >= 0
     {
         return unchecked floor_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// The smallest character boundary `>= byte_index`, or `len()` beyond it.
     pub fn ceil_char_boundary(&self, byte_index: i32) -> i32
-        contract byte_index >= 0, "negative byte index"
+        contract byte_index >= 0
     {
         return unchecked ceil_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
@@ -862,8 +862,8 @@ impl String {
     /// Extract a substring by byte range `[start, end)`. Round a byte budget
     /// with `floor_char_boundary` first.
     pub fn substr_bytes(&self, start: i32, end: i32) -> String
-        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
-        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+        contract 0 <= start <= end <= self.len()
+        contract self.is_char_boundary(start) && self.is_char_boundary(end)
     {
         return unchecked self.as_str_slice().substr_bytes(start, end);
     }
@@ -923,7 +923,7 @@ impl String {
 
     /// Inserts a character at the given byte index.
     pub fn insert(&mut self, byte_index: i32, ch: char)
-        contract self.is_char_boundary(byte_index), "insert index not on UTF-8 character boundary"
+        contract self.is_char_boundary(byte_index)
     {
         self.make_gap(byte_index, ch.len_utf8());
         encode_char(&mut self.repr as &mut Array<u8>, byte_index, ch as u32);
@@ -931,7 +931,7 @@ impl String {
 
     /// Inserts a string at the given byte index.
     pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S)
-        contract self.is_char_boundary(byte_index), "insert_str index not on UTF-8 character boundary"
+        contract self.is_char_boundary(byte_index)
     {
         let view = s.as_str_slice();
         let s_len = view.len();
@@ -944,8 +944,8 @@ impl String {
 
     /// Removes and returns the character at the given byte index.
     pub fn remove(&mut self, byte_index: i32) -> char
-        contract 0 <= byte_index < self.len(), "index out of bounds"
-        contract self.is_char_boundary(byte_index), "remove index not on UTF-8 character boundary"
+        contract 0 <= byte_index < self.len()
+        contract self.is_char_boundary(byte_index)
     {
         let [code, char_len] = decode_char_at(&self.repr as &Array<u8>, byte_index);
         builtin::array_copy(
@@ -1002,7 +1002,7 @@ impl String {
     /// build does not check contracts. A marked call on invalid bytes builds an
     /// invalid string, and the behavior is unconstrained.
     pub fn from_utf8<S: AsByteSlice>(bytes: S) -> String
-        contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"
+        contract String::is_valid_utf8(bytes.as_byte_slice())
     {
         return String::copy_validated(&bytes.as_byte_slice());
     }
@@ -1088,7 +1088,7 @@ impl String {
     /// The failure a `utf8_valid_prefix` answer other than `len` stands for.
     /// Measured here rather than in the scan, being off the hot path.
     internal fn utf8_error_at(bytes: &ByteSlice, prefix: i32) -> Utf8Error
-        contract prefix != bytes.len(), "the bytes are valid"
+        contract prefix != bytes.len(), "the bytes must not be valid UTF-8"
     {
         if prefix >= 0 {
             return Utf8Error::incomplete(prefix);
@@ -1343,7 +1343,7 @@ impl StrSlice {
     }
 
     fn byte_at(&self, index: i32) -> u8
-        contract 0 <= index < self.len(), "index out of bounds"
+        contract 0 <= index < self.len()
     {
         return self.repr[self.start + index];
     }
@@ -1356,14 +1356,14 @@ impl StrSlice {
 
     /// The largest character boundary `<= index`, or `len()` beyond it.
     pub fn floor_char_boundary(&self, index: i32) -> i32
-        contract index >= 0, "negative byte index"
+        contract index >= 0
     {
         return unchecked floor_boundary(self.repr, self.start, self.len(), index);
     }
 
     /// The smallest character boundary `>= index`, or `len()` beyond it.
     pub fn ceil_char_boundary(&self, index: i32) -> i32
-        contract index >= 0, "negative byte index"
+        contract index >= 0
     {
         return unchecked ceil_boundary(self.repr, self.start, self.len(), index);
     }
@@ -1376,8 +1376,8 @@ impl StrSlice {
 
     /// A sub-view over `[start, end)`, counted from this view's start.
     pub fn slice(&self, start: i32, end: i32) -> StrSlice
-        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
-        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+        contract 0 <= start <= end <= self.len()
+        contract self.is_char_boundary(start) && self.is_char_boundary(end)
     {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
@@ -1534,7 +1534,7 @@ impl StrSlice {
     /// The character starting at `byte_index`, counted from the view's start,
     /// or None past the end.
     pub fn char_at_byte(&self, byte_index: i32) -> Option<char>
-        contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"
+        contract byte_index >= self.len() || self.is_char_boundary(byte_index)
     {
         let at = self.start + byte_index;
         if at >= self.end || at + utf8_seq_len(self.repr[at]) > self.end {
@@ -1651,8 +1651,8 @@ impl StrSlice {
     }
 
     fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice]
-        contract 0 <= at && 0 <= sep_len && at + sep_len <= self.len(), "separator out of bounds"
-        contract self.is_char_boundary(at) && self.is_char_boundary(at + sep_len), "separator not on UTF-8 character boundaries"
+        contract 0 <= at && 0 <= sep_len && at + sep_len <= self.len()
+        contract self.is_char_boundary(at) && self.is_char_boundary(at + sep_len)
     {
         return [
             unchecked self.slice(0, at),
@@ -1685,7 +1685,7 @@ impl StrSlice {
     }
 
     fn char_starting_at(&self, byte_index: i32) -> char
-        contract 0 <= byte_index < self.len() && self.is_char_boundary(byte_index), "not the start of a character"
+        contract 0 <= byte_index < self.len() && self.is_char_boundary(byte_index)
     {
         return char::from_u32_unchecked(decode_char_at(self.repr, self.start + byte_index).0);
     }
@@ -1699,8 +1699,8 @@ impl StrSlice {
     }
 
     pub fn substr_bytes(&self, start: i32, end: i32) -> String
-        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
-        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+        contract 0 <= start <= end <= self.len()
+        contract self.is_char_boundary(start) && self.is_char_boundary(end)
     {
         return (unchecked self.slice(start, end)).to_string();
     }
@@ -1807,20 +1807,20 @@ pub trait AsStrSlice: Eq<String> with () {
     }
 
     fn floor_char_boundary(&self, index: i32) -> i32
-        contract index >= 0, "negative byte index"
+        contract index >= 0
     {
         return unchecked self.as_str_slice().floor_char_boundary(index);
     }
 
     fn ceil_char_boundary(&self, index: i32) -> i32
-        contract index >= 0, "negative byte index"
+        contract index >= 0
     {
         return unchecked self.as_str_slice().ceil_char_boundary(index);
     }
 
     fn slice(&self, start: i32, end: i32) -> StrSlice
-        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
-        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+        contract 0 <= start <= end <= self.len()
+        contract self.is_char_boundary(start) && self.is_char_boundary(end)
     {
         return unchecked self.as_str_slice().slice(start, end);
     }
@@ -1882,7 +1882,7 @@ pub trait AsStrSlice: Eq<String> with () {
     }
 
     fn char_at_byte(&self, byte_index: i32) -> Option<char>
-        contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"
+        contract byte_index >= self.len() || self.is_char_boundary(byte_index)
     {
         return unchecked self.as_str_slice().char_at_byte(byte_index);
     }
@@ -1956,8 +1956,8 @@ pub trait AsStrSlice: Eq<String> with () {
     }
 
     fn substr_bytes(&self, start: i32, end: i32) -> String
-        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
-        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+        contract 0 <= start <= end <= self.len()
+        contract self.is_char_boundary(start) && self.is_char_boundary(end)
     {
         return unchecked self.as_str_slice().substr_bytes(start, end);
     }

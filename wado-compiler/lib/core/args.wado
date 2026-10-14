@@ -153,7 +153,7 @@ struct LongOpt {
 impl ArgvDeserializer {
     /// Decompose a `--name[=value]` token. Folds `-`→`_` only when present.
     fn split_long<S: AsStrSlice>(tok: S) -> LongOpt
-        contract tok.starts_with("--") && tok.len() > 2, "not a long option"
+        contract tok.starts_with("--") && tok.len() > 2, "tok must be a long option"
     {
         let body = tok.substr_bytes(2, tok.len());
         let mut raw = body;

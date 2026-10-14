@@ -979,7 +979,7 @@ impl CborDeserializer {
     /// scalar decoders. The `match` on the dense 24..=27 codes lowers to a
     /// `br_table`.
     fn read_arg(&mut self, ai: u8) -> Result<u64, DeserializeError>
-        contract ai <= AI_8BYTE, "additional info carries no argument"
+        contract ai <= AI_8BYTE, "ai must carry an argument"
     {
         return match ai {
             AI_1BYTE => Result::Ok(self.next_byte()? as u64),
@@ -1257,7 +1257,7 @@ impl CborDeserializer {
     /// past it. Kept non-generic so the generic `next_field` only does the
     /// schema lookup.
     fn read_text_key_range(&mut self, head: u8) -> Result<[i32, i32], DeserializeError>
-        contract head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE, "not a definite-length text head"
+        contract head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE, "head must open a definite-length text string"
     {
         let ai = head & 0x1f;
         self.pos += 1;

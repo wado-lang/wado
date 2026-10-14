@@ -141,7 +141,7 @@ trait Pick with () {
     fn size(&self) -> i32;
 
     fn pick(&self, i: i32) -> i32
-        contract 0 <= i < self.size(), "index out of range";
+        contract 0 <= i < self.size();
 
     fn first(&self) -> i32
         contract self.size() > 0

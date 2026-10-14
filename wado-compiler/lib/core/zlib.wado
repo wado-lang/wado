@@ -759,7 +759,7 @@ impl InflateState {
     // hand, so input that ends first is a stream cut short. The buffer holds 64
     // bits, and a pull adds up to 7 past `n`.
     fn need_bits(&mut self, input: &ByteList, n: i32) -> Result<(), ZlibError>
-        contract n <= 57, "more bits than the buffer holds"
+        contract n <= 57
     {
         while self.bits < n {
             if self.next == self.end {
@@ -951,7 +951,7 @@ fn inflate_raw_ex(
     input_length: i32,
     max_output: i32,
 ) -> Result<[ByteList, i32], ZlibError>
-    contract max_output >= 0, "max_output must not be negative"
+    contract max_output >= 0
 {
     let mut state = InflateState::new(input_offset, input_offset + input_length);
     let mut output: ByteList = [];
@@ -3026,7 +3026,7 @@ impl DeflateStream {
 
     /// Appends `chunk` to the input buffer.
     pub fn update(&mut self, chunk: &ByteList)
-        contract !self.is_finished(), "DeflateStream already finished"
+        contract !self.is_finished()
     {
         self.buffer.extend(chunk);
     }
@@ -3034,7 +3034,7 @@ impl DeflateStream {
     /// Compresses all buffered input and returns the wrapped output. Marks
     /// the stream as finished until `reset` is invoked.
     pub fn finish(&mut self) -> ByteList
-        contract !self.is_finished(), "DeflateStream already finished"
+        contract !self.is_finished()
     {
         self.finished = true;
         let result = self.compress_internal(&self.buffer);
@@ -3046,7 +3046,7 @@ impl DeflateStream {
     /// Compresses `input` in one shot, bypassing the internal buffer. Marks
     /// the stream as finished.
     pub fn compress(&mut self, input: &ByteList) -> ByteList
-        contract !self.is_finished(), "DeflateStream already finished"
+        contract !self.is_finished()
     {
         self.finished = true;
         let result = self.compress_internal(input);

@@ -325,13 +325,13 @@ fn from_byte_list(b: &ByteList) -> Uuid {
 
 /// The lowercase hex digit for a nibble.
 fn hex_digit(nibble: i32) -> char
-    contract 0 <= nibble < 16, "not a nibble"
+    contract 0 <= nibble < 16
 {
     return if nibble < 10 { (b'0' + nibble as u8) as char } else { (b'a' + (nibble - 10) as u8) as char };
 }
 
 fn has_urn_prefix<S: AsStrSlice>(s: S) -> bool
-    contract s.len() >= 9, "shorter than the prefix"
+    contract s.len() >= 9, "s must be long enough to hold the prefix"
 {
     let prefix = "urn:uuid:";
     for let mut i = 0; i < 9; i += 1 {

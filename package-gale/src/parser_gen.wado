@@ -3690,7 +3690,7 @@ fn gen_op_leaf(
     name_counts: &mut List<[String, i32]>,
     proven: &List<i32> = &NO_KINDS,
 )
-    contract op_is_leaf(op), "not a leaf op"
+    contract op_is_leaf(op)
 {
     if leaf_is_proven(op, proven) {
         gen_op_leaf_taken(w, op, ctx, name_counts);
@@ -5281,7 +5281,7 @@ fn sync_name_counts_for_op_leaf(op: &Op, name_counts: &mut List<[String, i32]>) 
 
 /// Read the `dedup_base` slot from any leaf op variant.
 fn op_leaf_dedup_base(op: &Op) -> String
-    contract op_is_leaf(op), "not a leaf op"
+    contract op_is_leaf(op)
 {
     return match op {
         Token(t) => t.dedup_base,

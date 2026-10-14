@@ -106,7 +106,7 @@ impl<T> Slice<T> {
     }
 
     fn element_at(&self, index: i32) -> T
-        contract 0 <= index < self.len(), "index out of bounds"
+        contract 0 <= index < self.len()
     {
         return builtin::array_get_value(self.repr, self.start + index);
     }
@@ -134,7 +134,7 @@ impl<T> Slice<T> {
 
     /// Overlapping windows of `size` consecutive elements.
     pub fn windows(&self, size: i32) -> SliceWindows<T>
-        contract size > 0, "window size must be positive"
+        contract size > 0
     {
         return SliceWindows { repr: self.repr, index: self.start, end: self.end, size };
     }
@@ -142,7 +142,7 @@ impl<T> Slice<T> {
     /// Non-overlapping chunks of up to `size` elements; the last may be
     /// shorter.
     pub fn chunks(&self, size: i32) -> SliceChunks<T>
-        contract size > 0, "chunk size must be positive"
+        contract size > 0
     {
         return SliceChunks { repr: self.repr, index: self.start, end: self.end, size };
     }
@@ -473,7 +473,7 @@ pub trait AsSlice: Sequence with () {
 
     /// Overlapping windows of `size` consecutive elements.
     fn windows(&self, size: i32) -> SliceWindows<Self::Elem>
-        contract size > 0, "window size must be positive"
+        contract size > 0
     {
         return unchecked self.as_slice().windows(size);
     }
@@ -481,7 +481,7 @@ pub trait AsSlice: Sequence with () {
     /// Non-overlapping chunks of up to `size` elements; the last may be
     /// shorter.
     fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>
-        contract size > 0, "chunk size must be positive"
+        contract size > 0
     {
         return unchecked self.as_slice().chunks(size);
     }

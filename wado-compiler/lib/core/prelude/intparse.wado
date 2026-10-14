@@ -224,7 +224,7 @@ fn digit_value(b: u8) -> i32 {
 /// Returns `Err(Empty)` if the view is empty, `Err(InvalidDigit)` on bad
 /// characters, or `Err(PosOverflow)` if the accumulator exceeds `u64::MAX`.
 internal fn parse_u64_digits(s: &StrSlice, radix: u32) -> Result<u64, IntErrorKind>
-    contract 2 <= radix <= 36, "radix must be in 2..=36"
+    contract 2 <= radix <= 36
 {
     let len = s.len();
     if len == 0 {
@@ -251,7 +251,7 @@ internal fn parse_u64_digits(s: &StrSlice, radix: u32) -> Result<u64, IntErrorKi
 /// Parse the view as an unsigned integer in the given radix, accumulating into
 /// a `u128`. Caller strips any sign.
 internal fn parse_u128_digits(s: &StrSlice, radix: u32) -> Result<u128, IntErrorKind>
-    contract 2 <= radix <= 36, "radix must be in 2..=36"
+    contract 2 <= radix <= 36
 {
     let len = s.len();
     if len == 0 {
@@ -321,7 +321,7 @@ internal fn split_plus(s: &StrSlice) -> Result<StrSlice, IntErrorKind> {
 /// `max = 2147483647`, `min_abs = 2147483648`). Handles the optional leading
 /// `+`/`-` sign.
 internal fn parse_i64_radix(s: &StrSlice, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError>
-    contract 2 <= radix <= 36, "radix must be in 2..=36"
+    contract 2 <= radix <= 36
 {
     let [is_negative, digits] = match split_sign(s) {
         Ok(p) => p,
@@ -352,7 +352,7 @@ internal fn parse_i64_radix(s: &StrSlice, radix: u32, max: i64, min_abs: u64) ->
 /// Parse an unsigned integer in the given radix from the view, clamped to
 /// `[0, max]`.
 internal fn parse_u64_radix(s: &StrSlice, radix: u32, max: u64) -> Result<u64, ParseIntError>
-    contract 2 <= radix <= 36, "radix must be in 2..=36"
+    contract 2 <= radix <= 36
 {
     let digits = match split_plus(s) {
         Ok(v) => v,

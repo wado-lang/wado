@@ -171,7 +171,7 @@ and a function may have any number of them:
 
 ```text
 pub fn slice(&self, start: i32, end: i32) -> StrSlice
-    contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+    contract 0 <= start <= end <= self.len()
     contract self.is_char_boundary(start) && self.is_char_boundary(end)
 {
     …
@@ -260,7 +260,7 @@ trait IndexValue<I> {
     type Output;
     fn contains_index(&self, index: &I) -> bool;
     fn index_value(&self, index: I) -> Self::Output
-        contract self.contains_index(&index), "index out of range";
+        contract self.contains_index(&index);
 }
 ```
 

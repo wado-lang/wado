@@ -62,7 +62,7 @@ impl<K, V> EntryLog<K, V> {
     /// outnumber the live enough to `compact`. Nothing reads a dead entry's
     /// value again, so it is released; its key stays for a lookup to compare.
     internal fn kill(&mut self, e: i32) -> bool
-        contract self.alive[e], "entry already dead"
+        contract self.alive[e]
     {
         self.alive[e] = false;
         builtin::array_release(&mut self.values, e, 1);

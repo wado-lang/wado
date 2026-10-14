@@ -220,7 +220,7 @@ impl<K: Hash, V> HashMap<K, V> {
     /// left out is only missed by a later insert of its key, which appends
     /// anyway.
     fn rebuild_table(&mut self, slots: i32)
-        contract slots & slots - 1 == 0, "not a power of two"
+        contract slots & slots - 1 == 0, "slots must be a power of two"
     {
         self.table = Array::<i32>::filled(slots, NO_ENTRY);
         self.shift = 32 - i32::ctz(slots);

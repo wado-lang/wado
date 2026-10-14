@@ -446,7 +446,7 @@ impl char {
     }
 
     fn from_scalar(value: u32) -> char
-        contract value < 0xD800 || 0xE000 <= value <= 0x10FFFF, "not a Unicode scalar value"
+        contract value < 0xD800 || 0xE000 <= value <= 0x10FFFF, "value must be a Unicode scalar value"
     {
         return builtin::i32_as_char(value as i32);
     }
@@ -552,7 +552,7 @@ impl char {
 
     /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
     pub fn hex_digit_value(&self) -> i32
-        contract self.is_hexdigit(), "not a hex digit"
+        contract self.is_hexdigit()
     {
         let c = *self;
         if c.is_ascii_digit() {
@@ -697,7 +697,7 @@ impl i8 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: i8, low: i8, high: i8) -> i8
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return i8::min(i8::max(value, low), high);
     }
@@ -740,7 +740,7 @@ impl i8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return Result::Ok(
             (unchecked parse_i64_radix(&s.as_str_slice(), radix, i8::MAX as i64, i8::MAX as u64 + 1))? as i8,
@@ -780,7 +780,7 @@ impl u8 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: u8, low: u8, high: u8) -> u8
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return u8::min(u8::max(value, low), high);
     }
@@ -865,7 +865,7 @@ impl u8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return Result::Ok((unchecked parse_u64_radix(&s.as_str_slice(), radix, u8::MAX as u64))? as u8);
     }
@@ -903,7 +903,7 @@ impl i16 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: i16, low: i16, high: i16) -> i16
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return i16::min(i16::max(value, low), high);
     }
@@ -943,7 +943,7 @@ impl i16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return Result::Ok(
             (unchecked parse_i64_radix(&s.as_str_slice(), radix, i16::MAX as i64, i16::MAX as u64 + 1))? as i16,
@@ -983,7 +983,7 @@ impl u16 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: u16, low: u16, high: u16) -> u16
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return u16::min(u16::max(value, low), high);
     }
@@ -1016,7 +1016,7 @@ impl u16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return Result::Ok((unchecked parse_u64_radix(&s.as_str_slice(), radix, u16::MAX as u64))? as u16);
     }
@@ -1054,7 +1054,7 @@ impl i32 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: i32, low: i32, high: i32) -> i32
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return i32::min(i32::max(value, low), high);
     }
@@ -1117,7 +1117,7 @@ impl i32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return Result::Ok(
             (unchecked parse_i64_radix(&s.as_str_slice(), radix, i32::MAX as i64, i32::MAX as u64 + 1))? as i32,
@@ -1157,7 +1157,7 @@ impl u32 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: u32, low: u32, high: u32) -> u32
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return u32::min(u32::max(value, low), high);
     }
@@ -1197,7 +1197,7 @@ impl u32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return Result::Ok((unchecked parse_u64_radix(&s.as_str_slice(), radix, u32::MAX as u64))? as u32);
     }
@@ -1235,7 +1235,7 @@ impl i64 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: i64, low: i64, high: i64) -> i64
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return i64::min(i64::max(value, low), high);
     }
@@ -1299,7 +1299,7 @@ impl i64 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return unchecked parse_i64_radix(&s.as_str_slice(), radix, i64::MAX, i64::MAX as u64 + 1);
     }
@@ -1337,7 +1337,7 @@ impl u64 {
 
     /// `value` confined to `low..=high`.
     pub fn clamp(value: u64, low: u64, high: u64) -> u64
-        contract low <= high, "empty range"
+        contract low <= high
     {
         return u64::min(u64::max(value, low), high);
     }
@@ -1401,7 +1401,7 @@ impl u64 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>
-        contract 2 <= radix <= 36, "radix must be in 2..=36"
+        contract 2 <= radix <= 36
     {
         return unchecked parse_u64_radix(&s.as_str_slice(), radix, u64::MAX);
     }
@@ -1611,7 +1611,7 @@ impl f32 {
     /// `x` confined to `low..=high` by the order, except that a NaN `x` stays
     /// NaN.
     pub fn clamp(x: f32, low: f32, high: f32) -> f32
-        contract !high.is_nan() && low <= high, "empty or NaN range"
+        contract !high.is_nan() && low <= high
     {
         if x.is_nan() {
             return x;
@@ -2082,7 +2082,7 @@ impl f64 {
     /// `x` confined to `low..=high` by the order, except that a NaN `x` stays
     /// NaN.
     pub fn clamp(x: f64, low: f64, high: f64) -> f64
-        contract !high.is_nan() && low <= high, "empty or NaN range"
+        contract !high.is_nan() && low <= high
     {
         if x.is_nan() {
             return x;

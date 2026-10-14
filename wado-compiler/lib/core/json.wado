@@ -1076,7 +1076,7 @@ fn scanned_to_bits(n: &ScannedNumber, input: &ByteSlice, format: &BinaryFormat) 
 /// True when `b` is one of JSON's four whitespace bytes. `json_ws_end` is the
 /// only caller, and the `b > b' '` it tests first is what bounds `b` here.
 fn is_json_ws(b: i32) -> bool
-    contract b < 64, "shift past the set"
+    contract b < 64
 {
     let ws_set = 1 as u64 << b' ' | 1 as u64 << b'\t' | 1 as u64 << b'\n' | 1 as u64 << b'\r';
     return ws_set >> b as u64 & 1 != 0;
@@ -1997,7 +1997,7 @@ impl JsonDeserializer {
     /// Inline check for "true" / "false" / "null", whose first byte the caller
     /// matched. Returns Ok if the literal matches and advances pos past it.
     fn expect_true(&mut self) -> Result<(), DeserializeError>
-        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b't', "not at 't'"
+        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b't'
     {
         if self.pos + 4 <= self.input.len()
             && self.input.get_unchecked(self.pos + 1) as i32 == b'r'
@@ -2010,7 +2010,7 @@ impl JsonDeserializer {
     }
 
     fn expect_false(&mut self) -> Result<(), DeserializeError>
-        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b'f', "not at 'f'"
+        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b'f'
     {
         if self.pos + 5 <= self.input.len()
             && self.input.get_unchecked(self.pos + 1) as i32 == b'a'
@@ -2024,7 +2024,7 @@ impl JsonDeserializer {
     }
 
     fn expect_null(&mut self) -> Result<(), DeserializeError>
-        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b'n', "not at 'n'"
+        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b'n'
     {
         if self.pos + 4 <= self.input.len()
             && self.input.get_unchecked(self.pos + 1) as i32 == b'u'
