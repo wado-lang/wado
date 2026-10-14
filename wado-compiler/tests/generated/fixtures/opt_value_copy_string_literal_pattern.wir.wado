@@ -126,9 +126,9 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:opt_value_copy_string_literal_pattern.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(103, 97, 109, 109, 97);
-global global:opt_value_copy_string_literal_pattern.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(98, 101, 116, 97);
-global global:opt_value_copy_string_literal_pattern.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(97, 108, 112, 104, 97);
+global mut global:opt_value_copy_string_literal_pattern.wado::$const_obj_10: ref null Array<u8> = ref.null none;
+global mut global:opt_value_copy_string_literal_pattern.wado::$const_obj_11: ref null Array<u8> = ref.null none;
+global mut global:opt_value_copy_string_literal_pattern.wado::$const_obj_12: ref null Array<u8> = ref.null none;
 global global:opt_value_copy_string_literal_pattern.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:core:prelude/format.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(38);
 global global:core:prelude/format.wado::$const_obj_19: ref Array<u8> = array.new_fixed<u8>(46, 46, 46);
@@ -158,46 +158,45 @@ global global:core:prelude/string.wado::$const_obj_57: ref Array<u8> = array.new
 global global:core:prelude/primitive.wado::$const_obj_97: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "opt_value_copy_string_literal_pattern.wado/kind_of"(name) {
-    let a_10: ref Array<u8>;
-    let a_end_12: i32;
-    let b_13: ref Array<u8>;
-    let i_17: i32;
-    return (if $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: block -> bool {
-        a_10 = name.repr;
-        a_end_12 = name.used;
-        b_13 = global:opt_value_copy_string_literal_pattern.wado::$const_obj_12;
-        if local.tee a_end_12(a_end_12 - 0) != 5 {
+    let $load_0: ref Array<u8>;
+    let $load_1: i32;
+    let b_16: ref Array<u8>;
+    let len_19: i32;
+    let i_20: i32;
+    return (if $load_0 = name.repr; $load_1 = name.used; let $array_clone_dst_8: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_8(builtin::array_new<u8>($load_1)), 0, $load_0, 0, $load_1); $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: block -> bool {
+        global:opt_value_copy_string_literal_pattern.wado::$const_obj_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 108, 112, 104, 97), used: 5 }.repr;
+        b_16 = global:opt_value_copy_string_literal_pattern.wado::$const_obj_12;
+        if local.tee len_19($load_1 - 0) != 5 {
             break $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: 0;
         }
-        i_17 = 0;
+        i_20 = 0;
         b2: block {
             l3: loop {
-                break_if b2 i_17 >= a_end_12;
-                if builtin::array_get_value<u8>(a_10, 0 + i_17) != builtin::array_get_value<u8>(b_13, 0 + i_17) {
+                break_if b2 i_20 >= len_19;
+                if builtin::array_get_value<u8>($array_clone_dst_8, 0 + i_20) != builtin::array_get_value<u8>(b_16, 0 + i_20) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: 0;
                 }
-                i_17 = i_17 + 1;
+                i_20 = i_20 + 1;
                 continue l3;
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: 1;
     } -> i32 {
         1;
-    } else if $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: block -> bool {
-        b_13 = name.repr;
-        i_17 = name.used;
-        a_10 = global:opt_value_copy_string_literal_pattern.wado::$const_obj_11;
-        if local.tee i_17(i_17 - 0) != 4 {
+    } else if builtin::array_copy<u8>(local.tee b_16(builtin::array_new<u8>($load_1)), 0, $load_0, 0, $load_1); $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: block -> bool {
+        global:opt_value_copy_string_literal_pattern.wado::$const_obj_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 101, 116, 97), used: 4 }.repr;
+        $array_clone_dst_8 = global:opt_value_copy_string_literal_pattern.wado::$const_obj_11;
+        if local.tee i_20($load_1 - 0) != 4 {
             break $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: 0;
         }
-        a_end_12 = 0;
+        len_19 = 0;
         b7: block {
             l8: loop {
-                break_if b7 a_end_12 >= i_17;
-                if builtin::array_get_value<u8>(b_13, 0 + a_end_12) != builtin::array_get_value<u8>(a_10, 0 + a_end_12) {
+                break_if b7 len_19 >= i_20;
+                if builtin::array_get_value<u8>(b_16, 0 + len_19) != builtin::array_get_value<u8>($array_clone_dst_8, 0 + len_19) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__spec1_1: 0;
                 }
-                a_end_12 = a_end_12 + 1;
+                len_19 = len_19 + 1;
                 continue l8;
             };
         };
@@ -205,21 +204,20 @@ fn "opt_value_copy_string_literal_pattern.wado/kind_of"(name) {
     } -> i32 {
         2;
     } else {
-        select i32($inline_core_prelude_array_wado_seq_eq_u8__spec0_2: block -> bool {
-            b_13 = name.repr;
-            i_17 = name.used;
-            a_10 = global:opt_value_copy_string_literal_pattern.wado::$const_obj_10;
-            if local.tee i_17(i_17 - 0) != 5 {
+        select i32(builtin::array_copy<u8>(local.tee b_16(builtin::array_new<u8>($load_1)), 0, $load_0, 0, $load_1); $inline_core_prelude_array_wado_seq_eq_u8__spec0_2: block -> bool {
+            global:opt_value_copy_string_literal_pattern.wado::$const_obj_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103, 97, 109, 109, 97), used: 5 }.repr;
+            $load_0 = global:opt_value_copy_string_literal_pattern.wado::$const_obj_10;
+            if local.tee $load_1($load_1 - 0) != 5 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__spec0_2: 0;
             }
-            a_end_12 = 0;
+            i_20 = 0;
             b11: block {
                 l12: loop {
-                    break_if b11 a_end_12 >= i_17;
-                    if builtin::array_get_value<u8>(b_13, 0 + a_end_12) != builtin::array_get_value<u8>(a_10, 0 + a_end_12) {
+                    break_if b11 i_20 >= $load_1;
+                    if builtin::array_get_value<u8>(b_16, 0 + i_20) != builtin::array_get_value<u8>($load_0, 0 + i_20) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__spec0_2: 0;
                     }
-                    a_end_12 = a_end_12 + 1;
+                    i_20 = i_20 + 1;
                     continue l12;
                 };
             };

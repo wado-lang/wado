@@ -117,30 +117,30 @@ global global:core:prelude/primitive.wado::$const_obj_63: ref "core:prelude/stri
 fn "allocator_asset_memory_pruned.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
     let $local_1: ref "core:prelude/string.wado//String";
-    let new_used_29: i32;
-    let start_30: i32;
+    let new_used_28: i32;
+    let start_29: i32;
     let packed: i64;
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    if @unlikely(local.tee new_used_29(0 + 4) > builtin::array_len($local_1.repr)) {
+    if @unlikely(local.tee new_used_28(0 + 4) > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_29);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_28);
     }
-    start_30 = $local_1.used;
-    $local_1.used = new_used_29;
-    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_30, global:allocator_asset_memory_pruned.wado::$const_obj_1, 0, 4);
-    if @unlikely(local.tee start_30($local_1.used + 1) > builtin::array_len($load_2)) {
+    start_29 = $local_1.used;
+    $local_1.used = new_used_28;
+    builtin::array_copy<u8>(local.tee $load_2($local_1.repr), start_29, global:allocator_asset_memory_pruned.wado::$const_obj_1, 0, 4);
+    if @unlikely(local.tee start_29($local_1.used + 1) > builtin::array_len($load_2)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_30);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, start_29);
     }
-    new_used_29 = $local_1.used;
-    $local_1.used = start_30;
-    builtin::array_copy<u8>($local_1.repr, new_used_29, global:allocator_asset_memory_pruned.wado::$const_obj_0, 0, 1);
+    new_used_28 = $local_1.used;
+    $local_1.used = start_29;
+    builtin::array_copy<u8>($local_1.repr, new_used_28, global:allocator_asset_memory_pruned.wado::$const_obj_0, 0, 1);
     "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]"(black_box(1.5), $local_1);
-    new_used_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    start_30 = builtin::i32_wrap_i64(packed >> 32_i64);
-    new_used_29 = "allocator_asset_memory_pruned.wado/$cm_binding__Stdout_write_via_stream"(new_used_29);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_30, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_29);
+    new_used_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    start_29 = builtin::i32_wrap_i64(packed >> 32_i64);
+    new_used_28 = "allocator_asset_memory_pruned.wado/$cm_binding__Stdout_write_via_stream"(new_used_28);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_29, $local_1.repr, $local_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(new_used_28);
 }
 
 fn "allocator_asset_memory_pruned.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

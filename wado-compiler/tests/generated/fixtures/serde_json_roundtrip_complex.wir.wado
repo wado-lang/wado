@@ -2702,7 +2702,6 @@ condition: json == `\"North\"`
 }
 
 fn "serde_json_roundtrip_complex.wado/$test_11_all_enum_variants_roundtrip"() {
-    let $load_2: i32;
     let i_2: i32;
     let json: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/string.wado//String";
@@ -2711,73 +2710,69 @@ fn "serde_json_roundtrip_complex.wado/$test_11_all_enum_variants_roundtrip"() {
     let $fuse_at_10: i32;
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
-    let v: ref "core:prelude/string.wado//String";
-    let new_used_54: i32;
-    let start_55: i32;
-    let new_used_67: i32;
-    let start_68: i32;
+    let other_36: ref "core:prelude/string.wado//String";
+    let n_49: i32;
+    let new_used_53: i32;
+    let start_54: i32;
+    let new_used_66: i32;
+    let start_67: i32;
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
-    let i_79: i32;
-    let $licm_repr_80: ref "Array<serde_json_roundtrip_complex.wado/Direction>";
-    let $licm_repr_81: ref "Array<core:prelude/string.wado/String>";
+    let i_78: i32;
+    let $licm_repr_79: ref "Array<serde_json_roundtrip_complex.wado/Direction>";
+    let $licm_repr_80: ref "Array<core:prelude/string.wado/String>";
     i_2 = 0;
-    $licm_repr_80 = global:serde_json_roundtrip_complex.wado::$const_obj_138;
-    $licm_repr_81 = global:serde_json_roundtrip_complex.wado::$const_obj_137;
+    $licm_repr_79 = global:serde_json_roundtrip_complex.wado::$const_obj_138;
+    $licm_repr_80 = global:serde_json_roundtrip_complex.wado::$const_obj_137;
     b138: block {
         l139: loop {
             break_if b138 i_2 >= 4;
             let $mv$json_r$0: i32;
             let $mv$json_r$1: ref null "core:prelude/string.wado//String";
             let $mv$json_r$2: ref null "core:serde//SerializeError";
-            multivalue_bind [$mv$json_r$0, $mv$json_r$1, $mv$json_r$2] = "core:json/core/json/to_string<serde_json_roundtrip_complex.wado/Direction>$sroa[value.value,return]"(builtin::array_get_value<"serde_json_roundtrip_complex.wado//enum:Direction">($licm_repr_80, i_2), global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0);
+            multivalue_bind [$mv$json_r$0, $mv$json_r$1, $mv$json_r$2] = "core:json/core/json/to_string<serde_json_roundtrip_complex.wado/Direction>$sroa[value.value,return]"(builtin::array_get_value<"serde_json_roundtrip_complex.wado//enum:Direction">($licm_repr_79, i_2), global:core:builtin::$unit_case$core:prelude/types.wado//Option<char>$0);
             if @likely($mv$json_r$0 == 0) {
                 json = ref.as_non_null($mv$json_r$1);
                 local.tee $local_7(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 }).used = 1;
                 builtin::array_copy<u8>($local_7.repr, 0, global:serde_json_roundtrip_complex.wado::$const_obj_135, 0, 1);
-                v = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_81, i_2);
-                let $array_clone_src_2: ref Array<u8>;
-                $array_clone_src_2 = v.repr;
-                $load_2 = v.used;
-                let $array_clone_dst_3: ref Array<u8>;
-                builtin::array_copy<u8>(local.tee $array_clone_dst_3(builtin::array_new<u8>($load_2)), 0, $array_clone_src_2, 0, $load_2);
-                $inline_core_prelude_string_wado_String__internal_push_string_14: block {
-                    break_if $inline_core_prelude_string_wado_String__internal_push_string_14 $load_2 == 0;
-                    if @unlikely(local.tee new_used_54(1 + $load_2) > 18) {
+                other_36 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_80, i_2);
+                $inline_core_prelude_string_wado_String__internal_push_string_13: block {
+                    break_if $inline_core_prelude_string_wado_String__internal_push_string_13 local.tee n_49(other_36.used) == 0;
+                    if @unlikely(local.tee new_used_53(1 + n_49) > 18) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_54);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_53);
                     }
-                    start_55 = $local_7.used;
-                    $local_7.used = new_used_54;
-                    builtin::array_copy<u8>($local_7.repr, start_55, $array_clone_dst_3, 0, $load_2);
+                    start_54 = $local_7.used;
+                    $local_7.used = new_used_53;
+                    builtin::array_copy<u8>($local_7.repr, start_54, other_36.repr, 0, n_49);
                 };
-                if @unlikely(local.tee new_used_67($local_7.used + 1) > builtin::array_len($local_7.repr)) {
+                if @unlikely(local.tee new_used_66($local_7.used + 1) > builtin::array_len($local_7.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_67);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_66);
                 }
-                start_68 = $local_7.used;
-                $local_7.used = new_used_67;
-                builtin::array_copy<u8>($local_7.repr, start_68, global:serde_json_roundtrip_complex.wado::$const_obj_135, 0, 1);
-                if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__23: block -> bool {
+                start_67 = $local_7.used;
+                $local_7.used = new_used_66;
+                builtin::array_copy<u8>($local_7.repr, start_67, global:serde_json_roundtrip_complex.wado::$const_obj_135, 0, 1);
+                if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__22: block -> bool {
                     a = json.repr;
                     a_end = json.used;
                     b = $local_7.repr;
                     if a_end != $local_7.used {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
+                        break $inline_core_prelude_array_wado_seq_eq_u8__22: 0;
                     }
-                    i_79 = 0;
+                    i_78 = 0;
                     b145: block {
                         l146: loop {
-                            break_if b145 i_79 >= a_end;
-                            if builtin::array_get_value<u8>(a, i_79) != builtin::array_get_value<u8>(b, i_79) {
-                                break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
+                            break_if b145 i_78 >= a_end;
+                            if builtin::array_get_value<u8>(a, i_78) != builtin::array_get_value<u8>(b, i_78) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__22: 0;
                             }
-                            i_79 = i_79 + 1;
+                            i_78 = i_78 + 1;
                             continue l146;
                         };
                     };
-                    break $inline_core_prelude_array_wado_seq_eq_u8__23: 1;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__22: 1;
                 } == 0) {
                     cold_path;
                     $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(166)), 94);
@@ -2800,9 +2795,9 @@ condition: json == `\"${names[i]}\"`
                     "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_12 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("`\"${names[i]}\"`: "), used: 17 }, 17);
                     $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
                     "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($local_7, $local_9);
-                    let $mv_arg_6: ref "core:prelude/string.wado//String";
-                    $mv_arg_6 = global:serde_json_roundtrip_complex.wado::$const_obj_73;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_arg_6.repr, $mv_arg_6.used);
+                    let $mv_arg_3: ref "core:prelude/string.wado//String";
+                    $mv_arg_3 = global:serde_json_roundtrip_complex.wado::$const_obj_73;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_arg_3.repr, $mv_arg_3.used);
                     "core:rt/panic"($local_8.repr, $local_8.used);
                     unreachable;
                 }

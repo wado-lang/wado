@@ -13,6 +13,7 @@ pub mod modref;
 pub mod observed;
 pub mod ownership;
 pub mod place;
+pub mod points_to;
 pub mod reach;
 pub mod retention;
 pub mod synthesize;
@@ -23,8 +24,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
 use crate::tir::{
-    BuiltinDeclarations, ResolvedType, TemplateId, TirExpr, TirExprKind, TirFunction, TypeId,
-    TypeTable,
+    BuiltinDeclarations, ClosureFunctor, ResolvedType, TemplateId, TirExpr, TirExprKind,
+    TirFunction, TypeId, TypeTable,
 };
 use funcset::{FuncKeyMap, FuncKeySet};
 
@@ -119,6 +120,9 @@ pub struct ValueCopyPlan {
     /// The fields a borrow may observe from outside the body assigning them, so
     /// an assignment through a parameter or a reference writes in place.
     pub observed_fields: observed::ObservedFields,
+    /// Which storage each reference may name, so a by-value argument keeps its
+    /// copy exactly where something the call reaches can write it.
+    pub points_to: points_to::PointsTo,
     /// What a `fn` value of each shape can hold, for `reach::StorageReach`.
     pub closure_captures: reach::ClosureCaptures,
     /// The projection each accessor returns out of its receiver, so a name
@@ -176,6 +180,7 @@ pub fn plan(
     builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
+    functors: &[ClosureFunctor],
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
     let seed = analyze::collect_seed_types(flat);
@@ -256,6 +261,7 @@ pub fn plan(
     );
     ValueCopyPlan {
         helpers,
+        points_to: points_to::compute(flat, functors),
         mod_ref,
         observed_fields,
         closure_captures,
