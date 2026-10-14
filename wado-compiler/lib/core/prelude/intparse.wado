@@ -30,7 +30,7 @@ internal fn lenient_int_preprocess<T: AsStrSlice>(text: T) -> Result<[String, u3
     if len == 0 {
         return Result::Err(LenientParseError::new("empty integer string"));
     }
-    let first = s.get_byte_unchecked(0);
+    let first = unchecked s.byte_at(0);
     let is_negative = first == b'-';
     let has_sign = is_negative || first == b'+';
     let mut i = if has_sign { 1 } else { 0 };
@@ -38,8 +38,8 @@ internal fn lenient_int_preprocess<T: AsStrSlice>(text: T) -> Result<[String, u3
         return Result::Err(LenientParseError::new("integer string has a sign but no digits"));
     }
     let mut radix: u32 = 10;
-    if s.get_byte_unchecked(i) == b'0' && i + 2 <= len {
-        let marker = s.get_byte_unchecked(i + 1);
+    if unchecked s.byte_at(i) == b'0' && i + 2 <= len {
+        let marker = unchecked s.byte_at(i + 1);
         if marker == b'x' || marker == b'X' {
             radix = 16;
             i += 2;
@@ -57,11 +57,11 @@ internal fn lenient_int_preprocess<T: AsStrSlice>(text: T) -> Result<[String, u3
     }
     let mut digit_count = 0;
     for let mut j = i; j < len; j += 1 {
-        let b = s.get_byte_unchecked(j);
+        let b = unchecked s.byte_at(j);
         if b == b'_' {
             continue;
         }
-        cleaned.push(char::from_u32_unchecked(b as u32));
+        cleaned.push(unchecked char::from_u32(b as u32));
         digit_count += 1;
     }
     if digit_count == 0 {
@@ -104,22 +104,22 @@ impl From<ParseFloatError> for LenientParseError {
 internal fn lenient_float_preprocess<T: AsStrSlice>(text: T) -> String {
     let s = text.as_str_slice();
     let len = s.len();
-    let head = if len > 0 && (s.get_byte_unchecked(0) == b'+' || s.get_byte_unchecked(0) == b'-') { 1 } else { 0 };
+    let head = if len > 0 && (unchecked s.byte_at(0) == b'+' || unchecked s.byte_at(0) == b'-') { 1 } else { 0 };
     if head >= len {
         return s.to_string();
     }
-    let first = s.get_byte_unchecked(head);
+    let first = unchecked s.byte_at(head);
     let is_numeric = first.is_ascii_digit() || first == b'.';
     if !is_numeric {
         return s.to_string();
     }
     let mut cleaned = String::with_capacity(len);
     for let mut j = 0; j < len; j += 1 {
-        let b = s.get_byte_unchecked(j);
+        let b = unchecked s.byte_at(j);
         if b == b'_' {
             continue;
         }
-        cleaned.push(char::from_u32_unchecked(b as u32));
+        cleaned.push(unchecked char::from_u32(b as u32));
     }
     return cleaned;
 }
@@ -235,7 +235,7 @@ internal fn parse_u64_digits(s: &StrSlice, radix: u32) -> Result<u64, IntErrorKi
     let max_digit_for_overflow: u64 = u64::MAX - max_before_mul * r;
     let mut acc: u64 = 0;
     for let mut i = 0; i < len; i += 1 {
-        let d = digit_value(s.get_byte_unchecked(i));
+        let d = digit_value(unchecked s.byte_at(i));
         if d < 0 || d >= radix as i32 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
@@ -264,7 +264,7 @@ internal fn parse_u128_digits(s: &StrSlice, radix: u32) -> Result<u128, IntError
     let max_digit_for_overflow: u128 = divmod[1];
     let mut acc: u128 = 0;
     for let mut i = 0; i < len; i += 1 {
-        let d = digit_value(s.get_byte_unchecked(i));
+        let d = digit_value(unchecked s.byte_at(i));
         if d < 0 || d >= radix as i32 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }
@@ -288,7 +288,7 @@ internal fn split_sign(s: &StrSlice) -> Result<[bool, StrSlice], IntErrorKind> {
     if len == 0 {
         return Result::Err(IntErrorKind::Empty);
     }
-    let first = s.get_byte_unchecked(0);
+    let first = unchecked s.byte_at(0);
     let is_negative = first == b'-';
     let has_sign = is_negative || first == b'+';
     if has_sign && len == 1 {
@@ -306,7 +306,7 @@ internal fn split_plus(s: &StrSlice) -> Result<StrSlice, IntErrorKind> {
     if len == 0 {
         return Result::Err(IntErrorKind::Empty);
     }
-    if s.get_byte_unchecked(0) == b'+' {
+    if unchecked s.byte_at(0) == b'+' {
         if len == 1 {
             return Result::Err(IntErrorKind::InvalidDigit);
         }

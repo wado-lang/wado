@@ -671,16 +671,16 @@ let y: i8 = 65;
 let d = y as char;  // compile error (i8 can be negative)
 ```
 
-The checked conversions take their place. They answer `None` for a value that
-is not a scalar value. [`core:prelude`](./stdlib-core-prelude.md) has the full
-`char` API.
+Conversions take their place. `char::from_u32` takes a scalar value and traps on
+any other, and `char::try_from` answers an `Err` for a value that is not one.
+[`core:prelude`](./stdlib-core-prelude.md) has the full `char` API.
 
 <!-- {"fixture":"spec_literals_primitives.wado"} -->
 
 ```wado
-let from_u32 = char::from_u32(65 as u32);
-let from_i32 = char::from_i32(65);
-assert from_u32 == Option::Some('A') && from_i32 == Option::Some('A');
+let scalar = char::from_u32(65 as u32);   // traps on a non-scalar value
+let checked = char::try_from(0xD800 as u32);
+assert scalar == 'A' && checked matches { Err(_) };
 ```
 
 A `char` casts to no type but an integer:

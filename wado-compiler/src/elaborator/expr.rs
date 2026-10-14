@@ -342,7 +342,10 @@ fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
         tt.representation_head(target),
     );
     if target == TypeTable::CHAR && source != TypeTable::CHAR && source != TypeTable::U8 {
-        return Some("use char::from_u32() or char::from_i32() for checked conversion".to_string());
+        return Some(
+            "use char::from_u32() for a scalar value, or char::try_from() for one that may not be"
+                .to_string(),
+        );
     }
     let integer_target = tt.is_integer(target) || tt.is_wide_int(target);
     (source == TypeTable::CHAR && target != TypeTable::CHAR && !integer_target)

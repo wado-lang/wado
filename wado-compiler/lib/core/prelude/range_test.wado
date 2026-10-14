@@ -103,6 +103,15 @@ test "char range for-of" {
     assert s == "abcde";
 }
 
+test "char range stops before a surrogate and past the last scalar" {
+    let mut n = 0;
+    for let _ of '\u{D7FE}'..='\u{E000}' {
+        n += 1;
+    }
+    assert n == 2;
+    assert '\u{10FFFF}'.next_step() == null;
+}
+
 // i128/u128 Step
 
 test "i128 range iteration" {

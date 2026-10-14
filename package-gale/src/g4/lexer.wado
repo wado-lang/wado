@@ -287,10 +287,10 @@ pub fn string_literal_code_points(chars: &List<char>, span: Span) -> List<i32> {
 /// The `char` for a code point, or U+FFFD when it is not a Unicode scalar
 /// (an unpaired surrogate). Only for text that must stay a `String`.
 pub fn scalar_or_replacement(code: i32) -> char {
-    return match char::from_i32(code) {
-        Some(ch) => ch,
-        None => '\u{FFFD}',
-    };
+    if code < 0 || !char::is_scalar_value(code as u32) {
+        return '\u{FFFD}';
+    }
+    return unchecked char::from_i32(code);
 }
 
 global MAX_CODE_POINT: i32 = 0x10FFFF;

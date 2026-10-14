@@ -50,7 +50,7 @@ pub fn line_of<S: AsStrSlice>(source: S, at: i32) -> i32 {
     let mut line = 1;
     let mut i = 0;
     while i < at && i < source.len() {
-        if source.get_byte_unchecked(i) == b'\n' {
+        if unchecked source.byte_at(i) == b'\n' {
             line += 1;
         }
         i += 1;

@@ -15,7 +15,7 @@ pub fn ident_words<S: AsStrSlice>(text: S) -> List<String> {
     let mut out: List<String> = [];
     let mut start = -1;
     for let mut i = 0; i <= s.len(); i += 1 {
-        let in_word = i < s.len() && is_ident_byte(s.get_byte_unchecked(i));
+        let in_word = i < s.len() && is_ident_byte(unchecked s.byte_at(i));
         if in_word && start < 0 {
             start = i;
         } else if !in_word && start >= 0 {

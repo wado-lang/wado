@@ -27,7 +27,7 @@ test "generic map iterator doubles values" {
 
 test "generic map iterator type conversion" {
     let arr: List<i32> = [65, 66, 67];
-    let mut iter = GenericMapIter { inner: arr.iter_value(), f: |x: i32| char::from_u32_unchecked(x as u32) };
+    let mut iter = GenericMapIter { inner: arr.iter_value(), f: |x: i32| unchecked char::from_u32(x as u32) };
     assert iter.next() matches { Some('A') };
     assert iter.next() matches { Some('B') };
     assert iter.next() matches { Some('C') };

@@ -152,7 +152,7 @@ fn push_escaped_upto<S: AsStrSlice>(out: &mut String, source: S, cur: &mut HtmlC
     let mut pos = cur.char_index;
     let mut run = bi;
     while pos < target && bi < n {
-        let b = source.get_byte_unchecked(bi);
+        let b = unchecked source.byte_at(bi);
         if b >= b'\x80' {
             if b < b'\xe0' {
                 bi += 2;

@@ -88,7 +88,10 @@ impl Step for u64 {
 impl Step for char {
     fn next_step(&self) -> Option<char> {
         let code = *self as u32 + 1 as u32;
-        return char::from_u32(code);
+        if !char::is_scalar_value(code) {
+            return null;
+        }
+        return Option::Some(unchecked char::from_u32(code));
     }
 }
 

@@ -749,7 +749,7 @@ test "char_range_pat matches its range and nothing past either end" {
     let tabs = char_range_pat('\t'..='\n');
     let under = char_range_pat('_'..='_');
     let run = wado`for let n of [8, 9, 10, 11, 94, 95, 96] as List<u32> {
-    print(match char::from_u32_unchecked(n) { ${tabs} => "t", ${under} => "u", _ => "-" });
+    print(match unchecked char::from_u32(n) { ${tabs} => "t", ${under} => "u", _ => "-" });
 }`;
     assert printed(run) == "-tt--u-";
 }

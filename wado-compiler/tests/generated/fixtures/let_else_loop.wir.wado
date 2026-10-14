@@ -101,10 +101,10 @@ fn "let_else_loop.wado/run"() with Stdout {
     let tx_91: i32;
     let $sroa_items_repr_98: ref "Array<core:prelude/types.wado/Option<i32>>";
     let $sroa_$iter_0_index_109: i32;
-    let new_used_162: i32;
-    let start_163: i32;
-    let new_used_226: i32;
-    let start_227: i32;
+    let new_used_157: i32;
+    let start_158: i32;
+    let new_used_216: i32;
+    let start_217: i32;
     $sroa_items_repr_98 = global:let_else_loop.wado::$const_obj_4;
     sum = 0;
     $sroa_$iter_0_index_109 = 0;
@@ -226,27 +226,27 @@ fn "let_else_loop.wado/run"() with Stdout {
                         break $inline_count_digits_u64_29: 20;
                     };
                     if is_negative_73 {
-                        if @unlikely(local.tee new_used_162($local_7_7.used + 1) > builtin::array_len($load_12)) {
+                        if @unlikely(local.tee new_used_157($local_7_7.used + 1) > builtin::array_len($load_12)) {
                             cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, new_used_162);
+                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, new_used_157);
                         }
-                        start_163 = $local_7_7.used;
-                        $local_7_7.used = new_used_162;
-                        builtin::array_set_u8($local_7_7.repr, start_163, 45);
+                        start_158 = $local_7_7.used;
+                        $local_7_7.used = new_used_157;
+                        builtin::array_set_u8($local_7_7.repr, start_158, 45);
                     } else {
                     }
-                    if @unlikely(local.tee new_used_226($local_7_7.used + digit_count_75) > builtin::array_len($local_7_7.repr)) {
+                    if @unlikely(local.tee new_used_216($local_7_7.used + digit_count_75) > builtin::array_len($local_7_7.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, new_used_226);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7_7, new_used_216);
                     }
-                    start_227 = $local_7_7.used;
-                    $local_7_7.used = new_used_226;
+                    start_217 = $local_7_7.used;
+                    $local_7_7.used = new_used_216;
                     arr = $local_7_7.repr;
-                    pos = start_227 + digit_count_75;
+                    pos = start_217 + digit_count_75;
                     t = abs_val_74;
                     b32: block {
                         l33: loop {
-                            break_if b32 (pos - start_227) < 2;
+                            break_if b32 (pos - start_217) < 2;
                             q = t /u 100_i64;
                             tens = local.tee pair(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
                             builtin::array_set_u8(arr, pos - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -256,8 +256,8 @@ fn "let_else_loop.wado/run"() with Stdout {
                             continue l33;
                         };
                     };
-                    if pos > start_227 {
-                        builtin::array_set_u8(arr, start_227, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+                    if pos > start_217 {
+                        builtin::array_set_u8(arr, start_217, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
                     }
                     rx_90 = builtin::i32_wrap_i64(local.tee packed_89("wasi/stream-new"()));
                     tx_91 = builtin::i32_wrap_i64(packed_89 >> 32_i64);

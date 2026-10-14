@@ -29,7 +29,7 @@ global INPUT_BYTES: i32 = 65536;
 fn scan_scalar(s: &String, from: i32, len: i32) -> i32 {
     let mut i = from;
     while i < len {
-        let b = s.get_byte_unchecked(i);
+        let b = unchecked s.byte_at(i);
         if b == b'"' || b == b'\\' || b >= 0x80 as u8 {
             return i;
         }
@@ -111,7 +111,7 @@ fn sum_bytes_scalar(s: &String, len: i32) -> i32 {
     let mut total = 0;
     let mut i = 0;
     while i < len {
-        total += s.get_byte_unchecked(i) as i32;
+        total += unchecked s.byte_at(i) as i32;
         i += 1;
     }
     return total;
@@ -162,7 +162,7 @@ fn make_input(total: i32, run_len: i32) -> String {
         if i % (run_len + 1) == run_len {
             s.push('"');
         } else {
-            s.push(char::from_u32_unchecked((b'a' + (i % 26) as u8) as u32));
+            s.push((b'a' + (i % 26) as u8) as char);
         }
         i += 1;
     }
@@ -194,7 +194,7 @@ test "the two byte reads agree" {
     let chunks = pack(&s);
     let len = s.len();
     for let i of 0..<len {
-        assert byte_at_packed(&chunks, i) == s.get_byte_unchecked(i);
+        assert byte_at_packed(&chunks, i) == s.byte_at(i);
     }
     assert sum_bytes_packed(&chunks, len) == sum_bytes_scalar(&s, len);
 }

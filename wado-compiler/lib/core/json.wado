@@ -164,7 +164,7 @@ test "json_plain_quad agrees with json_plain_byte on every adjacent pair" {
 fn json_escape_free<S: AsStrSlice>(s: S) -> bool {
     let n = s.len();
     for let mut i = 0; i < n; i += 1 {
-        if json_plain_byte(s.get_byte_unchecked(i)) {
+        if json_plain_byte(unchecked s.byte_at(i)) {
             continue;
         }
         return false;
@@ -181,15 +181,15 @@ pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
     let n = s.len();
     let mut i = 0;
     while i + 4 <= n {
-        let lo = s.get_byte_unchecked(i) as u32 | s.get_byte_unchecked(i + 1) as u32 << 8;
-        let hi = s.get_byte_unchecked(i + 2) as u32 | s.get_byte_unchecked(i + 3) as u32 << 8;
+        let lo = unchecked s.byte_at(i) as u32 | unchecked s.byte_at(i + 1) as u32 << 8;
+        let hi = unchecked s.byte_at(i + 2) as u32 | unchecked s.byte_at(i + 3) as u32 << 8;
         if !json_plain_quad(lo | hi << 16) {
             break;
         }
         i += 4;
     }
     while i < n {
-        if json_plain_byte(s.get_byte_unchecked(i)) {
+        if json_plain_byte(unchecked s.byte_at(i)) {
             i += 1;
             continue;
         }
@@ -228,7 +228,7 @@ fn write_escaped_string_from<S: AsStrSlice>(buf: &mut String, s: S, first: i32) 
     let n = s.len();
     let mut run_start = 0;
     for let mut i = first; i < n; i += 1 {
-        let b = s.get_byte_unchecked(i);
+        let b = unchecked s.byte_at(i);
         if json_plain_byte(b) {
             continue;
         }
@@ -1596,9 +1596,7 @@ impl JsonDeserializer {
             }
             code = 0x10000 + (hi - 0xD800 << 10) + (lo - 0xDC00);
         }
-        return Result::Ok(
-            char::from_u32(code).expect("a lone surrogate is rejected above, so `code` is a scalar value"),
-        );
+        return Result::Ok(char::from_u32(code));
     }
 
     /// Advances past the JSON number at `pos` without allocating a String,
@@ -2769,8 +2767,8 @@ fn write_canonical_f32(buf: &mut String, v: f32) -> Result<(), SerializeError> {
 fn utf16_cmp(a: &String, b: &String) -> Ordering {
     let n = i32::min(a.len(), b.len());
     for let mut i = 0; i < n; i += 1 {
-        let x = a.get_byte_unchecked(i);
-        let y = b.get_byte_unchecked(i);
+        let x = unchecked a.byte_at(i);
+        let y = unchecked b.byte_at(i);
         if x == y {
             continue;
         }

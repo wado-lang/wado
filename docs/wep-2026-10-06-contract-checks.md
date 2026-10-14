@@ -232,6 +232,20 @@ only where Rust has a method of that name, such as `get_unchecked` or
 `from_utf8_unchecked`, since that is the name a reader from Rust reaches for.
 Any other public `_unchecked` name is removed.
 
+No name carries `_unchecked`, so each operation has one name per shape:
+
+| Shape                                | Name                 | Example                          |
+| ------------------------------------ | -------------------- | -------------------------------- |
+| Returns the value, under a contract  | the plain name       | `from_utf8`, `byte_at`, `xs[i]`  |
+| Returns `Option` or `Result` instead | `try_`, or `get`     | `try_from_utf8`, `xs.get(i)`     |
+| Skips the contract's check           | `unchecked` the call | `unchecked String::from_utf8(b)` |
+
+Where the plain name returned an `Option`, the contract form takes it over:
+`char::from_u32` returns a `char`, and the `Option` moves to
+`char::try_from`. A reader from Rust who writes `if let Some(c) = char::from_u32(v)` gets a type error rather than a different behavior.
+`String::byte_at` is a method of its own rather than `as_bytes()[i]`, which a
+marked call would spell `unchecked s.as_bytes()[i]` at every byte scan.
+
 `unchecked` means that the caller does not ask for the check in a shipping
 build. A build under `-f contract-checks` still checks a marked call. The word
 was kept despite that because it continues the `_unchecked` names it replaces.
@@ -354,8 +368,10 @@ API waits for a program outside the standard library that needs one.
      that still has no checked twin forwards to a private function that
      declares its contract.
    - [ ] The functions with no checked twin, or one returning an `Option`:
-     `get_byte_unchecked`, `push_ascii_unchecked`, `char_at_byte_unchecked`,
-     `char::from_u32_unchecked` and `Sequence::get_unchecked`.
+     `String::push_ascii`, `char_at_byte`, `char::from_u32` and
+     `String::byte_at` take a contract, and the `_unchecked` names go.
+   - [ ] `ByteList::get_byte_unchecked` and `Sequence::get_unchecked` become
+     `unchecked xs[i]`, after step 6.
 8. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps

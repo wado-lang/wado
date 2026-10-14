@@ -711,7 +711,7 @@ impl CodeWriter {
         let mut start = head.defaults_start;
         let mut n = 0;
         for let mut j = start; j < head.defaults_end; j += 1 {
-            if self.buf.get_byte_unchecked(j) != b'\n' {
+            if unchecked self.buf.byte_at(j) != b'\n' {
                 continue;
             }
             if n == i {
@@ -925,7 +925,7 @@ impl Seg {
 fn print_lines(out: &mut String, lines: StrSlice, depth: i32) {
     let mut start = 0;
     for let mut i = 0; i < lines.len(); i += 1 {
-        if lines.get_byte_unchecked(i) == b'\n' {
+        if unchecked lines.byte_at(i) == b'\n' {
             push_indent(out, depth);
             out.push_str(lines.slice(start, i + 1));
             start = i + 1;
@@ -1063,7 +1063,7 @@ fn write_escaped(out: &mut String, b: u8, quote: u8) {
     assert needs_escape(b, quote);
     if b == quote || b == b'\\' || b == b'$' {
         out.push('\\');
-        out.push_ascii_unchecked(b);
+        unchecked out.push_ascii(b);
         return;
     }
     match b {
@@ -1080,7 +1080,7 @@ fn write_escaped(out: &mut String, b: u8, quote: u8) {
 fn escape_in_place(out: &mut String, at: i32, quote: u8) {
     let n = out.len();
     let mut i = at;
-    while i < n && !needs_escape(out.get_byte_unchecked(i), quote) {
+    while i < n && !needs_escape(unchecked out.byte_at(i), quote) {
         i += 1;
     }
     if i == n {
@@ -1091,7 +1091,7 @@ fn escape_in_place(out: &mut String, at: i32, quote: u8) {
     let end = tail.len();
     let mut from = 0;
     for let mut j = 0; j < end; j += 1 {
-        let b = tail.get_byte_unchecked(j);
+        let b = unchecked tail.byte_at(j);
         if !needs_escape(b, quote) {
             continue;
         }
@@ -1139,11 +1139,11 @@ pub fn byte_string_literal<S: AsByteSlice>(bytes: S) -> String {
     for let mut i = 0; i < view.len(); i += 1 {
         let b = view.get_unchecked(i);
         if b'\x20' <= b <= b'\x7e' && b != b'"' && b != b'\\' {
-            out.push_ascii_unchecked(b);
+            unchecked out.push_ascii(b);
         } else {
             out.push_str("\\x");
-            out.push_ascii_unchecked(HEX_DIGITS.get_byte_unchecked((b >> 4) as i32));
-            out.push_ascii_unchecked(HEX_DIGITS.get_byte_unchecked((b & 0xf) as i32));
+            unchecked out.push_ascii(unchecked HEX_DIGITS.byte_at((b >> 4) as i32));
+            unchecked out.push_ascii(unchecked HEX_DIGITS.byte_at((b & 0xf) as i32));
         }
     }
     out.push('"');

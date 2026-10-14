@@ -56,7 +56,7 @@ pub(super) fn run_peephole(
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
     // Ordered after the rule above within one session: the run it fuses holds
-    // the `push_ascii_unchecked` calls that one retargets.
+    // the `push_ascii_byte` calls that one retargets.
     let append_fuse_rule = push_ctx.as_ref().and_then(AppendFuseRule::new);
     // Environment-free constant folding shares the session. It needs the
     // program-wide CTFE callee map and the type table; the per-function `env`

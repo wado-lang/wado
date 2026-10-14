@@ -569,7 +569,7 @@ fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, uppe
     } else if f.sign_plus {
         f.write_char('+');
     }
-    f.write_char(digits.char_at_byte_unchecked(0));
+    f.write_char(unchecked digits.char_at_byte(0));
     if precision > 0 || precision < 0 && fraction_len > 0 {
         f.write_char('.');
         f.buf.push_str(unchecked digits.slice(1, digits.len()));

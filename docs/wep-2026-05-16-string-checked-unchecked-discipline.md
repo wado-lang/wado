@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft
+Superseded by [WEP: Contract Checks](./wep-2026-10-06-contract-checks.md). A
+function states its precondition as a `contract`, and a call marked `unchecked`
+skips the check, so no name carries `_unchecked`.
 
 ## Context
 

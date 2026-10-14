@@ -162,12 +162,12 @@ fn parse_pointer(pointer: StrSlice) -> Result<List<String>, EditError> {
     if pointer.is_empty() {
         return Result::Ok(tokens);
     }
-    if pointer.get_byte_unchecked(0) != b'/' {
+    if unchecked pointer.byte_at(0) != b'/' {
         return Result::Err(InvalidPointer(pointer.to_string()));
     }
     let mut start = 1;
     for let mut i = 1; i <= pointer.len(); i += 1 {
-        if i < pointer.len() && pointer.get_byte_unchecked(i) != b'/' {
+        if i < pointer.len() && unchecked pointer.byte_at(i) != b'/' {
             continue;
         }
         let Some(token) = unescape_token(pointer.slice(start, i)) else {
@@ -212,12 +212,12 @@ fn array_index(token: &String, len: i32) -> i32 {
         return len;
     }
     let n = token.len();
-    if n == 0 || n > 9 || n > 1 && token.get_byte_unchecked(0) == b'0' {
+    if n == 0 || n > 9 || n > 1 && unchecked token.byte_at(0) == b'0' {
         return -1;
     }
     let mut index = 0;
     for let mut i = 0; i < n; i += 1 {
-        let b = token.get_byte_unchecked(i) as i32;
+        let b = unchecked token.byte_at(i) as i32;
         if b < b'0' || b > b'9' {
             return -1;
         }
@@ -648,7 +648,7 @@ fn reindent(text: &String, indent: &String, newline: &String) -> String {
     let mut out = String::with_capacity(text.len());
     let mut start = 0;
     for let mut i = 0; i < text.len(); i += 1 {
-        if text.get_byte_unchecked(i) == b'\n' {
+        if unchecked text.byte_at(i) == b'\n' {
             out.push_str(text.slice(start, i));
             out.push_str(newline);
             out.push_str(indent);

@@ -196,46 +196,46 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
-    let byte_4: u8;
+    let byte: u8;
     let new_used: i32;
-    let start_14: i32;
+    let start_9: i32;
     let repr: ref Array<u8>;
     if c <u 128 {
-        byte_4 = c & 255;
+        byte = c & 255;
         if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
         }
-        start_14 = self.used;
+        start_9 = self.used;
         self.used = new_used;
-        builtin::array_set_u8(self.repr, start_14, byte_4);
+        builtin::array_set_u8(self.repr, start_9, byte);
         return;
     }
-    if @unlikely((local.tee byte_4(self.used) + 4) > builtin::array_len(self.repr)) {
+    if @unlikely((local.tee byte(self.used) + 4) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, byte_4 + 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, byte + 4);
     }
-    self.used = local.tee byte_4(self.used) + $inline_encode_char_0: block -> i32 {
+    self.used = local.tee byte(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, byte_4, c & 255);
+            builtin::array_set_u8(repr, byte, c & 255);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, byte_4, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, byte_4 + 1, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, byte, (192 | (c >>u 6)) & 255);
+            builtin::array_set_u8(repr, byte + 1, (128 | (c & 63)) & 255);
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, byte_4, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, byte_4 + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, byte_4 + 2, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, byte, (224 | (c >>u 12)) & 255);
+            builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 6) & 63)) & 255);
+            builtin::array_set_u8(repr, byte + 2, (128 | (c & 63)) & 255);
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, byte_4, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, byte_4 + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, byte_4 + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, byte_4 + 3, (128 | (c & 63)) & 255);
+        builtin::array_set_u8(repr, byte, (240 | (c >>u 18)) & 255);
+        builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 12) & 63)) & 255);
+        builtin::array_set_u8(repr, byte + 2, (128 | ((c >>u 6) & 63)) & 255);
+        builtin::array_set_u8(repr, byte + 3, (128 | (c & 63)) & 255);
         break $inline_encode_char_0: 4;
     };
 }

@@ -53,7 +53,7 @@ impl LinearRouter {
 fn try_match<S: AsStrSlice>(segments: &List<Segment>, path: S, params: &mut TreeMap<String, String>) -> bool {
     let plen = path.len();
     // Skip leading '/'.
-    let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
+    let mut pos = if plen > 0 && unchecked path.byte_at(0) == b'/' { 1 } else { 0 };
     let nseg = segments.len();
     for let mut idx = 0; idx < nseg; idx += 1 {
         let seg = &segments[idx];
@@ -75,7 +75,7 @@ fn try_match<S: AsStrSlice>(segments: &List<Segment>, path: S, params: &mut Tree
                     return false;
                 }
                 let mut end = pos;
-                while end < plen && path.get_byte_unchecked(end) != b'/' {
+                while end < plen && unchecked path.byte_at(end) != b'/' {
                     end += 1;
                 }
                 if end == pos {
@@ -86,7 +86,7 @@ fn try_match<S: AsStrSlice>(segments: &List<Segment>, path: S, params: &mut Tree
                     return false;
                 }
                 for let mut k = 0; k < llen; k += 1 {
-                    if path.get_byte_unchecked(pos + k) != lit.get_byte_unchecked(k) {
+                    if unchecked path.byte_at(pos + k) != unchecked lit.byte_at(k) {
                         return false;
                     }
                 }
@@ -97,7 +97,7 @@ fn try_match<S: AsStrSlice>(segments: &List<Segment>, path: S, params: &mut Tree
                     return false;
                 }
                 let mut end = pos;
-                while end < plen && path.get_byte_unchecked(end) != b'/' {
+                while end < plen && unchecked path.byte_at(end) != b'/' {
                     end += 1;
                 }
                 if end == pos {

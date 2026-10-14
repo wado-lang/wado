@@ -15,13 +15,13 @@ impl Scanner {
         if self.pos >= self.data.len() {
             return -1;
         }
-        return self.data.get_byte_unchecked(self.pos) as i32;
+        return unchecked self.data.byte_at(self.pos) as i32;
     }
 
     #[inline(never)]
     fn skip_spaces(&mut self) {
         while self.pos < self.data.len() {
-            let b = self.data.get_byte_unchecked(self.pos) as i32;
+            let b = unchecked self.data.byte_at(self.pos) as i32;
             if b == ' ' as i32 {
                 self.pos += 1;
             } else {
@@ -53,6 +53,6 @@ __DATA__
     ],
     "wir_not_expect:O2": [
         "self.pos = $hfs_pos_{};\n            continue",
-        "String::get_byte_unchecked\""
+        "String::byte_at$unchecked\""
     ]
 }

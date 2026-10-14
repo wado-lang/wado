@@ -106,11 +106,11 @@ impl DfaRouter {
         let plen = path.len();
         let view = path.as_str_slice();
         // Skip leading '/' if any.
-        let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
+        let mut pos = if plen > 0 && unchecked path.byte_at(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
             let mut end = pos;
-            while end < plen && path.get_byte_unchecked(end) != b'/' {
+            while end < plen && unchecked path.byte_at(end) != b'/' {
                 end += 1;
             }
             if end == pos {

@@ -47,14 +47,14 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
     let abs_exp = i32::abs(exp);
     if abs_exp < 10 {
         buf.push('0');
-        buf.push(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
+        buf.push(unchecked char::from_u32('0' as u32 + abs_exp as u32));
     } else if abs_exp < 100 {
-        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp / 10) as u32));
-        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp % 10) as u32));
+        buf.push(unchecked char::from_u32('0' as u32 + (abs_exp / 10) as u32));
+        buf.push(unchecked char::from_u32('0' as u32 + (abs_exp % 10) as u32));
     } else {
-        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp / 100) as u32));
-        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp / 10 % 10) as u32));
-        buf.push(char::from_u32_unchecked('0' as u32 + (abs_exp % 10) as u32));
+        buf.push(unchecked char::from_u32('0' as u32 + (abs_exp / 100) as u32));
+        buf.push(unchecked char::from_u32('0' as u32 + (abs_exp / 10 % 10) as u32));
+        buf.push(unchecked char::from_u32('0' as u32 + (abs_exp % 10) as u32));
     }
 
     return buf;

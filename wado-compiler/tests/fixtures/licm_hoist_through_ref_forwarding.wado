@@ -8,7 +8,7 @@ fn count_quotes<S: AsStrSlice>(buf: &mut String, s: S) -> i32 {
     let n = s.len();
     let mut i = 0;
     while i < n {
-        if s.get_byte_unchecked(i) != 0x22 {
+        if unchecked s.byte_at(i) != 0x22 {
             i += 1;
             continue;
         }

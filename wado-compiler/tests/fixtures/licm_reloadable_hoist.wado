@@ -10,7 +10,7 @@ use { println, Stdout } from "core:cli";
 fn escape_quotes(buf: &mut String, s: &String) {
     let n = s.len();
     for let mut i = 0; i < n; i += 1 {
-        let b = s.get_byte_unchecked(i);
+        let b = unchecked s.byte_at(i);
         if b == 0x22 {
             buf.push_str(&"[Q]");
         }

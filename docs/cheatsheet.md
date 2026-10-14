@@ -1380,8 +1380,9 @@ x.div_ceil(2)                         // x = -7: -3, toward +Inf (every integer 
 
 // char classification and conversion
 let code = 'A' as i32;                // 65
-let c = char::from_u32(65);           // Option::<char>::Some('A')
-let d = char::from_u32_unchecked(65); // if you have already validated the u32 value
+let c = char::from_u32(65);           // 'A'; traps on a surrogate or past 0x10FFFF
+let d = char::try_from(n);            // Result<char, ConvertError>, for a u32 or an i32
+let e = unchecked char::from_u32(65); // if you have already validated the value
 'A'.is_ascii_uppercase()              // true
 'a'.is_ascii_lowercase()              // true
 'A'.to_ascii_lowercase()              // 'a'

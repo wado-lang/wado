@@ -110,9 +110,9 @@ test "matches with a guard" {
 }
 
 test "matches with a guard over a char payload" {
-    let c = char::from_i32(46); // '.'
+    let c: Option<char> = Option::Some(char::from_i32(46)); // '.'
     assert c matches { Some(ch) && ch == '.' };
-    let d = char::from_i32(65); // 'A'
+    let d: Option<char> = Option::Some(char::from_i32(65)); // 'A'
     assert !d matches { Some(ch) && ch == '.' };
 }
 

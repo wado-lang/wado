@@ -88,7 +88,7 @@ may assume the contract holds, and what follows from that reaches other
 functions, later in time.
 
 ```wado
-let c = char::from_u32_unchecked(0xD800);   // a surrogate is not a char
+let c = unchecked char::from_u32(0xD800);   // a surrogate is not a char
 let kind = match c {
     '\0'..='\u{D7FF}' => 0,
     '\u{E000}'..='\u{10FFFF}' => 1,          // exhaustive for every valid char
@@ -118,7 +118,7 @@ Whether reaching a behavior is a bug is independent of its class:
 | ------------- | --------------------------------------------- | -------------------------------------------------------------------------- |
 | Unspecified   | initialization order, ambient calls, `ref_eq` | `get_unchecked` out of range                                               |
 | Host-defined  | NaN bits, relaxed SIMD, `InsecureSeed`        | none                                                                       |
-| Unconstrained | none                                          | `char::from_u32_unchecked` on a non-scalar, `unchecked slice` off the view |
+| Unconstrained | none                                          | `unchecked char::from_u32` on a non-scalar, `unchecked slice` off the view |
 
 The axis earns its term by what a build may do. A contract violation may be
 detected and trapped, so the test world can keep the checks a call marked

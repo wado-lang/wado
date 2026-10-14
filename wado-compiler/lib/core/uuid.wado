@@ -174,7 +174,7 @@ impl FromStr for Uuid {
         if len == 32 {
             hyphenated = false;
         } else if len == 38 {
-            if s.get_byte_unchecked(0) != b'{' || s.get_byte_unchecked(37) != b'}' {
+            if unchecked s.byte_at(0) != b'{' || unchecked s.byte_at(37) != b'}' {
                 return Result::Err(ParseError::InvalidGroups);
             }
             start = 1;
@@ -191,14 +191,14 @@ impl FromStr for Uuid {
         let mut pos = start;
         for let mut g = 0; g < groups.len(); g += 1 {
             if g > 0 {
-                if s.get_byte_unchecked(pos) != b'-' {
+                if unchecked s.byte_at(pos) != b'-' {
                     return Result::Err(ParseError::InvalidGroups);
                 }
                 pos += 1;
             }
             for let mut k = 0; k < groups[g]; k += 2 {
-                let hi = s.get_byte_unchecked(pos) as char;
-                let lo = s.get_byte_unchecked(pos + 1) as char;
+                let hi = unchecked s.byte_at(pos) as char;
+                let lo = unchecked s.byte_at(pos + 1) as char;
                 if !hi.is_hexdigit() || !lo.is_hexdigit() {
                     return Result::Err(ParseError::InvalidCharacter);
                 }
@@ -335,8 +335,8 @@ fn has_urn_prefix<S: AsStrSlice>(s: S) -> bool
 {
     let prefix = "urn:uuid:";
     for let mut i = 0; i < 9; i += 1 {
-        let c = s.get_byte_unchecked(i) as char;
-        if !c.eq_ignore_ascii_case(&(prefix.get_byte_unchecked(i) as char)) {
+        let c = unchecked s.byte_at(i) as char;
+        if !c.eq_ignore_ascii_case(&(unchecked prefix.byte_at(i) as char)) {
             return false;
         }
     }

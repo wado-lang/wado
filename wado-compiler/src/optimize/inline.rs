@@ -1556,7 +1556,7 @@ fn classify_callee(
     // reflection walk only produces rounds later.
     //
     // Only a deleted loop counts: a constant receiver halves almost any body,
-    // and holding on that stopped `String::get_byte_unchecked` reaching a
+    // and holding on that stopped `String::byte_at` reaching a
     // two-line `peek`. Measured slower and not worth retrying — holding what
     // the call sites already admit, holding every candidate, and splicing from
     // a frozen copy, which no other pass can reach and `sroa_param` invalidates.
