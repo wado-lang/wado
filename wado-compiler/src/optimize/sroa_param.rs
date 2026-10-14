@@ -263,8 +263,7 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
-            if info.form == FieldForm::Value
-                && forwards_to_mutable(body, local_index, &candidates)
+            if info.form == FieldForm::Value && forwards_to_mutable(body, local_index, &candidates)
             {
                 widened.push((*key, *pi));
             }
