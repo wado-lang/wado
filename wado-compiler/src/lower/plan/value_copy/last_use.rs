@@ -1969,18 +1969,45 @@ impl Analyzer<'_> {
             return;
         }
         let span = strip_casts(arg).span;
-        // Storage no local of this frame roots, a global's say, is anyone's
-        // to write, the callee's included.
-        let Some(root) = alias_root(arg) else {
-            self.mut_aliased_reads.insert(span);
-            return;
-        };
-        let writes = mut_roots
+        let writes: Vec<u32> = mut_roots
             .iter()
             .copied()
             .chain(self.mutations[call_writes..].iter().map(|m| m.path.root))
             .collect();
-        self.pending_mut_alias.push((root, span, writes));
+        let mut roots = Vec::new();
+        self.storage_roots(arg, &mut roots);
+        if roots.contains(&None) {
+            self.mut_aliased_reads.insert(span);
+            return;
+        }
+        for root in roots.into_iter().flatten() {
+            self.pending_mut_alias.push((root, span, writes.clone()));
+        }
+    }
+
+    /// The local each storage `expr` may hand on is rooted at, `None` for one
+    /// this frame only borrows or cannot name (a global's, say), which anyone
+    /// may write, the callee included.
+    fn storage_roots(&self, expr: &TirExpr, out: &mut Vec<Option<u32>>) {
+        yielded_leaves(
+            expr,
+            self.type_table,
+            &mut |leaf| match self.resolver.names(leaf) {
+                Names::Value => {}
+                Names::Place(place) => out.push((!place.through_borrow).then_some(place.root)),
+                Names::Unknown => match (alias_root(leaf), &leaf.kind) {
+                    (Some(root), _) => out.push(Some(root)),
+                    // A named call hands back storage of its own or reached
+                    // through its arguments.
+                    (None, TirExprKind::Call { args, .. }) => {
+                        for a in args.iter() {
+                            self.storage_roots(place::unwrap_borrow(&a.expr), out);
+                        }
+                    }
+                    (None, _) => out.push(None),
+                },
+            },
+        );
     }
 
     fn kill_pattern(&self, pat: &TirPattern, live: &mut IndexSet<u32>) {
@@ -2505,27 +2532,14 @@ impl Analyzer<'_> {
             }
             TirExprKind::Call { func, args, .. } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
-                let (receiver, siblings) = args.split();
-                let receiver = receiver.map(|r| &r.expr);
+                let receiver = args.receiver().map(|r| &r.expr);
                 let mutated_receiver = receiver.filter(|_| self.mutates_receiver(func));
+                let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
+                let declared = self.mut_ref_params.get(&func.module_source, &func.name);
+                let mut mut_roots = mut_ref_roots(&exprs, declared.map_or(&[], Vec::as_slice));
+                mut_roots.extend(mutated_receiver.and_then(alias_root));
                 let call_writes = self.mutations.len();
-                let mut mut_roots = Vec::new();
                 if record {
-                    // A `&mut self` receiver mutates for the whole call, so it is
-                    // what the other arguments are checked against, not one of
-                    // them.
-                    let exprs: Vec<&TirExpr> = siblings.iter().map(|a| &a.expr).collect();
-                    mut_roots = mut_ref_roots(&exprs);
-                    mut_roots.extend(mutated_receiver.and_then(alias_root));
-                    if let Some(declared) = self.mut_ref_params.get(&func.module_source, &func.name)
-                    {
-                        mut_roots.extend(
-                            args.iter()
-                                .zip(declared)
-                                .filter(|(_, is_mut)| **is_mut)
-                                .filter_map(|(arg, _)| alias_root(&arg.expr)),
-                        );
-                    }
                     if let Some(receiver) = mutated_receiver {
                         let start = self.mutations.len();
                         self.record_call_mutation(func, receiver, 0, live);
@@ -2539,7 +2553,6 @@ impl Analyzer<'_> {
                         .ref_receiver_methods
                         .contains(&func.module_source, &func.name);
                 let kept = if record {
-                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                     let fresh = self.returns_owned.contains(&func.module_source, &func.name);
                     self.kept_through(
                         &self.retained_by(func, args.len(), expr),
@@ -2551,6 +2564,9 @@ impl Analyzer<'_> {
                     Vec::new()
                 };
                 for (pos, arg) in args.iter().enumerate().rev() {
+                    // A `&mut self` receiver mutates for the whole call, so it is
+                    // what the other arguments are checked against, not one of
+                    // them.
                     if record && !(pos == 0 && mutated_receiver.is_some()) {
                         self.defer_write_check(&arg.expr, &mut_roots, call_writes);
                     }
@@ -2573,7 +2589,7 @@ impl Analyzer<'_> {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let call_writes = self.mutations.len();
                 let exprs: Vec<&TirExpr> = args.iter().collect();
-                let mut_roots = mut_ref_roots(&exprs);
+                let mut_roots = mut_ref_roots(&exprs, &[]);
                 let kept = if record {
                     let retained = self.functor_rows.retained(callee, args.len());
                     self.kept_through(&retained, &exprs, &result, None)
@@ -2703,15 +2719,26 @@ struct Yielded {
     root: Option<u32>,
 }
 
-/// What a form hands to a position outliving it: its own value, or the arm,
-/// tail and `break` values of a control form — whichever one runs — past the
-/// casts and spreads that pass a value through unchanged.
+/// What a form hands to a position outliving it, one [`Yielded`] per
+/// [`yielded_leaves`] leaf.
 fn yielded_values(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<Yielded>) {
+    yielded_leaves(expr, type_table, &mut |leaf| {
+        out.push(Yielded {
+            reference: reference_escape(leaf, type_table),
+            root: alias_root(leaf),
+        });
+    });
+}
+
+/// Hand `leaf` each expression whose value a form hands on: its own, or the
+/// arm, tail and `break` values of a control form — whichever one runs — past
+/// the casts and spreads that pass a value through unchanged.
+fn yielded_leaves(expr: &TirExpr, type_table: &TypeTable, leaf: &mut dyn FnMut(&TirExpr)) {
     let expr = strip_casts(expr);
     match &expr.kind {
         TirExprKind::Match { arms, .. } => {
             for arm in arms {
-                yielded_values(&arm.body, type_table, out);
+                yielded_leaves(&arm.body, type_table, leaf);
             }
         }
         TirExprKind::If {
@@ -2719,30 +2746,27 @@ fn yielded_values(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<Yielded>
             else_branch,
             ..
         } => {
-            block_yielded_values(then_branch, type_table, out);
+            block_yielded_leaves(then_branch, type_table, leaf);
             if let Some(eb) = else_branch {
-                block_yielded_values(eb, type_table, out);
+                block_yielded_leaves(eb, type_table, leaf);
             }
         }
-        TirExprKind::Block(block) => block_yielded_values(block, type_table, out),
+        TirExprKind::Block(block) => block_yielded_leaves(block, type_table, leaf),
         TirExprKind::LabeledBlock { block, .. } => {
-            block_yielded_values(block, type_table, out);
-            BreakValues { type_table, out }.visit_block(block);
+            block_yielded_leaves(block, type_table, leaf);
+            BreakValues { type_table, leaf }.visit_block(block);
         }
-        TirExprKind::TupleSpread { expr: inner } => yielded_values(inner, type_table, out),
+        TirExprKind::TupleSpread { expr: inner } => yielded_leaves(inner, type_table, leaf),
         // A scalar read out of a local carries none of its storage.
         _ if is_scalar_type(expr.type_id, type_table) => {}
-        _ => out.push(Yielded {
-            reference: reference_escape(expr, type_table),
-            root: alias_root(expr),
-        }),
+        _ => leaf(expr),
     }
 }
 
 /// A block hands on its final statement's value.
-fn block_yielded_values(block: &TirBlock, type_table: &TypeTable, out: &mut Vec<Yielded>) {
+fn block_yielded_leaves(block: &TirBlock, type_table: &TypeTable, leaf: &mut dyn FnMut(&TirExpr)) {
     if let Some(e) = block.tail_expr() {
-        yielded_values(e, type_table, out);
+        yielded_leaves(e, type_table, leaf);
     }
 }
 
@@ -2750,33 +2774,40 @@ fn block_yielded_values(block: &TirBlock, type_table: &TypeTable, out: &mut Vec<
 /// label one targets is not distinguished; an outer one only over-counts.
 struct BreakValues<'a> {
     type_table: &'a TypeTable,
-    out: &'a mut Vec<Yielded>,
+    leaf: &'a mut dyn FnMut(&TirExpr),
 }
 
 impl TirRefVisitor for BreakValues<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
-            yielded_values(v, self.type_table, self.out);
+            yielded_leaves(v, self.type_table, self.leaf);
         }
         self.walk_stmt(stmt);
     }
 }
 
-/// The borrow a place chain bottoms out in, the shape a match takes on a
-/// borrowed scrutinee: its op and the place it takes.
-/// The roots of the `&mut place` arguments in `args`.
-fn mut_ref_roots(args: &[&TirExpr]) -> Vec<u32> {
+/// The roots a call writes through its arguments: each `&mut place`, and each
+/// slot `declared` marks `&mut`, which the syntax may not borrow (a receiver, a
+/// boxed `&mut`).
+fn mut_ref_roots(args: &[&TirExpr], declared: &[bool]) -> Vec<u32> {
     args.iter()
-        .filter_map(|a| match &a.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::MutRef,
-                expr: place,
-            } => alias_root(place),
-            _ => None,
+        .enumerate()
+        .filter(|(i, a)| {
+            declared.get(*i).copied().unwrap_or(false)
+                || matches!(
+                    &a.kind,
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        ..
+                    }
+                )
         })
+        .filter_map(|(_, a)| alias_root(a))
         .collect()
 }
 
+/// The borrow a place chain bottoms out in, the shape a match takes on a
+/// borrowed scrutinee: its op and the place it takes.
 fn borrowed_place(expr: &TirExpr) -> Option<(TirUnaryOp, &TirExpr)> {
     match &expr.kind {
         TirExprKind::Unary {

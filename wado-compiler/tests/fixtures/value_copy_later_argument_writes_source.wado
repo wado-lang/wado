@@ -3,7 +3,8 @@
 // before the callee reads it, so a parameter that keeps nothing of its argument
 // still needs the copy: whether the write goes through a `&mut` taken on the
 // spot, an assignment, a `&mut` some local or struct keeps, a closure that
-// captured the value, another reference to storage the caller lent, or a global.
+// captured the value, another reference to storage the caller lent, or a global,
+// and whether the argument is a local or a call handing back part of one.
 
 struct Pair {
     a: i32,
@@ -47,9 +48,22 @@ fn held_by_callee(p: Pair, h: Holder) -> i32 {
     return p.a;
 }
 
+// `spare` gives the body a local the ownership walk tracks, without which the
+// walk skips the body and every argument in it keeps its copy.
 #[inline("never")]
 fn lent(a: &mut Pair, b: &mut Pair) -> i32 {
-    return two(*a, then: { bump_a(b); *a });
+    let spare = Pair { a: 0, s: [] };
+    return two(*a, then: { bump_a(b); *a }) + spare.a;
+}
+
+#[inline("never")]
+fn items(p: &Pair) -> List<i32> {
+    return p.s;
+}
+
+#[inline("never")]
+fn count(s: List<i32>, n: i32) -> i32 {
+    return s.len() * 10 + n;
 }
 
 fn pair() -> Pair {
@@ -86,6 +100,8 @@ export fn run() {
     let rl = &mut l;
     assert lent(rl, rl) == 1011;
     assert two(G, then: { bump_global(); G }) == 1011;
+    let mut m = pair();
+    assert count(items(&m), then: { m.s.push(1); m.s.len() }) == 1;
 }
 
 __DATA__
