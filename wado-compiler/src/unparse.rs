@@ -1919,11 +1919,9 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" of ");
         self.unparse_expr(&c.iterable);
         // A comment anywhere in the comprehension forces the body onto its own
-        // line; the one-line form has no slot for one and would drop it. A
-        // comment in the head has no place of its own either, so it lands at
-        // the top of the body rather than being lost.
+        // line; the one-line form has no slot for one and would drop it.
         if self.has_comment_in_range(c.span.start, c.span.end) {
-            self.output.push_str(" {\n");
+            self.open_brace_from(c.iterable.span().end, c.span.line);
             self.indent_level += 1;
             self.flush_comments_in(c.span.start, c.body.span().start, Spacing::Tight);
             self.write_indent();
@@ -2455,8 +2453,7 @@ impl<'a> Unparser<'a> {
         // keyword's line: a multi-line scrutinee otherwise leaves
         // `blank_lines_between` thinking the lines occupied by the scrutinee
         // were blank source lines, and conjures spurious blanks before arm 0.
-        self.last_source_line =
-            self.open_brace_from(m.expr.span().end, m.expr.span().end_line());
+        self.last_source_line = self.open_brace_from(m.expr.span().end, m.expr.span().end_line());
         self.indent_level += 1;
 
         for arm in &m.arms {

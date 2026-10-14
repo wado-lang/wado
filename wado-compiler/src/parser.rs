@@ -6899,7 +6899,8 @@ impl Parser {
         self.absorb_comments(lex_result.comments);
         let nested = std::mem::take(&mut parser.comments);
         self.absorb_comments(nested);
-        self.interpolation_braces.append(&mut parser.open_brace_tokens());
+        self.interpolation_braces
+            .append(&mut parser.open_brace_tokens());
         self.interpolation_braces
             .append(&mut parser.interpolation_braces);
         Ok(expr)
