@@ -200,7 +200,9 @@ pub(crate) fn is_owned_value(
         TirExprKind::Call { func, args, .. } => {
             oracle.is_owned(func)
                 || oracle.projected_args(func, args).is_some_and(|mut handed_back| {
-                    handed_back.all(|a| is_owned_value(a, fresh_locals, oracle, type_table))
+                    handed_back.all(|a| {
+                        is_owned_value(borrowed_temporary(a), fresh_locals, oracle, type_table)
+                    })
                 })
         }
         TirExprKind::CmRawCall { .. } => true,
@@ -252,6 +254,21 @@ pub(crate) fn is_owned_value(
             is_owned_value(inner, fresh_locals, oracle, type_table)
         }
         _ => false,
+    }
+}
+
+/// The temporary an argument borrows, or the argument itself. An auto-ref'd
+/// call result (`f().into_iter()`, whose `into_iter(&self)` returns `*self`)
+/// lends storage nothing else reaches, so what the callee projects back is as
+/// fresh as that result. A borrowed place stays reachable after the call, so it
+/// is not peeled.
+fn borrowed_temporary(arg: &TirExpr) -> &TirExpr {
+    match &arg.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: inner,
+        } if matches!(inner.kind, TirExprKind::Call { .. }) => inner,
+        _ => arg,
     }
 }
 
