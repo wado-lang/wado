@@ -15,14 +15,6 @@ global LIST: List<i32> = [1, 2, 3];
 // ordering would go untested.
 global THROUGH_FN_VALUE: i32 = apply(reader) + 1;
 
-// What a callee reads is an inferred dependency, and the inference is
-// path-insensitive: `pick` names both globals, so each initializer calling it
-// looks dependent on the other even though neither execution reads either.
-// Such an edge must yield rather than manufacture a cycle out of a program
-// with none.
-global LEVEL: i32 = pick(1);
-global PREFIX: i32 = pick(2);
-
 #[inline(never)]
 fn read_list() -> i32 {
     return LIST.len();
@@ -38,29 +30,10 @@ fn apply(f: fn() -> i32) -> i32 {
     return f();
 }
 
-#[inline(never)]
-fn pick(n: i32) -> i32 {
-    if n == 1 {
-        return 10;
-    }
-    if n == 2 {
-        return 20;
-    }
-    if LEVEL > 0 {
-        return PREFIX;
-    }
-    return 0;
-}
-
 test "a dependency reached through a call is ordered first" {
     assert THROUGH_CALL == 4;
 }
 
 test "a dependency reached through a function value is ordered first" {
     assert THROUGH_FN_VALUE == 4;
-}
-
-test "a shared helper naming both globals is not a cycle" {
-    assert LEVEL == 10;
-    assert PREFIX == 20;
 }

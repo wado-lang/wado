@@ -15,8 +15,8 @@ use crate::name::{
 };
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
-    FunctionRef, GlobalInit, LocalFrame, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirGlobal, TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
+    FunctionRef, GlobalInit, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
+    TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
@@ -34,7 +34,7 @@ struct LazyInit {
     /// What the global is assigned, in the frame `frame` describes.
     value: TirExpr,
     frame: LocalFrame,
-    /// What `value` reads, assigns and calls.
+    /// What `value` reads and calls.
     scan: BodyReads,
 }
 
@@ -103,16 +103,10 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     }
 
     // An initializer depends on every global the functions it calls read.
-    let call_graph = CallGraph::new(&flat.functions);
-    let must_reads = call_graph.must_reads(by_module.values().flatten());
-    let orders = by_module
-        .values()
-        .map(|module_inits| {
-            topological_sort_global_inits(module_inits, &call_graph, &must_reads, errors)
-        })
-        .collect::<Result<Vec<_>, Bail>>()?;
+    let reads_by_function = global_reads_by_function(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
-    for ((module_source, module_inits), order) in by_module.into_iter().zip(orders) {
+    for (module_source, module_inits) in by_module {
+        let order = topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
         let mut taken: Vec<Option<LazyInit>> = module_inits.into_iter().map(Some).collect();
         let sorted_inits = order
             .into_iter()
@@ -175,14 +169,13 @@ fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: S
     TirStmt::new(TirStmtKind::Expr(global_set), span)
 }
 
-/// What a function body reads, assigns and calls, in one walk.
+/// What a function body reads and calls, in one walk.
 ///
 /// Callees are keyed by [`FunctionRef::full_name`], the same key
-/// [`CallGraph`] maps.
+/// [`global_reads_by_function`] maps.
 #[derive(Default)]
 struct BodyReads {
     globals: IndexSet<GlobalKey>,
-    assigned: IndexSet<GlobalKey>,
     callees: IndexSet<String>,
 }
 
@@ -194,13 +187,6 @@ impl TirRefVisitor for BodyReads {
                 module_source,
             } => {
                 self.globals.insert((module_source.clone(), name.clone()));
-            }
-            TirExprKind::GlobalVarSet {
-                name,
-                module_source,
-                ..
-            } => {
-                self.assigned.insert((module_source.clone(), name.clone()));
             }
             TirExprKind::Call { func, .. } => {
                 self.callees.insert(func.full_name());
@@ -222,7 +208,7 @@ impl TirRefVisitor for BodyReads {
     }
 }
 
-/// The key [`CallGraph`] maps a function under: the same string
+/// The key [`global_reads_by_function`] maps a function under: the same string
 /// [`FunctionRef::full_name`] produces for a free function, so a call and a
 /// bare mention of the same function land on one entry.
 fn function_key(module_source: &ModuleSource, name: &str) -> String {
@@ -236,123 +222,37 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
     .full_name()
 }
 
-/// The functions with a body, what each calls, and the globals each may read
-/// or assign.
-struct CallGraph<'a> {
-    bodies: IndexMap<String, &'a Rc<RefCell<TirFunction>>>,
-    callees: IndexMap<String, IndexSet<String>>,
-    /// Every global each function reads, closed over `callees`.
-    ///
-    /// An initializer's dependency is not always written in it: a call reads
-    /// globals the caller never names, and ordering on the directly-written
-    /// references alone leaves such a global still holding its placeholder
-    /// when the caller runs.
-    reads: IndexMap<String, IndexSet<GlobalKey>>,
-    /// Every global each function assigns, closed over `callees`.
-    assigned: IndexMap<String, IndexSet<GlobalKey>>,
-}
-
-impl<'a> CallGraph<'a> {
-    fn new(functions: &'a [Rc<RefCell<TirFunction>>]) -> Self {
-        let mut graph = Self {
-            bodies: IndexMap::default(),
-            callees: IndexMap::default(),
-            reads: IndexMap::default(),
-            assigned: IndexMap::default(),
+/// Every global each function reads, closed over the call graph.
+///
+/// An initializer's dependency is not always written in it: a call reads
+/// globals the caller never names, and ordering on the directly-written
+/// references alone leaves such a global still holding its placeholder when the
+/// caller runs. Computed as a least fixpoint, so a recursive cycle contributes
+/// each member's own reads and terminates.
+fn global_reads_by_function(
+    functions: &[Rc<RefCell<TirFunction>>],
+) -> IndexMap<String, IndexSet<GlobalKey>> {
+    let mut reads: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
+    let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
+    for func_rc in functions {
+        let func = func_rc.borrow();
+        let Some(body) = func.body.as_ref() else {
+            continue;
         };
-        for func_rc in functions {
-            let func = func_rc.borrow();
-            let Some(body) = func.body.as_ref() else {
-                continue;
-            };
-            let mut scan = BodyReads::default();
-            scan.visit_block(body);
-            let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
-            graph.bodies.insert(key.clone(), func_rc);
-            graph.reads.insert(key.clone(), scan.globals);
-            graph.assigned.insert(key.clone(), scan.assigned);
-            graph.callees.insert(key, scan.callees);
-        }
-        close_over_calls(&mut graph.reads, &graph.callees);
-        close_over_calls(&mut graph.assigned, &graph.callees);
-        graph
+        let mut scan = BodyReads::default();
+        scan.visit_block(body);
+        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
+        reads.entry(key.clone()).or_default().extend(scan.globals);
+        callees.entry(key).or_default().extend(scan.callees);
     }
 
-    /// What `scan` and the functions it reaches may assign.
-    fn assigned_from(&self, scan: &BodyReads) -> IndexSet<GlobalKey> {
-        let mut assigned = scan.assigned.clone();
-        for callee in &scan.callees {
-            assigned.extend(self.assigned.get(callee).into_iter().flatten().cloned());
-        }
-        assigned
-    }
-
-    /// The globals each function the initializers reach reads on every path
-    /// through it, leaving out any it or what it reaches may assign.
-    ///
-    /// A least fixpoint, rising from nothing known: a recursive function's
-    /// answer under-approximates, and the same whatever order it is asked in.
-    /// Only the callers of a function whose answer grew are walked again.
-    fn must_reads<'i>(
-        &self,
-        inits: impl IntoIterator<Item = &'i LazyInit>,
-    ) -> IndexMap<String, IndexSet<GlobalKey>> {
-        let mut reached: IndexSet<&str> = IndexSet::default();
-        let mut pending: Vec<&str> = inits
-            .into_iter()
-            .flat_map(|init| &init.scan.callees)
-            .map(String::as_str)
-            .collect();
-        while let Some(name) = pending.pop() {
-            let Some((name, _)) = self.bodies.get_key_value(name) else {
-                continue;
-            };
-            if reached.insert(name) {
-                pending.extend(self.callees[name].iter().map(String::as_str));
-            }
-        }
-        let mut callers: IndexMap<&str, Vec<&str>> = IndexMap::default();
-        for &caller in &reached {
-            for callee in &self.callees[caller] {
-                callers.entry(callee.as_str()).or_default().push(caller);
-            }
-        }
-
-        let mut known: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
-        let mut queued: IndexSet<&str> = reached.clone();
-        while let Some(name) = queued.pop() {
-            let func = self.bodies[name].borrow();
-            let body = func.body.as_ref().expect("the graph holds bodies only");
-            let mut walk = MustReads::new(&known);
-            walk.visit_block(body);
-            let reads: IndexSet<GlobalKey> = walk
-                .reads
-                .difference(&self.assigned[name])
-                .cloned()
-                .collect();
-            if known.get(name).is_none_or(|old| old.len() < reads.len()) {
-                known.insert(name.to_string(), reads);
-                queued.extend(callers.get(name).into_iter().flatten());
-            }
-        }
-        known
-    }
-}
-
-/// Extend each function's set by its callees', until nothing grows: a least
-/// fixpoint, so a recursive cycle contributes each member's own and
-/// terminates.
-fn close_over_calls(
-    sets: &mut IndexMap<String, IndexSet<GlobalKey>>,
-    callees: &IndexMap<String, IndexSet<String>>,
-) {
     loop {
         let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
-        for (name, called) in callees {
-            let known = &sets[name];
+        for (name, called) in &callees {
+            let known = &reads[name];
             let fresh: IndexSet<GlobalKey> = called
                 .iter()
-                .filter_map(|callee| sets.get(callee))
+                .filter_map(|callee| reads.get(callee))
                 .flatten()
                 .filter(|global| !known.contains(*global))
                 .cloned()
@@ -362,314 +262,25 @@ fn close_over_calls(
             }
         }
         if grown.is_empty() {
-            return;
+            return reads;
         }
         for (name, fresh) in grown {
-            sets[&name].extend(fresh);
+            reads[&name].extend(fresh);
         }
     }
-}
-
-/// The globals read on every path through what it walks, up to the first point
-/// a path can leave it.
-///
-/// Once a `return`, `break` or `continue` may have been taken, what follows is
-/// not on every path, so it counts only after the construct that exit leaves.
-/// Branches count what they all read. A closure body runs only when called, and
-/// a callee read through a function value is unknown, so neither counts.
-struct MustReads<'k> {
-    /// What each callee is known to read on every path through it.
-    by_function: &'k IndexMap<String, IndexSet<GlobalKey>>,
-    reads: IndexSet<GlobalKey>,
-    /// The loops and labeled blocks being walked, innermost last.
-    targets: Vec<Option<String>>,
-    /// The outermost construct a path may have left so far, as its depth in
-    /// `targets` (`0` is the function). While set, nothing counts.
-    exited_to: Option<usize>,
-}
-
-impl<'k> MustReads<'k> {
-    fn new(by_function: &'k IndexMap<String, IndexSet<GlobalKey>>) -> Self {
-        Self {
-            by_function,
-            reads: IndexSet::default(),
-            targets: Vec::new(),
-            exited_to: None,
-        }
-    }
-
-    fn exit_to(&mut self, depth: usize) {
-        self.exited_to = Some(self.exited_to.map_or(depth, |d| d.min(depth)));
-    }
-
-    /// The depth of the construct a `break` or `continue` leaves.
-    fn target_depth(&self, label: Option<&str>) -> usize {
-        let index = self
-            .targets
-            .iter()
-            .rposition(|target| match label {
-                Some(label) => target.as_deref() == Some(label),
-                None => target.is_none(),
-            })
-            .expect("a break or continue sits inside its target");
-        index + 1
-    }
-
-    /// Walk a loop or labeled block: an exit to it lands right after it.
-    fn within(&mut self, label: Option<String>, block: &TirBlock) {
-        self.targets.push(label);
-        let depth = self.targets.len();
-        self.visit_block(block);
-        self.targets.pop();
-        if self.exited_to == Some(depth) {
-            self.exited_to = None;
-        }
-    }
-
-    /// What each alternative reads on every path, and the outermost exit any
-    /// of them may take.
-    fn alternatives<'e>(&mut self, branches: impl IntoIterator<Item = Branch<'e>>) {
-        let mut common: Option<IndexSet<GlobalKey>> = None;
-        for branch in branches {
-            let mut walk = MustReads {
-                targets: self.targets.clone(),
-                ..MustReads::new(self.by_function)
-            };
-            match branch {
-                Branch::Block(block) => walk.visit_block(block),
-                Branch::Expr(expr) => walk.visit_expr(expr),
-                Branch::Empty => {}
-            }
-            let MustReads {
-                reads, exited_to, ..
-            } = walk;
-            common = Some(match common {
-                None => reads,
-                Some(common) => common.intersection(&reads).cloned().collect(),
-            });
-            if let Some(depth) = exited_to {
-                self.exit_to(depth);
-            }
-        }
-        self.reads.extend(common.into_iter().flatten());
-    }
-
-    fn branch_on(&mut self, condition: &TirExpr, then: &TirBlock, otherwise: Option<&TirBlock>) {
-        self.visit_expr(condition);
-        if self.exited_to.is_none() {
-            let otherwise = otherwise.map_or(Branch::Empty, Branch::Block);
-            self.alternatives([Branch::Block(then), otherwise]);
-        }
-    }
-}
-
-enum Branch<'e> {
-    Block(&'e TirBlock),
-    Expr(&'e TirExpr),
-    Empty,
-}
-
-/// Every kind is named, so a new one is classified as strict or as branching
-/// rather than counted as always evaluated.
-impl TirRefVisitor for MustReads<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if self.exited_to.is_some() {
-            return;
-        }
-        match &stmt.kind {
-            TirStmtKind::If {
-                condition,
-                then_block,
-                else_block,
-            } => self.branch_on(condition, then_block, else_block.as_ref()),
-            TirStmtKind::Loop { body } => self.within(None, body),
-            TirStmtKind::LabeledBlock { label, block } => self.within(Some(label.clone()), block),
-            TirStmtKind::Return { value } => {
-                if let Some(value) = value {
-                    self.visit_expr(value);
-                }
-                self.exit_to(0);
-            }
-            TirStmtKind::Break { label, value } => {
-                if let Some(value) = value {
-                    self.visit_expr(value);
-                }
-                let depth = self.target_depth(label.as_deref());
-                self.exit_to(depth);
-            }
-            TirStmtKind::Continue => {
-                let depth = self.target_depth(None);
-                self.exit_to(depth);
-            }
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("monomorphization expands a variadic for-of")
-            }
-            TirStmtKind::Let { .. }
-            | TirStmtKind::LetDestructure { .. }
-            | TirStmtKind::Expr(_)
-            | TirStmtKind::TaskReturn { .. } => self.walk_stmt(stmt),
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        if self.exited_to.is_some() {
-            return;
-        }
-        match &expr.kind {
-            TirExprKind::GlobalVarGet {
-                module_source,
-                name,
-            } => {
-                self.reads.insert((module_source.clone(), name.clone()));
-            }
-            TirExprKind::Call { func, args, .. } => {
-                for arg in args {
-                    self.visit_expr(&arg.expr);
-                }
-                if self.exited_to.is_none()
-                    && let Some(callee_reads) = self.by_function.get(&func.full_name())
-                {
-                    self.reads.extend(callee_reads.iter().cloned());
-                }
-            }
-            TirExprKind::Binary {
-                left,
-                op: TirBinaryOp::And | TirBinaryOp::Or,
-                right,
-            } => {
-                self.visit_expr(left);
-                if self.exited_to.is_none() {
-                    self.alternatives([Branch::Expr(right), Branch::Empty]);
-                }
-            }
-            TirExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => self.branch_on(condition, then_branch, else_branch.as_ref()),
-            TirExprKind::Match {
-                expr: scrutinee,
-                arms,
-            } => {
-                self.visit_expr(scrutinee);
-                // A guard runs only once its pattern matches.
-                for guard in arms.iter().filter_map(|arm| arm.guard.as_ref()) {
-                    if self.exited_to.is_none() {
-                        self.alternatives([Branch::Expr(guard), Branch::Empty]);
-                    }
-                }
-                if self.exited_to.is_none() {
-                    self.alternatives(arms.iter().map(|arm| Branch::Expr(&arm.body)));
-                }
-            }
-            TirExprKind::LabeledBlock { label, block, .. } => {
-                self.within(Some(label.clone()), block);
-            }
-            TirExprKind::Closure { .. } => {}
-            TirExprKind::TypePackExpansion { .. }
-            | TirExprKind::VariadicTupleComprehension { .. } => {
-                unreachable!("monomorphization expands a pack")
-            }
-            TirExprKind::IntLiteral { .. }
-            | TirExprKind::FloatLiteral { .. }
-            | TirExprKind::BoolLiteral(_)
-            | TirExprKind::CharLiteral(_)
-            | TirExprKind::StringLiteral(_)
-            | TirExprKind::BytesLiteral(_)
-            | TirExprKind::Null
-            | TirExprKind::Unit
-            | TirExprKind::Local { .. }
-            | TirExprKind::FuncRef { .. }
-            | TirExprKind::Capture { .. }
-            | TirExprKind::EnumConstruct { .. }
-            | TirExprKind::GlobalVarSet { .. }
-            | TirExprKind::Binary { .. }
-            | TirExprKind::Unary { .. }
-            | TirExprKind::Assign { .. }
-            | TirExprKind::Cast { .. }
-            | TirExprKind::CmRawCall { .. }
-            | TirExprKind::FieldAccess { .. }
-            | TirExprKind::Index { .. }
-            | TirExprKind::Block(_)
-            | TirExprKind::StructLiteral { .. }
-            | TirExprKind::TupleLiteral { .. }
-            | TirExprKind::ArrayLiteral { .. }
-            | TirExprKind::TupleSpread { .. }
-            | TirExprKind::TupleZip { .. }
-            | TirExprKind::TupleLen { .. }
-            | TirExprKind::IndirectCall { .. }
-            | TirExprKind::VariantConstruct { .. }
-            | TirExprKind::VariantTag { .. }
-            | TirExprKind::VariantTest { .. }
-            | TirExprKind::VariantPayload { .. }
-            | TirExprKind::TemplateString { .. }
-            | TirExprKind::WithHandler { .. } => self.walk_expr(expr),
-        }
-    }
-}
-
-/// The globals an initializer depends on, kept apart by how certainly.
-struct InitRefs {
-    /// Named anywhere in it, a closure body included, which orders it after
-    /// them. Its own name there is no dependency: a closure may call it later.
-    named: IndexSet<GlobalKey>,
-    /// Read on every path through it, its own global included.
-    must: IndexSet<GlobalKey>,
-    /// Read by the functions it reaches, on some path.
-    may: IndexSet<GlobalKey>,
-}
-
-fn collect_global_refs(
-    init: &LazyInit,
-    call_graph: &CallGraph,
-    must_reads: &IndexMap<String, IndexSet<GlobalKey>>,
-) -> InitRefs {
-    let scan = &init.scan;
-    let mut walk = MustReads::new(must_reads);
-    walk.visit_expr(&init.value);
-    let must: IndexSet<GlobalKey> = walk
-        .reads
-        .difference(&call_graph.assigned_from(scan))
-        .cloned()
-        .collect();
-    let may = scan
-        .callees
-        .iter()
-        .filter_map(|callee| call_graph.reads.get(callee))
-        .flatten()
-        .filter(|global| !scan.globals.contains(*global) && !must.contains(*global))
-        .cloned()
-        .collect();
-    InitRefs {
-        named: scan.globals.clone(),
-        must,
-        may,
-    }
-}
-
-/// Whether `from` already depends on `to`, directly or transitively — so an
-/// edge `to → from` would close a cycle.
-fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
-    let mut seen = vec![false; deps.len()];
-    let mut stack = vec![from];
-    while let Some(node) = stack.pop() {
-        if node == to {
-            return true;
-        }
-        if std::mem::replace(&mut seen[node], true) {
-            continue;
-        }
-        stack.extend(deps[node].iter().copied());
-    }
-    false
 }
 
 /// The order to run `lazy_inits` in, as indices into it, each initializer after
 /// every one it depends on.
+///
+/// An initializer depends on every global it names and every global a function
+/// it reaches reads, on any path. The rule is path-insensitive, as Go's is: a
+/// read only some executions take orders the initializer the same as one they
+/// all take, and a cycle among them is an error even where no execution would
+/// close it.
 fn topological_sort_global_inits(
     lazy_inits: &[LazyInit],
-    call_graph: &CallGraph,
-    must_reads: &IndexMap<String, IndexSet<GlobalKey>>,
+    reads_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
     errors: &dyn ErrorSink,
 ) -> Result<Vec<usize>, Bail> {
     // Build a map from `(module_source, name)` to its index in
@@ -684,35 +295,21 @@ fn topological_sort_global_inits(
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on.
-    let mut deps: Vec<IndexSet<usize>> = vec![IndexSet::default(); lazy_inits.len()];
-    let indices = |refs: &IndexSet<GlobalKey>| -> Vec<usize> {
-        refs.iter()
-            .filter_map(|key| key_to_idx.get(key).copied())
-            .collect()
-    };
-
-    let scanned: Vec<InitRefs> = lazy_inits
+    let deps: Vec<IndexSet<usize>> = lazy_inits
         .iter()
-        .map(|init| collect_global_refs(init, call_graph, must_reads))
+        .map(|init| {
+            let BodyReads { globals, callees } = &init.scan;
+            let via_calls = callees
+                .iter()
+                .filter_map(|callee| reads_by_function.get(callee))
+                .flatten();
+            globals
+                .iter()
+                .chain(via_calls)
+                .filter_map(|key| key_to_idx.get(key).copied())
+                .collect()
+        })
         .collect();
-
-    // A global named in the initializer, or read on every path through it, is
-    // a definite dependency, and a cycle among those is an error.
-    for (i, refs) in scanned.iter().enumerate() {
-        deps[i].extend(indices(&refs.named).into_iter().filter(|&dep| dep != i));
-        deps[i].extend(indices(&refs.must));
-    }
-    // What a callee may read is path-insensitive: a helper that reads two
-    // globals makes each initializer calling it look dependent on the other,
-    // even when no execution reads both. Such an edge yields rather than
-    // manufacturing a cycle out of a program that has none.
-    for (i, refs) in scanned.iter().enumerate() {
-        for dep in indices(&refs.may) {
-            if dep != i && !depends_on(&deps, dep, i) {
-                deps[i].insert(dep);
-            }
-        }
-    }
 
     // Kahn's algorithm for topological sort
     let mut in_degree: Vec<usize> = deps.iter().map(IndexSet::len).collect();
@@ -757,12 +354,12 @@ fn topological_sort_global_inits(
                 code: Code::CircularDependency,
                 message: if let [name] = names[..] {
                     format!(
-                        "the initializer of `{name}` reads `{name}` on every path, \
-                         before it has been given a value."
+                        "the initializer of `{name}` may read `{name}` before it has been \
+                         given a value."
                     )
                 } else {
                     format!(
-                        "global initializers form a cycle: {}. Each waits for a value \
+                        "global initializers form a cycle: {}. Each may wait for a value \
                          another has not been given yet, so none can go first.",
                         names.join(", ")
                     )
@@ -813,7 +410,7 @@ fn sort_modules_by_dependency(
     entry_source: &ModuleSource,
     functions: &[Rc<RefCell<TirFunction>>],
 ) {
-    let reads = CallGraph::new(functions).reads;
+    let reads = global_reads_by_function(functions);
     let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
         let key = function_key(module, MODULE_INIT_FUNCTION);
         reads

@@ -378,12 +378,10 @@ names the global or reaches it through a call. The order between two
 initializers that do not depend on each other is
 [unspecified](./spec-overview.md#behavior-classes).
 
-Reading a global before its initializer has run is a
-[contract violation](./spec-overview.md#behavior-classes) with unconstrained
-behavior. The compiler reports a cycle every execution takes: initializers
-that name each other, or that read each other on every path through them and
-the functions they call, before anything gives the global a value. A cycle
-that only some executions take is not reported.
+An initializer depends on every global it names and every global a function it
+calls reads, on any path: a read only some executions take counts as one they
+all take. A cycle among them is an error, an initializer that reads its own
+global included.
 
 ## Operators
 
