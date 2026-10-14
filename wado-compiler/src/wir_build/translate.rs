@@ -2271,7 +2271,15 @@ impl FunctionTranslator<'_, '_> {
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
-            if let Some(param) = split.get(&i) {
+            let in_prelude = split.contains_key(&i)
+                || last_early.is_some_and(|last| i < last)
+                || runs_before_split_reads(i);
+            if in_prelude && self.type_table.is_never(self.operand_type_id(op)) {
+                // It diverges where it stands, in source order, and leaves no
+                // value, nor fields for a split parameter: the call after it
+                // is dead at any arity.
+                prelude.push(self.translate_operand(op));
+            } else if let Some(param) = split.get(&i) {
                 let (p, reads) = self.split_argument(op, &param.fields);
                 prelude.extend(p);
                 call_args.extend(reads);
@@ -2279,13 +2287,7 @@ impl FunctionTranslator<'_, '_> {
                 if runs_code[i] {
                     prelude.push(self.translate_operand(op));
                 }
-            } else if last_early.is_some_and(|last| i < last) || runs_before_split_reads(i) {
-                if self.type_table.is_never(self.operand_type_id(op)) {
-                    // It diverges where it stands, in source order, and leaves
-                    // no value: the call after it is dead at any arity.
-                    prelude.push(self.translate_operand(op));
-                    continue;
-                }
+            } else if in_prelude {
                 let (p, read) = self.spill_operand(op, "$arg_spill");
                 prelude.extend(p);
                 call_args.push(read);
