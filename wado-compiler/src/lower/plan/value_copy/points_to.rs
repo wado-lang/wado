@@ -1069,8 +1069,8 @@ impl Builder<'_> {
         self.eval(reference).unwrap_or_else(|| self.g.node())
     }
 
-    /// The storage a borrow of `expr` names: its place, or a temporary
-    /// holding its value.
+    /// The storage a borrow of, or an assignment to, `expr` names: its place,
+    /// or a temporary holding its value, as `get().field = v` writes.
     fn borrowed(&mut self, expr: &TirExpr) -> u32 {
         let place = self.place(expr).unwrap_or_else(|| {
             let temp = self.g.node();
@@ -1267,10 +1267,7 @@ impl Builder<'_> {
                 }
             }
             _ => {
-                let place = self
-                    .place(target)
-                    .expect("an assignment's target is a place");
-                note_site(&mut self.written, target, place);
+                let place = self.borrowed(target);
                 if let Some(v) = value {
                     self.g.store(place, v);
                 }
