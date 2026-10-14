@@ -360,7 +360,7 @@ pub fn optimize(
     });
 
     run_pass("nir/multi_value_param", &mut project, profiler, |p| {
-        multi_value_param::classify_multi_value_params(p)
+        multi_value_param::classify_multi_value_params(p, &exec)
     });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by

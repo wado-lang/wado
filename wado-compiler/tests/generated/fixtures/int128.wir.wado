@@ -212,9 +212,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]" = fn(f64, ref "core:prelude/format.wado//Formatter");  // TypeId(91)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]" = fn(ref "core:prelude/int128.wado//u128") -> [u64, i64];  // TypeId(92)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]" = fn(u64, u64) -> [u64, i64];  // TypeId(92)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]" = fn(ref "core:prelude/int128.wado//u128") -> [u64, i64];  // TypeId(93)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]" = fn(u64, u64) -> [u64, i64];  // TypeId(93)
 
 type "functype//core:prelude/format.wado/&mut core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(94)
 
@@ -325,21 +325,20 @@ global global:core:prelude/format.wado::$const_obj_309: ref Array<u8> = array.ne
 fn "int128.wado/$test_7_wide_int_as_f32"() {
     let v: ref "core:prelude/int128.wado//i128";
     let $v1_1: f32;
+    let tie: ref "core:prelude/int128.wado//u128";
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_15: i32;
-    let self_28: ref "core:prelude/int128.wado//u128";
     let lo: i64;
     let hi: i64;
     v = struct.new "core:prelude/int128.wado//i128" { low: -5_i64, high: -1_i64 };
     if @unlikely(local.tee $v1_1(builtin::f32_neg($inline_core_prelude_int128_wado_u128__as_f32_2: block -> f32 {
         multivalue_bind [lo, hi] = i64.sub128(0_i64, 0_i64, -5_i64, -1_i64);
-        self_28 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
         if hi == 0_i64 {
             break $inline_core_prelude_int128_wado_u128__as_f32_2: builtin::f32_convert_i64_u(lo);
         }
-        multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(self_28);
-        break $inline_core_prelude_int128_wado_u128__as_f32_2: builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607));
+        multivalue_bind [hi, lo] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(lo, hi);
+        break $inline_core_prelude_int128_wado_u128__as_f32_2: builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(lo + 127_i64) << 23) | (builtin::i32_wrap_i64(hi) & 8388607));
     })) != -5_f32) {
         cold_path;
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(156)), 59);
@@ -362,14 +361,25 @@ condition: v as f32 == -5.0 as f32
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("v as f32: "), used: 10 }, 10);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_10);
+<<<<<<< HEAD
         let $mv_arg_2: ref "core:prelude/string.wado//String";
         $mv_arg_2 = global:int128.wado::$const_obj_44;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
+||||||| 85291eb24
+        let $mv_arg_2: ref "core:prelude/string.wado//String";
+        $mv_arg_2 = global:int128.wado::$const_obj_47;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
+=======
+        let $mv_arg_3: ref "core:prelude/string.wado//String";
+        $mv_arg_3 = global:int128.wado::$const_obj_47;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_3.repr, $mv_arg_3.used);
+>>>>>>> origin/main
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
-    multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(local.tee self_28(struct.new "core:prelude/int128.wado//u128" { low: 2199023255552_i64, high: 2_i64 }));
-    if @unlikely(local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607))) != 36893490000000000000_f32) {
+    tie = struct.new "core:prelude/int128.wado//u128" { low: 2199023255552_i64, high: 2_i64 };
+    multivalue_bind [hi, lo] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(2199023255552_i64, 2_i64);
+    if @unlikely(local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(lo + 127_i64) << 23) | (builtin::i32_wrap_i64(hi) & 8388607))) != 36893490000000000000_f32) {
         cold_path;
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(180)), 59);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -385,19 +395,28 @@ condition: tie as f32 == 36893488147419103232.0 as f32
 "), used: 56 }, 56);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15 + 56, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie: "), used: 5 }, 5);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
-        "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(self_28, $local_10);
+        "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(tie, $local_10);
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 13);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie as f32: "), used: 12 }, 12);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_10);
+<<<<<<< HEAD
         $mv_arg_2 = global:int128.wado::$const_obj_44;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
+||||||| 85291eb24
+        $mv_arg_2 = global:int128.wado::$const_obj_47;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
+=======
+        $mv_arg_3 = global:int128.wado::$const_obj_47;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_3.repr, $mv_arg_3.used);
+>>>>>>> origin/main
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
-    multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(local.tee self_28(struct.new "core:prelude/int128.wado//u128" { low: 2199023255553_i64, high: 2_i64 }));
-    if @unlikely(local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(hi + 127_i64) << 23) | (builtin::i32_wrap_i64(lo) & 8388607))) != 36893493000000000000_f32) {
+    tie = struct.new "core:prelude/int128.wado//u128" { low: 2199023255553_i64, high: 2_i64 };
+    multivalue_bind [hi, lo] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(2199023255553_i64, 2_i64);
+    if @unlikely(local.tee $v1_1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64(lo + 127_i64) << 23) | (builtin::i32_wrap_i64(hi) & 8388607))) != 36893493000000000000_f32) {
         cold_path;
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(186)), 59);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -413,14 +432,22 @@ condition: above as f32 == 36893492545465614336.0 as f32
 "), used: 58 }, 58);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15 + 58, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("above: "), used: 7 }, 7);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
-        "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(self_28, $local_10);
+        "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(tie, $local_10);
         $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 15);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_9.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("above as f32: "), used: 14 }, 14);
         $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_10);
+<<<<<<< HEAD
         $mv_arg_2 = global:int128.wado::$const_obj_44;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
+||||||| 85291eb24
+        $mv_arg_2 = global:int128.wado::$const_obj_47;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_2.repr, $mv_arg_2.used);
+=======
+        $mv_arg_3 = global:int128.wado::$const_obj_47;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_9, $mv_arg_3.repr, $mv_arg_3.used);
+>>>>>>> origin/main
         "core:rt/panic"($local_9.repr, $local_9.used);
         unreachable;
     }
@@ -807,18 +834,16 @@ fn "int128.wado/$cm_export__$test_0_i128_as_f64"() {
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_13: i32;
-    let self_33: ref "core:prelude/int128.wado//u128";
     let lo: i64;
     let hi: i64;
     neg = struct.new "core:prelude/int128.wado//i128" { low: -5_i64, high: -1_i64 };
     if @unlikely(local.tee $v1_4(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_9: block -> f64 {
         multivalue_bind [lo, hi] = i64.sub128(0_i64, 0_i64, -5_i64, -1_i64);
-        self_33 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
         if hi == 0_i64 {
             break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_convert_i64_u(lo);
         }
-        multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(self_33);
-        break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64));
+        multivalue_bind [hi, lo] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(lo, hi);
+        break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_reinterpret_i64(((lo + 1023_i64) << 52_i64) | (hi & 4503599627370495_i64));
     })) != -5) {
         cold_path;
         $fuse_at_13 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_8("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(155)), 55);
@@ -841,9 +866,9 @@ condition: neg as f64 == -5.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_8.repr, $fuse_at_13 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("neg as f64: "), used: 12 }, 12);
         $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_4, $local_9);
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_field_2, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, $mv_field_3, 1);
         "core:rt/panic"($local_8.repr, $local_8.used);
         unreachable;
     }
@@ -860,12 +885,10 @@ fn "int128.wado/$cm_export__$test_2_large_i128_as_f64_uses_the_full_128_bit_valu
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     let magnitude: f64;
-    let self_12: ref "core:prelude/int128.wado//u128";
     v = struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: 68719476736_i64 };
-    self_12 = struct.new "core:prelude/int128.wado//u128" { low: 0_i64, high: 68719476736_i64 };
     let $mv$$pattern_temp_0$0: u64;
     let $mv$$pattern_temp_0$1: i64;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(self_12);
+    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(0_i64, 68719476736_i64);
     if @unlikely(local.tee magnitude(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0$0 & 4503599627370495_i64))) != 1267650600228229400000000000000) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(178)), 89);
@@ -888,9 +911,9 @@ condition: v as f64 == 1267650600228229401496703205376.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_3.repr, $fuse_at_5 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("v as f64: "), used: 10 }, 10);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(magnitude, $local_4);
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_2, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_3, 1);
         "core:rt/panic"($local_3.repr, $local_3.used);
         unreachable;
     }
@@ -906,7 +929,7 @@ fn "int128.wado/$cm_export__$test_3_u128_as_f64_rounds_to_nearest_with_ties_to_e
     tie = struct.new "core:prelude/int128.wado//u128" { low: 2048_i64, high: 1_i64 };
     let $mv$$pattern_temp_0_24$0: u64;
     let $mv$$pattern_temp_0_24$1: i64;
-    multivalue_bind [$mv$$pattern_temp_0_24$0, $mv$$pattern_temp_0_24$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(tie);
+    multivalue_bind [$mv$$pattern_temp_0_24$0, $mv$$pattern_temp_0_24$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(2048_i64, 1_i64);
     if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0_24$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0_24$0 & 4503599627370495_i64))) != 18446744073709552000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(173)), 91);
@@ -929,13 +952,14 @@ condition: tie as f64 == 18446744073709551616.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_7);
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_2, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_3, 1);
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
-    multivalue_bind [$mv$$pattern_temp_0_24$0, $mv$$pattern_temp_0_24$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(local.tee tie(struct.new "core:prelude/int128.wado//u128" { low: 2049_i64, high: 1_i64 }));
+    tie = struct.new "core:prelude/int128.wado//u128" { low: 2049_i64, high: 1_i64 };
+    multivalue_bind [$mv$$pattern_temp_0_24$0, $mv$$pattern_temp_0_24$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(2049_i64, 1_i64);
     if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0_24$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0_24$0 & 4503599627370495_i64))) != 18446744073709556000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(179)), 91);
@@ -958,8 +982,8 @@ condition: above as f64 == 18446744073709555712.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("above as f64: "), used: 14 }, 14);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_7);
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_2, 1);
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6, $mv_field_3, 1);
         "core:rt/panic"($local_6.repr, $local_6.used);
         unreachable;
     }
@@ -972,18 +996,16 @@ fn "int128.wado/$cm_export__$test_4_i128_as_f64_rounds_the_magnitude_for_negativ
     let $local_6_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_10: i32;
-    let self_20: ref "core:prelude/int128.wado//u128";
     let lo_45: i64;
     let hi_46: i64;
     tie = struct.new "core:prelude/int128.wado//i128" { low: -4096_i64, high: -3_i64 };
     if @unlikely(local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_4: block -> f64 {
         multivalue_bind [lo_45, hi_46] = i64.sub128(0_i64, 0_i64, -4096_i64, -3_i64);
-        self_20 = struct.new "core:prelude/int128.wado//u128" { low: lo_45, high: hi_46 };
         if hi_46 == 0_i64 {
             break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_convert_i64_u(lo_45);
         }
-        multivalue_bind [lo_45, hi_46] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(self_20);
-        break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_reinterpret_i64(((hi_46 + 1023_i64) << 52_i64) | (lo_45 & 4503599627370495_i64));
+        multivalue_bind [hi_46, lo_45] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(lo_45, hi_46);
+        break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_reinterpret_i64(((lo_45 + 1023_i64) << 52_i64) | (hi_46 & 4503599627370495_i64));
     })) != -36893488147419103000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(174)), 96);
@@ -1006,20 +1028,19 @@ condition: tie as f64 == -36893488147419103232.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tie as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_7);
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
     tie = struct.new "core:prelude/int128.wado//i128" { low: -4097_i64, high: -3_i64 };
     if @unlikely(local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_9: block -> f64 {
-        multivalue_bind [lo_45, hi_46] = i64.sub128(0_i64, 0_i64, -4097_i64, -3_i64);
-        self_20 = struct.new "core:prelude/int128.wado//u128" { low: lo_45, high: hi_46 };
-        if hi_46 == 0_i64 {
-            break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_convert_i64_u(lo_45);
+        multivalue_bind [hi_46, lo_45] = i64.sub128(0_i64, 0_i64, -4097_i64, -3_i64);
+        if lo_45 == 0_i64 {
+            break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_convert_i64_u(hi_46);
         }
-        multivalue_bind [lo_45, hi_46] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(self_20);
+        multivalue_bind [lo_45, hi_46] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(hi_46, lo_45);
         break $inline_core_prelude_int128_wado_u128__as_f64_9: builtin::f64_reinterpret_i64(((hi_46 + 1023_i64) << 52_i64) | (lo_45 & 4503599627370495_i64));
     })) != -36893488147419110000) {
         cold_path;
@@ -1043,8 +1064,8 @@ condition: below as f64 == -36893488147419111424.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("below as f64: "), used: 14 }, 14);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_7);
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
@@ -1058,21 +1079,20 @@ fn "int128.wado/$cm_export__$test_5_u64_range_u128_as_f64_takes_the_native_conve
 fn "int128.wado/$cm_export__$test_6_i128__min_and_u128__max_as_f64"() {
     let min: ref "core:prelude/int128.wado//i128";
     let $v1_1: f64;
+    let max: ref "core:prelude/int128.wado//u128";
     let $local_6_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_10: i32;
-    let self_20: ref "core:prelude/int128.wado//u128";
     let lo: i64;
     let hi: i64;
     min = struct.new "core:prelude/int128.wado//i128" { low: 0_i64, high: -9223372036854775808_i64 };
     if @unlikely(local.tee $v1_1(builtin::f64_neg($inline_core_prelude_int128_wado_u128__as_f64_4: block -> f64 {
         multivalue_bind [lo, hi] = i64.sub128(0_i64, 0_i64, 0_i64, -9223372036854775808_i64);
-        self_20 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
         if hi == 0_i64 {
             break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_convert_i64_u(lo);
         }
-        multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(self_20);
-        break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64));
+        multivalue_bind [hi, lo] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(lo, hi);
+        break $inline_core_prelude_int128_wado_u128__as_f64_4: builtin::f64_reinterpret_i64(((lo + 1023_i64) << 52_i64) | (hi & 4503599627370495_i64));
     })) != -170141183460469230000000000000000000000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(193)), 74);
@@ -1095,14 +1115,15 @@ condition: min as f64 == -170141183460469231731687303715884105728.0
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("min as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_7);
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
-    multivalue_bind [lo, hi] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(local.tee self_20(struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 }));
-    if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64(((hi + 1023_i64) << 52_i64) | (lo & 4503599627370495_i64))) != 340282366920938500000000000000000000000) {
+    max = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
+    multivalue_bind [hi, lo] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(-1_i64, -1_i64);
+    if @unlikely(local.tee $v1_1(builtin::f64_reinterpret_i64(((lo + 1023_i64) << 52_i64) | (hi & 4503599627370495_i64))) != 340282366920938500000000000000000000000) {
         cold_path;
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_6_6("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(192)), 74);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -1118,14 +1139,14 @@ condition: max as f64 == 340282366920938463463374607431768211456.0
 "), used: 68 }, 68);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10 + 68, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max: "), used: 5 }, 5);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
-        "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(self_20, $local_7);
+        "core:prelude/int128.wado/core:prelude/int128.wado/u128^core:prelude/traits.wado/Inspect::inspect"(max, $local_7);
         $fuse_at_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_6_6, 13);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_6_6.repr, $fuse_at_10 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("max as f64: "), used: 12 }, 12);
         $local_7 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_6_6);
         "core:prelude/primitive.wado/f64^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"($v1_1, $local_7);
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_2, 1);
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_6_6, $mv_field_3, 1);
         "core:rt/panic"($local_6_6.repr, $local_6_6.used);
         unreachable;
     }
@@ -1146,7 +1167,7 @@ fn "int128.wado/$cm_export__$test_8_u128__max_as_f32_overflows_to_infinity"() {
     max = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
     let $mv$$pattern_temp_0$0: u64;
     let $mv$$pattern_temp_0$1: i64;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(max);
+    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(-1_i64, -1_i64);
     if @unlikely(local.tee $v1(builtin::f32_reinterpret_i32((builtin::i32_wrap_i64($mv$$pattern_temp_0$1 + 127_i64) << 23) | (builtin::i32_wrap_i64($mv$$pattern_temp_0$0) & 8388607))) != inf_f32) {
         cold_path;
         $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_3("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(196)), 82);
@@ -1174,9 +1195,9 @@ condition: max as f32 == f32::INFINITY
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_3.repr, $fuse_at_5 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("f32::INFINITY: "), used: 15 }, 15);
         $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
         "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(inf_f32, $local_4);
-        let $mv_field_2: ref Array<u8>;
-        $mv_field_2 = array.new_fixed<u8>(10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_2, 1);
+        let $mv_field_3: ref Array<u8>;
+        $mv_field_3 = array.new_fixed<u8>(10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_3, $mv_field_3, 1);
         "core:rt/panic"($local_3.repr, $local_3.used);
         unreachable;
     }
@@ -4413,36 +4434,33 @@ fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]"(self, f) {
     }
 }
 
-fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"(self) {
-    let $load_0: u64;
+fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec0$dae[mant_bits]"($mv$self$low, $mv$self$high) {
     let hbits: i64;
     let shift: i64;
     let a: u64;
     let sticky: u64;
     let t: u64;
-    let $av_20: u64;
-    if @unlikely(local.tee $load_0(self.high) == 0_i64) {
+    if @unlikely($mv$self$high == 0_i64) {
         cold_path;
-        "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$cold1$dae[self,mant_bits]"($load_0);
+        "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$cold1$dae[self,mant_bits]"($mv$self$high);
         unreachable;
     }
-    shift = local.tee hbits(builtin::i64_extend_i32_s(64 - builtin::i32_wrap_i64(builtin::i64_clz($load_0)))) + 9_i64;
+    shift = local.tee hbits(builtin::i64_extend_i32_s(64 - builtin::i32_wrap_i64(builtin::i64_clz($mv$self$high)))) + 9_i64;
     a = 0_i64;
     sticky = 0_i64;
-    $av_20 = self.low;
     if shift >= 64_i64 {
         t = shift - 64_i64;
-        a = $load_0 >>u t;
-        if (if $av_20 != 0_i64 -> i32 {
+        a = $mv$self$high >>u t;
+        if (if $mv$self$low != 0_i64 -> i32 {
             1;
         } else {
-            ($load_0 & ((1_i64 << t) - 1_i64)) != 0_i64;
+            ($mv$self$high & ((1_i64 << t) - 1_i64)) != 0_i64;
         }) {
             sticky = 1_i64;
         }
     } else {
-        a = ($av_20 >>u shift) | ($load_0 << (64_i64 - shift));
-        if ($av_20 & ((1_i64 << shift) - 1_i64)) != 0_i64 {
+        a = ($mv$self$low >>u shift) | ($mv$self$high << (64_i64 - shift));
+        if ($mv$self$low & ((1_i64 << shift) - 1_i64)) != 0_i64 {
             sticky = 1_i64;
         }
     }
@@ -4463,36 +4481,33 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$sp
     return a, hbits;
 }
 
-fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"(self) {
-    let $load_0: u64;
+fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$spec1$dae[mant_bits]"($mv$self$low, $mv$self$high) {
     let hbits: i64;
     let shift: i64;
     let a: u64;
     let sticky: u64;
     let t: u64;
-    let $av_20: u64;
-    if @unlikely(local.tee $load_0(self.high) == 0_i64) {
+    if @unlikely($mv$self$high == 0_i64) {
         cold_path;
-        "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$cold1$dae[self,mant_bits]"($load_0);
+        "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$cold1$dae[self,mant_bits]"($mv$self$high);
         unreachable;
     }
-    shift = local.tee hbits(builtin::i64_extend_i32_s(64 - builtin::i32_wrap_i64(builtin::i64_clz($load_0)))) + 38_i64;
+    shift = local.tee hbits(builtin::i64_extend_i32_s(64 - builtin::i32_wrap_i64(builtin::i64_clz($mv$self$high)))) + 38_i64;
     a = 0_i64;
     sticky = 0_i64;
-    $av_20 = self.low;
     if shift >= 64_i64 {
         t = shift - 64_i64;
-        a = $load_0 >>u t;
-        if (if $av_20 != 0_i64 -> i32 {
+        a = $mv$self$high >>u t;
+        if (if $mv$self$low != 0_i64 -> i32 {
             1;
         } else {
-            ($load_0 & ((1_i64 << t) - 1_i64)) != 0_i64;
+            ($mv$self$high & ((1_i64 << t) - 1_i64)) != 0_i64;
         }) {
             sticky = 1_i64;
         }
     } else {
-        a = ($av_20 >>u shift) | ($load_0 << (64_i64 - shift));
-        if ($av_20 & ((1_i64 << shift) - 1_i64)) != 0_i64 {
+        a = ($mv$self$low >>u shift) | ($mv$self$high << (64_i64 - shift));
+        if ($mv$self$low & ((1_i64 << shift) - 1_i64)) != 0_i64 {
             sticky = 1_i64;
         }
     }

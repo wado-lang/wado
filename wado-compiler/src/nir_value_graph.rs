@@ -783,18 +783,34 @@ impl ValuePool {
         seen: &mut IndexSet<ValueId>,
         mut f: impl FnMut(Option<OpaqueSource>, ValueId) -> ControlFlow<T>,
     ) -> Option<T> {
+        self.walk_values(root, seen, |v, kind| match kind {
+            ValueKind::Opaque(oid) => match f(self.opaque_source(*oid), v) {
+                ControlFlow::Break(found) => ControlFlow::Break(found),
+                ControlFlow::Continue(()) => ControlFlow::Continue(false),
+            },
+            _ => ControlFlow::Continue(true),
+        })
+    }
+
+    /// Walk the values reachable from `root`, `visit` answering at each
+    /// whether to go on into its children. `Break` stops the walk and is its
+    /// result. A worklist with a visited set, as [`Self::walk_opaques`] says.
+    pub fn walk_values<T>(
+        &self,
+        root: ValueId,
+        seen: &mut IndexSet<ValueId>,
+        mut visit: impl FnMut(ValueId, &ValueKind) -> ControlFlow<T, bool>,
+    ) -> Option<T> {
         let mut stack = vec![root];
         while let Some(v) = stack.pop() {
             if !seen.insert(v) {
                 continue;
             }
-            if let ValueKind::Opaque(oid) = self.kind(v) {
-                if let ControlFlow::Break(found) = f(self.opaque_source(*oid), v) {
-                    return Some(found);
-                }
-                continue;
+            match visit(v, self.kind(v)) {
+                ControlFlow::Break(found) => return Some(found),
+                ControlFlow::Continue(true) => self.push_value_children(v, &mut stack),
+                ControlFlow::Continue(false) => {}
             }
-            self.push_value_children(v, &mut stack);
         }
         None
     }
@@ -882,6 +898,16 @@ impl ValuePool {
             }
             ControlFlow::Continue(())
         });
+    }
+
+    /// Whether the value tree at `v` names an expression as an extraction
+    /// source, which extracting it runs.
+    pub fn names_extraction_source(&self, v: ValueId) -> bool {
+        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
+            Some(OpaqueSource::Expr(_)) => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_some()
     }
 
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one

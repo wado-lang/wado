@@ -162,7 +162,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_v
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, ref "core:prelude/types.wado//Option<i32>"];  // TypeId(54)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32, i32) -> i32;  // TypeId(55)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len" = fn(ref Array<u8>, i32, i32, i32) -> i32;  // TypeId(55)
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>::wait" = fn(ref "core:prelude/types.wado//AsyncCall<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>") -> ref "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>";  // TypeId(56)
 
@@ -957,7 +957,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_valid_prefix"
                     continue l107;
                 }
             }
-            if @unlikely(local.tee b0("core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len)) <= 0) {
+            if @unlikely(local.tee b0(block -> i32 {
+                "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes.repr, bytes.start, i, len);
+            }) <= 0) {
                 cold_path;
                 return select i32(b0 < 0, i, -1 - i);
             }
@@ -1020,13 +1022,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_at"(byt
     return prefix, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: $load_0 };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, start, len) {
-    let $load_0: i32;
-    let $load_1: ref Array<u8>;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"($mv$bytes$repr, $mv$bytes$start, start, len) {
     let b0_3: u8;
+<<<<<<< HEAD
     let b1_18: u8;
     $load_0 = bytes.start;
     if @likely(local.tee b0_3(builtin::array_get_value<u8>(local.tee $load_1(bytes.repr), $load_0 + start)) <u 128) {
+||||||| 85291eb24
+    let b1_26: u8;
+    $load_0 = bytes.start;
+    if @likely(local.tee b0_3(builtin::array_get_value<u8>(local.tee $load_1(bytes.repr), $load_0 + start)) <u 128) {
+=======
+    let b1_26: u8;
+    if @likely(local.tee b0_3(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + start)) <u 128) {
+>>>>>>> origin/main
         return 1;
     }
     if @unlikely(b0_3 <u 194) {
@@ -1039,9 +1048,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return -1;
         }
+<<<<<<< HEAD
         if @unlikely($inline_utf8_second_byte_ok_3: block -> bool {
             if (local.tee b1_18(builtin::array_get_value<u8>($load_1, $load_0 + (start + 1))) & 192) != 128 {
                 break $inline_utf8_second_byte_ok_3: 0;
+||||||| 85291eb24
+        if @unlikely($inline_utf8_second_byte_ok_2: block -> bool {
+            if (local.tee b1_26(builtin::array_get_value<u8>($load_1, $load_0 + (start + 1))) & 192) != 128 {
+                break $inline_utf8_second_byte_ok_2: 0;
+=======
+        if @unlikely($inline_utf8_second_byte_ok_2: block -> bool {
+            if (local.tee b1_26(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + (start + 1))) & 192) != 128 {
+                break $inline_utf8_second_byte_ok_2: 0;
+>>>>>>> origin/main
             }
             if b0_3 == 224 -> bool {
                 b1_18 >=u 160;
@@ -1063,9 +1082,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
     }
     if @likely(b0_3 <u 240) {
         if len >= 2 {
+<<<<<<< HEAD
             if @unlikely($inline_utf8_second_byte_ok_5: block -> bool {
                 if (local.tee b1_18(builtin::array_get_value<u8>($load_1, $load_0 + (start + 1))) & 192) != 128 {
                     break $inline_utf8_second_byte_ok_5: 0;
+||||||| 85291eb24
+            if @unlikely($inline_utf8_second_byte_ok_4: block -> bool {
+                if (local.tee b1_26(builtin::array_get_value<u8>($load_1, $load_0 + (start + 1))) & 192) != 128 {
+                    break $inline_utf8_second_byte_ok_4: 0;
+=======
+            if @unlikely($inline_utf8_second_byte_ok_4: block -> bool {
+                if (local.tee b1_26(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + (start + 1))) & 192) != 128 {
+                    break $inline_utf8_second_byte_ok_4: 0;
+>>>>>>> origin/main
                 }
                 if b0_3 == 224 -> bool {
                     b1_18 >=u 160;
@@ -1088,7 +1117,13 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return -1;
         }
+<<<<<<< HEAD
         if @unlikely((local.tee b1_18(builtin::array_get_value<u8>($load_1, $load_0 + (start + 2))) & 192) != 128) {
+||||||| 85291eb24
+        if @unlikely((local.tee b1_26(builtin::array_get_value<u8>($load_1, $load_0 + (start + 2))) & 192) != 128) {
+=======
+        if @unlikely((local.tee b1_26(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + (start + 2))) & 192) != 128) {
+>>>>>>> origin/main
             cold_path;
             return 0;
         }
@@ -1096,9 +1131,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
     }
     if @likely(b0_3 <u 245) {
         if len >= 2 {
+<<<<<<< HEAD
             if @unlikely($inline_utf8_second_byte_ok_9: block -> bool {
                 if (local.tee b1_18(builtin::array_get_value<u8>($load_1, $load_0 + (start + 1))) & 192) != 128 {
                     break $inline_utf8_second_byte_ok_9: 0;
+||||||| 85291eb24
+            if @unlikely($inline_utf8_second_byte_ok_8: block -> bool {
+                if (local.tee b1_26(builtin::array_get_value<u8>($load_1, $load_0 + (start + 1))) & 192) != 128 {
+                    break $inline_utf8_second_byte_ok_8: 0;
+=======
+            if @unlikely($inline_utf8_second_byte_ok_8: block -> bool {
+                if (local.tee b1_26(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + (start + 1))) & 192) != 128 {
+                    break $inline_utf8_second_byte_ok_8: 0;
+>>>>>>> origin/main
                 }
                 if b0_3 == 224 -> bool {
                     b1_18 >=u 160;
@@ -1118,7 +1163,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             }
         }
         if len >= 3 {
-            if @unlikely((builtin::array_get_value<u8>($load_1, $load_0 + (start + 2)) & 192) != 128) {
+            if @unlikely((builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + (start + 2)) & 192) != 128) {
                 cold_path;
                 return 0;
             }
@@ -1127,7 +1172,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return -1;
         }
-        if @unlikely((local.tee start(builtin::array_get_value<u8>($load_1, $load_0 + (start + 3))) & 192) != 128) {
+        if @unlikely((local.tee start(builtin::array_get_value<u8>($mv$bytes$repr, $mv$bytes$start + (start + 3))) & 192) != 128) {
             cold_path;
             return 0;
         }
@@ -1154,8 +1199,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if local.tee handle_1(self.__cm_packed >>u 4) != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
+<<<<<<< HEAD
         b162: block {
             l163: loop {
+||||||| 85291eb24
+        b170: block {
+            l171: loop {
+=======
+        b171: block {
+            l172: loop {
+>>>>>>> origin/main
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
@@ -1166,8 +1219,16 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
                     "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"(code);
                     unreachable;
                 }
+<<<<<<< HEAD
                 break_if b162 payload >u 1;
                 continue l163;
+||||||| 85291eb24
+                break_if b170 payload >u 1;
+                continue l171;
+=======
+                break_if b171 payload >u 1;
+                continue l172;
+>>>>>>> origin/main
             };
         };
         "wasi/subtask-drop"(handle_1);

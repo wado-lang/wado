@@ -32,7 +32,7 @@ type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//opt_multi_value_user_struct_escape.wado/make_point" = fn(i32, i32) -> ref "opt_multi_value_user_struct_escape.wado//Point";  // TypeId(11)
 
-type "functype//opt_multi_value_user_struct_escape.wado/measure" = fn(ref "opt_multi_value_user_struct_escape.wado//Point") -> i32;  // TypeId(12)
+type "functype//opt_multi_value_user_struct_escape.wado/measure" = fn(i32, i32) -> i32;  // TypeId(12)
 
 type "functype//opt_multi_value_user_struct_escape.wado/ref_use" = fn() -> i32;  // TypeId(13)
 
@@ -86,12 +86,16 @@ fn "opt_multi_value_user_struct_escape.wado/make_point"(x, y) {
     return struct.new "opt_multi_value_user_struct_escape.wado//Point" { x: x, y: y };
 }
 
-fn "opt_multi_value_user_struct_escape.wado/measure"(p) {
-    return p.x + p.y;
+fn "opt_multi_value_user_struct_escape.wado/measure"($mv$p$x, $mv$p$y) {
+    return $mv$p$x + $mv$p$y;
 }
 
 fn "opt_multi_value_user_struct_escape.wado/ref_use"() {
-    return "opt_multi_value_user_struct_escape.wado/measure"("opt_multi_value_user_struct_escape.wado/make_point"(black_box(10), black_box(20)));
+    let p: ref "opt_multi_value_user_struct_escape.wado//Point";
+    p = "opt_multi_value_user_struct_escape.wado/make_point"(black_box(10), black_box(20));
+    return block -> i32 {
+        "opt_multi_value_user_struct_escape.wado/measure"(p.x, p.y);
+    };
 }
 
 fn "opt_multi_value_user_struct_escape.wado/$cm_export__run"() {
@@ -159,16 +163,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b4: block {
-        l5: loop {
-            break_if b4 (digit_count - offset) < 2;
+    b5: block {
+        l6: loop {
+            break_if b5 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l5;
+            continue l6;
         };
     };
     if digit_count > offset {
@@ -267,17 +271,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b28: block {
-        l29: loop {
-            break_if b28 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b29: block {
+        l30: loop {
+            break_if b29 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l29;
+            continue l30;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l31: loop {
+        l32: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -307,7 +311,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l31;
+            continue l32;
         };
     };
 }

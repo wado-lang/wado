@@ -1,0 +1,12 @@
+// A reference to a newtype is not on its chain: `&Meters` does not wrap `i64`
+// the way `Meters` does, so `i64::from(&m)` asks for an impl and finds none.
+
+type Meters = i64;
+
+test {
+    let m = 3 as Meters;
+    let x = i64::from(&m);
+}
+
+__DATA__
+{"compile_error": ":8:13: analysis error: no impl of 'From' for 'i64' takes an argument of type '&Meters'", "compile_error_count": 1}

@@ -7,7 +7,6 @@
 pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
-pub mod from_synth;
 pub mod reflect_bridge;
 pub mod resource_cleanup;
 pub mod serde_synth;
@@ -69,14 +68,7 @@ pub fn synthesize(project: Package) -> Result<Package, SynthesisError> {
     // passes produce — the targets come from the declarations.
     synthesize_reflect_metadata(&mut project);
 
-    let project = traits::synthesize_traits(project);
-
-    // Generate From impls from `impl From<T> for Type;` requests.
-    // Must run before serde_synth which drains remaining synthesis requests.
-    let mut project = project;
-    for module in project.tir_modules.values_mut() {
-        from_synth::synthesize_from(module);
-    }
+    let mut project = traits::synthesize_traits(project);
 
     serde_synth::synthesize_serde(&mut project);
 

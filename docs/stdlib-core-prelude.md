@@ -3274,10 +3274,6 @@ The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 
 ##### `pub fn default() -> bool`
 
-#### `impl From<bool> for bool`
-
-##### `pub fn from(value: bool) -> bool`
-
 ### `char`
 
 #### `pub fn from_u32(value: u32) -> char`

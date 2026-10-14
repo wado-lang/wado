@@ -1,0 +1,17 @@
+// More than one case carrying the marker's payload leaves it no case to
+// choose, so the marker is rejected rather than wrapping into the first.
+
+variant Reading {
+    Celsius(f64),
+    Fahrenheit(f64),
+    Kelvin(f64),
+}
+
+impl From<f64> for Reading;
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": ":10:1: analysis error: cannot derive `From<f64>` for `Reading`: cases `Celsius`, `Fahrenheit` and `Kelvin` each carry a `f64` payload; write the impl"
+}

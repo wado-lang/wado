@@ -176,7 +176,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(64)
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(65)
+||||||| 85291eb24
+type "functype//key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]" = fn(ref "key_value_literal.wado//FrozenMap<i32>", ref Array<u8>, i32) -> [i32, i32];  // TypeId(65)
+=======
+type "functype//key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]" = fn(ref "core:prelude//List<core:prelude/string.wado/String>", ref "core:prelude//List<i32>", ref Array<u8>, i32) -> [i32, i32];  // TypeId(65)
+>>>>>>> origin/main
 
 type "functype//key_value_literal.wado/key_value_literal.wado/EitherBag<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> ref "key_value_literal.wado//EitherBag<i32>";  // TypeId(66)
 
@@ -314,12 +320,13 @@ global global:core:prelude/format.wado::$const_obj_236: ref Array<u8> = array.ne
 global global:core:prelude/format.wado::$const_obj_237: ref Array<u8> = array.new_fixed<u8>(38, 109, 117, 116, 32);
 
 fn "key_value_literal.wado/$test_0_one_from_impl_is_enough_for_an_immutable_target"() {
+    let $load_0: ref "core:prelude//List<core:prelude/string.wado/String>";
     let m: ref "key_value_literal.wado//FrozenMap<i32>";
     let $v1_1: i32;
     let $local_12: ref "core:prelude/string.wado//String";
     let $local_13: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_22: i32;
-    if @unlikely(local.tee $v1_1(local.tee m("key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from"(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, 1: 10 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, 1: 20 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 }, 1: 30 }))).keys.used) != 3) {
+    if @unlikely(local.tee $v1_1(local.tee $load_0(local.tee m("key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>^core:prelude/traits.wado/From<Array<[core:prelude/string.wado/String,V]>>::from"(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, i32]">(struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, 1: 10 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 }, 1: 20 }, struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 }, 1: 30 }))).keys).used) != 3) {
         cold_path;
         $fuse_at_22 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_12("core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(144)), 102);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$sroa[&mut(self.repr)]"($local_12.repr, $fuse_at_22, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in "), used: 20 }, 20);
@@ -347,7 +354,13 @@ condition: m.len() == 3
         "core:rt/panic"($local_12.repr, $local_12.used);
         unreachable;
     }
+<<<<<<< HEAD
     multivalue_bind [$v1_1, $fuse_at_22] = ($local_12 = global:key_value_literal.wado::$const_obj_12; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m, $local_12.repr, $local_12.used));
+||||||| 85291eb24
+    multivalue_bind [$v1_1, $fuse_at_22] = ($local_12 = global:key_value_literal.wado::$const_obj_15; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m, $local_12.repr, $local_12.used));
+=======
+    multivalue_bind [$v1_1, $fuse_at_22] = ($local_12 = global:key_value_literal.wado::$const_obj_15; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"($load_0, m.values, $local_12.repr, $local_12.used));
+>>>>>>> origin/main
     if @unlikely(local.tee $fuse_at_22((if $v1_1 == 1 -> bool {
         $fuse_at_22 == 10;
     } else {
@@ -357,7 +370,13 @@ condition: m.len() == 3
         "key_value_literal.wado/$test_0_one_from_impl_is_enough_for_an_immutable_target$cold2"();
         unreachable;
     }
+<<<<<<< HEAD
     multivalue_bind [$fuse_at_22, $v1_1] = ($local_12 = global:key_value_literal.wado::$const_obj_11; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m, $local_12.repr, $local_12.used));
+||||||| 85291eb24
+    multivalue_bind [$fuse_at_22, $v1_1] = ($local_12 = global:key_value_literal.wado::$const_obj_14; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m, $local_12.repr, $local_12.used));
+=======
+    multivalue_bind [$fuse_at_22, $v1_1] = ($local_12 = global:key_value_literal.wado::$const_obj_14; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m.keys, m.values, $local_12.repr, $local_12.used));
+>>>>>>> origin/main
     if @unlikely(local.tee $v1_1((if $fuse_at_22 == 1 -> bool {
         $v1_1 == 20;
     } else {
@@ -367,7 +386,13 @@ condition: m.len() == 3
         "key_value_literal.wado/$test_0_one_from_impl_is_enough_for_an_immutable_target$cold1"();
         unreachable;
     }
+<<<<<<< HEAD
     multivalue_bind [$v1_1, $fuse_at_22] = ($local_12 = global:key_value_literal.wado::$const_obj_10; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m, $local_12.repr, $local_12.used));
+||||||| 85291eb24
+    multivalue_bind [$v1_1, $fuse_at_22] = ($local_12 = global:key_value_literal.wado::$const_obj_13; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m, $local_12.repr, $local_12.used));
+=======
+    multivalue_bind [$v1_1, $fuse_at_22] = ($local_12 = global:key_value_literal.wado::$const_obj_13; "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(m.keys, m.values, $local_12.repr, $local_12.used));
+>>>>>>> origin/main
     if @unlikely(local.tee $fuse_at_22((if $v1_1 == 1 -> bool {
         $fuse_at_22 == 30;
     } else {
@@ -3163,11 +3188,9 @@ fn "key_value_literal.wado/key_value_literal.wado/EitherBag<i32>^core:prelude/tr
     return struct.new "key_value_literal.wado//EitherBag<i32>" { keys: keys, values: values };
 }
 
-fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"(self, $mv$key$repr, $mv$key$used) {
+fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[return]"($mv$self$keys, $mv$self$values, $mv$key$repr, $mv$key$used) {
     let i_2: i32;
     let self_10: ref "core:prelude/string.wado//String";
-    let $licm_keys_18: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_values_21: ref "core:prelude//List<i32>";
     let $licm_used_22: i32;
     let $licm_repr_23: ref "Array<core:prelude/string.wado/String>";
     let $licm_used_24: i32;
@@ -3176,6 +3199,7 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[retur
     let a_end: i32;
     let i_35: i32;
     i_2 = 0;
+<<<<<<< HEAD
     $licm_keys_18 = self.keys;
     $licm_values_21 = self.values;
     $licm_used_22 = $licm_keys_18.used;
@@ -3185,6 +3209,25 @@ fn "key_value_literal.wado/key_value_literal.wado/FrozenMap<i32>::get$sroa[retur
     b360: block {
         l361: loop {
             break_if b360 i_2 >= $licm_used_22;
+||||||| 85291eb24
+    $licm_keys_18 = self.keys;
+    $licm_values_21 = self.values;
+    $licm_used_22 = $licm_keys_18.used;
+    $licm_repr_23 = $licm_keys_18.repr;
+    $licm_used_24 = $licm_values_21.used;
+    $licm_repr_25 = $licm_values_21.repr;
+    b349: block {
+        l350: loop {
+            break_if b349 i_2 >= $licm_used_22;
+=======
+    $licm_used_22 = $mv$self$keys.used;
+    $licm_repr_23 = $mv$self$keys.repr;
+    $licm_used_24 = $mv$self$values.used;
+    $licm_repr_25 = $mv$self$values.repr;
+    b349: block {
+        l350: loop {
+            break_if b349 i_2 >= $licm_used_22;
+>>>>>>> origin/main
             self_10 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_23, i_2);
             if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
                 a = self_10.repr;

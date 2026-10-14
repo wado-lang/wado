@@ -310,6 +310,40 @@ The standard library provides `From` impls for common lossless conversions:
 - **More verbose than `.into()`**: `String::from(value)` is longer than `value.into()`. This is intentional — explicitness over brevity.
 - **No generic "accepts any convertible type" parameter**: Without `impl Into<T>`, functions cannot accept multiple types via a single parameter. Users call `Type::from(value)` at the call site instead. This avoids monomorphization bloat but requires the caller to be explicit.
 
+## Implementation
+
+A `From` marker is written out as an ordinary impl once the symbol table is
+built and before references resolve, so the marker is known by the trait it
+names: one spelled through an alias counts, and a module's own trait named
+`From` does not. Its body calls `builtin::wrap_in_case::<Self, P>(value)`, which the elaborator
+checks against the variant's cases and reifies as the one case's construction.
+The marker therefore takes a generic variant, `impl<T> From<T> for W<T>;`, as
+any written impl does, and an impl whose variant has no matching case, or more
+than one, is reported at the marker.
+
+The reflexive `From<T> for T` and a newtype's `From` impls are stated to the
+trait solver, so a bound holds for them as it does for a written impl. None of
+them is inherited: a `flags` type, which inherits from `u32`, would otherwise
+meet a `From<u32>` bound with no conversion behind it, and every newtype of a
+base would convert from every other. So each newtype's `From` in both
+directions is stated per base down its chain. No body backs them: a call
+through a bound that monomorphization finds converting to the same type, or
+along a newtype chain, becomes a cast. A reference is not on the chain, so
+`i64::from(&m)` asks for an impl like any other argument.
+
+Since a provided conversion answers before any written one, an impl it overlaps
+would never run, and `record_impl_sig` rejects it (`FromOverlapsProvided`). A
+`from` the type declares is still looked up first: the elaborator folds a call
+into a cast only when the `from` it selects is no inherent one or another
+trait's, and folds a bare
+generic receiver (`Slot::from(inner)` with `inner: Slot<i32>`) only when no
+`From` impl is selected, since the impl's own type argument is then the inner
+one.
+
+`?` asks the solver for `From<E>` while it types the operator, so a missing
+impl is reported in a function nothing calls, and converts through the block
+the solver selects, a generic marker's included.
+
 ## Future Considerations
 
 ### `into T` Operator

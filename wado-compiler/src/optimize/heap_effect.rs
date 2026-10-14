@@ -523,6 +523,15 @@ impl HeapEffects<'_> {
         out
     }
 
+    /// Whether the function at `index` may write an object of type `ty` it did
+    /// not allocate, where code after the write may read it.
+    pub(super) fn function_may_write(&self, index: usize, ty: TypeId) -> bool {
+        let writes = &self.cache.summaries[index].writes;
+        self.type_table
+            .heap_object_key(ty)
+            .is_none_or(|key| writes.through_args.contains(key) || writes.elsewhere.contains(key))
+    }
+
     /// Whether `call` may return. One typed `!` traps or runs forever, since a
     /// handler resumes its caller rather than unwinding past it, so no code
     /// after it observes what it writes.

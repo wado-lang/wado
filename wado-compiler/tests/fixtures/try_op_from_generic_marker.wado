@@ -1,0 +1,23 @@
+// `?` converts through a generic `From` marker: the impl is chosen for each
+// instance, not matched against the written `From<T>`.
+
+variant Slot<T> {
+    Full(T),
+    Empty,
+}
+
+impl<T> From<T> for Slot<T>;
+
+fn lift(r: Result<i32, String>) -> Result<i32, Slot<String>> {
+    return Ok(r?);
+}
+
+fn lift_wide(r: Result<i32, i64>) -> Result<i32, Slot<i64>> {
+    return Ok(r?);
+}
+
+test {
+    assert lift(Err("x")) matches { Err(Full(s)) && s == "x" };
+    assert lift(Ok(1)) matches { Ok(1) };
+    assert lift_wide(Err(5 as i64)) matches { Err(Full(5)) };
+}

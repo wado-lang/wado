@@ -1,0 +1,193 @@
+// A `&S` parameter whose every use is a field read takes the multi-value ABI
+// too, where nothing the call runs stores into memory its caller holds: the
+// fields the referent held at the call are what every read would see.
+//
+// Where the call may store (through a `&mut` the caller handed it, or in a
+// callee), a read after the store sees it, so the reference stays whole.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn total(p: &Pair) -> i32 {
+    return p.a + p.b;
+}
+
+// The fields are read at the call, after every argument, so a later
+// argument's store is seen as the callee would have seen it.
+#[inline("never")]
+fn total_plus(p: &Pair, k: i32) -> i32 {
+    return p.a + p.b + k;
+}
+
+struct Span {
+    tag: i64,
+    start: i32,
+    end: i32,
+}
+
+// Only the fields the callee reads are loaded at the call, `tag` left behind.
+// `s.start` is read twice, so it becomes one promoted value no expression
+// spells: the reads are counted off that too.
+#[inline("never")]
+fn span_head(s: &Span) -> i32 {
+    let len = s.end - s.start;
+    if len == 0 {
+        return -1;
+    }
+    return s.start * 3 + len;
+}
+
+// A builtin handed nothing that carries storage (`storage(none)`) stores into
+// no memory the caller holds, opaque as its other effects are: creating and
+// dropping a stream leaves the split standing.
+#[inline("never")]
+fn with_stream(p: &Pair) -> i32 {
+    let pair = builtin::stream_new();
+    builtin::stream_drop_readable(pair as i32);
+    builtin::stream_drop_writable((pair >> 32) as i32);
+    return p.a + p.b;
+}
+
+struct Bytes {
+    data: List<u8>,
+    start: i32,
+    end: i32,
+}
+
+// The bounds check on `b.data[b.start]` branches to a panic, which never
+// returns: neither what it prints nor where it branches is seen past it, so
+// the fields stay read on every path that goes on.
+#[inline("never")]
+fn first_byte(b: &Bytes) -> i32 {
+    let n = b.end - b.start;
+    return b.data[b.start] as i32 + n;
+}
+
+// The branch may return before it panics, so `p.a` and `p.b` are not read
+// on every path that goes on: the reference stays whole.
+#[inline("never")]
+fn returns_before_panic(p: &Pair, c: bool, d: bool) -> i32 {
+    if c {
+        if d {
+            return 0;
+        }
+        panic("c without d");
+    }
+    return p.a + p.b;
+}
+
+struct Queue {
+    at: i32,
+    step: i32,
+    cap: i32,
+}
+
+#[inline("always")]
+fn next_at(q: &Queue) -> i32 {
+    if q.at >= 100 {
+        panic(`past ${q.cap}`);
+    }
+    return q.at + q.step;
+}
+
+// Inlined, `next_at` leaves its panic branch inside a block, where `q.cap` is
+// read on the panic path alone, as at the top level: the reference stays
+// whole rather than load `cap` at every call.
+#[inline("never")]
+fn advanced(q: &Queue) -> i32 {
+    return q.step * 2 + next_at(q);
+}
+
+// A `&mut` handed to a `&S` reads at the call all the same.
+#[inline("never")]
+fn through_mut(w: &mut Pair) -> i32 {
+    return total_plus(w, bump_a(w));
+}
+
+// `p.b` is read only past an early return, so splitting would load it at
+// every call where the callee loads it on one path: the reference stays whole.
+#[inline("never")]
+fn guarded(p: &Pair) -> i32 {
+    if p.a < 0 {
+        return 0;
+    }
+    return p.a + p.b;
+}
+
+#[inline("never")]
+fn bump_a(w: &mut Pair) -> i32 {
+    w.a += 1000;
+    return 0;
+}
+
+// `w` and `r` may be one place, so `r.a` is read after the store.
+#[inline("never")]
+fn store_then_read(w: &mut Pair, r: &Pair) -> i32 {
+    w.a = 10;
+    return r.a + r.b;
+}
+
+#[inline("never")]
+fn bump(w: &mut Pair) {
+    w.b += 100;
+}
+
+// The store is a callee's.
+#[inline("never")]
+fn read_around_a_callee(w: &mut Pair, r: &Pair) -> i32 {
+    let before = r.b;
+    bump(w);
+    return r.b - before;
+}
+
+export fn run() {
+    let mut x = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert total(&x) == 3;
+    assert guarded(&x) == 3;
+    assert with_stream(&x) == 3;
+    let bytes = Bytes { data: builtin::black_box([7 as u8, 8, 9]), start: builtin::black_box(1), end: builtin::black_box(3) };
+    assert first_byte(&bytes) == 10;
+    let q = Queue { at: builtin::black_box(1), step: builtin::black_box(2), cap: builtin::black_box(9) };
+    assert advanced(&q) == 7;
+    assert returns_before_panic(&x, builtin::black_box(true), builtin::black_box(true)) == 0;
+    assert returns_before_panic(&x, builtin::black_box(false), builtin::black_box(false)) == 3;
+    assert total_plus(&x, bump_a(&mut x)) == 1003;
+    let mut m = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert total_plus(&mut m, bump_a(&mut m)) == 1003;
+    let mut n = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    assert through_mut(&mut n) == 1003;
+    assert store_then_read(&mut x, &x) == 12;
+    assert read_around_a_callee(&mut x, &x) == 100;
+    let s = Span { tag: builtin::black_box(5), start: builtin::black_box(1), end: builtin::black_box(3) };
+    let t = Span { tag: builtin::black_box(5), start: builtin::black_box(2), end: builtin::black_box(2) };
+    assert span_head(&s) == 5;
+    assert span_head(&t) == -1;
+    // An argument that diverges runs where it stands and leaves no value:
+    // nothing is spilled into a `()` local for it.
+    if builtin::black_box(false) {
+        let _ = total_plus(&x, panic("unreachable"));
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "total\" = fn(i32, i32) -> i32",
+        "total_plus\" = fn(i32, i32, i32) -> i32",
+        "span_head\" = fn(i32, i32) -> i32",
+        "with_stream\" = fn(i32, i32) -> i32",
+        "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
+        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "advanced\" = fn(ref \"opt_multi_value_param_ref.wado//Queue\") -> i32",
+        "returns_before_panic\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", bool, bool) -> i32",
+        "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
+    ],
+    "wir_not_expect:O0": [
+        ": ();"
+    ]
+}

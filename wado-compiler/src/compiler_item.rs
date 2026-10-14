@@ -281,7 +281,8 @@ pub enum CompilerItem {
     /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
     /// lowering and for auto-derived `T^Ord::cmp` bodies.
     Ord,
-    /// `From<T>` — synthesised by the `From` synthesiser.
+    /// `From<T>` — what `?` converts an error through, and what the solver
+    /// states for the conversions no impl writes.
     From,
     /// `core:serde::Serialize` — anchor for `Serialize` impl synthesis.
     Serialize,

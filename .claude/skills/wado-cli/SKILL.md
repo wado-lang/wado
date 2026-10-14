@@ -287,7 +287,8 @@ What the formatter decides — width, wrapping, comment placement — is in
 belong to `wkg`, not Wado — authenticate to the registry first (`docker login`,
 or `WKG_OCI_USERNAME` / `WKG_OCI_PASSWORD`; for GHCR the password is a token with
 the `write:packages` scope). `--dry-run` runs every readiness check without
-uploading.
+uploading. It still builds every world, at `-O0`, to show each one compiles
+into a component.
 
 ## Compilation Log and Timing
 

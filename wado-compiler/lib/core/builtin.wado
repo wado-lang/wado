@@ -87,6 +87,13 @@ pub fn variant_case_extract<T, P>(v: &T, index: i32) -> P;
 #[side_effect(none)]
 pub fn variant_case_construct<T, P>(payload: P, index: i32) -> T;
 
+/// Builds the one case of variant `V` whose payload is `P` around `value`.
+/// The body the compiler writes for `impl From<P> for V;`; a `V` with no such
+/// case, or more than one, is reported at the call.
+#[storage(holds_args)]
+#[side_effect(none)]
+pub fn wrap_in_case<V, P>(value: P) -> V;
+
 /// Reads field `index` of struct `v`. Rewritten by lowering to a direct
 /// field access (WEP 2026-06-13 §2). Used by `StructField::get`.
 #[storage(part_of_args)]

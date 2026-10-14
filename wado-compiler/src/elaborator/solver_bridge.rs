@@ -1048,6 +1048,7 @@ impl SolverBridge {
             &tysys.resolutions,
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
+        Self::state_reflexive_from(tysys, &mut lowering, &mut program);
         mark_duplicates(&mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
         Self::state_scopes(tysys, modules, &mut lowering, &mut program);
@@ -1302,6 +1303,24 @@ impl SolverBridge {
         }
     }
 
+    /// Every type converts to itself: `impl<T> From<T> for T`, which no source
+    /// can write, since a blanket needs a bound to say what it covers. Nothing
+    /// inherits it: a `flags` type wraps `u32` with no conversion between them,
+    /// and a newtype's conversions are stated per chain level instead.
+    fn state_reflexive_from(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
+        let Some(from) = tysys.compiler_trait_def(CompilerItem::From) else {
+            return;
+        };
+        let id = program.push_impl(ImplDef {
+            trait_: Some(lowering.trait_decl(from)),
+            trait_args: vec![SolverType::Param(0)],
+            target: SolverType::Param(0),
+            params: vec![ParamDef::default()],
+            origin: ImplOrigin::Written,
+        });
+        program.not_inherited.insert(id);
+    }
+
     /// Each trait's supertraits, argument defaults and reference rule;
     /// `Inspect` holds for all.
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
@@ -1428,7 +1447,8 @@ impl SolverBridge {
     }
 
     /// A newtype inherits its base's impls, and a `flags` type its primitive's.
-    /// Answers the heads whose base it stated.
+    /// A newtype's conversions along its chain are stated here, since none of
+    /// them is inherited. Answers the heads whose base it stated.
     fn state_newtype_bases(
         tysys: &TypeSystem,
         data: &DataDecls,
@@ -1438,6 +1458,8 @@ impl SolverBridge {
     ) -> Vec<TypeDeclId> {
         let u32_ = SolverType::Decl(lowering.builtin(TypeTable::FLAGS_BASE_NAME), vec![]);
         let mut stated = Vec::new();
+        // Each newtype head, and how many type parameters it declares.
+        let mut newtypes: Vec<(TypeDeclId, usize)> = Vec::new();
         let mut newtype_base = |head: TypeDeclId, base: SolverType| {
             program.types.insert(
                 head,
@@ -1449,7 +1471,9 @@ impl SolverBridge {
         };
         for (def, base_type) in newtype_decls(data, table) {
             if let Ok(base) = lowering.type_id(table, base_type, &|_| None) {
-                newtype_base(lowering.declared_type(def), base);
+                let head = lowering.declared_type(def);
+                newtypes.push((head, 0));
+                newtype_base(head, base);
             }
         }
         for (&def, info) in &data.generic_newtypes {
@@ -1463,13 +1487,60 @@ impl SolverBridge {
                 self_type: None,
             };
             if let Ok(base) = lowering.ast_type(&info.base_type_ast, &space) {
-                newtype_base(lowering.declared_type(def), base);
+                let head = lowering.declared_type(def);
+                newtypes.push((head, info.type_params.len()));
+                newtype_base(head, base);
             }
         }
         for &def in data.flags_cases.keys() {
             newtype_base(lowering.declared_type(def), u32_.clone());
         }
+        if let Some(from) = tysys.compiler_trait_def(CompilerItem::From) {
+            let from = lowering.trait_decl(from);
+            for (head, params) in newtypes {
+                Self::state_from_newtype(program, from, head, params);
+            }
+        }
         stated
+    }
+
+    /// `From<N> for B` and `From<B> for N` for every `B` down newtype `N`'s
+    /// chain of bases, none of which a newtype of `B` inherits: `Meters`
+    /// converts to and from `i64`, and `Feet`, another newtype of `i64`, does
+    /// not convert from `Meters`.
+    fn state_from_newtype(
+        program: &mut Program,
+        from: TraitDeclId,
+        head: TypeDeclId,
+        params: usize,
+    ) {
+        let own = SolverType::Decl(
+            head,
+            (0..params)
+                .map(|i| SolverType::Param(u32::try_from(i).expect("fewer than 2^32 parameters")))
+                .collect(),
+        );
+        let mut level = own.clone();
+        let mut seen = vec![own.clone()];
+        while let SolverType::Decl(at, args) = &level
+            && let Some(base) = program.types.get(at).and_then(|def| def.newtype_base.as_ref())
+            && let Some(base) = base.map_params(&|i| args.get(i as usize).cloned())
+            // A newtype cycle is reported where it is declared.
+            && !seen.contains(&base)
+        {
+            for [source, target] in [[&own, &base], [&base, &own]] {
+                let id = program.push_impl(ImplDef {
+                    trait_: Some(from),
+                    trait_args: vec![source.clone()],
+                    target: target.clone(),
+                    params: vec![ParamDef::default(); params],
+                    origin: ImplOrigin::Written,
+                });
+                program.not_inherited.insert(id);
+            }
+            seen.push(base.clone());
+            level = base;
+        }
     }
 
     /// The impls the declarations derive. A handle derives `Eq` alone, so the
@@ -2044,21 +2115,73 @@ impl SolverBridge {
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<Option<DefId>> {
+        self.bound_order(
+            tysys,
+            ctx,
+            scope,
+            type_id,
+            asked,
+            |selection| match selection {
+                Selection::AmbiguousBlankets(live) => live,
+                Selection::None
+                | Selection::One(_)
+                | Selection::AmbiguousTraits(_)
+                | Selection::Overloaded(_)
+                | Selection::Duplicated(_) => Vec::new(),
+            },
+        )
+    }
+
+    /// The blocks the order selects to answer a bound `asked` on `type_id`:
+    /// one, or the duplicates coherence reports where they are written.
+    /// A derived answer, or a type parameter's, names no block.
+    pub(super) fn bound_impls(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Vec<DefId> {
+        self.bound_order(
+            tysys,
+            ctx,
+            scope,
+            type_id,
+            asked,
+            |selection| match selection {
+                Selection::One(index) => vec![index],
+                Selection::Duplicated(live) => live,
+                Selection::None
+                | Selection::AmbiguousTraits(_)
+                | Selection::AmbiguousBlankets(_)
+                | Selection::Overloaded(_) => Vec::new(),
+            },
+        )
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    /// The blocks of the candidates `pick` keeps from the order's selection
+    /// for a bound `asked` on `type_id`.
+    fn bound_order(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+        pick: impl FnOnce(Selection) -> Vec<usize>,
+    ) -> Vec<Option<DefId>> {
         let Ok(q) = self.question(tysys, ctx, scope, type_id, asked) else {
             return Vec::new();
         };
         let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
-        match rank(&found) {
-            Selection::AmbiguousBlankets(live) => live
-                .iter()
-                .map(|&i| self.impl_def_of(found[i].impl_))
-                .collect(),
-            Selection::None
-            | Selection::One(_)
-            | Selection::AmbiguousTraits(_)
-            | Selection::Overloaded(_)
-            | Selection::Duplicated(_) => Vec::new(),
-        }
+        pick(rank(&found))
+            .into_iter()
+            .map(|i| self.impl_def_of(found[i].impl_))
+            .collect()
     }
 
     /// What the order selects for a call of `method_name` on `type_id` made in

@@ -12,7 +12,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
-use super::context::WirContext;
+use super::context::{SplitParam, WirContext};
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
@@ -115,6 +115,7 @@ fn split_locals_for_params(
         let nir::ParamAbi::MultiValue {
             field_types,
             field_names,
+            ..
         } = &param.param_abi
         else {
             continue;
@@ -981,6 +982,15 @@ pub(super) struct LabelEntry {
     pub(super) is_loop_continue: bool,
 }
 
+impl LabelEntry {
+    /// A block no break names: an `if`, or one built around translated code.
+    pub(super) const ANONYMOUS: LabelEntry = LabelEntry {
+        label: None,
+        is_loop_break: false,
+        is_loop_continue: false,
+    };
+}
+
 /// Translator state for a single function.
 pub(super) struct FunctionTranslator<'a, 'b> {
     pub(super) ctx: &'a mut WirContext<'b>,
@@ -1192,6 +1202,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         func_id: FuncId,
         ordered: &[Operand],
+        value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
         let split = self
             .ctx
@@ -1199,7 +1210,7 @@ impl FunctionTranslator<'_, '_> {
             .get(&func_id)
             .cloned()
             .unwrap_or_default();
-        self.without_multi_value_results(|t| t.translate_args(ordered, &split))
+        self.without_multi_value_results(|t| t.translate_args(ordered, &split, value_block))
     }
 
     /// One argument as N values, taken off a multi-value call's results or a
@@ -1518,7 +1529,8 @@ impl FunctionTranslator<'_, '_> {
                 elements.len()
             );
         };
-        let (prelude, raw_fields) = self.translate_args_erasing_unit(elements);
+        let value_block = self.prelude_block_holds(tuple_type_id, false);
+        let (prelude, raw_fields) = self.translate_args_erasing_unit(elements, value_block);
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
         (type_id, prelude, fields)
     }
@@ -1836,11 +1848,7 @@ impl FunctionTranslator<'_, '_> {
                     let else_block = *else_block;
                     if let Some(result_type) = self.infer_stmts_result_type(then_block) {
                         let cond = self.translate_operand(condition);
-                        self.label_stack.push(LabelEntry {
-                            label: None,
-                            is_loop_break: false,
-                            is_loop_continue: false,
-                        });
+                        self.label_stack.push(LabelEntry::ANONYMOUS);
                         let then_body =
                             self.translate_stmts_as_value(&arena.blocks[then_block].stmts);
                         let else_body =
@@ -1920,11 +1928,7 @@ impl FunctionTranslator<'_, '_> {
                 let else_branch = *else_branch;
                 if let Some(result_type) = self.infer_stmts_result_type(then_branch) {
                     let cond = self.translate_operand(condition);
-                    self.label_stack.push(LabelEntry {
-                        label: None,
-                        is_loop_break: false,
-                        is_loop_continue: false,
-                    });
+                    self.label_stack.push(LabelEntry::ANONYMOUS);
                     let then_body = self.translate_stmts_as_value(&arena.blocks[then_branch].stmts);
                     let else_body =
                         else_branch.map(|b| self.translate_stmts_as_value(&arena.blocks[b].stmts));
@@ -2111,12 +2115,7 @@ impl FunctionTranslator<'_, '_> {
                 ..
             } => {
                 let cond = self.translate_operand(*condition);
-                // Push a label entry for the if block scope
-                self.label_stack.push(LabelEntry {
-                    label: None,
-                    is_loop_break: false,
-                    is_loop_continue: false,
-                });
+                self.label_stack.push(LabelEntry::ANONYMOUS);
                 let then_body = self.translate_stmts(&arena.blocks[*then_block].stmts);
                 let else_body = else_block
                     .as_ref()
@@ -2210,11 +2209,15 @@ impl FunctionTranslator<'_, '_> {
 
     /// The `(prelude, values)` of a call's arguments or a literal's fields, the
     /// `()` ones erased but still run in order; wrap with [`Self::wrap_call_with_prelude`].
+    /// `value_block` says whether that wraps a prelude in a `Block`
+    /// ([`Self::prelude_block_holds`]), whose label a break out of an argument
+    /// counts.
     pub(super) fn translate_args_erasing_unit(
         &mut self,
         ordered: &[Operand],
+        value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        self.translate_args(ordered, &IndexMap::default())
+        self.translate_args(ordered, &IndexMap::default(), value_block)
     }
 
     /// As above, with the positions in `split` handed over field by field. One
@@ -2222,23 +2225,37 @@ impl FunctionTranslator<'_, '_> {
     fn translate_args(
         &mut self,
         ordered: &[Operand],
-        split: &IndexMap<usize, Vec<(String, TypeId)>>,
+        split: &IndexMap<usize, SplitParam>,
+        value_block: bool,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        let unit_needs_eval = |this: &Self, op: Operand| match op {
-            Operand::Value(_) => false,
-            Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
-        };
+        // Whether evaluating each argument runs code: a local read runs none,
+        // and a promoted value none unless its tree names an extraction source.
+        let runs_code: Vec<bool> = ordered
+            .iter()
+            .map(|&op| match op {
+                Operand::Value(v) => self.body.values.names_extraction_source(v),
+                Operand::Expr(e) => !matches!(self.body.exprs[e].kind, ExprKind::Local { .. }),
+            })
+            .collect();
         // A diverging argument stays in its place: the call after it is dead
         // code, which validates at any arity, and nothing to its right runs.
         let erased = |this: &Self, op: Operand| {
             let ty = this.operand_type_id(op);
             this.is_stackless_type(ty) && !this.type_table.is_never(ty)
         };
+        // A split `&S` reads its referent's fields at the call, as the callee
+        // would have, so every argument after it that runs code runs before
+        // those reads.
+        let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
+        let runs_before_split_reads =
+            |i: usize| first_borrowed.is_some_and(|r| i > r) && runs_code[i];
         // An argument evaluated into the prelude runs ahead of every argument
         // left on the stack, so each one to its left is spilled to hold source
         // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
-            split.contains_key(&i) || (erased(this, op) && unit_needs_eval(this, op))
+            split.contains_key(&i)
+                || runs_before_split_reads(i)
+                || (erased(this, op) && runs_code[i])
         };
         let last_early = ordered
             .iter()
@@ -2247,18 +2264,28 @@ impl FunctionTranslator<'_, '_> {
             .map(|(i, _)| i)
             .next_back();
 
+        let in_block = value_block && last_early.is_some();
+        if in_block {
+            self.label_stack.push(LabelEntry::ANONYMOUS);
+        }
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
-            if let Some(fields) = split.get(&i) {
-                let (p, reads) = self.split_argument(op, fields);
+            if let Some(param) = split.get(&i) {
+                let (p, reads) = self.split_argument(op, &param.fields);
                 prelude.extend(p);
                 call_args.extend(reads);
             } else if erased(self, op) {
-                if unit_needs_eval(self, op) {
+                if runs_code[i] {
                     prelude.push(self.translate_operand(op));
                 }
-            } else if last_early.is_some_and(|last| i < last) {
+            } else if last_early.is_some_and(|last| i < last) || runs_before_split_reads(i) {
+                if self.type_table.is_never(self.operand_type_id(op)) {
+                    // It diverges where it stands, in source order, and leaves
+                    // no value: the call after it is dead at any arity.
+                    prelude.push(self.translate_operand(op));
+                    continue;
+                }
                 let (p, read) = self.spill_operand(op, "$arg_spill");
                 prelude.extend(p);
                 call_args.push(read);
@@ -2266,12 +2293,22 @@ impl FunctionTranslator<'_, '_> {
                 call_args.push(self.translate_operand(op));
             }
         }
+        if in_block {
+            self.label_stack.pop();
+        }
+        assert_eq!(last_early.is_some(), !prelude.is_empty());
         (prelude, call_args)
     }
 
+    /// Whether [`Self::wrap_call_with_prelude`] holds a prelude and the call's
+    /// value in a `Block`: everywhere but where its one result cannot hold the
+    /// value — a void call, or a `multi_value` callee returning N.
+    pub(super) fn prelude_block_holds(&self, result_type: TypeId, multi_value: bool) -> bool {
+        !multi_value && !self.is_stackless_type(result_type)
+    }
+
     /// Run `prelude` before `call`, preserving the call's value: a value-typed
-    /// `Block`, or a `Seq` where a `Block`'s one result cannot hold it — a void
-    /// call, or a `multi_value` callee returning N.
+    /// `Block` where [`Self::prelude_block_holds`], else a `Seq`.
     pub(super) fn wrap_call_with_prelude(
         &mut self,
         mut prelude: Vec<WirInstr>,
@@ -2283,15 +2320,15 @@ impl FunctionTranslator<'_, '_> {
             return call;
         }
         prelude.push(call);
-        if multi_value || self.is_stackless_type(result_type) {
-            WirInstr::Seq(prelude)
-        } else {
+        if self.prelude_block_holds(result_type, multi_value) {
             let result_wir = self.ctx.type_id_to_wir_type(self.type_table, result_type);
             WirInstr::Block {
                 label: None,
                 result: Some(result_wir),
                 body: prelude,
             }
+        } else {
+            WirInstr::Seq(prelude)
         }
     }
 
@@ -2509,13 +2546,16 @@ impl FunctionTranslator<'_, '_> {
                 else {
                     panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
                 };
-                let field_name = match self.ctx.types.get(struct_tid.index() as usize) {
-                    Some(WirTypeDef::Struct(st)) => st
-                        .fields
-                        .get(field_index as usize)
-                        .map(|f| f.name.clone())
-                        .expect("FieldAccess field_index out of range"),
-                    _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
+                // The index counts NIR fields, which a Wasm struct leaving out
+                // `()` ones no longer matches one to one.
+                let field_name = match self.ctx.nir_field_names.get(&struct_tid.index()) {
+                    Some(names) => names[field_index as usize].clone(),
+                    None => match self.ctx.types.get(struct_tid.index() as usize) {
+                        Some(WirTypeDef::Struct(st)) => {
+                            st.fields[field_index as usize].name.clone()
+                        }
+                        _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
+                    },
                 };
                 // Multi-value-return split: if the receiver is a local that was
                 // split into per-field scalars (the aggregate was never
@@ -2631,27 +2671,22 @@ impl FunctionTranslator<'_, '_> {
                     .then(|| self.multi_value_result_fields(*func_id).map(<[_]>::to_vec))
                     .flatten();
 
+                let result_type = expr.type_id;
+                let multi_value = rebuild.is_none() && self.callee_returns_multi_value(*func_id);
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let (prelude, translated_args) = self.translate_args_for_callee(*func_id, &ordered);
+                let value_block = self.prelude_block_holds(result_type, multi_value);
+                let (prelude, translated_args) =
+                    self.translate_args_for_callee(*func_id, &ordered, value_block);
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
-                    let call = WirInstr::Call {
+                    let mut call = WirInstr::Call {
                         func_id: wir_func_id,
                         args: translated_args,
                     };
-                    let result_type = expr.type_id;
-                    match rebuild {
-                        Some(fields) => {
-                            let whole = self.rebuild_multi_value_result(call, result_type, &fields);
-                            self.wrap_call_with_prelude(prelude, whole, result_type, false)
-                        }
-                        None => self.wrap_call_with_prelude(
-                            prelude,
-                            call,
-                            result_type,
-                            self.callee_returns_multi_value(*func_id),
-                        ),
+                    if let Some(fields) = rebuild {
+                        call = self.rebuild_multi_value_result(call, result_type, &fields);
                     }
+                    self.wrap_call_with_prelude(prelude, call, result_type, multi_value)
                 } else {
                     self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
@@ -2676,7 +2711,9 @@ impl FunctionTranslator<'_, '_> {
                     );
                 };
                 let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
-                let (prelude, field_instrs) = self.translate_args_erasing_unit(&values);
+                let value_block = self.prelude_block_holds(expr.type_id, false);
+                let (prelude, field_instrs) =
+                    self.translate_args_erasing_unit(&values, value_block);
                 let new = self.struct_new(type_id, field_instrs);
                 self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }
@@ -2814,11 +2851,7 @@ impl FunctionTranslator<'_, '_> {
             } => {
                 let cond = self.translate_operand(*condition);
                 let has_result = !self.is_stackless_type(expr.type_id);
-                self.label_stack.push(LabelEntry {
-                    label: None,
-                    is_loop_break: false,
-                    is_loop_continue: false,
-                });
+                self.label_stack.push(LabelEntry::ANONYMOUS);
                 let then_body = if has_result {
                     self.translate_stmts_as_value(&arena.blocks[*then_branch].stmts)
                 } else {

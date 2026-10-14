@@ -306,6 +306,7 @@ fn register_struct(
             })
         })
         .collect();
+    let field_count = fields.len();
 
     let generic_origin = tir_struct
         .monomorph_info
@@ -336,6 +337,12 @@ fn register_struct(
         }),
     );
 
+    if field_count != tir_struct.fields.len() {
+        ctx.nir_field_names.insert(
+            type_id.index(),
+            tir_struct.fields.iter().map(|f| f.name.clone()).collect(),
+        );
+    }
     ctx.struct_type_map.insert(struct_name, type_id.clone());
 
     // A `GenericInstance` mangles its arguments qualified, while the
@@ -664,6 +671,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         })
                     })
                     .collect();
+                let dropped_unit = fields.len() != elements.len();
 
                 let wir_type_id = ctx.register_type(
                     fq.clone(),
@@ -676,6 +684,12 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                         supertype: None,
                     }),
                 );
+                if dropped_unit {
+                    ctx.nir_field_names.insert(
+                        wir_type_id.index(),
+                        (0..elements.len()).map(|i| i.to_string()).collect(),
+                    );
+                }
                 ctx.tuple_type_map
                     .insert(elements.clone(), wir_type_id.clone());
                 // Also register under resolved elements key for deduplication

@@ -37,6 +37,7 @@ use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::escape::unescape_bytes;
+use crate::from_marker::WRAP_IN_CASE;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
 
@@ -49,6 +50,14 @@ enum ByteLiteral {
     /// A literal whose bytes are unknown, which its own error reports.
     Unknown,
     Len(usize),
+}
+
+/// Why `builtin::wrap_in_case::<V, P>` has no one case to build.
+enum WrappedCase {
+    NotAVariant,
+    Missing,
+    /// The cases carrying `P`, each quoted.
+    Ambiguous(Vec<String>),
 }
 
 /// The parameter an associated-type equality binds: a bare parameter
@@ -1060,6 +1069,136 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::InvalidLiteral { message, span });
     }
 
+    /// `receiver::from(arg)` where no impl body backs the conversion: the
+    /// type of the result, with the cast reify rebuilds recorded at `call`.
+    /// With `bare_generic`, where no declared `from` accepts `arg`, a receiver
+    /// written without its type arguments converts an instance of its own
+    /// declaration to itself.
+    pub(super) fn convert_without_impl(
+        &mut self,
+        call: AstId,
+        receiver: TypeId,
+        arg: TypeId,
+        bare_generic: bool,
+    ) -> Option<TypeId> {
+        let (kind, result) = {
+            let tt = self.tysys.type_table.borrow();
+            let bare_generic_of_arg = bare_generic
+                && matches!(
+                    tt.get(arg),
+                    ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
+                )
+                && tt.nominal_def(arg).is_some()
+                && tt.nominal_def(arg) == tt.nominal_def(receiver)
+                && tt
+                    .nominal_type_args(receiver)
+                    .is_none_or(|args| args.is_empty());
+            if tt.type_key(arg) == tt.type_key(receiver) || bare_generic_of_arg {
+                (DesugarKind::NewtypeFromCollapse, arg)
+            } else if tt.newtype_chain_holds(arg, receiver) {
+                (DesugarKind::NewtypeFromUnwrap, receiver)
+            } else if tt.newtype_chain_holds(receiver, arg) {
+                (DesugarKind::NewtypeFromWrap, receiver)
+            } else {
+                return None;
+            }
+        };
+        self.record_desugar(call, kind);
+        Some(result)
+    }
+
+    /// Whether the method `def` is a `from` the type declares itself.
+    fn declares_own_from(&self, def: DefId) -> bool {
+        self.tysys
+            .signatures
+            .method_sig(def)
+            .is_some_and(|sig| self.own_from_sig(sig))
+    }
+
+    /// Whether `sig` is a method of an `impl` block other than one of the
+    /// compiler's `From`: an inherent block, or another trait's. Its body is
+    /// the call, where a `From` impl's is never reached for a conversion the
+    /// language provides.
+    pub(super) fn own_from_sig(&self, sig: &MethodSig) -> bool {
+        sig.declaring_impl.is_some_and(|block| {
+            self.tysys.signatures.impl_trait(block)
+                != self.tysys.compiler_trait_def(CompilerItem::From)
+        })
+    }
+
+    /// Check a `builtin::wrap_in_case::<V, P>` call, the body of a written-out
+    /// `impl From<P> for V;`, and record the case it builds: the one case of
+    /// `V` whose payload is `P`.
+    fn check_wrap_in_case(&mut self, call: AstId, target: TypeId, source: TypeId, span: Span) {
+        let (target_name, source_name) = {
+            let tt = self.tysys.type_table.borrow();
+            (tt.type_name(target), tt.type_name(source))
+        };
+        let why = match self.wrapped_case(target, source) {
+            Ok(index) => {
+                self.sem.types.wrapped_cases.insert(call, index);
+                return;
+            }
+            Err(WrappedCase::NotAVariant) => {
+                "only a variant derives `From`; write the impl".to_string()
+            }
+            Err(WrappedCase::Missing) => {
+                format!("no case of `{target_name}` carries a `{source_name}` payload")
+            }
+            Err(WrappedCase::Ambiguous(cases)) => {
+                let [init @ .., last] = &cases[..] else {
+                    unreachable!("an ambiguity names more than one case")
+                };
+                format!(
+                    "cases {} and {last} each carry a `{source_name}` payload; write the impl",
+                    init.join(", ")
+                )
+            }
+        };
+        let _ = self.emit(TypeError::MarkerWithheld {
+            trait_name: format!("From<{source_name}>"),
+            type_name: target_name,
+            why,
+            span,
+        });
+    }
+
+    /// The index of the one case of `target` whose payload, under `target`'s
+    /// type arguments, is `source`.
+    fn wrapped_case(&self, target: TypeId, source: TypeId) -> Result<u32, WrappedCase> {
+        let lookup = self.type_lookup();
+        let (args, info) = {
+            let tt = self.tysys.type_table.borrow();
+            let info = tt
+                .nominal_def(target)
+                .and_then(|def| lookup.variant_cases_of(def))
+                .ok_or(WrappedCase::NotAVariant)?;
+            (tt.nominal_type_args(target).unwrap_or_default(), info)
+        };
+        let [source_key, unit_key] = {
+            let tt = self.tysys.type_table.borrow();
+            [tt.type_key(source), tt.type_key(TypeTable::UNIT)]
+        };
+        let carrying: Vec<(usize, &str)> = info
+            .cases
+            .iter()
+            .enumerate()
+            .filter(|(_, case)| self.tysys.type_table.borrow().type_key(case.payload) != unit_key)
+            .filter(|(_, case)| {
+                let payload = self.tysys.substitute_type_params(case.payload, &args);
+                self.tysys.type_table.borrow().type_key(payload) == source_key
+            })
+            .map(|(index, case)| (index, case.name.as_str()))
+            .collect();
+        match carrying.as_slice() {
+            [(index, _)] => Ok(u32::try_from(*index).expect("case index fits u32")),
+            [] => Err(WrappedCase::Missing),
+            cases => Err(WrappedCase::Ambiguous(
+                cases.iter().map(|(_, name)| format!("`{name}`")).collect(),
+            )),
+        }
+    }
+
     /// What `expr` is as a byte literal.
     fn byte_literal(&self, expr: &Expr) -> ByteLiteral {
         let Expr::Literal(lit) = expr else {
@@ -1476,27 +1615,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // the same `from`, and only the argument's type separates
                 // them. It covers trait impls only; an inherent static has no
                 // selection and reaches the index instead.
-                if let Some(suffix_seg) = ident.segments.get(1) {
-                    // The same resolution the call itself uses, not a second
-                    // one: two resolutions of one call disagree, which is what
-                    // the edge then records.
-                    let receiver_args = self.expected_receiver_args(prefix, None, expected_type);
-                    let selected = self
-                        .resolve_static_callee(StaticQuery {
-                            site: receiver_site,
-                            arg_types: &args,
-                            receiver_args: &receiver_args,
-                            ..StaticQuery::of(prefix, suffix)
-                        })
-                        .found()
-                        .and_then(|callee| callee.method_ref.method_id);
-                    let method_def = selected
-                        .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
-                    if let Some(method_def) = method_def
-                        && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
-                    {
-                        return TypeTable::ERROR;
-                    }
+                //
+                // The same resolution the call itself uses, not a second one:
+                // two resolutions of one call disagree, which is what the edge
+                // then records.
+                let receiver_args = self.expected_receiver_args(prefix, None, expected_type);
+                let selection = self
+                    .resolve_static_callee(StaticQuery {
+                        site: receiver_site,
+                        arg_types: &args,
+                        receiver_args: &receiver_args,
+                        ..StaticQuery::of(prefix, suffix)
+                    })
+                    .found()
+                    .map(|callee| callee.method_ref.method_id);
+                let method_def = selection
+                    .flatten()
+                    .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
+                let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
+                if let Some(suffix_seg) = ident.segments.get(1)
+                    && let Some(method_def) = method_def
+                    && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
+                {
+                    return TypeTable::ERROR;
                 }
                 // The method's own parameters, in the dense space its type
                 // arguments are indexed by — an effect or `fn`-bound parameter
@@ -1571,63 +1712,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         call.span,
                     );
                 }
-                // Handle From conversions with no explicit impl: reflexive and newtype.
-                if suffix == "from" && args.len() == 1 {
-                    let arg_type = args[0];
-                    let arg_type_name = self.tysys.type_table.borrow().type_name(arg_type);
-
-                    // Reflexive `T::from(T_val)`: the outer Call evaporates, so
-                    // tag it `NewtypeFromCollapse` or reify emits a `Call` the
-                    // elaborator never built. Matched by canonical decl identity,
-                    // since two modules' `Instant` share a bare name. Generic
-                    // instances compare by name: a decl key drops type args.
-                    let arg_is_generic = {
-                        let tt = self.tysys.type_table.borrow();
-                        matches!(
-                            tt.get(tt.peel_refs(arg_type)),
-                            ResolvedType::GenericInstance { .. }
-                                | ResolvedType::GenericResource { .. }
-                        )
-                    };
-                    let is_reflexive = if arg_is_generic {
-                        arg_type_name == prefix
-                    } else if let Some(arg_key) = self.type_decl_key(arg_type) {
-                        Some(arg_key) == self.decl_key_or_local(prefix)
-                    } else {
-                        arg_type_name == prefix
-                    };
-                    if is_reflexive {
-                        self.record_desugar(call.id, DesugarKind::NewtypeFromCollapse);
-                        return args[0];
-                    }
-
-                    // Newtype→Base: u64::from(UserId_val) where type UserId = u64
-                    let base_of_arg = self.tysys.type_table.borrow().get_newtype_base(arg_type);
-                    if let Some(base_id) = base_of_arg
-                        && self.tysys.type_table.borrow().type_name(base_id) == prefix
-                    {
-                        self.record_desugar(call.id, DesugarKind::NewtypeFromUnwrap);
-                        // Reify rebuilds the newtype `Cast` from the
-                        // recorded `DesugarKind`; project only the result type.
-                        return base_id;
-                    }
-
-                    // Base→Newtype: UserId::from(u64_val) where type UserId = u64
-                    if let Some(newtype_type_id) = self.lookup_newtype(prefix) {
-                        let base_opt = self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .get_newtype_base(newtype_type_id);
-                        if let Some(base_id) = base_opt
-                            && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
-                        {
-                            self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
-                            // Reify rebuilds the newtype `Cast` from
-                            // the recorded `DesugarKind`; project only the type.
-                            return newtype_type_id;
-                        }
-                    }
+                if suffix == "from"
+                    && !own_from
+                    && let [arg_type] = args[..]
+                    && let Some(converted) = self.convert_without_impl(
+                        call.id,
+                        receiver_type,
+                        arg_type,
+                        selection.is_none(),
+                    )
+                {
+                    return converted;
                 }
 
                 // Literal args resolved against `TypeParam`/`Unknown` fell back to
@@ -1776,22 +1871,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // projects only the result type.
                 return named.unwrap_or(flags_info.type_id);
             }
-            // A variant's own case was constructed above; any other name is a static.
-            else if let Some(variant_info) =
-                self.variant_of_callee(&callee_kind, receiver_site, prefix)
+            // A type with no `from` of its own still converts to itself.
+            else if suffix == "from"
+                && let [arg_type] = args[..]
+                && self.names_type_at(receiver_site, prefix)
+                && let receiver_type = self.resolve_unsited_type_name(prefix, call.span)
+                && let Some(converted) =
+                    self.convert_without_impl(call.id, receiver_type, arg_type, true)
             {
-                let variant_defined_at = variant_info.defined_at;
-                if suffix == "from"
-                    && args.len() == 1
-                    && self.requests_from_synthesis(&self.impl_target(prefix), args[0])
-                {
-                    let target_type_id = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(variant_defined_at);
-                    return self.resolve_from_call(target_type_id, args[0], call.id);
-                }
+                self.record_receiver_reference(ident, prefix);
+                return converted;
+            }
+            // A variant's own case was constructed above; any other name is a static.
+            else if self
+                .variant_of_callee(&callee_kind, receiver_site, prefix)
+                .is_some()
+            {
                 return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
@@ -2269,6 +2364,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_generic_instantiation(call.id, type_args.clone(), return_type);
         if callee.intrinsic() == Some(ARRAY_NEW_DATA) {
             self.check_array_new_data(&call.args, return_type, call.span);
+        }
+        if callee.intrinsic() == Some(WRAP_IN_CASE)
+            && let [target, source] = type_args[..]
+        {
+            self.check_wrap_in_case(call.id, target, source, call.span);
         }
 
         // Check each argument: reject &T/&mut T passed where non-ref is expected.

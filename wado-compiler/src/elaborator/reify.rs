@@ -60,9 +60,9 @@ use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
-    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch, MethodNames,
-    OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
+    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, FromCallFacts, ImplFacts,
+    IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch,
+    MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -819,13 +819,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         for local_newtype in std::mem::take(&mut self.pending_local_newtypes).into_values() {
             tir_module.add_newtype(local_newtype);
-        }
-
-        // Forward the per-module synthesis requests annotate recorded on
-        // `ModuleDecls`. Default-method synthesis is reify's own job, handled
-        // per impl by `reify_impl_default_methods` in the `Item::Impl` arm.
-        for req in &self.sem.decls.pending_synthesis_requests {
-            tir_module.synthesis_requests.push(req.clone());
         }
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
@@ -5483,15 +5476,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => panic!("reify_question_mark_result: ? return type must be Result<U, F>"),
         };
 
-        // When inner and outer error types differ, synthesise a
-        // `<OuterErr>::from(<InnerErr>_val)` call. Mirrors
-        // `Elaborator::resolve_from_call`; the
-        // module source for the impl is looked up via the same
-        // search annotate runs (walk impl blocks across loaded
-        // modules to find a matching `impl From<InnerErr> for
-        // OuterErr`).
-        let need_from_conversion = inner_err_type != outer_err_type;
-
         let mut scope = ctx.enter_scope();
         let v_local = scope.add_local("$qm_v".to_string(), ok_type, false, None);
         let e_local = scope.add_local("$qm_e".to_string(), inner_err_type, false, None);
@@ -5536,10 +5520,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             inner_err_type,
             span,
         );
-        let converted_err = if need_from_conversion {
-            self.reify_from_call(outer_err_type, e_expr, span, qm_id)
-        } else {
-            e_expr
+        // `<OuterErr>::from(e)` where an impl converts, or a bound promises
+        // one; otherwise the two convert with no impl, and `e` is cast.
+        let converted_err = match self.ann_from_call_facts(qm_id) {
+            Some(facts) => self.reify_from_call(outer_err_type, e_expr, span, facts),
+            None => bare_cast(e_expr, outer_err_type, span),
         };
         let err_variant = TirExpr::new(
             TirExprKind::VariantConstruct {
@@ -6370,36 +6355,50 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Synthesise a `From<From>::from(value)` call from the facts the
-    /// body walk's [`super::Elaborator::resolve_from_call`] recorded
-    /// under `caller_id`. Every caller has a source-level handle (`?`
-    /// operator, `Type::from(x)` static call, `Type::<…>::from(x)`); the
-    /// recording is unconditional, so reify is a pure read.
+    /// The `From::from(value)` call a `?` converts its error through, from
+    /// the facts [`super::Elaborator::resolve_from_call`] recorded.
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
         value: TirExpr,
         span: Span,
-        caller_id: AstId,
+        facts: FromCallFacts,
     ) -> TirExpr {
-        let facts = self.ann_from_call_facts(caller_id).expect(
-            "resolve_from_call records FromCallFacts at every site reify hits — \
-                 ?-op, Type::from(x), and Type::<…>::from(x)",
+        let generic = LocalMethodName::new(
+            facts.target_name,
+            Some(facts.trait_name),
+            "from".to_string(),
         );
-        let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
-        let method_info =
-            LocalMethodName::new(facts.target_name, Some(from_trait), "from".to_string());
+        let arg_names: Vec<FqTypeName> = {
+            let table = self.tysys.type_table.borrow();
+            facts
+                .impl_type_args
+                .iter()
+                .map(|&arg| table.fq_type_name_rowless(arg))
+                .collect()
+        };
+        let mut method_info = generic.with_type_args(&arg_names, &[]);
+        method_info.is_type_param_receiver = facts.type_param_receiver;
+        let monomorph_info = (!facts.impl_type_args.is_empty()).then(|| MonomorphInfo {
+            generic_name: generic.to_mangled_name(),
+            impl_type_args: facts.impl_type_args,
+            method_type_args: vec![],
+            is_blanket: false,
+        });
 
         TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
-                    template: Some(match facts.method_def {
-                        Some(def) => self.tysys.signatures.declared_template(def),
-                        None => TemplateId::derived(facts.module_source.clone(), &method_info),
+                    // A parameter receiver: the instance's dispatch picks.
+                    template: (!facts.type_param_receiver).then(|| {
+                        let def = facts
+                            .method_def
+                            .expect("a selected `From` block declares `from`");
+                        self.tysys.signatures.declared_template(def)
                     }),
                     module_source: facts.module_source,
                     name: method_info.to_mangled_name(),
-                    monomorph_info: None,
+                    monomorph_info,
                     method_info: Some(method_info),
                 }),
                 type_args: vec![],
@@ -6774,6 +6773,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// `Type::from(x)` with no impl behind it, as annotate recorded it at
+    /// `call`: a reflexive or newtype conversion.
+    fn reify_conversion_without_impl(
+        &mut self,
+        call: AstId,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+        span: Span,
+    ) -> Option<TirExpr> {
+        let cast = match self.ann_desugars(call)? {
+            DesugarKind::NewtypeFromCollapse => false,
+            DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap => true,
+            _ => return None,
+        };
+        let arg = self.reify_expr(&args[0], ctx, None);
+        Some(if cast {
+            bare_cast(arg, recorded_type, span)
+        } else {
+            arg
+        })
+    }
+
     /// Reify a `StaticMethodCallExpr` — a fully-qualified static call like
     /// `Stream<u8>::new()`, whose target parses as a `Type` node rather than an
     /// `Ident` callee. Same shape as `reify_call`'s qualified-callee branch:
@@ -6837,6 +6859,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 static_call.span,
             );
             return Self::hoist_block(call, prelude);
+        }
+
+        if let Some(converted) = self.reify_conversion_without_impl(
+            static_call.id,
+            &static_call.args,
+            ctx,
+            recorded_type,
+            static_call.span,
+        ) {
+            return converted;
         }
 
         // Variant constructor in turbofish form (`Option::<T>::Some(x)`).
@@ -7277,6 +7309,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             {
                 return folded;
             }
+            if let Some(case_index) = self.ann_wrapped_case(call.id) {
+                let [payload] = <[CallArg; 1]>::try_from(arg_exprs)
+                    .unwrap_or_else(|_| unreachable!("`wrap_in_case` takes one argument"));
+                let wrapped = self.wrap_in_case(recorded_type, case_index, payload.expr, span);
+                return Self::hoist_block(wrapped, prelude);
+            }
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic
@@ -7296,22 +7334,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Self::hoist_block(call, prelude);
         }
 
-        // `Type::from(x)` resolved inline, with no `static_method_dispatch`:
-        // a bodyless `impl From<X> for Type;` (shared with the `?` operator),
-        // or a reflexive or newtype conversion.
-        if self.ann_from_call_facts(call.id).is_some() {
-            let arg = self.reify_expr(&call.args[0], ctx, None);
-            return self.reify_from_call(recorded_type, arg, span, call.id);
-        }
-        match self.ann_desugars(call.id) {
-            Some(DesugarKind::NewtypeFromCollapse) => {
-                return self.reify_expr(&call.args[0], ctx, None);
-            }
-            Some(DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap) => {
-                let arg = self.reify_expr(&call.args[0], ctx, None);
-                return bare_cast(arg, recorded_type, span);
-            }
-            _ => {}
+        if let Some(converted) =
+            self.reify_conversion_without_impl(call.id, &call.args, ctx, recorded_type, span)
+        {
+            return converted;
         }
 
         // Indirect call: the callee is a value rather than a named function.
@@ -9535,6 +9561,35 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 payload,
             },
             expr_type,
+            span,
+        )
+    }
+
+    /// `builtin::wrap_in_case`: case `case_index` of `variant_type`, the one
+    /// annotate found carrying the payload's type, around `payload`.
+    fn wrap_in_case(
+        &self,
+        variant_type: TypeId,
+        case_index: u32,
+        payload: TirExpr,
+        span: Span,
+    ) -> TirExpr {
+        let case_name = {
+            let tt = self.tysys.type_table.borrow();
+            let variant = tt
+                .nominal_def(variant_type)
+                .and_then(|def| self.type_lookup().variant_cases_of(def))
+                .expect("annotate found a variant");
+            variant.cases[case_index as usize].name.clone()
+        };
+        TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name,
+                payload: Some(Box::new(payload)),
+            },
+            variant_type,
             span,
         )
     }
