@@ -355,9 +355,12 @@ impl<T: FromLeBytes> List<T> {
 impl<T> IndexValue<i32> for List<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < self.used;
+    }
+
     #[compiler_item("list_index_value")]
     fn index_value(&self, index: i32) -> Self::Output {
-        assert index < self.used, "index out of bounds";
         return self.repr[index];
     }
 }
@@ -375,8 +378,11 @@ impl<T> IndexAssign<i32> for List<T> {
 impl<T: Ref> IndexRef<i32> for List<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < self.used;
+    }
+
     fn index_ref(&self, index: i32) -> &T {
-        assert index < self.used, "index out of bounds";
         return builtin::array_get_ref(&self.repr, index);
     }
 }
@@ -384,8 +390,11 @@ impl<T: Ref> IndexRef<i32> for List<T> {
 impl<T: RefMut> IndexRefMut<i32> for List<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < self.used;
+    }
+
     fn index_ref_mut(&mut self, index: i32) -> &mut T {
-        assert index < self.used, "index out of bounds";
         return builtin::array_get_ref_mut(&mut self.repr, index);
     }
 }
@@ -509,6 +518,10 @@ impl<T> List<T> {
 impl<T> IndexValue<RangeExclusive<i32>> for List<T> {
     type Output = Slice<T>;
 
+    fn contains_index(&self, range: &RangeExclusive<i32>) -> bool {
+        return true;
+    }
+
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
     }
@@ -516,6 +529,10 @@ impl<T> IndexValue<RangeExclusive<i32>> for List<T> {
 
 impl<T> IndexValue<RangeInclusive<i32>> for List<T> {
     type Output = Slice<T>;
+
+    fn contains_index(&self, range: &RangeInclusive<i32>) -> bool {
+        return true;
+    }
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);

@@ -135,6 +135,10 @@ impl<T> IntoIterator for &Array<T> {
 impl<T> IndexValue<i32> for Array<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < builtin::array_len(self);
+    }
+
     fn index_value(&self, index: i32) -> Self::Output {
         return builtin::array_get_value(self, index);
     }
@@ -151,6 +155,10 @@ impl<T> IndexAssign<i32> for Array<T> {
 impl<T: Ref> IndexRef<i32> for Array<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < builtin::array_len(self);
+    }
+
     fn index_ref(&self, index: i32) -> &T {
         return builtin::array_get_ref(self, index);
     }
@@ -158,6 +166,10 @@ impl<T: Ref> IndexRef<i32> for Array<T> {
 
 impl<T: RefMut> IndexRefMut<i32> for Array<T> {
     type Output = T;
+
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < builtin::array_len(self);
+    }
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T {
         return builtin::array_get_ref_mut(self, index);
@@ -167,6 +179,10 @@ impl<T: RefMut> IndexRefMut<i32> for Array<T> {
 impl<T> IndexValue<RangeExclusive<i32>> for Array<T> {
     type Output = Slice<T>;
 
+    fn contains_index(&self, range: &RangeExclusive<i32>) -> bool {
+        return true;
+    }
+
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
     }
@@ -174,6 +190,10 @@ impl<T> IndexValue<RangeExclusive<i32>> for Array<T> {
 
 impl<T> IndexValue<RangeInclusive<i32>> for Array<T> {
     type Output = Slice<T>;
+
+    fn contains_index(&self, range: &RangeInclusive<i32>) -> bool {
+        return true;
+    }
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);

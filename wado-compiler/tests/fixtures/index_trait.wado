@@ -10,6 +10,10 @@ struct ReadOnlyBox {
 impl IndexValue<i32> for ReadOnlyBox {
     type Output = i32;
 
+    fn contains_index(&self, _index: &i32) -> bool {
+        return true;
+    }
+
     fn index_value(&self, _index: i32) -> Self::Output {
         return self.value;
     }
@@ -34,6 +38,10 @@ struct SlotPair {
 
 impl IndexValue<i32> for SlotPair {
     type Output = i32;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_value(&self, _idx: i32) -> Self::Output {
         return self.a;
@@ -63,6 +71,10 @@ impl IntStore {
 impl IndexValue<i32> for IntStore {
     type Output = i32;
 
+    fn contains_index(&self, _index: &i32) -> bool {
+        return true;
+    }
+
     fn index_value(&self, index: i32) -> Self::Output {
         if index == 0 {
             return self.a;
@@ -83,6 +95,10 @@ struct Triple<T> {
 impl<T> IndexValue<i32> for Triple<T> {
     type Output = T;
 
+    fn contains_index(&self, _index: &i32) -> bool {
+        return true;
+    }
+
     fn index_value(&self, index: i32) -> Self::Output {
         if index == 0 {
             return self.first;
@@ -100,6 +116,10 @@ struct OptBox<T> {
 
 impl IndexValue<i32> for OptBox<i32> {
     type Output = Option<i32>;
+
+    fn contains_index(&self, _index: &i32) -> bool {
+        return true;
+    }
 
     fn index_value(&self, index: i32) -> Self::Output {
         if index == 0 {
@@ -127,6 +147,10 @@ struct NumHolder {
 impl IndexRef<i32> for NumHolder {
     type Output = Number;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref(&self, _idx: i32) -> &Self::Output {
         return &self.num;
     }
@@ -134,6 +158,10 @@ impl IndexRef<i32> for NumHolder {
 
 impl IndexRefMut<i32> for NumHolder {
     type Output = Number;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.num;
@@ -161,6 +189,10 @@ struct TallyBox {
 impl IndexRefMut<i32> for TallyBox {
     type Output = Tally;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.item;
     }
@@ -183,6 +215,10 @@ struct DataHolder {
 impl IndexRef<i32> for DataHolder {
     type Output = Data;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref(&self, _idx: i32) -> &Self::Output {
         return &self.data;
     }
@@ -190,6 +226,10 @@ impl IndexRef<i32> for DataHolder {
 
 impl IndexRefMut<i32> for DataHolder {
     type Output = Data;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.data;
@@ -217,6 +257,10 @@ struct AccBox {
 impl IndexRefMut<i32> for AccBox {
     type Output = Accumulator;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.acc;
     }
@@ -241,6 +285,10 @@ struct PointHolder {
 impl IndexRef<i32> for PointHolder {
     type Output = Point;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref(&self, _idx: i32) -> &Self::Output {
         return &self.point;
     }
@@ -248,6 +296,10 @@ impl IndexRef<i32> for PointHolder {
 
 impl IndexRefMut<i32> for PointHolder {
     type Output = Point;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.point;
@@ -281,6 +333,10 @@ impl ValueBox {
 impl IndexRef<i32> for ValueBox {
     type Output = Value;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref(&self, _idx: i32) -> &Self::Output {
         return &self.item;
     }
@@ -288,6 +344,10 @@ impl IndexRef<i32> for ValueBox {
 
 impl IndexRefMut<i32> for ValueBox {
     type Output = Value;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.item;
@@ -308,6 +368,10 @@ struct Grid {
 
 impl IndexValue<List<i32>> for Grid {
     type Output = i32;
+
+    fn contains_index(&self, key: &List<i32>) -> bool {
+        return key.len() == 1 && 0 <= key[0] < self.data.len();
+    }
 
     fn index_value(&self, key: List<i32>) -> Self::Output {
         return self.data[key[0]];
@@ -332,6 +396,10 @@ struct Cell<T> {
 impl IndexRef<i32> for Cell<Tally> {
     type Output = Tally;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref(&self, _idx: i32) -> &Self::Output {
         return &self.item;
     }
@@ -339,6 +407,10 @@ impl IndexRef<i32> for Cell<Tally> {
 
 impl IndexRefMut<i32> for Cell<Tally> {
     type Output = Tally;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.item;
@@ -377,6 +449,10 @@ struct CounterBox {
 impl IndexRef<i32> for CounterBox {
     type Output = Counter<i32>;
 
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
+
     fn index_ref(&self, _idx: i32) -> &Self::Output {
         return &self.item;
     }
@@ -384,6 +460,10 @@ impl IndexRef<i32> for CounterBox {
 
 impl IndexRefMut<i32> for CounterBox {
     type Output = Counter<i32>;
+
+    fn contains_index(&self, _idx: &i32) -> bool {
+        return true;
+    }
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
         return &mut self.item;

@@ -404,24 +404,36 @@ impl<K: Hash, V> IndexAssign<K> for HashMap<K, V> {
 impl<K: Hash, V> IndexValue<K> for HashMap<K, V> {
     type Output = V;
 
+    fn contains_index(&self, key: &K) -> bool {
+        return self.find_index(key) >= 0;
+    }
+
     fn index_value(&self, key: K) -> Self::Output {
-        return self.log.values[self.log.found(self.find_index(&key), &key)];
+        return self.log.values[self.find_index(&key)];
     }
 }
 
 impl<K: Hash, V: Ref> IndexRef<K> for HashMap<K, V> {
     type Output = V;
 
+    fn contains_index(&self, key: &K) -> bool {
+        return self.find_index(key) >= 0;
+    }
+
     fn index_ref(&self, key: K) -> &V {
-        return &self.log.values[self.log.found(self.find_index(&key), &key)];
+        return &self.log.values[self.find_index(&key)];
     }
 }
 
 impl<K: Hash, V: RefMut> IndexRefMut<K> for HashMap<K, V> {
     type Output = V;
 
+    fn contains_index(&self, key: &K) -> bool {
+        return self.find_index(key) >= 0;
+    }
+
     fn index_ref_mut(&mut self, key: K) -> &mut V {
-        let index = self.log.found(self.find_index(&key), &key);
+        let index = self.find_index(&key);
         return &mut self.log.values[index];
     }
 }

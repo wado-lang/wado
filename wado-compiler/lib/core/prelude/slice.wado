@@ -205,9 +205,11 @@ impl<T: Eq> Slice<T> {
 impl<T> IndexValue<i32> for Slice<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < self.len();
+    }
+
     fn index_value(&self, index: i32) -> Self::Output {
-        assert index >= 0, "index out of bounds";
-        assert index < self.end - self.start, "index out of bounds";
         return builtin::array_get_value(self.repr, self.start + index);
     }
 }
@@ -217,15 +219,21 @@ impl<T> IndexValue<i32> for Slice<T> {
 impl<T: Ref> IndexRef<i32> for Slice<T> {
     type Output = T;
 
+    fn contains_index(&self, index: &i32) -> bool {
+        return 0 <= *index < self.len();
+    }
+
     fn index_ref(&self, index: i32) -> &T {
-        assert index >= 0, "index out of bounds";
-        assert index < self.end - self.start, "index out of bounds";
         return builtin::array_get_ref(self.repr, self.start + index);
     }
 }
 
 impl<T> IndexValue<RangeExclusive<i32>> for Slice<T> {
     type Output = Slice<T>;
+
+    fn contains_index(&self, range: &RangeExclusive<i32>) -> bool {
+        return true;
+    }
 
     fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
@@ -234,6 +242,10 @@ impl<T> IndexValue<RangeExclusive<i32>> for Slice<T> {
 
 impl<T> IndexValue<RangeInclusive<i32>> for Slice<T> {
     type Output = Slice<T>;
+
+    fn contains_index(&self, range: &RangeInclusive<i32>) -> bool {
+        return true;
+    }
 
     fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);

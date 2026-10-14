@@ -665,8 +665,12 @@ pub trait RefMut with () {
 pub trait IndexRef<IndexType> with () {
     type Output: Ref;
 
+    /// Whether `index` names an element `index_ref` hands out.
+    fn contains_index(&self, index: &IndexType) -> bool;
+
     /// Returns a reference to the element at the given index.
-    fn index_ref(&self, index: IndexType) -> &Self::Output;
+    fn index_ref(&self, index: IndexType) -> &Self::Output
+        contract self.contains_index(&index);
 }
 
 /// Mutable reference indexing: `container[i].mutating_method()`.
@@ -676,8 +680,12 @@ pub trait IndexRef<IndexType> with () {
 pub trait IndexRefMut<IndexType> with () {
     type Output: RefMut;
 
+    /// Whether `index` names an element `index_ref_mut` hands out.
+    fn contains_index(&self, index: &IndexType) -> bool;
+
     /// Returns a mutable reference to the element at the given index.
-    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output
+        contract self.contains_index(&index);
 }
 
 /// Value-assignment indexing: `container[i] = value`.
@@ -698,8 +706,12 @@ pub trait IndexAssign<IndexType> with () {
 pub trait IndexValue<IndexType> with () {
     type Output;
 
+    /// Whether `index` names an element `index_value` reads.
+    fn contains_index(&self, index: &IndexType) -> bool;
+
     /// Returns a copy of the element at the given index.
-    fn index_value(&self, index: IndexType) -> Self::Output;
+    fn index_value(&self, index: IndexType) -> Self::Output
+        contract self.contains_index(&index);
 }
 
 /// Trait for the `+` operator.

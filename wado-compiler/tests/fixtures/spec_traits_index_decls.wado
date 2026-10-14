@@ -6,6 +6,7 @@ struct Cells { v: List<Cell> }
 
 impl IndexValue<i32> for Cells {
     type Output = Cell;
+    fn contains_index(&self, index: &i32) -> bool { return 0 <= *index < self.v.len(); }
     fn index_value(&self, index: i32) -> Cell { return self.v[index]; }
 }
 
@@ -16,18 +17,22 @@ impl IndexAssign<i32> for Cells {
 
 impl IndexRef<i32> for Cells {
     type Output = Cell;
+    fn contains_index(&self, index: &i32) -> bool { return 0 <= *index < self.v.len(); }
     fn index_ref(&self, index: i32) -> &Cell { return &self.v[index]; }
 }
 
 impl IndexRefMut<i32> for Cells {
     type Output = Cell;
+    fn contains_index(&self, index: &i32) -> bool { return 0 <= *index < self.v.len(); }
     fn index_ref_mut(&mut self, index: i32) -> &mut Cell { return &mut self.v[index]; }
 }
 
 /// Returns element by value (copy)
 pub trait IndexValue<IndexType> with () {
     type Output;
-    fn index_value(&self, index: IndexType) -> Self::Output;
+    fn contains_index(&self, index: &IndexType) -> bool;
+    fn index_value(&self, index: IndexType) -> Self::Output
+        contract self.contains_index(&index);
 }
 
 test {
@@ -49,7 +54,9 @@ test {
 /// Returns element by shared reference
 pub trait IndexRef<IndexType> with () {
     type Output: Ref;
-    fn index_ref(&self, index: IndexType) -> &Self::Output;
+    fn contains_index(&self, index: &IndexType) -> bool;
+    fn index_ref(&self, index: IndexType) -> &Self::Output
+        contract self.contains_index(&index);
 }
 
 test {
@@ -59,7 +66,9 @@ test {
 /// Returns element by mutable reference
 pub trait IndexRefMut<IndexType> with () {
     type Output: RefMut;
-    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+    fn contains_index(&self, index: &IndexType) -> bool;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output
+        contract self.contains_index(&index);
 }
 
 test {

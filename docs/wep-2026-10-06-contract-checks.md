@@ -267,8 +267,8 @@ call, and that marker means only what the call site can read.
 
 Where what an impl accepts differs between impls, the trait declares a
 predicate method and its clause calls it. The indexing traits are the case:
-a list takes an index in range, a range index takes ends in range, and a map
-takes a key it holds, so `len` would not do. Each declares `contains_index`,
+a list takes an index in range, a range index takes any ends since it clamps
+them, and a map takes a key it holds, so `len` would not do. Each declares `contains_index`,
 and `index_value` and its siblings require it:
 
 ```text
@@ -357,7 +357,10 @@ API waits for a program outside the standard library that needs one.
    its default body and in every handler of it, and held to the purity check.
    Until then the parser rejects one.
 6. The indexing traits declare `contains_index` and require it, so
-   `unchecked xs[i]` is an index read with no range check.
+   `unchecked xs[i]` is an index read with no range check. Done. The
+   operand's dispatch already names the trait method, so the marker reaches
+   its twin as it does for a call. A map's checked `m[k]` looks the key up
+   twice, once for the contract and once to read.
 7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
    `#[unavailable]` declaration where Rust has a method of the same name.
    - [x] The UTF-8 functions, in the shapes

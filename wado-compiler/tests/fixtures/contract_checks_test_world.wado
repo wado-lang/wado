@@ -13,6 +13,7 @@ test "calls inside their contracts run as before" {
     assert unchecked char::from_u32(0x41) == 'A';
     let list: List<i32> = [1, 2, 3];
     assert list.as_slice().get_unchecked(2) == 3;
+    assert unchecked list[2] == 3;
     let mut s = "héllo";
     unchecked s.truncate(3);
     assert s == "hé";
@@ -133,6 +134,20 @@ test "unchecked AsStrSlice::byte_at on a String past the length" {
 test "Sequence::get_unchecked on a Slice past the view" {
     let list: List<i32> = [1, 2, 3, 4];
     let _ = Sequence::get_unchecked(&list.as_slice().slice(0, 2), builtin::black_box(2));
+}
+
+#[expect_trap]
+test "unchecked List index past the length" {
+    let mut list: List<i32> = List::with_capacity(16);
+    list.push(1);
+    let _ = unchecked list[builtin::black_box(1)];
+}
+
+#[expect_trap]
+test "unchecked List index by reference past the length" {
+    let mut list: List<String> = List::with_capacity(16);
+    list.push("a");
+    let _ = (unchecked list[builtin::black_box(1)]).len();
 }
 
 #[expect_trap]

@@ -790,7 +790,9 @@ The prelude defines traits for index-based access:
 /// Returns element by value (copy)
 pub trait IndexValue<IndexType> with () {
     type Output;
-    fn index_value(&self, index: IndexType) -> Self::Output;
+    fn contains_index(&self, index: &IndexType) -> bool;
+    fn index_value(&self, index: IndexType) -> Self::Output
+        contract self.contains_index(&index);
 }
 
 test {
@@ -824,7 +826,9 @@ test {
 /// Returns element by shared reference
 pub trait IndexRef<IndexType> with () {
     type Output: Ref;
-    fn index_ref(&self, index: IndexType) -> &Self::Output;
+    fn contains_index(&self, index: &IndexType) -> bool;
+    fn index_ref(&self, index: IndexType) -> &Self::Output
+        contract self.contains_index(&index);
 }
 
 test {
@@ -840,7 +844,9 @@ test {
 /// Returns element by mutable reference
 pub trait IndexRefMut<IndexType> with () {
     type Output: RefMut;
-    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+    fn contains_index(&self, index: &IndexType) -> bool;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output
+        contract self.contains_index(&index);
 }
 
 test {
@@ -868,6 +874,14 @@ a copy, on which the write would be lost.
 The four traits are independent: a container implements only the ones it
 supports. A subscript names the prelude's declarations, as an operator does, so
 a user trait spelled `IndexValue` does not answer `c[i]`.
+
+Each reading trait declares `contains_index`, and its access method requires it
+as a [contract](./spec-assertions.md#contract-checks): `c[i]` checks
+`c.contains_index(&i)` before reading, and `unchecked c[i]` vouches for it, so
+the read runs with no check outside a `-f contract-checks` build. A range index
+clamps rather than fails, so its `contains_index` is always `true`.
+`IndexAssign` declares none: a list assignment past the end traps, and a map's
+inserts the key.
 
 `Ref` and `RefMut` are sealed marker traits the compiler provides for every
 eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
