@@ -106,8 +106,8 @@ pub fn analyze_ownership(
         written_through_escape: IndexSet::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
-        pending_mut_alias: Vec::new(),
-        mut_aliased_reads: IndexSet::default(),
+        pending_writes: Vec::new(),
+        written_args: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
         place_cands: Vec::new(),
@@ -126,7 +126,7 @@ pub fn analyze_ownership(
     let paths = a.alias_paths();
     let released = released_edges(&a.alias_sites);
     a.resolve_alias_chains(&paths, &released);
-    a.resolve_pending_mut_aliases(func, &paths, &released);
+    a.resolve_write_checks(func, &paths, &released);
     let reference_copies = a.reference_copies(func, type_table);
     let move_reach = a.move_reach(&paths);
     // Each step either settles a bounded retention against a destination the
@@ -168,7 +168,7 @@ pub fn analyze_ownership(
             final_reads.contains(*span)
                 && !borrowed_params.contains(*local)
                 && !a.place_escaped(**local, None)
-                && !a.mut_aliased_reads.contains(*span)
+                && !a.written_args.contains(*span)
         })
         .map(|(span, _)| *span)
         .collect();
@@ -181,7 +181,7 @@ pub fn analyze_ownership(
         },
         share_eligible: a.share_eligible(body, &paths, &place_move_bases),
         in_place_assigns,
-        written_args: a.mut_aliased_reads,
+        written_args: a.written_args,
     }
 }
 
@@ -1098,11 +1098,11 @@ struct Analyzer<'a> {
     written_through_escape: IndexSet<u32>,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
-    /// `(by-value arg root, arg span, storage the call mutates)`, resolved once
-    /// the alias chains are complete.
-    pending_mut_alias: Vec<(u32, Span, Vec<u32>)>,
-    /// The by-value arguments found aliasing storage their own call mutates.
-    mut_aliased_reads: IndexSet<Span>,
+    /// `(by-value arg root, arg span, roots written while the callee holds
+    /// it)`, resolved once the alias chains are complete.
+    pending_writes: Vec<(u32, Span, Vec<u32>)>,
+    /// [`Ownership::written_args`].
+    written_args: IndexSet<Span>,
     exits: Vec<Exit>,
     all_locals: IndexSet<u32>,
     /// Place-level move sites `(root, top-level field, span)` found at literals,
@@ -1933,13 +1933,13 @@ impl Analyzer<'_> {
     /// be written before its callee is done with it keeps its copy. Storage a
     /// `&mut` outlives, or a reference lends, may be written through a handle
     /// at any call, so it never skips one.
-    fn resolve_pending_mut_aliases(
+    fn resolve_write_checks(
         &mut self,
         func: &TirFunction,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         released: &IndexSet<(u32, u32)>,
     ) {
-        for (arg, span, writes) in std::mem::take(&mut self.pending_mut_alias) {
+        for (arg, span, writes) in std::mem::take(&mut self.pending_writes) {
             let targets: IndexSet<u32> = writes
                 .into_iter()
                 .chain(self.written_through_escape.iter().copied())
@@ -1948,7 +1948,7 @@ impl Analyzer<'_> {
                 || storage_shared(paths, released, arg, None, None, &targets)
             {
                 self.aliases_live.insert(arg);
-                self.mut_aliased_reads.insert(span);
+                self.written_args.insert(span);
             }
         }
     }
@@ -1977,11 +1977,11 @@ impl Analyzer<'_> {
         let mut roots = Vec::new();
         self.storage_roots(arg, &mut roots);
         if roots.contains(&None) {
-            self.mut_aliased_reads.insert(span);
+            self.written_args.insert(span);
             return;
         }
         for root in roots.into_iter().flatten() {
-            self.pending_mut_alias.push((root, span, writes.clone()));
+            self.pending_writes.push((root, span, writes.clone()));
         }
     }
 
@@ -2535,9 +2535,14 @@ impl Analyzer<'_> {
                 let receiver = args.receiver().map(|r| &r.expr);
                 let mutated_receiver = receiver.filter(|_| self.mutates_receiver(func));
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                let declared = self.mut_ref_params.get(&func.module_source, &func.name);
-                let mut mut_roots = mut_ref_roots(&exprs, declared.map_or(&[], Vec::as_slice));
-                mut_roots.extend(mutated_receiver.and_then(alias_root));
+                let mut_roots = if record {
+                    let declared = self.mut_ref_params.get(&func.module_source, &func.name);
+                    let mut roots = mut_ref_roots(&exprs, declared.map_or(&[], Vec::as_slice));
+                    roots.extend(mutated_receiver.and_then(alias_root));
+                    roots
+                } else {
+                    Vec::new()
+                };
                 let call_writes = self.mutations.len();
                 if record {
                     if let Some(receiver) = mutated_receiver {
@@ -2589,12 +2594,14 @@ impl Analyzer<'_> {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let call_writes = self.mutations.len();
                 let exprs: Vec<&TirExpr> = args.iter().collect();
-                let mut_roots = mut_ref_roots(&exprs, &[]);
-                let kept = if record {
+                let (kept, mut_roots) = if record {
                     let retained = self.functor_rows.retained(callee, args.len());
-                    self.kept_through(&retained, &exprs, &result, None)
+                    (
+                        self.kept_through(&retained, &exprs, &result, None),
+                        mut_ref_roots(&exprs, &[]),
+                    )
                 } else {
-                    Vec::new()
+                    (Vec::new(), Vec::new())
                 };
                 for (pos, arg) in args.iter().enumerate().rev() {
                     if record {
