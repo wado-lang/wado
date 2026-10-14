@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirBinaryOp, NirFunction, ParamAbi};
+use crate::nir::{NirBinaryOp, NirFunction, ParamAbi, aggregate_field_info};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
@@ -14,7 +14,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::gate::FunctionGate;
 use super::heap_effect::{HeapEffects, HeapEffectsCache};
-use super::multi_value_return::{aggregate_field_info, is_eligible_field_type};
+use super::multi_value_return::is_eligible_field_type;
 
 /// The same width the return side takes. Beyond it the register pressure of a
 /// call costs more than the aggregate it avoids.

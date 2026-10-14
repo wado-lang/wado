@@ -26,6 +26,7 @@ use super::arena_query::{
 };
 use crate::ast::Visibility;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
+use crate::nir::aggregate_field_info;
 use crate::nir::{FuncId, NirParam, NirStruct};
 use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
@@ -35,7 +36,6 @@ use crate::optimize::arena_query::{
     collect_pattern_bindings, holds_reference, projected_const_field,
 };
 use crate::optimize::mod_ref::compute_fn_effects;
-use crate::optimize::multi_value_return::aggregate_field_info;
 use crate::optimize::shared_escape::SharedEscape;
 use crate::primitive::PrimitiveType;
 use crate::tir::GlobalInit;

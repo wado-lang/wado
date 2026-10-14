@@ -2,7 +2,7 @@
 //! of a heap struct: those building a 2..=[`MAX_RESULTS`]-field fresh literal.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi};
+use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi, aggregate_field_info};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::optimize::arena_query::every_return;
@@ -261,33 +261,6 @@ fn candidate_info(
         field_names,
         field_name_set,
     })
-}
-
-pub(super) fn aggregate_field_info(
-    return_type: TypeId,
-    type_table: &TypeTable,
-    structs: &[NirStruct],
-) -> Option<(Vec<TypeId>, Vec<String>, bool)> {
-    if let Some(elems) = type_table.as_tuple(return_type) {
-        let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
-        return Some((elems, names, false));
-    }
-    let resolved = type_table.get(return_type);
-    if let ResolvedType::Struct { def, type_args } = resolved
-        && let module_source = &type_table.struct_head_module(*def).clone()
-    {
-        let name = type_table.struct_rendered_name(*def, type_args);
-        let s = structs
-            .iter()
-            .find(|s| s.name == name && s.module_source == *module_source)?;
-        if !s.type_params.is_empty() {
-            return None;
-        }
-        let result_types: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
-        let field_names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
-        return Some((result_types, field_names, true));
-    }
-    None
 }
 
 pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
