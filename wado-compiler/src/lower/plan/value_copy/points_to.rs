@@ -63,8 +63,23 @@ pub struct PointsTo {
     /// while no body is rewritten, as the fold, which computes and reads it,
     /// rewrites none.
     handed: IndexMap<usize, (u32, Span)>,
+    /// The node naming the storage each assigned or borrowed place denotes,
+    /// keyed as `handed` is.
+    written: IndexMap<usize, (u32, Span)>,
     /// What any call may write: [`Self::global_reach`].
     global_reach: IndexSet<u32>,
+}
+
+/// The node `expr` was recorded under in `sites`.
+fn site_of(sites: &IndexMap<usize, (u32, Span)>, expr: &TirExpr) -> u32 {
+    let &(node, span) = sites
+        .get(&std::ptr::from_ref(expr).addr())
+        .expect("the analysis records every site of every body it reads");
+    assert_eq!(
+        span, expr.span,
+        "a site keyed by address moved after the analysis"
+    );
+    node
 }
 
 impl PointsTo {
@@ -102,15 +117,24 @@ impl PointsTo {
             .unwrap_or_default()
     }
 
-    /// Whether the storage the value in `local` reaches may be written: it
-    /// meets `written`, or [`Self::global_reach`].
+    /// Whether storage the value in `local` reaches, at any depth, may be
+    /// written: it meets `written`, or [`Self::global_reach`].
     #[must_use]
     pub fn reaches_written(&self, frame: Frame, local: u32, written: &IndexSet<u32>) -> bool {
-        self.location(frame, local).is_some_and(|node| {
-            self.set(node)
-                .iter()
-                .any(|n| written.contains(&n) || self.global_reach.contains(&n))
-        })
+        let Some(node) = self.location(frame, local) else {
+            return false;
+        };
+        let mut walked: IndexSet<u32> = IndexSet::default();
+        let mut work: Vec<u32> = self.set(node).iter().collect();
+        while let Some(loc) = work.pop() {
+            if written.contains(&loc) || self.global_reach.contains(&loc) {
+                return true;
+            }
+            if walked.insert(self.rep[loc as usize]) {
+                work.extend(self.set(loc).iter());
+            }
+        }
+        false
     }
 
     /// The storage the call argument `arg` lets its callee write: what its
@@ -118,15 +142,13 @@ impl PointsTo {
     /// `&mut` parameter borrows it.
     #[must_use]
     pub fn handed(&self, arg: &TirExpr) -> &LocSet {
-        let &(node, span) = self
-            .handed
-            .get(&std::ptr::from_ref(arg).addr())
-            .expect("the analysis hands every argument of every call it reads");
-        assert_eq!(
-            span, arg.span,
-            "an argument keyed by address moved after the analysis"
-        );
-        self.set(node)
+        self.set(site_of(&self.handed, arg))
+    }
+
+    /// The storage an assignment to, or a borrow of, `place` denotes.
+    #[must_use]
+    pub fn written(&self, place: &TirExpr) -> &LocSet {
+        self.set(site_of(&self.written, place))
     }
 
     /// `from` and every location reachable from it, short of
@@ -756,6 +778,7 @@ struct Builder<'a> {
     globals: IndexMap<(ModuleSource, String), u32>,
     escape: u32,
     handed: IndexMap<usize, (u32, Span)>,
+    written: IndexMap<usize, (u32, Span)>,
     next_frame: Frame,
     frame: Frame,
     /// Where a `return` in the current frame sends its value.
@@ -806,6 +829,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         globals: IndexMap::default(),
         escape: 0,
         handed: IndexMap::default(),
+        written: IndexMap::default(),
         next_frame: u32::try_from(flat.functions.len()).expect("function count fits u32"),
         frame: 0,
         return_to: 0,
@@ -907,6 +931,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         pts,
         rep,
         handed: std::mem::take(&mut b.handed),
+        written: std::mem::take(&mut b.written),
         global_reach: IndexSet::default(),
     };
     result.global_reach = result.reach_until(global_nodes, &IndexSet::default());
@@ -1042,14 +1067,21 @@ impl Builder<'_> {
     /// The storage a borrow of `expr` names: its place, or a temporary
     /// holding its value.
     fn borrowed(&mut self, expr: &TirExpr) -> u32 {
-        if let Some(place) = self.place(expr) {
-            return place;
-        }
-        let temp = self.g.node();
-        if let Some(value) = self.eval(expr) {
-            self.g.copy(value, temp);
-        }
-        self.naming(temp)
+        let place = self.place(expr).unwrap_or_else(|| {
+            let temp = self.g.node();
+            if let Some(value) = self.eval(expr) {
+                self.g.copy(value, temp);
+            }
+            self.naming(temp)
+        });
+        self.note_written(expr, place);
+        place
+    }
+
+    /// Note `place` as the storage a write to `expr` denotes.
+    fn note_written(&mut self, expr: &TirExpr, place: u32) {
+        self.written
+            .insert(std::ptr::from_ref(expr).addr(), (place, expr.span));
     }
 
     /// Evaluate `expr` once: its value, and the storage it names where it is
@@ -1240,6 +1272,7 @@ impl Builder<'_> {
                 let place = self
                     .place(target)
                     .expect("an assignment's target is a place");
+                self.note_written(target, place);
                 if let Some(v) = value {
                     self.g.store(place, v);
                 }

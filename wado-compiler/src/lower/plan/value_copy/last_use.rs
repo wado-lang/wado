@@ -215,12 +215,23 @@ struct WriteCheck {
 
 /// A write this body makes, and the locals live where it runs. A binding absent
 /// from `live` cannot observe the write: nothing reads it afterwards.
-struct Mutation {
+struct Mutation<'a> {
     path: AccessPath,
+    lands: Lands<'a>,
     /// `p = x` repoints `p`; the value an earlier binding took out of `p` keeps
     /// the storage it already had. Only a write *inside* that value disturbs it.
     rebinds_place: bool,
     live: IndexSet<u32>,
+}
+
+/// The storage a write lands in, as points-to resolves it: `path` alone names
+/// a reference's own slot where the write goes through it.
+#[derive(Clone, Copy)]
+enum Lands<'a> {
+    /// The local's own location.
+    Local(u32),
+    /// What a place, or a handle a call writes through, denotes.
+    Place(&'a LocSet),
 }
 
 /// A materialization that may take its aggregate's storage rather than copy it,
@@ -398,7 +409,7 @@ fn disjoint(mutated: &AccessPath, read: &AccessPath) -> bool {
     false
 }
 
-impl Analyzer<'_> {
+impl<'a> Analyzer<'a> {
     /// The locals holding storage of their own, however often read. A greatest
     /// fixpoint: every sourced local, less those whose source is not owned.
     fn owned_locals(
@@ -564,23 +575,26 @@ impl Analyzer<'_> {
         }
     }
 
-    /// Record what a call writes through one `&mut` handle, receiver or not: the
-    /// fields the callee names, re-rooted at the handle's own path.
+    /// Record what a call writes through `handle`, its argument `arg` and a
+    /// `&mut` receiver or not: the fields the callee names, re-rooted at the
+    /// handle's own path.
     fn record_call_mutation(
         &mut self,
         func: &tir::FunctionRef,
+        arg: &TirExpr,
         handle: &TirExpr,
         position: u32,
         live: &IndexSet<u32>,
     ) {
+        let lands = Lands::Place(self.points_to.handed(arg));
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
         let owner = field_owner(handle.type_id, self.type_table);
         let Names::Place(path) = self.resolver.names(handle) else {
-            self.record_mutation(handle, live);
+            self.record_write(handle, lands, false, live);
             return;
         };
         if writes.is_opaque() || !writes.re_rootable_at(position, owner) {
-            self.record_mutation(handle, live);
+            self.record_write(handle, lands, false, live);
             return;
         }
         for field in writes.fields_of(position, owner) {
@@ -591,6 +605,7 @@ impl Analyzer<'_> {
             });
             self.mutations.push(Mutation {
                 path: written,
+                lands,
                 rebinds_place: false,
                 live: live.clone(),
             });
@@ -604,7 +619,8 @@ impl Analyzer<'_> {
     /// Record a write through `place`. One the resolver cannot name mutates every
     /// local it mentions, whole.
     fn record_mutation(&mut self, place: &TirExpr, live: &IndexSet<u32>) {
-        self.record_write(place, false, live);
+        let lands = Lands::Place(self.points_to.written(place));
+        self.record_write(place, lands, false, live);
     }
 
     /// Note `assign`, writing `target`, for `in_place_assigns` when the place
@@ -706,7 +722,8 @@ impl Analyzer<'_> {
 
     fn record_assign(&mut self, place: &TirExpr, live: &IndexSet<u32>) {
         let rebinds = self.rebinds_place(place);
-        self.record_write(place, rebinds, live);
+        let lands = Lands::Place(self.points_to.written(place));
+        self.record_write(place, lands, rebinds, live);
     }
 
     /// Whether assigning to `place` repoints a slot instead of writing the
@@ -722,10 +739,17 @@ impl Analyzer<'_> {
         self.type_table.box_payload_of(inner.type_id).is_some()
     }
 
-    fn record_write(&mut self, place: &TirExpr, rebinds_place: bool, live: &IndexSet<u32>) {
+    fn record_write(
+        &mut self,
+        place: &TirExpr,
+        lands: Lands<'a>,
+        rebinds_place: bool,
+        live: &IndexSet<u32>,
+    ) {
         if let Names::Place(path) = self.resolver.names(place) {
             self.mutations.push(Mutation {
                 path,
+                lands,
                 rebinds_place,
                 live: live.clone(),
             });
@@ -741,6 +765,7 @@ impl Analyzer<'_> {
                 };
                 self.mutations.push(Mutation {
                     path,
+                    lands,
                     rebinds_place: false,
                     live: live.clone(),
                 });
@@ -751,6 +776,7 @@ impl Analyzer<'_> {
     fn mark_local_mutated(&mut self, index: u32, rebinds_place: bool, live: &IndexSet<u32>) {
         self.mutations.push(Mutation {
             path: AccessPath::local(index),
+            lands: Lands::Local(index),
             rebinds_place,
             live: live.clone(),
         });
@@ -1149,7 +1175,7 @@ struct Analyzer<'a> {
     /// it moves nothing.
     value_reads: IndexMap<Span, u32>,
     /// Every write this body makes, with the locals live where it runs.
-    mutations: Vec<Mutation>,
+    mutations: Vec<Mutation<'a>>,
     /// Assignments to a place of an in-place type, decided once every borrow
     /// this body makes is known.
     assign_sites: Vec<AssignSite>,
@@ -1831,7 +1857,7 @@ impl Analyzer<'_> {
             return;
         };
         if record && !borrowing_receiver && *op == TirUnaryOp::MutRef {
-            self.record_call_mutation(c, place, position, live);
+            self.record_call_mutation(c, arg, place, position, live);
         }
         // A call handing its receiver back as its result keeps the borrow in
         // that result, which the walk follows as a place.
@@ -1968,6 +1994,9 @@ impl Analyzer<'_> {
         released: &IndexSet<(u32, u32)>,
     ) {
         let checks = std::mem::take(&mut self.pending_writes);
+        if checks.is_empty() {
+            return;
+        }
         let frame = self.frame;
         let pt = self.points_to;
         let global = pt.global_reach();
@@ -2079,13 +2108,14 @@ impl Analyzer<'_> {
         }
         let mut written = pt.reach_beyond_global(sources);
         for m in &self.mutations[call_writes..] {
-            if m.path.through_borrow {
-                written.extend(pt.local_targets(frame, m.path.root));
-            } else {
-                written.insert(
-                    pt.location(frame, m.path.root)
-                        .expect("the analysis gives every local a body writes a location"),
-                );
+            match m.lands {
+                Lands::Local(local) => {
+                    written.insert(
+                        pt.location(frame, local)
+                            .expect("the analysis gives every local a body writes a location"),
+                    );
+                }
+                Lands::Place(set) => written.extend(set.iter()),
             }
         }
         written
@@ -2653,7 +2683,7 @@ impl Analyzer<'_> {
                     self.hand(&exprs);
                     if let Some(receiver) = mutated_receiver {
                         let start = self.mutations.len();
-                        self.record_call_mutation(func, receiver, 0, live);
+                        self.record_call_mutation(func, receiver, receiver, 0, live);
                         self.note_element_site(expr, func, receiver, start, live);
                     }
                 }
