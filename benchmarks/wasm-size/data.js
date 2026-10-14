@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791936926769,
+  "lastUpdate": 1791944694994,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -66937,6 +66937,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5f10d5c11fe00584efe8da0c1115ca565a6f7ac9"
         },
         "date": 1791936926268,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21697,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339773,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6298d0311d96b5c9be98bdccd0b941a2d721066f",
+          "message": "Merge pull request #2348 from wado-lang/claude/project-thread-lvx1k3\n\nfeat(traits): specify From, TryFrom and Error, and settle every From conversion through the trait solver",
+          "timestamp": "2026-10-14T11:04:54+09:00",
+          "tree_id": "a2110e704d275f8aa7a5e4a23bb514aeb04a191d",
+          "url": "https://github.com/wado-lang/wado/commit/6298d0311d96b5c9be98bdccd0b941a2d721066f"
+        },
+        "date": 1791944694343,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
