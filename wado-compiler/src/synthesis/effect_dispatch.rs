@@ -219,16 +219,19 @@ fn instantiation_label(
     type_args: &[TypeId],
     type_table: &TypeTable,
 ) -> String {
-    let base = effect_namespace(module, base);
+    instance_name(&effect_namespace(module, base), type_args, type_table)
+}
+
+/// `base` instantiated at `type_args`: `Stream` with `[u8]` is `Stream<u8>`.
+fn instance_name(base: &str, type_args: &[TypeId], type_table: &TypeTable) -> String {
     if type_args.is_empty() {
-        base
-    } else {
-        let arg_strings: Vec<String> = type_args
-            .iter()
-            .map(|tid| type_table.mangle_type_name(*tid))
-            .collect();
-        mangle_generic_name(&base, &arg_strings)
+        return base.to_string();
     }
+    let arg_strings: Vec<String> = type_args
+        .iter()
+        .map(|tid| type_table.mangle_type_name(*tid))
+        .collect();
+    mangle_generic_name(base, &arg_strings)
 }
 
 /// The type an `impl E for T` method returns for one operation: the resolved
@@ -768,7 +771,6 @@ fn build_dispatch_wrapper_function(
         let placeholder_call = build_resource_fallback_call(
             effect_module,
             base_name,
-            label,
             type_args,
             op,
             &arg_exprs,
@@ -948,7 +950,6 @@ fn build_dispatch_wrapper_function(
 fn build_resource_fallback_call(
     effect_module: &ModuleSource,
     base_name: &str,
-    label: &str,
     type_args: &[TypeId],
     op: &TirEffectOp,
     arg_exprs: &[TirExpr],
@@ -962,16 +963,10 @@ fn build_resource_fallback_call(
         .expect("build_resource_fallback_call: caller checked op.cm_name.is_some()");
     let is_instance = op.params.first().is_some_and(TirParam::is_self);
 
-    // Trait/resource type args list, derived from the dispatch label
-    // (e.g. label "Stream<u8>" → ["u8"]). The label encodes the
-    // instantiation; the LocalMethodName carries it both as
-    // `struct_name = "Stream<u8>"` (full mangled) and
-    // `base_struct_name = "Stream"` (bare), mirroring the elaborator
-    // convention so cm_binding sees a familiar shape.
-    let _ = type_table;
-    // The receiver is the resource declaration, so both the base head and the
-    // instantiation label carry the module that declares it.
-    let label_fq = FqTypeName::shape(effect_module, label);
+    // The receiver is the resource type (`Stream<u8>`), declared in
+    // `effect_module`: the dispatch label names the infrastructure, not the type.
+    let type_name = instance_name(base_name, type_args, type_table);
+    let label_fq = FqTypeName::shape(effect_module, &type_name);
     let mangled_method_name = MethodName::format_local(&label_fq, None, &op.name);
 
     // The label is the receiver: a rendered name has nowhere to be stored now,
