@@ -828,17 +828,9 @@ fn build_dispatch_wrapper_function(
         // here anyway, panic with a diagnostic identifying the operation
         // — useful when a future refactor introduces a path that bypasses
         // effect-check.
-        let string_type_id = {
-            let tt = type_table.borrow();
-            let def = tt.require_compiler_item_def(CompilerItem::String);
-            tt.find_struct_type(StructDef::Decl(def))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "core:prelude/string.wado String type missing from \
-                         the package type table at effect-dispatch synthesis"
-                    )
-                })
-        };
+        let string_type_id = type_table
+            .borrow_mut()
+            .make_compiler_struct(CompilerItem::String);
         let message = TirExpr::new(
             TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),
             string_type_id,

@@ -17,8 +17,8 @@ use crate::name::{
 };
 use crate::synthesis::common::{builtin_call, panic_call};
 use crate::tir::{
-    FunctionRef, GlobalInit, LocalFrame, StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirGlobal, TirStmt, TirStmtKind, TypeId, TypeTable, is_constant_initializer,
+    FunctionRef, GlobalInit, LocalFrame, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirGlobal, TirStmt, TirStmtKind, TypeId, TypeTable, is_constant_initializer,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
@@ -146,32 +146,20 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
 /// sure to take is not a compile error, and a read the optimizer can drop
 /// would otherwise trap only where it survives (issue #2245).
 fn guard_early_reads(flat: &mut FlatPackage, read_early: &IndexSet<GlobalKey>, span: Span) {
-    for (module_source, global) in read_early {
-        flat.globals.push(TirGlobal {
-            name: global_ready_flag(global),
-            ty: TypeTable::BOOL,
-            init: GlobalInit::Direct(TirExpr::new(
-                TirExprKind::BoolLiteral(false),
-                TypeTable::BOOL,
-                span,
-            )),
-            param: None,
-            wado_mutable: true,
-            visibility: Visibility::Private,
-            module_source: module_source.clone(),
-            span,
-        });
-    }
     if read_early.is_empty() {
         return;
     }
-    let string_type = {
-        let type_table = flat.type_table.borrow();
-        let def = type_table.require_compiler_item_def(CompilerItem::String);
-        type_table
-            .find_struct_type(StructDef::Decl(def))
-            .expect("the prelude declares String")
-    };
+    for (module_source, global) in read_early {
+        flat.globals.push(flag_global(
+            module_source.clone(),
+            global_ready_flag(global),
+            span,
+        ));
+    }
+    let string_type = flat
+        .type_table
+        .borrow_mut()
+        .make_compiler_struct(CompilerItem::String);
     let mut guard = GuardEarlyReads {
         read_early,
         string_type,
@@ -261,22 +249,9 @@ fn build_module_init_function(
         } = init;
         merged.absorb(frame, |offset| shift_locals(&mut value, offset));
         let key = (module_source, global);
-        let set = |name: String, value: TirExpr| {
-            let global_set = TirExpr::new(
-                TirExprKind::GlobalVarSet {
-                    module_source: key.0.clone(),
-                    name,
-                    value: Box::new(value),
-                },
-                TypeTable::UNIT,
-                span,
-            );
-            TirStmt::new(TirStmtKind::Expr(global_set), span)
-        };
-        init_stmts.push(set(key.1.clone(), value));
+        init_stmts.push(set_global(key.0.clone(), key.1.clone(), value, span));
         if read_early.contains(&key) {
-            let ready = TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
-            init_stmts.push(set(global_ready_flag(&key.1), ready));
+            init_stmts.push(raise_flag(key.0, global_ready_flag(&key.1), span));
         }
     }
 
@@ -291,6 +266,42 @@ fn build_module_init_function(
         merged,
         span,
     )
+}
+
+/// A private `bool` global that starts `false`.
+fn flag_global(module_source: ModuleSource, name: String, span: Span) -> TirGlobal {
+    TirGlobal {
+        name,
+        ty: TypeTable::BOOL,
+        init: GlobalInit::Direct(TirExpr::new(
+            TirExprKind::BoolLiteral(false),
+            TypeTable::BOOL,
+            span,
+        )),
+        param: None,
+        wado_mutable: true,
+        visibility: Visibility::Private,
+        module_source,
+        span,
+    }
+}
+
+fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: Span) -> TirStmt {
+    let global_set = TirExpr::new(
+        TirExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value: Box::new(value),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    TirStmt::new(TirStmtKind::Expr(global_set), span)
+}
+
+fn raise_flag(module_source: ModuleSource, name: String, span: Span) -> TirStmt {
+    let raised = TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
+    set_global(module_source, name, raised, span)
 }
 
 /// What a function body reads and calls, in one walk.
@@ -346,6 +357,11 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
     .full_name()
 }
 
+/// The key a call of `func` names it by.
+fn declared_function_key(func: &TirFunction) -> String {
+    FunctionRef::from_resolved(func, func.module_source.clone()).full_name()
+}
+
 /// Every global each function reads, closed over the call graph.
 ///
 /// An initializer's dependency is not always written in it: a call reads
@@ -365,7 +381,7 @@ fn global_reads_by_function(
         };
         let mut scan = BodyReads::default();
         scan.visit_block(body);
-        let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
+        let key = declared_function_key(&func);
         reads.entry(key.clone()).or_default().extend(scan.globals);
         callees.entry(key).or_default().extend(scan.callees);
     }
@@ -411,8 +427,7 @@ impl<'a> MustReadsByFunction<'a> {
             .iter()
             .map(|func_rc| {
                 let func = func_rc.borrow();
-                let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
-                (key, func_rc)
+                (declared_function_key(&func), func_rc)
             })
             .collect();
         Self {
@@ -502,7 +517,6 @@ impl<'w, 'a> MustReads<'w, 'a> {
     /// of them may take.
     fn alternatives<'e>(&mut self, branches: impl IntoIterator<Item = Branch<'e>>) {
         let mut common: Option<IndexSet<GlobalKey>> = None;
-        let mut exited_to = None;
         for branch in branches {
             let mut walk = MustReads {
                 by_function: &mut *self.by_function,
@@ -515,17 +529,25 @@ impl<'w, 'a> MustReads<'w, 'a> {
                 Branch::Expr(expr) => walk.visit_expr(expr),
                 Branch::Empty => {}
             }
+            let MustReads {
+                reads, exited_to, ..
+            } = walk;
             common = Some(match common {
-                None => walk.reads,
-                Some(common) => common.intersection(&walk.reads).cloned().collect(),
+                None => reads,
+                Some(common) => common.intersection(&reads).cloned().collect(),
             });
-            if let Some(depth) = walk.exited_to {
-                exited_to = Some(exited_to.map_or(depth, |d: usize| d.min(depth)));
+            if let Some(depth) = exited_to {
+                self.exit_to(depth);
             }
         }
         self.reads.extend(common.into_iter().flatten());
-        if let Some(depth) = exited_to {
-            self.exit_to(depth);
+    }
+
+    fn branch_on(&mut self, condition: &TirExpr, then: &TirBlock, otherwise: Option<&TirBlock>) {
+        self.visit_expr(condition);
+        if self.exited_to.is_none() {
+            let otherwise = otherwise.map_or(Branch::Empty, Branch::Block);
+            self.alternatives([Branch::Block(then), otherwise]);
         }
     }
 }
@@ -546,13 +568,7 @@ impl TirRefVisitor for MustReads<'_, '_> {
                 condition,
                 then_block,
                 else_block,
-            } => {
-                self.visit_expr(condition);
-                if self.exited_to.is_none() {
-                    let otherwise = else_block.as_ref().map_or(Branch::Empty, Branch::Block);
-                    self.alternatives([Branch::Block(then_block), otherwise]);
-                }
-            }
+            } => self.branch_on(condition, then_block, else_block.as_ref()),
             TirStmtKind::Loop { body } => self.within(None, body),
             TirStmtKind::LabeledBlock { label, block } => self.within(Some(label.clone()), block),
             TirStmtKind::Return { value } => {
@@ -608,13 +624,7 @@ impl TirRefVisitor for MustReads<'_, '_> {
                 condition,
                 then_branch,
                 else_branch,
-            } => {
-                self.visit_expr(condition);
-                if self.exited_to.is_none() {
-                    let otherwise = else_branch.as_ref().map_or(Branch::Empty, Branch::Block);
-                    self.alternatives([Branch::Block(then_branch), otherwise]);
-                }
-            }
+            } => self.branch_on(condition, then_branch, else_branch.as_ref()),
             TirExprKind::Match {
                 expr: scrutinee,
                 arms,
@@ -689,8 +699,8 @@ fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
 struct InitOrder {
     /// Indices into the initializers, each after every one it depends on.
     order: Vec<usize>,
-    /// The globals an initializer may read before theirs runs, through a call
-    /// a path may skip.
+    /// The globals an initializer may read, on a path it may skip, before
+    /// theirs runs.
     read_early: IndexSet<GlobalKey>,
 }
 
@@ -807,12 +817,15 @@ fn topological_sort_global_inits(
     for (at, &i) in sorted.iter().enumerate() {
         position[i] = at;
     }
+    // A global named in its own initializer, off every path, is read early
+    // too: it is no edge, so the sort put nothing between them.
     let read_early = scanned
         .iter()
         .enumerate()
         .flat_map(|(i, refs)| {
             refs.may
                 .iter()
+                .chain(&refs.named)
                 .filter(|key| {
                     key_to_idx
                         .get(*key)
@@ -900,21 +913,11 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
 
     let span = Span::new(0, 0, 1, 1);
 
-    let init_flag_global = TirGlobal {
-        name: MODULES_INIT_FLAG.to_string(),
-        ty: TypeTable::BOOL,
-        init: GlobalInit::Direct(TirExpr::new(
-            TirExprKind::BoolLiteral(false),
-            TypeTable::BOOL,
-            span,
-        )),
-        param: None,
-        wado_mutable: true,
-        visibility: Visibility::Private,
-        module_source: entry_source.clone(),
+    flat.globals.push(flag_global(
+        entry_source.clone(),
+        MODULES_INIT_FLAG.to_string(),
         span,
-    };
-    flat.globals.push(init_flag_global);
+    ));
 
     let mut init_stmts: Vec<TirStmt> = Vec::new();
 
@@ -969,20 +972,11 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(call), span));
     }
 
-    let set_flag = TirExpr::new(
-        TirExprKind::GlobalVarSet {
-            module_source: entry_source.clone(),
-            name: MODULES_INIT_FLAG.to_string(),
-            value: Box::new(TirExpr::new(
-                TirExprKind::BoolLiteral(true),
-                TypeTable::BOOL,
-                span,
-            )),
-        },
-        TypeTable::UNIT,
+    init_stmts.push(raise_flag(
+        entry_source.clone(),
+        MODULES_INIT_FLAG.to_string(),
         span,
-    );
-    init_stmts.push(TirStmt::new(TirStmtKind::Expr(set_flag), span));
+    ));
 
     let init_body = TirBlock {
         stmts: init_stmts,
