@@ -53,6 +53,75 @@ if let Some(x) = opt {
 assert got == 42;
 ```
 
+### Let Chains
+
+The condition of an `if` or a `while` may be a let chain, as in Rust. A let
+chain is a list of operands joined by `&&`. Each operand is either a `bool`
+expression or `let PATTERN = EXPR`, and at least one is a `let`. `if let` and
+`while let` are the chains with one operand.
+
+The operands run left to right. A `bool` that is `false`, or a pattern that does
+not match, stops the chain: the operands after it do not run, `if` takes its
+`else`, and `while` ends. The condition holds when every operand holds.
+
+A `let` binds its names for the operands after it and for the body: the `if`'s
+then-block or the loop body. The `else` block and the operands before the `let`
+do not see them. A later `let` may bind a name again, and the later binding
+holds from there on.
+
+<!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
+
+```wado
+let a: Option<i32> = Option::Some(4);
+let b: Option<i32> = Option::Some(6);
+let mut got = 0;
+if let Some(x) = a && x % 2 == 0 && let Some(y) = b && y > x {
+    got = x + y;            // `x` and `y` are in scope here
+} else {
+    got = -1;               // neither is in scope here
+}
+assert got == 10;
+
+// A later `let` may rebind a name an earlier one bound.
+if let Some(x) = a && let Some(x) = Option::Some(x * 10) {
+    got = x;
+}
+assert got == 40;
+```
+
+A chain may start with a `bool`. Here the failing `bool` keeps the `let` from
+calling `next` a third time:
+
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
+```wado
+let items: List<i32> = [1, 2, 3, 4];
+let mut iter = items.into_iter();
+
+let mut taken: List<i32> = [];
+while taken.len() < 2 && let Some(x) = iter.next() {
+    taken.push(x);
+}
+assert taken == [1, 2];
+assert iter.next() == Option::Some(3);   // the failing `bool` skipped the `let`
+```
+
+Each operand, and each `let`'s scrutinee, is an expression with no top-level
+`&&` or `||`. A top-level `&&` always separates two operands, so
+`let true = a && b` is the chain of `let true = a` and `b`. A top-level `||` is
+a compile error. An operand that needs either operator puts it in parentheses,
+as in `let Some(x) = o && (a || b)`. An operator looser than `||`, such as a
+range, takes parentheses the same way.
+
+<!-- {"fixture":"let_chain_or_error.wado"} -->
+
+```wado
+if let Some(x) = o && a || x > 0 {
+```
+
+`let PATTERN = EXPR` is not an expression. It appears only as an operand of a
+chain, never inside parentheses or anywhere else.
+
 ### Let Else
 
 `let PATTERN = EXPR else { ... };` binds a refutable pattern whose bindings

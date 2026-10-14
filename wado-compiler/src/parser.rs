@@ -2926,13 +2926,7 @@ impl Parser {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::If)?;
-
-        let condition = if self.check(&TokenKind::Let) {
-            self.advance(); // consume 'let'
-            self.parse_let_chain(start_span)?
-        } else {
-            self.parse_condition_with_optional_let_chain(start_span)?
-        };
+        let condition = self.parse_condition(start_span)?;
 
         let then_block = self.parse_block()?;
 
@@ -2996,22 +2990,14 @@ impl Parser {
         false
     }
 
-    /// Parse an if/while condition that may or may not contain a let chain.
-    /// Only enters let-chain mode when `&&` + `let` is detected ahead.
-    /// Otherwise falls back to the normal expression parser.
-    fn parse_condition_with_optional_let_chain(
-        &mut self,
-        start_span: Span,
-    ) -> ParseResult<Condition> {
-        if !self.condition_has_and_let() {
-            // No `&& let` in the condition — parse as a regular expression
+    /// Parse an `if`, `while` or `for` condition: a let chain when it starts
+    /// with `let` or holds `&& let` at depth 0, otherwise a plain expression.
+    fn parse_condition(&mut self, start_span: Span) -> ParseResult<Condition> {
+        if !self.check(&TokenKind::Let) && !self.condition_has_and_let() {
             return Ok(Condition::Expr(self.parse_expr_no_struct_literal()?));
         }
 
-        // Condition contains `&& let` — parse as a let chain.
-        // The leading elements before any `let` are bool expressions.
         let mut elements = Vec::new();
-
         loop {
             if self.check(&TokenKind::Let) {
                 self.advance();
@@ -3035,111 +3021,40 @@ impl Parser {
             self.advance(); // consume &&
         }
 
-        let end_span = elements
-            .last()
-            .map(|e| match e {
-                ConditionElement::Let { span, .. } => *span,
-                ConditionElement::Expr(e) => e.span(),
-            })
-            .unwrap_or(start_span);
+        let end_span = match elements.last().expect("a let chain has an element") {
+            ConditionElement::Let { span, .. } => *span,
+            ConditionElement::Expr(e) => e.span(),
+        };
         Ok(Condition::LetChain {
             elements,
             span: start_span.merge(&end_span),
         })
     }
 
-    /// Parse a let-chain condition (after 'let' has been consumed).
-    /// Handles `if let PAT = EXPR && GUARD && let PAT2 = EXPR2 { ... }`.
-    /// In chain context, `&&` is always a chain separator (not logical and).
-    /// To use `&&` inside an expression, wrap it in parentheses.
-    fn parse_let_chain(&mut self, start_span: Span) -> ParseResult<Condition> {
-        let mut elements = Vec::new();
-
-        // Parse first let element
-        let elem_span = self.peek().span;
-        let pattern = self.parse_pattern()?;
-        self.expect(&TokenKind::Eq)?;
-        let expr = self.parse_chain_element_expr()?;
-        let span = elem_span.merge(&expr.span());
-        elements.push(ConditionElement::Let {
-            pattern: Box::new(pattern),
-            expr,
-            span,
-        });
-
-        // Parse subsequent chain elements separated by &&
-        while self.check(&TokenKind::And) {
-            self.advance(); // consume &&
-            if self.check(&TokenKind::Let) {
-                self.advance(); // consume 'let'
-                let elem_span = self.peek().span;
-                let pattern = self.parse_pattern()?;
-                self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_chain_element_expr()?;
-                let span = elem_span.merge(&expr.span());
-                elements.push(ConditionElement::Let {
-                    pattern: Box::new(pattern),
-                    expr,
-                    span,
-                });
-            } else {
-                elements.push(ConditionElement::Expr(self.parse_chain_element_expr()?));
-            }
-        }
-
-        let end_span = elements
-            .last()
-            .map(|e| match e {
-                ConditionElement::Let { span, .. } => *span,
-                ConditionElement::Expr(e) => e.span(),
-            })
-            .unwrap_or(start_span);
-
-        Ok(Condition::LetChain {
-            elements,
-            span: start_span.merge(&end_span),
-        })
-    }
-
-    /// Parse a chain element expression: like `parse_or_expr` but without `&&` handling.
-    /// In a let-chain, `&&` is a chain separator, not a logical-and operator.
-    /// To use `&&` inside a chain expression, wrap it in parentheses.
+    /// Parse a chain element expression, which stops below `&&` and `||`: in a
+    /// let chain `&&` separates elements, and `||` is rejected as Rust rejects it.
+    /// Either operator is written inside an element by parenthesizing it.
     /// Struct literals are suppressed so that `{` is recognized as the then-block.
     fn parse_chain_element_expr(&mut self) -> ParseResult<Expr> {
         let saved = self.restrict_struct_literals;
         self.restrict_struct_literals = true;
-
-        let mut left = self.parse_comparison_expr()?;
-
-        while self.check(&TokenKind::Or) {
-            let left_span = left.span();
-            self.advance();
-            let right = self.parse_comparison_expr()?;
-            let merged_span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op: BinaryOp::Or,
-                right,
-                span: merged_span,
-            }));
-        }
-
+        let element = self.parse_comparison_expr()?;
         self.restrict_struct_literals = saved;
-        Ok(left)
+
+        if self.check(&TokenKind::Or) {
+            return Err(self.error_at_span(
+                self.peek().span,
+                "`||` cannot join the operands of a let chain; parenthesize it",
+            ));
+        }
+        Ok(element)
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
         let id = self.alloc_ast_id();
         self.expect(&TokenKind::While)?;
-
-        let condition = if self.check(&TokenKind::Let) {
-            self.advance(); // consume 'let'
-            self.parse_let_chain(start_span)?
-        } else {
-            Condition::Expr(self.parse_expr_no_struct_literal()?)
-        };
+        let condition = self.parse_condition(start_span)?;
 
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
@@ -3227,8 +3142,7 @@ impl Parser {
             None
         } else if self.check(&TokenKind::Let) {
             let let_span = self.peek().span;
-            self.advance(); // consume 'let'
-            Some(self.parse_let_chain(let_span)?)
+            Some(self.parse_condition(let_span)?)
         } else {
             Some(Condition::Expr(self.parse_expr_no_struct_literal()?))
         };
@@ -4915,13 +4829,7 @@ impl Parser {
     fn parse_if_expr(&mut self) -> ParseResult<Expr> {
         let start_span = self.peek().span;
         self.expect(&TokenKind::If)?;
-
-        let condition = if self.check(&TokenKind::Let) {
-            self.advance(); // consume 'let'
-            self.parse_let_chain(start_span)?
-        } else {
-            self.parse_condition_with_optional_let_chain(start_span)?
-        };
+        let condition = self.parse_condition(start_span)?;
 
         let then_block = self.parse_block()?;
 
@@ -9361,6 +9269,26 @@ line 2
             "the diagnostic must point at the missing parentheses, got {:?}",
             err.message
         );
+    }
+
+    /// The e2e fixture `let_chain_or_error.wado` covers `||` between operands;
+    /// these are the other places a top-level `||` meets a let chain.
+    #[test]
+    fn let_chain_rejects_unparenthesized_or() {
+        for source in [
+            "fn f() { if let true = a || b { } }",
+            "fn f() { if a || b && let Some(x) = o { } }",
+            "fn f() { while let Some(x) = o && a || b { } }",
+            "fn f() { let v = if let true = a || b { 1 } else { 2 }; }",
+        ] {
+            let err = parse(source).unwrap_err();
+            assert!(
+                err.message.contains("`||` cannot join"),
+                "{source}: {:?}",
+                err.message
+            );
+        }
+        parse("fn f() { if let true = (a || b) && (c || d) { } }").unwrap();
     }
 
     /// Accepting `with ()` would let the formatter delete a written clause.

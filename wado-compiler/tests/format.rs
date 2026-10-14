@@ -3464,6 +3464,22 @@ fn test() {
 }
 ",
     );
+
+    // A `let`'s scrutinee is a chain operand too, as is a loose operand of a
+    // `while` chain that starts with a boolean.
+    assert_format_preserves_ast(
+        r"
+fn test() {
+    let mut n = 0;
+    if let true = (n > 1 || n < 0) && let r = (0..<n) {
+        println(`${r}`);
+    }
+    while (n < 2 || n > 9) && let Some(v) = (a && b) {
+        n += 1;
+    }
+}
+",
+    );
 }
 
 #[test]

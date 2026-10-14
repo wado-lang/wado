@@ -1,0 +1,13 @@
+// Error: `||` does not join the operands of a let chain, as in Rust.
+// Parenthesize it to make it one operand.
+
+export fn run() {
+    let o = builtin::black_box(Option::<i32>::Some(1));
+    let a = builtin::black_box(false);
+    if let Some(x) = o && a || x > 0 {
+        return;
+    }
+}
+
+__DATA__
+{"compile_error": ":7:29: parse error: `||` cannot join the operands of a let chain; parenthesize it"}
