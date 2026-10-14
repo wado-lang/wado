@@ -39,14 +39,15 @@ impl CalleeRef {
         }
     }
 
-    /// A callee reached through `Prefix::name` where `Prefix` names an effect
-    /// or resource rather than a module, so the prefix itself is the namespace.
-    pub fn local_namespace(
+    /// An operation of the interface `interface` declared in `declared_in`,
+    /// rendered in the interface's own namespace.
+    pub fn effect_operation(
         interner: &mut ModuleSourceInterner,
-        prefix: &str,
+        declared_in: &ModuleSource,
+        interface: &str,
         name: impl Into<String>,
     ) -> Self {
-        Self::rendered(interner.local(prefix), name)
+        Self::rendered(interner.effect(declared_in, interface), name)
     }
 
     /// The declaration this names, or `None` for a [`Self::Rendered`] callee.

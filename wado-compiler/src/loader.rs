@@ -567,6 +567,7 @@ pub fn resolve_wasm_asset_path(
         ModuleSource::Wasm { .. } => Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         }),
+        ModuleSource::Effect { .. } => unreachable!("an effect namespace imports nothing"),
     }
 }
 
@@ -1972,6 +1973,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     path: module_source.to_string(),
                 })
             }
+            ModuleSource::Effect { .. } => unreachable!("an effect namespace is never loaded"),
             ModuleSource::Redirected { uri, .. } => {
                 // Strip the `file:` scheme so the host sees a plain
                 // absolute path. Other schemes are passed through

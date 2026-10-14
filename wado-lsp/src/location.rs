@@ -43,6 +43,8 @@ pub(crate) fn module_uri(
         // until `workspace/textDocumentContent` lands. Emit the path so
         // CLI consumers can still see the reference site.
         ModuleSource::Wasm { path, .. } => Some(path.to_string()),
+        // An operation's namespace opens where its interface is declared.
+        ModuleSource::Effect { declared_in, .. } => module_uri(entry, declared_in, request_uri),
     }
 }
 

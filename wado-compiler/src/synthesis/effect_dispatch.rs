@@ -13,7 +13,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
     DeclName, DeclPath, FqTypeName, LocalMethodName, MethodName, Receiver, cm_wrap_async_func_name,
     dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
-    effect_default_impl_name, mangle_generic_name,
+    effect_default_impl_name, effect_namespace, mangle_generic_name,
 };
 use crate::package::Package;
 use crate::synthesis::common::{
@@ -123,28 +123,15 @@ fn identify_uncovered_effects(
     // Per-operation: an interface mixing a `#[cm]` operation with a plain one
     // still leaves the plain one unlowered, and the infrastructure covers the
     // whole interface either way.
-    //
-    // One bare name, one owner: the triple is named after the name alone, so
-    // activating a second declaration under it emits `$Dispatch_<E>` twice.
-    // A name an active instantiation owns is left to it — the call lands on
-    // that dispatch and traps there when no handler is installed.
-    let owned: IndexSet<&String> = active
+    let uncovered: IndexSet<EffectKey> = effect_index
         .iter()
-        .filter(|(_, _, type_args)| type_args.is_empty())
-        .map(|(_, name, _)| name)
+        .filter(|((module, name), meta)| {
+            !meta.is_resource
+                && meta.operations.iter().any(|op| op.cm_name.is_none())
+                && !active.contains(&(module.clone(), name.clone(), Vec::new()))
+        })
+        .map(|(key, _)| key.clone())
         .collect();
-    let mut uncovered: IndexMap<String, InstantiationKey> = IndexMap::default();
-    for ((module, name), meta) in effect_index {
-        if meta.is_resource
-            || !meta.operations.iter().any(|op| op.cm_name.is_none())
-            || owned.contains(name)
-        {
-            continue;
-        }
-        uncovered
-            .entry(name.clone())
-            .or_insert_with(|| (module.clone(), name.clone(), Vec::new()));
-    }
     if uncovered.is_empty() {
         return IndexSet::default();
     }
@@ -166,17 +153,19 @@ fn identify_uncovered_effects(
 /// Records which uncovered effects are actually called, so a declared but
 /// never-performed effect costs no dispatch infrastructure.
 struct UncoveredEffectCallCollector<'a> {
-    uncovered: &'a IndexMap<String, InstantiationKey>,
+    uncovered: &'a IndexSet<EffectKey>,
     called: IndexSet<InstantiationKey>,
 }
 
 impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Call { func, .. } = &expr.kind
-            && let Some(interface) = func.module_source.interface_name()
-            && let Some(key) = self.uncovered.get(interface.as_str())
+            && let Some((module, interface)) = func.module_source.effect_interface()
         {
-            self.called.insert(key.clone());
+            let key = (module.clone(), interface.to_string());
+            if self.uncovered.contains(&key) {
+                self.called.insert((key.0, key.1, Vec::new()));
+            }
         }
         self.walk_expr(expr);
     }
@@ -227,15 +216,21 @@ pub struct DispatchPlan {
 /// `"Stream<u8>"`. Mirrors `name::mangle_generic_name`, which is the
 /// canonical name-mangling utility (per the wado-compiler CLAUDE rule
 /// "Use utilities in name.rs to handle name mangling").
-fn instantiation_label(base: &str, type_args: &[TypeId], type_table: &TypeTable) -> String {
+fn instantiation_label(
+    module: &ModuleSource,
+    base: &str,
+    type_args: &[TypeId],
+    type_table: &TypeTable,
+) -> String {
+    let base = effect_namespace(module, base);
     if type_args.is_empty() {
-        base.to_string()
+        base
     } else {
         let arg_strings: Vec<String> = type_args
             .iter()
             .map(|tid| type_table.mangle_type_name(*tid))
             .collect();
-        mangle_generic_name(base, &arg_strings)
+        mangle_generic_name(&base, &arg_strings)
     }
 }
 
@@ -307,7 +302,7 @@ fn synthesize_dispatch_struct(
     key: &InstantiationKey,
     meta: &EffectMeta,
 ) -> DispatchPlan {
-    let (_, base_name, type_args) = key;
+    let (effect_module, base_name, type_args) = key;
 
     let entry_module = project
         .tir_modules
@@ -328,7 +323,7 @@ fn synthesize_dispatch_struct(
     let mut op_field_types: Vec<TypeId> = Vec::with_capacity(meta.operations.len());
     {
         let mut tt = tt_rc.borrow_mut();
-        label = instantiation_label(base_name, type_args, &tt);
+        label = instantiation_label(effect_module, base_name, type_args, &tt);
         struct_name = dispatch_struct_name(&label);
         global_name = dispatch_global_name(&label);
         // The dispatch struct is minted here, under a name this pass assigns:
@@ -491,7 +486,7 @@ fn synthesize_dispatch_wrappers(
         .get_mut(entry_source)
         .expect("entry module must exist");
     let type_table = entry_module.type_table.clone();
-    let label = instantiation_label(&base_name, type_args, &type_table.borrow());
+    let label = instantiation_label(&effect_module, &base_name, type_args, &type_table.borrow());
     for (op, &is_open_import) in plan.operations.iter().zip(&open_and_registered) {
         let wrapper = build_dispatch_wrapper_function(
             entry_source,
@@ -1545,8 +1540,12 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // synthesised local names (`$h_<label>` etc.) so dumps stay
         // readable when multiple instantiations of the same base
         // resource are installed in nested `with` blocks.
-        let label =
-            instantiation_label(&interface_name, &trait_type_args, &env.type_table.borrow());
+        let label = instantiation_label(
+            &effect_module,
+            &interface_name,
+            &trait_type_args,
+            &env.type_table.borrow(),
+        );
 
         // 1. let $h_<E> = handler_expr;
         //
@@ -2501,14 +2500,18 @@ fn rewrite_calls_in_functions(
 pub type ResourceWrapperIndex =
     IndexMap<(ModuleSource, String, String), Vec<(Vec<TypeId>, String)>>;
 
-/// One lookup map per call shape: an effect op keys on `(interface, op)`, a
-/// resource method on `(decl_module, base_name, cm_name)` plus its type args.
+/// `(interface_module, interface, op) → wrapper_name` for user-effect calls
+/// (e.g. `Counter::next()`).
+type EffectOpWrappers = IndexMap<(ModuleSource, String, String), String>;
+
+/// One lookup map per call shape: an effect op keys on its interface and name,
+/// a resource method on `(decl_module, base_name, cm_name)` plus its type args.
 fn build_wrapper_indexes(
     project: &Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
-) -> (IndexMap<(String, String), String>, ResourceWrapperIndex) {
+) -> (EffectOpWrappers, ResourceWrapperIndex) {
     let effect_index = build_effect_index(project);
-    let mut user_to_wrapper: IndexMap<(String, String), String> = IndexMap::default();
+    let mut user_to_wrapper = EffectOpWrappers::default();
     let mut cm_to_wrappers: ResourceWrapperIndex = IndexMap::default();
     for ((module, base_name, type_args), plan) in plans {
         let is_resource = effect_index
@@ -2531,11 +2534,14 @@ fn build_wrapper_indexes(
                 // user-side calls (no canonical attribute → no
                 // elaborator-side `cm_name` tag), so skip them.
             } else {
-                // Effect op: route via the `Local { path }` user-effect
-                // call shape regardless of whether the op carries a CM
-                // attribute (the WASI effect adapter generation in
-                // cm_binding still kicks in for the wrapper fallback).
-                user_to_wrapper.insert((base_name.clone(), op.name.clone()), wrapper_name.clone());
+                // Effect op: route via the `ModuleSource::Effect` call shape
+                // regardless of whether the op carries a CM attribute (the
+                // WASI effect adapter generation in cm_binding still kicks in
+                // for the wrapper fallback).
+                user_to_wrapper.insert(
+                    (module.clone(), base_name.clone(), op.name.clone()),
+                    wrapper_name.clone(),
+                );
             }
         }
     }
@@ -2566,9 +2572,7 @@ pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage) {
 /// `Ref(<receiver-type>)` ids when wrapping a value receiver to match
 /// the wrapper's `&Self` first parameter.
 struct RewriteCtx<'a> {
-    /// `(interface_name, op_name) → wrapper_name` for user-effect Calls
-    /// (e.g. `Counter::next()`).
-    user_to_wrapper: &'a IndexMap<(String, String), String>,
+    user_to_wrapper: &'a EffectOpWrappers,
     /// `(resource_module, base_name, cm_name) → [(type_args,
     /// wrapper_name)]` for calls with `method_info.cm_name` set.
     /// Multiple instantiations live under
@@ -2701,10 +2705,12 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                             ctx.entry_source,
                         )
                     })
-            } else if let ModuleSource::Local { path, .. } = &func.module_source
-                && let Some(wrapper) = ctx
-                    .user_to_wrapper
-                    .get(&(path.to_string(), func.name.clone()))
+            } else if let Some((module, interface)) = func.module_source.effect_interface()
+                && let Some(wrapper) = ctx.user_to_wrapper.get(&(
+                    module.clone(),
+                    interface.to_string(),
+                    func.name.clone(),
+                ))
             {
                 Some(wrapper_call(
                     wrapper.clone(),

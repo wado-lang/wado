@@ -2376,6 +2376,16 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
     format!("{struct_name}^{trait_name}::{method_name}")
 }
 
+/// The namespace an `E::op()` call is rendered in, and the dispatch triple of
+/// `E` is named after: the interface qualified by its declaring module, as two
+/// modules may each declare an interface of one name.
+///
+/// Examples:
+/// - `effect_namespace(./a.wado, "Base")` → `"./a.wado/Base"`
+pub fn effect_namespace(module: &ModuleSource, interface: &str) -> String {
+    format!("{module}/{interface}")
+}
+
 /// Build the per-instantiation effect-dispatch struct name.
 ///
 /// `label` is the dispatch instantiation label produced by the
