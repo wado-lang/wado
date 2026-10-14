@@ -219,11 +219,13 @@ fn digit_value(b: u8) -> i32 {
 }
 
 /// Parse the view as an unsigned integer in the given radix. Caller is
-/// responsible for stripping any sign. `radix` must be in 2..=36.
+/// responsible for stripping any sign.
 ///
 /// Returns `Err(Empty)` if the view is empty, `Err(InvalidDigit)` on bad
 /// characters, or `Err(PosOverflow)` if the accumulator exceeds `u64::MAX`.
-internal fn parse_u64_digits(s: &StrSlice, radix: u32) -> Result<u64, IntErrorKind> {
+internal fn parse_u64_digits(s: &StrSlice, radix: u32) -> Result<u64, IntErrorKind>
+    contract 2 <= radix <= 36, "radix must be in 2..=36"
+{
     let len = s.len();
     if len == 0 {
         return Result::Err(IntErrorKind::Empty);
@@ -248,7 +250,9 @@ internal fn parse_u64_digits(s: &StrSlice, radix: u32) -> Result<u64, IntErrorKi
 
 /// Parse the view as an unsigned integer in the given radix, accumulating into
 /// a `u128`. Caller strips any sign.
-internal fn parse_u128_digits(s: &StrSlice, radix: u32) -> Result<u128, IntErrorKind> {
+internal fn parse_u128_digits(s: &StrSlice, radix: u32) -> Result<u128, IntErrorKind>
+    contract 2 <= radix <= 36, "radix must be in 2..=36"
+{
     let len = s.len();
     if len == 0 {
         return Result::Err(IntErrorKind::Empty);
@@ -311,27 +315,21 @@ internal fn split_plus(s: &StrSlice) -> Result<StrSlice, IntErrorKind> {
     return Result::Ok(*s);
 }
 
-/// Check that the radix is supported (2..=36); panic otherwise.
-internal fn assert_radix(radix: u32) {
-    if radix < 2 || radix > 36 {
-        panic("from_str_radix: radix must be in 2..=36");
-    }
-}
-
 /// Parse a signed integer in the given radix from the view, clamped to
 /// `[-min_abs, max]`. `max` is the largest positive value; `min_abs` is the
 /// absolute value of the most negative representable value (e.g. for i32,
 /// `max = 2147483647`, `min_abs = 2147483648`). Handles the optional leading
 /// `+`/`-` sign.
-internal fn parse_i64_radix(s: &StrSlice, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError> {
-    assert_radix(radix);
+internal fn parse_i64_radix(s: &StrSlice, radix: u32, max: i64, min_abs: u64) -> Result<i64, ParseIntError>
+    contract 2 <= radix <= 36, "radix must be in 2..=36"
+{
     let [is_negative, digits] = match split_sign(s) {
         Ok(p) => p,
         Err(k) => {
             return Result::Err(ParseIntError::new(k));
         },
     };
-    return match parse_u64_digits(&digits, radix) {
+    return match unchecked parse_u64_digits(&digits, radix) {
         Ok(v) => if is_negative {
             if v > min_abs {
                 Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
@@ -353,15 +351,16 @@ internal fn parse_i64_radix(s: &StrSlice, radix: u32, max: i64, min_abs: u64) ->
 
 /// Parse an unsigned integer in the given radix from the view, clamped to
 /// `[0, max]`.
-internal fn parse_u64_radix(s: &StrSlice, radix: u32, max: u64) -> Result<u64, ParseIntError> {
-    assert_radix(radix);
+internal fn parse_u64_radix(s: &StrSlice, radix: u32, max: u64) -> Result<u64, ParseIntError>
+    contract 2 <= radix <= 36, "radix must be in 2..=36"
+{
     let digits = match split_plus(s) {
         Ok(v) => v,
         Err(k) => {
             return Result::Err(ParseIntError::new(k));
         },
     };
-    return match parse_u64_digits(&digits, radix) {
+    return match unchecked parse_u64_digits(&digits, radix) {
         Ok(v) => if v > max { Result::Err(ParseIntError::new(IntErrorKind::PosOverflow)) } else { Result::Ok(v) },
         Err(k) => Result::Err(ParseIntError::new(k)),
     };

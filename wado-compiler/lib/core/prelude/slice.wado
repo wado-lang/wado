@@ -132,16 +132,19 @@ impl<T> Slice<T> {
         return SliceRefIter::internal_new(self.repr, self.start, self.end);
     }
 
-    /// Overlapping windows of `size` consecutive elements. Panics if `size` is
-    /// not positive.
-    pub fn windows(&self, size: i32) -> SliceWindows<T> {
-        return SliceWindows::internal_new(self.repr, self.start, self.end, size);
+    /// Overlapping windows of `size` consecutive elements.
+    pub fn windows(&self, size: i32) -> SliceWindows<T>
+        contract size > 0, "window size must be positive"
+    {
+        return SliceWindows { repr: self.repr, index: self.start, end: self.end, size };
     }
 
     /// Non-overlapping chunks of up to `size` elements; the last may be
-    /// shorter. Panics if `size` is not positive.
-    pub fn chunks(&self, size: i32) -> SliceChunks<T> {
-        return SliceChunks::internal_new(self.repr, self.start, self.end, size);
+    /// shorter.
+    pub fn chunks(&self, size: i32) -> SliceChunks<T>
+        contract size > 0, "chunk size must be positive"
+    {
+        return SliceChunks { repr: self.repr, index: self.start, end: self.end, size };
     }
 
     pub fn to_array(&self) -> Array<T> {
@@ -388,13 +391,6 @@ pub struct SliceWindows<T> {
     size: i32,
 }
 
-impl<T> SliceWindows<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceWindows<T> {
-        assert size > 0, "window size must be positive";
-        return SliceWindows { repr, index, end, size };
-    }
-}
-
 impl<T> Iterator for SliceWindows<T> {
     type Item = Slice<T>;
 
@@ -427,13 +423,6 @@ pub struct SliceChunks<T> {
     index: i32,
     end: i32,
     size: i32,
-}
-
-impl<T> SliceChunks<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceChunks<T> {
-        assert size > 0, "chunk size must be positive";
-        return SliceChunks { repr, index, end, size };
-    }
 }
 
 impl<T> Iterator for SliceChunks<T> {
@@ -482,15 +471,18 @@ pub trait AsSlice: Sequence with () {
         return self.as_slice().iter_ref();
     }
 
-    /// Overlapping windows of `size` consecutive elements. Panics if `size` is
-    /// not positive.
-    fn windows(&self, size: i32) -> SliceWindows<Self::Elem> {
-        return self.as_slice().windows(size);
+    /// Overlapping windows of `size` consecutive elements.
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem>
+        contract size > 0, "window size must be positive"
+    {
+        return unchecked self.as_slice().windows(size);
     }
 
     /// Non-overlapping chunks of up to `size` elements; the last may be
-    /// shorter. Panics if `size` is not positive.
-    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> {
-        return self.as_slice().chunks(size);
+    /// shorter.
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>
+        contract size > 0, "chunk size must be positive"
+    {
+        return unchecked self.as_slice().chunks(size);
     }
 }

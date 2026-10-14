@@ -184,10 +184,10 @@ impl TreeBuilder {
                 && self.offset.capacity() == self.tag.capacity()
                 && self.alt.capacity() == self.tag.capacity(), "TreeBuilder event columns must grow in lockstep";
         }
-        self.tag.push_within_capacity(tag);
-        self.id.push_within_capacity(id);
-        self.offset.push_within_capacity(offset);
-        self.alt.push_within_capacity(-1);
+        unchecked self.tag.push_within_capacity(tag);
+        unchecked self.id.push_within_capacity(id);
+        unchecked self.offset.push_within_capacity(offset);
+        unchecked self.alt.push_within_capacity(-1);
     }
 
     internal fn start_node(&mut self, kind: NodeKind, start: i32) {

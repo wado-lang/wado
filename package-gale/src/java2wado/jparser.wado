@@ -445,10 +445,12 @@ pub fn punct_is<S: AsStrSlice>(tokens: &List<JToken>, pos: i32, s: S) -> bool {
     };
 }
 
-fn punct_at(tokens: &List<JToken>, pos: i32) -> String {
+fn punct_at(tokens: &List<JToken>, pos: i32) -> String
+    contract 0 <= pos < tokens.len() && tokens[pos] matches { Punct(_) }, "not a punctuator"
+{
     return match &tokens[pos] {
         Punct(p) => *p,
-        _ => panic("punct_at: caller must guard with punct_is"),
+        _ => unreachable(),
     };
 }
 

@@ -202,7 +202,7 @@ impl FromStr for Uuid {
                 if !hi.is_hexdigit() || !lo.is_hexdigit() {
                     return Result::Err(ParseError::InvalidCharacter);
                 }
-                out.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
+                out.push((unchecked hi.hex_digit_value() << 4 | unchecked lo.hex_digit_value()) as u8);
                 pos += 2;
             }
         }

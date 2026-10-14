@@ -221,7 +221,7 @@ pub fn percent_decode<S: AsStrSlice>(input: S) -> Result<String, ParseError> {
             if !hi.is_hexdigit() || !lo.is_hexdigit() {
                 return Result::Err(ParseError::InvalidPercentEncoding);
             }
-            bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
+            bytes.push((unchecked hi.hex_digit_value() << 4 | unchecked lo.hex_digit_value()) as u8);
             i += 3;
         } else {
             bytes.push(input.get_byte_unchecked(i));
@@ -258,7 +258,7 @@ fn percent_decode_query_component<S: AsStrSlice>(input: S) -> String {
             let hi = input.get_byte_unchecked(i + 1) as char;
             let lo = input.get_byte_unchecked(i + 2) as char;
             if hi.is_hexdigit() && lo.is_hexdigit() {
-                bytes.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
+                bytes.push((unchecked hi.hex_digit_value() << 4 | unchecked lo.hex_digit_value()) as u8);
                 i += 3;
             } else {
                 bytes.push(b'%');
@@ -776,7 +776,7 @@ fn normalize_percent_encoding<S: AsStrSlice>(input: S) -> String {
             let hi = input.get_byte_unchecked(i + 1) as char;
             let lo = input.get_byte_unchecked(i + 2) as char;
             if hi.is_hexdigit() && lo.is_hexdigit() {
-                let decoded = hi.hex_digit_value() << 4 | lo.hex_digit_value();
+                let decoded = unchecked hi.hex_digit_value() << 4 | unchecked lo.hex_digit_value();
                 if is_unreserved_char(decoded as u8 as char) {
                     out.push(decoded as u8 as char);
                 } else {

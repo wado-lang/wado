@@ -1993,9 +1993,11 @@ impl JsonDeserializer {
         }
     }
 
-    /// Inline check for "true" / "false" / "null". Assumes first byte already matched.
-    /// Returns Ok if the literal matches and advances pos past it.
-    fn expect_true(&mut self) -> Result<(), DeserializeError> {
+    /// Inline check for "true" / "false" / "null", whose first byte the caller
+    /// matched. Returns Ok if the literal matches and advances pos past it.
+    fn expect_true(&mut self) -> Result<(), DeserializeError>
+        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b't', "not at 't'"
+    {
         if self.pos + 4 <= self.input.len()
             && self.input.get_unchecked(self.pos + 1) as i32 == b'r'
             && self.input.get_unchecked(self.pos + 2) as i32 == b'u'
@@ -2006,7 +2008,9 @@ impl JsonDeserializer {
         return Result::Err(DeserializeError::malformed("expected 'true'", self.pos as i64));
     }
 
-    fn expect_false(&mut self) -> Result<(), DeserializeError> {
+    fn expect_false(&mut self) -> Result<(), DeserializeError>
+        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b'f', "not at 'f'"
+    {
         if self.pos + 5 <= self.input.len()
             && self.input.get_unchecked(self.pos + 1) as i32 == b'a'
             && self.input.get_unchecked(self.pos + 2) as i32 == b'l'
@@ -2018,7 +2022,9 @@ impl JsonDeserializer {
         return Result::Err(DeserializeError::malformed("expected 'false'", self.pos as i64));
     }
 
-    fn expect_null(&mut self) -> Result<(), DeserializeError> {
+    fn expect_null(&mut self) -> Result<(), DeserializeError>
+        contract self.pos < self.input.len() && self.input.get_unchecked(self.pos) == b'n', "not at 'n'"
+    {
         if self.pos + 4 <= self.input.len()
             && self.input.get_unchecked(self.pos + 1) as i32 == b'u'
             && self.input.get_unchecked(self.pos + 2) as i32 == b'l'
@@ -2113,13 +2119,13 @@ impl JsonDeserializer {
                 return self.skip_string();
             },
             't' => {
-                return self.expect_true();
+                return unchecked self.expect_true();
             },
             'f' => {
-                return self.expect_false();
+                return unchecked self.expect_false();
             },
             'n' => {
-                return self.expect_null();
+                return unchecked self.expect_null();
             },
             '[' => {
                 self.pos += 1;
@@ -2526,11 +2532,11 @@ impl Deserializer for JsonDeserializer {
         let b = lead as u8 as char;
         match b {
             't' => {
-                self.expect_true()?;
+                (unchecked self.expect_true())?;
                 return Result::Ok(true);
             },
             'f' => {
-                self.expect_false()?;
+                (unchecked self.expect_false())?;
                 return Result::Ok(false);
             },
             _ => {
@@ -2585,7 +2591,7 @@ impl Deserializer for JsonDeserializer {
         // In JSON, only the `null` literal starts with 'n', so a mismatch
         // after it is malformed input rather than "not null".
         if self.peek_after_whitespace() == b'n' {
-            self.expect_null()?;
+            (unchecked self.expect_null())?;
             return Result::Ok(true);
         }
         return Result::Ok(false);

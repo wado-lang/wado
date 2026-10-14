@@ -51,7 +51,7 @@ fn scan_gathered(s: &String, from: i32, len: i32) -> i32 {
 
     let mut i = from;
     while i + 16 <= len {
-        let m = delimiters(&u8x16::from_string(s, i), &quote, &escape);
+        let m = delimiters(&(unchecked u8x16::from_string(s, i)), &quote, &escape);
         if m != 0 {
             return i + i32::ctz(m);
         }
@@ -89,7 +89,7 @@ fn pack(s: &String) -> Array<u8x16> {
     let mut out = Array::<u8x16>::new(len / 16);
     let mut i = 0;
     while i < len {
-        out.set(i >> 4, u8x16::from_string(s, i));
+        out.set(i >> 4, unchecked u8x16::from_string(s, i));
         i += 16;
     }
     return out;

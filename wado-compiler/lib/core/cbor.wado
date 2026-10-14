@@ -137,7 +137,7 @@ fn push_be(buf: &mut ByteList, value: u64, nbytes: i32) {
     buf.reserve(nbytes);
     let mut i = nbytes - 1;
     while i >= 0 {
-        buf.push_within_capacity((value >> (i * 8) as u64) as u8);
+        unchecked buf.push_within_capacity((value >> (i * 8) as u64) as u8);
         i -= 1;
     }
 }
@@ -902,7 +902,7 @@ impl CborDeserializer {
             }
         } else if fai <= AI_8BYTE && (fmajor == MAJOR_UINT || fmajor == MAJOR_NINT) {
             self.pos += 1;
-            let arg = self.read_arg(fai)?;
+            let arg = (unchecked self.read_arg(fai))?;
             return Result::Ok(int_item::<T>(arg, fmajor == MAJOR_NINT));
         }
         loop {
@@ -974,11 +974,13 @@ impl CborDeserializer {
     }
 
     /// Read a head's argument given its additional-info code `ai` (RFC 8949 §3),
-    /// with the initial byte already consumed. The caller guarantees
-    /// `ai <= AI_8BYTE`. Returns the argument as a `u64` without building a head
-    /// tuple — the non-allocating core of the fast scalar decoders. The `match`
-    /// on the dense 24..=27 codes lowers to a `br_table`.
-    fn read_arg(&mut self, ai: u8) -> Result<u64, DeserializeError> {
+    /// with the initial byte already consumed. Returns the argument as a `u64`
+    /// without building a head tuple — the non-allocating core of the fast
+    /// scalar decoders. The `match` on the dense 24..=27 codes lowers to a
+    /// `br_table`.
+    fn read_arg(&mut self, ai: u8) -> Result<u64, DeserializeError>
+        contract ai <= AI_8BYTE, "additional info carries no argument"
+    {
         return match ai {
             AI_1BYTE => Result::Ok(self.next_byte()? as u64),
             AI_2BYTE => self.read_be(2),
@@ -998,7 +1000,7 @@ impl CborDeserializer {
         // Codes < 24 carry the argument inline (the `_` arm).
         match ai {
             AI_1BYTE | AI_2BYTE | AI_4BYTE | AI_8BYTE => {
-                let v = self.read_arg(ai)?;
+                let v = (unchecked self.read_arg(ai))?;
                 return Result::Ok([major, ai, v, false]);
             },
             AI_INDEFINITE => {
@@ -1254,11 +1256,12 @@ impl CborDeserializer {
     /// peeked, returning its `[start, len]` byte range in `input` and advancing
     /// past it. Kept non-generic so the generic `next_field` only does the
     /// schema lookup.
-    fn read_text_key_range(&mut self, head: u8) -> Result<[i32, i32], DeserializeError> {
+    fn read_text_key_range(&mut self, head: u8) -> Result<[i32, i32], DeserializeError>
+        contract head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE, "not a definite-length text head"
+    {
         let ai = head & 0x1f;
-        assert head >> 5 == MAJOR_TEXT && ai <= AI_8BYTE;
         self.pos += 1;
-        let arg = self.read_arg(ai)?;
+        let arg = (unchecked self.read_arg(ai))?;
         // Range-check the full u64 length before narrowing: a huge declared
         // length must be EOF, not a truncated-to-i32 read.
         let avail = (self.input.len() - self.pos) as u64;
@@ -1510,7 +1513,7 @@ impl DeserializeStruct for CborStructAccess {
         // precise malformed-head diagnostic.
         let head = self.de.peek_byte()?;
         if head >> 5 == MAJOR_TEXT && head & 0x1f <= AI_8BYTE {
-            let key_range = self.de.read_text_key_range(head)?;
+            let key_range = (unchecked self.de.read_text_key_range(head))?;
             let idx = match S::lookup(self.de.input.slice(key_range.0, key_range.0 + key_range.1)) {
                 Some(i) => i,
                 None => -1,
@@ -1601,7 +1604,7 @@ impl Deserializer for CborDeserializer {
         // same for both signs (`|value|` fits when `arg <= i32::MAX`).
         if ai <= AI_8BYTE && (major == MAJOR_UINT || major == MAJOR_NINT) {
             self.pos += 1;
-            let arg = self.read_arg(ai)?;
+            let arg = (unchecked self.read_arg(ai))?;
             if arg <= i32::MAX as u64 {
                 if major == MAJOR_UINT {
                     return Result::Ok(arg as i32);
@@ -1626,7 +1629,7 @@ impl Deserializer for CborDeserializer {
         let ai = b & 0x1f;
         if ai <= AI_8BYTE && (major == MAJOR_UINT || major == MAJOR_NINT) {
             self.pos += 1;
-            let arg = self.read_arg(ai)?;
+            let arg = (unchecked self.read_arg(ai))?;
             if arg <= i64::MAX as u64 {
                 if major == MAJOR_UINT {
                     return Result::Ok(arg as i64);
@@ -1651,7 +1654,7 @@ impl Deserializer for CborDeserializer {
         let ai = b & 0x1f;
         if ai <= AI_8BYTE && major == MAJOR_UINT {
             self.pos += 1;
-            let arg = self.read_arg(ai)?;
+            let arg = (unchecked self.read_arg(ai))?;
             if arg <= u32::MAX as u64 {
                 return Result::Ok(arg as u32);
             }
@@ -1673,7 +1676,7 @@ impl Deserializer for CborDeserializer {
         let ai = b & 0x1f;
         if ai <= AI_8BYTE && major == MAJOR_UINT {
             self.pos += 1;
-            return self.read_arg(ai);
+            return unchecked self.read_arg(ai);
         }
         let v = self.read_unsigned_u128()?;
         if v > U64_MAX_AS_U128 {
@@ -1777,7 +1780,7 @@ impl Deserializer for CborDeserializer {
         let b = self.peek_byte()?;
         if b >> 5 == MAJOR_TEXT && b & 0x1f <= AI_8BYTE {
             self.pos += 1;
-            let len = self.read_arg(b & 0x1f)?;
+            let len = (unchecked self.read_arg(b & 0x1f))?;
             return self.read_definite_text(len);
         }
         loop {

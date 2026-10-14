@@ -151,9 +151,10 @@ struct LongOpt {
 }
 
 impl ArgvDeserializer {
-    /// Decompose a `--name[=value]` token (caller guarantees `tok` starts with
-    /// `--` and is not the bare `--` marker). Folds `-`→`_` only when present.
-    fn split_long<S: AsStrSlice>(tok: S) -> LongOpt {
+    /// Decompose a `--name[=value]` token. Folds `-`→`_` only when present.
+    fn split_long<S: AsStrSlice>(tok: S) -> LongOpt
+        contract tok.starts_with("--") && tok.len() > 2, "not a long option"
+    {
         let body = tok.substr_bytes(2, tok.len());
         let mut raw = body;
         let mut inline: Option<String> = null;
@@ -244,7 +245,7 @@ impl ArgvDeserializer {
                 j += 1;
                 continue;
             }
-            let lo = ArgvDeserializer::split_long(&t);
+            let lo = unchecked ArgvDeserializer::split_long(&t);
             if lo.folded != self.cur_name {
                 j += 1;
                 continue;
@@ -329,7 +330,7 @@ impl DeserializeStruct for ArgvStructAccess {
                     continue;
                 }
                 self.de.pos += 1;
-                let lo = ArgvDeserializer::split_long(&tok);
+                let lo = unchecked ArgvDeserializer::split_long(&tok);
                 if lo.raw == "" {
                     self.de.err = Option::Some(ArgsError {
                         kind: ArgsErrorKind::UnknownOption,

@@ -19,7 +19,7 @@ fn to_lowercase_simd(input: String) -> String {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
 
         // Build mask: bytes >= 'A' && bytes <= 'Z'
         let ge_a = chunk.ge(&upper_a);
@@ -59,7 +59,7 @@ fn count_byte_simd(input: String, target: u8) -> i32 {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
         let mask = chunk.eq(&target_vec);
 
         // bitmask: one bit per lane (high bit), then popcount to count matches
@@ -88,7 +88,7 @@ fn is_ascii_printable_simd(input: String) -> bool {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
 
         let ge_lo = chunk.ge(&lo);
         let le_hi = chunk.le(&hi);
@@ -123,7 +123,7 @@ fn count_digits_simd(input: String) -> i32 {
 
     let mut i = 0;
     while i + 16 <= len {
-        let chunk = u8x16::from_string(&input, i);
+        let chunk = unchecked u8x16::from_string(&input, i);
 
         let ge_0 = chunk.ge(&zero);
         let le_9 = chunk.le(&nine);

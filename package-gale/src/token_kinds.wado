@@ -97,8 +97,10 @@ impl TokenKinds {
         return -1;
     }
 
-    /// The `TK_*` name for a kind id. Caller must pass an id this table minted.
-    pub fn name_of(&self, id: i32) -> String {
+    /// The `TK_*` name for a kind id.
+    pub fn name_of(&self, id: i32) -> String
+        contract 0 <= id < self.len(), "id not minted by this table"
+    {
         return self.names[id];
     }
 

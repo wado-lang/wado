@@ -197,22 +197,24 @@ fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
 }
 
 /// The nearest character boundary at or below `index`, counted from `start`;
-/// `len` when `index >= len`. Panics if `index` is negative.
-fn floor_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
-    if index as u32 >= len as u32 {
+/// `len` when `index >= len`.
+fn floor_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32
+    contract index >= 0, "negative byte index"
+{
+    if index >= len {
         builtin::cold_path();
-        assert index >= 0, "negative byte index";
         return len;
     }
     return char_start_backward(repr, start + index) - start;
 }
 
 /// The nearest character boundary at or above `index`, counted from `start`;
-/// `len` when `index >= len`. Panics if `index` is negative.
-fn ceil_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32 {
-    if index as u32 >= len as u32 {
+/// `len` when `index >= len`.
+fn ceil_boundary(repr: &Array<u8>, start: i32, len: i32, index: i32) -> i32
+    contract index >= 0, "negative byte index"
+{
+    if index >= len {
         builtin::cold_path();
-        assert index >= 0, "negative byte index";
         return len;
     }
     let mut p = index;
@@ -712,9 +714,10 @@ impl String {
     /// Decodes the UTF-8 character starting at the given byte index.
     /// Returns None if `byte_index` is past the end of the string or there
     /// aren't enough bytes to form a full UTF-8 sequence.
-    /// Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
-    pub fn char_at_byte(&self, byte_index: i32) -> Option<char> {
-        return self.as_str_slice().char_at_byte(byte_index);
+    pub fn char_at_byte(&self, byte_index: i32) -> Option<char>
+        contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"
+    {
+        return unchecked self.as_str_slice().char_at_byte(byte_index);
     }
 
     /// Decodes the UTF-8 character starting at `byte_index` without bounds checks.
@@ -787,15 +790,18 @@ impl String {
     }
 
     /// The largest character boundary `<= byte_index`, or `len()` beyond it:
-    /// cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
-    pub fn floor_char_boundary(&self, byte_index: i32) -> i32 {
-        return floor_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
+    /// cuts to a byte budget with `truncate` or `substr_bytes`.
+    pub fn floor_char_boundary(&self, byte_index: i32) -> i32
+        contract byte_index >= 0, "negative byte index"
+    {
+        return unchecked floor_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// The smallest character boundary `>= byte_index`, or `len()` beyond it.
-    /// Panics if `byte_index` is negative.
-    pub fn ceil_char_boundary(&self, byte_index: i32) -> i32 {
-        return ceil_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
+    pub fn ceil_char_boundary(&self, byte_index: i32) -> i32
+        contract byte_index >= 0, "negative byte index"
+    {
+        return unchecked ceil_boundary(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// Removes and returns the last character, or None if empty.
@@ -1347,15 +1353,17 @@ impl StrSlice {
     }
 
     /// The largest character boundary `<= index`, or `len()` beyond it.
-    /// Panics if `index` is negative.
-    pub fn floor_char_boundary(&self, index: i32) -> i32 {
-        return floor_boundary(self.repr, self.start, self.len(), index);
+    pub fn floor_char_boundary(&self, index: i32) -> i32
+        contract index >= 0, "negative byte index"
+    {
+        return unchecked floor_boundary(self.repr, self.start, self.len(), index);
     }
 
     /// The smallest character boundary `>= index`, or `len()` beyond it.
-    /// Panics if `index` is negative.
-    pub fn ceil_char_boundary(&self, index: i32) -> i32 {
-        return ceil_boundary(self.repr, self.start, self.len(), index);
+    pub fn ceil_char_boundary(&self, index: i32) -> i32
+        contract index >= 0, "negative byte index"
+    {
+        return unchecked ceil_boundary(self.repr, self.start, self.len(), index);
     }
 
     /// Byte end of the leading `char_count` characters, or `len()` when the
@@ -1523,7 +1531,9 @@ impl StrSlice {
 
     /// The character starting at `byte_index`, counted from the view's start,
     /// or None past the end.
-    pub fn char_at_byte(&self, byte_index: i32) -> Option<char> {
+    pub fn char_at_byte(&self, byte_index: i32) -> Option<char>
+        contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"
+    {
         let at = self.start + byte_index;
         if at >= self.end || at + utf8_seq_len(self.repr[at]) > self.end {
             return null;
@@ -1794,12 +1804,16 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().is_char_boundary(index);
     }
 
-    fn floor_char_boundary(&self, index: i32) -> i32 {
-        return self.as_str_slice().floor_char_boundary(index);
+    fn floor_char_boundary(&self, index: i32) -> i32
+        contract index >= 0, "negative byte index"
+    {
+        return unchecked self.as_str_slice().floor_char_boundary(index);
     }
 
-    fn ceil_char_boundary(&self, index: i32) -> i32 {
-        return self.as_str_slice().ceil_char_boundary(index);
+    fn ceil_char_boundary(&self, index: i32) -> i32
+        contract index >= 0, "negative byte index"
+    {
+        return unchecked self.as_str_slice().ceil_char_boundary(index);
     }
 
     fn slice(&self, start: i32, end: i32) -> StrSlice
@@ -1865,8 +1879,10 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().eq_ignore_ascii_case(other);
     }
 
-    fn char_at_byte(&self, byte_index: i32) -> Option<char> {
-        return self.as_str_slice().char_at_byte(byte_index);
+    fn char_at_byte(&self, byte_index: i32) -> Option<char>
+        contract byte_index >= self.len() || self.is_char_boundary(byte_index), "byte index not on a UTF-8 character boundary"
+    {
+        return unchecked self.as_str_slice().char_at_byte(byte_index);
     }
 
     fn trim_ascii_start(&self) -> StrSlice {
@@ -2023,11 +2039,11 @@ impl<T: AsStrSlice> AsStrSlice for &T {
     }
 
     fn floor_char_boundary(&self, index: i32) -> i32 {
-        return (*self).floor_char_boundary(index);
+        return unchecked (*self).floor_char_boundary(index);
     }
 
     fn ceil_char_boundary(&self, index: i32) -> i32 {
-        return (*self).ceil_char_boundary(index);
+        return unchecked (*self).ceil_char_boundary(index);
     }
 
     fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
