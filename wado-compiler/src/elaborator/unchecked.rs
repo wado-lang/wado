@@ -14,8 +14,8 @@ use crate::token::Span;
 
 const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
-const BOUND_NO_CONTRACT: &str = "through a bound, `unchecked` vouches for the trait's clauses, \
-                                 and this trait method declares none";
+const TRAIT_NO_CONTRACT: &str = "this trait method declares no `contract` clause, and `unchecked` \
+                                 on a call to it vouches for the trait's alone";
 const IMPL_CLAUSE: &str = "an impl writes no `contract` on a method its trait's clauses bind";
 const INNER_CALL: &str = "postfix operators bind tighter than `unchecked`, so it marks the \
                           whole chain; write `(unchecked …)` around the call it vouches for";
@@ -155,7 +155,7 @@ impl AstVisitor for Finder<'_> {
                 Some(NOT_A_CALL)
             } else if self.every_callee(&unary.expr, |def| self.contracts.unbound_trait_method(def))
             {
-                Some(BOUND_NO_CONTRACT)
+                Some(TRAIT_NO_CONTRACT)
             } else {
                 Some(NO_CONTRACT)
             };
@@ -195,8 +195,8 @@ impl<'a> Contracts<'_, 'a> {
         })
     }
 
-    /// Whether `def` declares a trait method its trait gives no clause, which
-    /// a call through a bound reaches without seeing any impl's.
+    /// Whether `def` declares a trait method its trait gives no clause: a call
+    /// through a bound, or to a default body, sees no impl's.
     fn unbound_trait_method(&self, def: DefId) -> bool {
         let target = self.resolutions.defs().ast_id(def);
         self.items_declaring(def).iter().any(|item| match item {

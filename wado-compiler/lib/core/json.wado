@@ -1557,7 +1557,7 @@ impl JsonDeserializer {
                     start as i64,
                 ));
             }
-            code = code * 16 + c.hex_digit_value() as u32;
+            code = code * 16 + unchecked c.hex_digit_value() as u32;
         }
         self.pos += 4;
         return Result::Ok(code);
@@ -1596,7 +1596,7 @@ impl JsonDeserializer {
             }
             code = 0x10000 + (hi - 0xD800 << 10) + (lo - 0xDC00);
         }
-        return Result::Ok(char::from_u32(code));
+        return Result::Ok(unchecked char::from_u32(code));
     }
 
     /// Advances past the JSON number at `pos` without allocating a String,

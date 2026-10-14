@@ -834,7 +834,7 @@ fn find_soft_escaped_locals(
         stores_lookup,
         value_copy_ids,
         type_table,
-        unseen: false,
+        unseen: None,
     };
     let mut hard_escaped = IndexSet::default();
     soft.walk(body, NodeRef::Block(body.root()), &mut hard_escaped);
@@ -853,18 +853,20 @@ struct SoftCtx<'a> {
     stores_lookup: &'a StoresLookup,
     value_copy_ids: &'a IndexSet<FuncId>,
     type_table: &'a TypeTable,
-    /// Inside a block that ends unseen ([`Body::ends_unseen`]). Nothing after
-    /// it runs, so a call there may keep what it is handed, and a rebuilt
-    /// literal is the only object anyone reads from then on.
-    unseen: bool,
+    /// Inside a block that ends unseen ([`Body::ends_unseen`]): the candidates
+    /// the block writes a field of. Nothing after the block runs, so a call
+    /// there may keep a borrow of any other candidate: the rebuilt literal it
+    /// keeps and the scalars agree for as long as anything runs.
+    unseen: Option<&'a IndexSet<u32>>,
 }
 
 impl SoftCtx<'_> {
     fn walk(&self, body: &Body, node: NodeRef, hard_escaped: &mut IndexSet<u32>) {
         match node {
-            NodeRef::Block(b) if !self.unseen && body.ends_unseen(b, self.type_table) => {
+            NodeRef::Block(b) if self.unseen.is_none() && body.ends_unseen(b, self.type_table) => {
+                let written = candidates_written_under(body, b, self.candidates);
                 let inner = SoftCtx {
-                    unseen: true,
+                    unseen: Some(&written),
                     ..*self
                 };
                 body.for_each_child(node, |c| inner.walk(body, c, hard_escaped));
@@ -952,8 +954,9 @@ impl SoftCtx<'_> {
                 for (i, (arg, is_mut)) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
                     let lent_candidate = immut_ref_to_candidate(body, arg, self.candidates)
-                        .filter(|_| {
-                            self.unseen || !callee_stores_param_at(callee_id, i, self.stores_lookup)
+                        .filter(|index| {
+                            self.unseen.is_some_and(|written| !written.contains(index))
+                                || !callee_stores_param_at(callee_id, i, self.stores_lookup)
                         })
                         .or_else(|| {
                             // Handed whole where nothing follows: the callee
@@ -961,7 +964,7 @@ impl SoftCtx<'_> {
                             let ExprKind::Local { index, .. } = body.exprs[arg].kind else {
                                 return None;
                             };
-                            (self.unseen && !is_mut && self.candidates.contains(&index))
+                            (self.unseen.is_some() && !is_mut && self.candidates.contains(&index))
                                 .then_some(index)
                         });
                     if let Some(index) = lent_candidate {
@@ -976,6 +979,27 @@ impl SoftCtx<'_> {
             _ => body.for_each_child(NodeRef::Expr(id), |c| self.walk(body, c, hard_escaped)),
         }
     }
+}
+
+/// The candidates something under `block` writes a field of, or assigns whole.
+fn candidates_written_under(
+    body: &Body,
+    block: BlockId,
+    candidates: &IndexSet<u32>,
+) -> IndexSet<u32> {
+    let mut written = IndexSet::default();
+    body.find_in_nodes_under(NodeRef::Block(block), |node| {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+            && let Some(index) = field_access_of_candidate(body, *target, candidates)
+                .map(|(index, _)| index)
+                .or_else(|| is_candidate_local(body, *target, candidates))
+        {
+            written.insert(index);
+        }
+        None::<()>
+    });
+    written
 }
 
 fn callee_stores_param_at(

@@ -330,7 +330,7 @@ fn scan_hex_digits(chars: &List<char>, pos: &mut i32, limit: i32) -> [i32, i32] 
     let mut n = 0;
     while n < limit && *pos < chars.len() && chars[*pos].is_hexdigit() {
         if val <= MAX_CODE_POINT {
-            val = val * 16 + chars[*pos].hex_digit_value();
+            val = val * 16 + unchecked chars[*pos].hex_digit_value();
         }
         *pos += 1;
         n += 1;

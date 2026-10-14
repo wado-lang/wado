@@ -252,6 +252,17 @@ fn collect_and_validate(
     // Phase 2: resolve each param to the one field it reads, dropping the ones
     // that escape or disagree — one fixpoint, since a param forwarded to another
     // candidate position takes its answer from there.
+    let forwards: IndexMap<(FnKey, usize), Vec<(FnKey, usize)>> = candidates
+        .keys()
+        .map(|&(key, pi)| {
+            let func = project.functions[key.index()].borrow();
+            let body = func
+                .body
+                .as_ref()
+                .expect("is_eligible rejects a body-less function");
+            ((key, pi), whole_forwards(body, func.params[pi].local_index))
+        })
+        .collect();
     loop {
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
@@ -263,7 +274,16 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
-            if info.form == FieldForm::Value && forwards_to_mutable(body, local_index, &candidates)
+            // Handed whole to a position taking its field as `&mut`, the param
+            // becomes that argument as it stands, so it must hold the field the
+            // same way: held by value it is a copy, and the callee's writes land
+            // on the copy.
+            if info.form == FieldForm::Value
+                && forwards[&(*key, *pi)].iter().any(|position| {
+                    candidates
+                        .get(position)
+                        .is_some_and(|target| target.form == FieldForm::Mutable)
+                })
             {
                 widened.push((*key, *pi));
             }
@@ -911,26 +931,21 @@ fn check_call_arg(
     check_expr(body, arg, idx, candidates)
 }
 
-/// Whether param `idx` is handed whole to a position that takes its field as
-/// `&mut`. The forwarded local becomes that argument as it stands, so it must
-/// hold the field the same way: held by value it is a copy, and the callee's
-/// writes land on the copy.
-fn forwards_to_mutable(
-    body: &Body,
-    idx: u32,
-    candidates: &IndexMap<(FnKey, usize), SroaInfo>,
-) -> bool {
-    reachable_exprs(body).into_iter().any(|e| {
-        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
-            return false;
-        };
-        args.iter().enumerate().any(|(pos, arg)| {
-            is_local_operand(body, arg.expr, idx)
-                && candidates
-                    .get(&(*func_id, pos))
-                    .is_some_and(|info| info.form == FieldForm::Mutable)
+/// The call positions param `idx` is handed to whole.
+fn whole_forwards(body: &Body, idx: u32) -> Vec<(FnKey, usize)> {
+    reachable_exprs(body)
+        .into_iter()
+        .filter_map(|e| match &body.exprs[e].kind {
+            ExprKind::Call { func_id, args, .. } => Some((*func_id, args)),
+            _ => None,
         })
-    })
+        .flat_map(|(func_id, args)| {
+            args.iter()
+                .enumerate()
+                .filter(|(_, arg)| is_local_operand(body, arg.expr, idx))
+                .map(move |(pos, _)| (func_id, pos))
+        })
+        .collect()
 }
 
 /// Whether scalarizing this parameter would strand the call: a sibling position
