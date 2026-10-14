@@ -298,9 +298,7 @@ fn collect_and_validate(
             }
         }
         for (k, fi) in &resolved {
-            let Some(info) = candidates.get_mut(k) else {
-                continue;
-            };
+            let info = &mut candidates[k];
             let Some(fields) = field_table.get(&info.struct_key) else {
                 invalid.insert(*k);
                 continue;
@@ -314,9 +312,7 @@ fn collect_and_validate(
             info.inner_type_id = ty;
         }
         for k in &widened {
-            if let Some(info) = candidates.get_mut(k) {
-                info.form = FieldForm::Mutable;
-            }
+            candidates[k].form = FieldForm::Mutable;
         }
         if invalid.is_empty() && resolved.is_empty() && widened.is_empty() {
             // Converged, so a param still holding no field never names one, and

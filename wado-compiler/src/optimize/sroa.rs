@@ -993,7 +993,9 @@ fn candidates_pinned_under(
     let mut pinned = IndexSet::default();
     let mut borrowed = IndexSet::default();
     body.find_in_nodes_under(NodeRef::Block(block), |node| {
-        let NodeRef::Expr(e) = node else { return None::<()> };
+        let NodeRef::Expr(e) = node else {
+            return None::<()>;
+        };
         if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
             && let Some(index) = field_access_of_candidate(body, *target, candidates)
                 .map(|(index, _)| index)

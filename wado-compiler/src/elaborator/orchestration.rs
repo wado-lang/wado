@@ -1051,8 +1051,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if let Some(span) = method.contract {
                     let holder = contract_holder_name(&method.name);
                     if decl.methods.iter().any(|m| m.name == holder) {
-                        let _ = logger
-                            .error_in(&header.module, TypeError::ImplContractUnderTraitContract { span });
+                        let _ = logger.error_in(
+                            &header.module,
+                            TypeError::ImplContractUnderTraitContract { span },
+                        );
                     }
                 }
                 // `with _` mints a parameter the source never wrote, and the

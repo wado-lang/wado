@@ -11,7 +11,7 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, is_reference, param_position};
+use super::place::{arg_at, carries_storage, is_reference, param_position, unwrap_borrow};
 use super::retention::CallRetention;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -117,16 +117,13 @@ impl<'a> OwnedCalls<'a> {
         let retained = self.retention.of_call(func, args.len(), false);
         Some(params.iter().map(move |&p| {
             let arg = arg_at(func, args, p);
-            match &arg.kind {
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                    expr: inner,
-                } if matches!(inner.kind, TirExprKind::Call { .. })
-                    && !retained.keeps(u32::try_from(p).unwrap()) =>
-                {
-                    &**inner
-                }
-                _ => arg,
+            let inner = unwrap_borrow(arg);
+            if matches!(inner.kind, TirExprKind::Call { .. })
+                && !retained.keeps(u32::try_from(p).unwrap())
+            {
+                inner
+            } else {
+                arg
             }
         }))
     }

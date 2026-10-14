@@ -346,7 +346,11 @@ fn free_vars(
         if !matches!(type_table.get(type_id), ResolvedType::Primitive(_))
             && !bound_ahead.contains(&idx)
         {
-            compiler_trace!("cold_outline", "  local {idx} may be unset at the call");
+            compiler_trace!(
+                "cold_outline",
+                "  local {} may be unset at the call",
+                func.locals[idx as usize].name
+            );
             return None;
         }
         args.push(idx);

@@ -8,7 +8,6 @@ use crate::elaborator::sem::ModuleSemantics;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resolve::Resolutions;
-use crate::token::Span;
 
 const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
@@ -46,15 +45,6 @@ struct Finder<'a> {
 }
 
 impl Finder<'_> {
-    fn report(&mut self, code: Code, message: &str, span: &Span) {
-        self.found.push(Diagnostic {
-            severity: Severity::Error,
-            code,
-            message: message.to_string(),
-            span: Some(DiagnosticSpan::from_span(span, None)),
-        });
-    }
-
     /// The declarations the call `expr` reaches, one per walk that reached it.
     fn callees(&self, expr: &Expr) -> Vec<DefId> {
         let types = &self.sem.types;
@@ -137,7 +127,12 @@ impl AstVisitor for Finder<'_> {
                 Some(NO_CONTRACT)
             };
             if let Some(message) = message {
-                self.report(Code::UncheckedInvalid, message, &unary.span);
+                self.found.push(Diagnostic {
+                    severity: Severity::Error,
+                    code: Code::UncheckedInvalid,
+                    message: message.to_string(),
+                    span: Some(DiagnosticSpan::from_span(&unary.span, None)),
+                });
             }
         }
         ast::walk_expr(self, expr);
