@@ -48,12 +48,9 @@ fn held_by_callee(p: Pair, h: Holder) -> i32 {
     return p.a;
 }
 
-// `spare` gives the body a local the ownership walk tracks, without which the
-// walk skips the body and every argument in it keeps its copy.
 #[inline("never")]
 fn lent(a: &mut Pair, b: &mut Pair) -> i32 {
-    let spare = Pair { a: 0, s: [] };
-    return two(*a, then: { bump_a(b); *a }) + spare.a;
+    return two(*a, then: { bump_a(b); *a });
 }
 
 #[inline("never")]

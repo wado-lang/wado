@@ -32,12 +32,13 @@ use crate::tir::{
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeKey, TypeTable, struct_fields,
 };
 
-/// A frame: a function, or a closure body inside one, whose locals have
-/// locations of their own.
+/// A frame: a function, or a global's initializer, whose locals have locations
+/// of their own.
 type Frame = u32;
 
 /// The solved analysis. Sets name nodes that are locations: a frame's local,
-/// a global, or the temporary a borrow of a call's result takes.
+/// a global, a function value, or the temporary a borrow of a call's result
+/// takes.
 pub struct PointsTo {
     functions: FuncIndex,
     locals: IndexMap<(Frame, u32), u32>,
@@ -83,6 +84,17 @@ impl PointsTo {
             .unwrap_or_default()
     }
 
+    /// Whether the storage the value in `local` reaches may be written: it
+    /// meets `written`, or [`Self::global_reach`].
+    #[must_use]
+    pub fn reaches_written(&self, frame: Frame, local: u32, written: &IndexSet<u32>) -> bool {
+        self.location(frame, local).is_some_and(|node| {
+            self.pts[node as usize]
+                .iter()
+                .any(|n| written.contains(n) || self.global_reach.contains(n))
+        })
+    }
+
     /// The storage the call argument `arg` lets its callee write: what its
     /// value reaches where that holds a writable handle, and its own where a
     /// `&mut` parameter borrows it. `None` for an argument the analysis did
@@ -93,7 +105,8 @@ impl PointsTo {
         Some(&self.pts[*node as usize])
     }
 
-    /// The storage what `from` can reach, transitively, may be written through.
+    /// `from` and every location reachable from it: what a write through any of
+    /// it may reach.
     #[must_use]
     pub fn reach(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
         let mut out: IndexSet<u32> = IndexSet::default();
@@ -436,7 +449,7 @@ struct Builder<'a> {
     return_to: u32,
     labels: Vec<(String, u32)>,
     /// Each closure functor's `$call`, by functor id.
-    closure_calls: Vec<Option<Frame>>,
+    closure_calls: Vec<Frame>,
     /// The value of a function the analysis has no body for: what a call
     /// through it hands escapes, and its result is what escapes.
     unseen_function: u32,
@@ -530,12 +543,12 @@ pub fn compute(flat: &FlatPackage, functors: &[ClosureFunctor]) -> PointsTo {
                 writes: p.is_mut_ref || could_write_through(p.type_id, &type_table),
             })
             .collect();
+        let dispatches = matches!(func.kind, FunctionKind::FnCanonicalDispatch { .. });
         b.callees.push(Callee {
             params,
             slots,
-            analyzed: func.body.is_some()
-                && !matches!(func.kind, FunctionKind::FnCanonicalDispatch { .. }),
-            dispatches: matches!(func.kind, FunctionKind::FnCanonicalDispatch { .. }),
+            analyzed: func.body.is_some() && !dispatches,
+            dispatches,
         });
         let ret = b.g.node();
         b.returns.push(ret);
@@ -544,7 +557,9 @@ pub fn compute(flat: &FlatPackage, functors: &[ClosureFunctor]) -> PointsTo {
         .iter()
         .map(|functor| {
             let call = functor.call_method.borrow();
-            functions.id(&call.module_source, &call.name)
+            functions
+                .id(&call.module_source, &call.name)
+                .expect("closure planning adds each `$call` to the package")
         })
         .collect();
     for global in &flat.globals {
@@ -1200,26 +1215,28 @@ impl Builder<'_> {
                 ..
             } => {
                 let functor = functor_id.expect("closure planning numbers every closure");
-                let call = self.closure_calls[functor as usize]
-                    .expect("closure planning adds each `$call` to the package");
+                let call = self.closure_calls[functor as usize];
                 let mut held = Vec::new();
                 for capture in captures {
-                    let node = match capture.source {
-                        CaptureSource::Local(index) => self.local(self.frame, index),
+                    match capture.source {
+                        CaptureSource::Local(index) => {
+                            let node = self.local(self.frame, index);
+                            // A capture by reference holds the local's storage.
+                            if self.type_table.is_reference_shaped(capture.type_id) {
+                                let own = self.g.node();
+                                self.g.add(own, node);
+                                held.push(own);
+                            }
+                            held.push(node);
+                        }
                         // What the enclosing `$call` captured: its `self` holds it.
                         CaptureSource::Capture(_) => {
                             let this = self.callees[self.frame as usize].params[0];
                             let node = self.g.node();
                             self.g.load(this, node);
-                            node
+                            held.push(node);
                         }
-                    };
-                    if self.type_table.is_reference_shaped(capture.type_id) {
-                        let own = self.g.node();
-                        self.g.add(own, node);
-                        held.push(own);
                     }
-                    held.push(node);
                 }
                 Some(self.function_value(call, true, held))
             }

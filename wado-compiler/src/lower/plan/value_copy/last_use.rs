@@ -1996,13 +1996,8 @@ impl Analyzer<'_> {
             )
             .collect();
         for check in checks {
-            let meets = |named: &IndexSet<u32>| {
-                named
-                    .iter()
-                    .any(|n| check.written.contains(n) || global.contains(n))
-            };
             let written = if is_reference_local(func, check.root, self.type_table) {
-                meets(&pt.local_targets(frame, check.root))
+                pt.reaches_written(frame, check.root, &check.written)
             } else {
                 let targets: IndexSet<u32> = always
                     .iter()
@@ -2065,13 +2060,7 @@ impl Analyzer<'_> {
                     written: Rc::clone(&written),
                 }),
                 Storage::Lent(reference) => {
-                    let global = self.points_to.global_reach();
-                    if self
-                        .points_to
-                        .local_targets(frame, reference)
-                        .iter()
-                        .any(|n| written.contains(n) || global.contains(n))
-                    {
+                    if self.points_to.reaches_written(frame, reference, &written) {
                         self.written_args.insert(span);
                     }
                 }
