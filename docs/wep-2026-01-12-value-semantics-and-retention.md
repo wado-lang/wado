@@ -399,15 +399,18 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Known gaps
 
-Each says which reading the compiler does not have. The first two want the same
+Each says which reading the compiler does not have. The first two want a
 shape-level points-to answer, the next two a reading of this body finer than one
 answer per local, and the last a change to the lattice the rest are read over.
+`value_copy::points_to` computes such an answer, but only the check of a
+confined argument's copy reads it; the passes below do not (#2352).
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
 the local holding it goes where the walk does not, and every call that could
 reach a value of that type is then read off the type. Following a function value
-through the heap is a shape-level points-to answer, and nothing here is one.
+through the heap is a shape-level points-to answer, which this walk does not
+read.
 
 An element claim reads what a value holds, which a body fills but a signature
 never states. A parameter arrives holding whatever the caller put there, and
@@ -415,8 +418,8 @@ nothing names that, so the claim is answered from the writes this body made and
 the positions those writes came from. A caller that hands on its own argument's
 elements untouched is not telling its own caller so, which is what makes the
 claim useful — it stops at the frame that filled the container — and also what
-bounds it. What a parameter holds on entry is the same points-to answer, and
-nothing states it.
+bounds it. What a parameter holds on entry is the same points-to answer, which
+the claim does not read.
 
 The write-back reads the union where the move reads the destination. Refusing a
 write-back is a correctness rule rather than a precision one — a `&mut` to a

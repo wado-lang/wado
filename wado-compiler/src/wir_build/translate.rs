@@ -2292,10 +2292,12 @@ impl FunctionTranslator<'_, '_> {
                 // is dead at any arity.
                 prelude.push(self.translate_operand(op));
             } else if let Some(param) = split.get(&i) {
-                // A split `&S` reads at the call, after every write; a
-                // by-value one reads where it stands unless the prelude runs
-                // code after it.
-                if local_read[i] && (param.borrowed || !spilled) {
+                // A local read where nothing after it runs ahead of the call
+                // reads its fields there; otherwise the value is taken where
+                // it stands, as a later argument may rebind the local, and a
+                // split `&S` still reads its fields at the call, after every
+                // write.
+                if local_read[i] && !spilled {
                     let whole = self.translate_operand(op);
                     call_args.extend(self.field_reads(op, &whole, &param.fields));
                 } else {

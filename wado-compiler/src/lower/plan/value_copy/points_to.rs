@@ -129,13 +129,28 @@ impl PointsTo {
     /// it may reach.
     #[must_use]
     pub fn reach(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
+        self.reach_until(from, &IndexSet::default())
+    }
+
+    /// [`Self::reach`] beyond [`Self::global_reach`], which every reader of a
+    /// write set consults beside it, so the walk stops where it enters it.
+    #[must_use]
+    pub fn reach_beyond_global(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
+        self.reach_until(from, &self.global_reach)
+    }
+
+    fn reach_until(
+        &self,
+        from: impl IntoIterator<Item = u32>,
+        known: &IndexSet<u32>,
+    ) -> IndexSet<u32> {
         let mut out: IndexSet<u32> = IndexSet::default();
         // Locations on one cycle share a set, walked once.
         let mut walked: IndexSet<u32> = IndexSet::default();
-        let mut work: Vec<u32> = from.into_iter().collect();
+        let mut work: Vec<u32> = from.into_iter().filter(|l| !known.contains(l)).collect();
         while let Some(loc) = work.pop() {
             if out.insert(loc) && walked.insert(self.rep[loc as usize]) {
-                work.extend(self.set(loc).iter());
+                work.extend(self.set(loc).iter().filter(|l| !known.contains(l)));
             }
         }
         out
@@ -973,62 +988,90 @@ impl Builder<'_> {
         Some(node)
     }
 
-    /// The node whose set is the storage `place` names.
-    fn place(&mut self, place: &TirExpr) -> u32 {
-        match &place.kind {
+    /// The node whose set is the storage `expr` names, evaluating what it
+    /// reads, or `None` for an expression no storage holds, which is then left
+    /// unevaluated.
+    fn place(&mut self, expr: &TirExpr) -> Option<u32> {
+        let named = |b: &mut Self, loc: u32| {
+            let node = b.g.node();
+            b.g.add(node, loc);
+            node
+        };
+        match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 let loc = self.local(self.frame, *index);
-                let node = self.g.node();
-                self.g.add(node, loc);
-                node
+                Some(named(self, loc))
+            }
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } => {
+                let loc = self.global(module_source, name);
+                Some(named(self, loc))
             }
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
-            } => self.eval(inner).unwrap_or_else(|| self.g.node()),
+            } => Some(self.referent(inner)),
             TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => self.projected(inner),
             TirExprKind::Index { expr: inner, index } => {
+                let place = self.projected(inner)?;
                 self.eval(index);
-                self.projected(inner)
+                Some(place)
             }
-            _ => {
-                // A temporary holding the value, which the borrow names.
-                let temp = self.g.node();
-                if let Some(value) = self.eval(place) {
-                    self.g.copy(value, temp);
-                }
-                let node = self.g.node();
-                self.g.add(node, temp);
-                node
-            }
+            _ => None,
         }
     }
 
     /// The storage a projection over `base` names: `base`'s own, or what it
     /// refers to where it is a reference read through.
-    fn projected(&mut self, base: &TirExpr) -> u32 {
+    fn projected(&mut self, base: &TirExpr) -> Option<u32> {
         if self.type_table.is_reference_shaped(base.type_id) {
-            self.eval(base).unwrap_or_else(|| self.g.node())
+            Some(self.referent(base))
         } else {
             self.place(base)
         }
     }
 
-    fn is_place(expr: &TirExpr) -> bool {
-        match &expr.kind {
-            TirExprKind::Local { .. } => true,
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. } => Self::is_place(inner),
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                ..
-            } => true,
-            _ => false,
+    /// The storage the reference `reference` evaluates to names.
+    fn referent(&mut self, reference: &TirExpr) -> u32 {
+        self.eval(reference).unwrap_or_else(|| self.g.node())
+    }
+
+    /// The storage a borrow of `expr` names: its place, or a temporary
+    /// holding its value.
+    fn borrowed(&mut self, expr: &TirExpr) -> u32 {
+        if let Some(place) = self.place(expr) {
+            return place;
         }
+        let temp = self.g.node();
+        if let Some(value) = self.eval(expr) {
+            self.g.copy(value, temp);
+        }
+        let node = self.g.node();
+        self.g.add(node, temp);
+        node
+    }
+
+    /// Evaluate `expr` once: its value, and the storage it names where it is
+    /// a place.
+    fn operand(&mut self, expr: &TirExpr) -> (Option<u32>, Option<u32>) {
+        let Some(place) = self.place(expr) else {
+            return (self.eval(expr), None);
+        };
+        // A local's node holds its value already; reading it evaluates nothing.
+        let value = if matches!(expr.kind, TirExprKind::Local { .. }) {
+            self.eval(expr)
+        } else {
+            self.names.of(expr.type_id).then(|| {
+                let node = self.g.node();
+                self.g.load(place, node);
+                node
+            })
+        };
+        (value, Some(place))
     }
 
     /// Evaluate `arg` for a slot that may borrow it: its value, and its own
@@ -1039,11 +1082,11 @@ impl Builder<'_> {
     /// value where its type holds a writable handle, and its own storage where
     /// the slot is a `&mut`.
     fn hand(&mut self, arg: &TirExpr, slot: Slot) -> Option<u32> {
-        let value = self.eval(arg);
-        let own = (slot.borrows
-            && Self::is_place(arg)
-            && !self.type_table.is_reference_shaped(arg.type_id))
-        .then(|| self.place_of(arg));
+        let (value, own) = if slot.borrows && !self.type_table.is_reference_shaped(arg.type_id) {
+            self.operand(arg)
+        } else {
+            (self.eval(arg), None)
+        };
         let writable_value = value.filter(|_| self.writes.of(arg.type_id));
         let writable_own = own.filter(|_| slot.writes);
         let recorded = self
@@ -1052,46 +1095,6 @@ impl Builder<'_> {
         self.handed
             .insert(std::ptr::from_ref(arg).addr(), (recorded, arg.span));
         self.join([value, own])
-    }
-
-    /// [`Self::place`] without re-evaluating the subexpressions `eval` walked.
-    fn place_of(&mut self, place: &TirExpr) -> u32 {
-        match &place.kind {
-            TirExprKind::Local { index, .. } => {
-                let loc = self.local(self.frame, *index);
-                let node = self.g.node();
-                self.g.add(node, loc);
-                node
-            }
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. } => {
-                if self.type_table.is_reference_shaped(inner.type_id) {
-                    self.value_of(inner)
-                } else {
-                    self.place_of(inner)
-                }
-            }
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: inner,
-            } => self.value_of(inner),
-            _ => self.g.node(),
-        }
-    }
-
-    /// The value a place-shaped expression holds, without its side effects.
-    fn value_of(&mut self, expr: &TirExpr) -> u32 {
-        match &expr.kind {
-            TirExprKind::Local { index, .. } => self.local(self.frame, *index),
-            _ => {
-                let place = self.place_of(expr);
-                let node = self.g.node();
-                self.g.load(place, node);
-                node
-            }
-        }
     }
 
     fn call(&mut self, id: Frame, args: &mut dyn Iterator<Item = &TirExpr>) -> Option<u32> {
@@ -1183,12 +1186,11 @@ impl Builder<'_> {
             .iter()
             .enumerate()
             .map(|(i, arg)| {
-                let writes = decl.mut_params.contains(&i);
                 self.hand(
                     arg,
                     Slot {
-                        borrows: writes,
-                        writes,
+                        borrows: decl.reference_params.contains(&i),
+                        writes: decl.mut_params.contains(&i),
                     },
                 )
             })
@@ -1245,7 +1247,9 @@ impl Builder<'_> {
                 }
             }
             _ => {
-                let place = self.place(target);
+                let place = self
+                    .place(target)
+                    .expect("an assignment's target is a place");
                 if let Some(v) = value {
                     self.g.store(place, v);
                 }
@@ -1253,7 +1257,14 @@ impl Builder<'_> {
         }
     }
 
-    fn bind_pattern(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, value: Option<u32>) {
+    /// Bind `pattern` to `scrutinee`, evaluated as [`Self::operand`] to `value`
+    /// and `own`.
+    fn bind_pattern(
+        &mut self,
+        pattern: &TirPattern,
+        scrutinee: &TirExpr,
+        (value, own): (Option<u32>, Option<u32>),
+    ) {
         let mut binds: IndexSet<u32> = IndexSet::default();
         collect_pattern_bindings(pattern, &mut binds);
         if binds.is_empty() {
@@ -1266,7 +1277,6 @@ impl Builder<'_> {
         } else {
             None
         };
-        let own = Self::is_place(scrutinee).then(|| self.place_of(scrutinee));
         for local in binds {
             let node = self.local(self.frame, local);
             for v in [value, referent, own].into_iter().flatten() {
@@ -1343,8 +1353,8 @@ impl Builder<'_> {
                 None
             }
             TirStmtKind::LetDestructure { pattern, value } => {
-                let v = self.eval(value);
-                self.bind_pattern(pattern, value, v);
+                let scrutinee = self.operand(value);
+                self.bind_pattern(pattern, value, scrutinee);
                 None
             }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
@@ -1386,7 +1396,7 @@ impl Builder<'_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
-            } => Some(self.place(place)),
+            } => Some(self.borrowed(place)),
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -1471,8 +1481,11 @@ impl Builder<'_> {
                 name,
                 ..
             } => Some(match self.functions.id(module_source, name) {
-                Some(id) => self.function_value(id, false, Vec::new()),
-                None => self.unseen_function,
+                Some(id) if self.callees[id as usize].analyzed => {
+                    self.function_value(id, false, Vec::new())
+                }
+                // No body carries the flow from its parameters.
+                _ => self.unseen_function,
             }),
             TirExprKind::Block(block) => self.block_value(block),
             TirExprKind::If {
@@ -1486,10 +1499,10 @@ impl Builder<'_> {
                 self.join([t, e])
             }
             TirExprKind::Match { expr: scrut, arms } => {
-                let v = self.eval(scrut);
+                let scrutinee = self.operand(scrut);
                 let mut results = Vec::new();
                 for arm in arms {
-                    self.bind_pattern(&arm.pattern, scrut, v);
+                    self.bind_pattern(&arm.pattern, scrut, scrutinee);
                     if let Some(guard) = &arm.guard {
                         self.eval(guard);
                     }

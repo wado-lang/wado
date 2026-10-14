@@ -3,7 +3,8 @@
 // before the callee reads it, so a parameter that keeps nothing of its argument
 // still needs the copy: whether the write goes through a `&mut` taken on the
 // spot, an assignment, a `&mut` some local or struct keeps, a closure that
-// captured the value, another reference to storage the caller lent, or a global,
+// captured the value, another reference to storage the caller lent, a reference
+// into a list's element, a `&mut` a global keeps, or a global,
 // and whether the argument is a local or a call handing back part of one.
 
 struct Pair {
@@ -16,6 +17,8 @@ struct Holder {
 }
 
 global mut G: Pair = Pair { a: 1, s: [] };
+global mut UNHELD: Pair = Pair { a: 0, s: [] };
+global mut GH: Holder = Holder { w: &mut UNHELD };
 
 #[inline("never")]
 fn bump_a(w: &mut Pair) {
@@ -30,6 +33,11 @@ fn bump_held(h: Holder) {
 #[inline("never")]
 fn bump_global() {
     G.a += 1000;
+}
+
+#[inline("never")]
+fn bump_global_held() {
+    GH.w.a += 1000;
 }
 
 #[inline("never")]
@@ -97,6 +105,12 @@ export fn run() {
     let rl = &mut l;
     assert lent(rl, rl) == 1011;
     assert two(G, then: { bump_global(); G }) == 1011;
+    let mut g = pair();
+    GH.w = &mut g;
+    assert two(g, then: { bump_global_held(); g }) == 1011;
+    let mut list: List<Pair> = [pair()];
+    let e = &list[0];
+    assert two(*e, then: { list[0].a = 1001; *e }) == 1011;
     let mut m = pair();
     assert count(items(&m), then: { m.s.push(1); m.s.len() }) == 1;
 }

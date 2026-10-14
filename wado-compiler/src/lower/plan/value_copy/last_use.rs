@@ -2077,7 +2077,7 @@ impl Analyzer<'_> {
                 sources.extend(handed.iter());
             }
         }
-        let mut written = pt.reach(sources);
+        let mut written = pt.reach_beyond_global(sources);
         for m in &self.mutations[call_writes..] {
             if m.path.through_borrow {
                 written.extend(pt.local_targets(frame, m.path.root));
