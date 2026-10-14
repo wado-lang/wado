@@ -763,8 +763,8 @@ impl String {
         self.internal_set_byte_unchecked(start, byte);
     }
 
-    /// Truncates the string to the given byte length. Panics if `byte_len` is
-    /// negative or off a character boundary; round a budget with `floor_char_boundary`.
+    /// Truncates the string to the given byte length. Round a byte budget with
+    /// `floor_char_boundary` first.
     pub fn truncate(&mut self, byte_len: i32)
         contract byte_len >= 0, "negative length"
         contract byte_len >= self.len() || self.is_char_boundary(byte_len), "not on a UTF-8 character boundary"
@@ -852,13 +852,13 @@ impl String {
         return self.as_str_slice().eq_ignore_ascii_case(other);
     }
 
-    /// Extract a substring by byte range `[start, end)`. Panics if the range is out
-    /// of bounds or off a character boundary; round a budget with `floor_char_boundary`.
+    /// Extract a substring by byte range `[start, end)`. Round a byte budget
+    /// with `floor_char_boundary` first.
     pub fn substr_bytes(&self, start: i32, end: i32) -> String
         contract 0 <= start <= end <= self.len(), "byte range out of bounds"
         contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
     {
-        return (unchecked self.as_str_slice().slice(start, end)).to_string();
+        return unchecked self.as_str_slice().substr_bytes(start, end);
     }
 
     /// Returns true if this string contains the given substring.
@@ -915,7 +915,6 @@ impl String {
     }
 
     /// Inserts a character at the given byte index.
-    /// Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
     pub fn insert(&mut self, byte_index: i32, ch: char)
         contract self.is_char_boundary(byte_index), "insert index not on UTF-8 character boundary"
     {
@@ -924,7 +923,6 @@ impl String {
     }
 
     /// Inserts a string at the given byte index.
-    /// Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
     pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S)
         contract self.is_char_boundary(byte_index), "insert_str index not on UTF-8 character boundary"
     {
@@ -938,7 +936,6 @@ impl String {
     }
 
     /// Removes and returns the character at the given byte index.
-    /// Panics if the index is out of bounds or not on a UTF-8 character boundary.
     pub fn remove(&mut self, byte_index: i32) -> char
         contract 0 <= byte_index < self.len(), "index out of bounds"
         contract self.is_char_boundary(byte_index), "remove index not on UTF-8 character boundary"
@@ -1368,8 +1365,6 @@ impl StrSlice {
     }
 
     /// A sub-view over `[start, end)`, counted from this view's start.
-    /// Panics if the range is out of bounds or either end is off a character
-    /// boundary.
     pub fn slice(&self, start: i32, end: i32) -> StrSlice
         contract 0 <= start <= end <= self.len(), "byte range out of bounds"
         contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
