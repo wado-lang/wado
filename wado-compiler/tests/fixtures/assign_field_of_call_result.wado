@@ -1,0 +1,24 @@
+// An assignment into a field of a by-value call's result writes a temporary:
+// the call still runs, once per write, and nothing else changes.
+
+global mut CALLS: i32 = 0;
+
+struct Obj {
+    field: i32,
+}
+
+fn get_obj() -> Obj {
+    CALLS += 1;
+    return Obj { field: builtin::black_box(1) };
+}
+
+export fn run() {
+    get_obj().field = 3;
+    get_obj().field += 1;
+    assert CALLS == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -8896,6 +8896,9 @@ pub struct BuiltinDeclaration {
     pub returns: Option<ReturnConvention>,
     /// What the call keeps beyond it, as the storage implies.
     pub retains: Vec<RetainSpec<usize>>,
+    /// Positions the declaration takes through a reference, which lend it the
+    /// argument's storage.
+    pub reference_params: IndexSet<usize>,
     /// Positions the declaration takes by `&mut`, the only ones it can write
     /// the caller's storage through. Snapshot here because the bodyless
     /// declaration keeps no parameters past lowering.
@@ -8991,6 +8994,7 @@ impl BuiltinDeclaration {
             facts,
             returns,
             retains,
+            reference_params: shape.reference_params,
             mut_params: shape.mut_params,
             ranged_params,
             immediate_params: shape.immediate_params,

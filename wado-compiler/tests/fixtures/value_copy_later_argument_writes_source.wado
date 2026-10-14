@@ -1,0 +1,121 @@
+// Arguments are evaluated left to right, and a by-value one is copied as it is
+// taken. A later argument, or the callee itself, may write the same storage
+// before the callee reads it, so a parameter that keeps nothing of its argument
+// still needs the copy: whether the write goes through a `&mut` taken on the
+// spot, an assignment, a `&mut` some local or struct keeps, a closure that
+// captured the value, another reference to storage the caller lent, a reference
+// into a list's element, a `&mut` a global keeps, or a global,
+// and whether the argument is a local or a call handing back part of one.
+
+struct Pair {
+    a: i32,
+    s: List<i32>,
+}
+
+struct Holder {
+    w: &mut Pair,
+}
+
+global mut G: Pair = Pair { a: 1, s: [] };
+global mut UNHELD: Pair = Pair { a: 0, s: [] };
+global mut GH: Holder = Holder { w: &mut UNHELD };
+
+#[inline("never")]
+fn bump_a(w: &mut Pair) {
+    w.a += 1000;
+}
+
+#[inline("never")]
+fn bump_held(h: Holder) {
+    h.w.a += 1000;
+}
+
+#[inline("never")]
+fn bump_global() {
+    G.a += 1000;
+}
+
+#[inline("never")]
+fn bump_global_held() {
+    GH.w.a += 1000;
+}
+
+#[inline("never")]
+fn call(f: fn()) {
+    f();
+}
+
+#[inline("never")]
+fn two(p: Pair, q: Pair) -> i32 {
+    return p.a * 10 + q.a;
+}
+
+#[inline("never")]
+fn held_by_callee(p: Pair, h: Holder) -> i32 {
+    h.w.a += 1000;
+    return p.a;
+}
+
+#[inline("never")]
+fn lent(a: &mut Pair, b: &mut Pair) -> i32 {
+    return two(*a, then: { bump_a(b); *a });
+}
+
+#[inline("never")]
+fn items(p: &Pair) -> List<i32> {
+    return p.s;
+}
+
+#[inline("never")]
+fn count(s: List<i32>, n: i32) -> i32 {
+    return s.len() * 10 + n;
+}
+
+fn pair() -> Pair {
+    return Pair { a: builtin::black_box(1), s: [] };
+}
+
+export fn run() {
+    let mut x = pair();
+    assert two(x, then: { bump_a(&mut x); x }) == 1011;
+    let mut y = pair();
+    assert two(y, then: { y.a = 1001; y }) == 1011;
+    let bump = |w: &mut Pair| { w.a += 1000; };
+    let mut z = pair();
+    let r = &mut z;
+    assert two(z, then: { bump(r); z }) == 1011;
+    let mut v = pair();
+    let mut bump_v = || { v.a += 1000; };
+    assert two(v, then: { bump_v(); v }) == 1011;
+    let mut u = pair();
+    let mut bump_u: fn mut() = || {};
+    bump_u = || { u.a += 1000; };
+    assert two(u, then: { bump_u(); u }) == 1011;
+    let mut w = pair();
+    let rw = &mut w;
+    let bump_w = || { rw.a += 1000; };
+    assert two(w, then: { call(bump_w); w }) == 1011;
+    let mut h = pair();
+    let held = Holder { w: &mut h };
+    assert two(h, then: { bump_held(held); h }) == 1011;
+    let mut k = pair();
+    let kept = Holder { w: &mut k };
+    assert held_by_callee(k, kept) == 1;
+    let mut l = pair();
+    let rl = &mut l;
+    assert lent(rl, rl) == 1011;
+    assert two(G, then: { bump_global(); G }) == 1011;
+    let mut g = pair();
+    GH.w = &mut g;
+    assert two(g, then: { bump_global_held(); g }) == 1011;
+    let mut list: List<Pair> = [pair()];
+    let e = &list[0];
+    assert two(*e, then: { list[0].a = 1001; *e }) == 1011;
+    let mut m = pair();
+    assert count(items(&m), then: { m.s.push(1); m.s.len() }) == 1;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

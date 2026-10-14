@@ -19,6 +19,7 @@ use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
+use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
 use crate::synthesis::common::builtin_call;
@@ -89,6 +90,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // (and a default build routes the marker back to a plain `panic`).
     bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
     let strings = string::plan(&flat);
+    // After the last rewrite of a body, which would move the arguments it keys.
+    let struct_fields_map = struct_fields(&flat.structs);
+    let points_to =
+        value_copy::points_to::compute(&flat, &struct_fields_map, &closure.functor_infos);
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -123,7 +128,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         pruned,
     } = flat;
 
-    let struct_fields_map = struct_fields(&structs);
     // Pre-register every in-package function's canonical `FuncId` (its position,
     // 1:1 with the final function list). Calls stamp against this at construction.
     let mut ids: IndexMap<FunctionId, FuncId> = IndexMap::default();
@@ -142,6 +146,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let translator = Translator {
         box_plan: &box_plan,
         value_copy: &value_copy,
+        points_to,
         closure: &closure,
         type_table: Rc::clone(&type_table),
         struct_fields_map,
@@ -255,6 +260,9 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
 struct Translator<'a> {
     box_plan: &'a BoxPlan,
     value_copy: &'a value_copy::ValueCopyPlan,
+    /// Computed on the TIR as the fold reads it: [`PointsTo::handed`] keys an
+    /// argument by its expression.
+    points_to: PointsTo,
     closure: &'a closure::ClosurePlan,
     type_table: Rc<RefCell<TypeTable>>,
     struct_fields_map: StructFields,
@@ -416,9 +424,9 @@ struct FunctionTranslator<'a, 'p> {
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
-    /// May-alias components for this function, so a confined by-value argument
-    /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
-    alias_components: value_copy::last_use::AliasComponents,
+    /// [`value_copy::last_use::Ownership::written_args`], `None` where the
+    /// ownership walk did not run, which leaves every argument copied.
+    written_args: Option<IndexSet<Span>>,
     /// Assignments that write into the storage their place holds, by span
     /// (WEP 2026-10-13).
     in_place_assigns: IndexSet<Span>,
@@ -462,14 +470,17 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
         // functions (scalar/reference-only) hit this path. A borrowed local is
-        // already retyped to its box, and the value it holds is what counts.
+        // already retyped to its box, and the value it holds is what counts, as
+        // is what a reference leads to, which `*r` hands to a call.
         let needs_copy_analysis = {
             let tt = base.type_table.borrow();
             func.params
                 .iter()
                 .map(|p| p.type_id)
                 .chain(func.locals.iter().map(|l| l.type_id))
-                .map(|tid| base.box_plan.get_box_inner_type(tid).unwrap_or(tid))
+                .map(|tid| {
+                    tt.peel_refs_and_box(base.box_plan.get_box_inner_type(tid).unwrap_or(tid))
+                })
                 .any(|tid| value_copy::needs_value_copy(tid, &tt))
         };
         // One resolver for the body, shared by every question about what an
@@ -496,6 +507,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &type_table,
                     &resolver,
                     base.value_copy,
+                    &base.points_to,
                     &base.moved_local_spans,
                     &value_copy::reach::StorageReach::new(
                         &type_table,
@@ -533,11 +545,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             IndexSet::default()
         };
-        let alias_components = if needs_copy_analysis {
-            value_copy::last_use::AliasComponents::build(func)
-        } else {
-            value_copy::last_use::AliasComponents::empty()
-        };
+        let written_args = analyzed.then_some(ownership.written_args);
         // Keyed on the *return* type rather than `needs_copy_analysis`: the
         // payload is read out of the receiver, so it need not be any local's
         // type.
@@ -558,7 +566,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals,
             ref_targets,
             moved_roots,
-            alias_components,
+            written_args,
             in_place_assigns,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
@@ -585,7 +593,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
-            alias_components: value_copy::last_use::AliasComponents::empty(),
+            written_args: None,
             in_place_assigns: IndexSet::default(),
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
@@ -2317,7 +2325,6 @@ impl FunctionTranslator<'_, '_> {
             return rewritten;
         }
         let ordered = self.call_args_in_param_order(func, args);
-        let mut_roots = self.call_mut_roots(func, &ordered);
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
         let has_receiver = args.receiver().is_some();
@@ -2340,7 +2347,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: *is_mut,
                     }
                 } else {
-                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
+                    self.convert_call_arg_at(e, *is_mut, Some(func), i)
                 }
             })
             .collect();
@@ -2880,10 +2887,9 @@ impl FunctionTranslator<'_, '_> {
         is_mut: bool,
         callee: Option<&FunctionRef>,
         param_index: usize,
-        mut_roots: &[u32],
     ) -> ArenaCallArg {
-        let needs_value_copy = self.should_wrap_value_copy(arg)
-            && !self.arg_confined(arg, callee, param_index, mut_roots);
+        let needs_value_copy =
+            self.should_wrap_value_copy(arg) && !self.arg_confined(arg, callee, param_index);
         let value_type = arg.type_id;
         let converted = self.convert_operand(arg);
         let expr = if needs_value_copy {
@@ -2895,52 +2901,22 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether a by-value argument into a confined parameter can skip its copy:
-    /// the argument aliases no `mut_root`.
+    /// nothing writes its storage before the callee is done with it.
     fn arg_confined(
         &self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
         param_index: usize,
-        mut_roots: &[u32],
     ) -> bool {
-        let confined = callee.is_some_and(|c| {
+        callee.is_some_and(|c| {
             self.base
                 .value_copy
                 .confined_params
                 .is_confined(c, param_index)
-        });
-        if !confined {
-            return false;
-        }
-        match value_copy::last_use::alias_root(arg) {
-            Some(r) => !mut_roots
-                .iter()
-                .any(|m| self.alias_components.may_alias(*m, r)),
-            None => mut_roots.is_empty(),
-        }
-    }
-
-    /// The storage roots a call mutates: the referent of each `&mut` parameter.
-    /// `args` is in the callee's parameter order, so a method's receiver is
-    /// `args[0]` and needs no offset.
-    fn call_mut_roots(&self, callee: &FunctionRef, args: &[(&TirExpr, bool)]) -> Vec<u32> {
-        let mut_ref_params = self
-            .base
-            .value_copy
-            .mut_ref_params
-            .get(&callee.module_source, &callee.name);
-        let mut roots = Vec::new();
-        for (i, (expr, _)) in args.iter().enumerate() {
-            if mut_ref_params
-                .and_then(|v| v.get(i))
-                .copied()
-                .unwrap_or(false)
-                && let Some(r) = value_copy::last_use::alias_root(expr)
-            {
-                roots.push(r);
-            }
-        }
-        roots
+        }) && self
+            .written_args
+            .as_ref()
+            .is_some_and(|written| !written.contains(&value_copy::last_use::strip_casts(arg).span))
     }
 
     /// A call's arguments paired with their declared `mut`-ness, in the callee's

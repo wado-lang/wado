@@ -1,0 +1,26 @@
+// A generic variant that recurses through a tuple payload: the copy planner
+// asks what `Chain<i32>` can hold, walking `[T, Chain<T>]` in the instance's
+// terms, and the walk ends at `Chain<i32>` itself.
+
+variant Chain<T> {
+    End,
+    Link([T, Chain<T>]),
+}
+
+#[inline("never")]
+fn depth(c: Chain<i32>) -> i32 {
+    return match c {
+        End => 0,
+        Link([_, rest]) => 1 + depth(rest),
+    };
+}
+
+export fn run() {
+    let c: Chain<i32> = Link([1, Link([2, End])]);
+    assert depth(c) == 2;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
