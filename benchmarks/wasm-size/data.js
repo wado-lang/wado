@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791955040807,
+  "lastUpdate": 1791977526532,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67025,6 +67025,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b04b4ab5fa1320ca81d7e517521622264d23b6eb"
         },
         "date": 1791955039838,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21710,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339797,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a5f3582572d792ab258b32f62552188a1a7e7e6",
+          "message": "Merge pull request #2353 from wado-lang/claude/spec-let-chains-5zrkuz\n\nfeat: let chains with Rust's semantics in if, while and for",
+          "timestamp": "2026-10-14T20:12:58+09:00",
+          "tree_id": "8c2b9c8606644475f7dfefe9d9f581e4fc9f3625",
+          "url": "https://github.com/wado-lang/wado/commit/8a5f3582572d792ab258b32f62552188a1a7e7e6"
+        },
+        "date": 1791977525675,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
