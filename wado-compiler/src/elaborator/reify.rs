@@ -1120,7 +1120,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("`record_effect_ops` records op signatures for every effect reify emits");
         tir::TirEffect {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
-            name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
             span: decl.span,
@@ -1138,7 +1137,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
-            name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
             is_generic: !decl.type_params.is_empty(),

@@ -98,11 +98,6 @@ impl EffectRef {
         }
     }
 
-    /// Whether this names one effect rather than a row still to be filled in.
-    pub fn is_ground(&self) -> bool {
-        matches!(self, EffectRef::Concrete(_) | EffectRef::Undeclared { .. })
-    }
-
     pub fn is_param(&self) -> bool {
         matches!(self, EffectRef::Param { .. })
     }
@@ -9761,7 +9756,6 @@ pub struct TirTest {
 pub struct TirEffect {
     /// The declaration this was reified from.
     pub head: DeclaredHead,
-    pub name: String,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub span: Span,
@@ -9794,7 +9788,6 @@ pub struct TirEffectOp {
 pub struct TirResource {
     /// The declaration this was reified from.
     pub head: DeclaredHead,
-    pub name: String,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub is_generic: bool,

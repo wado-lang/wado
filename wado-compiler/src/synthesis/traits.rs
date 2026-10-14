@@ -4063,7 +4063,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
         .resources
         .iter()
         .filter(|r| !r.is_generic)
-        .map(|r| (r.name.clone(), r.span, r.head.def()))
+        .map(|r| (r.head.name().to_string(), r.span, r.head.def()))
         .collect();
 
     let mut tt = module.type_table.borrow_mut();

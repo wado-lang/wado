@@ -64,8 +64,8 @@ pub use types::{
     flatten_param_type,
 };
 
-/// Every effect and resource the TIR modules declare, as `(module, name)`: the
-/// candidates [`lookup_effect_owner`] picks a binding's owner from.
+/// Every effect and resource the TIR modules declare: the candidates
+/// [`lookup_effect_owner`] picks a binding's owner from.
 fn effect_owners(modules: &IndexMap<ModuleSource, TirModule>) -> Vec<&DeclaredHead> {
     modules
         .values()

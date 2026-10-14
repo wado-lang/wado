@@ -754,8 +754,7 @@ fn build_dispatch_wrapper_function(
         }
     } else if is_resource {
         let placeholder_call = build_resource_fallback_call(
-            effect_module,
-            base_name,
+            effect,
             type_args,
             op,
             &arg_exprs,
@@ -936,8 +935,7 @@ fn build_dispatch_wrapper_function(
 /// for static ones — with `method_info` carrying the original `cm_name`, which
 /// is what lets `rewrite_cm_resource_methods` route it afterwards.
 fn build_resource_fallback_call(
-    effect_module: &ModuleSource,
-    base_name: &str,
+    resource: &DeclaredHead,
     type_args: &[TypeId],
     op: &TirEffectOp,
     arg_exprs: &[TirExpr],
@@ -951,10 +949,10 @@ fn build_resource_fallback_call(
         .expect("build_resource_fallback_call: caller checked op.cm_name.is_some()");
     let is_instance = op.params.first().is_some_and(TirParam::is_self);
 
-    // The receiver is the resource type (`Stream<u8>`), declared in
-    // `effect_module`: the dispatch label names the infrastructure, not the type.
-    let type_name = instance_name(base_name, type_args, type_table);
-    let label_fq = FqTypeName::shape(effect_module, &type_name);
+    // The receiver is the resource type (`Stream<u8>`): the dispatch label
+    // names the infrastructure, not the type.
+    let type_name = instance_name(resource.name(), type_args, type_table);
+    let label_fq = FqTypeName::shape(resource.module(), &type_name);
     let mangled_method_name = MethodName::format_local(&label_fq, None, &op.name);
 
     // The label is the receiver: a rendered name has nowhere to be stored now,
@@ -971,7 +969,7 @@ fn build_resource_fallback_call(
         None
     } else {
         Some(tir::MonomorphInfo {
-            generic_name: base_name.to_string(),
+            generic_name: resource.name().to_string(),
             impl_type_args: type_args.to_vec(),
             method_type_args: vec![],
             is_blanket: false,
@@ -979,7 +977,7 @@ fn build_resource_fallback_call(
     };
 
     let func_ref = FunctionRef {
-        module_source: effect_module.clone(),
+        module_source: resource.module().clone(),
         name: mangled_method_name,
         template: None,
         monomorph_info,
