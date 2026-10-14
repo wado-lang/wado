@@ -589,10 +589,7 @@ impl CaptureScanner {
                     ast::Condition::LetChain { elements, .. } => {
                         for (index, element) in elements.iter().enumerate() {
                             self.conditional = conditional || index > 0;
-                            match element {
-                                ast::ConditionElement::Let { expr, .. } => self.scan(expr),
-                                ast::ConditionElement::Expr(cond) => self.scan(cond),
-                            }
+                            self.scan(element.expr());
                         }
                         self.conditional = conditional;
                     }

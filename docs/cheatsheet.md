@@ -675,6 +675,7 @@ if let Some(x) = opt {
 // Let chains, as in Rust: `&&` joins `let`s and bools, left to right
 if let Some(x) = a && x > 0 && let Some(y) = b { ... }   // x, y in scope
 while n < 10 && let Some(v) = iter.next() { ... }
+for let mut i = 0; i < xs.len() && let x = xs[i]; i += 1 { ... }
 // if let Some(x) = a && p || q { }   // Error: parenthesize `(p || q)`
 
 // Mutable pattern bindings

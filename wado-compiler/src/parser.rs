@@ -85,15 +85,45 @@ pub struct Parser {
     /// statement-level expression. Enables operand-position recovery inside the
     /// binary / assignment parsers: a missing right operand becomes an
     /// [`Expr::Error`] placeholder so the partial expression (`a + <error>`) and
-    /// its statement survive. The `checkpoint`/`restore` speculative paths only
-    /// parse types and patterns, never binary/assignment operands, so they
-    /// never reach the recovery branch — a real parse error is never masked from
-    /// a backtracking caller even when this flag is set across a checkpoint.
+    /// its statement survive. A `checkpoint`/`restore` speculative path that
+    /// reaches the recovery branch (a condition's operands do) drops what it
+    /// recorded on `restore`, and the parse replacing it records it again, so
+    /// a real parse error is never masked.
     recovering: bool,
     effect_hole: EffectHole,
     /// Inside a trait whose head is not `with ()`, where a method's own
     /// `with ()` says it is pure rather than nothing.
     pure_override_allowed: bool,
+}
+
+/// Why a read of a condition's operands rolled back.
+enum ConditionRetry {
+    /// It holds no `let` and is not a whole plain condition at comparison
+    /// precedence, so the expression parser reads it.
+    Plain,
+    /// A `let` came after operands already joined into a plain expression.
+    Chain,
+}
+
+/// An operator binding looser than `||`, which a let-chain operand cannot hold
+/// unparenthesized.
+fn binds_looser_than_or(kind: &TokenKind) -> bool {
+    matches!(
+        kind,
+        TokenKind::DotDotLt
+            | TokenKind::DotDotEq
+            | TokenKind::Eq
+            | TokenKind::PlusEq
+            | TokenKind::MinusEq
+            | TokenKind::StarEq
+            | TokenKind::SlashEq
+            | TokenKind::PercentEq
+            | TokenKind::AmpEq
+            | TokenKind::PipeEq
+            | TokenKind::CaretEq
+            | TokenKind::ShlEq
+            | TokenKind::ShrEq
+    )
 }
 
 /// Where the parse stands on `with _`, which names an effect only inside a
@@ -2965,62 +2995,95 @@ impl Parser {
     }
 
     /// Parse an `if`, `while` or `for` condition. Its operands are read at
-    /// comparison precedence, split at `&&` and `||`, and what they hold
-    /// decides: a `let` among them makes a let chain, and none a plain
-    /// expression, which is parsed again as one when it is more than a single
-    /// operand.
+    /// comparison precedence and split at `&&` and `||`, and a `let` among
+    /// them makes a let chain. A read that cannot settle the condition is
+    /// rolled back and done again by the parser it calls for.
     fn parse_condition(&mut self, start_span: Span) -> ParseResult<Condition> {
         let checkpoint = self.checkpoint();
+        let retry = match self.parse_condition_operands(start_span, true)? {
+            Ok(condition) => return Ok(condition),
+            Err(retry) => retry,
+        };
+        self.restore(checkpoint);
+        match retry {
+            ConditionRetry::Plain => Ok(Condition::Expr(self.parse_expr_no_struct_literal()?)),
+            ConditionRetry::Chain => match self.parse_condition_operands(start_span, false)? {
+                Ok(condition) => Ok(condition),
+                Err(_) => unreachable!("an unjoined read never asks to be retried"),
+            },
+        }
+    }
+
+    /// Read a condition's operands. While `join` holds and no `let` has
+    /// appeared, they are joined as `parse_or_expr` joins them, each node's id
+    /// allocated where it would allocate it, so a condition holding no `let`
+    /// is read once. A `let` after a join asks for an unjoined read, and
+    /// operands that are not a whole plain condition ask for the expression
+    /// parser.
+    fn parse_condition_operands(
+        &mut self,
+        start_span: Span,
+        mut join: bool,
+    ) -> ParseResult<Result<Condition, ConditionRetry>> {
         let mut elements = Vec::new();
+        // `ands` is the run of `&&` being joined, `ors` the `||` chain of the
+        // runs before it.
+        let mut ands: Option<Expr> = None;
+        let mut ors: Option<Expr> = None;
+        let mut joined = false;
         let mut first_or = None;
-        let mut has_let = false;
-        let mut every_operand_parsed = true;
         loop {
-            let element = if self.check(&TokenKind::Let) {
-                has_let = true;
+            if self.check(&TokenKind::Let) {
+                if join {
+                    if joined {
+                        return Ok(Err(ConditionRetry::Chain));
+                    }
+                    elements.extend(ands.take().map(ConditionElement::Expr));
+                    join = false;
+                }
                 self.advance();
                 let elem_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
-                self.parse_chain_operand()
-                    .map(|expr| ConditionElement::Let {
-                        span: elem_span.merge(&expr.span()),
-                        pattern: Box::new(pattern),
-                        expr,
-                    })
+                let expr = self.parse_chain_operand()?;
+                elements.push(ConditionElement::Let {
+                    span: elem_span.merge(&expr.span()),
+                    pattern: Box::new(pattern),
+                    expr,
+                });
+            } else if join {
+                let Ok(operand) = self.parse_chain_operand() else {
+                    return Ok(Err(ConditionRetry::Plain));
+                };
+                ands = Some(match ands.take() {
+                    Some(left) => {
+                        joined = true;
+                        self.join_binary(left, BinaryOp::And, operand)
+                    }
+                    None => operand,
+                });
             } else {
-                self.parse_chain_operand().map(ConditionElement::Expr)
-            };
-            match element {
-                Ok(element) => elements.push(element),
-                // Before a `let`, the operand may belong to a plain condition
-                // that the full expression parser reads where this one fails.
-                Err(_) if !has_let => {
-                    every_operand_parsed = false;
-                    break;
-                }
-                Err(e) => return Err(e),
+                elements.push(ConditionElement::Expr(self.parse_chain_operand()?));
             }
             match self.peek_kind() {
                 TokenKind::And => {}
                 TokenKind::Or => {
                     first_or.get_or_insert(self.peek().span);
+                    if join {
+                        joined = true;
+                        ors = Some(self.join_or_run(ors.take(), ands.take()));
+                    }
                 }
                 _ => break,
             }
             self.advance();
         }
 
-        if !has_let {
-            if every_operand_parsed
-                && elements.len() == 1
-                && matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Semicolon)
-                && let Some(ConditionElement::Expr(expr)) = elements.pop()
-            {
-                return Ok(Condition::Expr(expr));
+        if join {
+            if !matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Semicolon) {
+                return Ok(Err(ConditionRetry::Plain));
             }
-            self.restore(checkpoint);
-            return Ok(Condition::Expr(self.parse_expr_no_struct_literal()?));
+            return Ok(Ok(Condition::Expr(self.join_or_run(ors, ands))));
         }
         if let Some(span) = first_or {
             return Err(self.error_at_span(
@@ -3028,18 +3091,40 @@ impl Parser {
                 "`||` cannot join the operands of a let chain; parenthesize it",
             ));
         }
-        if matches!(self.peek_kind(), TokenKind::DotDotLt | TokenKind::DotDotEq) {
+        if binds_looser_than_or(self.peek_kind()) {
             return Err(self.error_at_span(
                 self.peek().span,
-                "a range cannot be a let-chain operand; parenthesize it",
+                &format!(
+                    "{} binds looser than a let-chain operand; parenthesize it",
+                    self.peek_kind()
+                ),
             ));
         }
-
         let end_span = elements.last().expect("a let chain has an element").span();
-        Ok(Condition::LetChain {
+        Ok(Ok(Condition::LetChain {
             elements,
             span: start_span.merge(&end_span),
-        })
+        }))
+    }
+
+    /// End a run of `&&` operands, joining it to the `||` chain before it.
+    fn join_or_run(&mut self, ors: Option<Expr>, ands: Option<Expr>) -> Expr {
+        let run = ands.expect("a run holds an operand");
+        match ors {
+            Some(left) => self.join_binary(left, BinaryOp::Or, run),
+            None => run,
+        }
+    }
+
+    fn join_binary(&mut self, left: Expr, op: BinaryOp, right: Expr) -> Expr {
+        let span = left.span().merge(&right.span());
+        Expr::Binary(Box::new(BinaryExpr {
+            id: self.alloc_ast_id(),
+            left,
+            op,
+            right,
+            span,
+        }))
     }
 
     /// One let-chain operand, a `let`'s scrutinee included, read at comparison

@@ -1699,20 +1699,16 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(expr);
             }
             Condition::LetChain { elements, .. } => {
-                self.comma_sep_with(" && ", elements, |s, elem| match elem {
-                    ConditionElement::Let { pattern, expr, .. } => {
+                self.comma_sep_with(" && ", elements, |s, elem| {
+                    if let ConditionElement::Let { pattern, .. } = elem {
                         s.output.push_str("let ");
                         s.unparse_pattern(pattern);
                         s.output.push_str(" = ");
-                        s.with_parens_if(chain_operand_needs_parens(expr), |s| {
-                            s.unparse_expr(expr);
-                        });
                     }
-                    ConditionElement::Expr(expr) => {
-                        s.with_parens_if(chain_operand_needs_parens(expr), |s| {
-                            s.unparse_expr(expr);
-                        });
-                    }
+                    let expr = elem.expr();
+                    s.with_parens_if(chain_operand_needs_parens(expr), |s| {
+                        s.unparse_expr(expr);
+                    });
                 });
             }
         }
@@ -3987,20 +3983,16 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
     match cond {
         Condition::Expr(e) => unparse_expr_into(e, output),
         Condition::LetChain { elements, .. } => {
-            comma_sep_with_into(" && ", elements, output, |elem, output| match elem {
-                ConditionElement::Let { pattern, expr, .. } => {
+            comma_sep_with_into(" && ", elements, output, |elem, output| {
+                if let ConditionElement::Let { pattern, .. } = elem {
                     output.push_str("let ");
                     unparse_pattern_into(pattern, output);
                     output.push_str(" = ");
-                    with_parens_if_into(chain_operand_needs_parens(expr), output, |o| {
-                        unparse_expr_into(expr, o);
-                    });
                 }
-                ConditionElement::Expr(expr) => {
-                    with_parens_if_into(chain_operand_needs_parens(expr), output, |o| {
-                        unparse_expr_into(expr, o);
-                    });
-                }
+                let expr = elem.expr();
+                with_parens_if_into(chain_operand_needs_parens(expr), output, |o| {
+                    unparse_expr_into(expr, o);
+                });
             });
         }
     }

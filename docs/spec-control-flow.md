@@ -55,18 +55,18 @@ assert got == 42;
 
 ### Let Chains
 
-The condition of an `if` or a `while` may be a let chain, as in Rust. A let
-chain is a list of operands joined by `&&`. Each operand is either a `bool`
-expression or `let PATTERN = EXPR`, and at least one is a `let`. `if let` and
-`while let` are the chains with one operand.
+The condition of an `if`, a `while`, or a C-style `for` may be a let chain, as
+in Rust. A let chain is a list of operands joined by `&&`. Each operand is
+either a `bool` expression or `let PATTERN = EXPR`, and at least one is a `let`.
+`if let` and `while let` are the chains with one operand.
 
 The operands run left to right. A `bool` that is `false`, or a pattern that does
 not match, stops the chain: the operands after it do not run, `if` takes its
-`else`, and `while` ends. The condition holds when every operand holds.
+`else`, and the loop ends. The condition holds when every operand holds.
 
 A `let` binds its names for the operands after it and for the body: the `if`'s
-then-block or the loop body. The `else` block and the operands before the `let`
-do not see them. A later `let` may bind a name again, and the later binding
+then-block, or the loop body and a `for`'s update. The `else` block and the
+operands before the `let` do not see them. A later `let` may bind a name again, and the later binding
 holds from there on.
 
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
@@ -257,7 +257,19 @@ assert count == 3;
 ```
 
 The loop runs while the pattern matches, as `while let` does, and the update
-runs after each iteration.
+runs after each iteration. The condition may be any
+[let chain](#let-chains):
+
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
+```wado
+// `i < items.len()` failing keeps `items[i]` from running out of bounds.
+let mut taken: List<i32> = [];
+for let mut i = 0; i < items.len() && let x = items[i] && x < 30; i += 1 {
+    taken.push(x);
+}
+assert taken == [10, 20];
+```
 
 ## For-Of Loop
 

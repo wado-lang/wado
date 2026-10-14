@@ -83,6 +83,28 @@ test "for with a pattern condition" {
     assert count == 3;
 }
 
+test "for with a let chain" {
+    let items: List<i32> = [10, 20, 30];
+
+    // `i < items.len()` failing keeps `items[i]` from running out of bounds.
+    let mut taken: List<i32> = [];
+    for let mut i = 0; i < items.len() && let x = items[i] && x < 30; i += 1 {
+        taken.push(x);
+    }
+    assert taken == [10, 20];
+
+    // `continue` still runs the update, which sees the chain's bindings.
+    let mut seen: List<i32> = [];
+    let mut iter = items.into_iter();
+    for ; let Some(x) = iter.next() && x > 0; seen.push(x) {
+        if x == 20 {
+            continue;
+        }
+        seen.push(-x);
+    }
+    assert seen == [-10, 10, 20, -30, 30];
+}
+
 struct Countdown {
     n: i32,
 }

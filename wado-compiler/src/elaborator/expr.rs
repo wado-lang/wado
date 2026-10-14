@@ -604,8 +604,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an expression standing in condition position, which must be
-    /// `bool`: nothing coerces to it. `bool` is checked, never passed down as an
-    /// expected type — an expectation reaches the operands, where it is wrong.
+    /// `bool`: nothing but `!` coerces to it. `bool` is checked, never passed
+    /// down as an expected type — an expectation reaches the operands, where it
+    /// is wrong.
     pub(super) fn resolve_condition_expr(
         &mut self,
         expr: &Expr,
@@ -613,6 +614,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let type_id = self.resolve_expr(expr, ctx, None);
         if type_id == TypeTable::BOOL
+            || type_id == TypeTable::NEVER
             || type_id == TypeTable::UNKNOWN
             || type_id == TypeTable::ERROR
         {
@@ -2422,17 +2424,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
-                self.resolve_let_chain_stmts(
-                    elements,
-                    &if_expr.then_block,
-                    &mut ctx.enter_scope(),
-                    expected_type,
-                    true,
-                    if_expr.span,
-                );
+                let scope = &mut ctx.enter_scope();
+                self.resolve_let_chain_operands(elements, scope);
+                self.resolve_block_with_position(&if_expr.then_block, scope, expected_type, true);
 
-                // `resolve_let_chain_stmts` resolved the then block under the
-                // same expectation, so a mismatch there is already diagnosed.
+                // The then block resolved under the same expectation, so a
+                // mismatch there is already diagnosed.
                 self.settle_if_result(if_expr, expected_type, true)
             }
             Condition::Expr(expr) => {

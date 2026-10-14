@@ -2849,6 +2849,14 @@ impl ConditionElement {
             Self::Expr(e) => e.span(),
         }
     }
+
+    /// The operand's expression: a `let`'s scrutinee, or the bool itself.
+    #[must_use]
+    pub fn expr(&self) -> &Expr {
+        match self {
+            Self::Let { expr, .. } | Self::Expr(expr) => expr,
+        }
+    }
 }
 
 /// Condition in control flow statements: either a regular expression or a let chain.
@@ -2857,8 +2865,9 @@ impl ConditionElement {
 pub enum Condition {
     /// Regular boolean expression: `if x > 0 { ... }` or `while x > 0 { ... }`
     Expr(Expr),
-    /// Let chain: `if let PAT = EXPR && BOOL && let PAT2 = EXPR2 { ... }`
-    /// Also handles simple `if let PAT = EXPR { ... }` (single Let element, no guards).
+    /// Let chain: `&&`-joined operands holding at least one `let PAT = EXPR`,
+    /// as in `if BOOL && let PAT = EXPR && let PAT2 = EXPR2 { ... }`. A plain
+    /// `if let PAT = EXPR { ... }` is the chain of one Let element.
     LetChain {
         elements: Vec<ConditionElement>,
         span: Span,
