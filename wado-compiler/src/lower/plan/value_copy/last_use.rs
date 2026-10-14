@@ -73,8 +73,23 @@ impl AliasComponents {
     }
 }
 
+/// The locals a closure yielded by `value` captures, which calling it may
+/// write: the closure literal itself, or a block ending in one, as boxing
+/// leaves a closure that captures a borrow.
+fn closure_captures(value: &TirExpr) -> Vec<u32> {
+    match &value.kind {
+        TirExprKind::Closure { captures, .. } => capture_source_locals(captures).collect(),
+        TirExprKind::Block(block) => match block.stmts.last().map(|s| &s.kind) {
+            Some(TirStmtKind::Expr(tail)) => closure_captures(tail),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
 /// Collects `(local, alias-root)` edges: a `let` / whole-local assign bound from
-/// a projection, and a match-arm binding rooted at its scrutinee.
+/// a projection or a closure capturing it, and a match-arm binding rooted at
+/// its scrutinee.
 struct AliasEdgeCollector {
     edges: Vec<(u32, u32)>,
 }
@@ -84,9 +99,13 @@ impl TirRefVisitor for AliasEdgeCollector {
         if let TirStmtKind::Let {
             local_index, value, ..
         } = &stmt.kind
-            && let Some(root) = alias_root(value)
         {
-            self.edges.push((*local_index, root));
+            if let Some(root) = alias_root(value) {
+                self.edges.push((*local_index, root));
+            }
+            for captured in closure_captures(value) {
+                self.edges.push((*local_index, captured));
+            }
         }
         self.walk_stmt(stmt);
     }

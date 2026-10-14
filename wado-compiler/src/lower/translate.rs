@@ -2957,6 +2957,23 @@ impl FunctionTranslator<'_, '_> {
             translator: &'t FunctionTranslator<'a, 'p>,
             roots: Vec<u32>,
         }
+        impl Scan<'_, '_, '_> {
+            /// A handle passed to a callee, which may write through it, or a
+            /// `fn mut` called, which may write what it captured. The callee's
+            /// own declaration is not consulted: a closure's `$call`,
+            /// synthesized after planning, has no row to consult.
+            fn handed(&mut self, arg: &TirExpr) {
+                let type_table = self.translator.base.type_table.borrow();
+                let writable = place::could_write_through(arg.type_id, &type_table)
+                    || matches!(
+                        type_table.get(arg.type_id),
+                        ResolvedType::Function { is_mut: true, .. }
+                    );
+                if writable {
+                    self.roots.extend(value_copy::last_use::alias_root(arg));
+                }
+            }
+        }
         impl TirRefVisitor for Scan<'_, '_, '_> {
             fn visit_expr(&mut self, expr: &TirExpr) {
                 match &expr.kind {
@@ -2966,9 +2983,19 @@ impl FunctionTranslator<'_, '_> {
                         expr: place,
                     } => self.roots.extend(value_copy::last_use::alias_root(place)),
                     TirExprKind::Call { func, args, .. } => {
+                        // A receiver written through is a place, not a handle.
                         let ordered = self.translator.call_args_in_param_order(func, args);
                         self.roots
                             .extend(self.translator.call_mut_roots(func, &ordered));
+                        for arg in args.iter() {
+                            self.handed(&arg.expr);
+                        }
+                    }
+                    TirExprKind::IndirectCall { callee, args } => {
+                        self.handed(callee);
+                        for arg in args {
+                            self.handed(arg);
+                        }
                     }
                     _ => {}
                 }

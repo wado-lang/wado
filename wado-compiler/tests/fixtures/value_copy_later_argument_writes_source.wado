@@ -1,7 +1,8 @@
 // Arguments are evaluated left to right, and a by-value one is copied as it is
-// taken. A later argument that writes the same value, through a `&mut` it
-// hands on or by assigning a field, runs before the callee does, so a
-// parameter that keeps nothing of its argument still needs the copy.
+// taken. A later argument that writes the same value runs before the callee
+// does, so a parameter that keeps nothing of its argument still needs the
+// copy: whether it hands on a `&mut`, assigns a field, passes a closure a
+// reference held in a local, or calls a closure that captured the value.
 
 struct Pair {
     a: i32,
@@ -23,6 +24,13 @@ export fn run() {
     assert two(x, then: { bump_a(&mut x); x }) == 1011;
     let mut y = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
     assert two(y, then: { y.a = 1001; y }) == 1011;
+    let bump = |w: &mut Pair| { w.a += 1000; };
+    let mut z = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    let r = &mut z;
+    assert two(z, then: { bump(r); z }) == 1011;
+    let mut v = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    let mut bump_v = || { v.a += 1000; };
+    assert two(v, then: { bump_v(); v }) == 1011;
 }
 
 __DATA__
