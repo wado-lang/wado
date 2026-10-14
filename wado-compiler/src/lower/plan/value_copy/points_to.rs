@@ -1259,18 +1259,15 @@ impl Builder<'_> {
     }
 
     fn assign(&mut self, target: &TirExpr, value: Option<u32>) {
-        match &target.kind {
-            TirExprKind::Local { index, .. } => {
-                let node = self.local(self.frame, *index);
-                if let Some(v) = value {
-                    self.g.copy(v, node);
-                }
+        if let TirExprKind::Local { index, .. } = &target.kind {
+            let node = self.local(self.frame, *index);
+            if let Some(v) = value {
+                self.g.copy(v, node);
             }
-            _ => {
-                let place = self.borrowed(target);
-                if let Some(v) = value {
-                    self.g.store(place, v);
-                }
+        } else {
+            let place = self.borrowed(target);
+            if let Some(v) = value {
+                self.g.store(place, v);
             }
         }
     }

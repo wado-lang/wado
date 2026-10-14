@@ -2142,7 +2142,7 @@ impl Analyzer<'_> {
                     // A named call hands back storage of its own or reached
                     // through its arguments, and so does a part of it.
                     (None, TirExprKind::Call { args, .. }) => {
-                        for a in args.iter() {
+                        for a in args {
                             self.storage_roots(place::unwrap_borrow(&a.expr), out);
                         }
                     }

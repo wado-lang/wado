@@ -223,8 +223,8 @@ mod tests {
             let b = set((0..end).step_by(step_b));
             let mut added = LocSet::default();
             a.union_into(&b, &mut added);
-            let is_a = |n: &u32| n % step_a as u32 == 0;
-            let is_b = |n: &u32| n % step_b as u32 == 0;
+            let is_a = |n: &u32| n.is_multiple_of(step_a as u32);
+            let is_b = |n: &u32| n.is_multiple_of(step_b as u32);
             let expected: Vec<u32> = (0..end).filter(|n| is_a(n) || is_b(n)).collect();
             assert_eq!(a.iter().collect::<Vec<_>>(), expected);
             assert_eq!(a.len(), expected.len());
