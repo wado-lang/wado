@@ -7,7 +7,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp, aggregate_field_info};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp, field_name_at};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
@@ -2534,10 +2534,13 @@ impl FunctionTranslator<'_, '_> {
                 let receiver_type = self
                     .type_table
                     .monomorphized_or_self(self.type_table.strip_handles(recv_nir_ty));
-                let (_, names, _) =
-                    aggregate_field_info(receiver_type, self.type_table, &self.ctx.package.structs)
-                        .expect("a promoted FieldAccess reads a tuple or struct");
-                let field_name = names[field_index as usize].clone();
+                let field_name = field_name_at(
+                    receiver_type,
+                    field_index,
+                    self.type_table,
+                    &self.ctx.package.structs,
+                )
+                .expect("a promoted FieldAccess reads a field of a tuple or struct");
                 // Multi-value-return split: if the receiver is a local that was
                 // split into per-field scalars (the aggregate was never
                 // materialised), read the split local directly — a `StructGet`
