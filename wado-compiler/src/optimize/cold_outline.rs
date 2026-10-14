@@ -17,6 +17,7 @@
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
     FuncCell, FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam,
@@ -304,6 +305,7 @@ fn free_vars(
         &[],
     );
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
+    let bound_ahead = bound_ahead_of(body, region);
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
         let crossing = if idx < param_count {
@@ -315,26 +317,35 @@ fn free_vars(
         } else {
             Crossing::Argument
         };
+        let type_id = func.locals[idx as usize].type_id;
+        // A boxed local's storage is the box, which the call hands over, so a
+        // write through its address lands where the caller reads it.
+        let storage_in_slot = !type_table.is_compiler_struct_instance(type_id, CompilerItem::Box);
         // One question, asked of every crossing that leaves the storage behind:
         // a write inside the region is one no call carries back.
         if crossing.leaves_storage_behind()
-            && (inside.written.contains(&idx) || func.address_taken_locals.contains(&idx))
+            && (inside.written.contains(&idx)
+                || (storage_in_slot && func.address_taken_locals.contains(&idx)))
         {
-            compiler_trace!("cold_outline", "  local {idx} is written across the split");
+            compiler_trace!(
+                "cold_outline",
+                "  local {} is written across the split",
+                func.locals[idx as usize].name
+            );
             return None;
         }
         if crossing != Crossing::Argument {
             continue;
         }
         // An argument is read at the call, ahead of the guard the region read it
-        // behind. A primitive slot always holds a value, so that is the same
-        // read; a reference slot need not — an assertion's short-circuit
-        // operands are filled only on the path that evaluates them, and one the
-        // guard would have skipped hands a null across a non-null parameter.
-        if !matches!(
-            type_table.get(func.locals[idx as usize].type_id),
-            ResolvedType::Primitive(_)
-        ) {
+        // behind. A primitive slot always holds a value, and so does one bound
+        // ahead of the region; any other reference slot need not — an
+        // assertion's short-circuit operands are filled only on the path that
+        // evaluates them, and one the guard would have skipped hands a null
+        // across a non-null parameter.
+        if !matches!(type_table.get(type_id), ResolvedType::Primitive(_))
+            && !bound_ahead.contains(&idx)
+        {
             compiler_trace!("cold_outline", "  local {idx} may be unset at the call");
             return None;
         }
@@ -342,6 +353,21 @@ fn free_vars(
     }
     args.sort_unstable();
     Some(args)
+}
+
+/// The locals a root-level `let` binds ahead of the root statement holding
+/// `region`, which every path into the region has run.
+fn bound_ahead_of(body: &Body, region: &[StmtId]) -> IndexSet<u32> {
+    let first = NodeRef::Stmt(region[0]);
+    body.blocks[body.root()]
+        .stmts
+        .iter()
+        .take_while(|&&s| body.find_in_nodes_under(NodeRef::Stmt(s), |n| (n == first).then_some(())).is_none())
+        .filter_map(|&s| match &body.stmts[s].kind {
+            StmtKind::Let { local_index, .. } => Some(*local_index),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The locals a walk touched.
