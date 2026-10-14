@@ -1,6 +1,6 @@
 use crate::ast::{
-    self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
-    Pattern, Stmt, for_each_pattern_binding,
+    self, AssignExpr, AstId, Block, Condition, Expr, Function, IdentExpr, Item, Pattern, Stmt,
+    for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::elaborator::liveness::is_user_authored;
@@ -748,10 +748,7 @@ impl MoveWalker<'_> {
             Condition::Expr(e) => self.visit_expr(e),
             Condition::LetChain { elements, .. } => {
                 for element in elements {
-                    match element {
-                        ConditionElement::Let { expr, .. } => self.visit_expr(expr),
-                        ConditionElement::Expr(e) => self.visit_expr(e),
-                    }
+                    self.visit_expr(element.expr());
                 }
             }
         }

@@ -2,7 +2,7 @@
 //! conditional where a short-circuit can skip it. See
 //! `docs/wep-2026-08-19-power-assert-coverage.md`.
 
-use crate::ast::{self, AssertStmt, AstId, BinaryOp, Expr, UnaryOp};
+use crate::ast::{self, AssertStmt, AstId, Expr, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::TypeId;
@@ -475,7 +475,7 @@ impl CaptureScanner {
             }
             Expr::Binary(b) => {
                 self.scan(&b.left);
-                self.conditional = conditional || matches!(b.op, BinaryOp::And | BinaryOp::Or);
+                self.conditional = conditional || b.op.is_short_circuit();
                 self.scan(&b.right);
                 self.conditional = conditional;
                 if !is_root {
@@ -587,12 +587,11 @@ impl CaptureScanner {
                 match &i.condition {
                     ast::Condition::Expr(cond) => self.scan(cond),
                     ast::Condition::LetChain { elements, .. } => {
-                        for element in elements {
-                            match element {
-                                ast::ConditionElement::Let { expr, .. } => self.scan(expr),
-                                ast::ConditionElement::Expr(cond) => self.scan(cond),
-                            }
+                        for (index, element) in elements.iter().enumerate() {
+                            self.conditional = conditional || index > 0;
+                            self.scan(element.expr());
                         }
+                        self.conditional = conditional;
                     }
                 }
                 if !is_root {

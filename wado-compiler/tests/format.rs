@@ -3439,6 +3439,20 @@ fn test() {
 ",
     );
 
+    // An assignment nested in a comparison, inside a chain and outside one
+    assert_format_preserves_ast(
+        r"
+fn test() {
+    let y: Option<i32> = null;
+    let mut z = 0;
+    if let Some(v) = y && (z = 3) == () {
+        println(`${v}`);
+    }
+    let b = (z += 1) == ();
+}
+",
+    );
+
     // while let with && guard containing &&
     assert_format_preserves_ast(
         r"
@@ -3460,6 +3474,25 @@ fn test() {
     let opt = Option::<i32>::Some(5);
     if let Some(x) = opt && (x > 10 || x < 0) {
         println(`${x}`);
+    }
+}
+",
+    );
+
+    // A `let`'s scrutinee is a chain operand too, as is a loose operand of a
+    // `while` chain that starts with a boolean.
+    assert_format_preserves_ast(
+        r"
+fn test() {
+    let mut n = 0;
+    if let true = (n > 1 || n < 0) && let r = (0..<n) {
+        println(`${r}`);
+    }
+    while (n < 2 || n > 9) && let Some(v) = (a && b) {
+        n += 1;
+    }
+    if let f = (|y: i32| y > 0) && f(n) {
+        n = 0;
     }
 }
 ",

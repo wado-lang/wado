@@ -81,7 +81,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_block_with_position(block, ctx, expected_type, true);
     }
 
-    fn resolve_block_with_position(
+    pub(super) fn resolve_block_with_position(
         &mut self,
         block: &Block,
         ctx: &mut FunctionContext,
@@ -1385,67 +1385,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_with_position(b, ctx, expected_type, tail_value);
                 }
 
-                self.resolve_let_chain_stmts(
-                    elements,
+                let ctx = &mut ctx.enter_scope();
+                self.resolve_let_chain_operands(elements, ctx);
+                self.resolve_block_with_position(
                     &if_stmt.then_block,
-                    &mut ctx.enter_scope(),
+                    ctx,
                     expected_type,
                     tail_value,
-                    if_stmt.span,
                 );
             }
         }
     }
 
-    /// Resolve a let-chain condition, one nesting level per element: a `Let`
-    /// becomes a two-arm `Match`, an `Expr` an `If` guard, every failure falling
-    /// through to `else_block` and the innermost success running `then_block`.
-    /// This walk only resolves the scrutinees and conditions and binds the
-    /// patterns; reify rebuilds the chain from the `DesugarKind::IfLetChain` tag.
-    pub(super) fn resolve_let_chain_stmts(
+    /// Resolve a let chain's operands in order, binding each pattern into
+    /// `ctx` so later operands and the success path the caller resolves next
+    /// can name it. Reify rebuilds the chain's nested `Match` / `If` shape
+    /// (`reify_let_chain_stmts`).
+    pub(super) fn resolve_let_chain_operands(
         &mut self,
         elements: &[ConditionElement],
-        then_block_ast: &ast::Block,
         ctx: &mut FunctionContext,
-        expected_type: Option<TypeId>,
-        tail_value: bool,
-        span: Span,
     ) {
-        if elements.is_empty() {
-            self.resolve_block_with_position(then_block_ast, ctx, expected_type, tail_value);
-            return;
-        }
-        // Process the current element first so its bindings are visible when
-        // resolving subsequent elements and the then_block (via the recursion
-        // below).
-        match &elements[0] {
-            ConditionElement::Let {
-                pattern,
-                expr,
-                span: elem_span,
-            } => {
-                let scrutinee_type = self.resolve_expr(expr, ctx, None);
-                // Adds pattern bindings to ctx — subsequent elements can see them.
-                self.resolve_if_pattern(pattern, scrutinee_type, ctx, *elem_span);
-                self.resolve_let_chain_stmts(
-                    &elements[1..],
-                    then_block_ast,
-                    ctx,
-                    expected_type,
-                    tail_value,
+        for element in elements {
+            match element {
+                ConditionElement::Let {
+                    pattern,
+                    expr,
                     span,
-                );
-            }
-            ConditionElement::Expr(expr) => {
-                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
-                self.resolve_let_chain_stmts(
-                    &elements[1..],
-                    then_block_ast,
-                    ctx,
-                    expected_type,
-                    tail_value,
-                    span,
-                );
+                } => {
+                    let scrutinee_type = self.resolve_expr(expr, ctx, None);
+                    self.resolve_if_pattern(pattern, scrutinee_type, ctx, *span);
+                }
+                ConditionElement::Expr(expr) => {
+                    self.resolve_condition_expr(expr, ctx);
+                }
             }
         }
     }
@@ -3147,22 +3120,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_condition_expr(cond_expr, ctx);
                 self.resolve_block(&w.body, ctx, None);
             }
-            Condition::LetChain {
-                elements,
-                span: cond_span,
-            } => {
+            Condition::LetChain { elements, .. } => {
                 self.record_desugar(w.id, DesugarKind::WhileLetChain);
                 // The else-branch (an unconditional `break`) is rebuilt by reify;
                 // the body walk only binds the chain patterns and walks the
                 // then-body for facts.
-                self.resolve_let_chain_stmts(
-                    elements,
-                    &w.body,
-                    &mut ctx.enter_scope(),
-                    None,
-                    false,
-                    *cond_span,
-                );
+                let ctx = &mut ctx.enter_scope();
+                self.resolve_let_chain_operands(elements, ctx);
+                self.resolve_block_with_position(&w.body, ctx, None, false);
             }
         }
     }
@@ -3179,11 +3144,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Reify rebuilds the C-style-for desugar
         // (`{ init; loop { if !cond { break } $for_N_body: { B } update } }`,
-        // or the `while let` form) from the `DesugarKind::CStyleFor` tag + the
-        // AST. This walk resolves `init` / `cond` / scrutinee, binds the
-        // for-header let pattern, and walks the body + update for their facts.
+        // or the let-chain form, as `while` has) from the `DesugarKind::CStyleFor`
+        // tag + the AST. This walk resolves `init` / the condition, binds the
+        // chain's patterns, and walks the body + update for their facts.
         // Body and update are resolved here (not up-front) because in the
-        // let-chain form the pattern's bindings must be in scope for both — see
+        // let-chain form the chain's bindings must be in scope for both — see
         // `lib/core/prelude/string.wado::String::find_char`.
         if let Some(init) = &f.init {
             self.resolve_stmt(init, ctx);
@@ -3194,46 +3159,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_for_update(f.update.as_ref(), ctx);
             }
             Some(Condition::Expr(cond_expr)) => {
-                self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(cond_expr, ctx);
                 self.resolve_for_labeled_body(&body_label, &f.body, ctx);
                 self.resolve_for_update(f.update.as_ref(), ctx);
             }
-            Some(Condition::LetChain {
-                elements,
-                span: cond_span,
-            }) => {
-                // The parser only accepts a single Let element in a for
-                // header — multi-element let-chains are syntactically
-                // limited to `if`/`while`. Future grammar evolution that
-                // relaxes this should surface here as a diagnostic, not
-                // an ICE.
-                let single_let = if elements.len() == 1 {
-                    match &elements[0] {
-                        ConditionElement::Let {
-                            pattern,
-                            expr,
-                            span: elem_span,
-                        } => Some((pattern, expr, *elem_span)),
-                        ConditionElement::Expr(_) => None,
-                    }
-                } else {
-                    None
-                };
-                let Some((pattern, expr, elem_span)) = single_let else {
-                    let _ = self.emit(TypeError::InvalidPattern {
-                        message: "for-header let-chain must consist of a single \
-                                  `let pattern = expr` element"
-                            .to_string(),
-                        span: *cond_span,
-                    });
-                    return;
-                };
-
-                let scrutinee_type = self.resolve_expr(expr, ctx, None);
+            Some(Condition::LetChain { elements, .. }) => {
                 let ctx = &mut ctx.enter_scope();
-                self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
-                // Body and update both run inside the pattern scope so they can
-                // name the bindings introduced by `pat`.
+                self.resolve_let_chain_operands(elements, ctx);
                 self.resolve_for_labeled_body(&body_label, &f.body, ctx);
                 self.resolve_for_update(f.update.as_ref(), ctx);
             }

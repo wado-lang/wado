@@ -1,0 +1,14 @@
+// Error: a `||` before the first `let` of a chain is rejected as one after it
+// is, in a `while` condition as in an `if` condition.
+
+export fn run() {
+    let o = builtin::black_box(Option::<i32>::Some(1));
+    let a = builtin::black_box(false);
+    let b = builtin::black_box(true);
+    while a || b && let Some(x) = o {
+        break;
+    }
+}
+
+__DATA__
+{"compile_error": ":8:13: parse error: `||` cannot join the operands of a let chain; parenthesize it"}

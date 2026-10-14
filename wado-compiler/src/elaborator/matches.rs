@@ -29,12 +29,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut ctx.enter_scope();
         self.resolve_if_pattern(&m.pattern, scrutinee_type, ctx, m.span);
         if let Some(guard) = &m.guard {
-            let body = self.resolve_expr(guard, ctx, Some(TypeTable::BOOL));
-            // `expected_type` on `resolve_expr` is only a coercion hint;
-            // a non-bool guard (e.g. `Some(v) && v + 1`) would silently
-            // pass and leave the synthesised `Match`'s declared type
-            // (BOOL) inconsistent with the arm body's actual type.
-            self.typecheck(body, TypeTable::BOOL, guard.span());
+            self.resolve_condition_expr(guard, ctx);
         }
 
         TypeTable::BOOL

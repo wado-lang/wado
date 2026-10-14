@@ -729,7 +729,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left_requires = self.tysys.binop_operand_requires_trait(left);
             let right_requires = self.tysys.binop_operand_requires_trait(right);
             if (left_requires || right_requires)
-                && !matches!(op, BinaryOp::And | BinaryOp::Or)
+                && !op.is_short_circuit()
                 && left != TypeTable::ERROR
                 && right != TypeTable::ERROR
             {
@@ -762,7 +762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Logical operators (&&, ||) are excluded since both sides are always bool.
         // We compare resolved types (not just TypeIds) because generic instantiation
         // can create distinct TypeIds for the same logical type.
-        if !matches!(op, BinaryOp::And | BinaryOp::Or)
+        if !op.is_short_circuit()
             && left != right
             && left != TypeTable::NEVER
             && right != TypeTable::NEVER

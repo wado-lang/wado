@@ -1699,25 +1699,16 @@ impl<'a> Unparser<'a> {
                 self.unparse_expr(expr);
             }
             Condition::LetChain { elements, .. } => {
-                self.comma_sep_with(" && ", elements, |s, elem| match elem {
-                    ConditionElement::Let { pattern, expr, .. } => {
+                self.comma_sep_with(" && ", elements, |s, elem| {
+                    if let ConditionElement::Let { pattern, .. } = elem {
                         s.output.push_str("let ");
                         s.unparse_pattern(pattern);
                         s.output.push_str(" = ");
+                    }
+                    let expr = elem.expr();
+                    s.with_parens_if(chain_operand_needs_parens(expr), |s| {
                         s.unparse_expr(expr);
-                    }
-                    ConditionElement::Expr(expr) => {
-                        // In a let-chain, elements are joined by `&&`. If this
-                        // element is itself a `&&`/`||` expression, we wrap it
-                        // in parens so re-parsing preserves the chain shape:
-                        // `let PAT = E && (a && b)` would otherwise re-parse
-                        // as three chain elements instead of two.
-                        let needs_parens = matches!(
-                            expr,
-                            Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
-                        );
-                        s.with_parens_if(needs_parens, |s| s.unparse_expr(expr));
-                    }
+                    });
                 });
             }
         }
@@ -2099,7 +2090,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_binary(&mut self, b: &BinaryExpr) {
-        if matches!(b.op, BinaryOp::And | BinaryOp::Or) {
+        if b.op.is_short_circuit() {
             let snap = self.snapshot();
             self.unparse_binary_inline(b);
             if !self.added_since(snap).contains('\n') && !self.exceeds_width_since(snap) {
@@ -3524,10 +3515,10 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // tightly as comparison, and inside another comparison (which would
         // extend or invalidate the chain). Only the looser-binding logical
         // `&&` / `||` can hold a bare chain.
-        Expr::ComparisonChain(_) => !matches!(parent_op, BinaryOp::And | BinaryOp::Or),
-        // Range expressions have lower precedence than all binary operators,
-        // so they always need parentheses when nested inside a binary expression.
-        Expr::Range(_) => true,
+        Expr::ComparisonChain(_) => !parent_op.is_short_circuit(),
+        // A range or an assignment binds looser than every binary operator,
+        // and a closure's expression body would take the operator after it.
+        Expr::Range(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::Closure(_) => true,
         // `matches` and logical `!` bind looser than the arithmetic, shift, and
         // bitwise operators (precedence >= 5 here) but tighter than comparison
         // and logical `&&`/`||`, so they need parens only inside the former.
@@ -3992,23 +3983,26 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
     match cond {
         Condition::Expr(e) => unparse_expr_into(e, output),
         Condition::LetChain { elements, .. } => {
-            comma_sep_with_into(" && ", elements, output, |elem, output| match elem {
-                ConditionElement::Let { pattern, expr, .. } => {
+            comma_sep_with_into(" && ", elements, output, |elem, output| {
+                if let ConditionElement::Let { pattern, .. } = elem {
                     output.push_str("let ");
                     unparse_pattern_into(pattern, output);
                     output.push_str(" = ");
-                    unparse_expr_into(expr, output);
                 }
-                ConditionElement::Expr(expr) => {
-                    let needs_parens = matches!(
-                        expr,
-                        Expr::Binary(b) if matches!(b.op, BinaryOp::And | BinaryOp::Or)
-                    );
-                    with_parens_if_into(needs_parens, output, |o| unparse_expr_into(expr, o));
-                }
+                let expr = elem.expr();
+                with_parens_if_into(chain_operand_needs_parens(expr), output, |o| {
+                    unparse_expr_into(expr, o);
+                });
             });
         }
     }
+}
+
+/// A let-chain operand, a `let`'s scrutinee included, is parenthesized as the
+/// right operand of an `&&` would be: neither `&&` nor `||` may stand bare in
+/// it.
+fn chain_operand_needs_parens(expr: &Expr) -> bool {
+    needs_parens(expr, BinaryOp::And, false)
 }
 
 /// One pattern as source.

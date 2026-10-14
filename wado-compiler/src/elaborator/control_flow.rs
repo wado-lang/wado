@@ -655,10 +655,9 @@ fn condition_any<'t, P: AstTreeProbe<'t>>(
 ) -> bool {
     match cond {
         ast::Condition::Expr(e) => any_in_expr(ctx, e, probe),
-        ast::Condition::LetChain { elements, .. } => elements.iter().any(|el| match el {
-            ast::ConditionElement::Let { expr, .. } => any_in_expr(ctx, expr, probe),
-            ast::ConditionElement::Expr(e) => any_in_expr(ctx, e, probe),
-        }),
+        ast::Condition::LetChain { elements, .. } => {
+            elements.iter().any(|el| any_in_expr(ctx, el.expr(), probe))
+        }
     }
 }
 

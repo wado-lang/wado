@@ -34,6 +34,37 @@ test "if let" {
     assert got == 42;
 }
 
+test "let chains" {
+    let a: Option<i32> = Option::Some(4);
+    let b: Option<i32> = Option::Some(6);
+    let mut got = 0;
+    if let Some(x) = a && x % 2 == 0 && let Some(y) = b && y > x {
+        got = x + y;            // `x` and `y` are in scope here
+    } else {
+        got = -1;               // neither is in scope here
+    }
+    assert got == 10;
+
+    // A later `let` may rebind a name an earlier one bound.
+    if let Some(x) = a && let Some(x) = Option::Some(x * 10) {
+        got = x;
+    }
+    assert got == 40;
+}
+
+test "a let chain stops at the first operand that fails" {
+    let none: Option<i32> = null;
+    let mut calls = 0;
+    let mut tick = || {
+        calls += 1;
+        return true;
+    };
+    if let Some(_) = none && tick() {
+        calls += 100;
+    }
+    assert calls == 0;
+}
+
 test "match ergonomics" {
     let opt: Option<i32> = Option::<i32>::Some(42);
     let ro = &opt;

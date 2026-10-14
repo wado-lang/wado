@@ -28,7 +28,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::synth::ArgClass;
-use super::typecheck::{SlotFrame, TypeCheckResult, check_assignable};
+use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
@@ -604,18 +604,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an expression standing in condition position, which must be
-    /// `bool`: nothing coerces to it. `bool` is checked, never passed down as an
-    /// expected type — an expectation reaches the operands, where it is wrong.
+    /// `bool`: nothing but `!` coerces to it.
     pub(super) fn resolve_condition_expr(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let type_id = self.resolve_expr(expr, ctx, None);
-        if type_id == TypeTable::BOOL
-            || type_id == TypeTable::UNKNOWN
-            || type_id == TypeTable::ERROR
-        {
+        let type_id = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+        if admits_condition(&self.tysys.type_table.borrow(), type_id) {
             return type_id;
         }
         let (expected, found) = self
@@ -2422,17 +2418,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
-                self.resolve_let_chain_stmts(
-                    elements,
-                    &if_expr.then_block,
-                    &mut ctx.enter_scope(),
-                    expected_type,
-                    true,
-                    if_expr.span,
-                );
+                let scope = &mut ctx.enter_scope();
+                self.resolve_let_chain_operands(elements, scope);
+                self.resolve_block_with_position(&if_expr.then_block, scope, expected_type, true);
 
-                // `resolve_let_chain_stmts` resolved the then block under the
-                // same expectation, so a mismatch there is already diagnosed.
+                // The then block resolved under the same expectation, so a
+                // mismatch there is already diagnosed.
                 self.settle_if_result(if_expr, expected_type, true)
             }
             Condition::Expr(expr) => {
@@ -3044,7 +3035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut ctx.enter_scope();
         self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
         if let Some(g) = arm.guard.as_ref() {
-            self.resolve_expr(g, ctx, Some(TypeTable::BOOL));
+            self.resolve_condition_expr(g, ctx);
         }
         let body_type = self.resolve_expr(&arm.body, ctx, expected_type);
         (body_type, arm.body.span())

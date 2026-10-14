@@ -1,0 +1,12 @@
+// Error: a range, like an assignment, binds looser than a let-chain operand,
+// so it takes parentheses as `||` does: `let r = (0..<n)`.
+
+export fn run() {
+    let n = builtin::black_box(3);
+    if let r = 0..<n {
+        return;
+    }
+}
+
+__DATA__
+{"compile_error": ":6:17: parse error: `..<` binds looser than a let-chain operand; parenthesize it"}
