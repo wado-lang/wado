@@ -36,9 +36,10 @@ pub struct CodegenFlags {
     /// V8, which lacks the proposal.
     pub wide_arithmetic: bool,
 
-    /// Check the contracts of `_unchecked` functions: `lower::contract_checks`
-    /// keeps each `if builtin::contract_checks()` or deletes it. On in the
-    /// test world and at `-O0`, off otherwise (see [`CodegenFlags::for_build`]).
+    /// Check the contract of a call marked `unchecked`: `lower::contract_checks`
+    /// keeps or deletes the checks of each `unchecked` twin. An unmarked call
+    /// checks in every build. On in the test world and at `-O0`, off otherwise
+    /// (see [`CodegenFlags::for_build`]).
     pub contract_checks: bool,
 }
 

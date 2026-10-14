@@ -531,9 +531,12 @@ impl String {
     /// unspecified: a byte of the backing array past `len()`, or a trap.
     #[compiler_item("string_get_byte_unchecked")]
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.used, "index out of bounds";
-        }
+        return unchecked self.byte_at(index);
+    }
+
+    fn byte_at(&self, index: i32) -> u8
+        contract 0 <= index < self.len(), "index out of bounds"
+    {
         return self.repr[index];
     }
 
@@ -543,9 +546,12 @@ impl String {
     /// reads the string.
     #[compiler_item("string_set_byte_unchecked")]
     internal fn internal_set_byte_unchecked(&mut self, index: i32, value: u8) {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.used, "index out of bounds";
-        }
+        unchecked self.set_byte_at(index, value);
+    }
+
+    fn set_byte_at(&mut self, index: i32, value: u8)
+        contract 0 <= index < self.len(), "index out of bounds"
+    {
         self.repr[index] = value;
     }
 
@@ -683,18 +689,6 @@ impl String {
         builtin::array_copy(&mut self.repr as &mut Array<u8>, start, slice.internal_repr(), slice.internal_start(), n);
     }
 
-    /// Append the byte range `[start, end)` of `s` to this string.
-    ///
-    /// # Contract
-    /// - `0 <= start <= end <= s.len()`.
-    /// - `start` and `end` must lie on UTF-8 character boundaries of `s`.
-    /// - The resulting byte sequence must remain valid UTF-8.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32) {
-        self.push_str(s.as_str_slice().slice_unchecked(start, end));
-    }
-
     /// Returns an iterator over the UTF-8 bytes of the string.
     pub fn bytes(&self) -> StrUtf8ByteIter {
         return StrUtf8ByteIter { repr: &self.repr as &Array<u8>, used: self.used, index: 0 };
@@ -759,36 +753,25 @@ impl String {
     /// here directly, skipping `encode_char`'s width dispatch.
     #[compiler_item("string_push_ascii")]
     pub fn push_ascii_unchecked(&mut self, byte: u8) {
-        if builtin::contract_checks() {
-            assert byte < 0x80, "not an ASCII byte";
-        }
+        unchecked self.push_ascii_byte(byte);
+    }
+
+    fn push_ascii_byte(&mut self, byte: u8)
+        contract byte < 0x80, "not an ASCII byte"
+    {
         let start = self.internal_reserve_uninit(1);
         self.internal_set_byte_unchecked(start, byte);
     }
 
     /// Truncates the string to the given byte length. Panics if `byte_len` is
     /// negative or off a character boundary; round a budget with `floor_char_boundary`.
-    pub fn truncate(&mut self, byte_len: i32) {
-        if byte_len >= self.used {
-            return;
+    pub fn truncate(&mut self, byte_len: i32)
+        contract byte_len >= 0, "negative length"
+        contract byte_len >= self.len() || self.is_char_boundary(byte_len), "not on a UTF-8 character boundary"
+    {
+        if byte_len < self.used {
+            self.used = byte_len;
         }
-        assert byte_len >= 0, "negative length";
-        assert self.is_char_boundary(byte_len), "not on a UTF-8 character boundary";
-        self.truncate_unchecked(byte_len);
-    }
-
-    /// Truncate without bounds or UTF-8 boundary checks.
-    ///
-    /// # Contract
-    /// - `0 <= byte_len <= self.len()`.
-    /// - `byte_len` lies on a UTF-8 character boundary.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn truncate_unchecked(&mut self, byte_len: i32) {
-        if builtin::contract_checks() {
-            assert self.is_char_boundary(byte_len), "not a character boundary of the string";
-        }
-        self.used = byte_len;
     }
 
     /// Truncate the string to the given number of characters.
@@ -871,20 +854,11 @@ impl String {
 
     /// Extract a substring by byte range `[start, end)`. Panics if the range is out
     /// of bounds or off a character boundary; round a budget with `floor_char_boundary`.
-    pub fn substr_bytes(&self, start: i32, end: i32) -> String {
-        return self.as_str_slice().substr_bytes(start, end);
-    }
-
-    /// Extract a substring by byte range `[start, end)` without bounds or
-    /// UTF-8 boundary checks.
-    ///
-    /// # Contract
-    /// - `0 <= start <= end <= self.len()`.
-    /// - `start` and `end` lie on UTF-8 character boundaries.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
-        return self.as_str_slice().substr_bytes_unchecked(start, end);
+    pub fn substr_bytes(&self, start: i32, end: i32) -> String
+        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+    {
+        return (unchecked self.as_str_slice().slice(start, end)).to_string();
     }
 
     /// Returns true if this string contains the given substring.
@@ -942,44 +916,18 @@ impl String {
 
     /// Inserts a character at the given byte index.
     /// Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
-    pub fn insert(&mut self, byte_index: i32, ch: char) {
-        assert self.is_char_boundary(byte_index), "insert index not on UTF-8 character boundary";
-        self.insert_unchecked(byte_index, ch);
-    }
-
-    /// Inserts a character at `byte_index` without bounds or UTF-8 boundary checks.
-    ///
-    /// # Contract
-    /// - `0 <= byte_index <= self.len()`.
-    /// - `byte_index` lies on a UTF-8 character boundary.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn insert_unchecked(&mut self, byte_index: i32, ch: char) {
-        if builtin::contract_checks() {
-            assert self.is_char_boundary(byte_index), "not a character boundary of the string";
-        }
+    pub fn insert(&mut self, byte_index: i32, ch: char)
+        contract self.is_char_boundary(byte_index), "insert index not on UTF-8 character boundary"
+    {
         self.make_gap(byte_index, ch.len_utf8());
         encode_char(&mut self.repr as &mut Array<u8>, byte_index, ch as u32);
     }
 
     /// Inserts a string at the given byte index.
     /// Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
-    pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S) {
-        assert self.is_char_boundary(byte_index), "insert_str index not on UTF-8 character boundary";
-        self.insert_str_unchecked(byte_index, s);
-    }
-
-    /// Inserts a string at `byte_index` without bounds or UTF-8 boundary checks.
-    ///
-    /// # Contract
-    /// - `0 <= byte_index <= self.len()`.
-    /// - `byte_index` lies on a UTF-8 character boundary.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn insert_str_unchecked<S: AsStrSlice>(&mut self, byte_index: i32, s: S) {
-        if builtin::contract_checks() {
-            assert self.is_char_boundary(byte_index), "not a character boundary of the string";
-        }
+    pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S)
+        contract self.is_char_boundary(byte_index), "insert_str index not on UTF-8 character boundary"
+    {
         let view = s.as_str_slice();
         let s_len = view.len();
         if s_len == 0 {
@@ -991,24 +939,10 @@ impl String {
 
     /// Removes and returns the character at the given byte index.
     /// Panics if the index is out of bounds or not on a UTF-8 character boundary.
-    pub fn remove(&mut self, byte_index: i32) -> char {
-        assert 0 <= byte_index < self.used, "index out of bounds";
-        assert self.is_char_boundary(byte_index), "remove index not on UTF-8 character boundary";
-        return self.remove_unchecked(byte_index);
-    }
-
-    /// Removes and returns the character at `byte_index` without bounds or
-    /// UTF-8 boundary checks.
-    ///
-    /// # Contract
-    /// - `0 <= byte_index < self.len()`.
-    /// - `byte_index` lies on a UTF-8 character boundary.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn remove_unchecked(&mut self, byte_index: i32) -> char {
-        if builtin::contract_checks() {
-            assert 0 <= byte_index < self.used && self.is_char_boundary(byte_index), "not the start of a character";
-        }
+    pub fn remove(&mut self, byte_index: i32) -> char
+        contract 0 <= byte_index < self.len(), "index out of bounds"
+        contract self.is_char_boundary(byte_index), "remove index not on UTF-8 character boundary"
+    {
         let [code, char_len] = decode_char_at(&self.repr as &Array<u8>, byte_index);
         builtin::array_copy(
             &mut self.repr as &mut Array<u8>,
@@ -1400,9 +1334,12 @@ impl StrSlice {
     /// Any other `index` is a contract violation, and the result is
     /// unspecified: a byte of the backing array outside the view, or a trap.
     pub fn get_byte_unchecked(&self, index: i32) -> u8 {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.len(), "index out of bounds";
-        }
+        return unchecked self.byte_at(index);
+    }
+
+    fn byte_at(&self, index: i32) -> u8
+        contract 0 <= index < self.len(), "index out of bounds"
+    {
         return self.repr[self.start + index];
     }
 
@@ -1433,23 +1370,10 @@ impl StrSlice {
     /// A sub-view over `[start, end)`, counted from this view's start.
     /// Panics if the range is out of bounds or either end is off a character
     /// boundary.
-    pub fn slice(&self, start: i32, end: i32) -> StrSlice {
-        assert 0 <= start <= end <= self.len(), "byte range out of bounds";
-        assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
-        return self.slice_unchecked(start, end);
-    }
-
-    /// A sub-view without bounds or UTF-8 boundary checks.
-    ///
-    /// # Contract
-    /// - `0 <= start <= end <= self.len()`.
-    /// - `start` and `end` lie on UTF-8 character boundaries.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
-        if builtin::contract_checks() {
-            assert start <= end && self.is_char_boundary(start) && self.is_char_boundary(end), "not a range of characters in the view";
-        }
+    pub fn slice(&self, start: i32, end: i32) -> StrSlice
+        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+    {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
@@ -1550,7 +1474,7 @@ impl StrSlice {
         if !self.starts_with(prefix) {
             return null;
         }
-        return Option::Some(self.slice_unchecked(start, self.len()));
+        return Option::Some(unchecked self.slice(start, self.len()));
     }
 
     /// The view with `suffix` removed from the end, or None when it does not
@@ -1560,7 +1484,7 @@ impl StrSlice {
         if !self.ends_with(suffix) {
             return null;
         }
-        return Option::Some(self.slice_unchecked(0, self.len() - suffix_len));
+        return Option::Some(unchecked self.slice(0, self.len() - suffix_len));
     }
 
     /// Byte order against any text, the `cmp` a generic body cannot reach:
@@ -1721,8 +1645,8 @@ impl StrSlice {
 
     fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] {
         return [
-            self.slice_unchecked(0, at),
-            self.slice_unchecked(at + sep_len, self.len()),
+            unchecked self.slice(0, at),
+            unchecked self.slice(at + sep_len, self.len()),
         ];
     }
 
@@ -1747,9 +1671,12 @@ impl StrSlice {
     ///
     /// Breaking it is a contract violation, and the behavior is unconstrained.
     pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
-        if builtin::contract_checks() {
-            assert 0 <= byte_index < self.len() && self.is_char_boundary(byte_index), "not the start of a character";
-        }
+        return unchecked self.char_starting_at(byte_index);
+    }
+
+    fn char_starting_at(&self, byte_index: i32) -> char
+        contract 0 <= byte_index < self.len() && self.is_char_boundary(byte_index), "not the start of a character"
+    {
         return char::from_u32_unchecked(decode_char_at(self.repr, self.start + byte_index).0);
     }
 
@@ -1761,19 +1688,11 @@ impl StrSlice {
         return String::from_iter(self.chars().map(|c: char| c.to_ascii_uppercase()));
     }
 
-    pub fn substr_bytes(&self, start: i32, end: i32) -> String {
-        return self.slice(start, end).to_string();
-    }
-
-    /// Copies out the byte range `[start, end)` of the view without checks.
-    ///
-    /// # Contract
-    /// - `0 <= start <= end <= self.len()`.
-    /// - `start` and `end` lie on UTF-8 character boundaries.
-    ///
-    /// Breaking it is a contract violation, and the behavior is unconstrained.
-    pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
-        return self.slice_unchecked(start, end).to_string();
+    pub fn substr_bytes(&self, start: i32, end: i32) -> String
+        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+    {
+        return (unchecked self.slice(start, end)).to_string();
     }
 
     pub fn contains_char(&self, ch: char) -> bool {
@@ -1833,7 +1752,7 @@ impl StrSlice {
             // A match starts with the pattern's lead byte, never inside a
             // character, so each run between matches is whole characters.
             if bytes_match_at(self.repr, self.start + pos, pat.repr, pat.start, from_len) {
-                result.push_str(self.slice_unchecked(run_start, pos));
+                result.push_str(unchecked self.slice(run_start, pos));
                 result.push_str(to);
                 pos += from_len;
                 run_start = pos;
@@ -1842,7 +1761,7 @@ impl StrSlice {
                 pos += 1;
             }
         }
-        result.push_str(self.slice_unchecked(run_start, len));
+        result.push_str(unchecked self.slice(run_start, len));
         return result;
     }
 }
@@ -1885,12 +1804,11 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().ceil_char_boundary(index);
     }
 
-    fn slice(&self, start: i32, end: i32) -> StrSlice {
-        return self.as_str_slice().slice(start, end);
-    }
-
-    fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
-        return self.as_str_slice().slice_unchecked(start, end);
+    fn slice(&self, start: i32, end: i32) -> StrSlice
+        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+    {
+        return unchecked self.as_str_slice().slice(start, end);
     }
 
     fn as_bytes(&self) -> ByteSlice {
@@ -2021,12 +1939,11 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().to_ascii_uppercase();
     }
 
-    fn substr_bytes(&self, start: i32, end: i32) -> String {
-        return self.as_str_slice().substr_bytes(start, end);
-    }
-
-    fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
-        return self.as_str_slice().substr_bytes_unchecked(start, end);
+    fn substr_bytes(&self, start: i32, end: i32) -> String
+        contract 0 <= start <= end <= self.len(), "byte range out of bounds"
+        contract self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries"
+    {
+        return unchecked self.as_str_slice().substr_bytes(start, end);
     }
 
     fn contains_char(&self, ch: char) -> bool {

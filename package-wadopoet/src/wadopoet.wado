@@ -1086,8 +1086,8 @@ fn escape_in_place(out: &mut String, at: i32, quote: u8) {
     if i == n {
         return;
     }
-    let tail = out.substr_bytes_unchecked(i, n);
-    out.truncate_unchecked(i);
+    let tail = unchecked out.substr_bytes(i, n);
+    unchecked out.truncate(i);
     let end = tail.len();
     let mut from = 0;
     for let mut j = 0; j < end; j += 1 {
@@ -1096,13 +1096,13 @@ fn escape_in_place(out: &mut String, at: i32, quote: u8) {
             continue;
         }
         if j > from {
-            out.push_str_range_unchecked(&tail, from, j);
+            out.push_str(unchecked tail.slice(from, j));
         }
         write_escaped(out, b, quote);
         from = j + 1;
     }
     if end > from {
-        out.push_str_range_unchecked(&tail, from, end);
+        out.push_str(unchecked tail.slice(from, end));
     }
 }
 

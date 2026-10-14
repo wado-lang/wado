@@ -1113,8 +1113,8 @@ test "replacen" {
 
 test "replacen copies the tail from a character boundary" {
     // The scan stops one byte into `é`; the tail after it must not be a view
-    // starting inside the character, which the test world's contract check
-    // on `slice_unchecked` rejects.
+    // starting inside the character, which the test world's check of the
+    // contract on `slice` rejects.
     assert "é".replacen("xy", "z", -1) == "é";
     assert "aé".replacen("a", "b", 1) == "bé";
     assert "日本".replacen("本本", "x", -1) == "日本";
@@ -1325,59 +1325,40 @@ test "push_bytes with half a character" {
     s.push_bytes(&bytes);
 }
 
-test "push_str_range_unchecked ASCII" {
-    let mut dst = "[";
-    let src = "hello";
-    dst.push_str_range_unchecked(&src, 1, 4);
-    dst.push_str("]");
-    assert dst == "[ell]";
-}
-
-test "push_str_range_unchecked full range" {
-    let mut dst = String::with_capacity(0);
-    dst.push_str_range_unchecked("abcd", 0, 4);
-    assert dst == "abcd";
-}
-
-test "push_str_range_unchecked empty range" {
-    let mut dst = "x";
-    dst.push_str_range_unchecked("hello", 2, 2);
-    assert dst == "x";
-}
-
-test "push_str_range_unchecked multibyte" {
-    let mut dst = String::with_capacity(0);
+test "unchecked slice" {
     let src = "日本語";
-    dst.push_str_range_unchecked(&src, 3, 6);  // "本"
-    assert dst == "本";
+    assert unchecked src.slice(3, 6) == "本";
+    assert unchecked src.as_str_slice().slice(0, 3) == "日";
+    assert unchecked "hello".slice(2, 2) == "";
 }
 
-test "substr_bytes_unchecked basic" {
+test "unchecked substr_bytes" {
     let s = "hello";
-    assert s.substr_bytes_unchecked(1, 4) == "ell";
+    assert unchecked s.substr_bytes(1, 4) == "ell";
+    assert unchecked s.as_str_slice().substr_bytes(0, 2) == "he";
 }
 
-test "truncate_unchecked basic" {
+test "unchecked truncate" {
     let mut s = "hello";
-    s.truncate_unchecked(3);
+    unchecked s.truncate(3);
     assert s == "hel";
 }
 
-test "insert_unchecked ASCII" {
+test "unchecked insert" {
     let mut s = "ac";
-    s.insert_unchecked(1, 'b');
+    unchecked s.insert(1, 'b');
     assert s == "abc";
 }
 
-test "insert_str_unchecked ASCII" {
+test "unchecked insert_str" {
     let mut s = "<>";
-    s.insert_str_unchecked(1, "x");
+    unchecked s.insert_str(1, "x");
     assert s == "<x>";
 }
 
-test "remove_unchecked ASCII" {
+test "unchecked remove" {
     let mut s = "abc";
-    let c = s.remove_unchecked(1);
+    let c = unchecked s.remove(1);
     assert c == 'b';
     assert s == "ac";
 }

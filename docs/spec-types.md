@@ -353,10 +353,11 @@ assert part.len() == 3;              // in bytes
 assert part.to_string() == "ana";    // copies out, here and only here
 ```
 
-`slice(start, end)` takes byte offsets from the view's start. It traps when the
-range is out of bounds or either end is not a character boundary.
-`slice_unchecked` leaves both checks to the caller. Calling it with a range
-that fails either check is a
+`slice(start, end)` takes byte offsets from the view's start. Its
+[contract](./spec-assertions.md#contract-checks) is that the range is in bounds
+and both ends are character boundaries, so a call outside it traps.
+`unchecked v.slice(start, end)` leaves both checks to the caller. A marked call
+with a range that fails either check is a
 [contract violation](./spec-overview.md#behavior-classes), and the behavior is
 unconstrained: the view breaks its own invariant, and it may read bytes outside
 the view it was taken from. A view refers to its

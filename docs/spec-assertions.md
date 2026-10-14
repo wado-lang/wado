@@ -116,13 +116,10 @@ gives it (see [Behavior Classes](./spec-overview.md#behavior-classes)). A call
 from another component carries no marker, so a contract on an `export fn` is
 always checked.
 
-A function may also state a check of its own with `builtin::contract_checks()`,
-as the whole condition of an `if` statement with no `else`. Its body runs only
-where the build checks contracts.
-
-`-f contract-checks` and `-f no-contract-checks` choose. Without either, the
-test world checks at every optimization level, and any other world checks at
-`-O0` only:
+Whether a build checks a marked call is set by `-f contract-checks` and
+`-f no-contract-checks`, and by nothing a program writes. Without either flag,
+the test world checks at every optimization level, and any other world checks
+at `-O0` only:
 
 ```sh
 wado test app.wado                              # checks

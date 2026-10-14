@@ -108,6 +108,12 @@ pub fn unchecked_twin_name(name: &str) -> String {
 
 const UNCHECKED_TWIN_SUFFIX: &str = "$unchecked";
 
+/// The `core:builtin` intrinsic heading the contract checks of an `unchecked`
+/// twin, `if $contract_checks() { … }`, which `lower::contract_checks` keeps
+/// or deletes under `-f contract-checks`. No source spells it, so no program
+/// writes a check a build removes.
+pub const CONTRACT_CHECKS_INTRINSIC: &str = "$contract_checks";
+
 /// The name of the hidden default method a trait declares to hold the
 /// `contract` clauses of its method `method`, which every impl of the method
 /// calls at its head.

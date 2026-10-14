@@ -205,7 +205,7 @@ pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
 /// its caller, a byte scan whose escape arm is taken rarely, so the scan carries
 /// a call instead of a range append and a six-arm match with a format in it.
 fn flush_run_and_escape<S: AsStrSlice>(buf: &mut String, s: S, run_start: i32, i: i32, b: u8) {
-    buf.push_str_range_unchecked(s, run_start, i);
+    buf.push_str(unchecked s.slice(run_start, i));
     match b {
         0x22 => buf.push_str("\\\""),
         0x5C => buf.push_str("\\\\"),
@@ -236,7 +236,7 @@ fn write_escaped_string_from<S: AsStrSlice>(buf: &mut String, s: S, first: i32) 
         flush_run_and_escape(buf, s, run_start, i, b);
         run_start = i + 1;
     }
-    buf.push_str_range_unchecked(s, run_start, n);
+    buf.push_str(unchecked s.slice(run_start, n));
     buf.push('"');
 }
 

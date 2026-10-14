@@ -163,7 +163,7 @@ fn push_escaped_upto<S: AsStrSlice>(out: &mut String, source: S, cur: &mut HtmlC
             }
         } else {
             if b == b'&' || b == b'<' || b == b'>' || b == b'"' {
-                out.push_str_range_unchecked(source, run, bi);
+                out.push_str(unchecked source.slice(run, bi));
                 if b == b'&' {
                     out.push_str("&amp;");
                 } else if b == b'<' {
@@ -179,7 +179,7 @@ fn push_escaped_upto<S: AsStrSlice>(out: &mut String, source: S, cur: &mut HtmlC
         }
         pos += 1;
     }
-    out.push_str_range_unchecked(source, run, bi);
+    out.push_str(unchecked source.slice(run, bi));
     cur.byte_index = bi;
     cur.char_index = pos;
 }

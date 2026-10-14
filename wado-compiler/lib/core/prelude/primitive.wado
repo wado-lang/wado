@@ -275,7 +275,7 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
     f.write_char(digits.char_at_byte_unchecked(0));
     if precision > 0 || precision < 0 && fraction_len > 0 {
         f.write_char('.');
-        f.buf.push_str_range_unchecked(&digits, 1, digits.len());
+        f.buf.push_str(unchecked digits.slice(1, digits.len()));
         for let mut i = fraction_len; i < precision; i += 1 {
             f.write_char('0');
         }
@@ -442,9 +442,12 @@ impl char {
     /// (0..=0xD7FF or 0xE000..=0x10FFFF). Passing any other value is a
     /// contract violation, and the behavior is unconstrained.
     pub fn from_u32_unchecked(value: u32) -> char {
-        if builtin::contract_checks() {
-            assert value < 0xD800 || 0xE000 <= value <= 0x10FFFF, "not a Unicode scalar value";
-        }
+        return unchecked char::from_scalar(value);
+    }
+
+    fn from_scalar(value: u32) -> char
+        contract value < 0xD800 || 0xE000 <= value <= 0x10FFFF, "not a Unicode scalar value"
+    {
         return builtin::i32_as_char(value as i32);
     }
 

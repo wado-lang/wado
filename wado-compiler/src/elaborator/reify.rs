@@ -23,7 +23,10 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, global_init_function, global_name, unchecked_twin_name};
+use crate::name::{
+    CONTRACT_CHECKS_INTRINSIC, FqTypeName, Receiver, global_init_function, global_name,
+    unchecked_twin_name,
+};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, InstancePattern, LetStorage, LocalFrame, ResolvedType,
@@ -45,7 +48,7 @@ use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
-use crate::coverage::{CoverageMap, ProbeSite, contract_check_call};
+use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
@@ -460,9 +463,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
     /// over no elements.
     pub(crate) probes_without_instance: IndexSet<u32>,
-    /// The `builtin::contract_checks()` call heading the contract check whose
-    /// condition reify is in. See [`contract_check_call`].
-    pub(crate) contract_check_call: Option<AstId>,
 }
 
 /// Call site captured for location literals in defaults.
@@ -524,7 +524,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             coverage: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
-            contract_check_call: None,
         }
     }
 
@@ -1718,25 +1717,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.error_at(code, attr.span, message);
     }
 
-    /// Report `call` when it reified to `builtin::contract_checks()` anywhere
-    /// but at the head of a contract check: `lower::contract_checks` keeps or
-    /// deletes a check whole and knows no other shape.
-    fn reject_misplaced_contract_checks(&self, call: &ast::CallExpr, expr: &TirExpr) {
-        let TirExprKind::Call { func, .. } = &expr.kind else {
-            return;
-        };
-        if !func.is_builtin_named("contract_checks") || self.contract_check_call == Some(call.id) {
-            return;
-        }
-        self.error_at(
-            Code::UnsupportedFeature,
-            call.span,
-            "`builtin::contract_checks()` stands only as the whole condition of \
-             `if builtin::contract_checks() { … }`, with no `else`"
-                .to_string(),
-        );
-    }
-
     /// Report each attribute that describes a declaration with no body, written
     /// on a function that has one. Its arguments were read already, so a
     /// malformed one reports that too.
@@ -2677,11 +2657,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_method_call(method_call, ctx, recorded_type)
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
-            ast::Expr::Call(call) => {
-                let expr = self.reify_call(call, ctx, recorded_type);
-                self.reject_misplaced_contract_checks(call, &expr);
-                expr
-            }
+            ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
             ast::Expr::Match(match_expr) => {
                 self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
             }
@@ -2822,20 +2798,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 unreachable!("reify does not run on modules with syntax errors")
             }
         }
-    }
-
-    /// Reify the condition of the `if` statement `if_stmt`, where a contract
-    /// check's `builtin::contract_checks()` stands.
-    fn reify_if_stmt_condition(
-        &mut self,
-        if_stmt: &ast::IfStmt,
-        cond_expr: &ast::Expr,
-        ctx: &mut FunctionContext,
-    ) -> TirExpr {
-        let saved = std::mem::replace(&mut self.contract_check_call, contract_check_call(if_stmt));
-        let condition = self.reify_condition_expr(cond_expr, ctx);
-        self.contract_check_call = saved;
-        condition
     }
 
     /// Reify an expression in condition position, the walk
@@ -4308,7 +4270,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_if_stmt_condition(if_stmt, cond_expr, ctx);
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_branch = self.reify_block_with_position(
                     &if_stmt.then_block,
                     ctx,
@@ -4352,7 +4314,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_if_stmt(&mut self, if_stmt: &ast::IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
-                let condition = self.reify_if_stmt_condition(if_stmt, cond_expr, ctx);
+                let condition = self.reify_condition_expr(cond_expr, ctx);
                 let then_block = self.reify_block(&if_stmt.then_block, ctx, None);
                 let else_block = self.else_branch(
                     if_stmt.else_block.as_ref(),
@@ -10227,13 +10189,13 @@ fn bind_to_local(
     TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
 }
 
-/// `if builtin::contract_checks() { check }`: one `contract` clause as the
+/// `if $contract_checks() { check }`: one `contract` clause as the
 /// `unchecked` twin runs it. [`split_unchecked_twin`] unwraps it again for the
 /// checked function.
 fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
     TirStmt::new(
         TirStmtKind::If {
-            condition: builtin_call("contract_checks", Vec::new(), TypeTable::BOOL),
+            condition: builtin_call(CONTRACT_CHECKS_INTRINSIC, Vec::new(), TypeTable::BOOL),
             then_block: TirBlock::new(check, span),
             else_block: None,
         },

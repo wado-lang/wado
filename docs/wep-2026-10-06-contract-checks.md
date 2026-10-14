@@ -38,41 +38,26 @@ them off. The default depends on the world and the optimization level:
 The test world defaults on whatever the level, because finding bugs is what it
 is for. It already pays for that with the `debug` allocator.
 
-### `builtin::contract_checks()`
+### No program writes a removable check
 
-`builtin::contract_checks()` answers whether the build checks contracts. A
-function checks its contract with it, and this is the only shape it takes: the
-whole condition of an `if` statement with no `else`. A call anywhere else is a
-compile error.
-
-```text
-if builtin::contract_checks() {
-    assert 0 <= index < self.len(), "index out of bounds";
-}
-```
-
-It is the mechanism, not a stopgap. A contract syntax, once one is designed,
-lowers to it.
-
-Before NIR, the compiler keeps such an `if` where checks are on and deletes it
-outright where they are off, so a disabled check costs nothing at any
-optimization level. Folding the condition to `false` was not enough: the
-inliner sized the `if false` body before any pass pruned it, and
-`Formatter::prepare_int_write` stopped being inlined at `-O2`. For the same
-reason each site writes its check out rather than calling a shared helper: the
-call to a helper a disabled check left empty would remain.
-
-Coverage does not count a check as a branch, because its condition is a build
-constant. Where the build keeps the check, its body is part of the enclosing
-region. Where the build deletes it, under `-f no-contract-checks`, it holds no
-line.
-
-It is `pub`, since contracts are open to every program and this is what they
-lower to. Written by hand, it is a removable `assert`. Every language that
+The flag reaches only the code the compiler writes for a marked call. No
+program can ask whether the build checks contracts. A check a program could
+make conditional on the flag would be a removable `assert`. Every language that
 offers one reports it used for checks that must hold in production, and
 removed with them (`assert` under Python's `-O`, Rust's `debug_assert!` in
-RUSTSEC-2025-0137). The `contract` syntax below is the form that keeps a check
-unless the call is marked.
+RUSTSEC-2025-0137). The `contract` syntax below is the only way to make a check
+removable, and only a marker at the call removes it.
+
+The first implementation offered `builtin::contract_checks()` as that
+question, and the standard library's `_unchecked` functions wrapped their
+checks in it. It was removed once the `contract` syntax could state every one
+of those checks.
+
+Before NIR, the compiler keeps the checks of a marked call where checks are on
+and deletes them outright where they are off, so a disabled check costs
+nothing at any optimization level. Folding a condition to `false` was not
+enough: the inliner sized the `if false` body before any pass pruned it, and
+`Formatter::prepare_int_write` stopped being inlined at `-O2`.
 
 ### A skipped check is not an assumption
 
@@ -286,7 +271,7 @@ in that impl, not a contract to add.
 
 The first checks covered only the clauses that cost constant time, because a
 check written with `builtin::contract_checks()` ran in every checking build at
-every call. A clause is checked on two paths: an unmarked call, whose caller
+every call, marked or not. A clause is checked on two paths: an unmarked call, whose caller
 asked for the check, and a marked call in a build that checks contracts. A
 clause that costs the same order as the function's own work, such as
 validating the bytes a function copies, is therefore written and checked. It
@@ -337,8 +322,8 @@ API waits for a program outside the standard library that needs one.
    it appended could start inside a character.
 2. `contract` clauses and the `unchecked` operator. Done. A function with a
    contract is reified twice: itself, which always checks, and a twin named
-   with an `$unchecked` suffix that checks under `builtin::contract_checks()`.
-   A marked call reaches the twin. The parser puts each clause at the head of
+   with an `$unchecked` suffix whose checks the flag keeps or deletes before
+   NIR. A marked call reaches the twin. The parser puts each clause at the head of
    the body as an `assert` marked as a contract, so every pass over a body
    sees it, and the formatter prints it back as a clause.
 3. A trait method's contract: written on the trait, checked in every impl and
@@ -358,9 +343,19 @@ API waits for a program outside the standard library that needs one.
 6. The indexing traits declare `contains_index` and require it, so
    `unchecked xs[i]` is an index read with no range check.
 7. Migrate `core:*`'s `_unchecked` functions to contracts, keeping an
-   `#[unavailable]` declaration where Rust has a method of the same name. The
-   UTF-8 functions are done, in the shapes
-   [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives them.
+   `#[unavailable]` declaration where Rust has a method of the same name.
+   - [x] The UTF-8 functions, in the shapes
+     [UTF-8 in the standard library](#utf-8-in-the-standard-library) gives
+     them.
+   - [x] The functions with a checked twin: `slice`, `substr_bytes`,
+     `truncate`, `insert`, `insert_str` and `remove` declare the contract,
+     and `push_str_range_unchecked` becomes `push_str` of a marked `slice`.
+   - [x] `builtin::contract_checks()` is removed. Each `_unchecked` function
+     that still has no checked twin forwards to a private function that
+     declares its contract.
+   - [ ] The functions with no checked twin, or one returning an `Option`:
+     `get_byte_unchecked`, `push_ascii_unchecked`, `char_at_byte_unchecked`,
+     `char::from_u32_unchecked` and `Sequence::get_unchecked`.
 8. The generated WIT carries an `export fn`'s contract as a comment.
 
 ## Known gaps

@@ -472,7 +472,7 @@ impl<H> Router<H> {
             if end == pos {
                 return -1;
             }
-            if let Some(target) = s.literals.get_str(view.slice_unchecked(pos, end)) {
+            if let Some(target) = s.literals.get_str(unchecked view.slice(pos, end)) {
                 state = target;
             } else if s.param_target >= 0 {
                 v.param(pos, end);

@@ -158,6 +158,12 @@ impl<T> List<T> {
         return builtin::array_clone_prefix(&self.repr, self.used);
     }
 
+    fn element_at(&self, index: i32) -> T
+        contract 0 <= index < self.len(), "index out of bounds"
+    {
+        return self.repr[index];
+    }
+
     /// Inserts an element at the given index, shifting all elements after it to the right.
     /// Panics if `index > len()`.
     pub fn insert(&mut self, index: i32, value: T) {
@@ -390,10 +396,7 @@ impl<T> Sequence for List<T> {
     }
 
     fn get_unchecked(&self, index: i32) -> T {
-        if builtin::contract_checks() {
-            assert 0 <= index < self.used, "index out of bounds";
-        }
-        return self.repr[index];
+        return unchecked self.element_at(index);
     }
 }
 

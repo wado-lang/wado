@@ -8,13 +8,13 @@ fn view() -> StrSlice {
 
 test "calls inside their contracts run as before" {
     assert view().get_byte_unchecked(0) == b'h';
-    assert view().slice_unchecked(1, 3) == "é";
+    assert unchecked view().slice(1, 3) == "é";
     assert view().char_at_byte_unchecked(1) == 'é';
     assert char::from_u32_unchecked(0x41) == 'A';
     let list: List<i32> = [1, 2, 3];
     assert list.as_slice().get_unchecked(2) == 3;
     let mut s = "héllo";
-    s.truncate_unchecked(3);
+    unchecked s.truncate(3);
     assert s == "hé";
     let bytes: ByteList = [0xC3, 0xA9];
     assert unchecked String::from_utf8(bytes) == "é";
@@ -28,13 +28,13 @@ test "StrSlice::get_byte_unchecked past the view" {
 }
 
 #[expect_trap]
-test "StrSlice::slice_unchecked past the view" {
-    let _ = view().slice_unchecked(0, builtin::black_box(6));
+test "unchecked StrSlice::slice past the view" {
+    let _ = unchecked view().slice(0, builtin::black_box(6));
 }
 
 #[expect_trap]
-test "StrSlice::slice_unchecked off a character boundary" {
-    let _ = view().slice_unchecked(0, builtin::black_box(2));
+test "unchecked StrSlice::slice off a character boundary" {
+    let _ = unchecked view().slice(0, builtin::black_box(2));
 }
 
 #[expect_trap]
@@ -69,32 +69,31 @@ test "String::push_ascii_unchecked with a non-ASCII byte" {
 }
 
 #[expect_trap]
-test "String::truncate_unchecked off a character boundary" {
+test "unchecked String::truncate off a character boundary" {
     let mut s = "héllo";
-    s.truncate_unchecked(builtin::black_box(2));
+    unchecked s.truncate(builtin::black_box(2));
 }
 
 #[expect_trap]
-test "String::insert_unchecked off a character boundary" {
+test "unchecked String::insert off a character boundary" {
     let mut s = "héllo";
-    s.insert_unchecked(builtin::black_box(2), 'x');
+    unchecked s.insert(builtin::black_box(2), 'x');
 }
 
 #[expect_trap]
-test "String::insert_str_unchecked off a character boundary" {
+test "unchecked String::insert_str off a character boundary" {
     let mut s = "héllo";
-    s.insert_str_unchecked(builtin::black_box(2), "x");
+    unchecked s.insert_str(builtin::black_box(2), "x");
 }
 
 #[expect_trap]
-test "String::push_str_range_unchecked with the end before the start" {
-    let mut s = "";
-    s.push_str_range_unchecked("abcd", 3, builtin::black_box(1));
+test "unchecked AsStrSlice::slice with the end before the start" {
+    let _ = unchecked "abcd".slice(3, builtin::black_box(1));
 }
 
 #[expect_trap]
-test "String::substr_bytes_unchecked off a character boundary" {
-    let _ = "héllo".substr_bytes_unchecked(0, builtin::black_box(2));
+test "unchecked String::substr_bytes off a character boundary" {
+    let _ = unchecked "héllo".substr_bytes(0, builtin::black_box(2));
 }
 
 #[expect_trap]
@@ -105,10 +104,10 @@ test "ByteList::get_byte_unchecked past the length" {
 }
 
 #[expect_trap]
-test "String::remove_unchecked at the length" {
+test "unchecked String::remove at the length" {
     let mut s = String::with_capacity(16);
     s.push_str("abc");
-    let _ = s.remove_unchecked(builtin::black_box(3));
+    let _ = unchecked s.remove(builtin::black_box(3));
 }
 
 #[expect_trap]
