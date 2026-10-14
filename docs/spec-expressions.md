@@ -374,9 +374,14 @@ fn example() {
 
 Initializers run in dependency order, so one may read another global whatever
 the declaration order. This holds across modules, and whether the initializer
-names the global or reaches it through a call. A cycle among them is an error.
-The order between two initializers that do not depend on each other is
+names the global or reaches it through a call. The order between two
+initializers that do not depend on each other is
 [unspecified](./spec-overview.md#behavior-classes).
+
+A cycle among them is an error. When each initializer on the cycle names the
+next or reads it on every path, the error is at compile time. A cycle that only
+some executions take is not detected until it is: reading a global before its
+initializer has run traps.
 
 ## Operators
 

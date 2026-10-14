@@ -1,0 +1,15 @@
+// An initializer that reads its own global on every path can never run: it
+// waits for its own value. Written directly, it used to trap at run time.
+
+use { println, Stdout } from "core:cli";
+
+global A: String = `${A.len()}`;
+
+export fn run() with Stdout {
+    println(A);
+}
+
+__DATA__
+{
+    "compile_error": "the initializer of `A` reads `A` on every path, before it has been given a value."
+}
