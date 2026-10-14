@@ -152,24 +152,6 @@ fn build_module_init_function(
     )
 }
 
-/// A private `bool` global that starts `false`.
-fn flag_global(module_source: ModuleSource, name: String, span: Span) -> TirGlobal {
-    TirGlobal {
-        name,
-        ty: TypeTable::BOOL,
-        init: GlobalInit::Direct(TirExpr::new(
-            TirExprKind::BoolLiteral(false),
-            TypeTable::BOOL,
-            span,
-        )),
-        param: None,
-        wado_mutable: true,
-        visibility: Visibility::Private,
-        module_source,
-        span,
-    }
-}
-
 fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: Span) -> TirStmt {
     let global_set = TirExpr::new(
         TirExprKind::GlobalVarSet {
@@ -183,15 +165,10 @@ fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: S
     TirStmt::new(TirStmtKind::Expr(global_set), span)
 }
 
-fn raise_flag(module_source: ModuleSource, name: String, span: Span) -> TirStmt {
-    let raised = TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
-    set_global(module_source, name, raised, span)
-}
-
 /// What a function body reads and calls, in one walk.
 ///
 /// Callees are keyed by [`FunctionRef::full_name`], the same key
-/// [`global_reads_by_function`] maps.
+/// [`CallGraph`] maps.
 #[derive(Default)]
 struct BodyReads {
     globals: IndexSet<GlobalKey>,
@@ -227,7 +204,7 @@ impl TirRefVisitor for BodyReads {
     }
 }
 
-/// The key [`global_reads_by_function`] maps a function under: the same string
+/// The key [`CallGraph`] maps a function under: the same string
 /// [`FunctionRef::full_name`] produces for a free function, so a call and a
 /// bare mention of the same function land on one entry.
 fn function_key(module_source: &ModuleSource, name: &str) -> String {
@@ -241,28 +218,16 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
     .full_name()
 }
 
-/// The key a call of `func` names it by.
-fn declared_function_key(func: &TirFunction) -> String {
-    FunctionRef::from_resolved(func, func.module_source.clone()).full_name()
-}
-
-/// Every global each function reads, closed over the call graph.
-///
-/// An initializer's dependency is not always written in it: a call reads
-/// globals the caller never names, and ordering on the directly-written
-/// references alone leaves such a global still holding its placeholder when the
-/// caller runs.
-fn global_reads_by_function(
-    functions: &[Rc<RefCell<TirFunction>>],
-) -> IndexMap<String, IndexSet<GlobalKey>> {
-    CallGraph::new(functions).reads
-}
-
 /// The functions with a body, what each calls, and every global each may read.
 struct CallGraph<'a> {
     bodies: IndexMap<String, &'a Rc<RefCell<TirFunction>>>,
     callees: IndexMap<String, IndexSet<String>>,
-    /// Closed over `callees` as a least fixpoint, so a recursive cycle
+    /// Every global each function reads, closed over `callees`.
+    ///
+    /// An initializer's dependency is not always written in it: a call reads
+    /// globals the caller never names, and ordering on the directly-written
+    /// references alone leaves such a global still holding its placeholder
+    /// when the caller runs. Computed as a least fixpoint, so a recursive cycle
     /// contributes each member's own reads and terminates.
     reads: IndexMap<String, IndexSet<GlobalKey>>,
 }
@@ -281,7 +246,7 @@ impl<'a> CallGraph<'a> {
             };
             let mut scan = BodyReads::default();
             scan.visit_block(body);
-            let key = declared_function_key(&func);
+            let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
             graph.bodies.insert(key.clone(), func_rc);
             graph
                 .reads
@@ -793,7 +758,7 @@ fn sort_modules_by_dependency(
     entry_source: &ModuleSource,
     functions: &[Rc<RefCell<TirFunction>>],
 ) {
-    let reads = global_reads_by_function(functions);
+    let reads = CallGraph::new(functions).reads;
     let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
         let key = function_key(module, MODULE_INIT_FUNCTION);
         reads
@@ -853,11 +818,20 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
 
     let span = Span::new(0, 0, 1, 1);
 
-    flat.globals.push(flag_global(
-        entry_source.clone(),
-        MODULES_INIT_FLAG.to_string(),
+    flat.globals.push(TirGlobal {
+        name: MODULES_INIT_FLAG.to_string(),
+        ty: TypeTable::BOOL,
+        init: GlobalInit::Direct(TirExpr::new(
+            TirExprKind::BoolLiteral(false),
+            TypeTable::BOOL,
+            span,
+        )),
+        param: None,
+        wado_mutable: true,
+        visibility: Visibility::Private,
+        module_source: entry_source.clone(),
         span,
-    ));
+    });
 
     let mut init_stmts: Vec<TirStmt> = Vec::new();
 
@@ -912,9 +886,11 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(call), span));
     }
 
-    init_stmts.push(raise_flag(
+    let initialized = TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, span);
+    init_stmts.push(set_global(
         entry_source.clone(),
         MODULES_INIT_FLAG.to_string(),
+        initialized,
         span,
     ));
 
