@@ -486,13 +486,11 @@ fn synthesize_dispatch_wrappers(
         .get_mut(entry_source)
         .expect("entry module must exist");
     let type_table = entry_module.type_table.clone();
-    let label = instantiation_label(&effect_module, &base_name, type_args, &type_table.borrow());
     for (op, &is_open_import) in plan.operations.iter().zip(&open_and_registered) {
         let wrapper = build_dispatch_wrapper_function(
             entry_source,
             &effect_module,
             &base_name,
-            &label,
             type_args,
             op,
             plan,
@@ -509,7 +507,6 @@ fn build_dispatch_wrapper_function(
     entry_source: &ModuleSource,
     effect_module: &ModuleSource,
     base_name: &str,
-    label: &str,
     type_args: &[TypeId],
     op: &TirEffectOp,
     plan: &DispatchPlan,
@@ -834,7 +831,10 @@ fn build_dispatch_wrapper_function(
                 })
         };
         let message = TirExpr::new(
-            TirExprKind::StringLiteral(format!("no handler installed for `{label}::{op_name}`")),
+            TirExprKind::StringLiteral(format!(
+                "no handler installed for `{}::{op_name}`",
+                instance_name(base_name, type_args, &type_table.borrow())
+            )),
             string_type_id,
             span,
         );
@@ -1526,12 +1526,10 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             )
         });
 
-        // Mangled instantiation label, e.g. `Stream<u8>` for
-        // `(Stream, [u8])`. Used both as the struct-literal type name
-        // (must agree with `synthesize_dispatch_struct`) and for the
-        // synthesised local names (`$h_<label>` etc.) so dumps stay
-        // readable when multiple instantiations of the same base
-        // resource are installed in nested `with` blocks.
+        // Names both the dispatch struct (must agree with
+        // `synthesize_dispatch_struct`) and the synthesised locals
+        // (`$h_<label>` etc.), so nested `with` blocks installing two
+        // instantiations of one resource stay apart in dumps.
         let label = instantiation_label(
             &effect_module,
             &interface_name,
