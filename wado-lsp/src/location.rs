@@ -44,7 +44,7 @@ pub(crate) fn module_uri(
         // CLI consumers can still see the reference site.
         ModuleSource::Wasm { path, .. } => Some(path.to_string()),
         // An operation's namespace opens where its interface is declared.
-        ModuleSource::Effect { declared_in, .. } => module_uri(entry, declared_in, request_uri),
+        ModuleSource::Effect(head) => module_uri(entry, head.module(), request_uri),
     }
 }
 

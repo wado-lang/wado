@@ -7,7 +7,7 @@
 use crate::compiler_host::{DependencyIndex, DependencyManifest};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
-use crate::name::effect_namespace;
+use crate::name::{DeclaredHead, effect_namespace};
 use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
@@ -246,14 +246,6 @@ impl ModuleSourceInterner {
         }
     }
 
-    /// The namespace an `E::op()` call is rendered in.
-    pub fn effect(&mut self, declared_in: &ModuleSource, interface: &str) -> ModuleSource {
-        ModuleSource::Effect {
-            declared_in: Box::new(declared_in.clone()),
-            interface: self.intern(interface),
-        }
-    }
-
     /// A remote package's entry module: it is its own package root.
     pub fn remote(&mut self, url: &str) -> ModuleSource {
         self.remote_module(url, url)
@@ -464,13 +456,9 @@ pub enum ModuleSource {
         /// `wat` or `wasm` source format.
         kind: WasmAssetKind,
     },
-    /// The namespace an `E::op()` call is rendered in: interface `interface`,
-    /// declared in `declared_in`. No module of its own, and two modules may
-    /// each declare an interface of one name.
-    Effect {
-        declared_in: Box<ModuleSource>,
-        interface: InternedStr,
-    },
+    /// The namespace an `E::op()` call is rendered in: the interface (or
+    /// resource) it names, which has no module of its own.
+    Effect(Box<DeclaredHead>),
 }
 
 /// The package a [`ModuleSource`] belongs to. Visibility enforcement keys on
@@ -501,7 +489,7 @@ impl ModuleSource {
             Self::Redirected { package, .. } => package.clone(),
             Self::Dependency { pkg, .. } => PackageId::Dependency(pkg.clone()),
             Self::Remote { pkg, .. } => PackageId::Remote(pkg.clone()),
-            Self::Effect { declared_in, .. } => declared_in.package_id(),
+            Self::Effect(head) => head.module().package_id(),
         }
     }
 
@@ -540,16 +528,7 @@ impl PartialEq for ModuleSource {
                     kind: kind_b,
                 },
             ) => a == b && kind_a == kind_b,
-            (
-                Self::Effect {
-                    declared_in: module_a,
-                    interface: a,
-                },
-                Self::Effect {
-                    declared_in: module_b,
-                    interface: b,
-                },
-            ) => module_a == module_b && a == b,
+            (Self::Effect(a), Self::Effect(b)) => a == b,
             // Entry points are equal regardless of filename
             (Self::EntryPoint { .. }, Self::EntryPoint { .. }) => true,
             _ => false,
@@ -580,13 +559,7 @@ impl std::hash::Hash for ModuleSource {
                 path.hash(state);
                 kind.hash(state);
             }
-            Self::Effect {
-                declared_in,
-                interface,
-            } => {
-                declared_in.hash(state);
-                interface.hash(state);
-            }
+            Self::Effect(head) => head.hash(state),
             // Entry points hash the same regardless of filename
             Self::EntryPoint { .. } => {}
         }
@@ -827,18 +800,20 @@ impl ModuleSource {
     /// The interface an `E::op()` call's namespace names, by its bare name.
     #[must_use]
     pub fn interface_name(&self) -> Option<String> {
-        self.effect_interface()
-            .map(|(_, interface)| interface.to_string())
+        self.effect_interface().map(|head| head.name().to_string())
     }
 
-    /// The interface an `E::op()` call's namespace names, and where it is declared.
+    /// The namespace of an operation of `effect`.
     #[must_use]
-    pub fn effect_interface(&self) -> Option<(&ModuleSource, &str)> {
+    pub fn effect(effect: &DeclaredHead) -> Self {
+        Self::Effect(Box::new(effect.clone()))
+    }
+
+    /// The interface an `E::op()` call's namespace names.
+    #[must_use]
+    pub fn effect_interface(&self) -> Option<&DeclaredHead> {
         match self {
-            Self::Effect {
-                declared_in,
-                interface,
-            } => Some((declared_in, interface)),
+            Self::Effect(head) => Some(head),
             _ => None,
         }
     }
@@ -938,10 +913,7 @@ impl fmt::Display for ModuleSource {
             Self::EntryPoint { filename, .. } => write!(f, "{}", entry_basename(filename)),
             Self::Redirected { uri, .. } => write!(f, "{uri}"),
             Self::Wasm { path, .. } => write!(f, "{path}"),
-            Self::Effect {
-                declared_in,
-                interface,
-            } => write!(f, "{}", effect_namespace(declared_in, interface)),
+            Self::Effect(head) => write!(f, "{}", effect_namespace(head.module(), head.rendered())),
         }
     }
 }

@@ -16,7 +16,7 @@ use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::{DeclName, FqTraitName};
+use crate::name::{DeclName, DeclaredHead, FqTraitName};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -136,11 +136,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Verify the underlying struct type has `impl <Effect> for <Type>`.
-        if let Some(EffectRef::Concrete {
-            name: interface_name,
-            ..
-        }) = &effect
-        {
+        if let Some(EffectRef::Concrete(head)) = &effect {
+            let interface_name = head.name();
             // Skip the check for an unresolved handler (`Unknown` / `Error`):
             // an earlier diagnostic already covered it. Query by `TypeId` (via
             // `type_implements_trait`) so a generic-instance handler like
@@ -171,7 +168,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);
                 let _ = self.emit(TypeError::HandlerEffectNotImplemented {
                     type_name,
-                    interface_name: interface_name.clone(),
+                    interface_name: interface_name.to_string(),
                     span: binding.span,
                 });
             } else if is_real_type
@@ -197,11 +194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Record this explicit binding so
         // reify_with_handler reads the single-effect entry without
         // re-resolving the effect reference.
-        if let Some(EffectRef::Concrete {
-            name: eff_name,
-            module_source: eff_module,
-        }) = &effect
-        {
+        if let Some(EffectRef::Concrete(head)) = &effect {
             self.record_handler_binding_facts(
                 binding.id,
                 HandlerBindingFacts {
@@ -209,8 +202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_def: effect_decl.and_then(|trait_| {
                             self.effect_impl_block(handler_type, trait_, &trait_type_args)
                         }),
-                        name: eff_name.clone(),
-                        module_source: eff_module.clone(),
+                        effect: head.clone(),
                         trait_type_args,
                     }],
                     bundle_group: None,
@@ -340,10 +332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if seen.insert((trait_ref, type_args.clone())) {
                 out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
-                    name: FqTraitName::declared(defs, trait_ref)
-                        .base_name()
-                        .to_string(),
-                    module_source: defs.module(trait_ref).clone(),
+                    effect: DeclaredHead::new(defs, trait_ref),
                     trait_type_args: type_args,
                 });
             }

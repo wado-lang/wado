@@ -45,7 +45,7 @@ impl CoverageScope {
             ModuleSource::Binding { .. }
             | ModuleSource::Redirected { .. }
             | ModuleSource::Wasm { .. } => false,
-            ModuleSource::Effect { declared_in, .. } => self.measures(declared_in),
+            ModuleSource::Effect(head) => self.measures(head.module()),
         }
     }
 }

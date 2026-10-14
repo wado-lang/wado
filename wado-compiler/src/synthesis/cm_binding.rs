@@ -31,8 +31,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    DeclPath, cm_export_func_name, cm_name_key, cm_post_return_func_name, is_test_function,
-    to_cm_name,
+    DeclPath, DeclaredHead, cm_export_func_name, cm_name_key, cm_post_return_func_name,
+    is_test_function, to_cm_name,
 };
 use crate::package::{Package, test_selected};
 use crate::synthesis::SynthesisError;
@@ -66,46 +66,40 @@ pub use types::{
 
 /// Every effect and resource the TIR modules declare, as `(module, name)`: the
 /// candidates [`lookup_effect_owner`] picks a binding's owner from.
-fn effect_owner_module_sources(
-    modules: &IndexMap<ModuleSource, TirModule>,
-) -> IndexSet<(ModuleSource, String)> {
-    let mut out: IndexSet<(ModuleSource, String)> = IndexSet::default();
-    for (module_source, module) in modules {
-        for effect in &module.effects {
-            out.insert((module_source.clone(), effect.name.clone()));
-        }
-        for resource in &module.resources {
-            out.insert((module_source.clone(), resource.name.clone()));
-        }
-    }
-    out
+fn effect_owners(modules: &IndexMap<ModuleSource, TirModule>) -> Vec<&DeclaredHead> {
+    modules
+        .values()
+        .flat_map(|module| {
+            let effects = module.effects.iter().map(|effect| &effect.head);
+            effects.chain(module.resources.iter().map(|resource| &resource.head))
+        })
+        .collect()
 }
 
-/// The canonical owning module for an effect/resource named `name` whose
-/// binding targets CM `package`. A [`ModuleSource::Binding`] under
-/// `"{package}/"` wins; any other owner of the name is the fallback.
+/// The effect/resource named `name` whose binding targets CM `package`. The CM
+/// registry is parsed apart from the program and holds no declaration, so the
+/// name is all it gives: a declaration in a [`ModuleSource::Binding`] under
+/// `"{package}/"` wins, and any other of the name is the fallback.
 fn lookup_effect_owner(
-    owners: &IndexSet<(ModuleSource, String)>,
+    owners: &[&DeclaredHead],
     name: &str,
     package: &str,
-) -> Option<ModuleSource> {
-    let mut fallback: Option<ModuleSource> = None;
-    for (ms, n) in owners {
-        if n != name {
+) -> Option<DeclaredHead> {
+    let mut fallback: Option<&DeclaredHead> = None;
+    for &head in owners {
+        if head.name() != name {
             continue;
         }
-        if let ModuleSource::Binding { interface, .. } = ms
+        if let ModuleSource::Binding { interface, .. } = head.module()
             && interface
                 .strip_prefix(package)
                 .is_some_and(|rest| rest.starts_with('/'))
         {
-            return Some(ms.clone());
+            return Some(head.clone());
         }
-        if fallback.is_none() {
-            fallback = Some(ms.clone());
-        }
+        fallback.get_or_insert(head);
     }
-    fallback
+    fallback.cloned()
 }
 
 use payload_validation::reject_unresolvable_record_payloads;
@@ -501,7 +495,7 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
     }
 
     let entry_type_table = entry_type_table(project);
-    let owner_sources = effect_owner_module_sources(&project.tir_modules);
+    let owners = effect_owners(&project.tir_modules);
     let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     for qualified_name in &seen_effects {
@@ -512,16 +506,10 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
         // An operation on `E`, effect or resource alike, requires `with E`; a
         // world function belongs to no interface and requires nothing.
         let effect = (!registry.is_world_import_function(qualified_name)).then(|| {
-            let module_source = lookup_effect_owner(
-                &owner_sources,
-                &func_info.interface_name,
-                &func_info.package,
+            EffectRef::Concrete(
+                lookup_effect_owner(&owners, &func_info.interface_name, &func_info.package)
+                    .expect("an interface function's effect is declared"),
             )
-            .expect("an interface function's effect is declared");
-            EffectRef::Concrete {
-                name: func_info.interface_name.clone(),
-                module_source,
-            }
         });
         let produced = synthesize_adapter(
             func_info,

@@ -799,12 +799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// namespace the call wrote.
     fn effect_operation_callee(&self, op: &EffectOperation) -> CalleeRef {
         let defs = self.tysys.resolutions.defs();
-        CalleeRef::effect_operation(
-            &mut self.interner.borrow_mut(),
-            defs.module(op.decl),
-            defs.name(op.decl),
-            defs.name(op.op),
-        )
+        CalleeRef::effect_operation(defs, op.decl, defs.name(op.op))
     }
 
     /// The variant a `Variant::name(...)` callee's prefix names: the one the

@@ -80,7 +80,7 @@ use crate::escape::{
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::lexer::defaults_to_float;
 use crate::name::{
-    LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
+    DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, test_function_name, widened_half_local_name,
 };
@@ -1119,6 +1119,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every effect reify emits");
         tir::TirEffect {
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
@@ -1136,7 +1137,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
-            def: self.tysys.def_at(decl.id),
+            head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
@@ -1297,7 +1298,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             trait_canonical: facts
                 .trait_name
                 .as_ref()
-                .and_then(|fq| Some((fq.module()?.clone(), fq.base_name().to_string()))),
+                .and_then(|fq| fq.declared_head().cloned()),
             trait_type_args: facts.trait_type_args.clone(),
             struct_name: naming.struct_name(),
             rest: impl_block.rest.map(|r| r.kind),
@@ -6406,10 +6407,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let handler = self.reify_expr(&binding.handler, ctx, None);
             for entry in &facts.effects {
                 bindings.push(TirHandlerBinding {
-                    effect: Some(EffectRef::Concrete {
-                        name: entry.name.clone(),
-                        module_source: entry.module_source.clone(),
-                    }),
+                    effect: entry.effect.clone(),
                     trait_type_args: entry.trait_type_args.clone(),
                     handler: handler.clone(),
                     handler_type: facts.handler_type,
