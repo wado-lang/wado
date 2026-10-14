@@ -74,53 +74,53 @@ global mut global:const_object_globalization_value_arg_call.wado::$const_obj_1: 
 fn "const_object_globalization_value_arg_call.wado/encode_key"(name) {
     let $load_3: ref Array<u8>;
     let s_1: ref "core:prelude/string.wado//String";
-    let start_15: i32;
-    let new_used_32: i32;
-    let start_33: i32;
+    let start_17: i32;
+    let new_used_37: i32;
+    let start_38: i32;
     s_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(name.used + 2000), used: 0 };
     if @unlikely(1 > builtin::array_len(s_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_1, 1);
     }
-    start_15 = s_1.used;
+    start_17 = s_1.used;
     s_1.used = 1;
-    builtin::array_set_u8(local.tee $load_3(s_1.repr), start_15, 34);
-    start_15 = name.used;
-    if @unlikely(local.tee new_used_32(1 + (2 + start_15)) > builtin::array_len($load_3)) {
+    builtin::array_set_u8(local.tee $load_3(s_1.repr), start_17, 34);
+    start_17 = name.used;
+    if @unlikely(local.tee new_used_37(1 + (2 + start_17)) > builtin::array_len($load_3)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_1, new_used_32);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s_1, new_used_37);
     }
-    start_33 = s_1.used;
-    s_1.used = new_used_32;
-    builtin::array_copy<u8>(local.tee $load_3(s_1.repr), start_33, name.repr, 0, start_15);
-    builtin::array_copy<u8>($load_3, start_33 + start_15, global:const_object_globalization_value_arg_call.wado::$const_obj_0, 0, 2);
+    start_38 = s_1.used;
+    s_1.used = new_used_37;
+    builtin::array_copy<u8>(local.tee $load_3(s_1.repr), start_38, name.repr, 0, start_17);
+    builtin::array_copy<u8>($load_3, start_38 + start_17, global:const_object_globalization_value_arg_call.wado::$const_obj_0, 0, 2);
     return s_1;
 }
 
 fn "const_object_globalization_value_arg_call.wado/byte_total"($mv$s$repr, $mv$s$used) {
     let total: i32;
     let current: i32;
-    let $sroa_$iter_0_start_30: i32;
+    let $sroa_$iter_0_start_31: i32;
     total = 0;
-    $sroa_$iter_0_start_30 = 0;
+    $sroa_$iter_0_start_31 = 0;
     b2: block {
         l3: loop {
             break_if b2 $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                if $sroa_$iter_0_start_30 < $mv$s$used {
+                if $sroa_$iter_0_start_31 < $mv$s$used {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 0;
                 }
-                if $sroa_$iter_0_start_30 > $mv$s$used {
+                if $sroa_$iter_0_start_31 > $mv$s$used {
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 2;
                 }
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__0: 1;
             } != 0;
-            current = $sroa_$iter_0_start_30;
+            current = $sroa_$iter_0_start_31;
             $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1: block {
                 if current == 2147483647 {
-                    $sroa_$iter_0_start_30 = $mv$s$used;
+                    $sroa_$iter_0_start_31 = $mv$s$used;
                     break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
                 }
-                $sroa_$iter_0_start_30 = current + 1;
+                $sroa_$iter_0_start_31 = current + 1;
                 break $inline_core_prelude_range_wado_RangeExclusive_i32__core_prelude_traits_wado_Iterator__next_sroa_return__0__$fused_$inline_i32_core_prelude_range_wado_Step__next_step_sroa_self_value_return__1;
             };
             total = total + builtin::array_get_value<u8>($mv$s$repr, current);
