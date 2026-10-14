@@ -13,8 +13,12 @@
 //! here, so their dispatch resolves the same way.
 //!
 //! What only code the analysis cannot see reaches merges into one escape node:
-//! the arguments of a call to a function with no declaration here, and those
-//! of an `Inspect` dispatch stub, whose WIR body calls through its argument.
+//! the arguments of a call to a function with no declaration here, of a call
+//! through a function value with no body, and of an `Inspect` dispatch stub,
+//! whose WIR body calls through its argument.
+//!
+//! The solve collapses each cycle of copies into one node, as every node on it
+//! ends with one set, and merges a node fed by one copy alone into its source.
 
 use std::cell::RefCell;
 
@@ -125,27 +129,22 @@ impl PointsTo {
         self.set(node)
     }
 
-    /// `from` and every location reachable from it: what a write through any of
-    /// it may reach.
-    #[must_use]
-    pub fn reach(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
-        self.reach_until(from, &IndexSet::default())
-    }
-
-    /// [`Self::reach`] beyond [`Self::global_reach`], which every reader of a
-    /// write set consults beside it, so the walk stops where it enters it.
+    /// `from` and every location reachable from it, short of
+    /// [`Self::global_reach`]: what a write through any of it may reach that
+    /// every reader of a write set does not already consult.
     #[must_use]
     pub fn reach_beyond_global(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
         self.reach_until(from, &self.global_reach)
     }
 
+    /// `from` and every location reachable from it, not walking into `known`.
     fn reach_until(
         &self,
         from: impl IntoIterator<Item = u32>,
         known: &IndexSet<u32>,
     ) -> IndexSet<u32> {
         let mut out: IndexSet<u32> = IndexSet::default();
-        // Locations on one cycle share a set, walked once.
+        // Locations merged into one node share its set, walked once.
         let mut walked: IndexSet<u32> = IndexSet::default();
         let mut work: Vec<u32> = from.into_iter().filter(|l| !known.contains(l)).collect();
         while let Some(loc) = work.pop() {
@@ -385,8 +384,8 @@ struct Mark {
 #[derive(Default)]
 struct Graph {
     pts: Vec<LocSet>,
-    /// The node each node's set is held at: a cycle of copies leaves every
-    /// node on it with one set, so the cycle collapses into one node.
+    /// The node each node's set is held at, shared by the nodes merged into
+    /// it: a cycle of copies, or a node fed by one copy alone.
     rep: Vec<u32>,
     copy_to: Vec<Vec<u32>>,
     /// `loads[n]`: nodes receiving what each location in `pts[n]` holds.
@@ -492,12 +491,14 @@ impl Graph {
         }
     }
 
-    /// Add `locs` to the set of `node`, a representative.
+    /// Add `locs` to the set of `node`, a representative at the end of a copy
+    /// edge.
     fn add_all(&mut self, node: u32, locs: &LocSet) {
         let n = node as usize;
-        if self.inert.contains(&node) {
-            return;
-        }
+        assert!(
+            !self.inert.contains(&node),
+            "`copy` makes no edge into an inert node"
+        );
         let was_idle = self.delta[n].is_empty();
         self.pts[n].union_into(locs, &mut self.delta[n]);
         if was_idle && !self.delta[n].is_empty() {
@@ -699,7 +700,7 @@ impl Graph {
             if let Some(&to) = self.copy_to[v as usize].get(i) {
                 walk.last_mut().expect("the walk is under way").1 += 1;
                 let w = self.find(to);
-                if w == v || self.inert.contains(&w) {
+                if w == v {
                     continue;
                 }
                 let mark = self.marks[w as usize];
@@ -732,17 +733,12 @@ impl Graph {
             }
         }
         for cycle in cycles {
-            self.merge(&cycle);
+            let root = cycle[0];
+            for &member in &cycle[1..] {
+                self.absorb(root, member);
+            }
+            self.settle(root);
         }
-    }
-
-    /// Make `cycle[0]` the node of every node in `cycle`.
-    fn merge(&mut self, cycle: &[u32]) {
-        let root = cycle[0];
-        for &member in &cycle[1..] {
-            self.absorb(root, member);
-        }
-        self.settle(root);
     }
 }
 
@@ -819,8 +815,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
     };
     b.escape = b.g.node();
     // Whatever escapes may reach, and be stored in, whatever else escapes.
-    let reached = b.g.node();
-    b.g.load(b.escape, reached);
+    let reached = b.held_by(b.escape);
     b.g.copy(reached, b.escape);
     b.g.store(b.escape, b.escape);
     // And may call whatever function escapes, with whatever escapes.
@@ -841,8 +836,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             ret: b.escape,
         },
     );
-    b.unseen_function = b.g.node();
-    b.g.add(b.unseen_function, unseen);
+    b.unseen_function = b.naming(unseen);
     for (i, func) in flat.functions.iter().enumerate() {
         let func = func.borrow();
         let frame = u32::try_from(i).expect("function count fits u32");
@@ -915,7 +909,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         handed: std::mem::take(&mut b.handed),
         global_reach: IndexSet::default(),
     };
-    result.global_reach = result.reach(global_nodes);
+    result.global_reach = result.reach_until(global_nodes, &IndexSet::default());
     drop(b);
     result.functions = functions;
     result
@@ -953,8 +947,7 @@ impl Builder<'_> {
         for c in captured {
             self.g.copy(c, object);
         }
-        let value = self.g.node();
-        self.g.add(value, object);
+        let value = self.naming(object);
         let target = Target {
             this: is_closure.then_some(value),
             params: self.callees[frame as usize].params.clone(),
@@ -981,33 +974,39 @@ impl Builder<'_> {
         }
     }
 
-    fn deref(&mut self, reference: Option<u32>) -> Option<u32> {
-        let reference = reference?;
+    /// A node naming the location `loc` alone.
+    fn naming(&mut self, loc: u32) -> u32 {
+        let node = self.g.node();
+        self.g.add(node, loc);
+        node
+    }
+
+    /// A node holding what the locations in `reference`'s set hold.
+    fn held_by(&mut self, reference: u32) -> u32 {
         let node = self.g.node();
         self.g.load(reference, node);
-        Some(node)
+        node
+    }
+
+    fn deref(&mut self, reference: Option<u32>) -> Option<u32> {
+        reference.map(|r| self.held_by(r))
     }
 
     /// The node whose set is the storage `expr` names, evaluating what it
     /// reads, or `None` for an expression no storage holds, which is then left
     /// unevaluated.
     fn place(&mut self, expr: &TirExpr) -> Option<u32> {
-        let named = |b: &mut Self, loc: u32| {
-            let node = b.g.node();
-            b.g.add(node, loc);
-            node
-        };
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 let loc = self.local(self.frame, *index);
-                Some(named(self, loc))
+                Some(self.naming(loc))
             }
             TirExprKind::GlobalVarGet {
                 module_source,
                 name,
             } => {
                 let loc = self.global(module_source, name);
-                Some(named(self, loc))
+                Some(self.naming(loc))
             }
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
@@ -1050,9 +1049,7 @@ impl Builder<'_> {
         if let Some(value) = self.eval(expr) {
             self.g.copy(value, temp);
         }
-        let node = self.g.node();
-        self.g.add(node, temp);
-        node
+        self.naming(temp)
     }
 
     /// Evaluate `expr` once: its value, and the storage it names where it is
@@ -1065,11 +1062,7 @@ impl Builder<'_> {
         let value = if matches!(expr.kind, TirExprKind::Local { .. }) {
             self.eval(expr)
         } else {
-            self.names.of(expr.type_id).then(|| {
-                let node = self.g.node();
-                self.g.load(place, node);
-                node
-            })
+            self.names.of(expr.type_id).then(|| self.held_by(place))
         };
         (value, Some(place))
     }
@@ -1166,8 +1159,7 @@ impl Builder<'_> {
                 self.g.copy(handed, written);
             }
         }
-        let held = self.g.node();
-        self.g.load(carried, held);
+        let held = self.held_by(carried);
         self.g.copy(held, carried);
         self.g.store(written, carried);
         Some(carried)
@@ -1213,9 +1205,7 @@ impl Builder<'_> {
                 continue;
             };
             let kept = if spec.elements {
-                let node = self.g.node();
-                self.g.load(source, node);
-                node
+                self.held_by(source)
             } else {
                 source
             };
@@ -1375,6 +1365,17 @@ impl Builder<'_> {
         value
     }
 
+    /// What a part of `whole` carries: what `whole` carries, or where `whole`
+    /// is a reference read through, what the storage it names holds.
+    fn part_of(&mut self, whole: &TirExpr) -> Option<u32> {
+        let v = self.eval(whole);
+        if self.type_table.is_reference_shaped(whole.type_id) {
+            self.deref(v)
+        } else {
+            v
+        }
+    }
+
     fn eval_kind(&mut self, expr: &TirExpr) -> Option<u32> {
         match &expr.kind {
             TirExprKind::Local { index, .. } => Some(self.local(self.frame, *index)),
@@ -1404,16 +1405,8 @@ impl Builder<'_> {
                 let v = self.eval(inner);
                 self.deref(v)
             }
-            // A part read through a reference is held in what it refers to.
             TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. } => {
-                let v = self.eval(inner);
-                if self.type_table.is_reference_shaped(inner.type_id) {
-                    self.deref(v)
-                } else {
-                    v
-                }
-            }
+            | TirExprKind::VariantPayload { expr: inner, .. } => self.part_of(inner),
             TirExprKind::Cast { expr: inner, .. } => {
                 let v = self.eval(inner);
                 if self.type_table.is_reference_shaped(inner.type_id)
@@ -1426,12 +1419,7 @@ impl Builder<'_> {
             }
             TirExprKind::Index { expr: inner, index } => {
                 self.eval(index);
-                let v = self.eval(inner);
-                if self.type_table.is_reference_shaped(inner.type_id) {
-                    self.deref(v)
-                } else {
-                    v
-                }
+                self.part_of(inner)
             }
             TirExprKind::Assign { target, value } => {
                 let v = self.eval(value);
@@ -1542,18 +1530,14 @@ impl Builder<'_> {
                             let node = self.local(self.frame, index);
                             // A capture by reference holds the local's storage.
                             if self.type_table.is_reference_shaped(capture.type_id) {
-                                let own = self.g.node();
-                                self.g.add(own, node);
-                                held.push(own);
+                                held.push(self.naming(node));
                             }
                             held.push(node);
                         }
                         // What the enclosing `$call` captured: its `self` holds it.
                         CaptureSource::Capture(_) => {
                             let this = self.callees[self.frame as usize].params[0];
-                            let node = self.g.node();
-                            self.g.load(this, node);
-                            held.push(node);
+                            held.push(self.held_by(this));
                         }
                     }
                 }
