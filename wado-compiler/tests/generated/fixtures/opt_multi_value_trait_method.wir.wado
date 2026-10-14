@@ -68,7 +68,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(24)
 
-type "functype//opt_multi_value_trait_method.wado/opt_multi_value_trait_method.wado/Pair^opt_multi_value_trait_method.wado/Split::halves" = fn(ref "opt_multi_value_trait_method.wado//Pair") -> [i32, i32];  // TypeId(25)
+type "functype//opt_multi_value_trait_method.wado/opt_multi_value_trait_method.wado/Pair^opt_multi_value_trait_method.wado/Split::halves" = fn(i32, i32) -> [i32, i32];  // TypeId(25)
 
 type "functype//core:prelude/traits.wado/opt_multi_value_trait_method.wado/Pair^core:prelude/traits.wado/Inspect::inspect" = fn(ref "opt_multi_value_trait_method.wado//Pair", ref "core:prelude/format.wado//Formatter");  // TypeId(26)
 
@@ -120,7 +120,7 @@ global global:core:prelude/traits.wado::$const_obj_33: ref Array<u8> = array.new
 fn "opt_multi_value_trait_method.wado/total"(p) {
     let $mv$h$0: i32;
     let $mv$h$1: i32;
-    multivalue_bind [$mv$h$0, $mv$h$1] = "opt_multi_value_trait_method.wado/opt_multi_value_trait_method.wado/Pair^opt_multi_value_trait_method.wado/Split::halves"(p);
+    multivalue_bind [$mv$h$0, $mv$h$1] = "opt_multi_value_trait_method.wado/opt_multi_value_trait_method.wado/Pair^opt_multi_value_trait_method.wado/Split::halves"(p.lo, p.hi);
     return $mv$h$0 + $mv$h$1;
 }
 
@@ -564,8 +564,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     };
 }
 
-fn "opt_multi_value_trait_method.wado/opt_multi_value_trait_method.wado/Pair^opt_multi_value_trait_method.wado/Split::halves"(self) {
-    return self.lo, self.hi;
+fn "opt_multi_value_trait_method.wado/opt_multi_value_trait_method.wado/Pair^opt_multi_value_trait_method.wado/Split::halves"($mv$self$lo, $mv$self$hi) {
+    return $mv$self$lo, $mv$self$hi;
 }
 
 fn "core:prelude/traits.wado/opt_multi_value_trait_method.wado/Pair^core:prelude/traits.wado/Inspect::inspect"(self, f) {

@@ -11,44 +11,39 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct param_spec_caller_rewrites_field.wado//Options {  // TypeId(3)
-    mut mode: i32,
-    mut repeat: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//param_spec_caller_rewrites_field.wado/emit" = fn(i32, i32, ref "core:prelude/string.wado//String");  // TypeId(10)
 
-type "functype//param_spec_caller_rewrites_field.wado/emit" = fn(ref "param_spec_caller_rewrites_field.wado//Options", ref "core:prelude/string.wado//String");  // TypeId(11)
+type "functype//param_spec_caller_rewrites_field.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//param_spec_caller_rewrites_field.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//param_spec_caller_rewrites_field.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//param_spec_caller_rewrites_field.wado/$cm_export__run" = fn();  // TypeId(13)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(13)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -63,7 +58,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-fn "param_spec_caller_rewrites_field.wado/emit"(opt, out) {
+fn "param_spec_caller_rewrites_field.wado/emit"($mv$opt$mode, $mv$opt$repeat, out) {
     let i: i32;
     let new_used_11: i32;
     let start_12: i32;
@@ -71,18 +66,15 @@ fn "param_spec_caller_rewrites_field.wado/emit"(opt, out) {
     let start_35: i32;
     let new_used_57: i32;
     let start_58: i32;
-    let $licm_repeat_95: i32;
-    let $licm_mode_96: i32;
     let $licm_arith_97: bool;
     let $hfs_used_99: i32;
     i = 0;
-    $licm_repeat_95 = opt.repeat;
-    $licm_arith_97 = local.tee $licm_mode_96(opt.mode) == 1;
-    $licm_mode_96 = $licm_mode_96 == 2;
+    $licm_arith_97 = $mv$opt$mode == 1;
+    $mv$opt$mode = $mv$opt$mode == 2;
     $hfs_used_99 = out.used;
     b0: block {
         l1: loop {
-            break_if b0 i >= $licm_repeat_95;
+            break_if b0 i >= $mv$opt$repeat;
             if $licm_arith_97 {
                 if @unlikely(local.tee new_used_11($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
@@ -92,7 +84,7 @@ fn "param_spec_caller_rewrites_field.wado/emit"(opt, out) {
                 start_12 = local.tee $hfs_used_99(out.used);
                 $hfs_used_99 = new_used_11;
                 builtin::array_set_u8(out.repr, start_12, 97);
-            } else if $licm_mode_96 {
+            } else if $mv$opt$mode {
                 if @unlikely(local.tee new_used_34($hfs_used_99 + 1) > builtin::array_len(out.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_34);
@@ -135,8 +127,8 @@ fn "param_spec_caller_rewrites_field.wado/$cm_export__run"() {
     let rx_9: i32;
     let tx_10: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "param_spec_caller_rewrites_field.wado/emit"(struct.new "param_spec_caller_rewrites_field.wado//Options" { mode: 1, repeat: 2 }, out);
-    "param_spec_caller_rewrites_field.wado/emit"(struct.new "param_spec_caller_rewrites_field.wado//Options" { mode: 2, repeat: 2 }, out);
+    "param_spec_caller_rewrites_field.wado/emit"(1, 2, out);
+    "param_spec_caller_rewrites_field.wado/emit"(2, 2, out);
     rx_9 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     rx_9 = "param_spec_caller_rewrites_field.wado/$cm_binding__Stdout_write_via_stream"(rx_9);

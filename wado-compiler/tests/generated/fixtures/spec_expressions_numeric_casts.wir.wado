@@ -172,7 +172,7 @@ type "functype//core:prelude/half.wado/bf16::from_f32" = fn(f32) -> u16;  // Typ
 
 type "functype//core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from" = fn(u16) -> f32;  // TypeId(69)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$dae[mant_bits]" = fn(ref "core:prelude/int128.wado//u128") -> [u64, i64];  // TypeId(70)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$dae[mant_bits]" = fn(u64, u64) -> [u64, i64];  // TypeId(70)
 
 type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide" = fn(u64, u64, u64) -> [u64, u64];  // TypeId(71)
 
@@ -534,10 +534,9 @@ condition: a as u8 == 255 && a as u128 == u128::MAX
         "spec_expressions_numeric_casts.wado/$test_4_wide_integers_take_the_same_rules$cold1"();
         unreachable;
     }
-    $v5 = struct.new "core:prelude/int128.wado//u128" { low: -1_i64, high: -1_i64 };
     let $mv$$pattern_temp_0$0: u64;
     let $mv$$pattern_temp_0$1: i64;
-    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$dae[mant_bits]"($v5);
+    multivalue_bind [$mv$$pattern_temp_0$0, $mv$$pattern_temp_0$1] = "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$dae[mant_bits]"(-1_i64, -1_i64);
     if @unlikely(local.tee $v2_18("core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(local.tee $fuse_at_34("core:prelude/half.wado/f16::from_f32"("core:prelude/half.wado/round_to_odd_f32"(builtin::f64_reinterpret_i64((($mv$$pattern_temp_0$1 + 1023_i64) << 52_i64) | ($mv$$pattern_temp_0$0 & 4503599627370495_i64))))))) != inf_f32) {
         cold_path;
         "spec_expressions_numeric_casts.wado/$test_4_wide_integers_take_the_same_rules$cold0"($fuse_at_34, $v2_18);
@@ -3397,36 +3396,33 @@ fn "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"(value) 
     return builtin::f32_reinterpret_i32((sign | ((exp + 112) << 23)) | (value << 13));
 }
 
-fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$dae[mant_bits]"(self) {
-    let $load_0: u64;
+fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$dae[mant_bits]"($mv$self$low, $mv$self$high) {
     let hbits: i64;
     let shift: i64;
     let a: u64;
     let sticky: u64;
     let t: u64;
-    let $av_20: u64;
-    if @unlikely(local.tee $load_0(self.high) == 0_i64) {
+    if @unlikely($mv$self$high == 0_i64) {
         cold_path;
-        "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$cold1$dae[self,mant_bits]"($load_0);
+        "core:prelude/int128.wado/core:prelude/int128.wado/u128::round_to_mantissa$cold1$dae[self,mant_bits]"($mv$self$high);
         unreachable;
     }
-    shift = local.tee hbits(builtin::i64_extend_i32_s(64 - builtin::i32_wrap_i64(builtin::i64_clz($load_0)))) + 9_i64;
+    shift = local.tee hbits(builtin::i64_extend_i32_s(64 - builtin::i32_wrap_i64(builtin::i64_clz($mv$self$high)))) + 9_i64;
     a = 0_i64;
     sticky = 0_i64;
-    $av_20 = self.low;
     if shift >= 64_i64 {
         t = shift - 64_i64;
-        a = $load_0 >>u t;
-        if (if $av_20 != 0_i64 -> i32 {
+        a = $mv$self$high >>u t;
+        if (if $mv$self$low != 0_i64 -> i32 {
             1;
         } else {
-            ($load_0 & ((1_i64 << t) - 1_i64)) != 0_i64;
+            ($mv$self$high & ((1_i64 << t) - 1_i64)) != 0_i64;
         }) {
             sticky = 1_i64;
         }
     } else {
-        a = ($av_20 >>u shift) | ($load_0 << (64_i64 - shift));
-        if ($av_20 & ((1_i64 << shift) - 1_i64)) != 0_i64 {
+        a = ($mv$self$low >>u shift) | ($mv$self$high << (64_i64 - shift));
+        if ($mv$self$low & ((1_i64 << shift) - 1_i64)) != 0_i64 {
             sticky = 1_i64;
         }
     }

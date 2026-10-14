@@ -30,7 +30,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//functor_row_transient_borrow.wado/read_point" = fn(ref "functor_row_transient_borrow.wado//Point") -> i32;  // TypeId(11)
+type "functype//functor_row_transient_borrow.wado/read_point" = fn(i32, i32) -> i32;  // TypeId(11)
 
 type "functype//functor_row_transient_borrow.wado/$cm_export__run" = fn();  // TypeId(12)
 
@@ -82,8 +82,8 @@ global global:functor_row_transient_borrow.wado::$const_obj_13: ref Array<u8> = 
 global global:functor_row_transient_borrow.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
 global global:functor_row_transient_borrow.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
-fn "functor_row_transient_borrow.wado/read_point"(p) {
-    return p.x + p.y;
+fn "functor_row_transient_borrow.wado/read_point"($mv$p$x, $mv$p$y) {
+    return $mv$p$x + $mv$p$y;
 }
 
 fn "functor_row_transient_borrow.wado/$cm_export__run"() {
@@ -101,7 +101,9 @@ fn "functor_row_transient_borrow.wado/$cm_export__run"() {
 }
 
 fn "functor_row_transient_borrow.wado/apply$$Closure_0$dae[f]"(p) {
-    return "functor_row_transient_borrow.wado/read_point"(p);
+    return block -> i32 {
+        "functor_row_transient_borrow.wado/read_point"(p.x, p.y);
+    };
 }
 
 fn "functor_row_transient_borrow.wado/run$cold0"(r, $v0, $v2) {
@@ -187,16 +189,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b6: block {
-        l7: loop {
-            break_if b6 (digit_count - offset) < 2;
+    b7: block {
+        l8: loop {
+            break_if b7 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
             digit_count = digit_count - 2;
             val = q;
-            continue l7;
+            continue l8;
         };
     };
     if digit_count > offset {
@@ -295,17 +297,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b30: block {
-        l31: loop {
-            break_if b30 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b31: block {
+        l32: loop {
+            break_if b31 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l31;
+            continue l32;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l33: loop {
+        l34: loop {
             ptr_15 = ptr_13 + i;
             count_16 = $mv$data$end - i;
             if local.tee count_16("wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455))) == -1 {
@@ -335,7 +337,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return count_16;
             }
-            continue l33;
+            continue l34;
         };
     };
 }
