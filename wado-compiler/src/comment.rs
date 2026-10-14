@@ -81,7 +81,7 @@ impl TriviaMap {
         self.dangling = comments;
     }
 
-    /// Record the `{` token offsets. Called once at parse end.
+    /// Record the `{` tokens. Called once at parse end.
     pub fn set_open_braces(&mut self, open_braces: Vec<OpenBrace>) {
         assert!(open_braces.is_sorted_by_key(|b| b.span.start));
         self.open_braces = open_braces;
@@ -99,11 +99,10 @@ impl TriviaMap {
     /// The `{` token at `pos`, if one is there. A block the parser builds
     /// around a bare `return` has none.
     pub fn open_brace_at(&self, pos: usize) -> Option<OpenBrace> {
-        let i = self.open_braces.partition_point(|b| b.span.start < pos);
         self.open_braces
-            .get(i)
-            .filter(|b| b.span.start == pos)
-            .copied()
+            .binary_search_by_key(&pos, |b| b.span.start)
+            .ok()
+            .map(|i| self.open_braces[i])
     }
 
     /// Leading trivia for `id`, or an empty slice if none.

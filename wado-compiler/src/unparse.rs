@@ -19,7 +19,7 @@ use crate::ast::{
     WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::builtin_facts::BuiltinFacts;
-use crate::comment::{Comment, CommentKind, TriviaMap};
+use crate::comment::{Comment, CommentKind, OpenBrace, TriviaMap};
 use crate::escape::{quoted, quoted_char};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -375,26 +375,25 @@ impl<'a> Unparser<'a> {
         self.flush_comments_in(0, pos, spacing);
     }
 
-    /// Open the body whose `{` is at `brace`, after its head. A comment in the
-    /// gap before the brace has no slot on the head's line, and the body must
-    /// not adopt it, so it takes a line of its own and the brace another, as
-    /// after a `contract` clause (#2331).
+    /// Open the body whose `{` is at `brace`, after its head. No `{` is there
+    /// where comments are not kept, nor for the block the parser builds around
+    /// a bare `return`, and then no comment can sit before one.
     fn open_brace(&mut self, brace: usize) {
-        match self.brace_gap_start(brace) {
-            Some(gap_start) if self.has_comment_in_range(gap_start, brace) => {
-                self.open_brace_on_own_line(gap_start, brace);
-            }
-            _ => self.output.push_str(" {\n"),
+        match self.trivia.and_then(|trivia| trivia.open_brace_at(brace)) {
+            Some(brace) => self.open_brace_token(brace),
+            None => self.output.push_str(" {\n"),
         }
     }
 
-    /// Where the gap before the `{` at `brace` starts. `None` where comments
-    /// are not kept, or for the block the parser builds around a bare
-    /// `return`, which has no brace.
-    fn brace_gap_start(&self, brace: usize) -> Option<usize> {
-        self.trivia
-            .and_then(|trivia| trivia.open_brace_at(brace))
-            .map(|b| b.gap_start)
+    /// A comment in the gap before `brace` has no slot on the head's line, and
+    /// the body must not adopt it, so it takes a line of its own and the brace
+    /// another, as after a `contract` clause (#2331).
+    fn open_brace_token(&mut self, brace: OpenBrace) {
+        if self.has_comment_in_range(brace.gap_start, brace.span.start) {
+            self.open_brace_on_own_line(brace.gap_start, brace.span.start);
+        } else {
+            self.output.push_str(" {\n");
+        }
     }
 
     /// Open the body whose `{` is at `brace` on a line of its own, the
@@ -418,9 +417,9 @@ impl<'a> Unparser<'a> {
             self.output.push_str(" {\n");
             return head_line;
         };
-        let brace = trivia.open_brace_from(pos).span;
-        self.open_brace(brace.start);
-        brace.line
+        let brace = trivia.open_brace_from(pos);
+        self.open_brace_token(brace);
+        brace.span.line
     }
 
     /// [`Self::flush_comments_before`] bounded below as well, for a construct
