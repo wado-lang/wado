@@ -7,7 +7,9 @@ error handling. The patterns these statements take apart are in
 
 ## Conditional Statements
 
-A condition is a `bool`. No other type converts to one.
+The condition of an `if`, a `while`, or a C-style `for` is a `bool` or a
+[let chain](#let-chains), under the same rules in all three. No other type
+converts to a `bool`.
 
 <!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
 
@@ -55,8 +57,8 @@ assert got == 42;
 
 ### Let Chains
 
-The condition of an `if`, a `while`, or a C-style `for` may be a let chain, as
-in Rust. A let chain is a list of operands joined by `&&`. Each operand is
+A condition may be a let chain, as in Rust. A let chain is a list of operands
+joined by `&&`. Each operand is
 either a `bool` expression or `let PATTERN = EXPR`, and at least one is a `let`.
 `if let` and `while let` are the chains with one operand.
 
@@ -231,9 +233,11 @@ for let mut i = 0; i < 3; i += 1 {
 assert fs[0]() == 0 && fs[1]() == 1 && fs[2]() == 2;   // not 3, 3 and 3
 ```
 
-### For with Pattern Condition
+### For with a Let Chain
 
-The condition part of a C-style for loop can use `let` pattern matching:
+The condition may be a [let chain](#let-chains), as in `if` and `while`. The loop
+ends when the chain fails. The chain's bindings are in scope in the body and in
+the update, which runs after each iteration:
 
 <!-- {"fixture":"spec_control_flow_loops.wado"} -->
 
@@ -255,10 +259,6 @@ for ; let Some(x) = again.next(); count += 1 {
 }
 assert count == 3;
 ```
-
-The loop runs while the pattern matches, as `while let` does, and the update
-runs after each iteration. The condition may be any
-[let chain](#let-chains):
 
 <!-- {"fixture":"spec_control_flow_loops.wado"} -->
 

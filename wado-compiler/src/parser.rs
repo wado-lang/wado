@@ -3748,17 +3748,9 @@ impl Parser {
     ) -> ParseResult<Expr> {
         let mut left = next(self)?;
         while let Some(op) = classify(self.peek_kind()) {
-            let left_span = left.span();
             self.advance();
             let right = self.parse_operand_or_recover(&mut next)?;
-            let span = left_span.merge(&right.span());
-            left = Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
-                left,
-                op,
-                right,
-                span,
-            }));
+            left = self.join_binary(left, op, right);
         }
         Ok(left)
     }

@@ -913,16 +913,12 @@ impl AstVisitor for Planner<'_> {
             return walk_condition(self, cond);
         };
         for (index, element) in elements.iter().enumerate() {
-            let (expr, pattern) = match element {
-                ConditionElement::Let { pattern, expr, .. } => (expr, Some(pattern)),
-                ConditionElement::Expr(expr) => (expr, None),
-            };
             if index == 0 {
-                self.visit_expr(expr);
+                self.visit_expr(element.expr());
             } else {
-                self.conditional_operand(expr, Pos::start(element.span()));
+                self.conditional_operand(element.expr(), Pos::start(element.span()));
             }
-            if let Some(pattern) = pattern {
+            if let ConditionElement::Let { pattern, .. } = element {
                 self.visit_pattern(pattern);
             }
         }

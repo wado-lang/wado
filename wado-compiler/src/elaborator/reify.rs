@@ -4092,12 +4092,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .unwrap_or_default()
     }
 
-    /// Reify a let chain (operands joined by `&&`, each `let PAT = e` or a bool) into nested Match /
-    /// If stmts, shared by `reify_if_expr` / `reify_if_stmt` / `reify_while` /
-    /// `reify_for`. A `Let` element becomes a two-arm Match (pattern arm
-    /// recurses, wildcard falls back to `else_block`), an `Expr` element a
-    /// single-branch `If`; the recursion bottoms out on the empty list by
-    /// reifying the success path with `then`.
+    /// Reify a let chain into nested Match / If stmts, shared by
+    /// `reify_if_expr` / `reify_if_stmt` / `reify_while` / `reify_for`. A `Let`
+    /// element becomes a two-arm Match (pattern arm recurses, wildcard falls
+    /// back to `else_block`), an `Expr` element a single-branch `If`; the
+    /// recursion bottoms out on the empty list by reifying the success path
+    /// with `then`.
     fn reify_let_chain_stmts(
         &mut self,
         elements: &[ast::ConditionElement],
@@ -4123,8 +4123,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let inner_stmts =
                     self.reify_let_chain_stmts(&elements[1..], then, else_block, ctx, span);
                 let inner_block = TirBlock::new(inner_stmts, span);
-                // Use the shared `block_result_type` (mirroring
-                // `resolve_let_chain_stmts`) so a then/else
+                // Use the shared `block_result_type` so a then/else
                 // block ending in a value `If` / `Match` / nested chain
                 // contributes its real result type. A hand-rolled
                 // "last stmt is Expr" check would mis-classify those
