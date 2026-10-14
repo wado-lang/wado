@@ -1397,7 +1397,7 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 const PAYBACK_FACTOR: usize = 4;
 
 /// Which call sites splice a callee.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 enum Reach {
     #[default]
     Nowhere,
@@ -1456,18 +1456,22 @@ fn splice_barred(
     barred_cycle_members: &IndexSet<FuncId>,
     type_table: &TypeTable,
 ) -> bool {
+    // Recursion is barred ahead of the `#[inline(always)]` short-circuit in
+    // `never_spliced`: splicing a recursive call only exposes the next one, so a
+    // force would expand without bound over the fixed point (a compiler stack
+    // overflow at higher iteration counts). A bridge is the exception
+    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
+    // identity the set is built on, so a cross-module cycle is not missed.
+    func.id.is_some_and(|id| barred_cycle_members.contains(&id))
+        || never_spliced(func, type_table)
+}
+
+/// Whether this pass declines `func` whatever calls it. A call into such a
+/// function stays a call, so it closes no cycle splicing could expand.
+fn never_spliced(func: &NirFunction, type_table: &TypeTable) -> bool {
     // A CM binding is an ABI bridge between Wado GC types and CM linear memory,
     // and has to stay a function of its own.
     if func.inline_hint == InlineHint::Never || func.is_cm_binding {
-        return true;
-    }
-    // Recursion is barred ahead of the `#[inline(always)]` short-circuit below:
-    // splicing a recursive call only exposes the next one, so a force would
-    // expand without bound over the fixed point (a compiler stack overflow at
-    // higher iteration counts). A bridge is the exception
-    // `splice_barred_cycle_members` proves bounded. Keyed on `FuncId`, the
-    // identity the set is built on, so a cross-module cycle is not missed.
-    if func.id.is_some_and(|id| barred_cycle_members.contains(&id)) {
         return true;
     }
     // A `!`-returning body is an error/abort path: never hot, nothing to gain.
@@ -1988,9 +1992,29 @@ pub fn inline_functions(
     // call node's `FunctionRef`. Indexed by `func_id.index()` (== store position).
     let descriptors = descriptor_cache.descriptors(project);
     let scans = scans.0.refresh(project, gate.exec(), scan_body);
+    let never: Vec<bool> = {
+        let type_table = project.type_table.borrow();
+        project
+            .functions
+            .iter()
+            .map(|f| {
+                let f = f.borrow();
+                f.body.is_some() && never_spliced(&f, &type_table)
+            })
+            .collect()
+    };
+    // A failed contract check inspects its receiver, whose `Inspect` indexes it
+    // again; that cycle runs through a `!` panic helper and must not bar the
+    // check's holder.
     let call_graph: Vec<Vec<usize>> = scans
         .iter()
-        .map(|s| s.calls.iter().map(|(c, _)| c.index()).collect())
+        .map(|s| {
+            s.calls
+                .iter()
+                .map(|(c, _)| c.index())
+                .filter(|&c| !never[c])
+                .collect()
+        })
         .collect();
     let barred_cycle_members = splice_barred_cycle_members(&call_graph);
 
@@ -2103,7 +2127,16 @@ pub fn inline_functions(
             &spliced,
             &hopeful_params[i],
         );
-        let candidate = (verdict.reach != Reach::Nowhere).then(|| {
+        compiler_trace!(
+            "inline_verdict",
+            "{}: hot {} for {} params, {} sites -> {:?}",
+            func.name,
+            verdict.hot,
+            func.params.len(),
+            call_sites[i],
+            verdict.reach
+        );
+        let candidate =(verdict.reach != Reach::Nowhere).then(|| {
             let hot = match func.inline_hint {
                 InlineHint::Always => inline_cost(
                     func.body.as_ref().expect("a candidate has a body"),

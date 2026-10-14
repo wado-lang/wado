@@ -3,17 +3,17 @@
 // `decode_at` is over the plain threshold, and `first_code` is its only caller.
 
 fn decode_at(bytes: &Array<u8>, pos: i32) -> [i32, i32] {
-    let b0 = bytes[pos] as i32;
+    let b0 = unchecked bytes[pos] as i32;
     if b0 < 0x80 {
         return [b0, 1];
     }
     if b0 < 0xE0 {
-        return [(b0 & 0x1F) << 6 | bytes[pos + 1] as i32 & 0x3F, 2];
+        return [(b0 & 0x1F) << 6 | unchecked bytes[pos + 1] as i32 & 0x3F, 2];
     }
     if b0 < 0xF0 {
-        return [(b0 & 0x0F) << 12 | (bytes[pos + 1] as i32 & 0x3F) << 6 | bytes[pos + 2] as i32 & 0x3F, 3];
+        return [(b0 & 0x0F) << 12 | (unchecked bytes[pos + 1] as i32 & 0x3F) << 6 | unchecked bytes[pos + 2] as i32 & 0x3F, 3];
     }
-    return [(b0 & 0x07) << 18 | (bytes[pos + 1] as i32 & 0x3F) << 12 | (bytes[pos + 2] as i32 & 0x3F) << 6 | bytes[pos + 3] as i32 & 0x3F, 4];
+    return [(b0 & 0x07) << 18 | (unchecked bytes[pos + 1] as i32 & 0x3F) << 12 | (unchecked bytes[pos + 2] as i32 & 0x3F) << 6 | unchecked bytes[pos + 3] as i32 & 0x3F, 4];
 }
 
 #[inline(never)]
