@@ -34,7 +34,6 @@ let i = 99;
 assert i < list.len() && list[i] == 1;
 // condition: i < list.len() && list[i] == 1
 // i: 99
-// list: [1, 2, 3]
 // list.len(): 3
 // i < list.len(): false
 // i: <not evaluated>
@@ -43,6 +42,12 @@ assert i < list.len() && list[i] == 1;
 ```
 
 ## The Failure Message
+
+The receiver of a method call or a subscript is not captured; the call's result
+is. `list` in `list.len()` or `list[i]` may be a whole container, and rendering
+it would cost more than the check, and keep the optimizer from taking the
+container apart for a message that only a failure prints. What computes the
+receiver's place, such as `i` in `rows[i].len()`, is still captured.
 
 Each captured operand is rendered with `Inspect` (`:?`), so a long `String` or
 `List` operand is cut at `Inspect`'s default length and marked where it was cut

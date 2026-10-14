@@ -1,0 +1,14 @@
+// A failed `assert` leaves out a receiver, however deep in a chain, but keeps
+// what computes its place: `i` here, and the call's result.
+
+export fn run() {
+    let rows: List<List<i32>> = [[1], [2, 3]];
+    let i = builtin::black_box(1);
+    assert rows[i].len() == 5;
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["condition: rows[i].len() == 5\ni: 1\nrows[i].len(): 2\n"]
+}

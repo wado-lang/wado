@@ -406,10 +406,19 @@ impl CaptureScanner {
         }
     }
 
-    /// A receiver is never bound — binding copies, and value semantics would
-    /// hide the call's own mutation. Only a place the failure branch can re-read
-    /// earns a slot, and nothing after the receiver may be bound ahead.
+    /// A receiver is never captured: rendering it may cost a whole container,
+    /// and a failure branch holding it keeps the optimizer from taking the
+    /// container apart. What computes its place is captured, and nothing after
+    /// the receiver may be bound ahead, since binding copies and value
+    /// semantics would hide the call's own mutation.
     fn scan_receiver(&mut self, expr: &Expr) {
+        self.scan_place_operands(expr);
+        self.frontier_ok = false;
+    }
+
+    /// A `matches` scrutinee is the operand the test reads, so it is captured
+    /// where the failure branch can re-read it.
+    fn scan_scrutinee(&mut self, expr: &Expr) {
         if is_place_expr(expr) && !self.conditional {
             self.scan(expr);
         }
@@ -549,7 +558,7 @@ impl CaptureScanner {
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Matches(m) => {
-                self.scan_receiver(&m.expr);
+                self.scan_scrutinee(&m.expr);
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Index(i) => {
