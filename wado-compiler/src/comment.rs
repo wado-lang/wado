@@ -43,6 +43,10 @@ pub struct TriviaMap {
     trailing: BTreeMap<AstId, Vec<Comment>>,
     inner_tail: BTreeMap<AstId, Vec<Comment>>,
     dangling: Vec<Comment>,
+    /// Every `{` token, in source order. No node records where its body's
+    /// brace sits, and a comment before it is the head's while one after it is
+    /// the body's.
+    open_braces: Vec<Span>,
 }
 
 impl TriviaMap {
@@ -67,6 +71,21 @@ impl TriviaMap {
     /// after the last AST node's end. Called once at parse end.
     pub fn set_dangling(&mut self, comments: Vec<Comment>) {
         self.dangling = comments;
+    }
+
+    /// Record the `{` token offsets. Called once at parse end.
+    pub fn set_open_braces(&mut self, open_braces: Vec<Span>) {
+        assert!(open_braces.is_sorted_by_key(|span| span.start));
+        self.open_braces = open_braces;
+    }
+
+    /// The first `{` token at or after `pos`.
+    pub fn open_brace_from(&self, pos: usize) -> Span {
+        let i = self.open_braces.partition_point(|b| b.start < pos);
+        *self
+            .open_braces
+            .get(i)
+            .unwrap_or_else(|| panic!("no `{{` at or after offset {pos}"))
     }
 
     /// Leading trivia for `id`, or an empty slice if none.

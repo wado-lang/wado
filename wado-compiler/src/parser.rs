@@ -71,6 +71,9 @@ pub struct Parser {
     comments: Vec<Comment>,
     /// Index of the next unattached comment in `comments`.
     comment_cursor: usize,
+    /// The `{` tokens of the interpolations parsed so far, which the template
+    /// token hides from `tokens` as it hides their comments.
+    interpolation_braces: Vec<Span>,
     /// Trivia attached to AST nodes during parsing. Exposed via
     /// [`Parser::take_trivia`] for the formatter pipeline.
     trivia: TriviaMap,
@@ -243,6 +246,7 @@ impl Parser {
             next_ast_id: 0,
             comments,
             comment_cursor: 0,
+            interpolation_braces: Vec::new(),
             trivia: TriviaMap::new(),
             errors: Vec::new(),
             contextual_keywords: Vec::new(),
@@ -311,6 +315,12 @@ impl Parser {
         self.comment_cursor = 0;
         let mut trivia = std::mem::take(&mut self.trivia);
         trivia.set_dangling(dangling);
+        let mut open_braces = self.open_brace_tokens();
+        open_braces.append(&mut self.interpolation_braces);
+        open_braces.sort_by_key(|span| span.start);
+        // A speculative branch that backtracked parsed its interpolations twice.
+        open_braces.dedup_by_key(|span| span.start);
+        trivia.set_open_braces(open_braces);
         trivia
     }
 
@@ -6889,7 +6899,18 @@ impl Parser {
         self.absorb_comments(lex_result.comments);
         let nested = std::mem::take(&mut parser.comments);
         self.absorb_comments(nested);
+        self.interpolation_braces.append(&mut parser.open_brace_tokens());
+        self.interpolation_braces
+            .append(&mut parser.interpolation_braces);
         Ok(expr)
+    }
+
+    fn open_brace_tokens(&self) -> Vec<Span> {
+        self.tokens
+            .iter()
+            .filter(|t| matches!(t.kind, TokenKind::LBrace))
+            .map(|t| t.span)
+            .collect()
     }
 
     /// Merge `comments` into this parse's stream, keeping it ordered by
