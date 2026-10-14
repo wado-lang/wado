@@ -2002,9 +2002,9 @@ pub fn inline_functions(
             })
             .collect()
     };
-    // A failed contract check inspects its receiver, whose `Inspect` indexes it
-    // again; that cycle runs through a `!` panic helper and must not bar the
-    // check's holder.
+    // A call into a never-spliced function stays a call, so an edge into one
+    // closes no cycle splicing could expand: a failed check's `!` panic path
+    // that reaches the checked function again must not bar it.
     let call_graph: Vec<Vec<usize>> = scans
         .iter()
         .map(|s| {

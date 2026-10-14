@@ -10,6 +10,7 @@ use crate::elaborator::sem::ModuleSemantics;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resolve::Resolutions;
+use crate::token::Span;
 
 const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
@@ -20,7 +21,8 @@ const INNER_CALL: &str = "postfix operators bind tighter than `unchecked`, so it
                           whole chain; write `(unchecked …)` around the call it vouches for";
 
 /// An error for each `unchecked` in `module` that marks no call a `contract`
-/// clause binds. `sem` holds the facts the body walk recorded for `module`.
+/// clause binds, and for each clause an impl writes on a method its trait's
+/// clauses bind. `sem` holds the facts the body walk recorded for `module`.
 pub(super) fn misplaced_unchecked(
     module: &Module,
     sem: &ModuleSemantics,
@@ -62,15 +64,20 @@ impl Finder<'_> {
             if let Some(clause) = method.contracts().next()
                 && trait_binds(decl, method)
             {
-                self.found.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::TraitDeclInvalid,
-                    message: IMPL_CLAUSE.to_string(),
-                    span: Some(DiagnosticSpan::from_span(&clause.span, None)),
-                });
+                self.report(Code::TraitDeclInvalid, IMPL_CLAUSE, &clause.span);
             }
         }
     }
+
+    fn report(&mut self, code: Code, message: &str, span: &Span) {
+        self.found.push(Diagnostic {
+            severity: Severity::Error,
+            code,
+            message: message.to_string(),
+            span: Some(DiagnosticSpan::from_span(span, None)),
+        });
+    }
+
     /// The declarations the call `expr` reaches, one per walk that reached it.
     fn callees(&self, expr: &Expr) -> Vec<DefId> {
         let types = &self.sem.types;
@@ -110,20 +117,15 @@ impl Finder<'_> {
         }
     }
 
-    /// Whether every callee of `expr` is a trait method left without clauses:
-    /// a call through a bound, where an impl's own clauses are out of sight.
-    fn reaches_unbound_trait_method(&self, expr: &Expr) -> bool {
+    /// Whether `expr` is a call, and `holds` of every declaration it reaches.
+    fn every_callee(&self, expr: &Expr, holds: impl Fn(DefId) -> bool) -> bool {
         let callees = self.callees(expr);
-        !callees.is_empty()
-            && callees
-                .iter()
-                .all(|&def| self.contracts.unbound_trait_method(def))
+        !callees.is_empty() && callees.into_iter().all(holds)
     }
 
     /// Whether `expr` reaches a call a `contract` clause binds.
     fn binds(&self, expr: &Expr) -> bool {
-        let callees = self.callees(expr);
-        !callees.is_empty() && callees.iter().all(|&def| self.contracts.binds(def))
+        self.every_callee(expr, |def| self.contracts.binds(def))
     }
 
     /// Whether a postfix operand inside `expr`'s chain is a call a `contract`
@@ -151,18 +153,14 @@ impl AstVisitor for Finder<'_> {
                 Some(INNER_CALL)
             } else if self.callees(&unary.expr).is_empty() {
                 Some(NOT_A_CALL)
-            } else if self.reaches_unbound_trait_method(&unary.expr) {
+            } else if self.every_callee(&unary.expr, |def| self.contracts.unbound_trait_method(def))
+            {
                 Some(BOUND_NO_CONTRACT)
             } else {
                 Some(NO_CONTRACT)
             };
             if let Some(message) = message {
-                self.found.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::UncheckedInvalid,
-                    message: message.to_string(),
-                    span: Some(DiagnosticSpan::from_span(&unary.span, None)),
-                });
+                self.report(Code::UncheckedInvalid, message, &unary.span);
             }
         }
         ast::walk_expr(self, expr);

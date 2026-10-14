@@ -467,16 +467,15 @@ impl CaptureScanner {
     /// Scan what an `unchecked` operand evaluates ahead of itself, when it is a
     /// call or a subscript, the two shapes that reach a contract.
     fn scan_marked_operands(&mut self, expr: &Expr) -> bool {
-        if let Expr::Index(i) = expr {
-            self.scan_receiver(&i.expr);
-            self.scan(&i.index);
+        if let Expr::Index(_) = expr {
+            self.scan_place_operands(expr);
             return true;
         }
         self.scan_call_operands(expr)
     }
 
-    /// The operands that compute a place without reading it: a subscript's
-    /// receiver and index, down a chain of fields and derefs.
+    /// The operands that compute a place without reading it: each subscript's
+    /// index, down a chain of subscripts, fields and derefs.
     fn scan_place_operands(&mut self, place: &Expr) {
         match place {
             Expr::Index(i) => {
@@ -561,9 +560,8 @@ impl CaptureScanner {
                 self.scan_scrutinee(&m.expr);
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
-            Expr::Index(i) => {
-                self.scan_receiver(&i.expr);
-                self.scan(&i.index);
+            Expr::Index(_) => {
+                self.scan_place_operands(expr);
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::TupleLiteral(t) => {
