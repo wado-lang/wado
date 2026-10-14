@@ -3394,10 +3394,6 @@ Encodes this character as UTF-8, returning the bytes.
 
 ##### `pub fn try_from(value: u32) -> Result<char, ConvertError>`
 
-#### `impl TryFrom<i32> for char`
-
-##### `pub fn try_from(value: i32) -> Result<char, ConvertError>`
-
 #### `impl Step for char`
 
 ##### `fn next_step(&self) -> Option<char>`

@@ -600,14 +600,14 @@ impl Parser {
                             return null;
                         }
                         let full_cp = surrogate_to_codepoint(cp, low);
-                        if let Ok(c) = char::try_from(full_cp) {
+                        if let Ok(c) = char::try_from(full_cp as u32) {
                             result.push(c);
                         } else {
                             return null;
                         }
                     } else if is_low_surrogate(cp) {
                         return null;
-                    } else if let Ok(c) = char::try_from(cp) {
+                    } else if let Ok(c) = char::try_from(cp as u32) {
                         result.push(c);
                     } else {
                         return null;

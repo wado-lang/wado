@@ -104,14 +104,13 @@ test "a float literal cast to an integer converts, not re-types" {
 
 test "char::try_from accepts exactly the unicode scalars" {
     assert char::try_from(65 as u32) matches { Ok('A') };
-    assert char::try_from(65 as i32) matches { Ok('A') };
+    assert char::try_from(65) matches { Ok('A') };
     assert char::try_from(0x1F600 as u32) matches { Ok('😀') };
 
     // Surrogates and anything past U+10FFFF are not scalars.
     assert char::try_from(0xD800 as u32) matches { Err(_) };
     assert char::try_from(0xDFFF as u32) matches { Err(_) };
     assert char::try_from(0x110000 as u32) matches { Err(_) };
-    assert char::try_from(-1 as i32) matches { Err(_) };
 
     // Boundaries of the valid ranges.
     assert char::try_from(0 as u32) matches { Ok('\u{0}') };
