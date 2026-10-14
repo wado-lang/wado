@@ -4185,7 +4185,7 @@ fn test_format_comment_before_body_brace_every_construct() {
     assert_format_preserves_ast(source);
 }
 
-/// Only a comment in the gap right before a `{` moves ahead of it. One between
+/// Only a body with a `{` of its own takes a comment ahead of it. One between
 /// `else` and `if` keeps the `else` block's braces and leads the `if`; one
 /// ahead of a bare `return` arm, which has no brace, stays in the body; an
 /// if expression with a comment takes its multi-line form.
