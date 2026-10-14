@@ -2,14 +2,14 @@
 // failure branch re-reads it, so a second line would repeat the first.
 
 export fn run() {
-    let xs: List<i32> = [10, 20, 30];
-    assert xs[0] + xs[1] + xs[2] == 99;
+    let x = builtin::black_box(10);
+    assert x + x + x == 99;
 }
 
 __DATA__
 {
     "trapped": true,
     "stderr_contains": [
-        "xs: [10, 20, 30]\nxs[0]: 10\nxs[1]: 20\n"
+        "condition: x + x + x == 99\nx: 10\nx + x: 20\n"
     ]
 }

@@ -1222,8 +1222,8 @@ trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 // Option<T>, TreeMap<K, V>; not Result)
 trait Default { fn default() -> Self; }
 
-// For [] operators. List's and Slice's impls require `0 <= index < self.len()`,
-// so `unchecked xs[i]` on one skips the range check as a marked call does.
+// For [] operators. List's and Slice's impls require the index in range, so
+// `unchecked xs[i]` on one skips the range check as a marked call does.
 trait IndexRef<I> { type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
 trait IndexRefMut<I> { type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> { type Output; fn index_value(&self, index: I) -> Self::Output; }

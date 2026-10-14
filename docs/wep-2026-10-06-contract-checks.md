@@ -279,8 +279,11 @@ call a predicate each impl defines, such as `contains_index`, and that
 predicate is exactly the clause a caller cannot read: it says only "whatever
 this impl accepts". A map would also look the key up twice on a checked read,
 once for the predicate and once to read. So the indexing traits declare no
-clause. `List` and `Slice` state `contract 0 <= index < self.len()` on their
-index methods. `Array` states none, since the Wasm array access traps on its
+clause. `List` states `contract index < self.len()` on its index methods,
+leaving a negative index to the array access's own trap, which keeps a guard
+that proves only the upper end enough to remove the check. `Slice` states
+`contract 0 <= index < self.len()`, since a negative index would read before
+its view. `Array` states none, since the Wasm array access traps on its
 own, and a map states none, since a missing key panics as it always did.
 
 An impl whose type cannot take every input its trait admits, where the trait

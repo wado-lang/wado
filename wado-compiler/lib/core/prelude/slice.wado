@@ -200,7 +200,7 @@ impl<T> IndexValue<i32> for Slice<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output
-        contract 0 <= index < self.len()
+        contract 0 <= index < self.len(), "index out of bounds"
     {
         return builtin::array_get_value(self.repr, self.start + index);
     }
@@ -212,7 +212,7 @@ impl<T: Ref> IndexRef<i32> for Slice<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T
-        contract 0 <= index < self.len()
+        contract 0 <= index < self.len(), "index out of bounds"
     {
         return builtin::array_get_ref(self.repr, self.start + index);
     }

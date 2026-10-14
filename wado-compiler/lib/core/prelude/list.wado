@@ -178,7 +178,7 @@ impl<T> List<T> {
     /// Removes and returns the element at the given index, shifting all elements after it to the left.
     /// Releases the last slot, under the contract on `List`.
     pub fn remove(&mut self, index: i32) -> T
-        contract 0 <= index < self.len()
+        contract 0 <= index < self.len(), "index out of bounds"
     {
         let value = self.repr[index];
         // Shift elements left
@@ -349,9 +349,11 @@ impl<T: FromLeBytes> List<T> {
 impl<T> IndexValue<i32> for List<T> {
     type Output = T;
 
+    // A negative index traps in the array access below, so the clause states
+    // only the end a read past the length but within the capacity would miss.
     #[compiler_item("list_index_value")]
     fn index_value(&self, index: i32) -> Self::Output
-        contract 0 <= index < self.len()
+        contract index < self.len(), "index out of bounds"
     {
         return builtin::array_get_value(&self.repr, index);
     }
@@ -371,7 +373,7 @@ impl<T: Ref> IndexRef<i32> for List<T> {
     type Output = T;
 
     fn index_ref(&self, index: i32) -> &T
-        contract 0 <= index < self.len()
+        contract index < self.len(), "index out of bounds"
     {
         return builtin::array_get_ref(&self.repr, index);
     }
@@ -381,7 +383,7 @@ impl<T: RefMut> IndexRefMut<i32> for List<T> {
     type Output = T;
 
     fn index_ref_mut(&mut self, index: i32) -> &mut T
-        contract 0 <= index < self.len()
+        contract index < self.len(), "index out of bounds"
     {
         return builtin::array_get_ref_mut(&mut self.repr, index);
     }

@@ -1082,9 +1082,11 @@ supports. A subscript names the prelude's declarations, as an operator does, so
 a user trait spelled `IndexValue` does not answer `c[i]`.
 
 The traits state no [contract](./spec-assertions.md#contract-checks): what an
-index must satisfy differs by container, so each impl states its own. `List`
-and `Slice` require `0 <= index < self.len()` of a single index, so `c[i]`
-checks the range before reading, and `unchecked c[i]` on one of them vouches
+index must satisfy differs by container, so each impl states its own. A
+single-index read of a `List` requires `index < self.len()`, since a negative
+index traps in the array access anyway, and one of a `Slice` requires
+`0 <= index < self.len()`, since the view's start would otherwise move. `c[i]`
+checks the clause before reading, and `unchecked c[i]` on one of them vouches
 for it. The read then runs with no check outside a `-f contract-checks` build.
 `Array` states none, since the Wasm array access traps on its own; a map states
 none, and a missing key panics; a range index clamps rather than fails.
