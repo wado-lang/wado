@@ -71,6 +71,9 @@ pub struct Parser {
     comments: Vec<Comment>,
     /// Index of the next unattached comment in `comments`.
     comment_cursor: usize,
+    /// The `{` tokens of the interpolations parsed so far, which the template
+    /// token hides from `tokens` as it hides their comments.
+    interpolation_braces: Vec<Span>,
     /// Trivia attached to AST nodes during parsing. Exposed via
     /// [`Parser::take_trivia`] for the formatter pipeline.
     trivia: TriviaMap,
@@ -282,6 +285,7 @@ impl Parser {
             next_ast_id: 0,
             comments,
             comment_cursor: 0,
+            interpolation_braces: Vec::new(),
             trivia: TriviaMap::new(),
             errors: Vec::new(),
             contextual_keywords: Vec::new(),
@@ -350,6 +354,12 @@ impl Parser {
         self.comment_cursor = 0;
         let mut trivia = std::mem::take(&mut self.trivia);
         trivia.set_dangling(dangling);
+        let mut open_braces = self.open_brace_tokens();
+        open_braces.append(&mut self.interpolation_braces);
+        open_braces.sort_by_key(|b| b.start);
+        // A speculative branch that backtracked parsed its interpolations twice.
+        open_braces.dedup_by_key(|b| b.start);
+        trivia.set_open_braces(open_braces);
         trivia
     }
 
@@ -2833,14 +2843,13 @@ impl Parser {
     /// Used in for loop init: `for (let mut i = 0; ...)`
     fn parse_let_stmt_inner(&mut self, allow_else: bool) -> ParseResult<Stmt> {
         let start_span = self.peek().span;
-        // Allocate the let-stmt id BEFORE descending into children so
-        // leading comments preceding `let` (e.g. `// note\nlet x = ...`)
+        // Allocate the let-stmt id before descending into children so the
+        // comments preceding `let`, those among its attributes included,
         // attach to the stmt itself rather than to its first child id.
-        // Matches the `alloc_ast_id`-at-start convention used by every
-        // outermost-first parser (`parse_block`, `parse_function`,
-        // `parse_match_arm`, …).
-        let id = self.alloc_ast_id();
+        // Attributes allocate none, so the id comes after them, as an item's
+        // does.
         let attrs = self.parse_attributes()?;
+        let id = self.alloc_ast_id();
 
         if self.check(&TokenKind::Reactive) {
             return Err(ParseError {
@@ -6864,7 +6873,19 @@ impl Parser {
         self.absorb_comments(lex_result.comments);
         let nested = std::mem::take(&mut parser.comments);
         self.absorb_comments(nested);
+        self.interpolation_braces
+            .append(&mut parser.open_brace_tokens());
+        self.interpolation_braces
+            .append(&mut parser.interpolation_braces);
         Ok(expr)
+    }
+
+    fn open_brace_tokens(&self) -> Vec<Span> {
+        self.tokens
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::LBrace))
+            .map(|token| token.span)
+            .collect()
     }
 
     /// Merge `comments` into this parse's stream, keeping it ordered by
