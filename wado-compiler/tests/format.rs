@@ -2927,6 +2927,44 @@ fn foo(c: char) -> bool {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A comment after a match's `{` stays before the first arm, not inside its
+/// body, and one before the `}` stays inside the match.
+#[test]
+fn test_format_match_comments_around_arms() {
+    let source = concat!(
+        "fn f(n: i32) -> i32 {\n",
+        "    let a = match n { // first\n",
+        "        _ => 0,\n",
+        "    };\n",
+        "    return match n {\n",
+        "        0 => 1,\n",
+        "        _ => 2,\n",
+        "        // last\n",
+        "    };\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f(n: i32) -> i32 {\n",
+        "    let a = match n {\n",
+        "        // first\n",
+        "        _ => 0,\n",
+        "    };\n",
+        "    return match n {\n",
+        "        0 => 1,\n",
+        "        _ => 2,\n",
+        "        // last\n",
+        "    };\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
 #[test]
 fn test_format_if_else_chain_all_multiline() {
     // When the first branch of an if-else chain is multiline, all branches should be multiline

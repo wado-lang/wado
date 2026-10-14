@@ -989,18 +989,18 @@ impl<'a> Unparser<'a> {
             self.emit_trailing_for(clause.id);
         }
         // A comment before the body has no slot on the signature's line, so it
-        // takes the line the brace would after a `contract` clause (#2331).
-        let brace_on_own_line = f.body.as_ref().is_some_and(|body| {
+        // gets the brace's own line, as a `contract` clause does (#2331).
+        let brace_on_own_line = f.body.as_ref().filter(|body| {
             !contracts.is_empty() || self.has_comment_in_range(0, body.span.start)
         });
-        if brace_on_own_line && let Some(body) = &f.body {
+        if let Some(body) = brace_on_own_line {
             self.output.push('\n');
             self.flush_comments_before(body.span.start, Spacing::Tight);
         }
         self.indent_level -= 1;
 
         if let Some(body) = &f.body {
-            if brace_on_own_line {
+            if brace_on_own_line.is_some() {
                 self.write_indent();
             } else {
                 self.output.push(' ');
@@ -2505,6 +2505,11 @@ impl<'a> Unparser<'a> {
         self.last_source_line = m.expr.span().end_line();
 
         for arm in &m.arms {
+            self.flush_comments_in(
+                m.span.start,
+                self.leading_start(arm.id, arm.span.start),
+                Spacing::KeepBlankLines,
+            );
             self.emit_leading_for(arm.id);
             self.emit_blank_lines_to(arm.span.line);
             self.unparse_match_arm(arm);
@@ -2512,6 +2517,7 @@ impl<'a> Unparser<'a> {
             self.output.push('\n');
             self.last_source_line = arm.span.end_line();
         }
+        self.flush_comments_in(m.span.start, m.span.end, Spacing::KeepBlankLines);
         self.indent_level -= 1;
 
         self.last_source_line = saved_line.max(m.span.end_line());
