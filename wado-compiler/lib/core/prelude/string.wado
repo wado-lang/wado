@@ -1627,7 +1627,7 @@ impl StrSlice {
         let Some(at) = self.find(sep) else {
             return null;
         };
-        return Option::Some(self.cut_at(at, sep_len));
+        return Option::Some(unchecked self.cut_at(at, sep_len));
     }
 
     pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> {
@@ -1635,10 +1635,13 @@ impl StrSlice {
         let Some(at) = self.rfind(sep) else {
             return null;
         };
-        return Option::Some(self.cut_at(at, sep_len));
+        return Option::Some(unchecked self.cut_at(at, sep_len));
     }
 
-    fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] {
+    fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice]
+        contract 0 <= at && 0 <= sep_len && at + sep_len <= self.len(), "separator out of bounds"
+        contract self.is_char_boundary(at) && self.is_char_boundary(at + sep_len), "separator not on UTF-8 character boundaries"
+    {
         return [
             unchecked self.slice(0, at),
             unchecked self.slice(at + sep_len, self.len()),
