@@ -4008,11 +4008,12 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
 
 /// A let-chain operand, a `let`'s scrutinee included, is parsed at comparison
 /// precedence: `&&` separates operands and `||` is rejected. An operand built
-/// from a looser operator keeps its parentheses, or it would not re-parse as one.
+/// from a looser operator keeps its parentheses, or it would not re-parse as
+/// one; so does a closure, whose expression body would take the `&&` after it.
 fn chain_operand_needs_parens(expr: &Expr) -> bool {
     matches!(
         expr,
-        Expr::Range(_) | Expr::Assign(_) | Expr::CompoundAssign(_)
+        Expr::Range(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::Closure(_)
     ) || matches!(expr, Expr::Binary(b) if b.op.is_short_circuit())
 }
 

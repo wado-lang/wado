@@ -4017,7 +4017,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             Some(ast::Condition::Expr(cond_expr)) => {
                 let cond_span = cond_expr.span();
-                let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                let cond_tir = self.reify_condition_expr(cond_expr, ctx);
                 let if_break = break_unless(cond_tir, cond_span, span);
                 let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
                 let mut s = vec![if_break, labeled_body];
@@ -4180,6 +4180,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span: elem_span,
             } => {
                 let scrutinee = self.reify_expr(expr, ctx, None);
+                let scrutinee = self.probe_expr(ProbeSite::Around, expr.id(), scrutinee);
                 let scrutinee_type = scrutinee.type_id;
                 let tir_pattern = self.reify_pattern(pattern, scrutinee_type, *elem_span, ctx);
                 let inner_stmts = self.reify_let_chain_stmts(
@@ -4244,7 +4245,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )]
             }
             ast::ConditionElement::Expr(expr) => {
-                let condition = self.reify_expr(expr, ctx, Some(TypeTable::BOOL));
+                let condition = self.reify_condition_expr(expr, ctx);
+                let condition = self.probe_expr(ProbeSite::Around, expr.id(), condition);
                 let inner_stmts = self.reify_let_chain_stmts(
                     &elements[1..],
                     then_block_ast,
@@ -6518,7 +6520,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let ctx = &mut ctx.enter_scope();
         let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, m.span, ctx);
         let arm_body = match &m.guard {
-            Some(guard) => self.reify_expr(guard, ctx, Some(TypeTable::BOOL)),
+            Some(guard) => self.reify_condition_expr(guard, ctx),
             None => bool_lit(true, m.span),
         };
 
@@ -6789,7 +6791,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let guard = arm
                     .guard
                     .as_ref()
-                    .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
+                    .map(|g| self.reify_condition_expr(g, ctx));
                 let body = self.reify_expr(&arm.body, ctx, branch_expected);
                 let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
                 TirMatchArm {

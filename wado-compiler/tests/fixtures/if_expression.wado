@@ -185,7 +185,11 @@ test "a boolean may precede the let in a chain" {
     if flag && let Some(x) = opt {
         seen.push(`flag and x=${x}`);
     }
-    assert seen == ["flag and x=5"];
+    // Braces in an operand do not end the condition.
+    if opt matches { Some(_) } && let Some(x) = opt {
+        seen.push(`matched x=${x}`);
+    }
+    assert seen == ["flag and x=5", "matched x=5"];
 }
 
 test "if let chain over nested options" {

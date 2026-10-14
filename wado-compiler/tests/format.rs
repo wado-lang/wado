@@ -3477,6 +3477,9 @@ fn test() {
     while (n < 2 || n > 9) && let Some(v) = (a && b) {
         n += 1;
     }
+    if let f = (|y: i32| y > 0) && f(n) {
+        n = 0;
+    }
 }
 ",
     );

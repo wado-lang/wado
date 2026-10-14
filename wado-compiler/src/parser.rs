@@ -2964,61 +2964,72 @@ impl Parser {
         }))
     }
 
-    /// Returns true if the token stream starting at the current position contains
-    /// a `&&` followed immediately by `let` at depth 0 (outside parentheses/brackets).
-    /// Used to decide whether to parse the if/while condition as a let chain.
-    fn condition_has_and_let(&self) -> bool {
-        let mut i = self.pos;
-        let mut depth = 0usize;
-        while i < self.tokens.len() {
-            match &self.tokens[i].kind {
-                TokenKind::LParen | TokenKind::LBracket => depth += 1,
-                TokenKind::RParen | TokenKind::RBracket => depth = depth.saturating_sub(1),
-                // Opening `{` at depth 0 is the then-block — stop scanning
-                TokenKind::LBrace if depth == 0 => break,
-                TokenKind::Eof => break,
-                TokenKind::And if depth == 0 => {
-                    let next = i + 1;
-                    if next < self.tokens.len() && self.tokens[next].kind == TokenKind::Let {
-                        return true;
-                    }
-                }
-                _ => {}
-            }
-            i += 1;
-        }
-        false
-    }
-
-    /// Parse an `if`, `while` or `for` condition: a let chain when it starts
-    /// with `let` or holds `&& let` at depth 0, otherwise a plain expression.
+    /// Parse an `if`, `while` or `for` condition. Its operands are read at
+    /// comparison precedence, split at `&&` and `||`, and what they hold
+    /// decides: a `let` among them makes a let chain, and none a plain
+    /// expression, which is parsed again as one when it is more than a single
+    /// operand.
     fn parse_condition(&mut self, start_span: Span) -> ParseResult<Condition> {
-        if !self.check(&TokenKind::Let) && !self.condition_has_and_let() {
-            return Ok(Condition::Expr(self.parse_expr_no_struct_literal()?));
-        }
-
+        let checkpoint = self.checkpoint();
         let mut elements = Vec::new();
+        let mut first_or = None;
+        let mut has_let = false;
         loop {
-            if self.check(&TokenKind::Let) {
+            let element = if self.check(&TokenKind::Let) {
+                has_let = true;
                 self.advance();
                 let elem_span = self.peek().span;
                 let pattern = self.parse_pattern()?;
                 self.expect(&TokenKind::Eq)?;
-                let expr = self.parse_chain_element_expr()?;
-                let span = elem_span.merge(&expr.span());
-                elements.push(ConditionElement::Let {
-                    pattern: Box::new(pattern),
-                    expr,
-                    span,
-                });
+                self.parse_chain_operand()
+                    .map(|expr| ConditionElement::Let {
+                        span: elem_span.merge(&expr.span()),
+                        pattern: Box::new(pattern),
+                        expr,
+                    })
             } else {
-                elements.push(ConditionElement::Expr(self.parse_chain_element_expr()?));
+                self.parse_chain_operand().map(ConditionElement::Expr)
+            };
+            match element {
+                Ok(element) => elements.push(element),
+                // Before a `let`, the operand may belong to a plain condition
+                // that the full expression parser reads where this one fails.
+                Err(_) if !has_let => break,
+                Err(e) => return Err(e),
             }
+            match self.peek_kind() {
+                TokenKind::And => {}
+                TokenKind::Or => {
+                    first_or.get_or_insert(self.peek().span);
+                }
+                _ => break,
+            }
+            self.advance();
+        }
 
-            if !self.check(&TokenKind::And) {
-                break;
+        if !has_let {
+            if let [ConditionElement::Expr(_)] = elements.as_slice()
+                && matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Semicolon)
+            {
+                let Some(ConditionElement::Expr(expr)) = elements.pop() else {
+                    unreachable!("matched a single `Expr` element above");
+                };
+                return Ok(Condition::Expr(expr));
             }
-            self.advance(); // consume &&
+            self.restore(checkpoint);
+            return Ok(Condition::Expr(self.parse_expr_no_struct_literal()?));
+        }
+        if let Some(span) = first_or {
+            return Err(self.error_at_span(
+                span,
+                "`||` cannot join the operands of a let chain; parenthesize it",
+            ));
+        }
+        if matches!(self.peek_kind(), TokenKind::DotDotLt | TokenKind::DotDotEq) {
+            return Err(self.error_at_span(
+                self.peek().span,
+                "a range cannot be a let-chain operand; parenthesize it",
+            ));
         }
 
         let end_span = match elements.last().expect("a let chain has an element") {
@@ -3031,23 +3042,16 @@ impl Parser {
         })
     }
 
-    /// Parse a chain element expression, which stops below `&&` and `||`: in a
-    /// let chain `&&` separates elements, and `||` is rejected as Rust rejects it.
-    /// Either operator is written inside an element by parenthesizing it.
-    /// Struct literals are suppressed so that `{` is recognized as the then-block.
-    fn parse_chain_element_expr(&mut self) -> ParseResult<Expr> {
+    /// One let-chain operand, a `let`'s scrutinee included, read at comparison
+    /// precedence: `&&` separates operands, and a looser operator is written
+    /// inside one by parenthesizing it. Struct literals are suppressed so that
+    /// `{` is recognized as the then-block.
+    fn parse_chain_operand(&mut self) -> ParseResult<Expr> {
         let saved = self.restrict_struct_literals;
         self.restrict_struct_literals = true;
-        let element = self.parse_comparison_expr()?;
+        let operand = self.parse_comparison_expr();
         self.restrict_struct_literals = saved;
-
-        if self.check(&TokenKind::Or) {
-            return Err(self.error_at_span(
-                self.peek().span,
-                "`||` cannot join the operands of a let chain; parenthesize it",
-            ));
-        }
-        Ok(element)
+        operand
     }
 
     fn parse_while_stmt(&mut self) -> ParseResult<Stmt> {
@@ -3140,11 +3144,9 @@ impl Parser {
         // Parse condition (optional): `i < 10` or `let Some(x) = expr`
         let condition = if self.check(&TokenKind::Semicolon) {
             None
-        } else if self.check(&TokenKind::Let) {
-            let let_span = self.peek().span;
-            Some(self.parse_condition(let_span)?)
         } else {
-            Some(Condition::Expr(self.parse_expr_no_struct_literal()?))
+            let condition_span = self.peek().span;
+            Some(self.parse_condition(condition_span)?)
         };
         self.expect(&TokenKind::Semicolon)?;
 
@@ -9288,7 +9290,10 @@ line 2
                 err.message
             );
         }
+        let err = parse("fn f() { if let r = 0..<n { } }").unwrap_err();
+        assert!(err.message.contains("a range cannot"), "{:?}", err.message);
         parse("fn f() { if let true = (a || b) && (c || d) { } }").unwrap();
+        parse("fn f() { if a || b && c { } }").unwrap();
     }
 
     /// Accepting `with ()` would let the formatter delete a written clause.

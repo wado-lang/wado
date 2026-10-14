@@ -1437,7 +1437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             ConditionElement::Expr(expr) => {
-                self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(expr, ctx);
                 self.resolve_let_chain_stmts(
                     &elements[1..],
                     then_block_ast,
@@ -3194,7 +3194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_for_update(f.update.as_ref(), ctx);
             }
             Some(Condition::Expr(cond_expr)) => {
-                self.resolve_expr(cond_expr, ctx, Some(TypeTable::BOOL));
+                self.resolve_condition_expr(cond_expr, ctx);
                 self.resolve_for_labeled_body(&body_label, &f.body, ctx);
                 self.resolve_for_update(f.update.as_ref(), ctx);
             }
@@ -3202,11 +3202,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 elements,
                 span: cond_span,
             }) => {
-                // The parser only accepts a single Let element in a for
-                // header — multi-element let-chains are syntactically
-                // limited to `if`/`while`. Future grammar evolution that
-                // relaxes this should surface here as a diagnostic, not
-                // an ICE.
                 let single_let = if elements.len() == 1 {
                     match &elements[0] {
                         ConditionElement::Let {

@@ -3044,7 +3044,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let ctx = &mut ctx.enter_scope();
         self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
         if let Some(g) = arm.guard.as_ref() {
-            self.resolve_expr(g, ctx, Some(TypeTable::BOOL));
+            self.resolve_condition_expr(g, ctx);
         }
         let body_type = self.resolve_expr(&arm.body, ctx, expected_type);
         (body_type, arm.body.span())

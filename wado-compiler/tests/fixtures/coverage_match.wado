@@ -1,5 +1,5 @@
-// A `match` arm is a branch, guard or not, and so is each side of `&&` and
-// `||` the right operand of which may not run.
+// A `match` arm is a branch, guard or not, and so is each operand of `&&`,
+// `||` and a let chain that may not run.
 fn describe(v: Option<i32>) -> String {
     return match v {
         Some(n) && n > 100 => "large",
@@ -16,19 +16,27 @@ fn either(a: bool, b: bool) -> bool {
     return a || b;
 }
 
+fn chained(v: Option<i32>, b: bool) -> bool {
+    if let Some(n) = v && b && n > 0 {
+        return true;
+    }
+    return false;
+}
+
 test "arms and short circuits" {
     assert describe(Some(5)) == "small";
     assert describe(null) == "none";
     assert !both(false, true);
     assert either(false, true);
+    assert !chained(null, true);
 }
 
 __DATA__
 {
   "test": {},
   "coverage": {
-    "uncovered_lines": [5],
-    "uncovered_branches": ["4:12 arm 0", "12:12 rhs"],
+    "uncovered_lines": [5, 21],
+    "uncovered_branches": ["4:12 arm 0", "12:12 rhs", "20:5 then", "20:27 rhs", "20:32 rhs"],
     "uncovered_functions": []
   }
 }

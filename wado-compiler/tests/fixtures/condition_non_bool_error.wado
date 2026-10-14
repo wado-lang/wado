@@ -1,0 +1,25 @@
+// Every condition position takes a `bool` and nothing else: the guard of a
+// `matches` and of a `match` arm, a `bool` operand of a let chain, and the
+// condition of a C-style `for`. A position that only passed `bool` down as an
+// expected type let a non-`bool` through: a `matches` guard once produced a
+// `bool`-typed Match around an `i32` arm, and a let-chain operand of type
+// `String` crashed codegen with an invalid Wasm module.
+
+export fn run() {
+    let opt: Option<i32> = Option::<i32>::Some(5);
+    let k = builtin::black_box(5);
+    let _ = opt matches { Option::Some(v) && v + 1 };
+    let _ = match opt { Some(v) && k => v, _ => 0 };
+    if let Some(v) = opt && k {
+        assert v == 5;
+    }
+    for ; k; {
+        break;
+    }
+}
+
+__DATA__
+{
+    "compile_error": "type mismatch: expected 'bool', found 'i32'",
+    "compile_error_count": 4
+}
