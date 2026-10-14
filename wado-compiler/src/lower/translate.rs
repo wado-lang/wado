@@ -91,7 +91,9 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
     let strings = string::plan(&flat);
     // After the last rewrite of a body, which would move the arguments it keys.
-    let points_to = value_copy::points_to::compute(&flat, &closure.functor_infos);
+    let struct_fields_map = struct_fields(&flat.structs);
+    let points_to =
+        value_copy::points_to::compute(&flat, &struct_fields_map, &closure.functor_infos);
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -126,7 +128,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         pruned,
     } = flat;
 
-    let struct_fields_map = struct_fields(&structs);
     // Pre-register every in-package function's canonical `FuncId` (its position,
     // 1:1 with the final function list). Calls stamp against this at construction.
     let mut ids: IndexMap<FunctionId, FuncId> = IndexMap::default();

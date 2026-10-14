@@ -111,7 +111,9 @@ pub fn analyze_ownership(
         pending_writes: Vec::new(),
         handed: Vec::new(),
         points_to,
-        frame: points_to.frame(&func.module_source, &func.name),
+        frame: points_to
+            .frame(&func.module_source, &func.name)
+            .expect("the fold computes points-to over every body it analyzes"),
         written_args: IndexSet::default(),
         exits: Vec::new(),
         all_locals,
@@ -1122,13 +1124,11 @@ struct Analyzer<'a> {
     /// Resolved once the alias chains are complete.
     pending_writes: Vec<WriteCheck>,
     /// What every value handed to a call reaches, in walk order, so a check
-    /// reads what the later arguments handed on. `None` for one the
-    /// points-to analysis did not see.
-    handed: Vec<Option<&'a IndexSet<u32>>>,
+    /// reads what the later arguments handed on.
+    handed: Vec<&'a IndexSet<u32>>,
     points_to: &'a PointsTo,
-    /// This body's frame in `points_to`, `None` for a body built after
-    /// planning, where every by-value argument keeps its copy.
-    frame: Option<u32>,
+    /// This body's frame in `points_to`.
+    frame: u32,
     /// [`Ownership::written_args`].
     written_args: IndexSet<Span>,
     exits: Vec<Exit>,
@@ -1968,13 +1968,7 @@ impl Analyzer<'_> {
         released: &IndexSet<(u32, u32)>,
     ) {
         let checks = std::mem::take(&mut self.pending_writes);
-        let Some(frame) = self.frame else {
-            assert!(
-                checks.is_empty(),
-                "a frame the analysis lacks defers nothing"
-            );
-            return;
-        };
+        let frame = self.frame;
         let pt = self.points_to;
         let global = pt.global_reach();
         let references: Vec<(u32, IndexSet<u32>)> = self
@@ -2043,14 +2037,7 @@ impl Analyzer<'_> {
             return;
         }
         let span = strip_casts(arg).span;
-        let Some(written) = self.written_since(call_writes, handed_from, own) else {
-            self.written_args.insert(span);
-            return;
-        };
-        let frame = self
-            .frame
-            .expect("`written_since` answers only in a frame the analysis has");
-        let written = Rc::new(written);
+        let written = Rc::new(self.written_since(call_writes, handed_from, own));
         let mut storages = Vec::new();
         self.storage_roots(arg, &mut storages);
         for storage in storages {
@@ -2061,7 +2048,10 @@ impl Analyzer<'_> {
                     written: Rc::clone(&written),
                 }),
                 Storage::Lent(reference) => {
-                    if self.points_to.reaches_written(frame, reference, &written) {
+                    if self
+                        .points_to
+                        .reaches_written(self.frame, reference, &written)
+                    {
                         self.written_args.insert(span);
                     }
                 }
@@ -2073,19 +2063,14 @@ impl Analyzer<'_> {
     }
 
     /// The locations a call's evaluation may write beyond
-    /// [`PointsTo::global_reach`], `None` where the analysis cannot say.
-    fn written_since(
-        &self,
-        call_writes: usize,
-        handed_from: usize,
-        own: usize,
-    ) -> Option<IndexSet<u32>> {
-        let frame = self.frame?;
+    /// [`PointsTo::global_reach`].
+    fn written_since(&self, call_writes: usize, handed_from: usize, own: usize) -> IndexSet<u32> {
+        let frame = self.frame;
         let pt = self.points_to;
         let mut sources: Vec<u32> = Vec::new();
         for (i, handed) in self.handed[handed_from..].iter().enumerate() {
             if handed_from + i != own {
-                sources.extend(handed.as_ref()?.iter().copied());
+                sources.extend(handed.iter().copied());
             }
         }
         let mut written = pt.reach(sources);
@@ -2093,10 +2078,13 @@ impl Analyzer<'_> {
             if m.path.through_borrow {
                 written.extend(pt.local_targets(frame, m.path.root));
             } else {
-                written.insert(pt.location(frame, m.path.root)?);
+                written.insert(
+                    pt.location(frame, m.path.root)
+                        .expect("the analysis gives every local a body writes a location"),
+                );
             }
         }
-        Some(written)
+        written
     }
 
     /// Note what `args` hand a call.

@@ -18,6 +18,7 @@
 
 use std::cell::RefCell;
 
+use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
 use super::is_reference_type;
 use super::last_use::collect_child_exprs;
@@ -30,7 +31,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclaration, BuiltinDeclarations, CaptureSource, ClosureFunctor, FunctionKind,
     ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeKey, TypeTable, struct_fields,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -57,8 +58,8 @@ pub struct PointsTo {
 }
 
 impl PointsTo {
-    /// The frame of the function `module`/`name`, `None` for one built after
-    /// planning.
+    /// The frame of the function `module`/`name`, `None` for one the analysis
+    /// did not read.
     #[must_use]
     pub fn frame(&self, module: &ModuleSource, name: &str) -> Option<Frame> {
         self.functions.id(module, name)
@@ -100,16 +101,18 @@ impl PointsTo {
 
     /// The storage the call argument `arg` lets its callee write: what its
     /// value reaches where that holds a writable handle, and its own where a
-    /// `&mut` parameter borrows it. `None` for an argument the analysis did
-    /// not see.
+    /// `&mut` parameter borrows it.
     #[must_use]
-    pub fn handed(&self, arg: &TirExpr) -> Option<&IndexSet<u32>> {
-        let &(node, span) = self.handed.get(&std::ptr::from_ref(arg).addr())?;
+    pub fn handed(&self, arg: &TirExpr) -> &IndexSet<u32> {
+        let &(node, span) = self
+            .handed
+            .get(&std::ptr::from_ref(arg).addr())
+            .expect("the analysis hands every argument of every call it reads");
         assert_eq!(
             span, arg.span,
             "an argument keyed by address moved after the analysis"
         );
-        Some(&self.pts[node as usize])
+        &self.pts[node as usize]
     }
 
     /// `from` and every location reachable from it: what a write through any of
@@ -509,7 +512,7 @@ struct Builder<'a> {
 }
 
 #[must_use]
-pub fn compute(flat: &FlatPackage, functors: &[ClosureFunctor]) -> PointsTo {
+pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFunctor]) -> PointsTo {
     let type_table = flat.type_table.borrow();
     let mut functions = FuncIndex::default();
     for (i, func) in flat.functions.iter().enumerate() {
@@ -532,11 +535,10 @@ pub fn compute(flat: &FlatPackage, functors: &[ClosureFunctor]) -> PointsTo {
                 .collect::<Vec<_>>()
         })
         .collect();
-    let fields = struct_fields(&flat.structs);
     let mut b = Builder {
         type_table: &type_table,
-        names: HoldsHandle::new(&type_table, &fields, Handle::Names),
-        writes: HoldsHandle::new(&type_table, &fields, Handle::Writes),
+        names: HoldsHandle::new(&type_table, fields, Handle::Names),
+        writes: HoldsHandle::new(&type_table, fields, Handle::Writes),
         local_types,
         builtins: &flat.builtin_declarations,
         callees: Vec::new(),
@@ -1003,7 +1005,7 @@ impl Builder<'_> {
 
     fn bind_pattern(&mut self, pattern: &TirPattern, scrutinee: &TirExpr, value: Option<u32>) {
         let mut binds: IndexSet<u32> = IndexSet::default();
-        super::analyze::collect_pattern_bindings(pattern, &mut binds);
+        collect_pattern_bindings(pattern, &mut binds);
         if binds.is_empty() {
             return;
         }
