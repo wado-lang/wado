@@ -4293,6 +4293,48 @@ fn test_format_comment_in_head_before_body_brace() {
     assert_format_preserves_ast(source);
 }
 
+/// A comment between a declaration's attributes stays among them, rather than
+/// moving above the first and counting the attribute's line as a blank one.
+#[test]
+fn test_format_comment_among_attributes_stays_put() {
+    let source = concat!(
+        "fn a() {\n",
+        "}\n",
+        "\n",
+        "#[inline(never)]\n",
+        "// after attr\n",
+        "fn g() {\n",
+        "}\n",
+        "\n",
+        "struct S {\n",
+        "    a: i32,\n",
+        "\n",
+        "    #[wire(name = \"b\")]\n",
+        "    // field\n",
+        "    b: i32,\n",
+        "}\n",
+        "\n",
+        "impl S {\n",
+        "    fn x(&self) {\n",
+        "    }\n",
+        "\n",
+        "    #[inline(never)]\n",
+        "    // between\n",
+        "    #[allow(shadowed_name)]\n",
+        "    fn y(&self) {\n",
+        "        let a = 1;\n",
+        "\n",
+        "        #[allow(shadowed_name)]\n",
+        "        // binder\n",
+        "        let b = 2;\n",
+        "    }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A function's body is one of those braces.
 #[test]
 fn test_format_comment_before_body_brace() {

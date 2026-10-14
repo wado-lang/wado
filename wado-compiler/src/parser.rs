@@ -2809,9 +2809,10 @@ impl Parser {
         // attach to the stmt itself rather than to its first child id.
         // Matches the `alloc_ast_id`-at-start convention used by every
         // outermost-first parser (`parse_block`, `parse_function`,
-        // `parse_match_arm`, …).
-        let id = self.alloc_ast_id();
+        // `parse_match_arm`, …). Attributes allocate none, so it comes after
+        // them, as an item's does: a comment among them is the stmt's too.
         let attrs = self.parse_attributes()?;
+        let id = self.alloc_ast_id();
 
         if self.check(&TokenKind::Reactive) {
             return Err(ParseError {

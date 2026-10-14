@@ -438,9 +438,9 @@ impl<'a> Unparser<'a> {
     /// Open a member's line: whatever the members before it had no slot for,
     /// then its own leading comments — in that order, so nothing lands between
     /// a doc comment and what it documents.
-    fn open_member(&mut self, id: AstId, start: usize) {
+    fn open_member(&mut self, id: AstId, start: usize, attrs: &[Attribute]) {
         self.flush_comments_before(self.leading_start(id, start), Spacing::KeepBlankLines);
-        self.emit_leading_for(id);
+        self.emit_leading_for(id, attrs);
     }
 
     /// Where `id`'s leading run begins: the first leading comment no construct
@@ -632,7 +632,7 @@ impl<'a> Unparser<'a> {
         // that nothing lands between a doc comment and what it documents.
         let leading_start = self.leading_start(id, get_item_span(item).start);
         self.flush_comments_before(leading_start, Spacing::KeepBlankLines);
-        let last_comment_was_doc = self.emit_leading_for_check_doc(id);
+        let last_comment_was_doc = self.emit_leading_for(id, item.attrs());
 
         // Anchor the leading-blank computation to the first attribute, not to
         // the item's own line — otherwise repeated formatting passes would grow
@@ -668,7 +668,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_use(&mut self, u: &UseDecl) {
-        self.emit_outer_attrs(&u.attrs);
+        self.emit_outer_attrs(u.id, &u.attrs);
         self.output
             .push_str(type_decl_keyword(u.visibility, u.is_export));
 
@@ -1001,7 +1001,7 @@ impl<'a> Unparser<'a> {
     /// Emit `f` with `contracts` as its `contract` clauses, which a trait
     /// method's hidden holder keeps rather than its body.
     fn unparse_function_with_contracts(&mut self, f: &Function, contracts: &[&AssertStmt]) {
-        self.emit_outer_attrs(&f.attrs);
+        self.emit_outer_attrs(f.id, &f.attrs);
         function_decl_keyword_into(f, &mut self.output);
         self.emit_kw_if(f.is_async, "async ");
 
@@ -1025,7 +1025,7 @@ impl<'a> Unparser<'a> {
                 self.leading_start(clause.id, clause.span.start),
                 Spacing::Tight,
             );
-            self.emit_leading_for(clause.id);
+            self.emit_leading_for(clause.id, &[]);
             self.write_indent();
             self.unparse_contract_clause(clause);
             self.emit_trailing_for(clause.id);
@@ -1078,7 +1078,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_struct(&mut self, s: &StructDecl) {
-        self.emit_outer_attrs(&s.attrs);
+        self.emit_outer_attrs(s.id, &s.attrs);
         self.output
             .push_str(type_decl_keyword(s.visibility, s.is_export));
 
@@ -1145,7 +1145,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_enum(&mut self, e: &EnumDecl) {
-        self.emit_outer_attrs(&e.attrs);
+        self.emit_outer_attrs(e.id, &e.attrs);
         self.output
             .push_str(type_decl_keyword(e.visibility, e.is_export));
 
@@ -1168,7 +1168,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_variant(&mut self, v: &VariantDecl) {
-        self.emit_outer_attrs(&v.attrs);
+        self.emit_outer_attrs(v.id, &v.attrs);
         self.output
             .push_str(type_decl_keyword(v.visibility, v.is_export));
 
@@ -1196,7 +1196,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_flags(&mut self, f: &FlagsDecl) {
-        self.emit_outer_attrs(f.attributes.as_deref().unwrap_or(&[]));
+        self.emit_outer_attrs(f.id, f.attributes.as_deref().unwrap_or(&[]));
         self.output
             .push_str(type_decl_keyword(f.visibility, f.is_export));
 
@@ -1214,7 +1214,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_tuple_type_decl(&mut self, d: &TupleTypeDecl) {
-        self.emit_outer_attrs(&d.attrs);
+        self.emit_outer_attrs(d.id, &d.attrs);
         self.emit_visibility(d.visibility);
         self.output.push_str("type ");
         self.unparse_type(&d.head);
@@ -1222,7 +1222,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_builtin_type_decl(&mut self, d: &BuiltinTypeDecl) {
-        self.emit_outer_attrs(&d.attrs);
+        self.emit_outer_attrs(d.id, &d.attrs);
         self.emit_visibility(d.visibility);
         self.output.push_str("type ");
         self.output.push_str(&d.name);
@@ -1231,7 +1231,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_newtype(&mut self, t: &Newtype) {
-        self.emit_outer_attrs(&t.attrs);
+        self.emit_outer_attrs(t.id, &t.attrs);
         self.output
             .push_str(type_decl_keyword(t.visibility, t.is_export));
         self.output.push_str("type ");
@@ -1245,7 +1245,7 @@ impl<'a> Unparser<'a> {
     /// Output an inherent impl type with type param bounds inlined into type args.
     /// E.g.: `impl<T: Ord> List<T>` → `impl List<T: Ord>`
     fn unparse_impl(&mut self, i: &ImplBlock) {
-        self.emit_outer_attrs(&i.attrs);
+        self.emit_outer_attrs(i.id, &i.attrs);
         self.output.push_str("impl");
 
         // Always emit explicit type params: `impl<T> Foo<T>`, not compact `impl Foo<T>`
@@ -1315,7 +1315,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_trait(&mut self, t: &TraitDecl) {
-        self.emit_outer_attrs(&t.attrs);
+        self.emit_outer_attrs(t.id, &t.attrs);
         self.emit_visibility(t.visibility);
 
         self.output.push_str("trait ");
@@ -1377,7 +1377,7 @@ impl<'a> Unparser<'a> {
                 this.output.push(';');
             }),
             Member::Method(method) => {
-                self.open_member(id, span.start);
+                self.open_member(id, span.start, attrs);
                 self.emit_blank_lines_to(effective_start_line(attrs, span.line));
                 match trait_ {
                     Some(t) => {
@@ -1393,7 +1393,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_interface(&mut self, e: &InterfaceDecl) {
-        self.emit_outer_attrs(&e.attrs);
+        self.emit_outer_attrs(e.id, &e.attrs);
         self.emit_visibility(e.visibility);
 
         self.output.push_str("interface ");
@@ -1402,7 +1402,7 @@ impl<'a> Unparser<'a> {
         self.with_braced_body(e.span, e.methods.first().map(|m| m.span), |this| {
             for method in &e.methods {
                 let effective_line = effective_start_line(&method.attrs, method.span.line);
-                this.open_member(method.id, method.span.start);
+                this.open_member(method.id, method.span.start, &method.attrs);
                 this.emit_blank_lines_to(effective_line);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
@@ -1411,7 +1411,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_resource(&mut self, r: &ResourceDecl) {
-        self.emit_outer_attrs(&r.attrs);
+        self.emit_outer_attrs(r.id, &r.attrs);
         self.emit_visibility(r.visibility);
 
         self.output.push_str("resource ");
@@ -1429,7 +1429,7 @@ impl<'a> Unparser<'a> {
 
         self.with_braced_body(r.span, r.methods.first().map(|m| m.span), |this| {
             for method in &r.methods {
-                this.open_member(method.id, method.span.start);
+                this.open_member(method.id, method.span.start, &method.attrs);
                 this.unparse_function(method);
                 this.last_source_line = method.span.end_line();
             }
@@ -1437,7 +1437,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_world(&mut self, w: &WorldDecl) {
-        self.emit_outer_attrs(&w.attrs);
+        self.emit_outer_attrs(w.id, &w.attrs);
         self.emit_visibility(w.visibility);
 
         self.output.push_str("world ");
@@ -1492,7 +1492,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_test(&mut self, t: &TestDecl) {
-        self.emit_outer_attrs(&t.attributes);
+        self.emit_outer_attrs(t.id, &t.attributes);
         self.output.push_str("test");
         if let Some(name) = &t.name {
             self.output.push_str(" \"");
@@ -1504,7 +1504,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_global(&mut self, g: &GlobalDecl) {
-        self.emit_outer_attrs(&g.attributes);
+        self.emit_outer_attrs(g.id, &g.attributes);
         self.emit_visibility(g.visibility);
         self.output.push_str("global ");
         self.emit_kw_if(g.mutable, "mut ");
@@ -1558,7 +1558,14 @@ impl<'a> Unparser<'a> {
                 self.leading_start(stmt_id, stmt_span.start),
                 Spacing::KeepBlankLines,
             );
-            self.emit_leading_for(stmt_id);
+            self.emit_leading_for(
+                stmt_id,
+                match stmt {
+                    Stmt::Let(l) => &l.attrs,
+                    Stmt::Item(item) => item.attrs(),
+                    _ => &[],
+                },
+            );
             // A local item's attributes sit above its keyword, and
             // `unparse_item` anchors on them. Anchoring here on the keyword
             // instead would count the attribute lines as a gap and open one.
@@ -1614,7 +1621,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_let(&mut self, l: &LetStmt) {
-        self.emit_outer_attrs(&l.attrs);
+        self.emit_outer_attrs(l.id, &l.attrs);
         self.output.push_str("let ");
 
         if l.is_mut {
@@ -2497,7 +2504,7 @@ impl<'a> Unparser<'a> {
                 self.leading_start(arm.id, arm.span.start),
                 Spacing::KeepBlankLines,
             );
-            self.emit_leading_for(arm.id);
+            self.emit_leading_for(arm.id, &[]);
             self.emit_blank_lines_to(arm.span.line);
             self.unparse_match_arm(arm);
             self.emit_trailing_for_inline(arm.id);
@@ -2819,12 +2826,24 @@ impl<'a> Unparser<'a> {
 
     /// Emit each outer attribute on its own indented line, then write the indent
     /// for the line that follows. Replaces the `write_indent + for attr {...}` prologue
-    /// shared by every item and member declaration.
-    fn emit_outer_attrs(&mut self, attrs: &[Attribute]) {
-        for attr in attrs {
+    /// shared by every item and member declaration. `id`'s leading comments
+    /// written after an attribute follow it, where they were written.
+    fn emit_outer_attrs(&mut self, id: AstId, attrs: &[Attribute]) {
+        let leading = self.leading_of(id);
+        for (i, attr) in attrs.iter().enumerate() {
             self.write_indent();
             self.unparse_attribute(attr);
             self.output.push('\n');
+            let next = attrs.get(i + 1).map_or(usize::MAX, |next| next.span.start);
+            for comment in leading {
+                if (attr.span.end..next).contains(&comment.span.start)
+                    && self.emitted_comments.insert(comment.span.start)
+                {
+                    self.write_indent();
+                    self.emit_comment(comment);
+                    self.output.push('\n');
+                }
+            }
         }
         self.write_indent();
     }
@@ -2865,9 +2884,9 @@ impl<'a> Unparser<'a> {
         F: FnOnce(&mut Self),
     {
         let effective_line = effective_start_line(attrs, span.line);
-        self.open_member(id, span.start);
+        self.open_member(id, span.start, attrs);
         self.emit_blank_lines_to(effective_line);
-        self.emit_outer_attrs(attrs);
+        self.emit_outer_attrs(id, attrs);
         body(self);
         self.emit_trailing_for_inline(id);
         self.output.push('\n');
@@ -2952,29 +2971,15 @@ impl<'a> Unparser<'a> {
         self.reserved_width = saved;
     }
 
-    /// Emit `trivia.leading_of(id)` on its own indented line with the
-    /// usual blank-line padding before each entry.
-    fn emit_leading_for(&mut self, id: AstId) {
-        let comments: Vec<Comment> = self.leading_of(id).to_vec();
-        for comment in &comments {
-            if self.emitted_comments.insert(comment.span.start) {
-                self.emit_blank_lines_to(comment.span.line);
-                self.write_indent();
-                self.emit_comment(comment);
-                self.output.push('\n');
-            }
-        }
-    }
-
-    /// Like [`Self::emit_leading_for`] but returns whether the last
-    /// emitted comment was a `///` doc comment. Items use this to
-    /// decide whether to insert a blank line between leading docs and
-    /// the item itself.
-    fn emit_leading_for_check_doc(&mut self, id: AstId) -> bool {
-        let comments: Vec<Comment> = self.leading_of(id).to_vec();
+    /// Emit `trivia.leading_of(id)` written before `attrs`, each on its own
+    /// indented line with the usual blank-line padding, and return whether the
+    /// last was a `///` doc comment. Items use that to decide whether to insert
+    /// a blank line between leading docs and the item itself.
+    fn emit_leading_for(&mut self, id: AstId, attrs: &[Attribute]) -> bool {
+        let end = attrs.first().map_or(usize::MAX, |attr| attr.span.start);
         let mut last_was_doc = false;
-        for comment in &comments {
-            if self.emitted_comments.insert(comment.span.start) {
+        for comment in self.leading_of(id) {
+            if comment.span.start < end && self.emitted_comments.insert(comment.span.start) {
                 self.emit_blank_lines_to(comment.span.line);
                 self.write_indent();
                 self.emit_comment(comment);
