@@ -220,7 +220,15 @@ test "a parenthesised boolean in an if let chain" {
     } else {
         seen.push("paren false");
     }
-    assert seen == ["paren: x=5", "paren false"];
+    // A parenthesized `||` is one operand, and with no `let` the condition is
+    // a plain expression where `||` is allowed.
+    if let true = (flag1 || false) && (false || flag2) {
+        seen.push("paren or");
+    }
+    if false || flag1 && flag2 {
+        seen.push("plain or");
+    }
+    assert seen == ["paren: x=5", "paren false", "paren or", "plain or"];
 }
 
 test "if let as an expression" {

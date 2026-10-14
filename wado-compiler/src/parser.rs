@@ -9273,29 +9273,6 @@ line 2
         );
     }
 
-    /// The e2e fixture `let_chain_or_error.wado` covers `||` between operands;
-    /// these are the other places a top-level `||` meets a let chain.
-    #[test]
-    fn let_chain_rejects_unparenthesized_or() {
-        for source in [
-            "fn f() { if let true = a || b { } }",
-            "fn f() { if a || b && let Some(x) = o { } }",
-            "fn f() { while let Some(x) = o && a || b { } }",
-            "fn f() { let v = if let true = a || b { 1 } else { 2 }; }",
-        ] {
-            let err = parse(source).unwrap_err();
-            assert!(
-                err.message.contains("`||` cannot join"),
-                "{source}: {:?}",
-                err.message
-            );
-        }
-        let err = parse("fn f() { if let r = 0..<n { } }").unwrap_err();
-        assert!(err.message.contains("a range cannot"), "{:?}", err.message);
-        parse("fn f() { if let true = (a || b) && (c || d) { } }").unwrap();
-        parse("fn f() { if a || b && c { } }").unwrap();
-    }
-
     /// Accepting `with ()` would let the formatter delete a written clause.
     #[test]
     fn parse_with_row_empty_parens_are_rejected() {

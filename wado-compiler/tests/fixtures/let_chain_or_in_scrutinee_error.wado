@@ -1,0 +1,12 @@
+// Error: a `let`'s scrutinee is a let-chain operand too, so a top-level `||`
+// there is rejected as it is between operands, in an `if` expression as in an
+// `if` statement.
+
+export fn run() {
+    let a = builtin::black_box(false);
+    let b = builtin::black_box(true);
+    let v = if let true = a || b { 1 } else { 2 };
+}
+
+__DATA__
+{"compile_error": ":8:29: parse error: `||` cannot join the operands of a let chain; parenthesize it"}
