@@ -1,0 +1,58 @@
+// A `?` inside an argument, once its function is inlined, breaks out of the
+// inlined body. The call may hold its arguments in a block of its own (the
+// fields of a split parameter, a closure call's callee), and the break counts
+// that block.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn pair_of(n: i32) -> Result<Pair, String> {
+    if n < 0 {
+        return Err("negative");
+    }
+    return Ok(Pair { a: n, b: n + 1 });
+}
+
+// A `&Pair` read only by field takes its fields, loaded in the prelude.
+#[inline("never")]
+fn borrowed_sum(p: &Pair) -> i32 {
+    return p.a + p.b;
+}
+
+// A by-value `Pair` takes its fields too.
+#[inline("never")]
+fn owned_sum(p: Pair) -> i32 {
+    return p.a + p.b;
+}
+
+fn through_borrowed(n: i32) -> Result<i32, String> {
+    return Ok(borrowed_sum(&pair_of(n)?));
+}
+
+fn through_owned(n: i32) -> Result<i32, String> {
+    return Ok(owned_sum(pair_of(n)?));
+}
+
+fn through_closure(n: i32, f: fn(Pair) -> i32) -> Result<i32, String> {
+    return Ok(f(pair_of(n)?));
+}
+
+export fn run() {
+    let n = builtin::black_box(1);
+    let m = builtin::black_box(-1);
+    assert through_borrowed(n) matches { Ok(3) };
+    assert through_borrowed(m) matches { Err(_) };
+    assert through_owned(n) matches { Ok(3) };
+    assert through_owned(m) matches { Err(_) };
+    let f = |p: Pair| p.a * p.b;
+    assert through_closure(n, f) matches { Ok(2) };
+    assert through_closure(m, f) matches { Err(_) };
+}
+
+__DATA__
+{
+    "stdout": ""
+}
