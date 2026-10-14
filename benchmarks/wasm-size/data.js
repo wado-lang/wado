@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791977526532,
+  "lastUpdate": 1791987462106,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67069,6 +67069,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8a5f3582572d792ab258b32f62552188a1a7e7e6"
         },
         "date": 1791977525675,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21710,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 339797,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45e0f39097ea46530de0ae66ce82f42f4792e9be",
+          "message": "Merge pull request #2354 from wado-lang/claude/project-thread-9t3336\n\nfix(format): keep a comment between a head and its body out of the body",
+          "timestamp": "2026-10-14T22:58:10+09:00",
+          "tree_id": "f6df96e5b21502240a3bf8f568834e1d61fc2d7c",
+          "url": "https://github.com/wado-lang/wado/commit/45e0f39097ea46530de0ae66ce82f42f4792e9be"
+        },
+        "date": 1791987461037,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
