@@ -1007,9 +1007,9 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     let midpoint: ref "core:prelude//List<u32>";
     let elements_21: ref Array<u32>;
     let carry: u64;
-    let k_47: i32;
+    let k_45: i32;
     let v: u64;
-    let value_69: u32;
+    let value_67: u32;
     decimal = struct.new "core:prelude//List<u32>" { repr: local.tee elements_21(array.new_fixed<u32>()), used: 0 };
     kept = 0;
     sticky = 0;
@@ -1025,26 +1025,26 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
                     sticky = select i32(sticky, 1, digit != 0);
                 } else if (kept > 0) | (digit != 0) {
                     carry = builtin::i64_extend_i32_u(digit);
-                    k_47 = 0;
+                    k_45 = 0;
                     $load_0 = decimal.used;
                     elements_21 = decimal.repr;
                     b129: block {
                         l130: loop {
-                            break_if b129 k_47 >= $load_0;
-                            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>(elements_21, k_47)) * 10_i64) + carry;
-                            builtin::array_set<u32>(elements_21, k_47, builtin::i32_wrap_i64(v));
+                            break_if b129 k_45 >= $load_0;
+                            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>(elements_21, k_45)) * 10_i64) + carry;
+                            builtin::array_set<u32>(elements_21, k_45, builtin::i32_wrap_i64(v));
                             carry = v >>u 32_i64;
-                            k_47 = k_47 + 1;
+                            k_45 = k_45 + 1;
                             continue l130;
                         };
                     };
                     if carry != 0_i64 {
-                        value_69 = builtin::i32_wrap_i64(carry);
+                        value_67 = builtin::i32_wrap_i64(carry);
                         if @unlikely($load_0 >= builtin::array_len(elements_21)) {
                             cold_path;
                             "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(decimal);
                         }
-                        builtin::array_set<u32>(decimal.repr, $load_0, value_69);
+                        builtin::array_set<u32>(decimal.repr, $load_0, value_67);
                         decimal.used = $load_0 + 1;
                     }
                     kept = kept + 1;
@@ -1056,31 +1056,31 @@ fn "core:prelude/fpfmt.wado/compare_to_midpoint"($mv$digits$repr, $mv$digits$sta
     };
     kept = p - (kept - 19);
     p = format.precision;
-    value_69 = (((1 << (format.exponent_bits - 1)) - 1) + p) - 2;
+    value_67 = (((1 << (format.exponent_bits - 1)) - 1) + p) - 2;
     v = below & ((1_i64 << builtin::i64_extend_i32_s(p - 1)) - 1_i64);
     $load_0 = builtin::i32_wrap_i64(below >>u builtin::i64_extend_i32_s(p - 1));
     v = select u64($load_0 == 0, v, v | (1_i64 << builtin::i64_extend_i32_s(p - 1)));
-    $load_0 = select i32($load_0 == 0, 0 - value_69, ($load_0 - value_69) - 1);
+    $load_0 = select i32($load_0 == 0, 0 - value_67, ($load_0 - value_67) - 1);
     midpoint = struct.new "core:prelude//List<u32>" { repr: local.tee elements_21(array.new_fixed<u32>(builtin::i32_wrap_i64(local.tee v((2_i64 * v) + 1_i64)), builtin::i32_wrap_i64(v >>u 32_i64))), used: builtin::array_len(elements_21) };
-    value_69 = 0;
+    value_67 = 0;
     $load_0 = $load_0 - 1;
     if kept >= 0 {
         "core:prelude/fpfmt.wado/big_mul_pow5"(decimal, kept);
-        value_69 = kept;
+        value_67 = kept;
     } else {
         "core:prelude/fpfmt.wado/big_mul_pow5"(midpoint, 0 - kept);
         $load_0 = $load_0 - kept;
     }
-    if value_69 > $load_0 {
-        "core:prelude/fpfmt.wado/big_shl"(decimal, value_69 - $load_0);
+    if value_67 > $load_0 {
+        "core:prelude/fpfmt.wado/big_shl"(decimal, value_67 - $load_0);
     } else {
-        "core:prelude/fpfmt.wado/big_shl"(midpoint, $load_0 - value_69);
+        "core:prelude/fpfmt.wado/big_shl"(midpoint, $load_0 - value_67);
     }
-    value_69 = "core:prelude/fpfmt.wado/big_cmp"(decimal, midpoint);
-    if select i32(value_69 == 0, sticky, 0) {
+    value_67 = "core:prelude/fpfmt.wado/big_cmp"(decimal, midpoint);
+    if select i32(value_67 == 0, sticky, 0) {
         return 1;
     }
-    return value_69;
+    return value_67;
 }
 
 fn "core:prelude/fpfmt.wado/big_mul_add$dae[addend]"(n, factor) {
