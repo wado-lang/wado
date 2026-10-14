@@ -2389,11 +2389,10 @@ pub fn effect_namespace(module: &ModuleSource, interface: &str) -> String {
 /// Build the per-instantiation effect-dispatch struct name.
 ///
 /// `label` is the dispatch instantiation label produced by the
-/// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
+/// effect-dispatch synthesis (`./c.wado/Counter`, `./io.wado/Stream<u8>`, …).
 ///
 /// Examples:
-/// - `dispatch_struct_name("Counter")` → `"$Dispatch_Counter"`
-/// - `dispatch_struct_name("Stream<u8>")` → `"$Dispatch_Stream<u8>"`
+/// - `dispatch_struct_name("./c.wado/Counter")` → `"$Dispatch_./c.wado/Counter"`
 pub fn dispatch_struct_name(label: &str) -> String {
     format!("$Dispatch_{label}")
 }
@@ -2401,8 +2400,7 @@ pub fn dispatch_struct_name(label: &str) -> String {
 /// Build the per-instantiation effect-dispatch global name.
 ///
 /// Examples:
-/// - `dispatch_global_name("Counter")` → `"$effect_Counter"`
-/// - `dispatch_global_name("Stream<u8>")` → `"$effect_Stream<u8>"`
+/// - `dispatch_global_name("./c.wado/Counter")` → `"$effect_./c.wado/Counter"`
 pub fn dispatch_global_name(label: &str) -> String {
     format!("$effect_{label}")
 }
@@ -2410,8 +2408,8 @@ pub fn dispatch_global_name(label: &str) -> String {
 /// Build the per-operation effect-dispatch wrapper function name.
 ///
 /// Examples:
-/// - `dispatch_wrapper_name("Counter", "next")` → `"$effect_dispatch__Counter__next"`
-/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"$effect_dispatch__Stream<u8>__read"`
+/// - `dispatch_wrapper_name("./c.wado/Counter", "next")` →
+///   `"$effect_dispatch__./c.wado/Counter__next"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
     format!("$effect_dispatch__{label}__{op_name}")
 }

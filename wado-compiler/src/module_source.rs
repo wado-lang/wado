@@ -826,10 +826,8 @@ impl ModuleSource {
     /// The interface an `E::op()` call's namespace names, by its bare name.
     #[must_use]
     pub fn interface_name(&self) -> Option<String> {
-        match self {
-            Self::Effect { interface, .. } => Some(interface.to_string()),
-            _ => None,
-        }
+        self.effect_interface()
+            .map(|(_, interface)| interface.to_string())
     }
 
     /// The interface an `E::op()` call's namespace names, and where it is declared.

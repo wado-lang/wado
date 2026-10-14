@@ -162,9 +162,12 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
         if let TirExprKind::Call { func, .. } = &expr.kind
             && let Some((module, interface)) = func.module_source.effect_interface()
         {
-            let key = (module.clone(), interface.to_string());
-            if self.uncovered.contains(&key) {
-                self.called.insert((key.0, key.1, Vec::new()));
+            let (module, interface) = (module.clone(), interface.to_string());
+            if self
+                .uncovered
+                .contains(&(module.clone(), interface.clone()))
+            {
+                self.called.insert((module, interface, Vec::new()));
             }
         }
         self.walk_expr(expr);
@@ -211,11 +214,8 @@ pub struct DispatchPlan {
     pub open_boundary_ops: IndexSet<String>,
 }
 
-/// Build the mangled instantiation label for naming dispatch
-/// infrastructure. `(base, [])` → `"Stream"`; `(base, [u8])` →
-/// `"Stream<u8>"`. Mirrors `name::mangle_generic_name`, which is the
-/// canonical name-mangling utility (per the wado-compiler CLAUDE rule
-/// "Use utilities in name.rs to handle name mangling").
+/// The label dispatch infrastructure is named after: `Stream` declared in
+/// `./io.wado` is `./io.wado/Stream`, and `./io.wado/Stream<u8>` with `[u8]`.
 fn instantiation_label(
     module: &ModuleSource,
     base: &str,
