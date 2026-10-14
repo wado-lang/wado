@@ -105,7 +105,8 @@ or repeats:
   the body never counts after them.
 - The right side of `&&` and `||`, a guard, and each operand of a
   [let chain](./spec-control-flow.md#let-chains) after the first may not run,
-  so what they assign counts only on the paths that ran them. A guard that fails passes its assignments on to the next arm.
+  so what they assign counts only on the paths that ran them. A guard that
+  fails passes its assignments on to the next arm.
 - A `let ... else` block diverges, so it never reaches the statement after the
   `let`.
 

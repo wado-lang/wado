@@ -2974,6 +2974,7 @@ impl Parser {
         let mut elements = Vec::new();
         let mut first_or = None;
         let mut has_let = false;
+        let mut every_operand_parsed = true;
         loop {
             let element = if self.check(&TokenKind::Let) {
                 has_let = true;
@@ -2994,7 +2995,10 @@ impl Parser {
                 Ok(element) => elements.push(element),
                 // Before a `let`, the operand may belong to a plain condition
                 // that the full expression parser reads where this one fails.
-                Err(_) if !has_let => break,
+                Err(_) if !has_let => {
+                    every_operand_parsed = false;
+                    break;
+                }
                 Err(e) => return Err(e),
             }
             match self.peek_kind() {
@@ -3008,12 +3012,11 @@ impl Parser {
         }
 
         if !has_let {
-            if let [ConditionElement::Expr(_)] = elements.as_slice()
+            if every_operand_parsed
+                && elements.len() == 1
                 && matches!(self.peek_kind(), TokenKind::LBrace | TokenKind::Semicolon)
+                && let Some(ConditionElement::Expr(expr)) = elements.pop()
             {
-                let Some(ConditionElement::Expr(expr)) = elements.pop() else {
-                    unreachable!("matched a single `Expr` element above");
-                };
                 return Ok(Condition::Expr(expr));
             }
             self.restore(checkpoint);
@@ -3032,10 +3035,7 @@ impl Parser {
             ));
         }
 
-        let end_span = match elements.last().expect("a let chain has an element") {
-            ConditionElement::Let { span, .. } => *span,
-            ConditionElement::Expr(e) => e.span(),
-        };
+        let end_span = elements.last().expect("a let chain has an element").span();
         Ok(Condition::LetChain {
             elements,
             span: start_span.merge(&end_span),

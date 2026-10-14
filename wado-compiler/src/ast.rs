@@ -2841,6 +2841,16 @@ pub enum ConditionElement {
     Expr(Expr),
 }
 
+impl ConditionElement {
+    #[must_use]
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Let { span, .. } => *span,
+            Self::Expr(e) => e.span(),
+        }
+    }
+}
+
 /// Condition in control flow statements: either a regular expression or a let chain.
 /// Used in `if`, `while`, and `for` statements.
 #[derive(Debug, Clone)]
