@@ -1633,12 +1633,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .flatten()
                     .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
                 let own_from = method_def.is_some_and(|def| self.declares_own_from(def));
-                if let Some(suffix_seg) = ident.segments.get(1) {
-                    if let Some(method_def) = method_def
-                        && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
-                    {
-                        return TypeTable::ERROR;
-                    }
+                if let Some(suffix_seg) = ident.segments.get(1)
+                    && let Some(method_def) = method_def
+                    && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
+                {
+                    return TypeTable::ERROR;
                 }
                 // The method's own parameters, in the dense space its type
                 // arguments are indexed by — an effect or `fn`-bound parameter
