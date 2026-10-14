@@ -39,6 +39,7 @@ use super::coercion::{
 };
 use super::expr::UnionSource;
 use super::sem::{ModuleSemantics, TypeAnnotations};
+use super::typecheck::admits_condition;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util;
@@ -2832,16 +2833,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify an expression in condition position, the walk
-    /// `resolve_condition_expr` made: a `Bool` expectation would reach the
-    /// operands and propagate into `If`/`Match` branches, where it is wrong.
+    /// `resolve_condition_expr` made.
     fn reify_condition_expr(&mut self, expr: &ast::Expr, ctx: &mut FunctionContext) -> TirExpr {
-        let cond = self.reify_expr(expr, ctx, None);
-        match cond.type_id {
-            TypeTable::BOOL | TypeTable::NEVER | TypeTable::UNKNOWN | TypeTable::ERROR => cond,
-            type_id => unreachable!(
-                "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {type_id}"
-            ),
-        }
+        let cond = self.reify_expr(expr, ctx, Some(TypeTable::BOOL));
+        assert!(
+            admits_condition(&self.tysys.type_table.borrow(), cond.type_id),
+            "`resolve_condition_expr` rejects a non-`bool` condition, and a module holding one is never reified; got {}",
+            cond.type_id
+        );
+        cond
     }
 
     /// Reify a `while cond { body }` statement as `Loop { if !cond { break; } body }`,

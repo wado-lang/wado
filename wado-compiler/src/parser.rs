@@ -106,24 +106,33 @@ enum ConditionRetry {
 }
 
 /// An operator binding looser than `||`, which a let-chain operand cannot hold
-/// unparenthesized.
+/// unparenthesized: a range or an assignment.
 fn binds_looser_than_or(kind: &TokenKind) -> bool {
-    matches!(
-        kind,
-        TokenKind::DotDotLt
-            | TokenKind::DotDotEq
-            | TokenKind::Eq
-            | TokenKind::PlusEq
-            | TokenKind::MinusEq
-            | TokenKind::StarEq
-            | TokenKind::SlashEq
-            | TokenKind::PercentEq
-            | TokenKind::AmpEq
-            | TokenKind::PipeEq
-            | TokenKind::CaretEq
-            | TokenKind::ShlEq
-            | TokenKind::ShrEq
-    )
+    range_kind(kind).is_some() || *kind == TokenKind::Eq || compound_assign_op(kind).is_some()
+}
+
+fn range_kind(kind: &TokenKind) -> Option<RangeKind> {
+    match kind {
+        TokenKind::DotDotLt => Some(RangeKind::Exclusive),
+        TokenKind::DotDotEq => Some(RangeKind::Inclusive),
+        _ => None,
+    }
+}
+
+fn compound_assign_op(kind: &TokenKind) -> Option<CompoundAssignOp> {
+    match kind {
+        TokenKind::PlusEq => Some(CompoundAssignOp::Add),
+        TokenKind::MinusEq => Some(CompoundAssignOp::Sub),
+        TokenKind::StarEq => Some(CompoundAssignOp::Mul),
+        TokenKind::SlashEq => Some(CompoundAssignOp::Div),
+        TokenKind::PercentEq => Some(CompoundAssignOp::Mod),
+        TokenKind::AmpEq => Some(CompoundAssignOp::BitAnd),
+        TokenKind::PipeEq => Some(CompoundAssignOp::BitOr),
+        TokenKind::CaretEq => Some(CompoundAssignOp::BitXor),
+        TokenKind::ShlEq => Some(CompoundAssignOp::Shl),
+        TokenKind::ShrEq => Some(CompoundAssignOp::Shr),
+        _ => None,
+    }
 }
 
 /// Where the parse stands on `with _`, which names an effect only inside a
@@ -3657,22 +3666,7 @@ impl Parser {
             })));
         }
 
-        // Check for compound assignment operators
-        let compound_op = match self.peek_kind() {
-            TokenKind::PlusEq => Some(CompoundAssignOp::Add),
-            TokenKind::MinusEq => Some(CompoundAssignOp::Sub),
-            TokenKind::StarEq => Some(CompoundAssignOp::Mul),
-            TokenKind::SlashEq => Some(CompoundAssignOp::Div),
-            TokenKind::PercentEq => Some(CompoundAssignOp::Mod),
-            TokenKind::AmpEq => Some(CompoundAssignOp::BitAnd),
-            TokenKind::PipeEq => Some(CompoundAssignOp::BitOr),
-            TokenKind::CaretEq => Some(CompoundAssignOp::BitXor),
-            TokenKind::ShlEq => Some(CompoundAssignOp::Shl),
-            TokenKind::ShrEq => Some(CompoundAssignOp::Shr),
-            _ => None,
-        };
-
-        if let Some(op) = compound_op {
+        if let Some(op) = compound_assign_op(self.peek_kind()) {
             self.advance();
             // Right-associative; recover a missing value operand in place.
             let value = self.parse_operand_or_recover(&mut Self::parse_assignment_expr)?;
@@ -3695,19 +3689,13 @@ impl Parser {
     fn parse_range_expr(&mut self) -> ParseResult<Expr> {
         let left = self.parse_or_expr()?;
 
-        let kind = match self.peek_kind() {
-            TokenKind::DotDotLt => Some(RangeKind::Exclusive),
-            TokenKind::DotDotEq => Some(RangeKind::Inclusive),
-            _ => None,
-        };
-
-        if let Some(kind) = kind {
+        if let Some(kind) = range_kind(self.peek_kind()) {
             let left_span = left.span();
             self.advance();
             let right = self.parse_or_expr()?;
 
             // Non-associative: reject `a..<b..<c`
-            if matches!(self.peek_kind(), TokenKind::DotDotLt | TokenKind::DotDotEq) {
+            if range_kind(self.peek_kind()).is_some() {
                 return Err(self.error_at_span(
                     self.peek().span,
                     "range operators are non-associative; use parentheses",

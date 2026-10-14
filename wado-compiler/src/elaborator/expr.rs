@@ -28,7 +28,7 @@ use super::infer::InferCtx;
 use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::orchestration::first_infer_span;
 use super::synth::ArgClass;
-use super::typecheck::{SlotFrame, TypeCheckResult, check_assignable};
+use super::typecheck::{SlotFrame, TypeCheckResult, admits_condition, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
 use super::util;
@@ -604,20 +604,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve an expression standing in condition position, which must be
-    /// `bool`: nothing but `!` coerces to it. `bool` is checked, never passed
-    /// down as an expected type — an expectation reaches the operands, where it
-    /// is wrong.
+    /// `bool`: nothing but `!` coerces to it.
     pub(super) fn resolve_condition_expr(
         &mut self,
         expr: &Expr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let type_id = self.resolve_expr(expr, ctx, None);
-        if type_id == TypeTable::BOOL
-            || type_id == TypeTable::NEVER
-            || type_id == TypeTable::UNKNOWN
-            || type_id == TypeTable::ERROR
-        {
+        let type_id = self.resolve_expr(expr, ctx, Some(TypeTable::BOOL));
+        if admits_condition(&self.tysys.type_table.borrow(), type_id) {
             return type_id;
         }
         let (expected, found) = self

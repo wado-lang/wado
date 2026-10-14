@@ -248,6 +248,33 @@ test "a diverging condition or guard stands for a bool" {
     assert seen.is_empty() && !matched && picked == 0;
 }
 
+fn fallback<T: Default>() -> T {
+    return T::default();
+}
+
+test "a condition's type parameter is inferred as bool" {
+    let some: Option<i32> = Option::Some(1);
+    let mut seen: List<String> = [];
+    if fallback() {
+        seen.push("if");
+    }
+    if let Some(_) = some && fallback() {
+        seen.push("chain");
+    }
+    while fallback() {
+        seen.push("while");
+    }
+    for ; fallback(); {
+        seen.push("for");
+    }
+    let matched = some matches { Some(_) && fallback() };
+    let picked = match some {
+        Some(v) && fallback() => v,
+        _ => 0,
+    };
+    assert seen.is_empty() && !matched && picked == 0;
+}
+
 test "if let as an expression" {
     assert unwrap_or(Option::Some(42), 0) == 42;
     assert unwrap_or(null, 99) == 99;

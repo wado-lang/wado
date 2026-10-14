@@ -23,12 +23,18 @@ fn chained(v: Option<i32>, b: bool) -> bool {
     return false;
 }
 
+// Each operand is a branch of its own, though `a && b` starts where the whole does.
+fn three(a: bool, b: bool, c: bool) -> bool {
+    return a && b && c;
+}
+
 test "arms and short circuits" {
     assert describe(Some(5)) == "small";
     assert describe(null) == "none";
     assert !both(false, true);
     assert either(false, true);
     assert !chained(null, true);
+    assert !three(false, true, true);
 }
 
 __DATA__
@@ -36,7 +42,7 @@ __DATA__
   "test": {},
   "coverage": {
     "uncovered_lines": [5, 21],
-    "uncovered_branches": ["4:12 arm 0", "12:12 rhs", "20:5 then", "20:27 rhs", "20:32 rhs"],
+    "uncovered_branches": ["4:12 arm 0", "12:17 rhs", "20:5 then", "20:27 rhs", "20:32 rhs", "28:17 rhs", "28:22 rhs"],
     "uncovered_functions": []
   }
 }

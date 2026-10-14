@@ -702,18 +702,15 @@ impl Planner<'_> {
     }
 
     /// An operand that runs only when the ones before it allow, counted in a
-    /// region of its own keyed at `at`.
-    fn conditional_operand(&mut self, operand: &Expr, at: Pos) {
+    /// region of its own. It is keyed at its own start, which no other operand
+    /// shares: `a && b && c` nests `a && b` inside, starting where it does.
+    fn conditional_operand(&mut self, operand: &Expr) {
         if self.is_unreachable_call(operand) {
             return self.visit_expr(operand);
         }
         let span = operand.span();
-        let region = self.new_region(
-            RegionKind::Rhs,
-            Pos::start(span),
-            Pos::end(span),
-            Some((at, 0)),
-        );
+        let start = Pos::start(span);
+        let region = self.new_region(RegionKind::Rhs, start, Pos::end(span), Some((start, 0)));
         self.sites.push((ProbeSite::Around, operand.id(), region));
         self.in_region(region, |p| p.visit_expr(operand));
     }
@@ -916,7 +913,7 @@ impl AstVisitor for Planner<'_> {
             if index == 0 {
                 self.visit_expr(element.expr());
             } else {
-                self.conditional_operand(element.expr(), Pos::start(element.span()));
+                self.conditional_operand(element.expr());
             }
             if let ConditionElement::Let { pattern, .. } = element {
                 self.visit_pattern(pattern);
@@ -928,7 +925,7 @@ impl AstVisitor for Planner<'_> {
         match expr {
             Expr::Binary(b) if b.op.is_short_circuit() => {
                 self.visit_expr(&b.left);
-                self.conditional_operand(&b.right, Pos::start(b.span));
+                self.conditional_operand(&b.right);
             }
             Expr::If(e) => {
                 self.visit_condition(&e.condition);

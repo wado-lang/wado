@@ -3516,9 +3516,9 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // extend or invalidate the chain). Only the looser-binding logical
         // `&&` / `||` can hold a bare chain.
         Expr::ComparisonChain(_) => !parent_op.is_short_circuit(),
-        // Range expressions have lower precedence than all binary operators,
-        // so they always need parentheses when nested inside a binary expression.
-        Expr::Range(_) => true,
+        // A range or an assignment binds looser than every binary operator,
+        // and a closure's expression body would take the operator after it.
+        Expr::Range(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::Closure(_) => true,
         // `matches` and logical `!` bind looser than the arithmetic, shift, and
         // bitwise operators (precedence >= 5 here) but tighter than comparison
         // and logical `&&`/`||`, so they need parens only inside the former.
@@ -3998,15 +3998,11 @@ fn unparse_condition_into(cond: &Condition, output: &mut String) {
     }
 }
 
-/// A let-chain operand, a `let`'s scrutinee included, is parsed at comparison
-/// precedence: `&&` separates operands and `||` is rejected. An operand built
-/// from a looser operator keeps its parentheses, or it would not re-parse as
-/// one; so does a closure, whose expression body would take the `&&` after it.
+/// A let-chain operand, a `let`'s scrutinee included, is parenthesized as the
+/// right operand of an `&&` would be: neither `&&` nor `||` may stand bare in
+/// it.
 fn chain_operand_needs_parens(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::Range(_) | Expr::Assign(_) | Expr::CompoundAssign(_) | Expr::Closure(_)
-    ) || matches!(expr, Expr::Binary(b) if b.op.is_short_circuit())
+    needs_parens(expr, BinaryOp::And, false)
 }
 
 /// One pattern as source.

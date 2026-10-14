@@ -3439,6 +3439,20 @@ fn test() {
 ",
     );
 
+    // An assignment nested in a comparison, inside a chain and outside one
+    assert_format_preserves_ast(
+        r"
+fn test() {
+    let y: Option<i32> = null;
+    let mut z = 0;
+    if let Some(v) = y && (z = 3) == () {
+        println(`${v}`);
+    }
+    let b = (z += 1) == ();
+}
+",
+    );
+
     // while let with && guard containing &&
     assert_format_preserves_ast(
         r"
