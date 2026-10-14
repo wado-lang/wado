@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct spec_effects_install_concrete.wado//$Dispatch_Counter {  // TypeId(3)
-    mut outer: ref null "spec_effects_install_concrete.wado//$Dispatch_Counter",
+struct spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter {  // TypeId(3)
+    mut outer: ref null "spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter",
     mut op_next: ref struct,
 }
 
@@ -95,7 +95,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global mut global:spec_effects_install_concrete.wado::SEEN: i32 = 0;
-global mut global:spec_effects_install_concrete.wado::$effect_Counter: ref null "spec_effects_install_concrete.wado//$Dispatch_Counter" = ref.null none;
+global mut global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter: ref null "spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter" = ref.null none;
 global global:core:prelude/string.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(10);
 global global:core:prelude/string.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(115, 101, 108, 102, 46, 117, 115, 101, 100, 58, 32);
 global global:core:prelude/string.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(105, 110, 100, 101, 120, 58, 32);
@@ -118,41 +118,41 @@ global global:spec_effects_install_concrete.wado::$const_obj_40: ref Array<u8> =
 
 fn "spec_effects_install_concrete.wado/$cm_export__$test_0"() {
     let c: ref "spec_effects_install_concrete.wado//MockCounter";
-    let $save_Counter: ref null "spec_effects_install_concrete.wado//$Dispatch_Counter";
-    let $d_Counter: ref "spec_effects_install_concrete.wado//$Dispatch_Counter";
-    let $local_0_9: ref null "spec_effects_install_concrete.wado//$Dispatch_Counter";
+    let $save_spec_effects_install_concrete.wado/Counter: ref null "spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter";
+    let $d_spec_effects_install_concrete.wado/Counter: ref "spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter";
+    let $local_0_9: ref null "spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter";
     let $local_2_11: i32;
     c = struct.new "spec_effects_install_concrete.wado//MockCounter" { value: 0 };
-    global:spec_effects_install_concrete.wado::$effect_Counter = local.tee $d_Counter(struct.new "spec_effects_install_concrete.wado//$Dispatch_Counter" { outer: local.tee $save_Counter(global:spec_effects_install_concrete.wado::$effect_Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install_concrete.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/spec_effects_install_concrete.wado/$closure_wrapper_0" } });
-    global:spec_effects_install_concrete.wado::SEEN = $inline__effect_dispatch__Counter__next_4: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_9(global:spec_effects_install_concrete.wado::$effect_Counter)) == 0) {
-            global:spec_effects_install_concrete.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_9)).outer;
+    global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter = local.tee $d_spec_effects_install_concrete.wado/Counter(struct.new "spec_effects_install_concrete.wado//$Dispatch_spec_effects_install_concrete.wado/Counter" { outer: local.tee $save_spec_effects_install_concrete.wado/Counter(global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install_concrete.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/spec_effects_install_concrete.wado/$closure_wrapper_0" } });
+    global:spec_effects_install_concrete.wado::SEEN = $inline__effect_dispatch__spec_effects_install_concrete_wado_Counter__next_4: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_9(global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter)) == 0) {
+            global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter = local.tee $d_spec_effects_install_concrete.wado/Counter(ref.as_non_null($local_0_9)).outer;
             $local_2_11 = block -> i32 {
                 let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_spec_effects_install_concrete.wado/Counter.op_next)).env);
             };
-            global:spec_effects_install_concrete.wado::$effect_Counter = $local_0_9;
-            break $inline__effect_dispatch__Counter__next_4: $local_2_11;
+            global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter = $local_0_9;
+            break $inline__effect_dispatch__spec_effects_install_concrete_wado_Counter__next_4: $local_2_11;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `spec_effects_install_concrete.wado/Counter::next`"), 75);
             unreachable;
         }
         unreachable;
-    } + $inline__effect_dispatch__Counter__next_5: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0_9(global:spec_effects_install_concrete.wado::$effect_Counter)) == 0) {
-            global:spec_effects_install_concrete.wado::$effect_Counter = local.tee $d_Counter(ref.as_non_null($local_0_9)).outer;
+    } + $inline__effect_dispatch__spec_effects_install_concrete_wado_Counter__next_5: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0_9(global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter)) == 0) {
+            global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter = local.tee $d_spec_effects_install_concrete.wado/Counter(ref.as_non_null($local_0_9)).outer;
             $local_2_11 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_Counter.op_next)).env);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($d_spec_effects_install_concrete.wado/Counter.op_next)).env);
             };
-            global:spec_effects_install_concrete.wado::$effect_Counter = $local_0_9;
-            break $inline__effect_dispatch__Counter__next_5: $local_2_11;
+            global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter = $local_0_9;
+            break $inline__effect_dispatch__spec_effects_install_concrete_wado_Counter__next_5: $local_2_11;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `spec_effects_install_concrete.wado/Counter::next`"), 75);
             unreachable;
         }
         unreachable;
     };
-    global:spec_effects_install_concrete.wado::$effect_Counter = $save_Counter;
+    global:spec_effects_install_concrete.wado::$effect_spec_effects_install_concrete.wado/Counter = $save_spec_effects_install_concrete.wado/Counter;
     if @unlikely(local.tee $local_2_11(global:spec_effects_install_concrete.wado::SEEN == 3) == 0) {
         cold_path;
         "spec_effects_install_concrete.wado/$test_0$cold0"();

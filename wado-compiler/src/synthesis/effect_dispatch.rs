@@ -792,7 +792,7 @@ fn build_dispatch_wrapper_function(
         let effect_call = TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
-                    module_source: interner.borrow_mut().local(base_name),
+                    module_source: interner.borrow_mut().effect(effect_module, base_name),
                     name: op_name.clone(),
                     template: None,
                     monomorph_info: None,
@@ -2458,7 +2458,7 @@ fn build_forward_closure(
 
 /// Rewrite every effect-operation call site to route through a dispatch wrapper.
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
-/// elaborator emits: a `Call` in `ModuleSource::Local { path: "<E>" }` for
+/// elaborator emits: a `Call` in `ModuleSource::Effect` for
 /// `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
 /// op. Calls inside `$effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(

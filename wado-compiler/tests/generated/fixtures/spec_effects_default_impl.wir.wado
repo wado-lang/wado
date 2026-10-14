@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct spec_effects_default_impl.wado//$Dispatch_Log {  // TypeId(3)
-    mut outer: ref null "spec_effects_default_impl.wado//$Dispatch_Log",
+struct spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log {  // TypeId(3)
+    mut outer: ref null "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log",
     mut op_emit: ref struct,
     mut op_level: ref struct,
 }
@@ -74,24 +74,24 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:spec_effects_default_impl.wado::$effect_Log: ref null "spec_effects_default_impl.wado//$Dispatch_Log" = ref.null none;
+global mut global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log: ref null "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log" = ref.null none;
 
 fn "spec_effects_default_impl.wado/$cm_export__$test_0_a_default_answers_with_no_handler_installed"() {
     let message_0: ref "core:prelude/string.wado//String";
-    let $local_1: ref null "spec_effects_default_impl.wado//$Dispatch_Log";
-    let $local_2: ref "spec_effects_default_impl.wado//$Dispatch_Log";
+    let $local_1: ref null "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log";
+    let $local_2: ref "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log";
     let packed: i64;
     let rx_10: i32;
     let tx_11: i32;
     let new_repr: ref Array<u8>;
     let self_17: i32;
-    $inline__effect_dispatch__Log__emit_2: block {
+    $inline__effect_dispatch__spec_effects_default_impl_wado_Log__emit_2: block {
         message_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("degraded to stderr"), used: 18 };
-        if ref.is_null(local.tee $local_1(global:spec_effects_default_impl.wado::$effect_Log)) == 0 {
-            global:spec_effects_default_impl.wado::$effect_Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
+        if ref.is_null(local.tee $local_1(global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log)) == 0 {
+            global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = local.tee $local_2(ref.as_non_null($local_1)).outer;
             let $indirect_call_5: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_5.func, local.tee $indirect_call_5(ref.cast "canonical//CanonicalClosure_0"($local_2.op_emit)).env, message_0);
-            break $inline__effect_dispatch__Log__emit_2: global:spec_effects_default_impl.wado::$effect_Log = $local_1;
+            break $inline__effect_dispatch__spec_effects_default_impl_wado_Log__emit_2: global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = $local_1;
         } else {
             rx_10 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
             tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
@@ -103,27 +103,27 @@ fn "spec_effects_default_impl.wado/$cm_export__$test_0_a_default_answers_with_no
                 "core:rt/cm_stream_write_raw_all_u8"(tx_11, new_repr, 0, self_17);
             });
             "wasi/stream-drop-writable"(tx_11);
-            break $inline__effect_dispatch__Log__emit_2: "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_10);
+            break $inline__effect_dispatch__spec_effects_default_impl_wado_Log__emit_2: "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_10);
         }
     };
     "wasi/task-return"(0);
 }
 
 fn "spec_effects_default_impl.wado/$cm_export__$test_trap_1_an_operation_without_one_traps"() {
-    let $local_0: ref null "spec_effects_default_impl.wado//$Dispatch_Log";
-    let $local_1: ref "spec_effects_default_impl.wado//$Dispatch_Log";
+    let $local_0: ref null "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log";
+    let $local_1: ref "spec_effects_default_impl.wado//$Dispatch_spec_effects_default_impl.wado/Log";
     let $local_2: i32;
-    drop($inline__effect_dispatch__Log__level_2: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0(global:spec_effects_default_impl.wado::$effect_Log)) == 0) {
-            global:spec_effects_default_impl.wado::$effect_Log = local.tee $local_1(ref.as_non_null($local_0)).outer;
+    drop($inline__effect_dispatch__spec_effects_default_impl_wado_Log__level_2: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0(global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log)) == 0) {
+            global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
                 let $indirect_call_3: ref "canonical//CanonicalClosure_1";
                 call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($local_1.op_level)).env);
             };
-            global:spec_effects_default_impl.wado::$effect_Log = $local_0;
-            break $inline__effect_dispatch__Log__level_2: $local_2;
+            global:spec_effects_default_impl.wado::$effect_spec_effects_default_impl.wado/Log = $local_0;
+            break $inline__effect_dispatch__spec_effects_default_impl_wado_Log__level_2: $local_2;
         } else {
-            "core:rt/panic"(array.new_data<u8>("no handler installed for `Log::level`"), 37);
+            "core:rt/panic"(array.new_data<u8>("no handler installed for `spec_effects_default_impl.wado/Log::level`"), 68);
             unreachable;
         }
         unreachable;
