@@ -2225,18 +2225,15 @@ impl FunctionTranslator<'_, '_> {
         ordered: &[Operand],
         split: &IndexMap<usize, SplitParam>,
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
-        // Anything but a constant or a local read, which run nothing. A promoted
-        // value runs the expressions its tree names as extraction sources.
-        let runs_code = |this: &Self, op: Operand| match op {
-            Operand::Value(v) => {
-                let mut sourced = false;
-                this.body
-                    .values
-                    .for_each_opaque_expr(v, &mut IndexSet::default(), |_| sourced = true);
-                sourced
-            }
-            Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
-        };
+        // Anything but a local read or a promoted value, which run nothing, and
+        // a promoted value does where its tree names an extraction source.
+        let runs_code: Vec<bool> = ordered
+            .iter()
+            .map(|&op| match op {
+                Operand::Value(v) => self.body.values.names_extraction_source(v),
+                Operand::Expr(e) => !matches!(self.body.exprs[e].kind, ExprKind::Local { .. }),
+            })
+            .collect();
         // A diverging argument stays in its place: the call after it is dead
         // code, which validates at any arity, and nothing to its right runs.
         let erased = |this: &Self, op: Operand| {
@@ -2247,16 +2244,15 @@ impl FunctionTranslator<'_, '_> {
         // would have, so every argument after it that runs code runs before
         // those reads.
         let first_borrowed = (0..ordered.len()).find(|i| split.get(i).is_some_and(|p| p.borrowed));
-        let runs_before_split_reads = |this: &Self, i: usize, op: Operand| {
-            first_borrowed.is_some_and(|r| i > r) && runs_code(this, op)
-        };
+        let runs_before_split_reads =
+            |i: usize| first_borrowed.is_some_and(|r| i > r) && runs_code[i];
         // An argument evaluated into the prelude runs ahead of every argument
         // left on the stack, so each one to its left is spilled to hold source
         // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
             split.contains_key(&i)
-                || runs_before_split_reads(this, i, op)
-                || (erased(this, op) && runs_code(this, op))
+                || runs_before_split_reads(i)
+                || (erased(this, op) && runs_code[i])
         };
         let last_early = ordered
             .iter()
@@ -2273,12 +2269,16 @@ impl FunctionTranslator<'_, '_> {
                 prelude.extend(p);
                 call_args.extend(reads);
             } else if erased(self, op) {
-                if runs_code(self, op) {
+                if runs_code[i] {
                     prelude.push(self.translate_operand(op));
                 }
-            } else if last_early.is_some_and(|last| i < last)
-                || runs_before_split_reads(self, i, op)
-            {
+            } else if last_early.is_some_and(|last| i < last) || runs_before_split_reads(i) {
+                if self.type_table.is_never(self.operand_type_id(op)) {
+                    // It diverges where it stands, in source order, and leaves
+                    // no value: the call after it is dead at any arity.
+                    prelude.push(self.translate_operand(op));
+                    continue;
+                }
                 let (p, read) = self.spill_operand(op, "$arg_spill");
                 prelude.extend(p);
                 call_args.push(read);

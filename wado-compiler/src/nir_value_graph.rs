@@ -900,6 +900,16 @@ impl ValuePool {
         });
     }
 
+    /// Whether the value tree at `v` names an expression as an extraction
+    /// source, which extracting it runs.
+    pub fn names_extraction_source(&self, v: ValueId) -> bool {
+        self.walk_opaques(v, &mut IndexSet::default(), |src, _| match src {
+            Some(OpaqueSource::Expr(_)) => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_some()
+    }
+
     /// Every `Opaque(Local)` leaf under `v`, with the leaf's own id — the one
     /// [`Self::type_of`] answers for.
     pub fn for_each_opaque_local(

@@ -125,7 +125,13 @@ export fn run() {
     let s = Span { tag: builtin::black_box(5), start: builtin::black_box(1), end: builtin::black_box(3) };
     let t = Span { tag: builtin::black_box(5), start: builtin::black_box(2), end: builtin::black_box(2) };
     assert span_head(&s) == 5;
-    assert span_head(&t) == -1;}
+    assert span_head(&t) == -1;
+    // An argument that diverges runs where it stands and leaves no value:
+    // nothing is spilled into a `()` local for it.
+    if builtin::black_box(false) {
+        let _ = total_plus(&x, panic("unreachable"));
+    }
+}
 
 __DATA__
 {
@@ -135,8 +141,12 @@ __DATA__
         "total_plus\" = fn(i32, i32, i32) -> i32",
         "span_head\" = fn(i32, i32) -> i32",
         "with_stream\" = fn(i32, i32) -> i32",
-        "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
+        "first_byte\" = fn(ref \"core:prelude//List<u8>\", i32, i32) -> i32",
+        "guarded\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "store_then_read\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32",
         "read_around_a_callee\" = fn(ref \"opt_multi_value_param_ref.wado//Pair\", ref \"opt_multi_value_param_ref.wado//Pair\") -> i32"
+    ],
+    "wir_not_expect:O0": [
+        ": ();"
     ]
 }
