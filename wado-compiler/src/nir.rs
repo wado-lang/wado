@@ -1019,51 +1019,20 @@ pub fn aggregate_field_info(
         let names: Vec<String> = (0..elems.len()).map(|i| i.to_string()).collect();
         return Some((elems, names, false));
     }
-    let s = struct_of(type_id, type_table, structs)?;
+    let tir::ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
+        return None;
+    };
+    let module_source = type_table.struct_head_module(*def);
+    let name = type_table.struct_rendered_name(*def, type_args);
+    let s = structs
+        .iter()
+        .find(|s| s.name == name && s.module_source == *module_source)?;
     if !s.type_params.is_empty() {
         return None;
     }
     let types: Vec<TypeId> = s.fields.iter().map(|f| f.type_id).collect();
     let names: Vec<String> = s.fields.iter().map(|f| f.name.clone()).collect();
     Some((types, names, true))
-}
-
-/// The name of the field at `index` of a tuple or struct type, counting `()`
-/// fields, which a Wasm struct leaves out. Every instance of a declaration
-/// names its fields alike, so its declaration answers.
-pub fn field_name_at(
-    type_id: TypeId,
-    index: u32,
-    type_table: &TypeTable,
-    structs: &[NirStruct],
-) -> Option<String> {
-    if type_table.as_tuple(type_id).is_some() {
-        return Some(index.to_string());
-    }
-    let tir::ResolvedType::Struct { def, .. } = type_table.get(type_id) else {
-        return None;
-    };
-    structs
-        .iter()
-        .find(|s| s.def == *def)?
-        .fields
-        .get(index as usize)
-        .map(|f| f.name.clone())
-}
-
-fn struct_of<'s>(
-    type_id: TypeId,
-    type_table: &TypeTable,
-    structs: &'s [NirStruct],
-) -> Option<&'s NirStruct> {
-    let tir::ResolvedType::Struct { def, type_args } = type_table.get(type_id) else {
-        return None;
-    };
-    let module_source = type_table.struct_head_module(*def);
-    let name = type_table.struct_rendered_name(*def, type_args);
-    structs
-        .iter()
-        .find(|s| s.name == name && s.module_source == *module_source)
 }
 
 #[derive(Debug, Clone)]

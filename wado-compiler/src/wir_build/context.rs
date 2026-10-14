@@ -195,6 +195,11 @@ pub struct WirContext<'a> {
     pub multi_value_return_funcs: IndexMap<FuncId, Vec<(String, TypeId)>>,
     /// Which parameter positions of a callee arrive as one Wasm slot per field.
     pub multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, SplitParam>>,
+    /// The NIR field names, `()` ones included, of each struct or tuple type
+    /// (by `WirTypeId::index`) whose Wasm fields leave out its `()` ones. A
+    /// NIR field index counts these; any other struct's Wasm fields match its
+    /// NIR fields one to one.
+    pub nir_field_names: IndexMap<u32, Vec<String>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<TraitBoundViolation>,
@@ -365,6 +370,7 @@ impl<'a> WirContext<'a> {
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,
             multi_value_param_funcs,
+            nir_field_names: IndexMap::default(),
             trait_bound_violations: Vec::new(),
             cm_import_violations: Vec::new(),
         }

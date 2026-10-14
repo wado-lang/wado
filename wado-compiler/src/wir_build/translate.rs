@@ -7,7 +7,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp, field_name_at};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirFunction, WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
@@ -2529,18 +2529,17 @@ impl FunctionTranslator<'_, '_> {
                 else {
                     panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
                 };
-                // The index counts NIR fields; the Wasm struct leaves out `()`
-                // ones, so its position for a field differs past one.
-                let receiver_type = self
-                    .type_table
-                    .monomorphized_or_self(self.type_table.strip_handles(recv_nir_ty));
-                let field_name = field_name_at(
-                    receiver_type,
-                    field_index,
-                    self.type_table,
-                    &self.ctx.package.structs,
-                )
-                .expect("a promoted FieldAccess reads a field of a tuple or struct");
+                // The index counts NIR fields, which a Wasm struct leaving out
+                // `()` ones no longer matches one to one.
+                let field_name = match self.ctx.nir_field_names.get(&struct_tid.index()) {
+                    Some(names) => names[field_index as usize].clone(),
+                    None => match self.ctx.types.get(struct_tid.index() as usize) {
+                        Some(WirTypeDef::Struct(st)) => {
+                            st.fields[field_index as usize].name.clone()
+                        }
+                        _ => panic!("extract_value FieldAccess: receiver type is not a struct"),
+                    },
+                };
                 // Multi-value-return split: if the receiver is a local that was
                 // split into per-field scalars (the aggregate was never
                 // materialised), read the split local directly — a `StructGet`
