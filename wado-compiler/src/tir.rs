@@ -5140,6 +5140,23 @@ impl TypeTable {
         }
     }
 
+    /// Whether `target::from(value: source)` converts with no impl body behind
+    /// it: `source` is `target`, or one lies down the other's newtype chain
+    /// (WEP: Conversion Traits).
+    #[must_use]
+    pub fn converts_without_impl(&self, target: TypeId, source: TypeId) -> bool {
+        self.newtype_chain_holds(target, source) || self.newtype_chain_holds(source, target)
+    }
+
+    /// Whether `link` is `id` or lies down its newtype chain. A reference is a
+    /// type of its own here, never stepped over: `&Meters` does not wrap `i64`
+    /// the way `Meters` does.
+    #[must_use]
+    pub fn newtype_chain_holds(&self, id: TypeId, link: TypeId) -> bool {
+        let link = self.type_key(link);
+        self.newtype_chain(id).any(|t| self.type_key(t) == link)
+    }
+
     /// A newtype's representation head, or `None` for anything else. The head
     /// rather than one peel, which on a chain lands on another newtype.
     #[must_use]
@@ -9794,11 +9811,10 @@ pub struct TirTraitMethod {
 ///
 /// The set is closed: the elaborator classifies the requested trait at the
 /// syntax boundary and rejects anything else with a diagnostic, so downstream
-/// synthesis never needs to re-parse a trait-name string. `From` carries its
-/// source type as a resolved [`TypeId`] rather than a mangled `From<…>` name.
+/// synthesis never needs to re-parse a trait-name string. A `From` marker
+/// never reaches here: `from_marker` writes it out as an ordinary impl.
 #[derive(Debug, Clone)]
 pub enum SynthTrait {
-    From { source: TypeId },
     Serialize,
     Deserialize,
 }

@@ -365,7 +365,8 @@ impl DefTable {
         }
         if item.type_decl().is_some_and(|decl| decl.is_export) {
             let def = self.def_at(item.id());
-            self.publish(def, module, &self.name(def).to_string());
+            let name = self.name(def).to_owned();
+            self.publish(def, module, &name);
         }
         if cm_definition(item).is_some()
             && let Some(def) = self.of_ast_id(item.id())

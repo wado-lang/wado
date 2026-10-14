@@ -1348,8 +1348,8 @@ test "a Reshape -1 the build rounds is checked to divide before the kernel runs"
         rule("Y", ["Pair", "Two"]),
     ];
     let out = generate(source, layout).unwrap();
-    let check = out.find("refuse(unmet(-dim_N + 2 * floor_div(dim_N, 2), ").unwrap();
-    let call = "let Y = backend.reshape::<f32, [Seq], [Pair, Two]>(&X, [to_extent(floor_div(dim_N, 2)), 2]);";
+    let check = out.find("refuse(unmet(-dim_N + 2 * dim_N.div_floor(2), ").unwrap();
+    let call = "let Y = backend.reshape::<f32, [Seq], [Pair, Two]>(&X, [to_extent(dim_N.div_floor(2)), 2]);";
     let reshape = out.find(call).unwrap();
     assert check < reshape;
 }

@@ -32,6 +32,7 @@ pub(crate) mod escape;
 pub mod flat_package;
 pub mod float_literal_pattern;
 pub mod format_spec;
+pub(crate) mod from_marker;
 pub(crate) mod graph;
 pub mod hashmap;
 pub mod hex_suffix_lookalike;
@@ -100,6 +101,7 @@ pub mod trace;
 pub mod trait_solver;
 pub mod unparse;
 pub mod unresolved_types;
+pub mod wasm_module_calls;
 pub mod wir;
 pub mod wir_build;
 pub mod wir_optimize;
@@ -153,6 +155,7 @@ use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
 pub use token::Span;
 pub use trace::{TraceSink, set_sink as set_trace_sink};
+use wasm_module_calls::calls_out_of_wasm_modules;
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).
@@ -754,22 +757,21 @@ fn adopt_types(
     let defs = resolutions.defs();
     for (def, published) in defs.adopted_by(entry_source) {
         let ast_id = defs.ast_id(def);
-        let item = match surface
+        let item = if let Some((_, item)) = surface
             .submodule_type_decls
             .iter_mut()
             .find(|(_, item)| item.id() == ast_id)
         {
-            Some((_, item)) => item,
-            None => {
-                let source = defs.module(def);
-                let item = modules[source]
-                    .items
-                    .iter()
-                    .find(|item| item.id() == ast_id)
-                    .expect("`export use` adopts a module-level declaration");
-                surface.foreign_types.push((source.clone(), item.clone()));
-                &mut surface.foreign_types.last_mut().expect("just pushed").1
-            }
+            item
+        } else {
+            let source = defs.module(def);
+            let item = modules[source]
+                .items
+                .iter()
+                .find(|item| item.id() == ast_id)
+                .expect("`export use` adopts a module-level declaration");
+            surface.foreign_types.push((source.clone(), item.clone()));
+            &mut surface.foreign_types.last_mut().expect("just pushed").1
         };
         *item
             .type_decl_name_mut()
@@ -1822,6 +1824,13 @@ fn compile_after_load<H: CompilerHost>(
 
     // Rejected here rather than at emit, where the split leaves a call to a
     // function the separated module never holds.
+    let calls_out = calls_out_of_wasm_modules(&flat);
+    for (module, diagnostic) in &calls_out {
+        let _ = logger.error_in(module, diagnostic.clone());
+    }
+    if !calls_out.is_empty() {
+        return Err(Bail);
+    }
     if let Some(name) = flat.wasm_module_sources.get(&flat.entry_module_source) {
         let _ = logger.error_in(
             &flat.entry_module_source,

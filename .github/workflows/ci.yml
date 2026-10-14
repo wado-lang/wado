@@ -230,16 +230,16 @@ jobs:
           rust-cache: false
           prebuilt: wado
 
-      - run: mise run check-rust-paths
-      - run: mise run check-spec-examples
       - run: mise run check-wadopoet-vocabulary
+      - parallel:
+          - run: mise run check-rust-paths
+          - run: mise run check-spec-examples
+          - run: mise run check-grammar
+          - run: mise run check-highlight
+          - run: mise run test-web-glue
+
       - run: mise run test-wado
-      - run: mise run check-grammar
-      - run: mise run check-highlight
-      # `--dry-run` builds every publishable world without pushing, so it needs
-      # neither wkg nor credentials.
       - run: scripts/dev-bin.sh wado publish --dry-run
-      - run: mise run test-web-glue
 
   test-gale-o2:
     name: Test (Gale O2)

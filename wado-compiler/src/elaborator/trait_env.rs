@@ -883,7 +883,7 @@ pub struct TraitEnv {
 #[derive(Debug, Default, Clone)]
 pub struct SynthesisedImpls {
     /// Where each synthesized non-blanket trait impl lives (auto-derives plus
-    /// the impls produced by `from_synth` / `serde_synth`). Same shape as the
+    /// the impls produced by `serde_synth`). Same shape as the
     /// AST layer and consulted through the same [`TraitEnv::impl_module_for`].
     /// Includes both concrete (e.g. auto-derived `Inspect for Wrapper`) and
     /// generic synthesised impls.

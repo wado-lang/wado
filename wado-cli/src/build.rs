@@ -9,7 +9,12 @@
 //! path deps from the nearest manifest itself.
 
 use std::fmt::Write as _;
+use std::num::NonZero;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, CompileOptions};
@@ -145,6 +150,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<BuildOptions, CliExit> {
 
 /// One world to build: its entry module, the `build/<segment>.wasm` output, and
 /// the world selector (`--lib` FQ or `--world` FQ) passed to the compile core.
+#[derive(Clone)]
 pub struct BuildTarget {
     pub entry: PathBuf,
     pub output: PathBuf,
@@ -236,7 +242,7 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
         "no wado.toml found; run from a project directory \
          (use `wado compile <file>` to compile a single file)",
     )?;
-    let targets = select_targets(declared_worlds(&project)?, &opts)?;
+    let mut targets = select_targets(declared_worlds(&project)?, &opts)?;
     if targets.is_empty() {
         return Err(CliExit::error(
             "no world to build; declare [package].lib or a [world] entry in wado.toml",
@@ -248,30 +254,74 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
         ));
     }
 
-    for target in targets {
-        let output = match &opts.output {
-            Some(path) => PathBuf::from(path),
-            None => target.output.clone(),
-        };
-        build_world_component(&target, &output, &opts.knobs, opts.embed).await?;
-        compile::announce_artifact(&output);
+    if let Some(path) = &opts.output {
+        targets[0].output = PathBuf::from(path);
     }
-    Ok(())
+    build_world_components(targets, &opts.knobs, opts.embed).await
+}
+
+/// Build every target concurrently, announcing each artifact and printing each
+/// failure as it lands, so one broken world does not hide another. The
+/// builds share the cores, so unless `--optimize-threads` says otherwise each
+/// optimizes on its share of them.
+pub async fn build_world_components(
+    targets: Vec<BuildTarget>,
+    knobs: &CompileKnobs,
+    embed: EmbedOptions,
+) -> Result<(), CliExit> {
+    assert!(!targets.is_empty(), "every caller has a world to build");
+    let cores = std::thread::available_parallelism().map_or(1, NonZero::get);
+    let mut knobs = knobs.clone();
+    knobs
+        .opt_threads
+        .get_or_insert((cores / targets.len()).max(1));
+    let slots = Arc::new(Semaphore::new(cores));
+    let mut builds = JoinSet::<Result<(), CliExit>>::new();
+    for target in targets {
+        let slot = Arc::clone(&slots)
+            .acquire_owned()
+            .await
+            .expect("the build semaphore is never closed");
+        let knobs = knobs.clone();
+        // A compile blocks its thread for its whole run, so each one gets a
+        // blocking thread and a runtime of its own, as `wado test`'s do.
+        builds.spawn_blocking(move || {
+            let _slot = slot;
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| CliExit::error(format!("unable to create a build runtime: {e}")))?
+                .block_on(build_world_component(&target, &knobs, embed))?;
+            compile::announce_artifact(&target.output);
+            Ok(())
+        });
+    }
+    let mut exit_code = None;
+    while let Some(joined) = builds.join_next().await {
+        match joined {
+            Ok(Ok(())) => {}
+            Ok(Err(failure)) => {
+                eprint!("{}", failure.message);
+                exit_code.get_or_insert(failure.exit_code);
+            }
+            Err(join) => std::panic::resume_unwind(join.into_panic()),
+        }
+    }
+    exit_code.map_or(Ok(()), |code| Err(CliExit::silent_failure(code)))
 }
 
 /// The single project-build path: compile one world with `[package]` metadata
-/// embedded, write it to `output`, and return its bytes. Shared by `wado build`
-/// and the run/serve drivers so a run artifact matches a built one. It
+/// embedded, write it to `target.output`, and return its bytes. Shared by `wado
+/// build` and the run/serve drivers so a run artifact matches a built one. It
 /// announces nothing; `wado build` does that for the files it asked for.
 pub async fn build_world_component(
     target: &BuildTarget,
-    output: &Path,
     knobs: &CompileKnobs,
     embed: EmbedOptions,
 ) -> Result<Vec<u8>, CliExit> {
     let mut opts = CompileOptions::for_world_build(
         target.entry.to_string_lossy().into_owned(),
-        output.to_path_buf(),
+        target.output.clone(),
         target.lib_world.clone(),
         target.target_world.clone(),
     );
@@ -299,14 +349,13 @@ pub async fn build_for_driver(
     match compile::load_nearest_manifest(Path::new(entry)).map_err(CliExit::error)? {
         Some(project) => {
             let segment = compile::world_path_segment(target_world);
-            let output = compile::build_output_path(&project.root, &segment);
             let target = BuildTarget {
                 entry: PathBuf::from(entry),
-                output: output.clone(),
+                output: compile::build_output_path(&project.root, &segment),
                 lib_world: None,
                 target_world: Some(target_world.to_string()),
             };
-            build_world_component(&target, &output, &flags.knobs, EmbedOptions::default()).await
+            build_world_component(&target, &flags.knobs, EmbedOptions::default()).await
         }
         None => compile::compile(entry, flags).await,
     }

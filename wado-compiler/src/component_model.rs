@@ -2604,7 +2604,7 @@ impl CmInterfaceRegistry {
         // types' module source (and detect lib-local provenance) without
         // prefix-sniffing the FQ.
         self.cm_interface_module_sources
-            .insert(iface_fq.to_string(), entry_source.clone());
+            .insert(iface_fq.to_string(), entry_source);
 
         // Every entry type is registered, not just the `pub` ones: a type an
         // `export fn` names crosses the boundary whether or not it is marked,

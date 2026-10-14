@@ -1,0 +1,16 @@
+// `as` never calls `From`: a cast reaches only what `as` itself converts.
+
+struct Wrapper { v: i32 }
+
+impl From<i32> for Wrapper {
+    fn from(v: i32) -> Wrapper { return Wrapper { v }; }
+}
+
+export fn run() {
+    let w = 3 as Wrapper;
+}
+
+__DATA__
+{
+    "compile_error": ":10:13: analysis error: cannot cast 'i32' to 'Wrapper': the two types share no representation; `as` reinterprets only across a newtype boundary"
+}

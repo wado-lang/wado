@@ -1,0 +1,18 @@
+// A module's own trait named `From` is not the prelude's: a marker of it asks
+// for nothing the compiler derives.
+
+trait From<T> {
+    fn from(value: T) -> Self;
+}
+
+variant Reading {
+    Count(i32),
+    Note(String),
+}
+
+impl From<i32> for Reading;
+
+export fn run() { }
+
+__DATA__
+{"compile_error": ":13:1: analysis error: cannot synthesize trait `From<i32>` for `Reading`", "compile_error_count": 1}

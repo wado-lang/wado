@@ -1590,6 +1590,41 @@ fn test_publish_dry_run_catches_unpublishable_component() {
 }
 
 #[test]
+fn test_publish_dry_run_reports_every_broken_world() {
+    // The worlds build together, so a broken member does not hide another.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n\n[workspace.package]\nversion = \"0.1.0\"\nrepository = \"https://x/y\"\nnamespace = \"acme\"\nlicense = \"MIT\"\nauthors = [\"A\"]\n\n[registries]\ndefault = \"oci://ghcr.io\"\n",
+    )
+    .unwrap();
+    for member in ["a", "b"] {
+        let src = dir.join(member).join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(
+            dir.join(member).join("wado.toml"),
+            format!(
+                "[package]\nname = \"{member}\"\ndescription = \"d\"\nlib = \"src/lib.wado\"\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            src.join("lib.wado"),
+            "pub fn helper() -> i32 { return 0; }\n",
+        )
+        .unwrap();
+    }
+
+    wado_in(dir)
+        .arg("publish")
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exports nothing").count(2));
+}
+
+#[test]
 fn test_lib_duplicate_export_name_rejected() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();

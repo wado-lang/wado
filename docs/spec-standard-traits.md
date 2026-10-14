@@ -600,6 +600,218 @@ test "written" {
 }
 ```
 
+## Conversion Traits
+
+Two prelude traits convert a value of one type into another. `From` cannot
+fail. `TryFrom` returns a `Result`, and its failure is an `Error`:
+
+<!-- {"fixture":"spec_traits_conversion_decls.wado"} -->
+
+```wado
+pub trait From<T> with () {
+    fn from(value: T) -> Self;
+}
+
+pub trait TryFrom<T> with () {
+    type Err: Error;
+    fn try_from(value: T) -> Result<Self, Self::Err>;
+}
+
+pub trait Error: Display with () {
+}
+
+test {
+    assert Even::from(21 as i16).n == 42;
+    assert Even::try_from(4).unwrap().n == 4;
+    assert `${Even::try_from(3).unwrap_err()}` == "3 is odd";
+}
+```
+
+### Calling a Conversion
+
+A conversion is called on its target type, `Type::from(x)` or
+`Type::try_from(x)`, so the target is always written at the call. There is no
+`Into` trait and no `.into()` method. When a type has several `From` or
+`TryFrom` impls, the argument selects one, as
+[One Trait at Two Argument Lists](./spec-traits.md#one-trait-at-two-argument-lists)
+says.
+
+`as` never calls `From`. It converts only what
+[a cast](./spec-expressions.md#type-cast-as) converts, so a `From` impl does not
+make a cast compile:
+
+<!-- {"fixture":"spec_traits_as_never_converts.wado"} -->
+
+```wado
+impl From<i32> for Wrapper {
+    fn from(v: i32) -> Wrapper { return Wrapper { v }; }
+}
+
+export fn run() {
+    let w = 3 as Wrapper;
+}
+```
+
+`?` on a `Result` converts the error it returns with `From`. See
+[Error Propagation](./spec-control-flow.md#error-propagation).
+
+### Conversions Without an Impl
+
+Two conversions need no written impl:
+
+- A type converts to itself: `T::from(x)` with `x: T` is `x`.
+- A newtype converts to and from each type down its chain of bases, both
+  ways, as `as` does. Two newtypes of one base do not convert into each
+  other.
+
+Each satisfies a `From` bound, as a written impl does:
+
+<!-- {"fixture":"from_bound_reflexive_newtype.wado"} -->
+
+```wado
+fn convert<T: From<i64>>(v: i64) -> T { return T::from(v); }
+fn unwrap_meters<T: From<Meters>>(m: Meters) -> T { return T::from(m); }
+fn same<T: From<T>>(v: T) -> T { return T::from(v); }
+fn id_of<T: From<u64>>(raw: u64) -> T { return T::from(raw); }
+
+test "a type converts to itself through a bound" {
+    assert convert::<i64>(3) == 3;
+    assert same(Point { x: 6 }).x == 6;
+    assert same("s") == "s";
+}
+
+test "a newtype converts from its base through a bound" {
+    assert convert::<Meters>(3) == 3 as Meters;
+    assert id_of::<UserId>(42) == 42 as UserId;
+}
+
+test "a newtype converts to its base through a bound" {
+    assert unwrap_meters::<i64>(4 as Meters) == 4;
+    assert unwrap_meters::<Meters>(5 as Meters) == 5 as Meters;
+}
+```
+
+A written `From` impl that one of these already answers is an error, since its
+body would never run: `impl From<Point> for Point`, or
+`impl From<i64> for Meters` where `type Meters = i64`.
+
+A `from` the type declares itself wins over both. An inherent `fn from`, or
+another trait's, is called as written, and so is a generic `From` impl whose
+argument happens to be the type itself: with `impl<T> From<T> for Slot<T>`, `Slot::from(inner)` wraps an
+`inner: Slot<i32>` into a `Slot<Slot<i32>>`.
+
+The prelude implements `From` for lossless numeric widenings, such as
+`i32` to `i64` and `f32` to `f64`. It implements `TryFrom` for the numeric
+conversions that can lose a value: a narrowing, a change of sign, and a
+conversion to a float that would round the value. Every one of those `TryFrom`
+impls fails with `ConvertError`.
+[`core:prelude`](./stdlib-core-prelude.md) lists each impl.
+
+<!-- {"fixture":"spec_traits_conversion_prelude.wado"} -->
+
+```wado
+test {
+    let n: i32 = 42;
+    assert i64::from(n) == 42;
+
+    let wide: i64 = 300;
+    assert i16::try_from(wide).unwrap() == 300;
+    assert `${i8::try_from(wide).unwrap_err()}` == "300 out of range for i8";
+
+    let m = Meters::from(wide);
+    assert i64::from(m) == 300;
+    assert i64::from(wide) == wide;
+}
+```
+
+### Deriving `From` for a Variant
+
+A marker `impl From<P> for V;` on a variant `V` asks the compiler to write
+`from`, which wraps the value in the one case of `V` whose payload is `P`. An
+error type that gathers narrower errors declares one marker per error, and `?`
+then lifts each into it:
+
+<!-- {"fixture":"spec_traits_from_marker.wado"} -->
+
+```wado
+variant AppError {
+    Parse(ParseIntError),
+    Message(String),
+}
+
+impl From<ParseIntError> for AppError;
+impl From<String> for AppError;
+
+fn port(text: String) -> Result<i32, AppError> {
+    return Ok(i32::from_str(text)?);
+}
+
+test {
+    assert AppError::from("closed") matches { Message(m) && m == "closed" };
+    assert port("80").unwrap() == 80;
+    assert port("x") matches { Err(Parse(_)) };
+}
+```
+
+On a generic variant the marker names one instance, or every instance through
+a type parameter:
+
+<!-- {"fixture":"derive_from_marker_generic_variant.wado", "assert": false} -->
+
+```wado
+impl From<String> for Lookup<i32>;
+impl<T> From<T> for Slot<T>;
+```
+
+The marker is an error at its own span when it has no case to wrap into:
+
+- `V` is not a variant.
+- No case of `V` carries a `P` payload.
+- More than one case carries a `P` payload. The marker does not choose
+  between them, so the impl is written by hand:
+
+<!-- {"fixture":"derive_from_marker_ambiguous_case_error.wado"} -->
+
+```wado
+variant Reading {
+    Celsius(f64),
+    Fahrenheit(f64),
+    Kelvin(f64),
+}
+
+impl From<f64> for Reading;
+```
+
+### Error
+
+`Error` declares no method. It requires `Display`, so a bound `E: Error` says
+that a failure can always report its reason, and nothing more. `TryFrom`,
+`FromStr` and `LenientFromStr` bound their `Err` by it. The prelude's error
+types implement it, `ConvertError`, `ParseIntError`, `ParseFloatError` and
+`Utf8Error` among them.
+
+An error type writes its `Display` and then an empty `impl Error`, as `Odd`
+does above. Without `Display` the impl is rejected:
+
+<!-- {"fixture":"spec_traits_error_needs_display.wado"} -->
+
+```wado
+struct Timeout {}
+
+impl Error for Timeout { }
+```
+
+`Error` takes no marker, though it has no method to write. The empty block is
+the declaration:
+
+<!-- {"fixture":"spec_traits_error_marker.wado"} -->
+
+```wado
+impl Error for Timeout;
+```
+
+Rationale: [WEP: Conversion Traits](./wep-2026-03-16-conversion-traits.md).
+
 ## String Parsing Traits
 
 Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. `char`, `bool`, the integer types (`i128`/`u128` included), and the float types implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.

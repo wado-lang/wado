@@ -1,0 +1,26 @@
+// A written `From` impl that a provided conversion already answers is
+// rejected: the cast would run, never its body.
+
+type Meters = i64;
+
+impl From<i64> for Meters {
+    fn from(v: i64) -> Meters {
+        return (v * 1000) as Meters;
+    }
+}
+
+struct Point {
+    x: i32,
+}
+
+impl From<Point> for Point {
+    fn from(p: Point) -> Point {
+        return p;
+    }
+}
+
+test {
+}
+
+__DATA__
+{"compile_error": ":6:1: analysis error: `impl From<i64> for Meters` overlaps a conversion the language provides: a newtype converts to and from each type down its chain, so this body would never run", "compile_errors_contains": ["`impl From<Point> for Point` overlaps a conversion the language provides: every type converts to itself, so this body would never run"]}

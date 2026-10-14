@@ -1,0 +1,18 @@
+// A `flags` type wraps `u32` with no conversion between them, so it does not
+// meet a `From<u32>` bound: nothing inherits the reflexive `From`.
+
+flags Perms {
+    Read,
+    Write,
+}
+
+fn make<T: From<u32>>(bits: u32) -> T {
+    return T::from(bits);
+}
+
+test {
+    let p = make::<Perms>(1);
+}
+
+__DATA__
+{"compile_error": ":14:13: analysis error: type 'Perms' does not implement trait 'From<u32>' required by bound on 'T'", "compile_error_count": 1}

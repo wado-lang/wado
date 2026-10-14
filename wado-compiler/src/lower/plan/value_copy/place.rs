@@ -301,7 +301,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// What `expr` names. Total over the expression kinds: a shape with no arm
-    /// of its own is [`Names::Unknown`], never silently nothing.
+    /// of its own is [`Self::unclassified`], never silently nothing.
     #[must_use]
     pub fn names(&self, expr: &TirExpr) -> Names {
         match &expr.kind {
@@ -364,10 +364,8 @@ impl<'a> Resolver<'a> {
             TirExprKind::Call { func, args, .. } if self.builtins.declares(&**func) => {
                 match self.builtins.part_of_params(&**func) {
                     Some(&[p]) => self.project(arg_at(func, args, p), Selector::Index),
-                    // `builtin::select` hands back one of two, naming neither,
-                    // so a storage-carrying result is no value of its own.
-                    _ if carries_storage(expr.type_id, self.type_table) => Names::Unknown,
-                    _ => Names::Value,
+                    // `builtin::select` hands back one of two, naming neither.
+                    _ => self.unclassified(expr),
                 }
             }
             TirExprKind::Call { func, args, .. } => {
@@ -385,7 +383,7 @@ impl<'a> Resolver<'a> {
                     None if self.returns_owned.contains(&func.module_source, &func.name) => {
                         Names::Value
                     }
-                    None => Names::Unknown,
+                    None => self.unclassified(expr),
                 }
             }
             TirExprKind::IntLiteral { .. }
@@ -400,7 +398,17 @@ impl<'a> Resolver<'a> {
             | TirExprKind::VariantConstruct { .. }
             | TirExprKind::EnumConstruct { .. }
             | TirExprKind::Binary { .. } => Names::Value,
-            _ => Names::Unknown,
+            _ => self.unclassified(expr),
+        }
+    }
+
+    /// What a result no arm classifies names. One carrying no storage aliases
+    /// nothing, whatever computed it.
+    fn unclassified(&self, expr: &TirExpr) -> Names {
+        if carries_storage(expr.type_id, self.type_table) {
+            Names::Unknown
+        } else {
+            Names::Value
         }
     }
 

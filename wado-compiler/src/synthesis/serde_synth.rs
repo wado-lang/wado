@@ -130,11 +130,6 @@ pub fn synthesize_serde(project: &mut Package) {
                         generated.push(Rc::new(RefCell::new(schema_func)));
                     }
                 }
-                // `From` requests are drained by `from_synth`, which runs
-                // before this pass, so none reach the serde drain.
-                SynthTrait::From { .. } => unreachable!(
-                    "From synthesis requests must be drained by from_synth before serde_synth"
-                ),
             }
         }
 

@@ -689,6 +689,20 @@ nothing to unwrap, it returns from the enclosing function:
   through the `From` impl.
 - On `Some(v)`, `expr?` is `v`. On `None`, the function returns `None`.
 
+The function's error type must implement `From` of the error `?` meets, as
+[Conversions Without an Impl](./spec-standard-traits.md#conversions-without-an-impl)
+counts it. A `?` it does not is an error, whether or not anything calls the
+function:
+
+<!-- {"fixture":"try_op_error_missing_from_unreached.wado"} -->
+
+```wado
+fn unreached() -> Result<i32, String> {
+    let v = fails()?;
+    return Ok(v);
+}
+```
+
 `?` on a `Result` needs a function that returns a `Result`, and `?` on an
 `Option` one that returns an `Option`. Any other pairing is an error:
 
