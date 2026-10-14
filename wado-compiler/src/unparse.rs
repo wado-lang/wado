@@ -988,19 +988,22 @@ impl<'a> Unparser<'a> {
             self.unparse_contract_clause(clause);
             self.emit_trailing_for(clause.id);
         }
-        if !contracts.is_empty()
-            && let Some(body) = &f.body
-        {
+        // A comment before the body has no slot on the signature's line, so it
+        // takes the line the brace would after a `contract` clause (#2331).
+        let brace_on_own_line = f.body.as_ref().is_some_and(|body| {
+            !contracts.is_empty() || self.has_comment_in_range(0, body.span.start)
+        });
+        if brace_on_own_line && let Some(body) = &f.body {
             self.output.push('\n');
             self.flush_comments_before(body.span.start, Spacing::Tight);
         }
         self.indent_level -= 1;
 
         if let Some(body) = &f.body {
-            if contracts.is_empty() {
-                self.output.push(' ');
-            } else {
+            if brace_on_own_line {
                 self.write_indent();
+            } else {
+                self.output.push(' ');
             }
             self.output.push_str("{\n");
             self.indent_level += 1;

@@ -3991,6 +3991,48 @@ fn test_format_contract_clause_comments() {
     assert_format_preserves_ast(source);
 }
 
+/// A comment between a signature and its body's `{` stays before the brace,
+/// which then opens a line of its own as it does after a `contract` clause
+/// (issue #2331).
+#[test]
+fn test_format_comment_before_body_brace() {
+    let source = concat!(
+        "fn f() -> i32\n",
+        "    // before body\n",
+        "{\n",
+        "    return 1;\n",
+        "}\n",
+        "\n",
+        "impl S {\n",
+        "    fn g(&self) /* why */ {\n",
+        "        return;\n",
+        "    }\n",
+        "}\n",
+    );
+    let expected = concat!(
+        "fn f() -> i32\n",
+        "    // before body\n",
+        "{\n",
+        "    return 1;\n",
+        "}\n",
+        "\n",
+        "impl S {\n",
+        "    fn g(&self)\n",
+        "        /* why */\n",
+        "    {\n",
+        "        return;\n",
+        "    }\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    assert_eq!(
+        wado_compiler::format(&formatted).expect("format failed"),
+        expected
+    );
+    assert_format_preserves_ast(source);
+}
+
 /// A trait method's clauses print on the trait's declaration, a bodyless one
 /// ending in `;` after the last clause.
 #[test]
