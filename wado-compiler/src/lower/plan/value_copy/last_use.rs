@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::observed::ObservedFields;
 use super::ownership::OwnedCalls;
-use super::points_to::PointsTo;
+use super::points_to::{LocSet, PointsTo};
 use super::reach::StorageReach;
 use super::retention::{CallRetention, FunctorRows, RESULT, Retained};
 use super::{is_reference_type, is_scalar_type, needs_value_copy};
@@ -1125,7 +1125,7 @@ struct Analyzer<'a> {
     pending_writes: Vec<WriteCheck>,
     /// What every value handed to a call reaches, in walk order, so a check
     /// reads what the later arguments handed on.
-    handed: Vec<&'a IndexSet<u32>>,
+    handed: Vec<&'a LocSet>,
     points_to: &'a PointsTo,
     /// This body's frame in `points_to`.
     frame: u32,
@@ -2033,13 +2033,17 @@ impl Analyzer<'_> {
                 ..
             }
         );
-        if is_borrow {
+        // Only a value a copy would wrap has a copy to keep.
+        if is_borrow || !needs_value_copy(arg.type_id, self.type_table) {
             return;
         }
         let span = strip_casts(arg).span;
-        let written = Rc::new(self.written_since(call_writes, handed_from, own));
         let mut storages = Vec::new();
         self.storage_roots(arg, &mut storages);
+        if storages.is_empty() {
+            return;
+        }
+        let written = Rc::new(self.written_since(call_writes, handed_from, own));
         for storage in storages {
             match storage {
                 Storage::Local(root) => self.pending_writes.push(WriteCheck {
@@ -2070,7 +2074,7 @@ impl Analyzer<'_> {
         let mut sources: Vec<u32> = Vec::new();
         for (i, handed) in self.handed[handed_from..].iter().enumerate() {
             if handed_from + i != own {
-                sources.extend(handed.iter().copied());
+                sources.extend(handed.iter());
             }
         }
         let mut written = pt.reach(sources);

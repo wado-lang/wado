@@ -18,6 +18,10 @@
 
 use std::cell::RefCell;
 
+mod loc_set;
+
+pub use loc_set::LocSet;
+
 use super::analyze::collect_pattern_bindings;
 use super::funcset::FuncIndex;
 use super::is_reference_type;
@@ -47,7 +51,9 @@ pub struct PointsTo {
     locals: IndexMap<(Frame, u32), u32>,
     /// The frame and local each location node is, the inverse of `locals`.
     owners: IndexMap<u32, (Frame, u32)>,
-    pts: Vec<IndexSet<u32>>,
+    pts: Vec<LocSet>,
+    /// The node whose entry in `pts` each node's set is.
+    rep: Vec<u32>,
     /// The node the value each call argument hands its callee flows from, and
     /// the argument's span, keyed by the argument expression's address. Valid
     /// while no body is rewritten, as the fold, which computes and reads it,
@@ -58,6 +64,10 @@ pub struct PointsTo {
 }
 
 impl PointsTo {
+    fn set(&self, node: u32) -> &LocSet {
+        &self.pts[self.rep[node as usize] as usize]
+    }
+
     /// The frame of the function `module`/`name`, `None` for one the analysis
     /// did not read.
     #[must_use]
@@ -84,7 +94,7 @@ impl PointsTo {
     #[must_use]
     pub fn local_targets(&self, frame: Frame, local: u32) -> IndexSet<u32> {
         self.location(frame, local)
-            .map(|node| self.pts[node as usize].clone())
+            .map(|node| self.set(node).iter().collect())
             .unwrap_or_default()
     }
 
@@ -93,9 +103,9 @@ impl PointsTo {
     #[must_use]
     pub fn reaches_written(&self, frame: Frame, local: u32, written: &IndexSet<u32>) -> bool {
         self.location(frame, local).is_some_and(|node| {
-            self.pts[node as usize]
+            self.set(node)
                 .iter()
-                .any(|n| written.contains(n) || self.global_reach.contains(n))
+                .any(|n| written.contains(&n) || self.global_reach.contains(&n))
         })
     }
 
@@ -103,7 +113,7 @@ impl PointsTo {
     /// value reaches where that holds a writable handle, and its own where a
     /// `&mut` parameter borrows it.
     #[must_use]
-    pub fn handed(&self, arg: &TirExpr) -> &IndexSet<u32> {
+    pub fn handed(&self, arg: &TirExpr) -> &LocSet {
         let &(node, span) = self
             .handed
             .get(&std::ptr::from_ref(arg).addr())
@@ -112,7 +122,7 @@ impl PointsTo {
             span, arg.span,
             "an argument keyed by address moved after the analysis"
         );
-        &self.pts[node as usize]
+        self.set(node)
     }
 
     /// `from` and every location reachable from it: what a write through any of
@@ -120,10 +130,12 @@ impl PointsTo {
     #[must_use]
     pub fn reach(&self, from: impl IntoIterator<Item = u32>) -> IndexSet<u32> {
         let mut out: IndexSet<u32> = IndexSet::default();
+        // Locations on one cycle share a set, walked once.
+        let mut walked: IndexSet<u32> = IndexSet::default();
         let mut work: Vec<u32> = from.into_iter().collect();
         while let Some(loc) = work.pop() {
-            if out.insert(loc) {
-                work.extend(self.pts[loc as usize].iter().copied());
+            if out.insert(loc) && walked.insert(self.rep[loc as usize]) {
+                work.extend(self.set(loc).iter());
             }
         }
         out
@@ -345,9 +357,22 @@ struct Site {
     result: u32,
 }
 
+/// A node's state in a cycle search, Tarjan's.
+#[derive(Clone, Copy, Default)]
+struct Mark {
+    /// The search that set it.
+    search: u32,
+    index: u32,
+    low: u32,
+    on_stack: bool,
+}
+
 #[derive(Default)]
 struct Graph {
-    pts: Vec<IndexSet<u32>>,
+    pts: Vec<LocSet>,
+    /// The node each node's set is held at: a cycle of copies leaves every
+    /// node on it with one set, so the cycle collapses into one node.
+    rep: Vec<u32>,
     copy_to: Vec<Vec<u32>>,
     /// `loads[n]`: nodes receiving what each location in `pts[n]` holds.
     loads: Vec<Vec<u32>>,
@@ -360,26 +385,36 @@ struct Graph {
     /// Locations whose value names no storage, which nothing flows into.
     inert: IndexSet<u32>,
     edges: IndexSet<(u32, u32)>,
-    delta: Vec<Vec<u32>>,
+    /// Copy edges found with equal sets at both ends, each searched for a
+    /// cycle once: lazy cycle detection (Hardekopf and Lin, PLDI 2007).
+    checked: IndexSet<(u32, u32)>,
+    /// Each node's state in the latest cycle search that reached it.
+    marks: Vec<Mark>,
+    /// The number of cycle searches so far.
+    search: u32,
+    /// What each node gained since its edges last carried its set.
+    delta: Vec<LocSet>,
     work: Vec<u32>,
 }
 
 impl Graph {
     fn node(&mut self) -> u32 {
         let id = u32::try_from(self.pts.len()).expect("node count fits u32");
-        self.pts.push(IndexSet::default());
+        self.pts.push(LocSet::default());
+        self.rep.push(id);
         self.copy_to.push(Vec::new());
         self.loads.push(Vec::new());
         self.stores.push(Vec::new());
         self.sites.push(Vec::new());
-        self.delta.push(Vec::new());
+        self.delta.push(LocSet::default());
         id
     }
 
     fn call_site(&mut self, callee: u32, site: Site) {
+        let callee = self.find(callee);
         self.sites[callee as usize].push(site);
         let at = self.sites[callee as usize].len() - 1;
-        let locs: Vec<u32> = self.pts[callee as usize].iter().copied().collect();
+        let locs: Vec<u32> = self.pts[callee as usize].iter().collect();
         for loc in locs {
             self.bind(callee, at, loc);
         }
@@ -419,7 +454,18 @@ impl Graph {
         }
     }
 
+    /// The node holding `node`'s set.
+    fn find(&mut self, mut node: u32) -> u32 {
+        while self.rep[node as usize] != node {
+            let parent = self.rep[node as usize];
+            self.rep[node as usize] = self.rep[parent as usize];
+            node = parent;
+        }
+        node
+    }
+
     fn add(&mut self, node: u32, loc: u32) {
+        let node = self.find(node);
         if self.inert.contains(&node) {
             return;
         }
@@ -427,42 +473,150 @@ impl Graph {
             if self.delta[node as usize].is_empty() {
                 self.work.push(node);
             }
-            self.delta[node as usize].push(loc);
+            self.delta[node as usize].insert(loc);
+        }
+    }
+
+    /// Add `locs` to the set of `node`, a representative.
+    fn add_all(&mut self, node: u32, locs: &LocSet) {
+        let n = node as usize;
+        if self.inert.contains(&node) {
+            return;
+        }
+        let was_idle = self.delta[n].is_empty();
+        self.pts[n].union_into(locs, &mut self.delta[n]);
+        if was_idle && !self.delta[n].is_empty() {
+            self.work.push(node);
         }
     }
 
     fn copy(&mut self, from: u32, to: u32) {
-        if from == to || !self.edges.insert((from, to)) {
+        let (from, to) = (self.find(from), self.find(to));
+        // An inert node's set stays empty, so an edge at either end carries
+        // nothing.
+        if from == to
+            || self.inert.contains(&from)
+            || self.inert.contains(&to)
+            || !self.edges.insert((from, to))
+        {
             return;
         }
         self.copy_to[from as usize].push(to);
-        let carried: Vec<u32> = self.pts[from as usize].iter().copied().collect();
-        for loc in carried {
-            self.add(to, loc);
-        }
+        let carried = std::mem::take(&mut self.pts[from as usize]);
+        self.add_all(to, &carried);
+        self.pts[from as usize] = carried;
     }
 
     fn load(&mut self, from: u32, to: u32) {
+        let from = self.find(from);
         self.loads[from as usize].push(to);
-        let locs: Vec<u32> = self.pts[from as usize].iter().copied().collect();
+        let locs: Vec<u32> = self.pts[from as usize].iter().collect();
         for loc in locs {
             self.copy(loc, to);
         }
     }
 
     fn store(&mut self, into: u32, from: u32) {
+        let into = self.find(into);
         self.stores[into as usize].push(from);
-        let locs: Vec<u32> = self.pts[into as usize].iter().copied().collect();
+        let locs: Vec<u32> = self.pts[into as usize].iter().collect();
         for loc in locs {
             self.copy(from, loc);
         }
     }
 
+    /// Merge each node that only ever copies one other's set into that one,
+    /// ahead of the solve: a temporary a value passes through holds what its
+    /// source holds, and a cycle search along the pair would find none.
+    fn substitute(&mut self) {
+        // What may gain a location other than through its static copies: a
+        // location (a store writes it), what a load or a call feeds, and what
+        // a location is added to.
+        let mut fed: IndexSet<u32> = self.inert.clone();
+        for set in &self.pts {
+            fed.extend(set.iter());
+        }
+        fed.extend(self.loads.iter().flatten().copied());
+        for (&loc, target) in &self.targets {
+            fed.insert(loc);
+            fed.extend(target.this);
+            fed.extend(target.params.iter().copied());
+            fed.extend(target.sink);
+            fed.insert(target.ret);
+        }
+        fed.extend(self.sites.iter().flatten().map(|site| site.result));
+        let mut sources: IndexMap<u32, Option<u32>> = IndexMap::default();
+        for &(from, to) in &self.edges {
+            sources
+                .entry(to)
+                .and_modify(|only| *only = None)
+                .or_insert(Some(from));
+        }
+        let mut roots: IndexSet<u32> = IndexSet::default();
+        for (to, only) in sources {
+            let Some(from) = only else { continue };
+            let from = self.find(from);
+            // A set holding more than its one source's took a location of its
+            // own, by an address taken.
+            if from == to
+                || fed.contains(&to)
+                || !self.pts[to as usize]
+                    .iter()
+                    .all(|loc| self.pts[from as usize].contains(loc))
+            {
+                continue;
+            }
+            self.absorb(from, to);
+            roots.insert(from);
+        }
+        for root in roots {
+            let root = self.find(root);
+            self.settle(root);
+        }
+    }
+
+    /// Make `root` the node of `member`, leaving `root` to [`Self::settle`].
+    fn absorb(&mut self, root: u32, member: u32) {
+        let (r, m) = (root as usize, member as usize);
+        self.rep[m] = root;
+        let pts = std::mem::take(&mut self.pts[m]);
+        self.pts[r].union_into(&pts, &mut LocSet::default());
+        let copy_to = std::mem::take(&mut self.copy_to[m]);
+        self.copy_to[r].extend(copy_to);
+        let loads = std::mem::take(&mut self.loads[m]);
+        self.loads[r].extend(loads);
+        let stores = std::mem::take(&mut self.stores[m]);
+        self.stores[r].extend(stores);
+        let sites = std::mem::take(&mut self.sites[m]);
+        self.sites[r].extend(sites);
+        self.delta[m] = LocSet::default();
+    }
+
+    /// Point the edges `root` took from the nodes it absorbed at
+    /// representatives, and carry its whole set along them, as none has.
+    fn settle(&mut self, root: u32) {
+        let r = root as usize;
+        let mut copy_to: IndexSet<u32> = IndexSet::default();
+        for to in std::mem::take(&mut self.copy_to[r]) {
+            let to = self.find(to);
+            if to != root && copy_to.insert(to) {
+                self.edges.insert((root, to));
+            }
+        }
+        self.copy_to[r] = copy_to.into_iter().collect();
+        self.delta[r] = self.pts[r].clone();
+        self.work.push(root);
+    }
+
     fn solve(&mut self) {
+        self.substitute();
         while let Some(node) = self.work.pop() {
+            if self.find(node) != node {
+                continue;
+            }
             let delta = std::mem::take(&mut self.delta[node as usize]);
             let n = node as usize;
-            for &loc in &delta {
+            for loc in delta.iter() {
                 for i in 0..self.loads[n].len() {
                     let to = self.loads[n][i];
                     self.copy(loc, to);
@@ -475,13 +629,105 @@ impl Graph {
                     self.bind(node, at, loc);
                 }
             }
+            let mut equal_ends = Vec::new();
             for i in 0..self.copy_to[n].len() {
-                let to = self.copy_to[n][i];
-                for &loc in &delta {
-                    self.add(to, loc);
+                let to = self.find(self.copy_to[n][i]);
+                if to == node {
+                    continue;
+                }
+                self.add_all(to, &delta);
+                let (from_set, to_set) = (&self.pts[n], &self.pts[to as usize]);
+                // A node no copy leaves lies on no cycle.
+                if from_set.len() == to_set.len()
+                    && !self.copy_to[to as usize].is_empty()
+                    && !self.checked.contains(&(node, to))
+                    && from_set == to_set
+                {
+                    self.checked.insert((node, to));
+                    equal_ends.push(to);
+                }
+            }
+            for to in equal_ends {
+                if self.find(to) == to {
+                    self.collapse_cycles_from(to);
                 }
             }
         }
+    }
+
+    /// Merge each cycle of copies reachable from `start` into one node: every
+    /// node on a cycle ends up with the same set, which one node then holds.
+    fn collapse_cycles_from(&mut self, start: u32) {
+        // Tarjan's algorithm, iteratively, over marks reused across searches:
+        // a mark from an earlier search is a node this one has not visited.
+        self.search += 1;
+        let search = self.search;
+        self.marks.resize(self.pts.len(), Mark::default());
+        let mut count = 0;
+        let mut stack: Vec<u32> = Vec::new();
+        let mut walk: Vec<(u32, usize)> = Vec::new();
+        let mut cycles: Vec<Vec<u32>> = Vec::new();
+        let mut next = Some(start);
+        loop {
+            if let Some(v) = next.take() {
+                self.marks[v as usize] = Mark {
+                    search,
+                    index: count,
+                    low: count,
+                    on_stack: true,
+                };
+                count += 1;
+                stack.push(v);
+                walk.push((v, 0));
+            }
+            let Some(&(v, i)) = walk.last() else { break };
+            if let Some(&to) = self.copy_to[v as usize].get(i) {
+                walk.last_mut().expect("the walk is under way").1 += 1;
+                let w = self.find(to);
+                if w == v || self.inert.contains(&w) {
+                    continue;
+                }
+                let mark = self.marks[w as usize];
+                if mark.search != search {
+                    next = Some(w);
+                } else if mark.on_stack {
+                    let low = &mut self.marks[v as usize].low;
+                    *low = (*low).min(mark.index);
+                }
+                continue;
+            }
+            walk.pop();
+            let Mark { index, low, .. } = self.marks[v as usize];
+            if let Some(&(parent, _)) = walk.last() {
+                let parent_low = &mut self.marks[parent as usize].low;
+                *parent_low = (*parent_low).min(low);
+            }
+            if low == index {
+                let at = stack
+                    .iter()
+                    .rposition(|&w| w == v)
+                    .expect("a node leaves the stack only with its component");
+                let cycle: Vec<u32> = stack.drain(at..).collect();
+                for &w in &cycle {
+                    self.marks[w as usize].on_stack = false;
+                }
+                if cycle.len() > 1 {
+                    cycles.push(cycle);
+                }
+            }
+        }
+        for cycle in cycles {
+            self.merge(&cycle);
+        }
+    }
+
+    /// Make `cycle[0]` the node of every node in `cycle`.
+    fn merge(&mut self, cycle: &[u32]) {
+        let root = cycle[0];
+        for &member in &cycle[1..] {
+            self.absorb(root, member);
+        }
+        self.settle(root);
     }
 }
 
@@ -639,6 +885,9 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
     // Code the analysis cannot see may run under any call and write what
     // escaped to it, as any call may write what a global reaches.
     let global_nodes: Vec<u32> = b.globals.values().copied().chain([b.escape]).collect();
+    let rep: Vec<u32> = (0..u32::try_from(b.g.pts.len()).expect("node count fits u32"))
+        .map(|node| b.g.find(node))
+        .collect();
     let pts = std::mem::take(&mut b.g.pts);
     let locals = std::mem::take(&mut b.locals);
     let owners = locals.iter().map(|(&key, &node)| (node, key)).collect();
@@ -647,6 +896,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
         locals,
         owners,
         pts,
+        rep,
         handed: std::mem::take(&mut b.handed),
         global_reach: IndexSet::default(),
     };
