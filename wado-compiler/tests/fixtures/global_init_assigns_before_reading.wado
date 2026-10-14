@@ -1,0 +1,23 @@
+// A function that gives a global a value before reading it does not wait on
+// that global's initializer. `A` runs first, and `B`'s initializer then
+// replaces what `reset_b` stored.
+
+use { println, Stdout } from "core:cli";
+
+global mut B: i32 = A + 1;
+global A: i32 = reset_b();
+
+#[inline(never)]
+fn reset_b() -> i32 {
+    B = 5;
+    return B;
+}
+
+export fn run() with Stdout {
+    println(`${A} ${B}`);
+}
+
+__DATA__
+{
+    "stdout": "5 6\n"
+}

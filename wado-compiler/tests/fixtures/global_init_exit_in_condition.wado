@@ -1,0 +1,36 @@
+// An exit inside the right operand of `&&` or inside a match guard leaves the
+// function on some path, so what follows it is not read on every path. Here
+// each exit is taken, `B` and `D` are never read before they are given a
+// value, and there is no cycle to report.
+
+use { println, Stdout } from "core:cli";
+
+global A: i32 = after_and(builtin::black_box(true), builtin::black_box(null)).unwrap_or(7);
+global B: i32 = A + 1;
+
+global C: i32 = after_guard(builtin::black_box(0), builtin::black_box(null)).unwrap_or(3);
+global D: i32 = C + 1;
+
+#[inline(never)]
+fn after_and(flag: bool, o: Option<i32>) -> Option<i32> {
+    let ok = flag && o? > 0;
+    return Some(if ok { B } else { B + 1 });
+}
+
+#[inline(never)]
+fn after_guard(n: i32, o: Option<i32>) -> Option<i32> {
+    let v = match n {
+        0 && o? > 0 => 1,
+        _ => 2,
+    };
+    return Some(D + v);
+}
+
+export fn run() with Stdout {
+    println(`${A} ${B} ${C} ${D}`);
+}
+
+__DATA__
+{
+    "stdout": "7 8 3 4\n"
+}

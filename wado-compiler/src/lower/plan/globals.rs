@@ -34,6 +34,8 @@ struct LazyInit {
     /// What the global is assigned, in the frame `frame` describes.
     value: TirExpr,
     frame: LocalFrame,
+    /// What `value` names and calls.
+    scan: BodyReads,
 }
 
 /// The value a `$init$` function returns. Reify writes the one return, and
@@ -80,11 +82,15 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         let Some(global) = global_init_target(&func.name).map(str::to_string) else {
             return true;
         };
+        let value = returned_value(func.body.take().expect("$init$ carries a body"));
+        let mut scan = BodyReads::default();
+        scan.visit_expr(&value);
         let init = LazyInit {
             global,
             module_source: func.module_source.clone(),
-            value: returned_value(func.body.take().expect("$init$ carries a body")),
+            value,
             frame: func.take_frame(),
+            scan,
         };
         by_module
             .entry(init.module_source.clone())
@@ -99,11 +105,15 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     // An initializer depends on every global the functions it calls read.
     let call_graph = CallGraph::new(&flat.functions);
     let must_reads = call_graph.must_reads(by_module.values().flatten());
-    let reads_by_function = call_graph.reads;
+    let orders = by_module
+        .values()
+        .map(|module_inits| {
+            topological_sort_global_inits(module_inits, &call_graph, &must_reads, errors)
+        })
+        .collect::<Result<Vec<_>, Bail>>()?;
+    drop(call_graph);
     let span = Span::new(0, 0, 1, 1);
-    for (module_source, module_inits) in by_module {
-        let order =
-            topological_sort_global_inits(&module_inits, &reads_by_function, &must_reads, errors)?;
+    for ((module_source, module_inits), order) in by_module.into_iter().zip(orders) {
         let mut taken: Vec<Option<LazyInit>> = module_inits.into_iter().map(Some).collect();
         let sorted_inits = order
             .into_iter()
@@ -134,6 +144,7 @@ fn build_module_init_function(
             module_source,
             mut value,
             frame,
+            ..
         } = init;
         merged.absorb(frame, |offset| shift_locals(&mut value, offset));
         init_stmts.push(set_global(module_source, global, value, span));
@@ -165,13 +176,14 @@ fn set_global(module_source: ModuleSource, name: String, value: TirExpr, span: S
     TirStmt::new(TirStmtKind::Expr(global_set), span)
 }
 
-/// What a function body reads and calls, in one walk.
+/// What a function body reads, assigns and calls, in one walk.
 ///
 /// Callees are keyed by [`FunctionRef::full_name`], the same key
 /// [`CallGraph`] maps.
 #[derive(Default)]
 struct BodyReads {
     globals: IndexSet<GlobalKey>,
+    assigned: IndexSet<GlobalKey>,
     callees: IndexSet<String>,
 }
 
@@ -183,6 +195,13 @@ impl TirRefVisitor for BodyReads {
                 module_source,
             } => {
                 self.globals.insert((module_source.clone(), name.clone()));
+            }
+            TirExprKind::GlobalVarSet {
+                name,
+                module_source,
+                ..
+            } => {
+                self.assigned.insert((module_source.clone(), name.clone()));
             }
             TirExprKind::Call { func, .. } => {
                 self.callees.insert(func.full_name());
@@ -218,7 +237,8 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
     .full_name()
 }
 
-/// The functions with a body, what each calls, and every global each may read.
+/// The functions with a body, what each calls, and the globals each may read
+/// or assign.
 struct CallGraph<'a> {
     bodies: IndexMap<String, &'a Rc<RefCell<TirFunction>>>,
     callees: IndexMap<String, IndexSet<String>>,
@@ -227,9 +247,10 @@ struct CallGraph<'a> {
     /// An initializer's dependency is not always written in it: a call reads
     /// globals the caller never names, and ordering on the directly-written
     /// references alone leaves such a global still holding its placeholder
-    /// when the caller runs. Computed as a least fixpoint, so a recursive cycle
-    /// contributes each member's own reads and terminates.
+    /// when the caller runs.
     reads: IndexMap<String, IndexSet<GlobalKey>>,
+    /// Every global each function assigns, closed over `callees`.
+    assigned: IndexMap<String, IndexSet<GlobalKey>>,
 }
 
 impl<'a> CallGraph<'a> {
@@ -238,6 +259,7 @@ impl<'a> CallGraph<'a> {
             bodies: IndexMap::default(),
             callees: IndexMap::default(),
             reads: IndexMap::default(),
+            assigned: IndexMap::default(),
         };
         for func_rc in functions {
             let func = func_rc.borrow();
@@ -248,82 +270,103 @@ impl<'a> CallGraph<'a> {
             scan.visit_block(body);
             let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
             graph.bodies.insert(key.clone(), func_rc);
-            graph
-                .reads
-                .entry(key.clone())
-                .or_default()
-                .extend(scan.globals);
-            graph.callees.entry(key).or_default().extend(scan.callees);
+            graph.reads.insert(key.clone(), scan.globals);
+            graph.assigned.insert(key.clone(), scan.assigned);
+            graph.callees.insert(key, scan.callees);
         }
+        close_over_calls(&mut graph.reads, &graph.callees);
+        close_over_calls(&mut graph.assigned, &graph.callees);
+        graph
+    }
 
-        loop {
-            let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
-            for (name, called) in &graph.callees {
-                let known = graph.reads.get(name);
-                let fresh: IndexSet<GlobalKey> = called
-                    .iter()
-                    .filter_map(|callee| graph.reads.get(callee))
-                    .flatten()
-                    .filter(|global| known.is_none_or(|k| !k.contains(*global)))
-                    .cloned()
-                    .collect();
-                if !fresh.is_empty() {
-                    grown.push((name.clone(), fresh));
-                }
-            }
-            if grown.is_empty() {
-                return graph;
-            }
-            for (name, fresh) in grown {
-                graph.reads.entry(name).or_default().extend(fresh);
-            }
+    /// What `scan` and the functions it reaches may assign.
+    fn assigned_from(&self, scan: &BodyReads) -> IndexSet<GlobalKey> {
+        let mut assigned = scan.assigned.clone();
+        for callee in &scan.callees {
+            assigned.extend(self.assigned.get(callee).into_iter().flatten().cloned());
         }
+        assigned
     }
 
     /// The globals each function the initializers reach reads on every path
-    /// through it.
+    /// through it, before anything it reaches may assign them.
     ///
     /// A least fixpoint, rising from nothing known: a recursive function's
     /// answer under-approximates, and the same whatever order it is asked in.
+    /// Only the callers of a function whose answer grew are walked again.
     fn must_reads<'i>(
         &self,
         inits: impl IntoIterator<Item = &'i LazyInit>,
     ) -> IndexMap<String, IndexSet<GlobalKey>> {
         let mut reached: IndexSet<&str> = IndexSet::default();
-        let mut pending: Vec<String> = inits
+        let mut pending: Vec<&str> = inits
             .into_iter()
-            .flat_map(|init| {
-                let mut scan = BodyReads::default();
-                scan.visit_expr(&init.value);
-                scan.callees
-            })
+            .flat_map(|init| &init.scan.callees)
+            .map(String::as_str)
             .collect();
         while let Some(name) = pending.pop() {
-            let Some((name, _)) = self.bodies.get_key_value(name.as_str()) else {
+            let Some((name, _)) = self.bodies.get_key_value(name) else {
                 continue;
             };
             if reached.insert(name) {
-                pending.extend(self.callees[name].iter().cloned());
+                pending.extend(self.callees[name].iter().map(String::as_str));
+            }
+        }
+        let mut callers: IndexMap<&str, Vec<&str>> = IndexMap::default();
+        for &caller in &reached {
+            for callee in &self.callees[caller] {
+                callers.entry(callee.as_str()).or_default().push(caller);
             }
         }
 
         let mut known: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
-        loop {
-            let mut grown = false;
-            for &name in &reached {
-                let func = self.bodies[name].borrow();
-                let body = func.body.as_ref().expect("the graph holds bodies only");
-                let mut walk = MustReads::new(&known);
-                walk.visit_block(body);
-                let reads = walk.reads;
-                if known.get(name).is_none_or(|old| old.len() < reads.len()) {
-                    known.insert(name.to_string(), reads);
-                    grown = true;
-                }
+        let mut queued: IndexSet<&str> = reached.clone();
+        while let Some(name) = queued.pop() {
+            let func = self.bodies[name].borrow();
+            let body = func.body.as_ref().expect("the graph holds bodies only");
+            let mut walk = MustReads::new(&known);
+            walk.visit_block(body);
+            let reads: IndexSet<GlobalKey> = walk
+                .reads
+                .difference(&self.assigned[name])
+                .cloned()
+                .collect();
+            if known.get(name).is_none_or(|old| old.len() < reads.len()) {
+                known.insert(name.to_string(), reads);
+                queued.extend(callers.get(name).into_iter().flatten());
             }
-            if !grown {
-                return known;
+        }
+        known
+    }
+}
+
+/// Extend each function's set by its callees', until nothing grows: a least
+/// fixpoint, so a recursive cycle contributes each member's own and
+/// terminates.
+fn close_over_calls(
+    sets: &mut IndexMap<String, IndexSet<GlobalKey>>,
+    callees: &IndexMap<String, IndexSet<String>>,
+) {
+    loop {
+        let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
+        for (name, called) in callees {
+            let known = &sets[name];
+            let fresh: IndexSet<GlobalKey> = called
+                .iter()
+                .filter_map(|callee| sets.get(callee))
+                .flatten()
+                .filter(|global| !known.contains(*global))
+                .cloned()
+                .collect();
+            if !fresh.is_empty() {
+                grown.push((name.clone(), fresh));
             }
+        }
+        if grown.is_empty() {
+            return;
+        }
+        for (name, fresh) in grown {
+            sets[&name].extend(fresh);
         }
     }
 }
@@ -390,10 +433,8 @@ impl<'k> MustReads<'k> {
         let mut common: Option<IndexSet<GlobalKey>> = None;
         for branch in branches {
             let mut walk = MustReads {
-                by_function: self.by_function,
-                reads: IndexSet::default(),
                 targets: self.targets.clone(),
-                exited_to: None,
+                ..MustReads::new(self.by_function)
             };
             match branch {
                 Branch::Block(block) => walk.visit_block(block),
@@ -495,8 +536,13 @@ impl TirRefVisitor for MustReads<'_> {
             TirExprKind::Binary {
                 left,
                 op: TirBinaryOp::And | TirBinaryOp::Or,
-                ..
-            } => self.visit_expr(left),
+                right,
+            } => {
+                self.visit_expr(left);
+                if self.exited_to.is_none() {
+                    self.alternatives([Branch::Expr(right), Branch::Empty]);
+                }
+            }
             TirExprKind::If {
                 condition,
                 then_branch,
@@ -507,6 +553,12 @@ impl TirRefVisitor for MustReads<'_> {
                 arms,
             } => {
                 self.visit_expr(scrutinee);
+                // A guard runs only once its pattern matches.
+                for guard in arms.iter().filter_map(|arm| arm.guard.as_ref()) {
+                    if self.exited_to.is_none() {
+                        self.alternatives([Branch::Expr(guard), Branch::Empty]);
+                    }
+                }
                 if self.exited_to.is_none() {
                     self.alternatives(arms.iter().map(|arm| Branch::Expr(&arm.body)));
                 }
@@ -569,25 +621,29 @@ struct InitRefs {
 }
 
 fn collect_global_refs(
-    value: &TirExpr,
-    reads_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
+    init: &LazyInit,
+    call_graph: &CallGraph,
     must_reads: &IndexMap<String, IndexSet<GlobalKey>>,
 ) -> InitRefs {
-    let mut scan = BodyReads::default();
-    scan.visit_expr(value);
+    let scan = &init.scan;
     let mut walk = MustReads::new(must_reads);
-    walk.visit_expr(value);
+    walk.visit_expr(&init.value);
+    let must: IndexSet<GlobalKey> = walk
+        .reads
+        .difference(&call_graph.assigned_from(scan))
+        .cloned()
+        .collect();
     let may = scan
         .callees
         .iter()
-        .filter_map(|callee| reads_by_function.get(callee))
+        .filter_map(|callee| call_graph.reads.get(callee))
         .flatten()
-        .filter(|global| !scan.globals.contains(*global) && !walk.reads.contains(*global))
+        .filter(|global| !scan.globals.contains(*global) && !must.contains(*global))
         .cloned()
         .collect();
     InitRefs {
-        named: scan.globals,
-        must: walk.reads,
+        named: scan.globals.clone(),
+        must,
         may,
     }
 }
@@ -613,7 +669,7 @@ fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
 /// every one it depends on.
 fn topological_sort_global_inits(
     lazy_inits: &[LazyInit],
-    reads_by_function: &IndexMap<String, IndexSet<GlobalKey>>,
+    call_graph: &CallGraph,
     must_reads: &IndexMap<String, IndexSet<GlobalKey>>,
     errors: &dyn ErrorSink,
 ) -> Result<Vec<usize>, Bail> {
@@ -638,7 +694,7 @@ fn topological_sort_global_inits(
 
     let scanned: Vec<InitRefs> = lazy_inits
         .iter()
-        .map(|init| collect_global_refs(&init.value, reads_by_function, must_reads))
+        .map(|init| collect_global_refs(init, call_graph, must_reads))
         .collect();
 
     // A global named in the initializer, or read on every path through it, is
