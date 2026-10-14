@@ -1,13 +1,20 @@
 // Arguments are evaluated left to right, and a by-value one is copied as it is
-// taken. A later argument that writes the same value runs before the callee
-// does, so a parameter that keeps nothing of its argument still needs the
-// copy: whether it hands on a `&mut`, assigns a field, passes a closure a
-// reference held in a local, or calls a closure that captured the value.
+// taken. A later argument, or the callee itself, may write the same storage
+// before the callee reads it, so a parameter that keeps nothing of its argument
+// still needs the copy: whether the write goes through a `&mut` taken on the
+// spot, an assignment, a `&mut` some local or struct keeps, a closure that
+// captured the value, another reference to storage the caller lent, or a global.
 
 struct Pair {
     a: i32,
-    b: i32,
+    s: List<i32>,
 }
+
+struct Holder {
+    w: &mut Pair,
+}
+
+global mut G: Pair = Pair { a: 1, s: [] };
 
 #[inline("never")]
 fn bump_a(w: &mut Pair) {
@@ -15,22 +22,70 @@ fn bump_a(w: &mut Pair) {
 }
 
 #[inline("never")]
+fn bump_held(h: Holder) {
+    h.w.a += 1000;
+}
+
+#[inline("never")]
+fn bump_global() {
+    G.a += 1000;
+}
+
+#[inline("never")]
+fn call(f: fn()) {
+    f();
+}
+
+#[inline("never")]
 fn two(p: Pair, q: Pair) -> i32 {
     return p.a * 10 + q.a;
 }
 
+#[inline("never")]
+fn held_by_callee(p: Pair, h: Holder) -> i32 {
+    h.w.a += 1000;
+    return p.a;
+}
+
+#[inline("never")]
+fn lent(a: &mut Pair, b: &mut Pair) -> i32 {
+    return two(*a, then: { bump_a(b); *a });
+}
+
+fn pair() -> Pair {
+    return Pair { a: builtin::black_box(1), s: [] };
+}
+
 export fn run() {
-    let mut x = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    let mut x = pair();
     assert two(x, then: { bump_a(&mut x); x }) == 1011;
-    let mut y = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    let mut y = pair();
     assert two(y, then: { y.a = 1001; y }) == 1011;
     let bump = |w: &mut Pair| { w.a += 1000; };
-    let mut z = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    let mut z = pair();
     let r = &mut z;
     assert two(z, then: { bump(r); z }) == 1011;
-    let mut v = Pair { a: builtin::black_box(1), b: builtin::black_box(2) };
+    let mut v = pair();
     let mut bump_v = || { v.a += 1000; };
     assert two(v, then: { bump_v(); v }) == 1011;
+    let mut u = pair();
+    let mut bump_u: fn mut() = || {};
+    bump_u = || { u.a += 1000; };
+    assert two(u, then: { bump_u(); u }) == 1011;
+    let mut w = pair();
+    let rw = &mut w;
+    let bump_w = || { rw.a += 1000; };
+    assert two(w, then: { call(bump_w); w }) == 1011;
+    let mut h = pair();
+    let held = Holder { w: &mut h };
+    assert two(h, then: { bump_held(held); h }) == 1011;
+    let mut k = pair();
+    let kept = Holder { w: &mut k };
+    assert held_by_callee(k, kept) == 1;
+    let mut l = pair();
+    let rl = &mut l;
+    assert lent(rl, rl) == 1011;
+    assert two(G, then: { bump_global(); G }) == 1011;
 }
 
 __DATA__

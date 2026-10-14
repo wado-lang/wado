@@ -416,9 +416,9 @@ struct FunctionTranslator<'a, 'p> {
     /// Locals a last-use move can hand to a new owner
     /// ([`value_copy::last_use::MoveEligible::roots`]).
     moved_roots: IndexSet<u32>,
-    /// May-alias components for this function, so a confined by-value argument
-    /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).
-    alias_components: value_copy::last_use::AliasComponents,
+    /// [`value_copy::last_use::Ownership::written_args`], `None` where the
+    /// ownership walk did not run, which leaves every argument copied.
+    written_args: Option<IndexSet<Span>>,
     /// Assignments that write into the storage their place holds, by span
     /// (WEP 2026-10-13).
     in_place_assigns: IndexSet<Span>,
@@ -533,11 +533,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         } else {
             IndexSet::default()
         };
-        let alias_components = if needs_copy_analysis {
-            value_copy::last_use::AliasComponents::build(func)
-        } else {
-            value_copy::last_use::AliasComponents::empty()
-        };
+        let written_args = analyzed.then_some(ownership.written_args);
         // Keyed on the *return* type rather than `needs_copy_analysis`: the
         // payload is read out of the receiver, so it need not be any local's
         // type.
@@ -558,7 +554,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals,
             ref_targets,
             moved_roots,
-            alias_components,
+            written_args,
             in_place_assigns,
             guarded_locals,
             assigned_flags: RefCell::new(IndexMap::default()),
@@ -585,7 +581,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             share_eligible_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
-            alias_components: value_copy::last_use::AliasComponents::empty(),
+            written_args: None,
             in_place_assigns: IndexSet::default(),
             guarded_locals: IndexSet::default(),
             assigned_flags: RefCell::new(IndexMap::default()),
@@ -2317,14 +2313,6 @@ impl FunctionTranslator<'_, '_> {
             return rewritten;
         }
         let ordered = self.call_args_in_param_order(func, args);
-        // What may write each argument's storage while the callee holds it:
-        // the call, through its `&mut` parameters, and every later argument,
-        // which runs after this one is taken.
-        let mut mut_roots = vec![self.call_mut_roots(func, &ordered); ordered.len()];
-        for i in (1..ordered.len()).rev() {
-            let written = self.written_roots(ordered[i].0);
-            mut_roots[i - 1] = [mut_roots[i].as_slice(), &written].concat();
-        }
         let nir_func = convert_function_ref(func);
         let func_id = self.base.interner.borrow_mut().resolve(&nir_func);
         let has_receiver = args.receiver().is_some();
@@ -2347,7 +2335,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut: *is_mut,
                     }
                 } else {
-                    self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots[i])
+                    self.convert_call_arg_at(e, *is_mut, Some(func), i)
                 }
             })
             .collect();
@@ -2887,10 +2875,9 @@ impl FunctionTranslator<'_, '_> {
         is_mut: bool,
         callee: Option<&FunctionRef>,
         param_index: usize,
-        mut_roots: &[u32],
     ) -> ArenaCallArg {
-        let needs_value_copy = self.should_wrap_value_copy(arg)
-            && !self.arg_confined(arg, callee, param_index, mut_roots);
+        let needs_value_copy =
+            self.should_wrap_value_copy(arg) && !self.arg_confined(arg, callee, param_index);
         let value_type = arg.type_id;
         let converted = self.convert_operand(arg);
         let expr = if needs_value_copy {
@@ -2902,113 +2889,22 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether a by-value argument into a confined parameter can skip its copy:
-    /// the argument aliases no `mut_root`.
+    /// nothing writes its storage before the callee is done with it.
     fn arg_confined(
         &self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
         param_index: usize,
-        mut_roots: &[u32],
     ) -> bool {
-        let confined = callee.is_some_and(|c| {
+        callee.is_some_and(|c| {
             self.base
                 .value_copy
                 .confined_params
                 .is_confined(c, param_index)
-        });
-        if !confined {
-            return false;
-        }
-        match value_copy::last_use::alias_root(arg) {
-            Some(r) => !mut_roots
-                .iter()
-                .any(|m| self.alias_components.may_alias(*m, r)),
-            None => mut_roots.is_empty(),
-        }
-    }
-
-    /// The storage roots a call mutates: the referent of each `&mut` parameter.
-    /// `args` is in the callee's parameter order, so a method's receiver is
-    /// `args[0]` and needs no offset.
-    fn call_mut_roots(&self, callee: &FunctionRef, args: &[(&TirExpr, bool)]) -> Vec<u32> {
-        let mut_ref_params = self
-            .base
-            .value_copy
-            .mut_ref_params
-            .get(&callee.module_source, &callee.name);
-        let mut roots = Vec::new();
-        for (i, (expr, _)) in args.iter().enumerate() {
-            if mut_ref_params
-                .and_then(|v| v.get(i))
-                .copied()
-                .unwrap_or(false)
-                && let Some(r) = value_copy::last_use::alias_root(expr)
-            {
-                roots.push(r);
-            }
-        }
-        roots
-    }
-
-    /// The storage roots evaluating `expr` may write: a place it assigns, a
-    /// `&mut` it takes, a handle a call is given, a `fn mut` it calls.
-    fn written_roots(&self, expr: &TirExpr) -> Vec<u32> {
-        struct Scan<'t, 'a, 'p> {
-            translator: &'t FunctionTranslator<'a, 'p>,
-            roots: Vec<u32>,
-        }
-        impl Scan<'_, '_, '_> {
-            /// A handle passed to a callee, which may write through it, or a
-            /// `fn mut` called, which may write what it captured. The callee's
-            /// own declaration is not consulted: a closure's `$call`,
-            /// synthesized after planning, has no row to consult.
-            fn handed(&mut self, arg: &TirExpr) {
-                let type_table = self.translator.base.type_table.borrow();
-                let writable = place::could_write_through(arg.type_id, &type_table)
-                    || matches!(
-                        type_table.get(arg.type_id),
-                        ResolvedType::Function { is_mut: true, .. }
-                    );
-                if writable {
-                    self.roots.extend(value_copy::last_use::alias_root(arg));
-                }
-            }
-        }
-        impl TirRefVisitor for Scan<'_, '_, '_> {
-            fn visit_expr(&mut self, expr: &TirExpr) {
-                match &expr.kind {
-                    TirExprKind::Assign { target: place, .. }
-                    | TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: place,
-                    } => self.roots.extend(value_copy::last_use::alias_root(place)),
-                    TirExprKind::Call { func, args, .. } => {
-                        // A receiver the callee writes through is a place, not
-                        // a handle, so only its declaration says so.
-                        let ordered = self.translator.call_args_in_param_order(func, args);
-                        self.roots
-                            .extend(self.translator.call_mut_roots(func, &ordered));
-                        for arg in args.iter() {
-                            self.handed(&arg.expr);
-                        }
-                    }
-                    TirExprKind::IndirectCall { callee, args } => {
-                        self.handed(callee);
-                        for arg in args {
-                            self.handed(arg);
-                        }
-                    }
-                    _ => {}
-                }
-                self.walk_expr(expr);
-            }
-        }
-        let mut scan = Scan {
-            translator: self,
-            roots: Vec::new(),
-        };
-        scan.visit_expr(expr);
-        scan.roots
+        }) && self
+            .written_args
+            .as_ref()
+            .is_some_and(|written| !written.contains(&value_copy::last_use::strip_casts(arg).span))
     }
 
     /// A call's arguments paired with their declared `mut`-ness, in the callee's
