@@ -242,7 +242,9 @@ No name carries `_unchecked`, so each operation has one name per shape:
 
 Where the plain name returned an `Option`, the contract form takes it over:
 `char::from_u32` returns a `char`, and the `Option` moves to
-`char::try_from`. A reader from Rust who writes `if let Some(c) = char::from_u32(v)` gets a type error rather than a different behavior.
+`char::try_from`. A reader from Rust who writes
+`if let Some(c) = char::from_u32(v)` gets a type error rather than a different
+behavior.
 `String::byte_at` is a method of its own rather than `as_bytes()[i]`, which a
 marked call would spell `unchecked s.as_bytes()[i]` at every byte scan.
 
@@ -367,7 +369,7 @@ API waits for a program outside the standard library that needs one.
    - [x] `builtin::contract_checks()` is removed. Each `_unchecked` function
      that still has no checked twin forwards to a private function that
      declares its contract.
-   - [ ] The functions with no checked twin, or one returning an `Option`:
+   - [x] The functions with no checked twin, or one returning an `Option`:
      `String::push_ascii`, `char_at_byte`, `char::from_u32` and
      `String::byte_at` take a contract, and the `_unchecked` names go.
    - [ ] `ByteList::get_byte_unchecked` and `Sequence::get_unchecked` become
