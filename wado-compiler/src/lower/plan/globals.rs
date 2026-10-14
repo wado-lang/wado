@@ -34,8 +34,6 @@ struct LazyInit {
     /// What the global is assigned, in the frame `frame` describes.
     value: TirExpr,
     frame: LocalFrame,
-    /// What `value` reads and calls.
-    scan: BodyReads,
 }
 
 /// The value a `$init$` function returns. Reify writes the one return, and
@@ -82,15 +80,11 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         let Some(global) = global_init_target(&func.name).map(str::to_string) else {
             return true;
         };
-        let value = returned_value(func.body.take().expect("$init$ carries a body"));
-        let mut scan = BodyReads::default();
-        scan.visit_expr(&value);
         let init = LazyInit {
             global,
             module_source: func.module_source.clone(),
-            value,
+            value: returned_value(func.body.take().expect("$init$ carries a body")),
             frame: func.take_frame(),
-            scan,
         };
         by_module
             .entry(init.module_source.clone())
@@ -137,7 +131,6 @@ fn build_module_init_function(
             module_source,
             mut value,
             frame,
-            ..
         } = init;
         merged.absorb(frame, |offset| shift_locals(&mut value, offset));
         init_stmts.push(set_global(module_source, global, value, span));
@@ -298,12 +291,14 @@ fn topological_sort_global_inits(
     let deps: Vec<IndexSet<usize>> = lazy_inits
         .iter()
         .map(|init| {
-            let BodyReads { globals, callees } = &init.scan;
-            let via_calls = callees
+            let mut scan = BodyReads::default();
+            scan.visit_expr(&init.value);
+            let via_calls = scan
+                .callees
                 .iter()
                 .filter_map(|callee| reads_by_function.get(callee))
                 .flatten();
-            globals
+            scan.globals
                 .iter()
                 .chain(via_calls)
                 .filter_map(|key| key_to_idx.get(key).copied())
