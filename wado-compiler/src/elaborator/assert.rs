@@ -331,6 +331,12 @@ impl CaptureScanner {
     }
 
     fn add(&mut self, source: String, ast_id: AstId, is_place: bool, pos: &Position) {
+        // The condition is false whenever the message prints, and a binding of
+        // it would leave the check writing a local, which no optimizer then
+        // drives to `false`.
+        if pos.is_root {
+            return;
+        }
         let conditional = self.conditional;
         if is_place {
             self.places_behind.push(source.clone());
@@ -475,11 +481,7 @@ impl CaptureScanner {
     }
 
     fn scan_node(&mut self, expr: &Expr, ast_id: AstId, pos: &Position) {
-        let Position {
-            is_root,
-            conditional,
-            ..
-        } = *pos;
+        let conditional = pos.conditional;
         match expr {
             Expr::Ident(ident) => {
                 self.add(ident.name.clone(), ast_id, true, pos);
@@ -489,9 +491,7 @@ impl CaptureScanner {
                 self.conditional = conditional || matches!(b.op, BinaryOp::And | BinaryOp::Or);
                 self.scan(&b.right);
                 self.conditional = conditional;
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             // Bound whole, marker and all: a binding of the call or subscript
             // alone would leave the marker nothing to retarget.
@@ -517,9 +517,7 @@ impl CaptureScanner {
                     && place_root_name(&u.expr).is_some()
                 {
                     self.scan_place_operands(&u.expr);
-                    if !is_root {
-                        self.add(unparse_expr_source(expr), ast_id, false, pos);
-                    }
+                    self.add(unparse_expr_source(expr), ast_id, false, pos);
                     return;
                 }
                 self.scan(&u.expr);
@@ -528,9 +526,7 @@ impl CaptureScanner {
                 if u.op == UnaryOp::Ref && matches!(&u.expr, Expr::Ident(_)) {
                     return;
                 }
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
                 self.scan_call_operands(expr);
@@ -543,24 +539,18 @@ impl CaptureScanner {
                 for cmp in &chain.comparisons {
                     self.scan(&cmp.right);
                 }
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Cast(c) => {
                 if is_inert(expr) {
                     return;
                 }
                 self.scan(&c.expr);
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Matches(m) => {
                 self.scan_receiver(&m.expr);
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Index(i) => {
                 self.scan_receiver(&i.expr);
@@ -606,38 +596,28 @@ impl CaptureScanner {
                         }
                     }
                 }
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Match(m) => {
                 // Arms are not walked, for the reason `If` bodies are not.
                 self.writes.push(None);
                 self.scan(&m.expr);
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Block(_) | Expr::LabeledBlock(_) => {
                 // Statements are not walked: a binding inside one is not an
                 // operand of the condition.
                 self.writes.push(None);
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::Range(r) => {
                 self.scan(&r.start);
                 self.scan(&r.end);
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             Expr::TryOp(t) => {
                 self.scan(&t.expr);
-                if !is_root {
-                    self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
-                }
+                self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
             // Renders its signature, all `Inspect` has for one. The body is not
             // walked: nothing there has a value when the condition failed.

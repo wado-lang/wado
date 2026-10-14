@@ -388,7 +388,9 @@ fn licm_block(
         };
 
         if let Some(lb) = loop_body {
-            let (hoist_stmts, loop_changed) = licm_loop(engine, lb, ctx, outer_aliases);
+            let preheader = preheader_field_hoists(engine.body, &new_stmts, ctx);
+            let (hoist_stmts, loop_changed) =
+                licm_loop(engine, lb, ctx, outer_aliases, &preheader);
             changed |= loop_changed;
             new_stmts.extend(hoist_stmts);
         } else {
@@ -436,6 +438,7 @@ fn licm_loop(
     loop_body: BlockId,
     ctx: &mut LicmCtx,
     outer_aliases: &[(u32, u32)],
+    preheader: &[HoistedField],
 ) -> (Vec<StmtId>, bool) {
     let mut all_hoist_stmts = Vec::new();
     let mut changed = false;
@@ -504,6 +507,12 @@ fn licm_loop(
         // the replacement so every rewritten read reuses it verbatim.
         let mut replacements = Vec::with_capacity(candidates.len());
         for candidate in candidates {
+            if let Some(held) = preheader.iter().find(|h| {
+                h.local_index == candidate.local_index && h.field_index == candidate.field_index
+            }) {
+                replacements.push(held.clone());
+                continue;
+            }
             let local_type_id = {
                 let locals = engine.locals();
                 if (candidate.local_index as usize) < locals.len() {
@@ -578,6 +587,51 @@ fn licm_loop(
 
     changed |= !all_hoist_stmts.is_empty();
     (all_hoist_stmts, changed)
+}
+
+/// The field reads an earlier run hoisted into the `let`s directly ahead of a
+/// loop. Only hoists separate them from the loop, so each still holds what a
+/// new hoist of the same field would read, and reusing it keeps the guard and
+/// the checks it dominates reading one local.
+fn preheader_field_hoists(body: &Body, ahead: &[StmtId], ctx: &LicmCtx) -> Vec<HoistedField> {
+    ahead
+        .iter()
+        .rev()
+        .map_while(|&s| {
+            let StmtKind::Let {
+                name,
+                local_index,
+                is_mut,
+                value,
+                ..
+            } = &body.stmts[s].kind
+            else {
+                return None;
+            };
+            // A mutable hoist is a reload target, rewritten inside the loop.
+            if *is_mut || !ctx.hoist_locals.contains(local_index) {
+                return None;
+            }
+            Some((name, *local_index, value.as_expr()))
+        })
+        .filter_map(|(name, new_local_index, value)| {
+            let ExprKind::FieldAccess {
+                expr, field_index, ..
+            } = &body.exprs[value?].kind
+            else {
+                return None;
+            };
+            let ExprKind::Local { index, .. } = body.exprs[expr.as_expr()?].kind else {
+                return None;
+            };
+            Some(HoistedField {
+                local_index: index,
+                field_index: *field_index,
+                new_local_index,
+                name: name.clone(),
+            })
+        })
+        .collect()
 }
 
 /// Type of the source local a candidate reads, falling back to the field type
@@ -1681,6 +1735,7 @@ struct HoistCandidate {
 /// A hoist performed in step 4: the (source local, field) pair now served by
 /// the pre-header local `new_local_index`, whose allocated `name` every
 /// rewritten read reuses.
+#[derive(Clone)]
 struct HoistedField {
     local_index: u32,
     field_index: u32,

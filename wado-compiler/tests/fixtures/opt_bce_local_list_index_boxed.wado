@@ -1,0 +1,28 @@
+// A list built in the function and read under its loop guard keeps no index
+// check. Two things once kept it: LICM hoisted `v.used` a second time once the
+// check was inlined, so guard and check read different locals; and the check's
+// failure message boxes the index, which marked the loop counter aliased.
+
+#[inline(never)]
+fn sum3(a: i32) -> i32 {
+    let mut v: List<i32> = [];
+    v.push(a);
+    v.push(2);
+    v.push(3);
+    let mut s = 0;
+    for let mut i = 0; i < v.len(); i += 1 {
+        s += v[i];
+    }
+    return s;
+}
+
+export fn run() {
+    assert sum3(builtin::black_box(1)) == 6;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "opt_bce_local_list_index_boxed.wado/sum3",
+    "wir_not_expect:O2": ["$contract$index_value"]
+}
