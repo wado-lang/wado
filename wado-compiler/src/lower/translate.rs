@@ -19,6 +19,7 @@ use crate::call_args::CallArgs;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
+use crate::lower::plan::value_copy::points_to::PointsTo;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::MethodName;
 use crate::synthesis::common::builtin_call;
@@ -89,6 +90,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // (and a default build routes the marker back to a plain `panic`).
     bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
     let strings = string::plan(&flat);
+    // After the last rewrite of a body, which would move the arguments it keys.
+    let points_to = value_copy::points_to::compute(&flat, &closure.functor_infos);
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -142,6 +145,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     let translator = Translator {
         box_plan: &box_plan,
         value_copy: &value_copy,
+        points_to,
         closure: &closure,
         type_table: Rc::clone(&type_table),
         struct_fields_map,
@@ -255,6 +259,9 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
 struct Translator<'a> {
     box_plan: &'a BoxPlan,
     value_copy: &'a value_copy::ValueCopyPlan,
+    /// Computed on the TIR as the fold reads it: [`PointsTo::handed`] keys an
+    /// argument by its expression.
+    points_to: PointsTo,
     closure: &'a closure::ClosurePlan,
     type_table: Rc<RefCell<TypeTable>>,
     struct_fields_map: StructFields,
@@ -499,6 +506,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &type_table,
                     &resolver,
                     base.value_copy,
+                    &base.points_to,
                     &base.moved_local_spans,
                     &value_copy::reach::StorageReach::new(
                         &type_table,

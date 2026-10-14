@@ -64,6 +64,7 @@ pub fn analyze_ownership(
     type_table: &TypeTable,
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
+    points_to: &PointsTo,
     final_reads: &IndexSet<Span>,
     reach: &StorageReach<'_>,
 ) -> Ownership {
@@ -109,8 +110,8 @@ pub fn analyze_ownership(
         match_sources: Vec::new(),
         pending_writes: Vec::new(),
         handed: Vec::new(),
-        points_to: &plan.points_to,
-        frame: plan.points_to.frame(&func.module_source, &func.name),
+        points_to,
+        frame: points_to.frame(&func.module_source, &func.name),
         written_args: IndexSet::default(),
         exits: Vec::new(),
         all_locals,

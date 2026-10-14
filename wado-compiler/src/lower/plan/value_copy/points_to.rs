@@ -22,6 +22,7 @@ use super::funcset::FuncIndex;
 use super::is_reference_type;
 use super::last_use::collect_child_exprs;
 use super::place::could_write_through;
+use super::{EnvFrame, NEEDS_COPY_DEPTH_LIMIT, resolve_param_in_env};
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -31,6 +32,7 @@ use crate::tir::{
     ResolvedType, RetainInto, ReturnConvention, StructFields, TirBlock, TirExpr, TirExprKind,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeKey, TypeTable, struct_fields,
 };
+use crate::token::Span;
 
 /// A frame: a function, or a global's initializer, whose locals have locations
 /// of their own.
@@ -45,10 +47,11 @@ pub struct PointsTo {
     /// The frame and local each location node is, the inverse of `locals`.
     owners: IndexMap<u32, (Frame, u32)>,
     pts: Vec<IndexSet<u32>>,
-    /// The node the value each call argument hands its callee flows from,
-    /// keyed by the argument expression's address. Read only while the TIR it
-    /// was built from is unchanged, which holds from `plan` through the fold.
-    handed: IndexMap<usize, u32>,
+    /// The node the value each call argument hands its callee flows from, and
+    /// the argument's span, keyed by the argument expression's address. Valid
+    /// while no body is rewritten, as the fold, which computes and reads it,
+    /// rewrites none.
+    handed: IndexMap<usize, (u32, Span)>,
     /// What any call may write: [`Self::global_reach`].
     global_reach: IndexSet<u32>,
 }
@@ -101,8 +104,12 @@ impl PointsTo {
     /// not see.
     #[must_use]
     pub fn handed(&self, arg: &TirExpr) -> Option<&IndexSet<u32>> {
-        let node = self.handed.get(&std::ptr::from_ref(arg).addr())?;
-        Some(&self.pts[*node as usize])
+        let &(node, span) = self.handed.get(&std::ptr::from_ref(arg).addr())?;
+        assert_eq!(
+            span, arg.span,
+            "an argument keyed by address moved after the analysis"
+        );
+        Some(&self.pts[node as usize])
     }
 
     /// `from` and every location reachable from it: what a write through any of
@@ -137,6 +144,25 @@ enum Handle {
     Writes,
 }
 
+/// The types a walk is inside of: a struct by its type, a variant by its
+/// declaration and its arguments resolved to concrete types. A cycle back to
+/// one adds no path to a handle.
+type UnderWay = IndexSet<(Option<DefId>, Vec<TypeKey>)>;
+
+/// `walk` inside `key`, or `false` where `key` is already under way.
+fn guarded(
+    key: (Option<DefId>, Vec<TypeKey>),
+    under_way: &mut UnderWay,
+    walk: impl FnOnce(&mut UnderWay) -> bool,
+) -> bool {
+    if !under_way.insert(key.clone()) {
+        return false;
+    }
+    let answer = walk(under_way);
+    under_way.swap_remove(&key);
+    answer
+}
+
 /// Whether a value of a type holds a [`Handle`] at any depth. Everything else
 /// is a value, which assignment copies.
 struct HoldsHandle<'a> {
@@ -161,15 +187,24 @@ impl<'a> HoldsHandle<'a> {
         if let Some(&known) = self.known.borrow().get(&key) {
             return known;
         }
-        // A cycle back to a type under way adds no path to a reference.
-        let answer = self.walk(ty, &[], &mut IndexSet::default());
+        let answer = self.walk(ty, None, &mut IndexSet::default(), 0);
         self.known.borrow_mut().insert(key, answer);
         answer
     }
 
-    /// `env` holds the arguments a variant template's parameters take.
-    fn walk(&self, ty: TypeId, env: &[TypeId], under_way: &mut IndexSet<TypeKey>) -> bool {
+    /// `env` is what the template parameters `ty` is written in take.
+    fn walk(
+        &self,
+        ty: TypeId,
+        env: Option<&EnvFrame<'_>>,
+        under_way: &mut UnderWay,
+        depth: usize,
+    ) -> bool {
+        if depth > NEEDS_COPY_DEPTH_LIMIT {
+            return true;
+        }
         let tt = self.type_table;
+        let next = depth + 1;
         if tt.is_reference_shaped(ty) {
             let referent = match tt.get(ty) {
                 ResolvedType::Ref(payload) => Some(*payload),
@@ -177,15 +212,11 @@ impl<'a> HoldsHandle<'a> {
                 _ => tt.box_payload_of(ty).filter(|_| !tt.is_mut_box(ty)),
             };
             return match (self.handle, referent) {
-                (Handle::Writes, Some(payload)) => self.walk(payload, env, under_way),
+                (Handle::Writes, Some(payload)) => self.walk(payload, env, under_way, next),
                 _ => true,
             };
         }
-        let key = tt.type_key(ty);
-        if env.is_empty() && !under_way.insert(key) {
-            return false;
-        }
-        let answer = match tt.get(ty) {
+        match tt.get(ty) {
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -193,47 +224,69 @@ impl<'a> HoldsHandle<'a> {
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. } => false,
-            ResolvedType::Newtype { base_type, .. } => self.walk(*base_type, env, under_way),
+            ResolvedType::Newtype { base_type, .. } => self.walk(*base_type, env, under_way, next),
+            ResolvedType::BuiltinArray(element) => self.walk(*element, env, under_way, next),
             ResolvedType::Struct { def, type_args } => {
-                match self.fields.get(&(*def, type_args.clone())) {
-                    Some(fields) => fields.iter().any(|f| self.walk(f.type_id, &[], under_way)),
-                    None => true,
-                }
+                let Some(fields) = self.fields.get(&(*def, type_args.clone())) else {
+                    return true;
+                };
+                guarded((None, vec![tt.type_key(ty)]), under_way, |under_way| {
+                    fields
+                        .iter()
+                        .any(|f| self.walk(f.type_id, None, under_way, next))
+                })
             }
-            ResolvedType::BuiltinArray(element) => self.walk(*element, &[], under_way),
-            ResolvedType::Variant { def } => self.cases(*def, &[], under_way),
+            ResolvedType::Variant { def } => guarded((Some(*def), Vec::new()), under_way, |u| {
+                self.cases(*def, None, u, next)
+            }),
             ResolvedType::GenericInstance { def, type_args } => {
-                let args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&a| match tt.get(a) {
-                        ResolvedType::TypeParam { index, .. } => env[*index as usize],
-                        _ => a,
-                    })
-                    .collect();
                 if tt.is_tuple_def(*def) {
-                    args.iter().any(|&a| self.walk(a, &[], under_way))
-                } else if tt.variant_template_cases(*def).is_some() {
-                    self.cases(*def, &args, under_way)
-                } else {
-                    true
+                    return type_args
+                        .iter()
+                        .any(|&a| self.walk(a, env, under_way, next));
+                }
+                if tt.variant_template_cases(*def).is_none() {
+                    return true;
+                }
+                let frame = EnvFrame {
+                    args: type_args,
+                    family: &[],
+                    parent: env,
+                };
+                // An instance whose arguments resolve is under way once, so a
+                // variant recursing through its own instance ends there.
+                let resolved: Option<Vec<TypeKey>> = type_args
+                    .iter()
+                    .map(|&a| resolve_param_in_env(a, env, tt).map(|c| tt.type_key(c)))
+                    .collect();
+                match resolved {
+                    Some(args) => guarded((Some(*def), args), under_way, |u| {
+                        self.cases(*def, Some(&frame), u, next)
+                    }),
+                    None => self.cases(*def, Some(&frame), under_way, next),
                 }
             }
-            ResolvedType::TypeParam { index, .. } => match env.get(*index as usize) {
-                Some(&arg) => self.walk(arg, &[], under_way),
-                None => true,
-            },
+            ResolvedType::TypeParam { index, .. } => env
+                .and_then(|frame| Some((*frame.args.get(*index as usize)?, frame.parent)))
+                .is_none_or(|(arg, parent)| self.walk(arg, parent, under_way, next)),
             _ => true,
-        };
-        if env.is_empty() {
-            under_way.swap_remove(&key);
         }
-        answer
     }
 
-    fn cases(&self, def: DefId, env: &[TypeId], under_way: &mut IndexSet<TypeKey>) -> bool {
+    fn cases(
+        &self,
+        def: DefId,
+        env: Option<&EnvFrame<'_>>,
+        under_way: &mut UnderWay,
+        depth: usize,
+    ) -> bool {
         self.type_table
             .variant_template_cases(def)
-            .is_none_or(|cases| cases.iter().any(|&(_, _, p)| self.walk(p, env, under_way)))
+            .is_none_or(|cases| {
+                cases
+                    .iter()
+                    .any(|&(_, _, p)| self.walk(p, env, under_way, depth))
+            })
     }
 }
 
@@ -442,7 +495,7 @@ struct Builder<'a> {
     locals: IndexMap<(Frame, u32), u32>,
     globals: IndexMap<(ModuleSource, String), u32>,
     escape: u32,
-    handed: IndexMap<usize, u32>,
+    handed: IndexMap<usize, (u32, Span)>,
     next_frame: Frame,
     frame: Frame,
     /// Where a `return` in the current frame sends its value.
@@ -744,7 +797,8 @@ impl Builder<'_> {
         let recorded = self
             .join([writable_value, writable_own])
             .unwrap_or_else(|| self.g.node());
-        self.handed.insert(std::ptr::from_ref(arg).addr(), recorded);
+        self.handed
+            .insert(std::ptr::from_ref(arg).addr(), (recorded, arg.span));
         self.join([value, own])
     }
 
