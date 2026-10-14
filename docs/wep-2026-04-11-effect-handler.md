@@ -88,9 +88,11 @@ section records only the current state.
   `synthesize_post_check` (`WithHandler` desugaring) after
   `effect_check`. Per `(module, base, type_args)` instantiation
   key, the synthesis substitutes the resource's operation template
-  and emits a distinct `$Dispatch_Stream<u8>` struct +
-  `$effect_Stream<u8>` global + `$effect_dispatch__Stream<u8>__op`
-  wrapper triple. `&self` / `&mut self` shorthand on impl methods is
+  and emits a distinct `$Dispatch_<module>/Stream<u8>` struct +
+  `$effect_<module>/Stream<u8>` global +
+  `$effect_dispatch__<module>/Stream<u8>__op` wrapper triple. The
+  declaring module qualifies the label, so two modules may each
+  declare an interface of one name. `&self` / `&mut self` shorthand on impl methods is
   synthesised as a `TirEffectOp` receiver at index 0
   (`Self = GenericResource { name, module, type_args }`), and call
   sites — both static (`Stream::<u8>::new()`) and instance

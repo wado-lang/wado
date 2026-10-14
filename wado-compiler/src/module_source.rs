@@ -253,6 +253,7 @@ impl ModuleSourceInterner {
             interface: self.intern(interface),
         }
     }
+
     /// A remote package's entry module: it is its own package root.
     pub fn remote(&mut self, url: &str) -> ModuleSource {
         self.remote_module(url, url)

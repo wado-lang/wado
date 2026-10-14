@@ -162,12 +162,9 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
         if let TirExprKind::Call { func, .. } = &expr.kind
             && let Some((module, interface)) = func.module_source.effect_interface()
         {
-            let (module, interface) = (module.clone(), interface.to_string());
-            if self
-                .uncovered
-                .contains(&(module.clone(), interface.clone()))
-            {
-                self.called.insert((module, interface, Vec::new()));
+            let key = (module.clone(), interface.to_string());
+            if self.uncovered.contains(&key) {
+                self.called.insert((key.0, key.1, Vec::new()));
             }
         }
         self.walk_expr(expr);
