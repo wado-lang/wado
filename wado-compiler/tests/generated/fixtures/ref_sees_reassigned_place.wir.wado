@@ -127,7 +127,7 @@ type "functype//ref_sees_reassigned_place.wado/$cm_export__$test_1_an_assignment
 
 type "functype//ref_sees_reassigned_place.wado/$cm_export__$test_2_a_value_made_of_the_place_s_own_parts" = fn();  // TypeId(44)
 
-type "functype//ref_sees_reassigned_place.wado/$cm_export__$test_3_a_borrow_a_closure_captured" = fn();  // TypeId(45)
+type "functype//ref_sees_reassigned_place.wado/$cm_export__$test_3_a_reference_a_closure_captured" = fn();  // TypeId(45)
 
 type "functype//ref_sees_reassigned_place.wado/$cm_export__$test_4_a_list_element_of_a_struct_with_no_fields" = fn();  // TypeId(46)
 
@@ -167,7 +167,7 @@ type "functype//ref_sees_reassigned_place.wado/$test_1_an_assignment_in_expressi
 
 type "functype//ref_sees_reassigned_place.wado/$test_1_an_assignment_in_expression_position$cold2" = fn(i32);  // TypeId(64)
 
-type "functype//ref_sees_reassigned_place.wado/$test_3_a_borrow_a_closure_captured$cold0" = fn(i32);  // TypeId(65)
+type "functype//ref_sees_reassigned_place.wado/$test_3_a_reference_a_closure_captured$cold0" = fn(i32);  // TypeId(65)
 
 type "functype//ref_sees_reassigned_place.wado/$test_4_a_list_element_of_a_struct_with_no_fields$cold0" = fn();  // TypeId(66)
 
@@ -336,7 +336,7 @@ global global:ref_sees_reassigned_place.wado::$const_obj_156: ref Array<u8> = ar
 global global:ref_sees_reassigned_place.wado::$const_obj_157: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 101, 108, 101, 109, 101, 110, 116, 95, 105, 110, 95, 97, 110, 95, 97, 114, 109, 40, 51, 41, 32, 61, 61, 32, 54, 10);
 global global:ref_sees_reassigned_place.wado::$const_obj_180: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 115, 115, 105, 103, 110, 101, 100, 95, 117, 110, 100, 101, 114, 95, 97, 95, 99, 108, 111, 115, 117, 114, 101, 40, 51, 41, 58, 32);
 global global:ref_sees_reassigned_place.wado::$const_obj_181: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 114, 101, 97, 115, 115, 105, 103, 110, 101, 100, 95, 117, 110, 100, 101, 114, 95, 97, 95, 99, 108, 111, 115, 117, 114, 101, 40, 51, 41, 32, 61, 61, 32, 55, 10);
-global global:ref_sees_reassigned_place.wado::$const_obj_185: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 51, 95, 97, 95, 98, 111, 114, 114, 111, 119, 95, 97, 95, 99, 108, 111, 115, 117, 114, 101, 95, 99, 97, 112, 116, 117, 114, 101, 100);
+global global:ref_sees_reassigned_place.wado::$const_obj_185: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 51, 95, 97, 95, 114, 101, 102, 101, 114, 101, 110, 99, 101, 95, 97, 95, 99, 108, 111, 115, 117, 114, 101, 95, 99, 97, 112, 116, 117, 114, 101, 100);
 global global:ref_sees_reassigned_place.wado::$const_obj_187: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 115, 97, 109, 101, 10), used: 17 };
 global global:ref_sees_reassigned_place.wado::$const_obj_191: ref Array<u8> = array.new_fixed<u8>(36, 116, 101, 115, 116, 95, 52, 95, 97, 95, 108, 105, 115, 116, 95, 101, 108, 101, 109, 101, 110, 116, 95, 111, 102, 95, 97, 95, 115, 116, 114, 117, 99, 116, 95, 119, 105, 116, 104, 95, 110, 111, 95, 102, 105, 101, 108, 100, 115);
 global global:ref_sees_reassigned_place.wado::$const_obj_194: ref Array<u8> = array.new_fixed<u8>(114, 46, 115, 117, 109, 40, 41, 58, 32);
@@ -923,14 +923,14 @@ fn "ref_sees_reassigned_place.wado/$cm_export__$test_2_a_value_made_of_the_place
     "wasi/task-return"(0);
 }
 
-fn "ref_sees_reassigned_place.wado/$cm_export__$test_3_a_borrow_a_closure_captured"() {
+fn "ref_sees_reassigned_place.wado/$cm_export__$test_3_a_reference_a_closure_captured"() {
     let $v0: i32;
     let x: ref "ref_sees_reassigned_place.wado//P";
     local.tee x(struct.new "ref_sees_reassigned_place.wado//P" { a: 1, b: 3 }).a = 7;
     x.b = 3;
     if @unlikely(local.tee $v0(x.a) != 7) {
         cold_path;
-        "ref_sees_reassigned_place.wado/$test_3_a_borrow_a_closure_captured$cold0"($v0);
+        "ref_sees_reassigned_place.wado/$test_3_a_reference_a_closure_captured$cold0"($v0);
         unreachable;
     }
     "wasi/task-return"(0);
@@ -1138,22 +1138,22 @@ fn "ref_sees_reassigned_place.wado/$test_1_an_assignment_in_expression_position$
     unreachable;
 }
 
-fn "ref_sees_reassigned_place.wado/$test_3_a_borrow_a_closure_captured$cold0"($v0) {
+fn "ref_sees_reassigned_place.wado/$test_3_a_reference_a_closure_captured$cold0"($v0) {
     let $load_0: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     let offset_13: i32;
     let f_29: ref "core:prelude/format.wado//Formatter";
-    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(168), used: 0 }), 90);
+    $fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(168), used: 0 }), 93);
     builtin::array_copy<u8>(local.tee $load_0($local_2.repr), $fuse_at_5, global:ref_sees_reassigned_place.wado::$const_obj_20, 0, 20);
     offset_13 = $fuse_at_5 + 20;
-    builtin::array_copy<u8>($load_0, offset_13, global:ref_sees_reassigned_place.wado::$const_obj_185, 0, 35);
-    offset_13 = $fuse_at_5 + 55;
+    builtin::array_copy<u8>($load_0, offset_13, global:ref_sees_reassigned_place.wado::$const_obj_185, 0, 38);
+    offset_13 = $fuse_at_5 + 58;
     builtin::array_copy<u8>($load_0, offset_13, global:ref_sees_reassigned_place.wado::$const_obj_18, 0, 4);
-    offset_13 = $fuse_at_5 + 59;
+    offset_13 = $fuse_at_5 + 62;
     builtin::array_copy<u8>($load_0, offset_13, global:ref_sees_reassigned_place.wado::$const_obj_17, 0, 30);
-    $fuse_at_5 = $fuse_at_5 + 89;
+    $fuse_at_5 = $fuse_at_5 + 92;
     builtin::array_copy<u8>($load_0, $fuse_at_5, global:ref_sees_reassigned_place.wado::$const_obj_16, 0, 1);
     f_29 = local.tee $local_3("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2));
     "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(145, f_29);
@@ -2948,7 +2948,7 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_0_a_place_below_the_assigned_one" as "$test_0_a_place_below_the_assigned_one"
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_1_an_assignment_in_expression_position" as "$test_1_an_assignment_in_expression_position"
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_2_a_value_made_of_the_place_s_own_parts" as "$test_2_a_value_made_of_the_place_s_own_parts"
-export fn "ref_sees_reassigned_place.wado/$cm_export__$test_3_a_borrow_a_closure_captured" as "$test_3_a_borrow_a_closure_captured"
+export fn "ref_sees_reassigned_place.wado/$cm_export__$test_3_a_reference_a_closure_captured" as "$test_3_a_reference_a_closure_captured"
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_4_a_list_element_of_a_struct_with_no_fields" as "$test_4_a_list_element_of_a_struct_with_no_fields"
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_5_a_local" as "$test_5_a_local"
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_6_a_struct_field" as "$test_6_a_struct_field"

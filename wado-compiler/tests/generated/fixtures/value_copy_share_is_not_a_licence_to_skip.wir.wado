@@ -56,7 +56,7 @@ type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_3_a_share_p
 
 type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_4_a_release_does_not_travel_to_a_chain_whose_root_is_read_again" = fn();  // TypeId(18)
 
-type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow" = fn();  // TypeId(19)
+type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference" = fn();  // TypeId(19)
 
 type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_6_a_share_does_not_outlive_an_in_place_assignment_under_a_reference_local" = fn();  // TypeId(20)
 
@@ -70,7 +70,7 @@ type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test
 
 type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_4_a_release_does_not_travel_to_a_chain_whose_root_is_read_again" = fn();  // TypeId(25)
 
-type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow" = fn();  // TypeId(26)
+type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference" = fn();  // TypeId(26)
 
 type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_6_a_share_does_not_outlive_an_in_place_assignment_under_a_reference_local" = fn();  // TypeId(27)
 
@@ -78,9 +78,9 @@ type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_bi
 
 type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it$cold1" = fn(i32);  // TypeId(29)
 
-type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow$cold0" = fn(i32);  // TypeId(30)
+type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold0" = fn(i32);  // TypeId(30)
 
-type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow$cold1" = fn(i32);  // TypeId(31)
+type "functype//value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold1" = fn(i32);  // TypeId(31)
 
 type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(32)
 
@@ -249,7 +249,7 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_4_a_release_does_not_tr
     };
 }
 
-fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow"() {
+fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference"() {
     let b: ref "core:prelude//List<i32>";
     let c: ref "core:prelude//List<i32>";
     let $v0_5: i32;
@@ -270,12 +270,12 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outl
     c.used = 2 + 1;
     if @unlikely((local.tee $v0_5(b.used) == 0) == 0) {
         cold_path;
-        "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow$cold1"($v0_5);
+        "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold1"($v0_5);
         unreachable;
     }
     if @unlikely(local.tee $v0_5(c.used) != 3) {
         cold_path;
-        "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow$cold0"($v0_5);
+        "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold0"($v0_5);
         unreachable;
     }
 }
@@ -323,8 +323,8 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_4_a_release
     "wasi/task-return"(0);
 }
 
-fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow"() {
-    "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow"();
+fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference"() {
+    "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference"();
     "wasi/task-return"(0);
 }
 
@@ -359,29 +359,29 @@ fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_2_an_arm_binding_read_a
     unreachable;
 }
 
-fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow$cold0"($v0) {
+fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold0"($v0) {
     let $load_0: ref Array<u8>;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_16: i32;
     let offset_24: i32;
     let f_40: ref "core:prelude/format.wado//Formatter";
-    "core:rt/panic"($fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_11(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(124), used: 0 }), 148); builtin::array_copy<u8>(local.tee $load_0($local_11.repr), $fuse_at_16, global:core:prelude/string.wado::$const_obj_13, 0, 20); offset_24 = $fuse_at_16 + 20; if ref.is_null(global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_124) {
-        global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_124 = array.new_data<u8>("$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow");
-    }; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_124, 0, 77); offset_24 = $fuse_at_16 + 97; builtin::array_copy<u8>($load_0, offset_24, global:core:prelude/string.wado::$const_obj_11, 0, 4); offset_24 = $fuse_at_16 + 101; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_66, 0, 46); $fuse_at_16 = $fuse_at_16 + 147; builtin::array_copy<u8>($load_0, $fuse_at_16, global:core:prelude/string.wado::$const_obj_9, 0, 1); f_40 = local.tee $local_12("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_11)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(99, f_40); $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_11, 34); builtin::array_copy<u8>(local.tee $load_0($local_11.repr), $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_120, 0, 25); $fuse_at_16 = $fuse_at_16 + 25; builtin::array_copy<u8>($load_0, $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_119, 0, 9); $local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_11); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, $local_12); "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_11, global:core:prelude/string.wado::$const_obj_4); $local_11);
+    "core:rt/panic"($fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_11(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(124), used: 0 }), 151); builtin::array_copy<u8>(local.tee $load_0($local_11.repr), $fuse_at_16, global:core:prelude/string.wado::$const_obj_13, 0, 20); offset_24 = $fuse_at_16 + 20; if ref.is_null(global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_124) {
+        global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_124 = array.new_data<u8>("$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference");
+    }; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_124, 0, 80); offset_24 = $fuse_at_16 + 100; builtin::array_copy<u8>($load_0, offset_24, global:core:prelude/string.wado::$const_obj_11, 0, 4); offset_24 = $fuse_at_16 + 104; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_66, 0, 46); $fuse_at_16 = $fuse_at_16 + 150; builtin::array_copy<u8>($load_0, $fuse_at_16, global:core:prelude/string.wado::$const_obj_9, 0, 1); f_40 = local.tee $local_12("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_11)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(99, f_40); $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_11, 34); builtin::array_copy<u8>(local.tee $load_0($local_11.repr), $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_120, 0, 25); $fuse_at_16 = $fuse_at_16 + 25; builtin::array_copy<u8>($load_0, $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_119, 0, 9); $local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_11); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, $local_12); "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_11, global:core:prelude/string.wado::$const_obj_4); $local_11);
     unreachable;
 }
 
-fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow$cold1"($v0) {
+fn "value_copy_share_is_not_a_licence_to_skip.wado/$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference$cold1"($v0) {
     let $load_0: ref Array<u8>;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_16: i32;
     let offset_24: i32;
     let f_40: ref "core:prelude/format.wado//Formatter";
-    "core:rt/panic"($fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 }), 148); builtin::array_copy<u8>(local.tee $load_0($local_9.repr), $fuse_at_16, global:core:prelude/string.wado::$const_obj_13, 0, 20); offset_24 = $fuse_at_16 + 20; if ref.is_null(global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_132) {
-        global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_132 = array.new_data<u8>("$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow");
-    }; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_132, 0, 77); offset_24 = $fuse_at_16 + 97; builtin::array_copy<u8>($load_0, offset_24, global:core:prelude/string.wado::$const_obj_11, 0, 4); offset_24 = $fuse_at_16 + 101; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_66, 0, 46); $fuse_at_16 = $fuse_at_16 + 147; builtin::array_copy<u8>($load_0, $fuse_at_16, global:core:prelude/string.wado::$const_obj_9, 0, 1); f_40 = local.tee $local_10("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(98, f_40); $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 40); builtin::array_copy<u8>(local.tee $load_0($local_9.repr), $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_128, 0, 28); $fuse_at_16 = $fuse_at_16 + 28; builtin::array_copy<u8>($load_0, $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_127, 0, 12); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, $local_10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_9, global:core:prelude/string.wado::$const_obj_4); $local_9);
+    "core:rt/panic"($fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_9(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 }), 151); builtin::array_copy<u8>(local.tee $load_0($local_9.repr), $fuse_at_16, global:core:prelude/string.wado::$const_obj_13, 0, 20); offset_24 = $fuse_at_16 + 20; if ref.is_null(global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_132) {
+        global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_132 = array.new_data<u8>("$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference");
+    }; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_132, 0, 80); offset_24 = $fuse_at_16 + 100; builtin::array_copy<u8>($load_0, offset_24, global:core:prelude/string.wado::$const_obj_11, 0, 4); offset_24 = $fuse_at_16 + 104; builtin::array_copy<u8>($load_0, offset_24, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_66, 0, 46); $fuse_at_16 = $fuse_at_16 + 150; builtin::array_copy<u8>($load_0, $fuse_at_16, global:core:prelude/string.wado::$const_obj_9, 0, 1); f_40 = local.tee $local_10("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9)); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(98, f_40); $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 40); builtin::array_copy<u8>(local.tee $load_0($local_9.repr), $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_128, 0, 28); $fuse_at_16 = $fuse_at_16 + 28; builtin::array_copy<u8>($load_0, $fuse_at_16, global:value_copy_share_is_not_a_licence_to_skip.wado::$const_obj_127, 0, 12); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, $local_10); "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_9, global:core:prelude/string.wado::$const_obj_4); $local_9);
     unreachable;
 }
 
@@ -1017,5 +1017,5 @@ export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_1_a_
 export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it" as "$test_2_an_arm_binding_read_again_inside_the_arm_is_not_moved_out_from_under_it"
 export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_3_a_share_plus_a_repoint_still_copies_where_the_binding_is_read_again" as "$test_3_a_share_plus_a_repoint_still_copies_where_the_binding_is_read_again"
 export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_4_a_release_does_not_travel_to_a_chain_whose_root_is_read_again" as "$test_4_a_release_does_not_travel_to_a_chain_whose_root_is_read_again"
-export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow" as "$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_borrow"
+export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference" as "$test_5_a_share_does_not_outlive_an_in_place_assignment_under_a_stored_reference"
 export fn "value_copy_share_is_not_a_licence_to_skip.wado/$cm_export__$test_6_a_share_does_not_outlive_an_in_place_assignment_under_a_reference_local" as "$test_6_a_share_does_not_outlive_an_in_place_assignment_under_a_reference_local"

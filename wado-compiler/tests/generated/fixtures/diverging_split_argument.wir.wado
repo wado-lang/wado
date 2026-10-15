@@ -57,7 +57,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(13)
 
 type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//diverging_split_argument.wado/borrowed_sum" = fn(i32, i32) -> i32;  // TypeId(15)
+type "functype//diverging_split_argument.wado/ref_sum" = fn(i32, i32) -> i32;  // TypeId(15)
 
 type "functype//diverging_split_argument.wado/owned_sum" = fn(i32, i32) -> i32;  // TypeId(16)
 
@@ -136,7 +136,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
 global global:diverging_split_argument.wado::$const_obj_5: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 119, 110, 101, 100), used: 5 };
-global global:diverging_split_argument.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 114, 114, 111, 119, 101, 100), used: 8 };
+global global:diverging_split_argument.wado::$const_obj_6: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 102, 101, 114, 101, 110, 99, 101, 100), used: 10 };
 global global:diverging_split_argument.wado::$const_obj_7: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:diverging_split_argument.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(111, 119, 110, 101, 100, 95, 115, 117, 109, 40, 112, 41, 58, 32);
 global global:diverging_split_argument.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(10);
@@ -147,8 +147,8 @@ global global:diverging_split_argument.wado::$const_obj_13: ref Array<u8> = arra
 global global:diverging_split_argument.wado::$const_obj_14: ref Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
 global global:diverging_split_argument.wado::$const_obj_15: ref Array<u8> = array.new_fixed<u8>(114, 117, 110);
 global global:diverging_split_argument.wado::$const_obj_16: ref Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global global:diverging_split_argument.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(98, 111, 114, 114, 111, 119, 101, 100, 95, 115, 117, 109, 40, 38, 112, 41, 58, 32);
-global global:diverging_split_argument.wado::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 98, 111, 114, 114, 111, 119, 101, 100, 95, 115, 117, 109, 40, 38, 112, 41, 32, 61, 61, 32, 51, 10);
+global global:diverging_split_argument.wado::$const_obj_18: ref Array<u8> = array.new_fixed<u8>(114, 101, 102, 95, 115, 117, 109, 40, 38, 112, 41, 58, 32);
+global global:diverging_split_argument.wado::$const_obj_21: ref Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 114, 101, 102, 95, 115, 117, 109, 40, 38, 112, 41, 32, 61, 61, 32, 51, 10);
 global global:core:prelude/traits.wado::$const_obj_27: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
 global global:core:prelude/traits.wado::$const_obj_28: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 global global:core:prelude/traits.wado::$const_obj_29: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44, 32), used: 2 };
@@ -160,7 +160,7 @@ global global:core:prelude/primitive.wado::$const_obj_40: ref "core:prelude/stri
 global global:core:prelude/traits.wado::$const_obj_41: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 };
 global global:core:prelude/traits.wado::$const_obj_42: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(80, 97, 105, 114), used: 4 };
 
-fn "diverging_split_argument.wado/borrowed_sum"($mv$p$a, $mv$p$b) {
+fn "diverging_split_argument.wado/ref_sum"($mv$p$a, $mv$p$b) {
     return $mv$p$a + $mv$p$b;
 }
 
@@ -177,9 +177,9 @@ fn "diverging_split_argument.wado/run"() {
     let $fuse_at_9: i32;
     let offset_21: i32;
     let f_37: ref "core:prelude/format.wado//Formatter";
-    if @unlikely(local.tee $v1_1("diverging_split_argument.wado/borrowed_sum"(local.tee p(struct.new "diverging_split_argument.wado//Pair" { a: black_box(1), b: black_box(2) }).a, p.b)) != 3) {
+    if @unlikely(local.tee $v1_1("diverging_split_argument.wado/ref_sum"(local.tee p(struct.new "diverging_split_argument.wado//Pair" { a: black_box(1), b: black_box(2) }).a, p.b)) != 3) {
         cold_path;
-        $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(162), used: 0 }), 57);
+        $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee $local_5(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(152), used: 0 }), 57);
         builtin::array_copy<u8>(local.tee $load_2($local_5.repr), $fuse_at_9, global:diverging_split_argument.wado::$const_obj_16, 0, 20);
         offset_21 = $fuse_at_9 + 20;
         builtin::array_copy<u8>($load_2, offset_21, global:diverging_split_argument.wado::$const_obj_15, 0, 3);
@@ -191,16 +191,16 @@ fn "diverging_split_argument.wado/run"() {
         builtin::array_copy<u8>($load_2, $fuse_at_9, global:diverging_split_argument.wado::$const_obj_12, 0, 1);
         f_37 = local.tee $local_6("core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5));
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(21, f_37);
-        $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 37);
-        builtin::array_copy<u8>(local.tee $load_2($local_5.repr), $fuse_at_9, global:diverging_split_argument.wado::$const_obj_21, 0, 34);
-        $fuse_at_9 = $fuse_at_9 + 34;
+        $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 32);
+        builtin::array_copy<u8>(local.tee $load_2($local_5.repr), $fuse_at_9, global:diverging_split_argument.wado::$const_obj_21, 0, 29);
+        $fuse_at_9 = $fuse_at_9 + 29;
         builtin::array_copy<u8>($load_2, $fuse_at_9, global:diverging_split_argument.wado::$const_obj_10, 0, 3);
         $local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
         "core:prelude/traits.wado/diverging_split_argument.wado/Pair^core:prelude/traits.wado/Inspect::inspect"(p, $local_6);
-        $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 19);
+        $fuse_at_9 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_5, 14);
         builtin::array_copy<u8>(local.tee $load_2($local_5.repr), $fuse_at_9, global:diverging_split_argument.wado::$const_obj_9, 0, 1);
         $fuse_at_9 = $fuse_at_9 + 1;
-        builtin::array_copy<u8>($load_2, $fuse_at_9, global:diverging_split_argument.wado::$const_obj_18, 0, 18);
+        builtin::array_copy<u8>($load_2, $fuse_at_9, global:diverging_split_argument.wado::$const_obj_18, 0, 13);
         $local_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_5);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v1_1, $local_6);
         "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:diverging_split_argument.wado::$const_obj_7, $local_5);
@@ -241,7 +241,7 @@ fn "diverging_split_argument.wado/run"() {
         drop(block -> i32 {
             "core:rt/panic"(local.tee $local_5(global:diverging_split_argument.wado::$const_obj_6).repr, $local_5.used);
             unreachable;
-            "diverging_split_argument.wado/borrowed_sum"();
+            "diverging_split_argument.wado/ref_sum"();
         });
         drop(block -> i32 {
             "core:rt/panic"(local.tee $local_5(global:diverging_split_argument.wado::$const_obj_5).repr, $local_5.used);
