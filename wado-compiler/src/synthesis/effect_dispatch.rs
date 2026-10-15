@@ -1588,7 +1588,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     handler_type,
                     h_local,
                     &h_name,
-                    &interface_name,
+                    interface_name,
                     &env.entry_source,
                     &env.type_table,
                 )
@@ -1602,7 +1602,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 // does unhandled. `..trap` above wins over that — a mock means
                 // it — and a boundary-open operation keeps the wrapper's
                 // routing to the consumer's implementation.
-                build_default_closure(op, plan, &interface_name, &env.type_table)
+                build_default_closure(op, plan, interface_name, &env.type_table)
             } else {
                 build_trap_closure(op, &env.type_table)
             };
