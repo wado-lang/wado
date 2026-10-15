@@ -463,7 +463,7 @@ fn end_fn(w: &mut CodeWriter, ctx: &mut EmitContext) {
     w.end();
 }
 
-/// What a scan call passes after the position: the parser state it borrows,
+/// What a scan call passes after the position: the parser state it takes by `&mut`,
 /// the live `min_prec` where the callee is a helper that takes it, the caller's
 /// follow where the rule reads one, and `lr_cont` inside an atom that owes it.
 /// The walker takes its `min_prec` after these, so a call to it passes that
@@ -7923,7 +7923,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice>(
             }
             if ctx.ambiguous_routes_via_atn(a, rule_display) {
                 let in_scan = side matches { Scan };
-                assert !in_scan || ctx.plan.needs_atn, "a scan picks through the ATN only where every scan borrows its state";
+                assert !in_scan || ctx.plan.needs_atn, "a scan picks through the ATN only where every scan takes its state by `&mut`";
                 let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
                 let dec = ctx.plan.atn_rule_body_decision(ctx.cursor.current_rule_index());
                 if in_scan {

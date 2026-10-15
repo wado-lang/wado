@@ -1,14 +1,14 @@
-// Constant Object Globalization through a chain of read-only borrows.
+// Constant Object Globalization through a chain of `&` references.
 //
 // The serde derivation writes `st.field(&"created_at", &value)`, so the wire
-// key is a constant `String` literal borrowed at a call argument. `field` hands
-// that borrow on to a writer, which hands it on again and finally reads its
-// bytes through `array.get` / `array.copy` — all read-only, none of them
-// keeping the referent past the call. Handing a borrow on is therefore not an
-// escape, and the key is built once at instantiation instead of allocating a
-// `String` header plus a byte array per field per call.
+// key is a constant `String` literal referenced at a call argument. `field`
+// hands that reference on to a writer, which hands it on again and finally
+// reads its bytes through `array.get` / `array.copy` — all read-only, none of
+// them keeping the referent past the call. Handing a reference on is therefore
+// not an escape, and the key is built once at instantiation instead of
+// allocating a `String` header plus a byte array per field per call.
 //
-// The shape below is that chain in miniature: `emit` borrows the literal,
+// The shape below is that chain in miniature: `emit` takes `&` of the literal,
 // `relay` passes it on, `total` reads it through a hoisted local the way LICM
 // leaves one. Without the pass the loop allocates a fresh literal per
 // iteration.
@@ -47,5 +47,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "30 3108\n",
-    "wir_expect:O2": ["/relay\"(global:const_object_globalization_borrow_passthrough.wado::$const_obj"]
+    "wir_expect:O2": ["/relay\"(global:const_object_globalization_ref_passthrough.wado::$const_obj"]
 }

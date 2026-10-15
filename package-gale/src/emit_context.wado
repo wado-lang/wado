@@ -23,12 +23,12 @@ use { HashMap, HashSet } from "core:collections";
 use { GALE_SEED } from "./hash_seed.wado";
 
 /// The parser's ATN predictor (`AtnPredictor`): its field, and the name a scan
-/// function's `&mut` parameter borrows it under.
+/// function's `&mut` parameter refers to it by.
 pub global ATN_HANDLE: String = "atn";
 pub global ATN_PREDICTOR_TYPE: String = "AtnPredictor";
 
 /// The parser's scan memo (`ScanMemo`): its field, and the name a scan
-/// function's `&mut` parameter borrows it under.
+/// function's `&mut` parameter refers to it by.
 pub global SCAN_MEMO_HANDLE: String = "memo";
 
 /// `scan_<snake>`, the name of the rule `snake`'s scan function where it is
@@ -541,7 +541,7 @@ impl EmitContext {
     }
 
     /// The caller stack pushed and predicted with, as this code reaches it. A
-    /// scan borrows the parser's, so one launched mid-parse has full context.
+    /// scan refers to the parser's, so one launched mid-parse has full context.
     pub fn atn_stack_place(&self) -> String {
         return `${self.atn_path()}.stack`;
     }
@@ -556,7 +556,7 @@ impl EmitContext {
         return self.state_arg(ATN_HANDLE, ATN_HANDLE);
     }
 
-    /// Parser state a scan borrows, as a place: the scan's parameter `handle`,
+    /// Parser state a scan refers to, as a place: the scan's parameter `handle`,
     /// or the parser's `field` anywhere else.
     fn state_path<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
         if self.cursor.in_scan_fn() {
@@ -565,15 +565,15 @@ impl EmitContext {
         return `${PARSER_HANDLE}.${field}`;
     }
 
-    /// Parser state a scan borrows, as an argument: the scan's borrow passed
-    /// on, or a fresh borrow of the parser's field.
+    /// Parser state a scan refers to, as an argument: the scan's reference
+    /// passed on, or a fresh `&mut` of the parser's field.
     fn state_arg<S: AsStrSlice, S1: AsStrSlice>(&self, handle: S, field: S1) -> String {
         let path = self.state_path(handle, field);
         return if self.cursor.in_scan_fn() { path } else { `&mut ${path}` };
     }
 
-    /// The trailing arguments of a scan call for the parser state it borrows:
-    /// the gate, the ATN state, then the memo. Empty where the scan borrows
+    /// The trailing arguments of a scan call for the parser state it refers to:
+    /// the gate, the ATN state, then the memo. Empty where the scan refers to
     /// none of them.
     pub fn scan_state_args(&self) -> List<String> {
         let mut args: List<String> = [];

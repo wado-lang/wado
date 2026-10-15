@@ -129,7 +129,7 @@ test "text lookups find, miss, and skip a removed key" {
     assert map.get_str("key99") == null;
 }
 
-test "a value is borrowed and mutated in place through its key" {
+test "a value is referenced and mutated in place through its key" {
     let mut map = HashMap::<String, List<i32>>::new();
     map["a"] = [];
     map["a"].push(1);
@@ -149,7 +149,7 @@ test "reading a missing key panics" {
 }
 
 #[expect_trap]
-test "borrowing a missing key panics" {
+test "referencing a missing key panics" {
     let map = HashMap::<String, List<i32>>::new();
     let _ = &map["missing"];
 }

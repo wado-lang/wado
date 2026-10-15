@@ -508,7 +508,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     // Runtime ATN simulator state (only when a non-greedy / LR decision needs
     // it); the decoded ATN is shared via the module-level `ATN_SIM`.
     // `atn.stack` is the caller stack of ATN return states for full-context
-    // prediction, which a simulating scan borrows so it continues the parse's
+    // prediction, which a simulating scan takes by `&mut` so it continues the parse's
     // frames. `atn_ret_pending` passes a call site's return state to the
     // callee's entry wrapper, which pushes it and resets to -1 (an unstamped
     // call pushes -1 = unknown caller, handled as SLL).

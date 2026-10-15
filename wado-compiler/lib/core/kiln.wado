@@ -78,7 +78,7 @@ fn decode_to_end(content: &Stream<u8>) -> Result<String, Utf8Error> {
 /// second copy of the file exists. `Err` is a malformed input, not a bug.
 pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> {
     // A `Stream` handle is outside the compiler's drop elaboration. The decode
-    // borrows it, so no early return can leave this body before the drop.
+    // takes it by `&`, so no early return can leave this body before the drop.
     let decoded = decode_to_end(&content);
     content.drop();
     return decoded;
