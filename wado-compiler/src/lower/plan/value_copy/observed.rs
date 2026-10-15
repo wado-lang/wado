@@ -1,15 +1,16 @@
 //! The fields whose storage a reference may observe across an assignment the
 //! assigning body cannot see (WEP 2026-10-13).
 //!
-//! A body answers for its own borrows from its liveness, whatever the place's
-//! root. What it cannot see is a borrow another body holds while it runs, and
-//! that is this set: a field a borrow is taken through, where the borrow
+//! A body answers for its own references from its liveness, whatever the
+//! place's root. What it cannot see is a reference another body holds while it
+//! runs, and that is this set: a field a reference is taken through, where the
+//! reference
 //!
-//! - outlives the borrowing body: returned, stored, or kept by a callee where
+//! - outlives the body taking it: returned, stored, or kept by a callee where
 //!   the body cannot name it;
-//! - is held in one of the borrowing body's locals while it makes a call that
-//!   may write the field;
-//! - is lent to a call that may write the field.
+//! - is held in one of that body's locals while it makes a call that may write
+//!   the field;
+//! - is handed to a call that may write the field.
 
 use super::funcset::FuncKeySet;
 use super::modref::ModRef;
@@ -25,7 +26,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// `(owner, field)` pairs some borrow may observe from outside the body that
+/// `(owner, field)` pairs some reference may observe from outside the body that
 /// assigns them.
 #[derive(Default)]
 pub struct ObservedFields(IndexSet<(TypeId, u32)>);
@@ -64,7 +65,7 @@ pub fn compute(
             retention,
             mod_ref,
             ref_receiver_methods,
-            lent: IndexSet::default(),
+            handed: IndexSet::default(),
             frame_bound: IndexSet::default(),
             escaping: Vec::new(),
             held: Vec::new(),
@@ -84,9 +85,9 @@ struct Scan<'a> {
     retention: &'a CallRetention,
     mod_ref: &'a ModRef,
     ref_receiver_methods: &'a FuncKeySet,
-    /// The borrows a call argument already answered for, by address, so the
+    /// The references a call argument already answered for, by address, so the
     /// walk below them does not count them again.
-    lent: IndexSet<*const TirExpr>,
+    handed: IndexSet<*const TirExpr>,
     /// Calls whose result a local of this body holds, by address.
     frame_bound: IndexSet<*const TirExpr>,
     escaping: Vec<Steps>,
@@ -130,7 +131,7 @@ impl Scan<'_> {
                 self.field_steps(expr, out);
                 out.push((field_owner(expr.type_id, self.type_table), *field_index));
             }
-            // A reborrow `&*&place` names `place`.
+            // A re-reference `&*&place` names `place`.
             TirExprKind::Index { expr, .. }
             | TirExprKind::Cast { expr, .. }
             | TirExprKind::VariantPayload { expr, .. }
@@ -139,42 +140,42 @@ impl Scan<'_> {
         }
     }
 
-    /// The steps `place` passes through, its inner borrows answered by the
-    /// borrow of `place` itself.
+    /// The steps `place` passes through, its inner references answered by the
+    /// reference to `place` itself.
     fn steps(&mut self, place: &TirExpr) -> Steps {
         let mut out = Vec::new();
         self.field_steps(place, &mut out);
-        self.mark_inner_borrows(place);
+        self.mark_inner_refs(place);
         out
     }
 
-    fn mark_inner_borrows(&mut self, place: &TirExpr) {
+    fn mark_inner_refs(&mut self, place: &TirExpr) {
         match &place.kind {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr,
             } => {
-                self.lent.insert(std::ptr::from_ref(place));
-                self.mark_inner_borrows(expr);
+                self.handed.insert(std::ptr::from_ref(place));
+                self.mark_inner_refs(expr);
             }
             TirExprKind::FieldAccess { expr, .. }
             | TirExprKind::Index { expr, .. }
             | TirExprKind::Cast { expr, .. }
             | TirExprKind::VariantPayload { expr, .. }
-            | TirExprKind::Unary { expr, .. } => self.mark_inner_borrows(expr),
+            | TirExprKind::Unary { expr, .. } => self.mark_inner_refs(expr),
             _ => {}
         }
     }
 
-    /// A borrow of `place` lent to `func` at `position` of `call`. Kept only in
+    /// A reference to `place` handed to `func` at `position` of `call`. Kept only in
     /// the result, it is held where the result is: in this body's local for a
     /// frame-bound call, anywhere otherwise. Not kept, it is observed only from
     /// the outermost field the callee may write, since only an assignment the
     /// call makes can meet it.
-    fn lend(&mut self, place: &TirExpr, func: &FunctionRef, position: u32, call: &TirExpr) {
+    fn hand_ref(&mut self, place: &TirExpr, func: &FunctionRef, position: u32, call: &TirExpr) {
         let steps = self.steps(place);
         let TirExprKind::Call { args, .. } = &call.kind else {
-            unreachable!("a lent borrow is a call's argument")
+            unreachable!("a handed reference is a call's argument")
         };
         let retained = self.retention.of_call(
             func,
@@ -260,17 +261,17 @@ impl Scan<'_> {
         }
     }
 
-    /// A value a local of this body takes: a borrow there is held, and so is
+    /// A value a local of this body takes: a reference there is held, and so is
     /// one a call keeps in the result the local takes.
     fn bind_local(&mut self, value: &TirExpr) {
         let mut value = value;
         while let TirExprKind::Cast { expr, .. } = &value.kind {
             value = expr;
         }
-        if let Some(place) = borrowed_place(value) {
+        if let Some(place) = referenced_place(value) {
             let steps = self.steps(place);
             self.held.push(steps);
-            self.lent.insert(std::ptr::from_ref(value));
+            self.handed.insert(std::ptr::from_ref(value));
         } else if matches!(value.kind, TirExprKind::Call { .. }) {
             self.frame_bound.insert(std::ptr::from_ref(value));
         }
@@ -301,27 +302,27 @@ impl TirRefVisitor for Scan<'_> {
                 self.callees.push((**func).clone());
                 for (position, arg) in args.iter().enumerate() {
                     let position = u32::try_from(position).expect("arity");
-                    if let Some(place) = borrowed_place(&arg.expr) {
-                        self.lend(place, func, position, expr);
-                        self.lent.insert(std::ptr::from_ref(&arg.expr));
+                    if let Some(place) = referenced_place(&arg.expr) {
+                        self.hand_ref(place, func, position, expr);
+                        self.handed.insert(std::ptr::from_ref(&arg.expr));
                     }
                 }
-                // A `&self` / `&mut self` receiver is borrowed with no `&`.
+                // A `&self` / `&mut self` receiver is referenced with no `&`.
                 if let Some((receiver, _)) = expr.kind.call_receiver()
                     && self
                         .ref_receiver_methods
                         .contains(&func.module_source, &func.name)
                 {
-                    self.lend(receiver, func, 0, expr);
+                    self.hand_ref(receiver, func, 0, expr);
                 }
             }
             TirExprKind::IndirectCall { args, .. } => {
                 self.indirect = true;
                 for arg in args {
-                    if let Some(place) = borrowed_place(arg) {
+                    if let Some(place) = referenced_place(arg) {
                         let steps = self.steps(place);
                         self.escaping.push(steps);
-                        self.lent.insert(std::ptr::from_ref(arg));
+                        self.handed.insert(std::ptr::from_ref(arg));
                     }
                 }
             }
@@ -329,7 +330,7 @@ impl TirRefVisitor for Scan<'_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
-            } if !self.lent.contains(&std::ptr::from_ref(expr)) => {
+            } if !self.handed.contains(&std::ptr::from_ref(expr)) => {
                 let steps = self.steps(place);
                 self.escaping.push(steps);
             }
@@ -353,8 +354,8 @@ impl TirRefVisitor for Scan<'_> {
     }
 }
 
-/// The place a `&place` or `&mut place` argument borrows.
-fn borrowed_place(expr: &TirExpr) -> Option<&TirExpr> {
+/// The place a `&place` or `&mut place` argument references.
+fn referenced_place(expr: &TirExpr) -> Option<&TirExpr> {
     match &expr.kind {
         TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
