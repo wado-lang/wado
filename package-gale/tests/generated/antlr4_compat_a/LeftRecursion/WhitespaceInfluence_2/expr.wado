@@ -614,8 +614,9 @@ impl TreeBuilder {
         return self.tag.len();
     }
 
-    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
-        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
+    internal fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32)
+        contract self.innermost_open() < checkpoint, "a node wraps only rows finished before it"
+    {
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -1165,8 +1166,9 @@ impl LatnStacks {
     }
 }
 
-fn latn_pair_key(hi: i32, lo: i32) -> i64 {
-    assert hi >= -1 && lo >= -1, "latn keys pair a state or stack id with -1 for none";
+fn latn_pair_key(hi: i32, lo: i32) -> i64
+    contract hi >= -1 && lo >= -1, "latn keys pair a state or stack id with -1 for none"
+{
     return (hi + 1) as i64 << 32 | (lo + 1) as i64;
 }
 
