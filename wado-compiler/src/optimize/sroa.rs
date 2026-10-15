@@ -951,6 +951,23 @@ impl SoftCtx<'_> {
                 // Each borrow is rebuilt as its own literal, so a callee handed
                 // one candidate twice could tell the two apart (`ref_eq`).
                 let mut lent: IndexSet<u32> = IndexSet::default();
+                // The rebuilt literal is taken where the borrow stands, while
+                // the callee reads its referent after every argument has run.
+                let written_by_later: Vec<IndexSet<u32>> = (0..arg_ops.len())
+                    .map(|i| {
+                        let mut written = IndexSet::default();
+                        for (later, _) in &arg_ops[i + 1..] {
+                            if let Some(e) = later.as_expr() {
+                                written.extend(candidates_written_under(
+                                    body,
+                                    NodeRef::Expr(e),
+                                    self.candidates,
+                                ));
+                            }
+                        }
+                        written
+                    })
+                    .collect();
                 for (i, (arg, is_mut)) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
                     let lent_candidate = immut_ref_to_candidate(body, arg, self.candidates)
@@ -968,7 +985,7 @@ impl SoftCtx<'_> {
                                 .then_some(index)
                         });
                     if let Some(index) = lent_candidate {
-                        if !lent.insert(index) {
+                        if !lent.insert(index) || written_by_later[i].contains(&index) {
                             hard_escaped.insert(index);
                         }
                         continue;
@@ -990,27 +1007,39 @@ fn candidates_pinned_under(
     block: BlockId,
     candidates: &IndexSet<u32>,
 ) -> IndexSet<u32> {
-    let mut pinned = IndexSet::default();
+    let mut pinned = candidates_written_under(body, NodeRef::Block(block), candidates);
     let mut borrowed = IndexSet::default();
     body.find_in_nodes_under(NodeRef::Block(block), |node| {
-        let NodeRef::Expr(e) = node else {
-            return None::<()>;
-        };
-        if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-            && let Some(index) = field_access_of_candidate(body, *target, candidates)
-                .map(|(index, _)| index)
-                .or_else(|| is_candidate_local(body, *target, candidates))
-        {
-            pinned.insert(index);
-        }
-        if let Some((index, _)) = ref_to_candidate_local(body, e, candidates)
+        if let NodeRef::Expr(e) = node
+            && let Some((index, _)) = ref_to_candidate_local(body, e, candidates)
             && !borrowed.insert(index)
         {
             pinned.insert(index);
         }
-        None
+        None::<()>
     });
     pinned
+}
+
+/// The candidates something under `node` writes a field of or assigns whole.
+fn candidates_written_under(
+    body: &Body,
+    node: NodeRef,
+    candidates: &IndexSet<u32>,
+) -> IndexSet<u32> {
+    let mut written = IndexSet::default();
+    body.find_in_nodes_under(node, |node| {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+            && let Some(index) = field_access_of_candidate(body, *target, candidates)
+                .map(|(index, _)| index)
+                .or_else(|| is_candidate_local(body, *target, candidates))
+        {
+            written.insert(index);
+        }
+        None::<()>
+    });
+    written
 }
 
 fn callee_stores_param_at(
