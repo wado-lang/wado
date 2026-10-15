@@ -103,6 +103,7 @@ impl BpeTokenizer {
                         bytes_of[id] = b;
                     }
                 }
+                assert unknown >= 0 || byte_ids.into_iter().all(|id| id >= 0), "a character the vocabulary lacks needs its bytes' tokens or an unknown token";
             },
         }
         return BpeTokenizer {
@@ -274,38 +275,113 @@ impl BpeTokenizer {
     }
 
     /// Merges the adjacent pair of lowest rank in `parts` until no pair
-    /// merges, and appends what is left.
-    fn merge(&self, initial: List<i32>, out: &mut List<i32>) {
-        let mut parts = initial;
-        loop {
-            let mut best = -1;
-            let mut best_rank = i32::MAX;
-            let mut merged_id = 0;
-            for let mut i = 0; i + 1 < parts.len(); i += 1 {
-                if let Some([rank, merged]) = self.merges.get(pair_key(parts[i], parts[i + 1])) && rank < best_rank {
-                    best_rank = rank;
-                    best = i;
-                    merged_id = merged;
-                }
-            }
-            if best < 0 {
-                break;
-            }
-            let [left, right] = [parts[best], parts[best + 1]];
-            let mut next: List<i32> = [];
-            let mut i = 0;
-            while i < parts.len() {
-                if i + 1 < parts.len() && parts[i] == left && parts[i + 1] == right {
-                    next.push(merged_id);
-                    i += 2;
-                } else {
-                    next.push(parts[i]);
-                    i += 1;
-                }
-            }
-            parts = next;
+    /// merges, and appends what is left. A round merges every place the pair
+    /// of its rank stands, left to right, as the parts stood when it began.
+    ///
+    /// `parts` is a linked list by place, and a heap orders its pairs by rank,
+    /// then by place, so a round finds its pairs without a scan. A pair a merge
+    /// forms joins the heap once the round ends, and a pair a merge broke is
+    /// skipped when it comes up.
+    fn merge(&self, parts: List<i32>, out: &mut List<i32>) {
+        let n = parts.len();
+        let mut ids = parts;
+        let mut prev: List<i32> = [];
+        let mut next: List<i32> = [];
+        for let at of 0..<n {
+            prev.push(at - 1);
+            next.push(if at + 1 < n { at + 1 } else { -1 });
         }
-        out.extend(&parts);
+        let mut alive = List::<bool>::filled(n, true);
+        let mut pairs: List<i64> = [];
+        for let at of 0..<n - 1 {
+            self.queue_pair(&ids, at, at + 1, &mut pairs);
+        }
+        let mut formed: List<i64> = [];
+        let mut round = -1;
+        let mut last: i64 = -1;
+        loop {
+            if pairs.is_empty() || (pairs[0] >> 32) as i32 != round {
+                for let pair of formed {
+                    heap_push(&mut pairs, pair);
+                }
+                formed = [];
+                if pairs.is_empty() {
+                    break;
+                }
+                round = (pairs[0] >> 32) as i32;
+                last = -1;
+            }
+            let pair = heap_pop(&mut pairs);
+            if pair == last {
+                continue;
+            }
+            last = pair;
+            let at = pair as i32;
+            let right = next[at];
+            if !alive[at] || right < 0 {
+                continue;
+            }
+            let Some([rank, merged]) = self.merges.get(pair_key(ids[at], ids[right])) else {
+                continue;
+            };
+            if rank != round {
+                continue;
+            }
+            ids[at] = merged;
+            alive[right] = false;
+            next[at] = next[right];
+            if next[at] >= 0 {
+                prev[next[at]] = at;
+                self.queue_pair(&ids, at, next[at], &mut formed);
+            }
+            if prev[at] >= 0 {
+                self.queue_pair(&ids, prev[at], at, &mut formed);
+            }
+        }
+        for let mut at = 0; at >= 0 && at < n; at = next[at] {
+            out.push(ids[at]);
+        }
+    }
+
+    /// Adds the pair of `ids` at `left` and `right` to `pairs`, keyed by its
+    /// rank and then its place, where it merges.
+    fn queue_pair(&self, ids: &List<i32>, left: i32, right: i32, pairs: &mut List<i64>) {
+        if let Some([rank, _]) = self.merges.get(pair_key(ids[left], ids[right])) {
+            heap_push(pairs, rank as i64 << 32 | left as i64);
+        }
+    }
+}
+
+/// Adds `entry` to the least-first heap `heap`.
+fn heap_push(heap: &mut List<i64>, entry: i64) {
+    heap.push(entry);
+    let mut at = heap.len() - 1;
+    while at > 0 && heap[(at - 1) / 2] > heap[at] {
+        heap.swap(at, (at - 1) / 2);
+        at = (at - 1) / 2;
+    }
+}
+
+/// Takes the least entry out of the heap `heap`, which holds one.
+fn heap_pop(heap: &mut List<i64>) -> i64 {
+    let least = heap[0];
+    let last = heap.pop().unwrap();
+    if heap.is_empty() {
+        return least;
+    }
+    heap[0] = last;
+    let mut at = 0;
+    loop {
+        let left = at * 2 + 1;
+        if left >= heap.len() {
+            return least;
+        }
+        let child = if left + 1 < heap.len() && heap[left + 1] < heap[left] { left + 1 } else { left };
+        if heap[at] <= heap[child] {
+            return least;
+        }
+        heap.swap(at, child);
+        at = child;
     }
 }
 

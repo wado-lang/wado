@@ -186,7 +186,7 @@ fn external_bytes(t: &onnx::TensorProto, name: &String, files: &TreeMap<String, 
     };
     let offset = number("offset", 0)?;
     let length = number("length", file.len() as i64 - offset)?;
-    if offset < 0 || length < 0 || offset + length > file.len() as i64 {
+    if offset < 0 || length < 0 || length > file.len() as i64 - offset {
         return Result::Err(
             `${*name}: external data at ${offset} for ${length} bytes, past the end of ${location}'s ${file.len()}`,
         );

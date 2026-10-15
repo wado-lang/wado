@@ -384,6 +384,18 @@ test "external data past its file's end names its range" {
     assert e == "W: external data at 2 for 8 bytes, past the end of w.bin's 4";
 }
 
+test "external data whose end overflows is past its file's end" {
+    let mut files = TreeMap::<String, ByteList>::new();
+    files["w.bin"] = b"\x00\x00\x80\x3f";
+    let e = read_external(external_weight([
+        ["location", "w.bin"],
+        ["offset", "2"],
+        ["length", "9223372036854775807"],
+    ]), &files).unwrap_err().reason;
+
+    assert e == "W: external data at 2 for 9223372036854775807 bytes, past the end of w.bin's 4";
+}
+
 test "an initializer whose data disagrees with its shape names itself" {
     let e = read_initializer_of(onnx::TensorProto {
         dims: [2],

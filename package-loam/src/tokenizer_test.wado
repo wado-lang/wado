@@ -29,6 +29,38 @@ fn pieces() -> BpeTokenizer {
     return BpeTokenizer::new(&tokens_bytes(&tokens), &merges, ["<bos>"], TokenSpelling::Pieces, 0, [1]);
 }
 
+/// A byte-level tokenizer over every byte's character, then `joined`, which
+/// take the ids from 256, made by `merges` in rank order.
+fn merging(joined: List<String>, merges: List<[i32, i32, i32]>) -> BpeTokenizer {
+    let mut tokens: List<String> = byte_chars().into_iter().map(|c| String::from(c)).collect();
+    tokens.extend(&joined);
+    return BpeTokenizer::new(&tokens_bytes(&tokens), &merges_bytes(&merges), [], TokenSpelling::ByteLevel, -1, []);
+}
+
+test "every place a pair stands merges in its round, left to right" {
+    let t = merging(["aa", "aaaa"], [
+        [97, 97, 256],
+        [256, 256, 257],
+    ]);
+    assert t.encode(&"aaa") == [256, 97] as List<i32>;
+    assert t.encode(&"aaaaa") == [257, 97] as List<i32>;
+}
+
+test "a pair a merge forms merges by its own rank" {
+    let t = merging(["bc", "abc", "ab"], [
+        [98, 99, 256],
+        [97, 256, 257],
+        [97, 98, 258],
+    ]);
+    assert t.encode(&"abc") == [257] as List<i32>;
+    assert t.encode(&"abd") == [258, 100] as List<i32>;
+}
+
+#[expect_trap]
+test "SentencePiece's spelling needs the bytes' tokens or an unknown token" {
+    BpeTokenizer::new(&tokens_bytes(&["a"]), &merges_bytes(&[]), [], TokenSpelling::Pieces, -1, []);
+}
+
 test "a pair the merges rank merges, and the rest stay bytes" {
     let t = tokenizer([]);
     assert t.encode(&"abc") == [256, 99] as List<i32>;
