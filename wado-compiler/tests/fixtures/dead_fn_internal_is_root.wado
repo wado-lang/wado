@@ -1,5 +1,5 @@
 // A compilation loads the modules its entry reaches, not its whole package, so
-// whether another module calls an `internal` item is undecidable here: it is a
+// whether another module uses an `internal` item is undecidable here: it is a
 // root. What only it calls stays unreported, while a private item, whose
 // callers are all in its own file, is still decided.
 internal fn helper() -> i32 {
@@ -10,15 +10,30 @@ fn callee() -> i32 {
     return 1;
 }
 
-fn private_helper() -> i32 {
+internal fn test_helper() -> i32 {
     return 2;
 }
 
+internal global UNREAD: i32 = 3;
+
+fn private_helper() -> i32 {
+    return 4;
+}
+
 export fn run() {}
+
+test "uses test_helper" {
+    assert test_helper() == 2;
+}
 
 __DATA__
 {
     "stdout": "",
     "warnings_contains": ["function `private_helper` is never used"],
-    "warnings_not_contains": ["function `helper` is never used", "function `callee` is never used"]
+    "warnings_not_contains": [
+        "function `helper` is never used",
+        "function `callee` is never used",
+        "function `test_helper` is only used by tests",
+        "global `UNREAD` is never used"
+    ]
 }
