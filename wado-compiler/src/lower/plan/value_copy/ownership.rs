@@ -1,6 +1,6 @@
 //! Return-convention (ownership) analysis over monomorphized TIR (WEP
 //! 2026-05-21). A function *returns owned* when every value it can return is
-//! freshly materialized rather than a borrowed projection of a `&`/global
+//! freshly materialized rather than a shared projection of a `&`/global
 //! parameter, so the value-copy fold can consume its result as a move.
 //!
 //! Runs caller-side at insertion time, so copies are placed precisely instead
@@ -11,7 +11,7 @@
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::place::{arg_at, carries_storage, is_reference, param_position, unwrap_borrow};
+use super::place::{arg_at, carries_storage, is_reference, param_position, unwrap_ref};
 use super::retention::CallRetention;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -69,7 +69,7 @@ impl<'a> OwnedCalls<'a> {
     /// declaration answers from its `#[storage]`: one whose result is not
     /// part of its arguments is fresh. A body function is owned iff the
     /// fixpoint proved it so, and a callee nothing describes defaults to
-    /// borrowed.
+    /// shared.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if self.builtins.declares(func) {
             return self.builtins.part_of_params(func).is_none();
@@ -106,8 +106,8 @@ impl<'a> OwnedCalls<'a> {
     /// nowhere replaced by that result: storage nothing else reaches, so what
     /// the callee projects back is as fresh as the result
     /// (`f().into_iter()`, whose `into_iter(&self)` returns `*self`). A
-    /// borrowed place, or a borrow the callee keeps, stays reachable after the
-    /// call.
+    /// referenced place, or a reference the callee keeps, stays reachable after
+    /// the call.
     pub fn handed_back<'e>(
         &self,
         func: &'e FunctionRef,
@@ -117,7 +117,7 @@ impl<'a> OwnedCalls<'a> {
         let retained = self.retention.of_call(func, args.len(), false);
         Some(params.iter().map(move |&p| {
             let arg = arg_at(func, args, p);
-            let inner = unwrap_borrow(arg);
+            let inner = unwrap_ref(arg);
             if matches!(inner.kind, TirExprKind::Call { .. })
                 && !retained.keeps(u32::try_from(p).unwrap())
             {
@@ -139,8 +139,8 @@ pub struct ReturnConventions {
 }
 
 /// Functions whose every value-return aliases the receiver / first parameter
-/// (a *borrowed* projection, through `array_get_value` and nested accessor calls).
-/// Because it admits borrowed projections it must NOT feed the move / owned
+/// (a *shared* projection, through `array_get_value` and nested accessor calls).
+/// Because it admits shared projections it must NOT feed the move / owned
 /// decision; the read-only-share analysis and pattern lowering consume it.
 pub fn compute_receiver_alias(
     project: &FlatPackage,
@@ -216,7 +216,7 @@ fn function_returns_receiver_alias(
 ///
 /// A deref may peel only the parameter's own reference, the rule
 /// [`is_projection_of_param`] follows. Deeper in the chain it reads a reference
-/// *stored in* that storage and lands on whoever lent it, a different place.
+/// *stored in* that storage and lands on what it points to, a different place.
 /// Answering the wrong place is not the safe side. `last_use::source_path`
 /// makes a binding a share candidate gated on the place this names, so a place
 /// nothing writes reads as no conflict and the copy is dropped.
@@ -354,7 +354,7 @@ fn settle_component(
             let hands_out_payload = hands_out_payload(&func, return_paths);
             function_return_convention(
                 &func,
-                &confined.borrowed_locals(&func),
+                &confined.shared_locals(&func),
                 &oracle,
                 type_table,
                 hands_out_payload,
@@ -399,7 +399,7 @@ pub fn compute_indirect_owned_returns(
     returns_owned: &FuncKeySet,
 ) -> IndexSet<TypeId> {
     let mut owned_returns: IndexSet<TypeId> = IndexSet::default();
-    let mut borrowed_returns: IndexSet<TypeId> = IndexSet::default();
+    let mut shared_returns: IndexSet<TypeId> = IndexSet::default();
     for func in &project.functions {
         let func = func.borrow();
         if !func.is_closure_call() {
@@ -408,10 +408,10 @@ pub fn compute_indirect_owned_returns(
         if returns_owned.contains(&func.module_source, &func.name) {
             owned_returns.insert(func.return_type);
         } else {
-            borrowed_returns.insert(func.return_type);
+            shared_returns.insert(func.return_type);
         }
     }
-    owned_returns.retain(|ty| !borrowed_returns.contains(ty));
+    owned_returns.retain(|ty| !shared_returns.contains(ty));
     owned_returns
 }
 
@@ -419,18 +419,18 @@ pub fn compute_indirect_owned_returns(
 /// are not project (`return *self`, `return builtin::hole_get(t, i)`, the
 /// payload `unwrap` binds out of `self`). Judged against the callee convention
 /// `oracle` and the fresh-local set (Let bindings and match-arm bindings that
-/// destructure an owned source). `borrowed` are the by-value parameters the
+/// destructure an owned source). `shared` are the by-value parameters the
 /// callers pass uncopied.
 fn function_return_convention(
     func: &TirFunction,
-    borrowed: &IndexSet<u32>,
+    shared: &IndexSet<u32>,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
     hands_out_payload: bool,
 ) -> (bool, Option<Vec<usize>>) {
     let body = func.body.as_ref().expect("members have bodies");
     let bindings = BindingCollector::collect(body, func.params.len());
-    let fresh = compute_fresh_locals(&bindings, &func.params, borrowed, oracle, type_table);
+    let fresh = compute_fresh_locals(&bindings, &func.params, shared, oracle, type_table);
     let mut walker = ReturnWalker {
         projector: Projector {
             bindings: &bindings,
@@ -575,12 +575,12 @@ impl Projector<'_> {
 /// Fresh (owned-rooted) non-parameter locals: a `let` bound to an owned value,
 /// or a match-arm binding that destructures an owned scrutinee. Optimistic least
 /// fixpoint — every bound local starts owned and is dropped once a source proves
-/// borrowed (a source may reference another local whose ownership is still
+/// shared (a source may reference another local whose ownership is still
 /// shrinking).
 fn compute_fresh_locals(
     collector: &BindingCollector,
     params: &[TirParam],
-    borrowed: &IndexSet<u32>,
+    shared: &IndexSet<u32>,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
@@ -595,7 +595,7 @@ fn compute_fresh_locals(
     // some `&T` onto `Box<T>` in place, and one it reached would read here as a
     // parameter the caller handed a copy of.
     for p in params {
-        if !is_reference(p.type_id, type_table) && !borrowed.contains(&p.local_index) {
+        if !is_reference(p.type_id, type_table) && !shared.contains(&p.local_index) {
             fresh.insert(p.local_index);
         }
     }

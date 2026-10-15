@@ -166,8 +166,8 @@ impl ModRef {
 /// What a path naming no field of its own writes.
 #[derive(Clone, Copy)]
 enum WholeOf {
-    /// What this body was lent at the path's root.
-    Lent,
+    /// The caller's storage the path's root names.
+    CallerStorage,
     /// The type handed over, for a handle this walk cannot follow.
     Handed(TypeId),
 }
@@ -351,10 +351,10 @@ impl Walker<'_> {
         let Names::Place(place) = names else {
             return None;
         };
-        if let Some(position) = self.resolver.lent_position(place.root) {
+        if let Some(position) = self.resolver.caller_position(place.root) {
             return Some(Origin::Param(position));
         }
-        place.through_borrow.then_some(Origin::Unknown)
+        place.through_ref.then_some(Origin::Unknown)
     }
 
     /// What this call puts in one parameter position.
@@ -382,7 +382,7 @@ impl Walker<'_> {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
         };
-        // `arr[i].v = …` off a lent `Array<Cell>` root keys only `Cell`'s
+        // `arr[i].v = …` off a caller's `Array<Cell>` root keys only `Cell`'s
         // field, leaving the array itself unmarked, so a path an index or a
         // variant step reaches through falls to the whole-root write below.
         let named_a_field = place.field_addressable()
@@ -403,9 +403,10 @@ impl Walker<'_> {
         // A binding that names its root with no field selector at all — a
         // variant payload, typed like the payload rather than the value it
         // was matched out of — cannot be trusted to carry its own type: the
-        // root's lent type is authoritative whenever this body was lent one.
-        let whole = self.resolver.lent(place.root).or_else(|| match whole {
-            WholeOf::Lent => None,
+        // type of the caller's storage the root names is authoritative
+        // whenever it names one.
+        let whole = self.resolver.caller_type(place.root).or_else(|| match whole {
+            WholeOf::CallerStorage => None,
             WholeOf::Handed(ty) => Some(field_owner(ty, self.type_table)),
         });
         if let Some(whole) = whole
@@ -416,7 +417,7 @@ impl Walker<'_> {
     }
 
     /// Record a writable handle escaping into an aggregate as a write to what
-    /// it borrows: the aggregate carries it past the expression that took it.
+    /// it references: the aggregate carries it past the expression that took it.
     fn record_handle_escape(&mut self, value: &TirExpr) {
         if could_write_through(value.type_id, self.type_table) {
             let names = self.resolver.names(value);
@@ -427,7 +428,7 @@ impl Walker<'_> {
     /// A known callee's own writes are unsettled during this scan, so record
     /// the shape a hit would add rather than adding it now — as the fields the
     /// argument projects through, or, where those are no key a caller can look
-    /// the write up by, as the whole of what the root was lent. A bare argument
+    /// the write up by, as the whole of the caller's storage the root names. A bare argument
     /// needs neither: its type already matches what the call graph absorbs
     /// `callee`'s own writes into — unless it is a variant payload typed like
     /// the payload rather than the value it was matched out of, where trusting
@@ -448,12 +449,12 @@ impl Walker<'_> {
             return;
         };
         if !place.field_addressable() {
-            if let Some(lent) = self.resolver.lent(place.root)
-                && lent != handed
+            if let Some(caller_type) = self.resolver.caller_type(place.root)
+                && caller_type != handed
             {
                 self.pending.push(PendingProjection {
                     fields: Vec::new(),
-                    whole: Some((origin, lent)),
+                    whole: Some((origin, caller_type)),
                     callee,
                     position,
                 });
@@ -477,10 +478,10 @@ impl Walker<'_> {
             });
             return;
         }
-        if let Some(lent) = self.resolver.lent(place.root)
-            && lent != handed
+        if let Some(caller_type) = self.resolver.caller_type(place.root)
+            && caller_type != handed
         {
-            self.writes.whole.insert((origin, lent));
+            self.writes.whole.insert((origin, caller_type));
         }
     }
 }
@@ -498,7 +499,7 @@ impl TirRefVisitor for Walker<'_> {
                     && is_reference(target.type_id, self.type_table);
                 if !reseats {
                     let names = self.resolver.names(target);
-                    self.record(&names, WholeOf::Lent);
+                    self.record(&names, WholeOf::CallerStorage);
                 }
             }
             // A callee this scan reads answers for its own parameter through the
@@ -509,7 +510,7 @@ impl TirRefVisitor for Walker<'_> {
                 let known = self.defined.contains(&func.module_source, &func.name);
                 if known {
                     // Every position, not just the writable ones: a callee
-                    // writing through a `&T` parameter is one `lends_storage`
+                    // writing through a `&T` parameter is one `names_caller_storage`
                     // admits and `could_write_through` does not.
                     let handed = args
                         .iter()
