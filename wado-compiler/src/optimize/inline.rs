@@ -1000,6 +1000,8 @@ struct BodyScan {
     /// The callees called from at least one site no `cold_path()` marker
     /// covers.
     hot_callees: IndexSet<FuncId>,
+    /// The callees called from at least one site a `cold_path()` marker covers.
+    cold_callees: IndexSet<FuncId>,
     /// Whether the body holds a `loop`.
     loopy: bool,
 }
@@ -1101,7 +1103,9 @@ fn scan_body(func: &NirFunction, cold_path: Option<FuncId>) -> BodyScan {
                     .map(|(pos, a)| (pos as u32, a.expr))
                     .collect();
                 scan.calls.push((*func_id, by_value));
-                if !cold.contains(&e) {
+                if cold.contains(&e) {
+                    scan.cold_callees.insert(*func_id);
+                } else {
                     scan.hot_callees.insert(*func_id);
                 }
             }
@@ -1799,9 +1803,9 @@ fn call_site_counts(scans: &[BodyScan]) -> Vec<usize> {
 
 /// The functions no hot site reaches, indexed by store position: every path
 /// into one passes a `cold_path()` marker, so whatever is spliced into it runs
-/// at most once on the way out. A function no call site reaches is reached some
-/// other way (an export, a global initializer, a function reference), so it
-/// counts as hot.
+/// only once a cold path is taken. A function no call site reaches is reached
+/// some other way (an export, a global initializer, a function reference), so
+/// it counts as hot.
 fn cold_functions(project: &NirPackage, scans: &[BodyScan], call_sites: &[usize]) -> Vec<bool> {
     let mut hot: Vec<bool> = project
         .functions
@@ -1822,6 +1826,24 @@ fn cold_functions(project: &NirPackage, scans: &[BodyScan], call_sites: &[usize]
         }
     }
     hot.into_iter().map(|hot| !hot).collect()
+}
+
+/// The functions some cold site calls, indexed by store position: the ones a
+/// [`Site::Cold`] admission asks whether they shrink.
+fn called_cold(scans: &[BodyScan], cold: &[bool]) -> Vec<bool> {
+    let mut called = vec![false; scans.len()];
+    for (caller, scan) in scans.iter().enumerate() {
+        if cold[caller] {
+            for (callee, _) in &scan.calls {
+                called[callee.index()] = true;
+            }
+        } else {
+            for callee in &scan.cold_callees {
+                called[callee.index()] = true;
+            }
+        }
+    }
+    called
 }
 
 /// A callee the heuristic admitted, priced for the budget.
@@ -2078,6 +2100,7 @@ pub fn inline_functions(
     // where its splice pays back.
     let call_sites = call_site_counts(scans);
     let cold = cold_functions(project, scans, &call_sites);
+    let called_cold = called_cold(scans, &cold);
     let never: Vec<bool> = {
         let type_table = project.type_table.borrow();
         project
@@ -2226,12 +2249,14 @@ pub fn inline_functions(
                 InlineHint::Always => inline_cost(body, type_table, descriptors, &spliced),
                 InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
             };
-            let written = if pricing {
-                size
-            } else {
-                inline_size(body, type_table, descriptors)
+            let shrinks = called_cold[i] && {
+                let written = if pricing {
+                    size
+                } else {
+                    inline_size(body, type_table, descriptors)
+                };
+                net_cost(written, func.params.len()) == 0
             };
-            let shrinks = net_cost(written, func.params.len()) == 0;
             (net_cost(hot, func.params.len()), shrinks, func.clone())
         });
         (func.id, size, verdict, candidate)
@@ -2313,6 +2338,9 @@ pub fn inline_functions(
     for id in &over_budget {
         inline_candidates.shift_remove(id);
         candidate_strings.shift_remove(id);
+        reach.shift_remove(id);
+        net_price.shift_remove(id);
+        shrinking.shift_remove(id);
     }
 
     compiler_trace!(
