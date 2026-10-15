@@ -1877,11 +1877,10 @@ impl TypeError {
                 *span,
             ),
             TypeError::TemplateHoleGeneric { type_name, span } => (
-                Code::InvalidSyntax,
+                Code::UnsupportedFeature,
                 format!(
                     "a tagged template hole of type `{type_name}` mentions a type parameter; \
-                     a template's type is minted per shape and cannot be generic over the \
-                     enclosing item"
+                     a template shape generic over the enclosing item is not implemented yet"
                 ),
                 *span,
             ),

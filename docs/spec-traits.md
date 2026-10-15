@@ -1296,6 +1296,14 @@ So a `T: Display` bound certifies a real string representation, and
 `String::push_display` takes any `Display`. `${x:#}` is the
 [alternate form](./spec-literals.md#alternate-form).
 
+A type character asks for its own trait the same way: `${x:x}` over `x: T`
+needs `T: LowerHex`, which `T: Display` does not supply.
+
+> Not yet implemented: a template string checks a hole of a generic type only
+> once the item is instantiated, so it asks for no bound, and the error names
+> the instantiated type at the hole. A `format` call rejects such a hole
+> outright.
+
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 
 ```wado

@@ -22,7 +22,7 @@ fn pick(a: i32, c: char) -> i32 {
     return a;
 }
 
-impl<T> Wrapper<T> {
+impl<T: Display> Wrapper<T> {
     fn display_value(&self) -> String {
         return `${self.value}`;
     }
@@ -160,8 +160,8 @@ test "a bracket inside a char literal does not unbalance the nesting count" {
     assert `n=${pick(7, '('):02}` == "n=07";
 }
 
-// Inside a generic impl, monomorphization picks the concrete type's Display for
-// `${value}`, while `${value:?}` always renders the inspect form.
+// Inside a generic impl, `${value}` renders through the `Display` the bound
+// declares, while `${value:?}` always renders the inspect form.
 
 test "display and inspect of an integer type parameter" {
     let b = Wrapper { value: 42 };

@@ -550,8 +550,10 @@ serial advances on read, so a template nested inside a hole mints its own
   threshold refuses.
 - `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` calls to the
   bridge names beside its `struct_field_get` arm; `name.rs` owns both names.
-- A template shape is never generic, so `reflect_bridge`'s post-monomorphization
-  minting is not involved.
+- A template shape is not yet generic, so `reflect_bridge`'s
+  post-monomorphization minting is not involved. The roadmap's generic holes
+  change that: a shape generic over a type parameter needs its bridges minted
+  per instantiation.
 
 ### Fixtures
 
@@ -623,39 +625,46 @@ item below closes one, in this order.
   direct lowering (`synthesis::template::build_template_block`) is deleted.
   Done when no code path builds a `$tmpl` block.
 
-The cost gap is measured by this program, saved as `untagged.wado`, and its
-copy `format.wado` with the template written under the `format` tag:
+The cost gap is measured inside the guest by this program, so the runner's
+start-up stays out of it. Run it with `wado run -O2 bench.wado`; each phase
+reports the time one iteration of its loop took.
 
 ```wado
-use { println, Stdout } from "core:cli";
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { MonotonicClock } from "wasi:clocks";
 
 struct Pt { x: i32, y: i32 }
 
-export fn run() with Stdout {
-    let mut total = 0;
-    for let i of 0..<2000000 {
-        let p = Pt { x: i, y: i * 2 };
-        let s = `i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`;
-        total += s.len();
-    }
-    println(`${total}`);
+export fn run() with (Stdout, MonotonicClock) {
+    let mut bench = Benchmark { name: "template" };
+    bench.work_per_iter = Option::Some(100000.0);
+    bench.unit = "templates";
+    bench.run("untagged", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += `i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`.len();
+        }
+        return total;
+    });
+    bench.run("format", || {
+        let mut total = 0;
+        for let i of 0..<100000 {
+            let p = Pt { x: i, y: i * 2 };
+            total += format`i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`.len();
+        }
+        return total;
+    });
 }
 ```
 
-Run each once to warm the build cache, then alternate them six times each,
-taking each `format` run's wall-clock time against the untagged run beside it:
+Three runs:
 
-```sh
-TIMEFORMAT=%R
-for n in 1 2 3 4 5 6; do
-  for f in untagged format; do time wado run -O2 $f.wado >/dev/null; done
-done
-```
-
-| Form            | Run time, untagged = 1 |
-| --------------- | ---------------------- |
-| untagged        | 1                      |
-| `` format`…` `` | 1.5 to 1.8             |
+| Phase           | Time per iteration, untagged = 1 |
+| --------------- | -------------------------------- |
+| untagged        | 1                                |
+| `` format`…` `` | 1.2 to 1.3                       |
 
 ## Known gaps
 
