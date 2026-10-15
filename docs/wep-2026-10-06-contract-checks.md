@@ -203,9 +203,11 @@ let x = unchecked xs[i];    // an index read with no range check
 ```
 
 `xs[i]` is a call to an indexing trait's method, so `unchecked xs[i]` is an
-index read whose range check the caller vouches for. An index assignment takes
-no marker. `unchecked xs[i] = v` would put the operator on an assignment's
-target, outside what a unary operator is, and is a compile error.
+index read whose range check the caller vouches for. It is still the place
+`xs[i]` names, so `&mut (unchecked xs[i])` borrows through `IndexRefMut` where
+`xs` is mutable and is an error where it is not. An index assignment takes no
+marker: `unchecked xs[i] = v` and `unchecked xs[i] += v` are compile errors,
+whatever contract `IndexAssign` declares.
 
 `contract` is a contextual keyword: no identifier can follow a signature, so
 code that names something `contract` keeps working. `unchecked` is reserved.

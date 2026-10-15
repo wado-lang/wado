@@ -8,11 +8,13 @@ use crate::elaborator::sem::ModuleSemantics;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resolve::Resolutions;
+use crate::token::Span;
 
 const NOT_A_CALL: &str = "`unchecked` marks a call to a function with a `contract` clause";
 const NO_CONTRACT: &str = "the callee has no `contract` clause for `unchecked` to vouch for";
 const TRAIT_NO_CONTRACT: &str = "this trait method declares no `contract` clause, and `unchecked` \
                                  on a call to it vouches for the trait's alone";
+const ASSIGNED: &str = "an index assignment takes no `unchecked`: the marker vouches for a read";
 const INNER_CALL: &str = "postfix operators bind tighter than `unchecked`, so it marks the \
                           whole chain; write `(unchecked …)` around the call it vouches for";
 
@@ -59,10 +61,8 @@ impl Finder<'_> {
                 .all(|facts| &facts.static_method_dispatch, call.id)
                 .filter_map(|dispatch| dispatch.method_def)
                 .collect(),
-            // A subscript written to calls `IndexAssign` where its type has one.
             Expr::Index(index) => types
                 .all(|facts| &facts.operator_dispatch, index.id)
-                .chain(types.all(|facts| &facts.index_assign_dispatch, index.id))
                 .filter_map(|dispatch| dispatch.method_def)
                 .collect(),
             Expr::Call(call) => {
@@ -105,36 +105,7 @@ impl Finder<'_> {
         };
         self.binds(operand) || self.binds_inside_chain(operand)
     }
-}
 
-impl AstVisitor for Finder<'_> {
-    fn visit_expr(&mut self, expr: &Expr) {
-        let verdict = match expr {
-            // The parser folds `unchecked` into a subscript it marks, so a
-            // subscript under one was marked already.
-            Expr::Unary(unary) if unary.op == UnaryOp::Unchecked => Some((
-                match &unary.expr {
-                    Expr::Index(_) => Some(NOT_A_CALL),
-                    operand => self.misplaced(operand),
-                },
-                unary.span,
-            )),
-            Expr::Index(index) => index.unchecked.map(|span| (self.misplaced(expr), span)),
-            _ => None,
-        };
-        if let Some((Some(message), span)) = verdict {
-            self.found.push(Diagnostic {
-                severity: Severity::Error,
-                code: Code::UncheckedInvalid,
-                message: message.to_string(),
-                span: Some(DiagnosticSpan::from_span(&span, None)),
-            });
-        }
-        ast::walk_expr(self, expr);
-    }
-}
-
-impl Finder<'_> {
     /// Why `unchecked` cannot mark `operand`, or `None` where it can.
     fn misplaced(&self, operand: &Expr) -> Option<&'static str> {
         let callees = self.callees(operand);
@@ -156,6 +127,53 @@ impl Finder<'_> {
                 Some(_) => NO_CONTRACT,
             }
         })
+    }
+}
+
+impl AstVisitor for Finder<'_> {
+    fn visit_expr(&mut self, expr: &Expr) {
+        let assignment = match expr {
+            Expr::Assign(assign) => Some((&assign.target, &assign.value)),
+            Expr::CompoundAssign(compound) => Some((&compound.target, &compound.value)),
+            _ => None,
+        };
+        if let Some((Expr::Index(index), value)) = assignment
+            && let Some(span) = index.unchecked
+        {
+            self.report(ASSIGNED, span);
+            self.visit_expr(&index.expr);
+            self.visit_expr(&index.index);
+            self.visit_expr(value);
+            return;
+        }
+        let verdict = match expr {
+            // The parser folds `unchecked` into a subscript it marks, so a
+            // subscript under one was marked already.
+            Expr::Unary(unary) if unary.op == UnaryOp::Unchecked => Some((
+                match &unary.expr {
+                    Expr::Index(_) => Some(NOT_A_CALL),
+                    operand => self.misplaced(operand),
+                },
+                unary.span,
+            )),
+            Expr::Index(index) => index.unchecked.map(|span| (self.misplaced(expr), span)),
+            _ => None,
+        };
+        if let Some((Some(message), span)) = verdict {
+            self.report(message, span);
+        }
+        ast::walk_expr(self, expr);
+    }
+}
+
+impl Finder<'_> {
+    fn report(&mut self, message: &str, span: Span) {
+        self.found.push(Diagnostic {
+            severity: Severity::Error,
+            code: Code::UncheckedInvalid,
+            message: message.to_string(),
+            span: Some(DiagnosticSpan::from_span(&span, None)),
+        });
     }
 }
 

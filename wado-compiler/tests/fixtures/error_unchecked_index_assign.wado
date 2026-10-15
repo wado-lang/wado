@@ -1,11 +1,35 @@
-// A marked subscript written to vouches for `IndexAssign`, and `List`'s
-// declares no contract.
+// `unchecked` vouches for a read: an index assignment, plain or compound,
+// takes no marker, whatever contract `IndexAssign` declares.
+struct Cells { items: List<i32> }
+
+impl IndexValue<i32> for Cells {
+    type Output = i32;
+    fn index_value(&self, i: i32) -> i32
+        contract i < self.items.len()
+    {
+        return self.items[i];
+    }
+}
+
+impl IndexAssign<i32> for Cells {
+    type Output = i32;
+    fn index_assign(&mut self, i: i32, v: i32)
+        contract i < self.items.len()
+    {
+        self.items[i] = v;
+    }
+}
+
 export fn run() {
     let mut xs: List<i32> = [1, 2];
     unchecked xs[0] = 3;
+    let mut c = Cells { items: [1] };
+    unchecked c[0] = 2;
+    unchecked c[0] += 1;
 }
 
 __DATA__
 {
-  "compile_error": ":5:5: analysis error: the callee has no `contract` clause for `unchecked` to vouch for"
+  "compile_error": ":25:5: analysis error: an index assignment takes no `unchecked`: the marker vouches for a read",
+  "compile_errors_contains": [":27:5: analysis error: an index assignment", ":28:5: analysis error: an index assignment"]
 }

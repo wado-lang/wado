@@ -2707,7 +2707,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `FunctionRef` on `index_assign_dispatch[index.id]`;
                 // reify replays the same method-call shape.
                 if let ast::Expr::Index(index_expr) = &assign.target
-                    && let Some(dispatch) = self.index_write_dispatch(index_expr)
+                    && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
                 {
                     let receiver = self.reify_expr(&index_expr.expr, ctx, None);
                     let receiver = adjust_receiver_for_self_kind(
@@ -5180,12 +5180,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|dispatch| unchecked_subscript(index, dispatch))
     }
 
-    /// The `IndexAssign` method the subscript `index` is written through.
-    fn index_write_dispatch(&self, index: &ast::IndexExpr) -> Option<OperatorDispatch> {
-        self.ann_index_assign_dispatch(index.id)
-            .map(|dispatch| unchecked_subscript(index, dispatch))
-    }
-
     /// The compound-assign read side of `recv[idx]`, reusing the same
     /// once-evaluated receiver / subscript the write side gets.
     fn build_index_trait_read(
@@ -5270,7 +5264,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (`*recv.index(idx)`) and the write (`recv.index_assign(idx, …)`) are
         // different methods built from the same reified receiver / subscript.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(assign_dispatch) = self.index_write_dispatch(index_expr)
+            && let Some(assign_dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let recv = self.reify_expr(&index_expr.expr, ctx, None);
             let idx = self.reify_expr(&index_expr.index, ctx, None);
