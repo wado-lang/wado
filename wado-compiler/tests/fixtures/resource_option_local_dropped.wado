@@ -1,0 +1,20 @@
+// An `Option` holding a resource, bound and never moved, drops the resource
+// at the end of its scope, as a struct holding one does.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+fn hold(present: bool) with Fields {
+    let held: Option<Fields> = if present { Option::Some(Fields::new()) } else { null };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    hold(true);
+    hold(false);
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

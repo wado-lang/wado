@@ -767,9 +767,19 @@ needed.
 ### Some resource holders are not move-checked or dropped
 
 Every value holding an affine resource is move-only and dropped, but only a
-struct, a tuple and a `Result` are checked. An `Option`, a user variant or a
+struct, a tuple and a variant (`Option` and `Result` among them) are checked. A
 `List` holding one can be moved twice with no diagnostic, and is not dropped at
 scope exit.
+
+### A generic call's result that nothing binds
+
+A generic function that takes a reference and returns a type parameter may
+hand back a value the referenced container still owns, so cleanup
+(`alias_returning`) owns its result only once a binding takes it. `List::pop`
+moves its element out, and `while let Some(s) = list.pop() {}` drops each `s`.
+`while let Some(_) = list.pop() {}` binds nothing, so it drops none of them.
+The signature cannot tell `pop` from `List::index_value` or
+`TreeMap::get_or_insert`, whose result the container keeps.
 
 ### A resource field moves out of its holder
 

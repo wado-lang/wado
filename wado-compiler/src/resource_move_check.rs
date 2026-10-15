@@ -26,16 +26,24 @@ pub(crate) fn carries_affine_resource(
         return false;
     }
     visited.push(base);
+    // A variant's payloads, as its declaration writes them, then its type
+    // arguments, which stand in for the payloads that name them.
+    let variant_payloads = |def, type_args: &[TypeId]| -> Option<Vec<TypeId>> {
+        let cases = types.variant_template_cases(def)?;
+        let mut children: Vec<TypeId> = cases.iter().map(|(_, _, payload)| *payload).collect();
+        children.extend_from_slice(type_args);
+        Some(children)
+    };
     let children: Vec<TypeId> = match types.get(base) {
         ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
             return !types.is_unrestricted_resource(*def);
         }
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
         ResolvedType::Struct { .. } => struct_fields(base).unwrap_or_default(),
-        ResolvedType::GenericInstance { type_args, .. } if types.is_result(base) => {
-            type_args.clone()
-        }
-        _ => types.as_tuple(base).unwrap_or_default(),
+        ResolvedType::Variant { def } => variant_payloads(*def, &[]).unwrap_or_default(),
+        ResolvedType::GenericInstance { def, type_args } => variant_payloads(*def, type_args)
+            .unwrap_or_else(|| types.as_tuple(base).unwrap_or_default()),
+        _ => Vec::new(),
     };
     children
         .into_iter()

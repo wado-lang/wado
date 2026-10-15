@@ -7,7 +7,6 @@
 //! local that drops when its statement ends.
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl};
-use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
 use crate::hashmap::IndexSet;
@@ -127,6 +126,53 @@ fn build_struct_field_reg(project: &Package) -> StructFieldReg {
     reg
 }
 
+/// The cases of each variant type, `Option` and `Result` among them, with
+/// their payload types as that type's arguments make them:
+/// `(name, index, payload)`, a case without one carrying `()`.
+type VariantCaseReg = hashmap::IndexMap<TypeId, Vec<(String, u32, TypeId)>>;
+
+/// Every variant type the table holds, each generic one's payloads
+/// substituted. A substitution can intern a variant type of its own (a
+/// payload `Option<T>` made `Option<Fields>`), so the table is read again
+/// until a round adds none.
+fn build_variant_case_reg(tt: &mut TypeTable) -> VariantCaseReg {
+    let mut reg = VariantCaseReg::default();
+    let mut seen = 0;
+    loop {
+        let fresh: Vec<TypeId> = tt.iter_type_ids().skip(seen).collect();
+        if fresh.is_empty() {
+            return reg;
+        }
+        seen += fresh.len();
+        for id in fresh {
+            let (def, type_args) = match tt.get(id) {
+                ResolvedType::Variant { def } => (*def, Vec::new()),
+                ResolvedType::GenericInstance { def, type_args } => (*def, type_args.clone()),
+                _ => continue,
+            };
+            let Some(cases) = tt.variant_template_cases(def).map(<[_]>::to_vec) else {
+                continue;
+            };
+            let substitution: hashmap::IndexMap<u32, TypeId> = type_args
+                .into_iter()
+                .enumerate()
+                .map(|(i, arg)| (i as u32, arg))
+                .collect();
+            let cases = cases
+                .into_iter()
+                .map(|(name, index, payload)| {
+                    (
+                        name,
+                        index,
+                        tt.substitute_type_params(payload, &substitution),
+                    )
+                })
+                .collect();
+            reg.insert(id, cases);
+        }
+    }
+}
+
 /// What a type holds that this pass drops, one level down.
 enum Layout<'a> {
     /// A resource, released by `resource.drop` under this CM name.
@@ -135,8 +181,8 @@ enum Layout<'a> {
     Struct(&'a [(u32, String, TypeId)]),
     /// A tuple, dropped element by element.
     Tuple(Vec<TypeId>),
-    /// A `Result`, dropped by a `match` on its case: `(ok, err)`.
-    Result(TypeId, TypeId),
+    /// A variant, dropped by a `match` on its case: `(name, index, payload)`.
+    Variant(&'a [(String, u32, TypeId)]),
     /// Nothing this pass drops.
     Opaque,
 }
@@ -147,12 +193,13 @@ struct Resources<'a> {
     tt: &'a TypeTable,
     reg: &'a CmInterfaceRegistry,
     struct_fields: &'a StructFieldReg,
+    variant_cases: &'a VariantCaseReg,
 }
 
 impl<'a> Resources<'a> {
     /// Whether `type_id` owns, or structurally carries, a Component Model
     /// resource that this pass knows how to drop: a bare resource, or a struct
-    /// / tuple / `Result` that transitively contains one.
+    /// / tuple / variant that transitively contains one.
     fn carried_by(&self, type_id: TypeId) -> bool {
         self.carried_by_rec(type_id, &mut Vec::new())
     }
@@ -171,9 +218,9 @@ impl<'a> Resources<'a> {
             Layout::Tuple(elems) => elems
                 .into_iter()
                 .any(|elem_ty| self.carried_by_rec(elem_ty, visited)),
-            Layout::Result(ok, err) => {
-                self.carried_by_rec(ok, visited) || self.carried_by_rec(err, visited)
-            }
+            Layout::Variant(cases) => cases
+                .iter()
+                .any(|(_, _, payload)| self.carried_by_rec(*payload, visited)),
             Layout::Opaque => false,
         }
     }
@@ -210,8 +257,8 @@ impl<'a> Resources<'a> {
             _ => {
                 if let Some(elems) = tt.as_tuple(base) {
                     Layout::Tuple(elems)
-                } else if let Some((ok, err)) = tt.as_result(base) {
-                    Layout::Result(ok, err)
+                } else if let Some(cases) = self.variant_cases.get(&base) {
+                    Layout::Variant(cases)
                 } else {
                     Layout::Opaque
                 }
@@ -332,11 +379,13 @@ pub fn elaborate_resource_drops(project: &mut Package) {
     else {
         return;
     };
+    let variant_cases = build_variant_case_reg(&mut type_table.borrow_mut());
     let tt = type_table.borrow();
     let resources = Resources {
         tt: &tt,
         reg: &project.cm_interface_registry,
         struct_fields: &struct_fields,
+        variant_cases: &variant_cases,
     };
 
     let mut callees = CalleeFacts::default();
@@ -495,7 +544,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
                 .collect();
             drop_projected(scrutinee, &fields, cx)
         }
-        Layout::Result(ok_ty, err_ty) => drop_result(scrutinee, type_id, ok_ty, err_ty, cx),
+        Layout::Variant(cases) => drop_variant(scrutinee, type_id, cases, cx),
         Layout::Opaque => Vec::new(),
     }
 }
@@ -525,26 +574,22 @@ fn drop_projected(
     stmts
 }
 
-/// Drop a `Result<ok, err>` structurally via a synthesized `match`.
-fn drop_result(
+/// Drop a variant structurally via a synthesized `match`, an arm per case.
+fn drop_variant(
     scrutinee: TirExpr,
-    result_ty: TypeId,
-    ok_ty: TypeId,
-    err_ty: TypeId,
+    variant_ty: TypeId,
+    cases: &[(String, u32, TypeId)],
     cx: &mut Cx,
 ) -> Vec<TirStmt> {
-    let ok_has = cx.carries_resource(ok_ty);
-    let err_has = cx.carries_resource(err_ty);
-    if !ok_has && !err_has {
-        return Vec::new();
-    }
     let span = synth_span();
-    let ok_arm = result_drop_arm(result_ty, CompilerItem::ResultOk, ok_ty, ok_has, cx);
-    let err_arm = result_drop_arm(result_ty, CompilerItem::ResultErr, err_ty, err_has, cx);
+    let arms = cases
+        .iter()
+        .map(|(name, index, payload)| variant_drop_arm(variant_ty, name, *index, *payload, cx))
+        .collect();
     let match_expr = TirExpr::new(
         TirExprKind::Match {
             expr: Box::new(scrutinee),
-            arms: vec![ok_arm, err_arm],
+            arms,
         },
         TypeTable::UNIT,
         span,
@@ -552,39 +597,39 @@ fn drop_result(
     vec![TirStmt::new(TirStmtKind::Expr(match_expr), span)]
 }
 
-/// Build one arm of a `Result` structural-drop `match`. The payload is bound
-/// to a fresh local and recursively dropped when `drop_payload` is set;
-/// otherwise the arm body is empty.
-fn result_drop_arm(
-    result_ty: TypeId,
-    case: CompilerItem,
+/// Build one arm of a variant's structural-drop `match`: the case's payload,
+/// where it carries a resource, bound to a fresh local and dropped; an empty
+/// body otherwise.
+fn variant_drop_arm(
+    variant_ty: TypeId,
+    case_name: &str,
+    case_index: u32,
     payload_ty: TypeId,
-    drop_payload: bool,
     cx: &mut Cx,
 ) -> TirMatchArm {
     let span = synth_span();
-    let (_, _, case_name, case_index) = cx.resources.tt.compiler_variant_case(case);
-    let case_name = case_name.to_string();
-    let (payload_local, payload_name) = cx.alloc_local(payload_ty, "drop_v");
-    let body_stmts = if drop_payload {
-        drop_value(
+    let (bindings, body_stmts) = if cx.carries_resource(payload_ty) {
+        let (payload_local, payload_name) = cx.alloc_local(payload_ty, "drop_v");
+        let drops = drop_value(
             local_ref(payload_local, &payload_name, payload_ty),
             payload_ty,
             cx,
-        )
+        );
+        let binding = TirPattern::Binding {
+            name: payload_name,
+            local_index: payload_local,
+            type_id: payload_ty,
+        };
+        (vec![binding], drops)
     } else {
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
     TirMatchArm {
         pattern: TirPattern::Variant {
-            enum_type: result_ty,
-            variant_name: case_name,
+            enum_type: variant_ty,
+            variant_name: case_name.to_string(),
             case_index,
-            bindings: vec![TirPattern::Binding {
-                name: payload_name,
-                local_index: payload_local,
-                type_id: payload_ty,
-            }],
+            bindings,
             payload_type: payload_ty,
         },
         guard: None,

@@ -1,0 +1,38 @@
+// A variant holding a resource in a case's payload, bound and never moved,
+// drops the payload of whichever case it holds at the end of its scope. A
+// generic variant drops through its type arguments.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+variant Held {
+    One(Fields),
+    Pair([Fields, i32]),
+    Empty,
+}
+
+variant Boxed<T> {
+    Full(T),
+    Hollow,
+}
+
+fn hold(which: i32) with Fields {
+    let held = match which {
+        0 => Held::One(Fields::new()),
+        1 => Held::Pair([Fields::new(), 7]),
+        _ => Held::Empty,
+    };
+    let boxed: Boxed<Fields> = if which == 0 { Boxed::Full(Fields::new()) } else { Boxed::Hollow };
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    hold(0);
+    hold(1);
+    hold(2);
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}
