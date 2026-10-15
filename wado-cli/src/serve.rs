@@ -4,7 +4,7 @@ use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::{Pin, pin};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
@@ -37,7 +37,7 @@ use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
-use crate::runtime::{self, Preopens, ProfileMode, WasiState};
+use crate::runtime::{self, Preopens, ProfileMode, Ticker, WasiState};
 use crate::sync::lock;
 
 /// First-byte timeout cuts off guests stuck in the host; the epoch
@@ -1042,24 +1042,10 @@ async fn run_http_server(
         ProfileMode::Guest { interval_ms, .. } => Duration::from_millis(*interval_ms),
         _ => Duration::from_millis(EPOCH_TICK_MS),
     };
-    let epoch_stop = Arc::new((Mutex::new(false), Condvar::new()));
-    let epoch_ticker = {
+    let epoch_ticker = Ticker::start(epoch_tick, {
         let engine = engine.clone();
-        let epoch_stop = Arc::clone(&epoch_stop);
-        std::thread::spawn(move || {
-            let (stop_flag, cvar) = &*epoch_stop;
-            let mut stop = lock(stop_flag);
-            while !*stop {
-                let (next, wait) = cvar
-                    .wait_timeout(stop, epoch_tick)
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                stop = next;
-                if wait.timed_out() {
-                    engine.increment_epoch();
-                }
-            }
-        })
-    };
+        move || engine.increment_epoch()
+    });
 
     let addr: SocketAddr = addr.parse()?;
     let listener = TcpListener::bind(addr).await?;
@@ -1177,12 +1163,7 @@ async fn run_http_server(
     for engine_task in engine_tasks {
         let _ = tokio::time::timeout(drain_deadline, engine_task).await;
     }
-    {
-        let (stop_flag, cvar) = &*epoch_stop;
-        *lock(stop_flag) = true;
-        cvar.notify_all();
-    }
-    let _ = epoch_ticker.join();
+    drop(epoch_ticker);
 
     // Every worker has stopped, so no further samples can land: finish the
     // guest profile and write it out.
