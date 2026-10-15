@@ -348,13 +348,13 @@ fn report_init_cycle(
             code: Code::CircularDependency,
             message: if let [name] = names[..] {
                 format!(
-                    "the initializer of `{name}` may read `{name}` before it has been given \
+                    "the initializer of `{name}` may use `{name}` before it has been given \
                      a value."
                 )
             } else {
                 format!(
-                    "global initializers form a cycle: {}. Each may wait for a value another \
-                     has not been given yet, so none can go first.",
+                    "global initializers form a cycle: {}. Each may use a global another has \
+                     not given a value yet, so none can go first.",
                     names.join(", ")
                 )
             },
@@ -438,7 +438,7 @@ fn module_order(
                     severity: Severity::Error,
                     code: Code::CircularDependency,
                     message: format!(
-                        "the global initializers of these modules wait on each other: {}. \
+                        "the global initializers of these modules depend on each other: {}. \
                          A module's globals are initialized together, so none of these \
                          modules can go first.",
                         edges.join(", ")
