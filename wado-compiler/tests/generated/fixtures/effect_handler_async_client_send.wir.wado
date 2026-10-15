@@ -444,7 +444,7 @@ type "functype//effect_handler_async_client_send.wado/effect_handler_async_clien
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(114)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(115)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(115)
 
 type "functype//wasi/future-new" = fn() -> i64;  // TypeId(116)
 
@@ -1429,9 +1429,9 @@ fn "effect_handler_async_client_send.wado/$cm_task_entry__handle"(request) {
     let $fuse_at_193: i32;
     let offset_201: i32;
     let f_217: ref "core:prelude/format.wado//Formatter";
-    let packed_236: i64;
-    let rx_240: i32;
-    let tx_241: i32;
+    let packed_234: i64;
+    let rx_238: i32;
+    let tx_239: i32;
     mock = struct.new "effect_handler_async_client_send.wado//MockClient" { calls: 0 };
     global:effect_handler_async_client_send.wado::$effect_wasi:http/client.wado/Client = struct.new "effect_handler_async_client_send.wado//$Dispatch_wasi:http/client.wado/Client" { outer: local.tee $local_187(global:effect_handler_async_client_send.wado::$effect_wasi:http/client.wado/Client), op_send: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_async_client_send.wado//$Closure_2" { $capture_0: mock }, func: ref.func "closure/effect_handler_async_client_send.wado/$closure_wrapper_2" } };
     $local_189 = "effect_handler_async_client_send.wado/fetch_upstream"();
@@ -1456,36 +1456,36 @@ fn "effect_handler_async_client_send.wado/$cm_task_entry__handle"(request) {
         builtin::array_copy<u8>($load_1, $fuse_at_193, global:effect_handler_async_client_send.wado::$const_obj_10, 0, 12);
         $local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_12);
         "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"($v0, $local_13);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_12, global:effect_handler_async_client_send.wado::$const_obj_9);
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:effect_handler_async_client_send.wado::$const_obj_9, $local_12);
         "core:rt/panic"($local_12.repr, $local_12.used);
         unreachable;
     }
     $v0 = "effect_handler_async_client_send.wado/$cm_binding__Response_get_status_code"($local_189);
-    $fuse_at_193 = builtin::i32_wrap_i64(local.tee packed_236("wasi/future-new"()));
-    offset_201 = builtin::i32_wrap_i64(packed_236 >> 32_i64);
-    rx_240 = builtin::i32_wrap_i64(local.tee packed_236("wasi/stream-new"()));
-    tx_241 = builtin::i32_wrap_i64(packed_236 >> 32_i64);
-    $fuse_at_193 = "effect_handler_async_client_send.wado/$cm_binding__Response_new"("effect_handler_async_client_send.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: rx_240 }, $fuse_at_193).0;
-    rx_240 = 0;
-    rx_240 = $fuse_at_193;
-    "wasi/task-return:handle"(0, rx_240, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(tx_241, $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; if @unlikely(local.tee rx_240(0 + 9) > builtin::array_len($local_12.repr)) {
+    $fuse_at_193 = builtin::i32_wrap_i64(local.tee packed_234("wasi/future-new"()));
+    offset_201 = builtin::i32_wrap_i64(packed_234 >> 32_i64);
+    rx_238 = builtin::i32_wrap_i64(local.tee packed_234("wasi/stream-new"()));
+    tx_239 = builtin::i32_wrap_i64(packed_234 >> 32_i64);
+    $fuse_at_193 = "effect_handler_async_client_send.wado/$cm_binding__Response_new"("effect_handler_async_client_send.wado/$cm_binding__Fields_new"(), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 1, payload_0: rx_238 }, $fuse_at_193).0;
+    rx_238 = 0;
+    rx_238 = $fuse_at_193;
+    "wasi/task-return:handle"(0, rx_238, 0, 0_i64, 0, 0, 0, 0);
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all$dae[return]"(tx_239, $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 }; if @unlikely(local.tee rx_238(0 + 9) > builtin::array_len($local_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, rx_240);
-    }; $fuse_at_193 = $local_12.used; $local_12.used = rx_240; builtin::array_copy<u8>($local_12.repr, $fuse_at_193, global:effect_handler_async_client_send.wado::$const_obj_8, 0, 9); $fuse_at_193 = $v0 < 0; $v0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_236(packed_236 = builtin::i64_extend_i32_s($v0); select i64(packed_236 < 0_i64, 0_i64 - packed_236, packed_236))); if $fuse_at_193 {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, rx_238);
+    }; $fuse_at_193 = $local_12.used; $local_12.used = rx_238; builtin::array_copy<u8>($local_12.repr, $fuse_at_193, global:effect_handler_async_client_send.wado::$const_obj_8, 0, 9); $fuse_at_193 = $v0 < 0; $v0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee packed_234(packed_234 = builtin::i64_extend_i32_s($v0); select i64(packed_234 < 0_i64, 0_i64 - packed_234, packed_234))); if $fuse_at_193 {
         if @unlikely(local.tee $fuse_at_193($local_12.used + 1) > builtin::array_len($local_12.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, $fuse_at_193);
         }
-        rx_240 = $local_12.used;
+        rx_238 = $local_12.used;
         $local_12.used = $fuse_at_193;
-        builtin::array_set_u8($local_12.repr, rx_240, 45);
+        builtin::array_set_u8($local_12.repr, rx_238, 45);
     } else {
-    }; if @unlikely(local.tee rx_240($local_12.used + $v0) > builtin::array_len($local_12.repr)) {
+    }; if @unlikely(local.tee rx_238($local_12.used + $v0) > builtin::array_len($local_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, rx_240);
-    }; $fuse_at_193 = $local_12.used; $local_12.used = rx_240; "core:prelude/primitive.wado/write_decimal_digits"($local_12.repr, $fuse_at_193, packed_236, $v0); "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_12.repr, used: $local_12.used, index: 0 }));
-    "wasi/stream-drop-writable"(tx_241);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_12, rx_238);
+    }; $fuse_at_193 = $local_12.used; $local_12.used = rx_238; "core:prelude/primitive.wado/write_decimal_digits"($local_12.repr, $fuse_at_193, packed_234, $v0); "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: $local_12.repr, used: $local_12.used, index: 0 }));
+    "wasi/stream-drop-writable"(tx_239);
     "effect_handler_async_client_send.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(offset_201, global:effect_handler_async_client_send.wado::$const_obj_7);
     "wasi/resource-drop:wasi/http/types.wado#response"($local_189);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
@@ -2195,7 +2195,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0$dae[value]"(low, high) {
     builtin::array_copy<u8>($load_0, low, global:core:prelude/primitive.wado::$const_obj_18, 0, 6);
     $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(high, $local_5);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_4, global:effect_handler_async_client_send.wado::$const_obj_9);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:effect_handler_async_client_send.wado::$const_obj_9, $local_4);
     "core:rt/panic"($local_4.repr, $local_4.used);
     unreachable;
 }
@@ -2231,7 +2231,7 @@ fn "core:prelude/types.wado/cm_subtask_settled$cold0$dae[event]"($v0) {
     builtin::array_copy<u8>($load_0, $v0, global:core:prelude/types.wado::$const_obj_28, 0, 18);
     $local_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(1, $local_4);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_3, global:effect_handler_async_client_send.wado::$const_obj_9);
+    "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:effect_handler_async_client_send.wado::$const_obj_9, $local_3);
     "core:rt/panic"($local_3.repr, $local_3.used);
     unreachable;
 }
@@ -2887,16 +2887,16 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {
     let new_used: i32;
-    let start_7: i32;
-    if @unlikely(local.tee new_used(self.used + 1) > builtin::array_len(self.repr)) {
+    let start_9: i32;
+    if @unlikely(local.tee new_used(out.used + 1) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
     }
-    start_7 = self.used;
-    self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, 1);
+    start_9 = out.used;
+    out.used = new_used;
+    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 1);
 }
 
 fn "closure/effect_handler_async_client_send.wado/$closure_wrapper_0"($env, $p0) {

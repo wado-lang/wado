@@ -55,15 +55,15 @@ fn "spec_worlds_command_result.wado/$cm_binding__Stdout_write_via_stream"(data) 
 
 fn "spec_worlds_command_result.wado/$cm_export__run"() {
     let packed: i64;
-    let rx_74: i32;
-    let tx_75: i32;
-    rx_74 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_75 = builtin::i32_wrap_i64(packed >> 32_i64);
-    rx_74 = "spec_worlds_command_result.wado/$cm_binding__Stdout_write_via_stream"(rx_74);
+    let rx_72: i32;
+    let tx_73: i32;
+    rx_72 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_73 = builtin::i32_wrap_i64(packed >> 32_i64);
+    rx_72 = "spec_worlds_command_result.wado/$cm_binding__Stdout_write_via_stream"(rx_72);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("all checks passed");
-    "core:rt/write_string_to_stream$dae[add_newline]"(tx_75, $mv_field_2, 17);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_74);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_73, $mv_field_2, 17);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_72);
     "wasi/task-return:run"(0);
 }
 

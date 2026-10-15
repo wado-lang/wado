@@ -91,7 +91,7 @@ type "functype//core:prelude/traits.wado/assoc_output_is_self.wado/Cm^core:prelu
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(34)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(35)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
 
@@ -190,7 +190,7 @@ fn "assoc_output_is_self.wado/run$cold0"() with Stdout {
         global:assoc_output_is_self.wado::$const_obj_4 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: xs.iter_value().sum() matches { Some(t) && t.v == 5 }
 "), used: 66 };
-    }; "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($local_4, global:assoc_output_is_self.wado::$const_obj_4); $local_4);
+    }; "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:assoc_output_is_self.wado::$const_obj_4, $local_4); $local_4);
     unreachable;
 }
 
@@ -746,16 +746,16 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(self, out) {
     let new_used: i32;
-    let start_7: i32;
-    if @unlikely(local.tee new_used(self.used + 66) > builtin::array_len(self.repr)) {
+    let start_9: i32;
+    if @unlikely(local.tee new_used(out.used + 66) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
     }
-    start_7 = self.used;
-    self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, 66);
+    start_9 = out.used;
+    out.used = new_used;
+    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 66);
 }
 
 export fn "assoc_output_is_self.wado/$cm_export__run" as "run"

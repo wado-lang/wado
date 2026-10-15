@@ -377,17 +377,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(86)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(87)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(87)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(88)
+type "functype//wasi:http/types.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,core:prelude/types.wado/Option<core:prelude/string.wado/String>>"];  // TypeId(88)
 
-type "functype//wasi:http/types.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>", ref "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,core:prelude/types.wado/Option<core:prelude/string.wado/String>>"];  // TypeId(89)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(89)
 
 type "functype//core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref null "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(90)
 
 type "functype//core:prelude/traits.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "wasi:http/types.wado//HeaderError", ref "core:prelude/format.wado//Formatter");  // TypeId(91)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(92)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(92)
 
 type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(93)
 
@@ -2036,22 +2036,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
     return start;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(self, other) {
-    let n_2: i32;
-    let new_used: i32;
-    let start_7: i32;
-    if local.tee n_2(other.used) == 0 {
-        return;
-    }
-    if @unlikely(local.tee new_used(self.used + n_2) > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-    }
-    start_7 = self.used;
-    self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, n_2);
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     let byte: u8;
     let new_used: i32;
@@ -2099,6 +2083,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 
 fn "wasi:http/types.wado/wasi:http/types.wado/HeaderError^core:prelude/traits.wado/ReflectVariant::members"() {
     return struct.new "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>" { index: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("InvalidSyntax"), used: 13 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>" { index: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Forbidden"), used: 9 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>" { index: 2, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Immutable"), used: 9 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,()>" { index: 3, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("SizeExceeded"), used: 12 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<wasi:http/types.wado/HeaderError,core:prelude/types.wado/Option<core:prelude/string.wado/String>>" { index: 4, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Other"), used: 5 }, wire_override: ref.null none, is_unit: 0 };
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self, other) {
+    let n_8: i32;
+    let new_used: i32;
+    let start_13: i32;
+    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 local.tee n_8(other.used) == 0;
+        if @unlikely(local.tee new_used(self.used + n_8) > builtin::array_len(self.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
+        }
+        start_13 = self.used;
+        self.used = new_used;
+        builtin::array_copy<u8>(self.repr, start_13, other.repr, 0, n_8);
+    };
 }
 
 fn "core:prelude/traits.wado/core:prelude/types.wado/Option<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
@@ -2171,56 +2171,61 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/HeaderError^core:prelude/trait
     $mv_3_4 = global:core:prelude/traits.wado::$const_obj_104.0;
     if self.discriminant == 0 {
         s_12 = global:core:prelude/traits.wado::$const_obj_95;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee s_12(f.buf), global:core:prelude/traits.wado::$const_obj_94);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
+        s_12 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_94, s_12);
         s_12 = $mv_3_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
     }
     $mv_3_4 = global:core:prelude/traits.wado::$const_obj_104.1;
     if self.discriminant == 1 {
         s_12 = global:core:prelude/traits.wado::$const_obj_95;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee s_12(f.buf), global:core:prelude/traits.wado::$const_obj_94);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
+        s_12 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_94, s_12);
         s_12 = $mv_3_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
     }
     $mv_3_4 = global:core:prelude/traits.wado::$const_obj_104.2;
     if self.discriminant == 2 {
         s_12 = global:core:prelude/traits.wado::$const_obj_95;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee s_12(f.buf), global:core:prelude/traits.wado::$const_obj_94);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
+        s_12 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_94, s_12);
         s_12 = $mv_3_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
     }
     $mv_3_4 = global:core:prelude/traits.wado::$const_obj_104.3;
     if self.discriminant == 3 {
         s_12 = global:core:prelude/traits.wado::$const_obj_95;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee s_12(f.buf), global:core:prelude/traits.wado::$const_obj_94);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
+        s_12 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_94, s_12);
         s_12 = $mv_3_4.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
     }
     $mv_4_5 = global:core:prelude/traits.wado::$const_obj_104.4;
     if self.discriminant == 4 {
         s_12 = global:core:prelude/traits.wado::$const_obj_95;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(local.tee s_12(f.buf), global:core:prelude/traits.wado::$const_obj_94);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
+        s_12 = f.buf;
+        "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(global:core:prelude/traits.wado::$const_obj_94, s_12);
         s_12 = $mv_4_5.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f.buf, s_12);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f.buf, s_12);
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/types.wado/Option<core:prelude/string.wado/String>>$sroa[payload.value]"("wasi:http/types.wado/$case_extract$wasi:http/types.wado/HeaderError$core:prelude/types.wado/Option<core:prelude/string.wado/String>$sroa[v.value]"(self, 4), f);
     }
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec1"(self, out) {
     let new_used: i32;
-    let start_7: i32;
-    if @unlikely(local.tee new_used(self.used + 2) > builtin::array_len(self.repr)) {
+    let start_9: i32;
+    if @unlikely(local.tee new_used(out.used + 2) > builtin::array_len(out.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
     }
-    start_7 = self.used;
-    self.used = new_used;
-    builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, 2);
+    start_9 = out.used;
+    out.used = new_used;
+    builtin::array_copy<u8>(out.repr, start_9, self.repr, 0, 2);
 }
 
 export fn "resource_result_binding_unwrap.wado/$cm_export__handle" as "handle"
