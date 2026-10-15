@@ -123,9 +123,8 @@ global global:core:prelude/string.wado::$const_obj_90: ref Array<u8> = array.new
 global global:core:prelude/string.wado::$const_obj_92: ref Array<u8> = array.new_fixed<u8>(83, 116, 114, 105, 110, 103, 58, 58, 115, 101, 116, 95, 98, 121, 116, 101, 95, 97, 116);
 global global:core:prelude/traits.wado::$const_obj_140: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 114, 101, 101, 110), used: 5 };
 global global:core:prelude/traits.wado::$const_obj_141: ref Array<u8> = array.new_fixed<u8>(58, 58);
-global global:core:prelude/traits.wado::$const_obj_142: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(67, 111, 108, 111, 114), used: 5 };
-global global:core:prelude/traits.wado::$const_obj_143: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 100), used: 3 };
-global global:core:prelude/primitive.wado::$const_obj_146: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_142: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 100), used: 3 };
+global global:core:prelude/primitive.wado::$const_obj_144: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "comparison_chain_dispatch.wado/$cm_export__$test_0_an_impl_written_for_a_reference"() {
     "wasi/task-return"(0);
@@ -774,7 +773,7 @@ fn "core:prelude/traits.wado/comparison_chain_dispatch.wado/Color^core:prelude/t
     let new_used_40: i32;
     let start_41: i32;
     if self == 0 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_142;
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
         if @unlikely(local.tee new_used_40(f.used + 2) > builtin::array_len(f.repr)) {
             cold_path;
@@ -783,10 +782,10 @@ fn "core:prelude/traits.wado/comparison_chain_dispatch.wado/Color^core:prelude/t
         start_41 = f.used;
         f.used = new_used_40;
         builtin::array_copy<u8>(f.repr, start_41, global:core:prelude/traits.wado::$const_obj_141, 0, 2);
-        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, global:core:prelude/traits.wado::$const_obj_143);
+        "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, global:core:prelude/traits.wado::$const_obj_142);
     }
     if self == 1 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_142;
+        s_9 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(f, s_9);
         if @unlikely(local.tee self(f.used + 2) > builtin::array_len(f.repr)) {
             cold_path;
@@ -806,7 +805,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     is_negative = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_146;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_144;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, self);
     };
     "core:prelude/primitive.wado/write_decimal_digits"(local.tee $mv_arg_3(f.buf).repr, is_negative, x, self);
