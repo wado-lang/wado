@@ -101,9 +101,9 @@ type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" =
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(40)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(41)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(41)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(42)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(42)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]" = fn(u64, ref "core:prelude/string.wado//String", i32, bool);  // TypeId(43)
 
@@ -1213,6 +1213,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
     builtin::array_copy<u8>(self.repr, start_7, other.repr, 0, 1);
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
+    let new_used_19: i32;
+    let start_20: i32;
+    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
+        if @unlikely(local.tee new_used_19(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
+        }
+        start_20 = self.used;
+        self.used = new_used_19;
+        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
+    };
+    return;
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
     let start_26: i32;
     if is_negative {
@@ -1238,22 +1254,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_26 = self.used;
     self.used = digit_count;
     return start_26;
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {
-    let new_used_19: i32;
-    let start_20: i32;
-    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 $mv$content$used == 0;
-        if @unlikely(local.tee new_used_19(self.used + $mv$content$used) > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
-        }
-        start_20 = self.used;
-        self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, start_20, $mv$content$repr, 0, $mv$content$used);
-    };
-    return;
 }
 
 fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0$sroa[f.buf]$dae[alt_prefix]"(self, f, base, upper) {
