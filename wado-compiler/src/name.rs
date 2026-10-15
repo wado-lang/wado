@@ -322,6 +322,12 @@ pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
     format!("$hole_fmt${mangled_shape}")
 }
 
+/// Name of the synthesized function that drops the resources a value of a
+/// self-holding type holds, by structural mangle of the type.
+pub fn drop_glue_name(mangled_type: &str) -> String {
+    format!("$drop${mangled_type}")
+}
+
 /// Whether `name` is a per-type bridge — a helper synthesis mints for a *type*
 /// rather than for a call site: the value-copy pair, the reflect accessors
 /// ([`case_extract_helper_name`] and its siblings), an effect operation's

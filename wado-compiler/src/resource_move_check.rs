@@ -7,57 +7,7 @@ use crate::elaborator::liveness::is_user_authored;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
-
-/// Whether `type_id` transitively owns an affine resource, making a binding of
-/// that type move-only. The aggregate set stays in step with
-/// `resource_cleanup::carries_resource`, so nothing is move-only that the
-/// cleanup pass would then leak. `struct_fields` answers a struct's field
-/// types, which the type table alone does not hold.
-pub(crate) fn carries_affine_resource(
-    types: &TypeTable,
-    struct_fields: &impl Fn(TypeId) -> Option<Vec<TypeId>>,
-    type_id: TypeId,
-    visited: &mut Vec<TypeId>,
-) -> bool {
-    let base = types.representation_head(type_id);
-    if visited.contains(&base) {
-        return false;
-    }
-    visited.push(base);
-    // A variant's payloads, as its declaration writes them, then its type
-    // arguments, which stand in for the payloads that name them.
-    let variant_payloads = |def, type_args: &[TypeId]| -> Option<Vec<TypeId>> {
-        let cases = types.variant_template_cases(def)?;
-        let mut children: Vec<TypeId> = cases.iter().map(|(_, _, payload)| *payload).collect();
-        children.extend_from_slice(type_args);
-        Some(children)
-    };
-    let children: Vec<TypeId> = match types.get(base) {
-        ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
-            return !types.is_unrestricted_resource(*def);
-        }
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-        ResolvedType::Struct { .. } => struct_fields(base).unwrap_or_default(),
-        ResolvedType::Variant { def } => variant_payloads(*def, &[]).unwrap_or_default(),
-        ResolvedType::GenericInstance { def, type_args } => variant_payloads(*def, type_args)
-            .unwrap_or_else(|| types.as_tuple(base).unwrap_or_default()),
-        _ => Vec::new(),
-    };
-    children
-        .into_iter()
-        .any(|t| carries_affine_resource(types, struct_fields, t, visited))
-}
-
-fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
-    carries_affine_resource(
-        &sem.types,
-        &|id| sem.struct_field_type_ids_of(id),
-        type_id,
-        visited,
-    )
-}
 
 #[derive(Debug, Clone)]
 pub enum ResourceMoveError {
@@ -274,7 +224,7 @@ impl ReferenceChecker<'_> {
         let Some(type_id) = self.sem.expression_type(value.id()) else {
             return;
         };
-        if !type_carries_resource(self.sem, type_id, &mut Vec::new()) {
+        if !self.sem.carries_resource(type_id) {
             return;
         }
         self.out.push(ResourceMoveError::MoveOutOfReference {
@@ -416,7 +366,7 @@ impl MoveWalker<'_> {
     fn resource_def(&self, use_id: AstId) -> Option<AstId> {
         let def = self.sem.referenced_symbol(use_id)?;
         let type_id = self.sem.expression_type(use_id)?;
-        (type_carries_resource(self.sem, type_id, &mut Vec::new())).then_some(def)
+        self.sem.carries_resource(type_id).then_some(def)
     }
 
     fn read(&mut self, ident: &IdentExpr) {

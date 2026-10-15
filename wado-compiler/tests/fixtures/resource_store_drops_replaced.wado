@@ -1,0 +1,37 @@
+// A store drops the resource it replaces, after the stored value is computed,
+// and a binding whose resource was moved owns the one stored into it.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+struct Holder {
+    fields: Fields,
+    count: i32,
+}
+
+fn eat(fields: Fields) {
+}
+
+fn store(branch: bool) with Fields {
+    let mut held = Fields::new();
+    held = Fields::new();
+    eat(held);
+    held = Fields::new();
+    if branch {
+        held = Fields::new();
+    }
+    let mut holder = Holder { fields: Fields::new(), count: 0 };
+    holder.fields = Fields::new();
+    holder.count += 1;
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    store(true);
+    store(false);
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

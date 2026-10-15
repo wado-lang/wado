@@ -63,6 +63,7 @@ mod prelower_reach;
 pub mod primitive;
 pub mod remarks;
 pub mod resolve;
+mod resource_holding;
 pub mod resource_move_check;
 pub mod self_comparison;
 pub mod semantics;

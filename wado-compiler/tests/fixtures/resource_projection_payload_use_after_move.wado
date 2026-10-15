@@ -1,0 +1,31 @@
+// A variant holding a resource through an associated type is move-only, as
+// one naming the resource directly is.
+
+use { Fields } from "wasi:http";
+
+trait Back {
+    type Item;
+}
+
+struct ByFields {}
+
+impl Back for ByFields {
+    type Item = Fields;
+}
+
+variant Held<Q: Back> {
+    Full(Q::Item),
+    Hollow,
+}
+
+fn eat(held: Held<ByFields>) {
+}
+
+fn twice() with Fields {
+    let held: Held<ByFields> = Held::Full(Fields::new());
+    eat(held);
+    eat(held);
+}
+
+__DATA__
+{"compile_error": "resource `held` used after it was moved"}

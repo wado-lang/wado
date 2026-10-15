@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::resource_move_check::carries_affine_resource;
+use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeKey, TypeTable, range_item};
 
@@ -115,8 +115,7 @@ impl TypeSystem {
     /// The `TypeId` of each field of the struct `type_id` names, in declaration
     /// order, or `None` if it names no registered struct. Keyed by the type
     /// itself rather than a spelling of it, which is what every caller holds:
-    /// each reached one by destructuring a `ResolvedType`. Used by the resource
-    /// move check to decide whether an aggregate transitively owns a resource.
+    /// each reached one by destructuring a `ResolvedType`.
     ///
     /// An anonymous shape answers from its head: it has fields like any other
     /// struct, and no declaration to reach them through.
@@ -141,15 +140,10 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-    /// Whether `type_id` is, or transitively carries, an affine resource.
-    /// Permits a by-value `self` receiver on an aggregate that owns a resource.
+    /// Whether `type_id` is, or holds at any depth, an affine resource: what
+    /// makes a binding of it move-only, and a by-value `self` on it legal.
     pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
-        carries_affine_resource(
-            &self.type_table.borrow(),
-            &|id| self.struct_field_type_ids_of(id),
-            type_id,
-            &mut Vec::new(),
-        )
+        holds_resource(self, type_id)
     }
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
@@ -677,5 +671,78 @@ impl TypeSystem {
     pub(super) fn compares_handles(&self, op: BinaryOp, left: TypeId, right: TypeId) -> bool {
         matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
             && self.type_table.borrow().handles_compare(left, right)
+    }
+}
+
+impl HeldTypes for TypeSystem {
+    fn held(&self, type_id: TypeId) -> Held {
+        let (base, resolved) = {
+            let table = self.type_table.borrow();
+            let base = table.representation_head(type_id);
+            (base, table.get(base).clone())
+        };
+        match resolved {
+            ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
+                if self.type_table.borrow().is_unrestricted_resource(def) {
+                    Held::Nothing
+                } else {
+                    Held::Resource
+                }
+            }
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
+            ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } => Held::Members {
+                decl: None,
+                args: Vec::new(),
+                members: self
+                    .type_table
+                    .borrow()
+                    .anon_struct_fields(shape)
+                    .iter()
+                    .map(|(_, field_type)| *field_type)
+                    .collect(),
+            },
+            _ => {
+                if let Some(elements) = self.type_table.borrow().as_tuple(base) {
+                    return Held::Members {
+                        decl: None,
+                        args: Vec::new(),
+                        members: elements,
+                    };
+                }
+                let Some(decl) = self.type_def(base) else {
+                    return Held::Nothing;
+                };
+                let args = self
+                    .type_table
+                    .borrow()
+                    .nominal_type_args(base)
+                    .unwrap_or_default();
+                // A generic struct's instance is a `GenericInstance`, as a
+                // generic variant's is.
+                let members = if let Some(info) = self.data.struct_fields.get(&decl) {
+                    let templates: Vec<TypeId> = info
+                        .fields
+                        .iter()
+                        .map(|(_, field_type, _)| *field_type)
+                        .collect();
+                    templates
+                        .into_iter()
+                        .map(|field_type| self.substitute_type_params(field_type, &args))
+                        .collect()
+                } else if let Some(payloads) = self.case_payload_types(base) {
+                    payloads
+                } else {
+                    return Held::Nothing;
+                };
+                Held::Members {
+                    decl: Some(decl),
+                    args,
+                    members,
+                }
+            }
+        }
     }
 }

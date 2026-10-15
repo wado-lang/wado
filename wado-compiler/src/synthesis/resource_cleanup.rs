@@ -6,22 +6,27 @@
 //! temporary that is only referenced has no other owner, so it is spilled into a
 //! local that drops when its statement ends.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::canonical::{CanonicalIntrinsic, CmDecl};
 use crate::component_model::CmInterfaceRegistry;
 use crate::defs::DefId;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::minted_name;
+use crate::name::{drop_glue_name, minted_name};
 use crate::package::Package;
+use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::common;
 use crate::synthesis::common::{cm_canonical_call, expr_stmt, let_stmt, local_ref, synth_span};
+use crate::tir;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal,
-    TirMatchArm, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirTemplatePart, TirUnaryOp, TypeId, TypeKey, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
-use crate::{hashmap, tir};
 
 /// An owned resource-bearing value currently live in some scope.
 #[derive(Clone)]
@@ -34,11 +39,39 @@ struct Live {
     temporary: bool,
 }
 
-/// Ownership state: a stable slot per resource value. `None` means the value
-/// has been transferred or already dropped on the current path. Slots are
-/// only ever appended (a new binding) or cleared (a transfer / drop), so a
-/// slot index stays valid across cloned branch states.
-type Owned = Vec<Option<Live>>;
+/// A resource value a scope declared, and whether the scope still owns it on
+/// the current path: a transfer or a drop clears `held`, and an assignment to
+/// its local sets it again.
+#[derive(Clone)]
+struct Slot {
+    live: Live,
+    held: bool,
+}
+
+impl From<Live> for Slot {
+    fn from(live: Live) -> Slot {
+        Slot { live, held: true }
+    }
+}
+
+impl Slot {
+    fn take(&mut self) -> Option<Live> {
+        self.take_if(|_| true)
+    }
+
+    fn take_if(&mut self, which: impl FnOnce(&Live) -> bool) -> Option<Live> {
+        if !self.held || !which(&self.live) {
+            return None;
+        }
+        self.held = false;
+        Some(self.live.clone())
+    }
+}
+
+/// Ownership state: a stable slot per resource value. Slots are only ever
+/// appended (a new binding) or truncated (a scope's end), so a slot index
+/// stays valid across cloned branch states.
+type Owned = Vec<Slot>;
 
 /// Whether a statement sequence falls through to its successor.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -72,6 +105,16 @@ struct Cx<'a> {
     local_count: &'a mut u32,
     /// The enclosing loops and labeled blocks, innermost last.
     targets: Vec<BreakTarget>,
+    /// The holders whose drop is being expanded, outermost first.
+    expanding: Vec<TypeKey>,
+    glue: &'a mut DropGlue,
+}
+
+/// The drop glue functions called so far, by name, each with the type it
+/// drops. They go in `entry`, the entry module.
+struct DropGlue {
+    entry: ModuleSource,
+    called: IndexMap<String, TypeId>,
 }
 
 impl Cx<'_> {
@@ -105,95 +148,48 @@ impl Cx<'_> {
     }
 }
 
-/// Fields of each struct `(name, module)`, in declaration order, as
-/// `(index, name, type_id)`. Built once so the drop walk can recurse into
-/// struct fields without holding the `TirModule`s.
-type StructFieldReg = hashmap::IndexMap<(String, ModuleSource), Vec<(u32, String, TypeId)>>;
-
-fn build_struct_field_reg(project: &Package) -> StructFieldReg {
-    let mut reg: StructFieldReg = hashmap::IndexMap::default();
-    for module in project.tir_modules.values() {
-        for s in &module.structs {
-            reg.entry((s.name.clone(), s.module_source.clone()))
-                .or_insert_with(|| {
-                    s.fields
-                        .iter()
-                        .map(|f| (f.index, f.name.clone(), f.type_id))
-                        .collect()
-                });
-        }
-    }
-    reg
-}
-
-/// The cases of each variant type, `Option` and `Result` among them, with
-/// their payload types as that type's arguments make them:
-/// `(name, index, payload)`, a case without one carrying `()`.
-type VariantCaseReg = hashmap::IndexMap<TypeId, Vec<(String, u32, TypeId)>>;
-
-/// Every variant type the table holds, each generic one's payloads
-/// substituted. A substitution can intern a variant type of its own (a
-/// payload `Option<T>` made `Option<Fields>`), so the table is read again
-/// until a round adds none.
-fn build_variant_case_reg(tt: &mut TypeTable) -> VariantCaseReg {
-    let mut reg = VariantCaseReg::default();
-    let mut seen = 0;
-    loop {
-        let fresh: Vec<TypeId> = tt.iter_type_ids().skip(seen).collect();
-        if fresh.is_empty() {
-            return reg;
-        }
-        seen += fresh.len();
-        for id in fresh {
-            let (def, type_args) = match tt.get(id) {
-                ResolvedType::Variant { def } => (*def, Vec::new()),
-                ResolvedType::GenericInstance { def, type_args } => (*def, type_args.clone()),
-                _ => continue,
-            };
-            let Some(cases) = tt.variant_template_cases(def).map(<[_]>::to_vec) else {
-                continue;
-            };
-            let substitution: hashmap::IndexMap<u32, TypeId> = type_args
-                .into_iter()
-                .enumerate()
-                .map(|(i, arg)| (i as u32, arg))
-                .collect();
-            let cases = cases
-                .into_iter()
-                .map(|(name, index, payload)| {
-                    (
-                        name,
-                        index,
-                        tt.substitute_type_params(payload, &substitution),
-                    )
-                })
-                .collect();
-            reg.insert(id, cases);
-        }
-    }
-}
-
 /// What a type holds that this pass drops, one level down.
 enum Layout<'a> {
     /// A resource, released by `resource.drop` under this CM name.
     Resource(DefId, &'a str),
-    /// A struct, dropped field by field: `(index, name, type_id)`.
-    Struct(&'a [(u32, String, TypeId)]),
-    /// A tuple, dropped element by element.
-    Tuple(Vec<TypeId>),
-    /// A variant, dropped by a `match` on its case: `(name, index, payload)`.
-    Variant(&'a [(String, u32, TypeId)]),
+    /// An aggregate, instantiating `decl` with `args` where it has a
+    /// declaration.
+    Holder {
+        decl: Option<DefId>,
+        args: Vec<TypeId>,
+        parts: Parts,
+    },
     /// Nothing this pass drops.
     Opaque,
+}
+
+/// An aggregate's parts, typed at its instance.
+enum Parts {
+    /// A struct's fields or a tuple's elements, dropped one by one:
+    /// `(index, name, type_id)`.
+    Fields(Vec<(u32, String, TypeId)>),
+    /// A variant's cases, dropped by a `match`: `(name, index, payload)`, a
+    /// case without one carrying `()`.
+    Cases(Vec<(String, u32, TypeId)>),
+}
+
+impl Parts {
+    fn types(&self) -> Vec<TypeId> {
+        match self {
+            Parts::Fields(fields) => fields.iter().map(|(_, _, ty)| *ty).collect(),
+            Parts::Cases(cases) => cases.iter().map(|(_, _, ty)| *ty).collect(),
+        }
+    }
 }
 
 /// The tables that tell which types carry a resource this pass drops.
 #[derive(Clone, Copy)]
 struct Resources<'a> {
-    tt: &'a TypeTable,
+    tt: &'a RefCell<TypeTable>,
     reg: &'a CmInterfaceRegistry,
-    struct_fields: &'a StructFieldReg,
-    variant_cases: &'a VariantCaseReg,
+    struct_fields: &'a StructFields,
+    /// What [`Self::carried_by`] has answered, by type.
+    answers: &'a RefCell<IndexMap<TypeKey, bool>>,
 }
 
 impl<'a> Resources<'a> {
@@ -201,28 +197,13 @@ impl<'a> Resources<'a> {
     /// resource that this pass knows how to drop: a bare resource, or a struct
     /// / tuple / variant that transitively contains one.
     fn carried_by(&self, type_id: TypeId) -> bool {
-        self.carried_by_rec(type_id, &mut Vec::new())
-    }
-
-    fn carried_by_rec(&self, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
-        let base = self.tt.representation_head(type_id);
-        if visited.contains(&base) {
-            return false;
+        let key = self.tt.borrow().type_key(type_id);
+        if let Some(&carried) = self.answers.borrow().get(&key) {
+            return carried;
         }
-        visited.push(base);
-        match self.layout(base) {
-            Layout::Resource(..) => true,
-            Layout::Struct(fields) => fields
-                .iter()
-                .any(|(_, _, field_ty)| self.carried_by_rec(*field_ty, visited)),
-            Layout::Tuple(elems) => elems
-                .into_iter()
-                .any(|elem_ty| self.carried_by_rec(elem_ty, visited)),
-            Layout::Variant(cases) => cases
-                .iter()
-                .any(|(_, _, payload)| self.carried_by_rec(*payload, visited)),
-            Layout::Opaque => false,
-        }
+        let carried = holds_resource(self, type_id);
+        self.answers.borrow_mut().insert(key, carried);
+        carried
     }
 
     /// The [`Layout`] of `type_id`.
@@ -232,38 +213,79 @@ impl<'a> Resources<'a> {
     /// a reference — a referenced place owns nothing — and an unrestricted
     /// resource, which is never dropped.
     fn layout(&self, type_id: TypeId) -> Layout<'a> {
-        let tt = self.tt;
-        let base = tt.representation_head(type_id);
-        match tt.get(base) {
-            ResolvedType::Resource { def } if !tt.is_unrestricted_resource(*def) => {
-                match self.reg.get_resource_cm_name_by_module(
-                    &tt.def_module(*def).to_string(),
-                    tt.def_name(*def),
-                ) {
-                    Some(cm) => Layout::Resource(*def, cm),
-                    None => Layout::Opaque,
-                }
+        let (base, resolved) = {
+            let tt = self.tt.borrow();
+            let base = tt.representation_head(type_id);
+            (base, tt.get(base).clone())
+        };
+        if let ResolvedType::Resource { def } = resolved {
+            let tt = self.tt.borrow();
+            if tt.is_unrestricted_resource(def) {
+                return Layout::Opaque;
             }
-            ResolvedType::Struct { def, type_args } => {
-                let key = (
-                    tt.struct_rendered_name(*def, type_args),
-                    tt.struct_head_module(*def).clone(),
-                );
-                match self.struct_fields.get(&key) {
-                    Some(fields) => Layout::Struct(fields),
-                    None => Layout::Opaque,
-                }
-            }
-            _ => {
-                if let Some(elems) = tt.as_tuple(base) {
-                    Layout::Tuple(elems)
-                } else if let Some(cases) = self.variant_cases.get(&base) {
-                    Layout::Variant(cases)
-                } else {
-                    Layout::Opaque
-                }
-            }
+            return match self
+                .reg
+                .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+            {
+                Some(cm) => Layout::Resource(def, cm),
+                None => Layout::Opaque,
+            };
         }
+        let mut tt = self.tt.borrow_mut();
+        if let Some(elems) = tt.as_tuple(base) {
+            let fields = elems
+                .into_iter()
+                .enumerate()
+                .map(|(i, ty)| (i as u32, i.to_string(), ty))
+                .collect();
+            return Layout::Holder {
+                decl: None,
+                args: Vec::new(),
+                parts: Parts::Fields(fields),
+            };
+        }
+        // A generic struct's instance is a `GenericInstance`, as a generic
+        // variant's is.
+        let (def, args) = match resolved {
+            ResolvedType::Struct { def, type_args } => (def, type_args),
+            _ => match tt.nominal_def(base) {
+                Some(def) => (
+                    StructDef::Decl(def),
+                    tt.nominal_type_args(base).unwrap_or_default(),
+                ),
+                None => return Layout::Opaque,
+            },
+        };
+        let decl = match def {
+            StructDef::Decl(decl) => Some(decl),
+            StructDef::Anon(_) => None,
+        };
+        let parts = if let Some(fields) = self.struct_fields.get(&(def, Vec::new())) {
+            Parts::Fields(
+                fields
+                    .iter()
+                    .map(|field| {
+                        let ty = tt.substitute_positional(field.type_id, &args);
+                        (field.index, field.name.clone(), ty)
+                    })
+                    .collect(),
+            )
+        } else if let Some(cases) = decl
+            .and_then(|decl| tt.variant_template_cases(decl))
+            .map(<[_]>::to_vec)
+        {
+            Parts::Cases(
+                cases
+                    .into_iter()
+                    .map(|(name, index, payload)| {
+                        (name, index, tt.substitute_positional(payload, &args))
+                    })
+                    .collect(),
+            )
+        } else {
+            return Layout::Opaque;
+        };
+        Layout::Holder { decl, args, parts }
     }
 
     /// The resource-carrying values `pattern` binds (e.g. `response` in
@@ -275,6 +297,20 @@ impl<'a> Resources<'a> {
         };
         collector.visit_pattern(pattern);
         collector.found
+    }
+}
+
+impl HeldTypes for Resources<'_> {
+    fn held(&self, type_id: TypeId) -> Held {
+        match self.layout(type_id) {
+            Layout::Resource(..) => Held::Resource,
+            Layout::Holder { decl, args, parts } => Held::Members {
+                decl,
+                args,
+                members: parts.types(),
+            },
+            Layout::Opaque => Held::Nothing,
+        }
     }
 }
 
@@ -370,7 +406,6 @@ fn callee_key(func: &FunctionRef) -> String {
 
 /// Entry point: elaborate resource drops for every function in the project.
 pub fn elaborate_resource_drops(project: &mut Package) {
-    let struct_fields = build_struct_field_reg(project);
     let Some(type_table) = project
         .tir_modules
         .values()
@@ -379,31 +414,104 @@ pub fn elaborate_resource_drops(project: &mut Package) {
     else {
         return;
     };
-    let variant_cases = build_variant_case_reg(&mut type_table.borrow_mut());
-    let tt = type_table.borrow();
+    let struct_fields: StructFields = project
+        .tir_modules
+        .values()
+        .flat_map(|module| tir::struct_fields(&module.structs))
+        .collect();
+    let answers = RefCell::default();
     let resources = Resources {
-        tt: &tt,
+        tt: &type_table,
         reg: &project.cm_interface_registry,
         struct_fields: &struct_fields,
-        variant_cases: &variant_cases,
+        answers: &answers,
     };
 
     let mut callees = CalleeFacts::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
-            callees.record(&func_rc.borrow(), &tt);
+            callees.record(&func_rc.borrow(), &type_table.borrow());
         }
     }
 
+    let mut glue = DropGlue {
+        entry: project.entry_module_source.clone(),
+        called: IndexMap::default(),
+    };
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
-            elaborate_function(&mut func_rc.borrow_mut(), resources, &callees);
+            elaborate_function(&mut func_rc.borrow_mut(), resources, &callees, &mut glue);
         }
+    }
+    // A glue body can call glue of its own, so the list grows while it is
+    // built.
+    let mut glue_functions = Vec::new();
+    while let Some((name, type_id)) = glue
+        .called
+        .get_index(glue_functions.len())
+        .map(|(name, type_id)| (name.clone(), *type_id))
+    {
+        glue_functions.push(build_drop_glue(
+            name, type_id, resources, &callees, &mut glue,
+        ));
+    }
+    let entry = project
+        .tir_modules
+        .get_mut(&project.entry_module_source)
+        .expect("the entry module is loaded");
+    for function in glue_functions {
+        entry.functions.push(Rc::new(RefCell::new(function)));
     }
 }
 
+/// The function that drops a value of `type_id`, a holder that holds itself:
+/// expanding its drop in place would never end.
+fn build_drop_glue(
+    name: String,
+    type_id: TypeId,
+    resources: Resources,
+    callees: &CalleeFacts,
+    glue: &mut DropGlue,
+) -> TirFunction {
+    let params = vec![TirParam {
+        name: "value".to_string(),
+        type_id,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span: synth_span(),
+    }];
+    let mut locals = common::locals_from_params(&params);
+    let mut local_count = locals.len() as u32;
+    let mut cx = Cx {
+        resources,
+        callees,
+        locals: &mut locals,
+        local_count: &mut local_count,
+        targets: Vec::new(),
+        expanding: Vec::new(),
+        glue,
+    };
+    let stmts = drop_value(local_ref(0, "value", type_id), type_id, &mut cx);
+    let entry = cx.glue.entry.clone();
+    let mut function = common::make_synthetic_free_function(
+        name,
+        params,
+        TypeTable::UNIT,
+        TirBlock::new(stmts, synth_span()),
+        locals,
+    );
+    function.module_source = entry;
+    function
+}
+
 /// Elaborate resource drops for a single function body.
-fn elaborate_function(func: &mut TirFunction, resources: Resources, callees: &CalleeFacts) {
+fn elaborate_function(
+    func: &mut TirFunction,
+    resources: Resources,
+    callees: &CalleeFacts,
+    glue: &mut DropGlue,
+) {
     let TirFunction {
         body: Some(body),
         params,
@@ -422,7 +530,7 @@ fn elaborate_function(func: &mut TirFunction, resources: Resources, callees: &Ca
         .iter()
         .filter(|param| resources.carried_by(param.type_id))
         .map(|param| {
-            Some(Live {
+            Slot::from(Live {
                 local: param.local_index,
                 name: param.name.clone(),
                 type_id: param.type_id,
@@ -440,6 +548,8 @@ fn elaborate_function(func: &mut TirFunction, resources: Resources, callees: &Ca
         locals,
         local_count,
         targets: Vec::new(),
+        expanding: Vec::new(),
+        glue,
     };
     // Parameters count as declared in the body's scope, so they drop at its
     // end when never transferred.
@@ -500,12 +610,12 @@ fn drop_all<'l>(lives: impl IntoIterator<Item = &'l Live>, cx: &mut Cx) -> Vec<T
 /// Take every value still owned in the slots from `first` up, and build the
 /// statements that drop them, innermost first.
 fn drop_slots(owned: &mut Owned, first: usize, cx: &mut Cx) -> Vec<TirStmt> {
-    let lives: Vec<Live> = owned[first..].iter_mut().filter_map(Option::take).collect();
+    let lives: Vec<Live> = owned[first..].iter_mut().filter_map(Slot::take).collect();
     drop_all(lives.iter().rev(), cx)
 }
 
 /// Take the temporaries still owned in `slots`, in slot order.
-fn take_temporaries(slots: &mut [Option<Live>]) -> Vec<Live> {
+fn take_temporaries(slots: &mut [Slot]) -> Vec<Live> {
     slots
         .iter_mut()
         .filter_map(|slot| slot.take_if(|live| live.temporary))
@@ -530,23 +640,49 @@ fn drop_discarded(value: TirExpr, cx: &mut Cx) -> Vec<TirStmt> {
 /// from `scrutinee` (a value of type `type_id`).
 fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
     match cx.resources.layout(type_id) {
-        Layout::Resource(def, cm) => vec![expr_stmt(cm_canonical_call(
-            CanonicalIntrinsic::ResourceDrop(CmDecl::new(cx.resources.tt.defs(), def, cm)),
-            vec![scrutinee],
-            TypeTable::UNIT,
-        ))],
-        Layout::Struct(fields) => drop_projected(scrutinee, fields, cx),
-        Layout::Tuple(elems) => {
-            let fields: Vec<(u32, String, TypeId)> = elems
-                .into_iter()
-                .enumerate()
-                .map(|(i, ty)| (i as u32, i.to_string(), ty))
-                .collect();
-            drop_projected(scrutinee, &fields, cx)
+        Layout::Resource(def, cm) => {
+            let decl = CmDecl::new(cx.resources.tt.borrow().defs(), def, cm);
+            vec![expr_stmt(cm_canonical_call(
+                CanonicalIntrinsic::ResourceDrop(decl),
+                vec![scrutinee],
+                TypeTable::UNIT,
+            ))]
         }
-        Layout::Variant(cases) => drop_variant(scrutinee, type_id, cases, cx),
+        Layout::Holder { parts, .. } => {
+            let key = cx.resources.tt.borrow().type_key(type_id);
+            if cx.expanding.contains(&key) {
+                return drop_through_glue(scrutinee, type_id, cx);
+            }
+            cx.expanding.push(key);
+            let stmts = match parts {
+                Parts::Fields(fields) => drop_projected(scrutinee, &fields, cx),
+                Parts::Cases(cases) => drop_variant(scrutinee, type_id, &cases, cx),
+            };
+            cx.expanding.pop();
+            stmts
+        }
         Layout::Opaque => Vec::new(),
     }
+}
+
+/// Drop `scrutinee`, a holder already being expanded, by calling its drop
+/// glue. A holder naming a type parameter has no glue: this pass runs before
+/// monomorphization, which would have to instantiate it.
+fn drop_through_glue(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> {
+    let name = {
+        let tt = cx.resources.tt.borrow();
+        if tt.contains_type_param(type_id) {
+            return Vec::new();
+        }
+        drop_glue_name(&tt.mangle_type_arg_for_generic(type_id))
+    };
+    cx.glue.called.entry(name.clone()).or_insert(type_id);
+    vec![expr_stmt(common::entry_call(
+        &name,
+        vec![scrutinee],
+        TypeTable::UNIT,
+        cx.glue.entry.clone(),
+    ))]
 }
 
 /// Drop each resource-carrying field / tuple element of `scrutinee` in
@@ -705,7 +841,7 @@ fn elab_scope_stmts(
     // Block-local slots leave scope; enclosing slots (with any transfers
     // applied within this block) remain visible to the caller.
     owned.truncate(entry);
-    owned.extend(deferred.into_iter().map(Some));
+    owned.extend(deferred.into_iter().map(Slot::from));
     out
 }
 
@@ -724,7 +860,7 @@ fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> 
     }
     let span = synth_span();
     let inner = TirBlock { stmts, span };
-    let result_ty = tir::block_result_type(cx.resources.tt, &inner);
+    let result_ty = tir::block_result_type(&cx.resources.tt.borrow(), &inner);
     if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
         // The block yields nothing observable; the drops can simply run last.
         let mut out = inner.stmts;
@@ -844,7 +980,7 @@ fn elab_stmt(
         } => {
             let value = elab_value_expr(value, owned, cx);
             if cx.carries_resource(type_id) {
-                owned.push(Some(Live {
+                owned.push(Slot::from(Live {
                     local: local_index,
                     name: name.clone(),
                     type_id,
@@ -871,7 +1007,7 @@ fn elab_stmt(
                 cx.resources
                     .pattern_bindings(&pattern)
                     .into_iter()
-                    .map(Some),
+                    .map(Slot::from),
             );
             out.push(TirStmt {
                 kind: TirStmtKind::LetDestructure { pattern, value },
@@ -1055,9 +1191,10 @@ fn elab_if_branches(
 }
 
 /// Merge the post-states of the paths out of a branch, each `(owned, flow)`
-/// elaborated from a clone of `owned`. A resource stays owned only where every
-/// path that falls through still owns it. Where one consumed it, the others
-/// still owning it drop it at their end: returns, per path, what it must drop.
+/// elaborated from a clone of `owned`. A resource is owned after the branch
+/// only where every path that falls through owns it, whether it kept it or an
+/// assignment gave it a new one. Where one does not, the others still owning
+/// it drop it at their end: returns, per path, what it must drop.
 fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
     let mut drops = vec![Vec::new(); paths.len()];
     let falling_through: Vec<usize> = paths
@@ -1067,21 +1204,20 @@ fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
         .map(|(path, _)| path)
         .collect();
     for (slot, state) in owned.iter_mut().enumerate() {
-        let Some(live) = state.as_ref() else {
-            continue;
-        };
         let owners: Vec<usize> = falling_through
             .iter()
             .copied()
-            .filter(|&path| paths[path].0[slot].is_some())
+            .filter(|&path| paths[path].0[slot].held)
             .collect();
         if owners.len() == falling_through.len() {
+            // Where no path falls through, nothing reads the state after.
+            state.held |= !owners.is_empty();
             continue;
         }
         for path in owners {
-            drops[path].push(live.clone());
+            drops[path].push(state.live.clone());
         }
-        *state = None;
+        state.held = false;
     }
     drops
 }
@@ -1091,8 +1227,8 @@ fn merge_paths(owned: &mut Owned, paths: &[(Owned, Flow)]) -> Vec<Vec<Live>> {
 /// can leak on the others, but never drops twice.
 fn release_transferred(owned: &mut Owned, branch: &Owned) {
     for (slot, after) in owned.iter_mut().zip(branch) {
-        if after.is_none() {
-            *slot = None;
+        if !after.held {
+            slot.held = false;
         }
     }
 }
@@ -1202,6 +1338,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
         TirExprKind::Assign { target, value } => {
             elab_expr(target, false, owned, cx);
             elab_expr(value, true, owned, cx);
+            elab_store(target, value, owned, cx);
         }
         TirExprKind::Index { expr: base, index } => {
             elab_expr(base, consuming, owned, cx);
@@ -1323,7 +1460,7 @@ fn spill_temporary(expr: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
             expr_stmt(local_ref(local, &name, type_id)),
         ]
     });
-    owned.push(Some(Live {
+    owned.push(Slot::from(Live {
         local,
         name,
         type_id,
@@ -1332,10 +1469,48 @@ fn spill_temporary(expr: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
 }
 
 fn release_local(owned: &mut Owned, local: u32) {
-    for slot in owned.iter_mut() {
-        if slot.as_ref().is_some_and(|live| live.local == local) {
-            *slot = None;
-        }
+    if let Some(slot) = slot_of(owned, local) {
+        slot.held = false;
+    }
+}
+
+/// The slot of the binding `local`, where it holds a resource.
+fn slot_of(owned: &mut Owned, local: u32) -> Option<&mut Slot> {
+    owned.iter_mut().find(|slot| slot.live.local == local)
+}
+
+/// What a store into `target` replaces drops once the stored `value` is
+/// computed, since computing it may read what it replaces. A binding whose
+/// value was transferred owns the one stored into it.
+fn elab_store(target: &TirExpr, value: &mut TirExpr, owned: &mut Owned, cx: &mut Cx) {
+    if !cx.carries_resource(target.type_id) {
+        return;
+    }
+    let Some(slot) = place_root(target).and_then(|root| slot_of(owned, root)) else {
+        return;
+    };
+    if slot.held {
+        let replaced = drop_value(target.clone(), target.type_id, cx);
+        let type_id = value.type_id;
+        let (local, name) = cx.alloc_local(type_id, "stored");
+        wrap_in_block(value, |computed| {
+            let mut stmts = vec![let_stmt(&name, local, type_id, computed)];
+            stmts.extend(replaced);
+            stmts.push(expr_stmt(local_ref(local, &name, type_id)));
+            stmts
+        });
+    }
+    if matches!(target.kind, TirExprKind::Local { .. }) {
+        slot.held = true;
+    }
+}
+
+/// The binding a place expression (`x`, `x.a.b`) is a part of.
+fn place_root(place: &TirExpr) -> Option<u32> {
+    match &place.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::FieldAccess { expr, .. } => place_root(expr),
+        _ => None,
     }
 }
 
@@ -1385,7 +1560,7 @@ fn elab_match(scrutinee: &mut TirExpr, arms: &mut [TirMatchArm], owned: &mut Own
     let mut arm_states: Vec<(Owned, Flow)> = Vec::with_capacity(arms.len());
     for (arm, arm_bindings) in arms.iter_mut().zip(bindings) {
         let mut arm_owned = owned.clone();
-        arm_owned.extend(arm_bindings.into_iter().map(Some));
+        arm_owned.extend(arm_bindings.into_iter().map(Slot::from));
         if let Some(guard) = arm.guard.as_mut() {
             let guard_entry = arm_owned.len();
             elab_expr_scope(guard, &mut arm_owned, guard_entry, cx);

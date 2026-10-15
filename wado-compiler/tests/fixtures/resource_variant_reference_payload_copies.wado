@@ -1,0 +1,30 @@
+// A variant whose payload is a reference to a resource holds no resource: it
+// copies as any value does, and the resource stays with its owner.
+
+use { Request, Response, ErrorCode, Fields, Headers, Trailers } from "wasi:http";
+
+variant Borrowed<T> {
+    Here(&T),
+    Gone,
+}
+
+fn look(b: Borrowed<Fields>) -> i32 {
+    return match b { Here(_) => 1, Gone => 0 };
+}
+
+fn twice() -> i32 with Fields {
+    let fields = Fields::new();
+    let b: Borrowed<Fields> = Borrowed::Here(&fields);
+    return look(b) + look(b);
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    assert twice() == 2;
+    let [trailers, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _sent] = Response::new(Headers::new(), null, trailers);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}

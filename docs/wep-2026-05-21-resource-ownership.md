@@ -205,9 +205,18 @@ by-value receiver transfer, with no aggregate-shape guessing. Two fixes landed:
 - A resource value discarded in statement position (`Fields::new();`,
   `let _ = …`) is dropped, not leaked; a tail expression is left for its
   consumer.
+- A store into a binding or one of its fields drops the resource it replaces,
+  after the stored value is computed, since computing it may read the old one.
+  A binding whose resource was moved owns the one stored into it.
 
 The `is_resource_aggregate` heuristic is **retired**: cleanup now drops "owned and
 not transferred at scope exit" directly.
+
+Whether a type holds a resource is answered by one walk,
+`resource_holding::holds_resource`, for the move check, a by-value `self` and
+this pass alike. Each supplies a type's members typed at its instance, and the
+walk cuts a declaration it reaches again with arguments that hold alike, which
+ends on polymorphic recursion as well as on a type that holds itself.
 
 ### Deterministic drop
 
@@ -217,7 +226,9 @@ guest-defined one runs its destructor (WEP 2026-01-12). An explicit
 `fn drop(self)` consumes the receiver, so exactly one drop fires; a `&self` drop
 would be unsound (the binding outlives its handle and double-frees). An aggregate
 containing a resource is move-only and gets a synthesized destructor in
-declaration order. Panic does not unwind, so a drop is not guaranteed on panic.
+declaration order. An aggregate that holds itself (`next: Option<Node>`) drops
+through a function synthesized per type, `$drop$…`, since expanding its drop in
+place never ends. Panic does not unwind, so a drop is not guaranteed on panic.
 
 ### CM boundary
 
@@ -750,6 +761,13 @@ temporary it references, is never dropped.
 
 Moving one resource field out of a temporary aggregate (`make().a`) drops
 nothing else the temporary owns, so a second resource field leaks.
+
+A store through a reference (`*r = x`) or into an element (`list[i] = x`) drops
+nothing it replaces.
+
+An aggregate that holds itself and names a type parameter (`Node<T>` in a body
+generic over `T`) is not dropped past its first level: cleanup runs before
+monomorphization, and its `$drop$…` function would have to be generic.
 
 A panic drops nothing the program owns.
 
