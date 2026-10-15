@@ -279,7 +279,7 @@ from another language, where it is now always false. The
 about all six operators, and on a float names `is_nan()`. It reports only an
 expression that performs no effect, since one that does may answer differently
 the second time. For the same reason it skips one that writes: an assignment, a
-`&mut` borrow, a `&mut self` method such as an iterator's `next`, a call of a
+`&mut` reference, a `&mut self` method such as an iterator's `next`, a call of a
 closure, which may capture by `&mut`, and a call handed a value that holds a
 `&mut`, which the callee may write through. GCC's `-Wtautological-compare` and
 Clippy's `eq_op` warn on the same shape.

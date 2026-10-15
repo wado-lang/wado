@@ -77,7 +77,7 @@ fn writes_in(
         .collect()
 }
 
-/// The local slots a whole-value write reaches inside one body, so a borrow
+/// The local slots a whole-value write reaches inside one body, so a reference
 /// bound to one is refused only when something actually replaces through it.
 /// A function's body is a block; a closure's is an expression.
 pub fn replaced_locals(
@@ -172,7 +172,7 @@ impl<'a> WriteWalker<'a> {
     }
 
     /// The storage `expr` names, if it names one directly, seeing through the
-    /// `&mut *x` reborrow that forwarding a reference argument spells and the
+    /// `&mut *x` that forwarding a reference argument spells and the
     /// `&mut` bindings that carry one on. A reference reached out of something
     /// that holds it is [`WriteWalker::carried`]'s question instead.
     fn root_of(&self, expr: &TirExpr) -> Option<Root> {
@@ -221,7 +221,7 @@ impl<'a> WriteWalker<'a> {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
             } => match &place.kind {
-                // `&mut *x` reborrows what `x` names rather than naming `x`.
+                // `&mut *x` references what `x` names rather than naming `x`.
                 TirExprKind::Unary {
                     op: TirUnaryOp::Deref,
                     expr: inner,

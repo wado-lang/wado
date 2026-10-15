@@ -48,7 +48,7 @@ use crate::token::Span;
 type Frame = u32;
 
 /// The solved analysis. Sets name nodes that are locations: a frame's local,
-/// a global, a function value, or the temporary a borrow of a call's result
+/// a global, a function value, or the temporary a reference to a call's result
 /// takes.
 pub struct PointsTo {
     functions: FuncIndex,
@@ -63,7 +63,7 @@ pub struct PointsTo {
     /// while no body is rewritten, as the fold, which computes and reads it,
     /// rewrites none.
     handed: IndexMap<usize, (u32, Span)>,
-    /// The node naming the storage each assigned or borrowed place denotes,
+    /// The node naming the storage each assigned or referenced place denotes,
     /// keyed as `handed` is.
     written: IndexMap<usize, (u32, Span)>,
     /// What any call may write: [`Self::global_reach`].
@@ -144,13 +144,13 @@ impl PointsTo {
 
     /// The storage the call argument `arg` lets its callee write: what its
     /// value reaches where that holds a writable handle, and its own where a
-    /// `&mut` parameter borrows it.
+    /// `&mut` parameter references it.
     #[must_use]
     pub fn handed(&self, arg: &TirExpr) -> &LocSet {
         self.set(site_of(&self.handed, arg))
     }
 
-    /// The storage an assignment to, or a borrow of, `place` denotes.
+    /// The storage an assignment to, or a reference to, `place` denotes.
     #[must_use]
     pub fn written(&self, place: &TirExpr) -> &LocSet {
         self.set(site_of(&self.written, place))
@@ -349,8 +349,9 @@ impl<'a> HoldsHandle<'a> {
 /// How a parameter takes its argument.
 #[derive(Clone, Copy)]
 struct Slot {
-    /// It borrows the argument, so the argument's own storage is handed too.
-    borrows: bool,
+    /// It takes the argument by reference, so the argument's own storage is
+    /// handed too.
+    by_ref: bool,
     /// It is a `&mut`, so the callee may write that storage.
     writes: bool,
 }
@@ -358,7 +359,7 @@ struct Slot {
 impl Slot {
     /// A parameter the analysis knows nothing of.
     const UNKNOWN: Slot = Slot {
-        borrows: true,
+        by_ref: true,
         writes: true,
     };
 }
@@ -878,7 +879,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             .params
             .iter()
             .map(|p| Slot {
-                borrows: type_table.is_reference_shaped(p.type_id),
+                by_ref: type_table.is_reference_shaped(p.type_id),
                 writes: p.is_mut_ref || could_write_through(p.type_id, &type_table),
             })
             .collect();
@@ -1069,9 +1070,9 @@ impl Builder<'_> {
         self.eval(reference).unwrap_or_else(|| self.g.node())
     }
 
-    /// The storage a borrow of, or an assignment to, `expr` names: its place,
+    /// The storage a reference to, or an assignment to, `expr` names: its place,
     /// or a temporary holding its value, as `get().field = v` writes.
-    fn borrowed(&mut self, expr: &TirExpr) -> u32 {
+    fn referenced(&mut self, expr: &TirExpr) -> u32 {
         let place = self.place(expr).unwrap_or_else(|| {
             let temp = self.g.node();
             if let Some(value) = self.eval(expr) {
@@ -1098,15 +1099,15 @@ impl Builder<'_> {
         (value, Some(place))
     }
 
-    /// Evaluate `arg` for a slot that may borrow it: its value, and its own
-    /// storage where `borrows` takes a value-typed place by reference. A
+    /// Evaluate `arg` for a slot that may take it by reference: its value, and
+    /// its own storage where `by_ref` takes a value-typed place by reference. A
     /// reference argument names the storage in its value already.
     ///
     /// Recorded for the walk is what the callee can write through it: the
     /// value where its type holds a writable handle, and its own storage where
     /// the slot is a `&mut`.
     fn hand(&mut self, arg: &TirExpr, slot: Slot) -> Option<u32> {
-        let (value, own) = if slot.borrows && !self.type_table.is_reference_shaped(arg.type_id) {
+        let (value, own) = if slot.by_ref && !self.type_table.is_reference_shaped(arg.type_id) {
             self.operand(arg)
         } else {
             (self.eval(arg), None)
@@ -1141,7 +1142,7 @@ impl Builder<'_> {
 
     /// A call the analysis cannot follow into: everything handed escapes, and
     /// the result is what escapes. A parameter `slots` does not cover may
-    /// borrow and write.
+    /// take its argument by reference and write.
     fn opaque_call(
         &mut self,
         slots: &[Slot],
@@ -1165,7 +1166,7 @@ impl Builder<'_> {
         params
             .iter()
             .map(|&p| Slot {
-                borrows: tt.is_reference_shaped(p),
+                by_ref: tt.is_reference_shaped(p),
                 writes: could_write_through(p, tt),
             })
             .collect()
@@ -1211,7 +1212,7 @@ impl Builder<'_> {
                 self.hand(
                     arg,
                     Slot {
-                        borrows: decl.reference_params.contains(&i),
+                        by_ref: decl.reference_params.contains(&i),
                         writes: decl.mut_params.contains(&i),
                     },
                 )
@@ -1265,7 +1266,7 @@ impl Builder<'_> {
                 self.g.copy(v, node);
             }
         } else {
-            let place = self.borrowed(target);
+            let place = self.referenced(target);
             if let Some(v) = value {
                 self.g.store(place, v);
             }
@@ -1286,7 +1287,7 @@ impl Builder<'_> {
             return;
         }
         // A binding takes part of the value, or what it refers to, or — lifted
-        // to a borrow of the scrutinee — the scrutinee's own storage.
+        // to a reference to the scrutinee — the scrutinee's own storage.
         let referent = if self.type_table.is_reference_shaped(scrutinee.type_id) {
             self.deref(value)
         } else {
@@ -1422,7 +1423,7 @@ impl Builder<'_> {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
-            } => Some(self.borrowed(place)),
+            } => Some(self.referenced(place)),
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -1469,7 +1470,7 @@ impl Builder<'_> {
                     .hand(
                         callee,
                         Slot {
-                            borrows: false,
+                            by_ref: false,
                             writes: false,
                         },
                     )

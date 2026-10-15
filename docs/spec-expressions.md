@@ -65,7 +65,7 @@ inside a labeled block, which `break LABEL: expr` leaves with the result.
 ## Variable Mutability
 
 `mut` governs every write reaching the binding's storage, not just
-reassignment. A `&mut self` method, a mutable borrow, and a store to a field or
+reassignment. A `&mut self` method, a `&mut` of it, and a store to a field or
 element all require it.
 
 <!-- {"fixture":"spec_lexical_mut_method.wado"} -->

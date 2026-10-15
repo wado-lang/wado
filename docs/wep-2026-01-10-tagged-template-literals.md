@@ -189,10 +189,10 @@ $tagged: {
 ```
 
 `id` is an `i32`, so its hole holds the value; `user.name` is a `String`, so
-its hole holds the handle. A hole that names storage is read or borrowed where
-it stands: a local, a global, or a field or element path rooted at one. Any
+its hole holds the handle. A hole that names storage is read or referenced
+where it stands: a local, a global, or a field or element path rooted at one. Any
 other hole expression is evaluated once into a local of the block, which the
-literal then reads or borrows.
+literal then reads or references.
 
 The holes are evaluated in source order, the order an untagged template
 evaluates them, and the literal is built after the last of them. So a hole is
@@ -203,8 +203,8 @@ too, and the tag then sees the value the storage held there. That is what holds
 
 The struct literal is the only place the synthesized type is built. Passing it
 by value copies scalars and handles, never the storage a handle points at.
-Borrowing a local of a handle type marks nothing on that local: only a
-box-target type's local is retagged by a borrow, and those holes are held by
+Referencing a local of a handle type marks nothing on that local: only a
+box-target type's local is retagged by a reference, and those holes are held by
 value.
 
 The synthesized `impl ReflectTemplate` carries the segments, specifiers and
@@ -492,7 +492,7 @@ the tag's result type:
 
 `reify_tagged_template` reifies each hole in order, binding one that is not a
 place to a `let $hole_{n}_{k}` local, and builds the `Call` the dispatch fact
-names over a `StructLiteral` whose field `k` is the place or local, borrowed
+names over a `StructLiteral` whose field `k` is the place or local, referenced
 when the field type is `&V_k`. With locals the call sits in a labeled block that
 breaks with its value. The `TirStruct` reaches the module through the pending
 list `reify` already drains.

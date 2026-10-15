@@ -62,14 +62,14 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // Record each parameter's `&mut`-ness before `boxing::prepare_types`
     // rewrites `&mut T` / `&T` to the same `Box<T>`, erasing the distinction.
     capture_param_mut_ref(flat);
-    // Ahead of every analysis, which then reads the proxy as any other borrow.
+    // Ahead of every analysis, which then reads the proxy as any other reference.
     capture_ref::capture_observed_by_ref(flat);
     // The pre-boxing analyses share one graph: what follows rewrites bodies but
     // adds no function, so the callee sets do not move until closure lifting.
     let pre_boxing_calls = value_copy::callgraph::CallGraph::build(flat);
     // Before boxing, while `&mut T` still names its referent: a detached `&mut`
-    // argument becomes a borrow of a temp that is stored back after the call.
-    // The borrow a callee keeps is read from its body, so the fixpoint runs
+    // argument becomes a reference to a temp that is stored back after the
+    // call. The reference a callee keeps is read from its body, so the fixpoint runs
     // here as well as after closure lifting: a write-back needs the answer
     // before boxing, while `&mut T` still names its referent.
     let builtins = flat.builtin_declarations.clone();

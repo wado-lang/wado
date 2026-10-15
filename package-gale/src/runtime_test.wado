@@ -20,7 +20,7 @@ use {
 } from "./runtime/highlight.wado";
 
 /// Build a TokenStream over `src` from `[kind, start, end]` token specs (no
-/// trivia). The returned stream borrows a fresh char list; GC keeps it alive.
+/// trivia). The returned stream refers to a fresh char list; GC keeps it alive.
 fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
     let chars: List<char> = src.chars().collect();
     let mut ts = TokenStream::new(&chars);

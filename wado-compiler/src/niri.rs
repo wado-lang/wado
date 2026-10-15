@@ -495,14 +495,15 @@ struct FrameState {
     /// the arena grows as nodes are interned — so the witness is the binding
     /// itself, which a different body does not carry at that id.
     ref_global_aliases: IndexMap<u32, (StmtId, GlobalKey)>,
-    /// Locals a frame's `let` bound to a borrow of a local place, resolved to
-    /// the place borrowed — flattened at record time, so a chain never needs
-    /// chasing. Reads through one project the place's current value and writes
-    /// land in it, which is what keeps a borrow from copying its referent.
+    /// Locals a frame's `let` bound to a reference to a local place, resolved
+    /// to that place — flattened at record time, so a chain never
+    /// needs chasing. Reads through one project the place's current value and
+    /// writes land in it, which is what keeps a reference from copying its
+    /// referent.
     /// Populated only during frame execution; empty everywhere else.
     place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
-    /// Locals this frame bound to a borrow, mapped to the local the referent
-    /// lives in — `&mut xs[i]` reduces to a borrow of an accessor result, which
+    /// Locals this frame bound to a reference, mapped to the local the referent
+    /// lives in — `&mut xs[i]` reduces to a reference to an accessor result, which
     /// still names `xs` — or `None` where it resolved to nothing nameable.
     ref_roots: IndexMap<u32, Option<u32>>,
     /// The body's [`aggregate_safe_locals`] — the only locals that may bind an
@@ -539,7 +540,7 @@ struct FrameState {
     /// here: the store and its reader are one block, so neither outlives the
     /// frame that ran them.
     materialized: IndexMap<GlobalKey, Value>,
-    /// See [`Trackability::reassigned`]. Read when a `let mut` binds a borrow,
+    /// See [`Trackability::reassigned`]. Read when a `let mut` binds a reference,
     /// to tell a binding that can be displaced from one that cannot.
     reassigned: LocalSet,
 }
@@ -933,7 +934,7 @@ impl<'a> Interpreter<'a> {
             return;
         };
         // A write through a reference lands in its referent. `frame_place_of`
-        // re-roots a borrow taken over a place the frame can spell; `ref_roots`
+        // re-roots a reference taken over a place the frame can spell; `ref_roots`
         // names the local for one taken over an accessor result.
         if place::place_of(body, place).is_some_and(|(raw, _)| raw == root)
             && place_roots_at_reference(body, place, self.type_table)
@@ -961,13 +962,13 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Record what `index` borrows into, clearing the entry where the binding
-    /// is not a borrow.
-    pub fn record_ref_root(&mut self, index: u32, borrow: BorrowRoot) {
-        match borrow {
-            BorrowRoot::NotABorrow => self.frame.ref_roots.swap_remove(&index),
-            BorrowRoot::Unrooted => self.frame.ref_roots.insert(index, None),
-            BorrowRoot::Local(target) => self.frame.ref_roots.insert(index, Some(target)),
+    /// Record the local holding what `index` refers to, clearing the entry
+    /// where the binding is not a reference.
+    pub fn record_ref_root(&mut self, index: u32, root: RefRoot) {
+        match root {
+            RefRoot::NotARef => self.frame.ref_roots.swap_remove(&index),
+            RefRoot::Unrooted => self.frame.ref_roots.insert(index, None),
+            RefRoot::Local(target) => self.frame.ref_roots.insert(index, Some(target)),
         };
     }
 
@@ -980,12 +981,13 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-/// What a `let` binding borrows into, as [`Interpreter::record_ref_root`] reads
-/// it. Also a lattice: two answers that differ join to `Unrooted`.
+/// The local holding what a `let` binding refers to, as
+/// [`Interpreter::record_ref_root`] reads it. Also a lattice: two answers that
+/// differ join to `Unrooted`.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum BorrowRoot {
-    NotABorrow,
-    /// A borrow whose referent no tracked local holds.
+pub enum RefRoot {
+    NotARef,
+    /// A reference whose referent no tracked local holds.
     Unrooted,
     Local(u32),
 }

@@ -1524,8 +1524,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Coerce a sequence literal `[e0, e1, …]` into a type implementing
     /// `From<Array<E>>`, built-in `List<T>` included. A leading `&` /
     /// `&mut` is looked through: `&mut [...] as List<T>` parses as
-    /// `(&mut [...]) as List<T>`, but means a `List<T>` the call site
-    /// auto-borrows — lowering the inner literal as a tuple fails validation.
+    /// `(&mut [...]) as List<T>`, but means `&mut` of a `List<T>` built at the
+    /// call site — lowering the inner literal as a tuple fails validation.
     pub(super) fn try_coerce_tuple_to_sequence(
         &mut self,
         expr: &Expr,

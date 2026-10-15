@@ -98,25 +98,27 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[start,marker]$spec0" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(31)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(33)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow" = fn(ref "core:prelude//List<fn mut()->i32>");  // TypeId(34)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(34)
 
-type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(35)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<fn mut()->i32>::grow" = fn(ref "core:prelude//List<fn mut()->i32>");  // TypeId(35)
 
-type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_1::$call" = fn(ref "closure_list_for_of.wado//$Closure_1") -> i32;  // TypeId(36)
+type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_0::$call$dae[self]" = fn(i32) -> i32;  // TypeId(36)
 
-type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_2::$call$dae[self]" = fn(i32) -> i32;  // TypeId(37)
+type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_1::$call" = fn(ref "closure_list_for_of.wado//$Closure_1") -> i32;  // TypeId(37)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
+type "functype//closure_list_for_of.wado/closure_list_for_of.wado/$Closure_2::$call$dae[self]" = fn(i32) -> i32;  // TypeId(38)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(39)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(39)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(40)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(40)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(41)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(41)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -515,16 +517,19 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     builtin::array_set_u8(self_7.repr, new_used_86, 93);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
-    let capacity: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let capacity: i32;
+    capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {

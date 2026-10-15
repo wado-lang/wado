@@ -45,11 +45,11 @@ impl Selector {
 pub struct Place {
     pub root: u32,
     pub selectors: Vec<Selector>,
-    /// The chain read a `&` / `&mut` field, so the root only borrows what it
+    /// The chain read a `&` / `&mut` field, so the root only references what it
     /// ends at. [`Resolver::names`] must set it as it walks — it resolves
     /// through a local binding and through a callee's [`ReturnPath`], which a
     /// second walk over the expression's syntax would follow neither of.
-    pub through_borrow: bool,
+    pub through_ref: bool,
 }
 
 impl Place {
@@ -58,7 +58,7 @@ impl Place {
         Self {
             root,
             selectors: Vec::new(),
-            through_borrow: false,
+            through_ref: false,
         }
     }
 
@@ -89,7 +89,7 @@ pub enum Names {
 }
 
 /// What each local stands for. Covers every binder that hands out a name: a
-/// borrow, an accessor's result, a destructuring pattern, a re-seated
+/// reference, an accessor's result, a destructuring pattern, a re-seated
 /// reference.
 #[derive(Default)]
 pub struct Bindings {
@@ -114,9 +114,9 @@ pub struct ReturnPath {
     /// field of `v`, and reading that as `self` names the wrong storage.
     pub param: usize,
     pub selectors: Vec<Selector>,
-    /// [`Place::through_borrow`] for the place this path lands on, so even a
+    /// [`Place::through_ref`] for the place this path lands on, so even a
     /// fresh argument does not own it.
-    pub through_borrow: bool,
+    pub through_ref: bool,
 }
 
 /// Which projection of which parameter each accessor returns. A call with no
@@ -162,7 +162,7 @@ pub fn compute_return_paths(
             return false;
         };
         let Some(param) = param_position(&func.params, place.root)
-            .filter(|&i| lends_storage(&func.params[i], type_table))
+            .filter(|&i| names_caller_storage(&func.params[i], type_table))
         else {
             return false;
         };
@@ -172,7 +172,7 @@ pub fn compute_return_paths(
             ReturnPath {
                 param,
                 selectors: place.selectors,
-                through_borrow: place.through_borrow,
+                through_ref: place.through_ref,
             },
         );
         true
@@ -216,15 +216,15 @@ pub struct Resolver<'a> {
     returns_owned: &'a FuncKeySet,
     /// Where each builtin declared its result comes from.
     builtins: &'a BuiltinDeclarations,
-    /// Parameters naming storage the caller lent, by position and type lent.
-    /// The only roots a write in this body reaches out through.
-    lent: IndexMap<u32, (u32, TypeId)>,
+    /// Parameters naming the caller's storage, by position and the type they
+    /// name. The only roots a write in this body reaches out through.
+    caller_storage: IndexMap<u32, (u32, TypeId)>,
     bindings: Bindings,
 }
 
 impl<'a> Resolver<'a> {
     /// Walk `func` once, recording what each of its locals stands for. A
-    /// reference parameter stands for storage its caller lent.
+    /// reference parameter stands for its caller's storage.
     #[must_use]
     pub fn new(
         func: &TirFunction,
@@ -238,16 +238,16 @@ impl<'a> Resolver<'a> {
             return_paths,
             returns_owned,
             builtins,
-            lent: IndexMap::default(),
+            caller_storage: IndexMap::default(),
             bindings: Bindings::default(),
         };
         for (position, param) in func.params.iter().enumerate() {
-            if !lends_storage(param, type_table) {
+            if !names_caller_storage(param, type_table) {
                 continue;
             }
             let owner = field_owner(param.type_id, type_table);
             resolver
-                .lent
+                .caller_storage
                 .insert(param.local_index, (position as u32, owner));
         }
         if let Some(body) = &func.body {
@@ -265,23 +265,26 @@ impl<'a> Resolver<'a> {
         self.bindings.get(local).cloned()
     }
 
-    /// The type `local` was lent, for a parameter naming a caller's storage.
+    /// The type of the caller's storage `local` names, for a parameter naming
+    /// it.
     #[must_use]
-    pub fn lent(&self, local: u32) -> Option<TypeId> {
-        self.lent.get(&local).map(|(_, owner)| *owner)
+    pub fn caller_type(&self, local: u32) -> Option<TypeId> {
+        self.caller_storage.get(&local).map(|(_, owner)| *owner)
     }
 
     /// Which of the caller's handles `local` is, for a parameter naming a
     /// caller's storage.
     #[must_use]
-    pub fn lent_position(&self, local: u32) -> Option<u32> {
-        self.lent.get(&local).map(|(position, _)| *position)
+    pub fn caller_position(&self, local: u32) -> Option<u32> {
+        self.caller_storage
+            .get(&local)
+            .map(|(position, _)| *position)
     }
 
     /// Whether `expr` is a call handing back the storage of an argument it was
-    /// given by value rather than one it borrowed. The result names that
-    /// argument's place either way, but only a borrowed one has a lender whose
-    /// later writes an alias analysis can refuse a share on.
+    /// given by value rather than by reference. The result names that
+    /// argument's place either way, but only one given by reference has an
+    /// owner whose later writes an alias analysis can refuse a share on.
     #[must_use]
     pub fn hands_back_by_value(&self, expr: &TirExpr) -> bool {
         let TirExprKind::Call { func, args, .. } = &expr.kind else {
@@ -310,8 +313,8 @@ impl<'a> Resolver<'a> {
                 .get(*index)
                 .cloned()
                 .unwrap_or(Names::Place(Place::local(*index))),
-            // A reference field borrows storage its holder does not own — an
-            // iterator's `repr` borrows the list it walks — so a fresh aggregate
+            // A reference field points to storage its holder does not own — an
+            // iterator's `repr` points to the list it walks — so a fresh aggregate
             // does not make what it points at fresh.
             TirExprKind::FieldAccess {
                 expr: inner,
@@ -327,13 +330,13 @@ impl<'a> Resolver<'a> {
                 );
                 // `is_reference`, not a `ResolvedType` match: `boxing` has
                 // already rewritten some `&T` onto `Box<T>` in place, and which
-                // ones it reached says nothing about whether the field borrows.
+                // ones it reached says nothing about whether the field is a reference.
                 if !is_reference(expr.type_id, self.type_table) {
                     return names;
                 }
                 match names {
                     Names::Place(mut place) => {
-                        place.through_borrow = true;
+                        place.through_ref = true;
                         Names::Place(place)
                     }
                     Names::Value | Names::Unknown => Names::Unknown,
@@ -357,7 +360,7 @@ impl<'a> Resolver<'a> {
                 Names::Place(p) => Names::Place(p),
                 Names::Value | Names::Unknown => Names::Unknown,
             },
-            // A member read borrows the slot in place, so it names the storage
+            // A member read references the slot in place, so it names the storage
             // of the one parameter its result is part of, one `Index` further
             // in. `Index` is the honest selector: the index is a runtime value,
             // so which component it lands on is not known here.
@@ -373,11 +376,11 @@ impl<'a> Resolver<'a> {
                     Some(path) => match self.names(arg_at(func, args, path.param)) {
                         Names::Place(mut place) => {
                             place.selectors.extend(path.selectors.iter().copied());
-                            place.through_borrow |= path.through_borrow;
+                            place.through_ref |= path.through_ref;
                             Names::Place(place)
                         }
-                        // A fresh receiver does not own what it borrows.
-                        Names::Value if path.through_borrow => Names::Unknown,
+                        // A fresh receiver does not own what it references.
+                        Names::Value if path.through_ref => Names::Unknown,
                         other => other,
                     },
                     None if self.returns_owned.contains(&func.module_source, &func.name) => {
@@ -443,9 +446,9 @@ impl<'a> Resolver<'a> {
                                 index: field.field_index,
                             });
                             // The pattern carries no type to say whether the
-                            // field borrows, and a wrong `false` here costs the
+                            // field is a reference, and a wrong `false` here costs the
                             // value semantics rather than a copy.
-                            place.through_borrow = true;
+                            place.through_ref = true;
                             Names::Place(place)
                         }
                         Names::Value => Names::Value,
@@ -589,7 +592,7 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
 
 /// The place an argument names, past the `&`/`&mut` it is wrapped in.
 #[must_use]
-pub fn unwrap_borrow(argument: &TirExpr) -> &TirExpr {
+pub fn unwrap_ref(argument: &TirExpr) -> &TirExpr {
     match &argument.kind {
         TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
@@ -642,7 +645,7 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// return or to write. A by-value one was deep-copied at the call, or is
 /// confined: passed uncopied and copied before a write, and handed back only as
 /// a projection the caller copies where it takes it over.
-pub fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
+pub fn names_caller_storage(param: &TirParam, type_table: &TypeTable) -> bool {
     param.is_mut_ref || is_reference(param.type_id, type_table)
 }
 

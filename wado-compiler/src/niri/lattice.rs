@@ -140,7 +140,7 @@ impl Interpreter<'_> {
 
     /// What a projection's receiver denotes, resolving a frame place alias.
     ///
-    /// Reading *through* a reference is what a borrow is for, so a field read,
+    /// Reading *through* a reference is what a reference is for, so a field read,
     /// an element read and a deref all reach the place's current value. Reading
     /// the reference *itself* is a different act — it names storage the engine
     /// has no value for — and [`Self::expr_to_lattice`] leaves that
@@ -377,7 +377,7 @@ impl Interpreter<'_> {
     /// `NonConst` (not `Unevaluated`) when the op would trap, so the node
     /// survives.
     ///
-    /// A shared borrow is excluded: it denotes its referent rather than
+    /// A `&` reference is excluded: it denotes its referent rather than
     /// operating on it, and `eval_unary` would bury the referent's own constant
     /// as non-constant.
     pub fn try_fold(&self, body: &Body, e: ExprId) -> Lattice {
@@ -720,11 +720,11 @@ impl Interpreter<'_> {
         }
     }
 
-    /// Whether `a` and `b` are the same array or borrow structure, so a cast
+    /// Whether `a` and `b` are the same array or reference structure, so a cast
     /// between them cannot convert a value. Identical ids are trivially so;
     /// otherwise both must be the same reference shape over element types that
     /// are — which is what makes duplicate-interned `Array<u8>` ids compare
-    /// equal. A borrow denotes its referent either way, so `&mut` and `&`
+    /// equal. A reference denotes its referent either way, so `&mut` and `&`
     /// over the same referent shape read alike.
     fn same_ref_shape(&self, a: TypeId, b: TypeId) -> bool {
         if a == b {
@@ -834,7 +834,7 @@ enum Arith {
     },
 }
 
-/// `operand` as an [`Arith`], or `None` where it is not arithmetic. A borrow
+/// `operand` as an [`Arith`], or `None` where it is not arithmetic. A reference
 /// denotes its referent rather than operating on it, so it is not one; the pool
 /// has no kind for it either.
 fn arith_view(body: &Body, operand: Operand) -> Option<Arith> {

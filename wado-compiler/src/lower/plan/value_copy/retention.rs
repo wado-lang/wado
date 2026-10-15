@@ -18,7 +18,7 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
-use super::place::unwrap_borrow;
+use super::place::unwrap_ref;
 use super::reach::ClosureCaptures;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
@@ -1136,7 +1136,7 @@ struct AnchorScan<'a> {
 
 impl AnchorScan<'_> {
     fn source_of(&self, value: &TirExpr) -> Source {
-        match StoresWalker::place_root(unwrap_borrow(value)) {
+        match StoresWalker::place_root(unwrap_ref(value)) {
             Some((root, _)) => match self.param_of_local.get(&root) {
                 Some(&position) => Source::Param(position),
                 None => Source::Local(root),
@@ -1503,7 +1503,7 @@ impl StoresWalker<'_> {
     }
 
     /// What a *place* (the operand of `&`) carries, read off its root —
-    /// `&p.field` roots at `p`, whatever the field's own type. A borrow of a
+    /// `&p.field` roots at `p`, whatever the field's own type. A reference to a
     /// temporary (`&self.as_slice()`) reaches whatever the temporary holds.
     fn place_roots(&self, place: &TirExpr) -> Carried {
         match Self::place_root(place) {
@@ -1784,7 +1784,7 @@ impl StoresWalker<'_> {
         carried: &IndexSet<u32>,
         value_type: TypeId,
     ) {
-        self.lands_in_place(unwrap_borrow(argument), carried, value_type);
+        self.lands_in_place(unwrap_ref(argument), carried, value_type);
     }
 
     fn retained_into(&mut self, destination: u32, carried: &IndexSet<u32>) {

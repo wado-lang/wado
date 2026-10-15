@@ -435,7 +435,7 @@ pub enum CompilerItem {
     /// lower walks.
     ListIndexValue,
     /// `List`'s `IndexAssign<i32>::index_assign` — `xs[i] = v`, which writes
-    /// into the element's storage where a borrow of it may be read after
+    /// into the element's storage where a reference to it may be read after
     /// (WEP 2026-10-13).
     ListIndexAssign,
     /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;

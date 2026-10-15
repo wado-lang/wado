@@ -1,0 +1,56 @@
+// A call's result of a type that carries no storage is a value of its own,
+// whatever the callee, so a `&self` method called on it receives nothing a
+// caller of this frame reaches.
+//
+// Read as unclassifiable instead, `rounded`'s `width(x).div_ceil(4)` tagged
+// the call with a handle that could be any of them, `take` was reported as
+// writing `P` through its receiver, and `scan`'s field read had to copy the
+// whole buffer. The prelude's digit counting is shaped this way, so every
+// formatted integer carried it.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    repr: Array<u8>,
+    pos: i32,
+}
+
+fn width(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn rounded(x: i32) -> i32 {
+    return width(x).div_ceil(4);
+}
+
+fn chosen(x: i32) -> i32 {
+    return (if x > 0 { x } else { -x }).div_ceil(4);
+}
+
+impl P {
+    fn take(&mut self) -> i32 {
+        self.pos += 1;
+        return rounded(self.pos) + chosen(self.pos);
+    }
+
+    fn scan(&mut self) -> i64 {
+        let raw = self.repr;
+        let n = self.take();
+        return builtin::array_get_value_u8(&raw, 0) as i64 + n as i64;
+    }
+}
+
+export fn run() with Stdout {
+    let mut bytes = builtin::array_new::<u8>(4);
+    builtin::array_set::<u8>(&mut bytes, 0, 5);
+    let mut p = P { repr: bytes, pos: 0 };
+    println(`${p.scan()}`);
+}
+
+__DATA__
+{
+    "stdout": "7\n",
+    "wir_not_expect:O2": [
+        "$array_clone_dst"
+    ]
+}

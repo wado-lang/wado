@@ -1,0 +1,32 @@
+// A function reached only from cold code is cold through and through. The
+// region past the `cold_path()` marker moves into `run$cold0`, which only that
+// cold site calls, so nothing spliced into it would ever run hot: it keeps its
+// call to `report`, though that is `report`'s only site. An assertion's failure
+// message is the shape this keeps small.
+use { println, Stdout } from "core:cli";
+
+fn mix(x: i32, y: i32) -> i32 {
+    let mut h = x ^ y * 0x27d4eb2d;
+    h = (h ^ h >> 15) * 0x2c1b3c6d;
+    h = (h ^ h >> 12) * 0x297a2d39;
+    return h ^ h >> 15;
+}
+
+fn report(x: i32) -> String {
+    return `mixed: ${mix(x, x + 1)}`;
+}
+
+export fn run() with Stdout {
+    let v = builtin::black_box(5);
+    if v > 100 {
+        builtin::cold_path();
+        println(report(v));
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_scope": "inline_cold_function.wado/run$cold0",
+    "wir_expect:O2": ["\"inline_cold_function.wado/report\"("]
+}

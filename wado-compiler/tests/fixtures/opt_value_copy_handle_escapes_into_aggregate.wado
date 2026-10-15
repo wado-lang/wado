@@ -1,6 +1,6 @@
 // A `&mut` stored into an aggregate outlives the expression that took it, and
 // the mod/ref walk cannot follow where it is written — so taking one counts as
-// a write to what it borrows. Unrecorded, `bump`'s writes are invisible to its
+// a write to its referent. Unrecorded, `bump`'s writes are invisible to its
 // caller, and `r` is shared across them.
 struct View {
     repr: &mut List<i32>,
@@ -13,7 +13,7 @@ struct Holder {
 }
 
 impl Holder {
-    /// The borrow reaches `self.rows` through a struct literal.
+    /// The reference reaches `self.rows` through a struct literal.
     #[inline("never")]
     fn bump_via_field(&mut self) {
         let v = View { repr: &mut self.rows, tag: 0 };

@@ -73,27 +73,29 @@ type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_varian
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]" = fn(ref "tuple//[core:prelude/string.wado/String, i32]", ref "core:prelude/string.wado//String");  // TypeId(26)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(28)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/traits.wado/compiler_trait_aliased.wado/NetworkError^core:prelude/traits.wado/Inspect::inspect$sroa[self.code]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(29)
 
-type "functype//core:prelude/traits.wado/compiler_trait_aliased.wado/ServiceError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref null "compiler_trait_aliased.wado//NetworkError", ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//core:prelude/traits.wado/compiler_trait_aliased.wado/NetworkError^core:prelude/traits.wado/Inspect::inspect$sroa[self.code]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(30)
 
-type "functype//core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "tuple//[core:prelude/string.wado/String, i32]", ref "core:prelude/string.wado//String");  // TypeId(31)
+type "functype//core:prelude/traits.wado/compiler_trait_aliased.wado/ServiceError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref null "compiler_trait_aliased.wado//NetworkError", ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "tuple//[core:prelude/string.wado/String, i32]", ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,compiler_trait_aliased.wado/ServiceError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>", ref "core:prelude/string.wado//String");  // TypeId(33)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(33)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<i32,compiler_trait_aliased.wado/ServiceError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(35)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(36)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -140,6 +142,7 @@ fn "compiler_trait_aliased.wado/run"() with Stdout {
     let packed_14: i64;
     let rx_15: i32;
     let tx_16: i32;
+    let $qm_e: ref "compiler_trait_aliased.wado//NetworkError";
     rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
     rx_15 = "compiler_trait_aliased.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
@@ -211,7 +214,7 @@ fn "compiler_trait_aliased.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(rx_15);
     $mv_arg_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,compiler_trait_aliased.wado/ServiceError>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"($inline_serve_35: block -> ref "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>" {
-        break $inline_serve_35: struct.new "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Ok" { discriminant: 0, payload_0: cold_path; struct.new "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Err" { discriminant: 1, payload_0: struct.new "compiler_trait_aliased.wado//NetworkError" { code: 7 } }; break $inline_serve_35 };
+        break $inline_serve_35: struct.new "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Ok" { discriminant: 0, payload_0: $qm_e = struct.new "compiler_trait_aliased.wado//NetworkError" { code: 7 }; cold_path; struct.new "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Err" { discriminant: 1, payload_0: $qm_e }; break $inline_serve_35 };
     }, $mv_arg_2);
     rx_15 = builtin::i32_wrap_i64(local.tee packed_14("wasi/stream-new"()));
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
@@ -751,16 +754,19 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[c
     builtin::array_copy<u8>(f.repr, new_used_103, global:core:prelude/traits.wado::$const_obj_211, 0, 1);
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
-    let $load_0: ref Array<u8>;
-    let capacity: i32;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {
     let new_repr: ref Array<u8>;
-    capacity = builtin::array_len(local.tee $load_0(self.repr));
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(new_capacity)), 0, self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let capacity: i32;
+    capacity = builtin::array_len(self.repr);
     if min_capacity <= capacity {
         return;
     }
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
+    "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {

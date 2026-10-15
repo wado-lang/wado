@@ -1,7 +1,7 @@
 // A `&mut` to a variant field is a detached box, so a whole-value write inside
-// the callee lands in the box rather than the field. The call borrows a temp
-// and stores it back, which makes both that write and payload mutation through
-// the same borrow land at the place.
+// the callee lands in the box rather than the field. The call takes `&mut` of a
+// temp and stores it back, which makes both that write and payload mutation
+// through the same reference land at the place.
 
 variant Payload {
     Text(String),
@@ -102,12 +102,12 @@ struct View {
 }
 
 #[inline("never")]
-fn reborrows_a_reference(r: &mut Payload) {
+fn forwards_a_reference(r: &mut Payload) {
     replace(&mut *r);
 }
 
 #[inline("never")]
-fn reborrows_through_a_field(v: &mut View) {
+fn forwards_a_reference_field(v: &mut View) {
     replace(&mut *v.slot);
 }
 
@@ -143,14 +143,14 @@ fn replaces_through_a_capture() -> Payload {
     return p
 }
 
-test "a whole-value write through a variant field borrow lands" {
+test "a whole-value write through a variant field reference lands" {
     let mut b = Bag { item: Payload::Text(`ab`), tick: 7 };
     replace(&mut b.item);
     assert b.item matches { Text(t) && t == `xyz` };
     assert b.tick == 7;
 }
 
-test "payload mutation through the same borrow still lands" {
+test "payload mutation through the same reference still lands" {
     let mut b = Bag { item: Payload::Text(`ab`), tick: 0 };
     mutate_payload(&mut b.item);
     assert b.item matches { Text(t) && t == `zz` };
@@ -234,25 +234,25 @@ test "a whole-value write through a capture lands" {
     assert replaces_through_a_capture() matches { Text(t) && t == `xyz` };
 }
 
-// `&mut *p` re-boxes what `p` points at, whatever `p` is, so a reborrow is as
+// `&mut *p` re-boxes what `p` points at, whatever `p` is, so it is as
 // detached as `&mut b.item` and needs the same write-back — to `*p`, which
 // names the storage the temp was read from.
-test "a reborrow of a mutable reference writes back" {
+test "`&mut *r` over a mutable reference writes back" {
     let mut p = Payload::Text(`ab`);
-    reborrows_a_reference(&mut p);
+    forwards_a_reference(&mut p);
     assert p matches { Text(t) && t == `xyz` };
 }
 
-test "a reborrow through a reference field writes back" {
+test "`&mut *v.slot` through a reference field writes back" {
     let mut p = Payload::Text(`ab`);
     let mut v = View { slot: &mut p };
-    reborrows_through_a_field(&mut v);
+    forwards_a_reference_field(&mut v);
     assert p matches { Text(t) && t == `xyz` };
 }
 
-// A destructuring `let` binds through the borrow rather than keeping it, so it
-// is not a place the borrow outlives and stays legal.
-test "a destructuring let-else through the borrow lands" {
+// A destructuring `let` binds through the reference rather than keeping it, so
+// it is not a place the reference outlives and stays legal.
+test "a destructuring let-else through the reference lands" {
     let mut b = Bag { item: Payload::Text(`ab`), tick: 0 };
     let Text(s) = &mut b.item else {
         return;

@@ -784,7 +784,7 @@ fn check_cm_boundary_representable_inner(
                     }
                     _ => Err(format!(
                         "a reference crosses a Component Model import only as a borrowed \
-                         resource handle, and `{}` borrows no resource",
+                         resource handle, and `{}` refers to no resource",
                         type_table.type_name(type_id)
                     )),
                 }

@@ -1,4 +1,4 @@
-// Verifies `LoopWriteCollector::mut_borrowed` and `written_fields`:
+// Verifies `LoopWriteEffects::mut_referenced` and the field writes beside it:
 // a loop body that takes `&mut c` (or writes `c.size = …`) must drop
 // `c.size`'s field-env binding so a post-loop bounds check on `c.size`
 // does NOT fold to the pre-loop literal value.
@@ -18,9 +18,9 @@ fn mutate_size(c: &mut Container) {
     c.size = 0;
 }
 
-fn check_mut_borrowed() -> i32 {
+fn check_mut_referenced() -> i32 {
     let mut c = Container { size: 16 };
-    // Loop body mutably borrows `c` — pre-loop `c.size = 16` MUST be
+    // Loop body takes `&mut c` — pre-loop `c.size = 16` MUST be
     // dropped before the post-loop bounds check.
     for let mut i = 0; i < 1; i += 1 {
         mutate_size(&mut c);
@@ -47,7 +47,7 @@ fn check_written_fields() -> i32 {
 }
 
 export fn run() with Stdout {
-    let a = check_mut_borrowed();
+    let a = check_mut_referenced();
     let b = check_written_fields();
     println(`${a},${b}`);
 }

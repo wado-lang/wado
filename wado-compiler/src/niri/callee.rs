@@ -57,7 +57,7 @@ impl Callee {
         self.arity
     }
 
-    /// A `&mut T` borrow is the only parameter kind that reaches the caller's
+    /// A `&mut T` is the only parameter kind that reaches the caller's
     /// storage. An index the signature does not have answers as one that does,
     /// so a call the map cannot account for is exempt from nothing.
     pub(super) fn writes_param(&self, index: usize) -> bool {

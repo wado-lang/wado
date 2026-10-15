@@ -1,7 +1,7 @@
-// Test: a shared borrow of a mutable global is not settled storage.
+// Test: a `&` reference to a mutable global is not settled storage.
 //
-// `&G.items` reaches the global read-only, so the borrow itself is no write
-// path — but `G` is written elsewhere, and the value the borrow names moves
+// `&G.items` reaches the global read-only, so the reference itself is no write
+// path — but `G` is written elsewhere, and the value the reference names moves
 // with it. A frame holding a snapshot would answer the first read twice.
 
 use { println, Stdout } from "core:cli";

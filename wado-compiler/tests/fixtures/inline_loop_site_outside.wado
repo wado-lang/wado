@@ -1,5 +1,6 @@
 // The counterpart of `inline_loop_site.wado`: a callee admitted only at loop
-// sites stays a call at a site outside every loop.
+// sites stays a call at a site outside every loop. Two such sites, so that
+// splicing the loop's leaves neither of them the callee's only one.
 
 fn decode_at(bytes: &Array<u8>, pos: i32) -> [i32, i32] {
     let b0 = bytes[pos] as i32;
@@ -32,6 +33,11 @@ fn first_code(bytes: &Array<u8>, pos: i32) -> i32 {
     return decode_at(bytes, pos).0;
 }
 
+#[inline(never)]
+fn first_len(bytes: &Array<u8>, pos: i32) -> i32 {
+    return decode_at(bytes, pos).1;
+}
+
 fn to_array(list: List<u8>) -> Array<u8> {
     let mut out: Array<u8> = builtin::array_new(list.len());
     for let i of 0..<list.len() {
@@ -45,6 +51,7 @@ export fn run() {
     let bytes = to_array(builtin::black_box(literal));
     assert sum_codes(&bytes) == 0x41 + 0xE9 + 0x20AC;
     assert first_code(&bytes, builtin::black_box(1)) == 0xE9;
+    assert first_len(&bytes, builtin::black_box(3)) == 3;
 }
 
 __DATA__

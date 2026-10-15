@@ -177,7 +177,7 @@ struct LocalUses {
     reads: IndexSet<u32>,
     /// Every write reaching a field: `Some(c)` for an assignment of the
     /// constant `c`, `None` for a non-constant assignment or a `&` / `&mut`
-    /// borrow of the field.
+    /// of the field.
     writes: Vec<(u32, Option<FieldConst>)>,
     /// Calls the local is passed to, as `(callee, callee parameter local index)`.
     forwards: Vec<(FuncId, u32)>,
@@ -208,7 +208,7 @@ struct Signatures {
     /// the unique anchor passes resolve that item by.
     specializable: Vec<bool>,
     /// Whether each parameter's own slot may be replaced by a constant. A
-    /// slot the body reassigns, borrows or aliases holds more than the argument.
+    /// slot the body reassigns, references or aliases holds more than the argument.
     param_fixed: Vec<Vec<bool>>,
     /// Whether the function's scalar arguments may move into a clone. A callee
     /// writing through a reference is one a compile-time frame runs for those
@@ -310,7 +310,7 @@ fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
 }
 
 /// Classify every reachable use of each tracked local in `body`. `alias_reads`
-/// names the reads that bind a borrow tracked alongside its referent, which are
+/// names the reads that bind a reference tracked alongside its referent, which are
 /// accounted by that pairing rather than by this walk.
 fn collect_local_uses(
     body: &Body,
@@ -319,7 +319,7 @@ fn collect_local_uses(
     signatures: &Signatures,
     out: &mut IndexMap<u32, LocalUses>,
 ) {
-    let (assigned, borrowed) = collect_place_contexts(body);
+    let (assigned, referenced) = collect_place_contexts(body);
     let mut classified: IndexSet<ExprId> = alias_reads.clone();
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
@@ -336,7 +336,7 @@ fn collect_local_uses(
                 };
                 classified.insert(expr.as_expr().expect("tracked local is a skeleton node"));
                 let uses = out.entry(local).or_default();
-                if borrowed.contains(&id) {
+                if referenced.contains(&id) {
                     uses.writes.push((*field_index, None));
                     uses.reads.insert(*field_index);
                 } else if let Some(value) = assigned.get(&id) {
@@ -380,7 +380,7 @@ fn collect_local_uses(
 /// parent, which the classifying walk may not have visited yet.
 fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>) {
     let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
-    let mut borrowed: IndexSet<ExprId> = IndexSet::default();
+    let mut referenced: IndexSet<ExprId> = IndexSet::default();
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
@@ -394,13 +394,13 @@ fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<E
                 expr,
             } => {
                 if let Some(referent) = expr.as_expr() {
-                    borrowed.insert(referent);
+                    referenced.insert(referent);
                 }
             }
             _ => {}
         }
     });
-    (assigned, borrowed)
+    (assigned, referenced)
 }
 
 /// Mark every tracked local the classifying walk did not reach — a return
@@ -440,10 +440,10 @@ fn tracked_local(body: &Body, op: Operand, tracked: &IndexSet<u32>) -> Option<u3
 }
 
 /// The local an argument names, looking through the `&` / `&mut` a by-value
-/// place is borrowed through. Returns the `Local` node too, which the caller
+/// place is referenced through. Returns the `Local` node too, which the caller
 /// marks classified so the catch-all does not re-read it as an escape.
 fn argument_local(body: &Body, arg: Operand) -> Option<(u32, ExprId)> {
-    body.borrowed_local(arg).or_else(|| body.local_read(arg))
+    body.referenced_local(arg).or_else(|| body.local_read(arg))
 }
 
 fn classify_argument(
@@ -615,7 +615,7 @@ fn collect_roots(
 
     // A parameter arrives defined, by the argument. A later assignment is a
     // second definition to narrow against, never the local's only one, and a
-    // borrow assigned to it does not make it a second name for the referent.
+    // reference assigned to it does not make it a second name for the referent.
     let mut defined: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut invalid: IndexSet<u32> = IndexSet::default();
     let mut note_def = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
@@ -636,15 +636,15 @@ fn collect_roots(
             .get(local as usize)
             .is_some_and(|l| struct_base(l.type_id, types).is_some())
     };
-    // A borrow is a second name for one object, so the two locals share a root
-    // rather than the borrow ending the chain. Inlining a function that passes
+    // A reference is a second name for one object, so the two locals share a
+    // root rather than the reference ending the chain. Inlining a function that passes
     // its `&mut` parameter on mints exactly this binding.
     let mut alias_defs: Vec<AliasDef> = Vec::new();
     let mut define = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
         if !is_struct_local(local) {
             return;
         }
-        match body.borrowed_local(value) {
+        match body.referenced_local(value) {
             Some((base, read)) if base != local => alias_defs.push(AliasDef { local, base, read }),
             _ => note_def(local, value, roots),
         }
@@ -702,7 +702,7 @@ fn collect_roots(
         }
         for rebind in &use_facts.rebinds {
             if body
-                .borrowed_local(*rebind)
+                .referenced_local(*rebind)
                 .is_some_and(|(_, read)| alias_reads.contains(&read))
             {
                 continue;
@@ -728,7 +728,7 @@ fn collect_roots(
     roots
 }
 
-/// One `let r = &base;` or `r = &base;`: the borrowing local, the local it
+/// One `let r = &base;` or `r = &base;`: the referencing local, the local it
 /// names, and the node reading that local.
 struct AliasDef {
     local: u32,
@@ -767,8 +767,8 @@ fn settle_aliases(
     (alias_of, reads)
 }
 
-/// Point every alias at the root of its chain, so one pass reaches a borrow of
-/// a borrow.
+/// Point every alias at the root of its chain, so one pass reaches a reference
+/// to a reference.
 fn flatten_aliases(alias_of: &mut IndexMap<u32, u32>) {
     let resolved: Vec<(u32, u32)> = alias_of
         .iter()
@@ -791,7 +791,7 @@ fn flatten_aliases(alias_of: &mut IndexMap<u32, u32>) {
     }
 }
 
-/// Give a borrow and its referent one answer: what either use narrows away is
+/// Give a reference and its referent one answer: what either use narrows away is
 /// narrowed away from both, since the two names reach one object.
 fn merge_aliases(roots: &mut IndexMap<u32, FieldConsts>, alias_of: &IndexMap<u32, u32>) {
     for (alias, base) in alias_of {
@@ -1110,7 +1110,7 @@ fn collect_body_call_constants(body: &Body, constants: &mut CallConsts) {
 }
 
 /// A scalar agreed on by every caller needs no clone. DAE removes the parameter
-/// after its reads have folded. Borrowed and mutable parameters keep their slots.
+/// after its reads have folded. Reference and mutable parameters keep their slots.
 fn propagate_scalar_constants(
     project: &mut NirPackage,
     state: &ParamSpecState,
