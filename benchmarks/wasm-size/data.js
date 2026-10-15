@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792077669442,
+  "lastUpdate": 1792096395670,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67421,6 +67421,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/48220137a95af0ddeb4ea6312fc44e59f1067f9e"
         },
         "date": 1792077668580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7350,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19942,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 337123,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad991424a4eb7ead6e13b7d1d93758747ed57dd4",
+          "message": "Merge pull request #2361 from wado-lang/claude/project-thread-hdom98\n\nfeat(compiler): struct literals over type parameters, with every derived trait",
+          "timestamp": "2026-10-16T05:13:30+09:00",
+          "tree_id": "513919e551435be4f02a6517646b5cb5abf6235d",
+          "url": "https://github.com/wado-lang/wado/commit/ad991424a4eb7ead6e13b7d1d93758747ed57dd4"
+        },
+        "date": 1792096395215,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
