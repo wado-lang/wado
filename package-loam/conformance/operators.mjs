@@ -344,6 +344,106 @@ add('ConcatShapes', {
   out: INT64,
 });
 
+// The operators ONNX defines as functions of others, and one onnxruntime adds to
+// the default domain: an RMS normalization.
+add('SimplifiedLayerNormalization', {
+  inputs: { A: float([2, 4]) },
+  inits: { S: float([4], [1, -0.5, 2, 0.25]) },
+  nodes: [node('SimplifiedLayerNormalization', ['A', 'S'], 'Y', { epsilon: f32(1e-5), axis: -1 })],
+  layout: { A: ['Row', 'Col'], S: ['Col'] },
+  opset: 17,
+});
+add('GeluTanh', {
+  inputs: { A: float([2, 3]) },
+  nodes: [node('Gelu', ['A'], 'Y', { approximate: 'tanh' })],
+  layout: { A: ['Row', 'Col'] },
+  opset: 20,
+});
+add('GeluErf', { inputs: { A: float([2, 3]) }, nodes: [node('Gelu', ['A'], 'Y')], layout: { A: ['Row', 'Col'] }, opset: 20 });
+
+const expand = (dims, shape, layout) => ({
+  inputs: { A: float(dims) },
+  inits: { S: int64([shape.length], shape) },
+  nodes: [node('Expand', ['A', 'S'], 'Y')],
+  layout,
+});
+add('ExpandUnit', expand([2, 1], [2, 3], { A: ['Row', 'One'], Y: ['Row', 'Col'] }));
+add('ExpandRank', expand([3], [2, 1, 3], { A: ['Col'], Y: ['Depth', 'Row', 'Col'] }));
+// The target's 1 keeps the operand's extent, since Expand broadcasts both ways.
+add('ExpandBothWays', expand([2, 1], [1, 3], { A: ['Row', 'One'], Y: ['Row', 'Col'] }));
+
+// GroupQueryAttention over `s` new positions after `past` cached ones, `heads`
+// query heads sharing `kv` key and value heads of `dim` elements. `rotary`
+// feeds cos and sin caches of 8 positions; `bias` an additive mask; `output`
+// names which of the three results the case checks. onnxruntime rotates a head
+// of a multiple of 16 elements only.
+const gqa = ({ s, past, heads, kv, dim, attrs = {}, rotary = false, bias = null, output = 0 }) => {
+  const total = past + s;
+  const cache = (f) => {
+    const half = dim / 2;
+    const values = [];
+    for (let p = 0; p < 8; p++) {
+      for (let i = 0; i < half; i++) values.push(f(p / 10 ** (i / half)));
+    }
+    return float([8, half], values);
+  };
+  const inputs = {
+    Q: float([1, s, heads * dim]),
+    K: float([1, s, kv * dim]),
+    V: float([1, s, kv * dim], halves(s * kv * dim).map((v) => -v)),
+    PK: float([1, kv, past, dim]),
+    PV: float([1, kv, past, dim]),
+  };
+  const inits = {
+    L: tensor(INT32, [1], [total - 1]),
+    T: tensor(INT32, [], [total]),
+  };
+  const operands = ['Q', 'K', 'V', 'PK', 'PV', 'L', 'T'];
+  if (rotary) {
+    inits.C = cache(Math.cos);
+    inits.N = cache(Math.sin);
+    operands.push('C', 'N');
+  }
+  if (bias) {
+    inputs.B = float([1, 1, s, total], bias);
+    operands.push(...(rotary ? [] : ['', '']), '', 'B');
+  }
+  const outputs = ['O', 'PKo', 'PVo'];
+  outputs[output] = 'Y';
+  return {
+    inputs,
+    inits,
+    nodes: [node('com.microsoft.GroupQueryAttention', operands, outputs, { num_heads: heads, kv_num_heads: kv, ...attrs })],
+    layout: {
+      Q: ['Batch', 'Seq', 'Hidden'],
+      K: ['Batch', 'Seq', 'KvHidden'],
+      V: ['Batch', 'Seq', 'KvHidden'],
+      PK: ['Batch', 'KvHead', 'Past', 'Dim'],
+      PV: ['Batch', 'KvHead', 'Past', 'Dim'],
+      C: ['Pos', 'Half'],
+      N: ['Pos', 'Half'],
+      B: ['Batch', 'One', 'Seq', 'Total'],
+      [outputs[1]]: ['Batch', 'KvHead', 'Total', 'Dim'],
+      [outputs[2]]: ['Batch', 'KvHead', 'Total', 'Dim'],
+    },
+    opset: 17,
+    domains: { 'com.microsoft': 1 },
+  };
+};
+add('GqaPrompt', gqa({ s: 3, past: 0, heads: 2, kv: 1, dim: 16 }));
+add('GqaPast', gqa({ s: 1, past: 3, heads: 4, kv: 2, dim: 16 }));
+add('GqaPastPrompt', gqa({ s: 2, past: 3, heads: 2, kv: 2, dim: 16 }));
+add('GqaRotary', gqa({ s: 3, past: 2, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 } }));
+add('GqaRotaryPresentKey', gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, output: 1 }));
+add('GqaPresentValue', gqa({ s: 2, past: 2, heads: 2, kv: 1, dim: 16, output: 2 }));
+add('GqaWindow', gqa({ s: 5, past: 0, heads: 2, kv: 1, dim: 16, attrs: { local_window_size: 2 } }));
+add('GqaWindowPast', gqa({ s: 2, past: 4, heads: 2, kv: 1, dim: 16, attrs: { local_window_size: 3 } }));
+add('GqaScaleSoftcap', gqa({ s: 3, past: 1, heads: 2, kv: 1, dim: 16, attrs: { scale: f32(0.75), softcap: f32(1.5) } }));
+add('GqaBias', gqa({ s: 2, past: 1, heads: 2, kv: 1, dim: 16, bias: [0, -3.4028234663852886e38, 0.5, 0, 0, -1] }));
+add('GqaRotaryBias', gqa({
+  s: 2, past: 1, heads: 2, kv: 1, dim: 16, rotary: true, attrs: { do_rotary: 1 }, bias: [0, 0, -2, -3.4028234663852886e38, 0, 0],
+}));
+
 const elementName = { [FLOAT]: 'f32', [INT64]: 'i64' };
 
 // The tensor's elements as the .txt spells them: a float by its bits, so that
@@ -356,13 +456,17 @@ function spelled(type, data) {
 const line = (fields) => `${fields.join(' ')}\n`;
 const list = (values) => `[${values.join(',')}]`;
 
-const raw = (type, values) => (type === FLOAT ? new Float32Array(values) : new BigInt64Array(values)).buffer;
+const raw = (type, values) => {
+  if (type === FLOAT) return new Float32Array(values).buffer;
+  if (type === INT32) return new Int32Array(values).buffer;
+  return new BigInt64Array(values).buffer;
+};
 
 const feed = (type, dims, values) => type === FLOAT
   ? new ort.Tensor('float32', Float32Array.from(values), dims)
   : new ort.Tensor('int64', BigInt64Array.from(values), dims);
 
-function model({ name, inputs, inits, nodes, out, opset }) {
+function model({ name, inputs, inits, nodes, out, opset, domains }) {
   const graph = graphProto({
     name,
     nodes,
@@ -370,7 +474,7 @@ function model({ name, inputs, inits, nodes, out, opset }) {
     inputs: Object.entries(inputs).map(([i, t]) => valueInfo(i, t.type, t.dims)),
     outputs: [valueInfo('Y', out, null)],
   });
-  return modelProto(graph, opset);
+  return modelProto(graph, opset, domains);
 }
 
 mkdirSync(join(here, 'operators'), { recursive: true });

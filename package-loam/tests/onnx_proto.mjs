@@ -78,14 +78,19 @@ function attribute(name, value) {
 // A node as `nodeProto` takes it, `outputs` one name or a list of them.
 export const node = (op, inputs, outputs, attrs = {}) => ({ op, inputs, outputs: [outputs].flat(), attrs });
 
-// NodeProto: input = 1, output = 2, op_type = 4, attribute = 5. `attrs` maps
-// each attribute's name to its value, in the order they are written.
+// NodeProto: input = 1, output = 2, op_type = 4, attribute = 5, domain = 7.
+// `attrs` maps each attribute's name to its value, in the order they are
+// written. An operator outside the default domain is named with its domain, as
+// `com.microsoft.GroupQueryAttention`.
 export function nodeProto({ op, inputs, outputs, attrs }) {
+  const dot = op.lastIndexOf('.');
+  const domain = dot < 0 ? [] : [[7, text(op.slice(0, dot))]];
   return [
     ...inputs.map((i) => [1, text(i)]),
     ...outputs.map((o) => [2, text(o)]),
-    [4, text(op)],
+    [4, text(op.slice(dot + 1))],
     ...Object.entries(attrs).map(([name, value]) => [5, attribute(name, value)]),
+    ...domain,
   ];
 }
 
@@ -103,6 +108,9 @@ export function graphProto({ name, nodes, initializers, inputs, outputs }) {
   ];
 }
 
-export function modelProto(graph, opset) {
-  return message([[1, 8], [7, graph], [8, [[2, opset]]]]);
+// OperatorSetIdProto: domain = 1, version = 2. `domains` maps each domain
+// beyond the default one to the version imported.
+export function modelProto(graph, opset, domains = {}) {
+  const imports = Object.entries(domains).map(([d, v]) => [8, [[1, text(d)], [2, v]]]);
+  return message([[1, 8], [7, graph], [8, [[2, opset]]], ...imports]);
 }

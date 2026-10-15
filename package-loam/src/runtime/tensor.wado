@@ -704,6 +704,27 @@ pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out>
     return Tensor { data: t.data, extents };
 }
 
+/// `t` broadcast to `extents`, which it must broadcast to, as `Expand` does.
+pub fn expand<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
+    assert broadcast_extents(&t.extents, &extents) == Option::Some(extents), "the operand broadcasts to the extents";
+    let strides = stretched_strides(&t.extents, extents.len());
+    let mut data = List::<E>::with_capacity(element_count(&extents));
+    let mut index = List::<i32>::filled(extents.len(), 0);
+    if element_count(&extents) > 0 {
+        loop {
+            let mut at = 0;
+            for let a of 0..<extents.len() {
+                at += index[a] * strides[a];
+            }
+            data.push(t.data[at]);
+            if advance(&mut index, &extents) < 0 {
+                break;
+            }
+        }
+    }
+    return Tensor { data, extents };
+}
+
 /// Moves a row-major `index` over `extents` one position on and returns the
 /// axis that advanced, every later one having wrapped to 0; -1 past the end.
 fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
@@ -791,6 +812,145 @@ pub struct Window {
     pub dilations: List<i32>,
     pub pads: List<i32>,
     pub output: List<i32>,
+}
+
+/// What `group_query_attention` computes beyond its operands.
+pub struct Attention {
+    pub heads: i32,
+    pub kv_heads: i32,
+    /// What each score is multiplied by.
+    pub scale: f32,
+    /// Where above 0, each scaled score `x` becomes `softcap · tanh(x / softcap)`.
+    pub softcap: f32,
+    /// Where above 0, a position reads only the `window` positions ending at
+    /// itself; -1 for no window.
+    pub window: i32,
+    /// Whether a position reads only the positions up to itself.
+    pub causal: bool,
+}
+
+/// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`) over
+/// `[batch, sequence, heads × head]` queries, keys and values, the `S` new
+/// positions after the `P` a past of `[batch, key heads, P, head]` caches. Each
+/// key head serves `heads / kv_heads` query heads. Where `cos` and `sin` are
+/// given, a query or key at position `p` turns its halves `(a, b)` by
+/// `(a cos − b sin, b cos + a sin)` of row `p`. Each score is scaled, capped,
+/// and biased by the row of `bias` a batch's and head's extent of 1 repeats,
+/// then masked by `options`. Returns the attended queries, then the past key
+/// and value with the new (turned) positions after them.
+pub fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+    q: &Tensor<f32, [B, S, Q]>,
+    k: &Tensor<f32, [B, S, K]>,
+    v: &Tensor<f32, [B, S, K]>,
+    past_k: &Tensor<f32, [B, H, P, D]>,
+    past_v: &Tensor<f32, [B, H, P, D]>,
+    cos: Option<&Tensor<f32, [Pos, Half]>>,
+    sin: Option<&Tensor<f32, [Pos, Half]>>,
+    bias: Option<&Tensor<f32, [BB, BH, S, T]>>,
+    options: &Attention,
+) -> [Tensor<f32, [B, S, Q]>, Tensor<f32, [B, H, T, D]>, Tensor<f32, [B, H, T, D]>] {
+    let [batch, s, kv, past, d] = [
+        q.extents[0],
+        q.extents[1],
+        options.kv_heads,
+        past_k.extents[2],
+        past_k.extents[3],
+    ];
+    let heads = options.heads;
+    let total = past + s;
+    let group = heads / kv;
+    let turn = |row: &mut List<f32>, at: i32, position: i32| {
+        let [Some(c), Some(n)] = [cos, sin] else {
+            return;
+        };
+        let half = c.extents[1];
+        for let i of 0..<half {
+            let [cv, sv] = [c.data[position * half + i], n.data[position * half + i]];
+            let [a, b] = [row[at + i], row[at + i + half]];
+            row[at + i] = a * cv - b * sv;
+            row[at + i + half] = b * cv + a * sv;
+        }
+    };
+    let cached = |old: &Tensor<f32, [B, H, P, D]>, new: &Tensor<f32, [B, S, K]>, turned: bool| -> Tensor<f32, [B, H, T, D]> {
+        let mut data = List::<f32>::with_capacity(batch * kv * total * d);
+        for let bi of 0..<batch {
+            for let h of 0..<kv {
+                let from = (bi * kv + h) * past * d;
+                data.extend_from_slice(old.data[from..<from + past * d]);
+                for let i of 0..<s {
+                    let at = data.len();
+                    let row = ((bi * s + i) * kv + h) * d;
+                    data.extend_from_slice(new.data[row..<row + d]);
+                    if turned {
+                        turn(&mut data, at, past + i);
+                    }
+                }
+            }
+        }
+        return Tensor { data, extents: [batch, kv, total, d] };
+    };
+    let present_k = cached(past_k, k, true);
+    let present_v = cached(past_v, v, false);
+    let mut out = List::<f32>::filled(batch * s * heads * d, 0.0);
+    let mut query = List::<f32>::filled(d, 0.0);
+    let mut weights = List::<f32>::filled(total, 0.0);
+    for let bi of 0..<batch {
+        for let i of 0..<s {
+            let position = past + i;
+            for let h of 0..<heads {
+                let row = ((bi * s + i) * heads + h) * d;
+                for let e of 0..<d {
+                    query[e] = q.data[row + e];
+                }
+                turn(&mut query, 0, position);
+                let keys = (bi * kv + h / group) * total * d;
+                let mut top = f32::NEG_INFINITY;
+                for let j of 0..<total {
+                    let masked = options.causal && j > position || options.window > 0 && position - j >= options.window;
+                    if masked {
+                        weights[j] = f32::NEG_INFINITY;
+                        continue;
+                    }
+                    let mut score: f32 = 0.0;
+                    for let e of 0..<d {
+                        score += query[e] * present_k.data[keys + j * d + e];
+                    }
+                    score *= options.scale;
+                    if options.softcap > 0.0 {
+                        score = options.softcap * f32::tanh(score / options.softcap);
+                    }
+                    if let Some(b) = bias {
+                        let [bb, bh] = [
+                            if b.extents[0] == 1 { 0 } else { bi },
+                            if b.extents[1] == 1 { 0 } else { h },
+                        ];
+                        score += b.data[((bb * b.extents[1] + bh) * s + i) * total + j];
+                    }
+                    weights[j] = score;
+                    top = f32::ieee754_max(top, score);
+                }
+                let mut sum: f32 = 0.0;
+                for let j of 0..<total {
+                    weights[j] = if weights[j] == f32::NEG_INFINITY { 0.0 } else { f32::exp(weights[j] - top) };
+                    sum += weights[j];
+                }
+                for let j of 0..<total {
+                    let w = weights[j] / sum;
+                    if w == 0.0 {
+                        continue;
+                    }
+                    for let e of 0..<d {
+                        out[row + e] += w * present_v.data[keys + j * d + e];
+                    }
+                }
+            }
+        }
+    }
+    return [
+        Tensor { data: out, extents: q.extents },
+        present_k,
+        present_v,
+    ];
 }
 
 /// ONNX's `MaxPool` over `window`: each position's greatest value under the
@@ -1886,6 +2046,8 @@ pub trait Backend with _ {
         axis: i32,
     ) -> Self::Tensor<E, [..Pre, Out, ..Post]>;
     fn lift<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, rank: i32) -> Self::Tensor<E, Out>;
+    /// `t` broadcast to `extents`, as `Expand` does.
+    fn expand<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, extents: List<i32>) -> Self::Tensor<E, Out>;
     fn reshape<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, extents: List<i32>) -> Self::Tensor<E, Out>;
     fn transpose2<E: Element, A, B>(&mut self, t: &Self::Tensor<E, [A, B]>) -> Self::Tensor<E, [B, A]>;
     fn permute<E: Element, In, Out>(&mut self, t: &Self::Tensor<E, In>, perm: List<i32>) -> Self::Tensor<E, Out>;
@@ -1895,6 +2057,19 @@ pub trait Backend with _ {
         x: &Self::Tensor<f32, [N, C, ..In]>,
         window: &Window,
     ) -> Self::Tensor<f32, [N, C, ..Out]>;
+    /// The free function `group_query_attention`, over the backend's tensors.
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        &mut self,
+        q: &Self::Tensor<f32, [B, S, Q]>,
+        k: &Self::Tensor<f32, [B, S, K]>,
+        v: &Self::Tensor<f32, [B, S, K]>,
+        past_k: &Self::Tensor<f32, [B, H, P, D]>,
+        past_v: &Self::Tensor<f32, [B, H, P, D]>,
+        cos: Option<&Self::Tensor<f32, [Pos, Half]>>,
+        sin: Option<&Self::Tensor<f32, [Pos, Half]>>,
+        bias: Option<&Self::Tensor<f32, [BB, BH, S, T]>>,
+        options: &Attention,
+    ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>];
     fn conv<N, Ci, Co, ..In, ..K, ..Out>(
         &mut self,
         x: &Self::Tensor<f32, [N, Ci, ..In]>,
@@ -2087,6 +2262,10 @@ impl Backend for Cpu {
         return lift(t, rank);
     }
 
+    fn expand<E: Element, In, Out>(&mut self, t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
+        return expand(t, extents);
+    }
+
     fn reshape<E: Element, In, Out>(&mut self, t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
         return reshape(t, extents);
     }
@@ -2105,6 +2284,21 @@ impl Backend for Cpu {
         window: &Window,
     ) -> Tensor<f32, [N, C, ..Out]> {
         return max_pool::<N, C, [..In], [..Out]>(x, window);
+    }
+
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        &mut self,
+        q: &Tensor<f32, [B, S, Q]>,
+        k: &Tensor<f32, [B, S, K]>,
+        v: &Tensor<f32, [B, S, K]>,
+        past_k: &Tensor<f32, [B, H, P, D]>,
+        past_v: &Tensor<f32, [B, H, P, D]>,
+        cos: Option<&Tensor<f32, [Pos, Half]>>,
+        sin: Option<&Tensor<f32, [Pos, Half]>>,
+        bias: Option<&Tensor<f32, [BB, BH, S, T]>>,
+        options: &Attention,
+    ) -> [Tensor<f32, [B, S, Q]>, Tensor<f32, [B, H, T, D]>, Tensor<f32, [B, H, T, D]>] {
+        return group_query_attention(q, k, v, past_k, past_v, cos, sin, bias, options);
     }
 
     fn conv<N, Ci, Co, ..In, ..K, ..Out>(

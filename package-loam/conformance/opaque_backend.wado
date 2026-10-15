@@ -7,7 +7,7 @@
 //! imports, so the tests discover none of it, and `program_over` in
 //! `oracle.wado` splices it.
 
-use { Cpu, Element, Epilogue, Expr, Held, Packed, Read, widen } from "lib:loam";
+use { Attention, Cpu, Element, Epilogue, Expr, Held, Packed, Read, widen } from "lib:loam";
 
 /// A tensor the generated module holds but cannot open.
 struct Handle<E, Axes> {
@@ -39,6 +39,14 @@ impl Opaque {
 
 fn handle<E, Axes>(held: Tensor<E, Axes>) -> Handle<E, Axes> {
     return Handle { held };
+}
+
+/// An optional operand opened, as the CPU's kernels read it.
+fn held_of<E, Axes>(t: Option<&Handle<E, Axes>>) -> Option<&Tensor<E, Axes>> {
+    return match t {
+        Some(h) => Option::Some(&h.held),
+        None => null,
+    };
 }
 
 /// `then`'s operands opened, as the CPU's kernels read them.
@@ -237,6 +245,10 @@ impl Backend for Opaque {
         return handle(self.cpu.lift::<E, In, Out>(&t.held, rank));
     }
 
+    fn expand<E: Element, In, Out>(&mut self, t: &Handle<E, In>, extents: List<i32>) -> Handle<E, Out> {
+        return handle(self.cpu.expand::<E, In, Out>(&t.held, extents));
+    }
+
     fn reshape<E: Element, In, Out>(&mut self, t: &Handle<E, In>, extents: List<i32>) -> Handle<E, Out> {
         return handle(self.cpu.reshape::<E, In, Out>(&t.held, extents));
     }
@@ -255,6 +267,36 @@ impl Backend for Opaque {
         window: &Window,
     ) -> Handle<f32, [N, C, ..Out]> {
         return handle(self.cpu.max_pool::<N, C, [..In], [..Out]>(&x.held, window));
+    }
+
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        &mut self,
+        q: &Handle<f32, [B, S, Q]>,
+        k: &Handle<f32, [B, S, K]>,
+        v: &Handle<f32, [B, S, K]>,
+        past_k: &Handle<f32, [B, H, P, D]>,
+        past_v: &Handle<f32, [B, H, P, D]>,
+        cos: Option<&Handle<f32, [Pos, Half]>>,
+        sin: Option<&Handle<f32, [Pos, Half]>>,
+        bias: Option<&Handle<f32, [BB, BH, S, T]>>,
+        options: &Attention,
+    ) -> [Handle<f32, [B, S, Q]>, Handle<f32, [B, H, T, D]>, Handle<f32, [B, H, T, D]>] {
+        let [out, present_k, present_v] = self.cpu.group_query_attention::<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+            &q.held,
+            &k.held,
+            &v.held,
+            &past_k.held,
+            &past_v.held,
+            held_of(cos),
+            held_of(sin),
+            held_of(bias),
+            options,
+        );
+        return [
+            handle(out),
+            handle(present_k),
+            handle(present_v),
+        ];
     }
 
     fn conv<N, Ci, Co, ..In, ..K, ..Out>(

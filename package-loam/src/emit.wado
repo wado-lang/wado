@@ -8,6 +8,7 @@ use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 use {
     Elements,
+    GROUP_QUERY_ATTENTION,
     Graph,
     KERNEL_ELEMENT,
     Node,
@@ -25,6 +26,7 @@ use { BinaryOp, Expr, Step, UnaryOp, constant as constant_expr, operand as opera
 use { expected } from "./safetensors.wado";
 use {
     Checked,
+    attention_options,
     concat_axis,
     conv_group,
     gather_axis,
@@ -312,7 +314,7 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 global RUNTIME_NAMES: List<String> = [
-    "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor", "UnaryOp",
+    "Attention", "Backend", "BinaryOp", "Epilogue", "Expected", "Expr", "LoadError", "Merged", "RowOp", "Step", "Tensor", "UnaryOp",
     "Window", "axis_mismatch", "extent_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint", "refuse",
     "to_extent", "unmet",
 ];
@@ -1034,6 +1036,23 @@ fn kernel_calls(
     symbols: &mut Symbols,
     opset: Option<i64>,
 ) -> Result<List<String>, EmitError> {
+    if node.op == GROUP_QUERY_ATTENTION {
+        let mut bound: List<String> = [];
+        for let output of node.outputs {
+            if output == "" {
+                bound.push("_");
+                continue;
+            }
+            let ident = names.get(&output);
+            exprs.values[output] = ident;
+            bound.push(ident);
+        }
+        // The kernel computes every output, so an unnamed one is dropped.
+        while bound.len() < 3 {
+            bound.push("_");
+        }
+        return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs)};`]);
+    }
     let calls = if node.op == "Split" {
         split_calls(node, checked, exprs, symbols)?;
     } else {
@@ -1044,6 +1063,61 @@ fn kernel_calls(
         lines.push(bound_to(&node.outputs[i], call, names, exprs));
     }
     return Result::Ok(lines);
+}
+
+/// A `GroupQueryAttention` as its kernel's call. An optional operand absent
+/// still needs its axes named, so the turbofish spells the query's for it.
+fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+    let shapes = &checked.shapes;
+    let options = settled(attention_options(node));
+    let q = shapes[node.inputs[0]];
+    let k = shapes[node.inputs[1]];
+    let past = shapes[node.inputs[3]];
+    let present = node.outputs[1..<node.outputs.len()].to_list().into_iter().find(|o| o != "").unwrap();
+    let total = shapes[present].axes[2].name;
+    let given = |index: i32| index < node.inputs.len() && node.inputs[index] != "";
+    let optional = |index: i32| if given(index) { `Option::Some(${exprs.reference(&node.inputs[index])})` } else { "null" };
+    let [pos, half] = if given(7) {
+        let cache = shapes[node.inputs[7]];
+        [cache.axes[0].name, cache.axes[1].name];
+    } else {
+        [q.axes[1].name, past.axes[3].name];
+    };
+    let [bias_batch, bias_heads] = if given(10) {
+        let bias = shapes[node.inputs[10]];
+        [bias.axes[0].name, bias.axes[1].name];
+    } else {
+        [q.axes[0].name, past.axes[1].name];
+    };
+    let turbofish = [
+        q.axes[0].name,
+        q.axes[1].name,
+        q.axes[2].name,
+        k.axes[2].name,
+        past.axes[1].name,
+        past.axes[2].name,
+        total,
+        past.axes[3].name,
+        pos,
+        half,
+        bias_batch,
+        bias_heads,
+    ] as List<String>;
+    let head = past.axes[3].static_extent();
+    let scale = options.scale.unwrap_or(1.0 / f32::sqrt(head as f32));
+    let attention = `&Attention { heads: ${options.heads}, kv_heads: ${options.kv_heads}, scale: ${float_literal(scale)}, softcap: ${float_literal(
+        options.softcap,
+    )}, window: ${options.window}, causal: ${options.causal} }`;
+    let mut operands: List<String> = [];
+    for let i of 0..<5 {
+        operands.push(exprs.reference(&node.inputs[i]));
+    }
+    for let index of [7, 8, 10] {
+        // The caches are read only where the attribute asks for rotation.
+        operands.push(if index < 10 && !options.rotary { "null" } else { optional(index) });
+    }
+    operands.push(attention);
+    return `backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`;
 }
 
 /// The statement binding `call` to `output`'s name, which later reads of
@@ -1459,6 +1533,16 @@ fn node_call(
     }
     if op == "Concat" {
         return Result::Ok(concat_call(node, checked, exprs));
+    }
+    if op == "Expand" {
+        let element = checked.primitives.get(node.inputs[0]).unwrap();
+        let from = shapes.get(node.inputs[0]).unwrap();
+        let to = shapes.get(node.outputs[0]).unwrap();
+        return Result::Ok(
+            `backend.expand::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${exprs.reference(&node.inputs[0])}, ${symbols.spell_shape(
+                &to,
+            )?})`,
+        );
     }
     if op == "Transpose" {
         let shape = shapes.get(node.inputs[0]).unwrap();

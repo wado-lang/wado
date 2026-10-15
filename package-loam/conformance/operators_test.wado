@@ -504,3 +504,77 @@ test "Shape between start and end" {
 test "Concat of two shapes" {
     assert_agrees(#include_bytes("./operators/ConcatShapes.onnx"), #include_str("./operators/ConcatShapes.txt"));
 }
+
+test "SimplifiedLayerNormalization scales each row by the root of its mean square" {
+    assert_agrees(
+        #include_bytes("./operators/SimplifiedLayerNormalization.onnx"),
+        #include_str("./operators/SimplifiedLayerNormalization.txt"),
+    );
+}
+
+test "Gelu approximated by tanh" {
+    assert_agrees(#include_bytes("./operators/GeluTanh.onnx"), #include_str("./operators/GeluTanh.txt"));
+}
+
+test "Gelu through erf" {
+    assert_agrees(#include_bytes("./operators/GeluErf.onnx"), #include_str("./operators/GeluErf.txt"));
+}
+
+test "Expand stretches an axis of 1" {
+    assert_agrees(#include_bytes("./operators/ExpandUnit.onnx"), #include_str("./operators/ExpandUnit.txt"));
+}
+
+test "Expand adds leading axes" {
+    assert_agrees(#include_bytes("./operators/ExpandRank.onnx"), #include_str("./operators/ExpandRank.txt"));
+}
+
+test "Expand keeps the operand's extent where the target's is 1" {
+    assert_agrees(#include_bytes("./operators/ExpandBothWays.onnx"), #include_str("./operators/ExpandBothWays.txt"));
+}
+
+test "GroupQueryAttention over a prompt with no past" {
+    assert_agrees(#include_bytes("./operators/GqaPrompt.onnx"), #include_str("./operators/GqaPrompt.txt"));
+}
+
+test "GroupQueryAttention of one position after a past" {
+    assert_agrees(#include_bytes("./operators/GqaPast.onnx"), #include_str("./operators/GqaPast.txt"));
+}
+
+test "GroupQueryAttention of several positions after a past" {
+    assert_agrees(#include_bytes("./operators/GqaPastPrompt.onnx"), #include_str("./operators/GqaPastPrompt.txt"));
+}
+
+test "GroupQueryAttention rotates queries and keys by their positions" {
+    assert_agrees(#include_bytes("./operators/GqaRotary.onnx"), #include_str("./operators/GqaRotary.txt"));
+}
+
+test "GroupQueryAttention's present key holds the rotated keys after the past" {
+    assert_agrees(
+        #include_bytes("./operators/GqaRotaryPresentKey.onnx"),
+        #include_str("./operators/GqaRotaryPresentKey.txt"),
+    );
+}
+
+test "GroupQueryAttention's present value holds the values after the past" {
+    assert_agrees(#include_bytes("./operators/GqaPresentValue.onnx"), #include_str("./operators/GqaPresentValue.txt"));
+}
+
+test "GroupQueryAttention with a local window reads the last positions only" {
+    assert_agrees(#include_bytes("./operators/GqaWindow.onnx"), #include_str("./operators/GqaWindow.txt"));
+}
+
+test "GroupQueryAttention's local window reaches into the past" {
+    assert_agrees(#include_bytes("./operators/GqaWindowPast.onnx"), #include_str("./operators/GqaWindowPast.txt"));
+}
+
+test "GroupQueryAttention scales then caps its scores" {
+    assert_agrees(#include_bytes("./operators/GqaScaleSoftcap.onnx"), #include_str("./operators/GqaScaleSoftcap.txt"));
+}
+
+test "GroupQueryAttention adds its bias to the scores" {
+    assert_agrees(#include_bytes("./operators/GqaBias.onnx"), #include_str("./operators/GqaBias.txt"));
+}
+
+test "GroupQueryAttention rotates and adds its bias" {
+    assert_agrees(#include_bytes("./operators/GqaRotaryBias.onnx"), #include_str("./operators/GqaRotaryBias.txt"));
+}

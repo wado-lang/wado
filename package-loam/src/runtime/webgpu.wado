@@ -7,6 +7,7 @@
 //! convolutions and `max_pool` run on the CPU. See `package-loam/webgpu.md`.
 
 use {
+    Attention,
     Backend,
     BinaryOp,
     Cpu,
@@ -20,6 +21,7 @@ use {
     Window,
     broadcast_extents,
     element_count,
+    group_query_attention,
     operand,
     row_extents,
 } from "./tensor.wado";
@@ -332,6 +334,17 @@ impl WebGpuBackend {
             Device(d) => *d,
             Host(h) => self.placed(h, false),
         };
+    }
+
+    /// `host` over an optional operand.
+    fn host_of<E: Element, Axes>(
+        &mut self,
+        t: Option<&Placed<E, Axes>>,
+    ) -> Option<Tensor<E, Axes>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let Some(placed) = t else {
+            return null;
+        };
+        return Option::Some(self.host(placed));
     }
 
     fn host<E: Element, Axes>(
@@ -1249,6 +1262,20 @@ impl Backend for WebGpuBackend {
         return Placed::Device(DeviceTensor { slot: d.slot, offset: d.offset, extents, strides });
     }
 
+    /// A view: each stretched axis reads its one element through a stride of 0.
+    fn expand<E: Element, In, Out>(&mut self, t: &Placed<E, In>, extents: List<i32>) -> Placed<E, Out> {
+        let Device(d) = t else {
+            return Placed::Host(self.cpu.expand::<E, In, Out>(&self.host_only(t), extents));
+        };
+        assert broadcast_extents(&d.extents, &extents) == Option::Some(extents), "the operand broadcasts to the extents";
+        let lead = extents.len() - d.extents.len();
+        let mut strides = List::<i32>::filled(lead, 0);
+        for let a of 0..<d.extents.len() {
+            strides.push(if d.extents[a] == 1 { 0 } else { d.strides[a] });
+        }
+        return Placed::Device(DeviceTensor { slot: d.slot, offset: d.offset, extents, strides });
+    }
+
     fn reshape<E: Element, In, Out>(
         &mut self,
         t: &Placed<E, In>,
@@ -1285,6 +1312,39 @@ impl Backend for WebGpuBackend {
         window: &Window,
     ) -> Placed<f32, [N, C, ..Out]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return Placed::Host(self.cpu.max_pool::<N, C, [..In], [..Out]>(&self.host(x), window));
+    }
+
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        &mut self,
+        q: &Placed<f32, [B, S, Q]>,
+        k: &Placed<f32, [B, S, K]>,
+        v: &Placed<f32, [B, S, K]>,
+        past_k: &Placed<f32, [B, H, P, D]>,
+        past_v: &Placed<f32, [B, H, P, D]>,
+        cos: Option<&Placed<f32, [Pos, Half]>>,
+        sin: Option<&Placed<f32, [Pos, Half]>>,
+        bias: Option<&Placed<f32, [BB, BH, S, T]>>,
+        options: &Attention,
+    ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let cos_host = self.host_of(cos);
+        let sin_host = self.host_of(sin);
+        let bias_host = self.host_of(bias);
+        let [out, present_k, present_v] = group_query_attention(
+            &self.host(q),
+            &self.host(k),
+            &self.host(v),
+            &self.host(past_k),
+            &self.host(past_v),
+            optional(&cos_host),
+            optional(&sin_host),
+            optional(&bias_host),
+            options,
+        );
+        return [
+            Placed::Host(out),
+            Placed::Host(present_k),
+            Placed::Host(present_v),
+        ];
     }
 
     fn conv<N, Ci, Co, ..In, ..K, ..Out>(
@@ -2059,6 +2119,14 @@ ${epilogue}        out[group.z * rows * cols + row * cols + col] = s${op.steps.l
     }
 }
 ${ELEMENTWISE_OPERATORS}`;
+}
+
+/// A reference to the tensor `t` holds, where it holds one.
+fn optional<E, Axes>(t: &Option<Tensor<E, Axes>>) -> Option<&Tensor<E, Axes>> {
+    return match t {
+        Some(held) => Option::Some(held),
+        None => null,
+    };
 }
 
 fn max_of(values: &List<i32>) -> i32 {

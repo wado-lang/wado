@@ -27,6 +27,7 @@ use {
     Node,
     Rank,
     ValueInfo,
+    GROUP_QUERY_ATTENTION,
     absent,
     data_type,
     dims_of,
@@ -398,7 +399,8 @@ fn checked_node(
     local: &Schema,
     opset: Option<i64>,
 ) -> Result<(), InferError> {
-    if node.outputs.is_empty() || node.outputs.len() != 1 && node.op != "Split" && node.op != "If" {
+    let several = node.op == "Split" || node.op == "If" || node.op == GROUP_QUERY_ATTENTION;
+    if node.outputs.is_empty() || node.outputs.len() != 1 && !several {
         builtin::cold_path();
         return Result::Err(InferError::OutputCount(OutputCountConflict {
             node: node.name(),
@@ -434,11 +436,17 @@ fn checked_node(
     }
     let produced = if node.op == "Split" {
         split(node, &scope.shapes, &scope.known, local, &mut scope.owed)?;
+    } else if node.op == GROUP_QUERY_ATTENTION {
+        attention(node, &scope.shapes, &scope.known, local, &mut scope.owed)?;
     } else {
         [infer_node(node, &scope.shapes, &scope.known, local, opset, &mut scope.owed)?] as List<Shape>;
     };
     let primitive = produced_primitive(node, &scope.primitives)?;
     for let [i, shape] of produced.into_iter().enumerate() {
+        // An optional output left unnamed is not computed.
+        if node.outputs[i] == "" {
+            continue;
+        }
         scope.shapes[node.outputs[i]] = held(&node.outputs[i], shape)?;
         if let Some(p) = primitive {
             scope.primitives[node.outputs[i]] = p;
@@ -586,8 +594,13 @@ fn read_at_build_time(node: &Node, index: i32) -> bool {
     if node.op == "Slice" {
         return index >= 1;
     }
+    // The sequence lengths, which `attention` checks against the shapes.
+    if node.op == GROUP_QUERY_ATTENTION {
+        return index == 5 || index == 6;
+    }
     return index == 1
         && (node.op == "Reshape"
+            || node.op == "Expand"
             || node.op == "Unsqueeze"
             || node.op == "Squeeze"
             || node.op == "Split"
@@ -598,6 +611,7 @@ fn read_at_build_time(node: &Node, index: i32) -> bool {
 /// they carry any primitive through.
 fn is_layout(op: &String) -> bool {
     return *op == "Reshape"
+        || *op == "Expand"
         || *op == "Flatten"
         || *op == "Unsqueeze"
         || *op == "Squeeze"
@@ -943,6 +957,9 @@ fn infer_node(
         softmax_lane(node, x.rank(), opset)?;
         return Result::Ok(x);
     }
+    if op == "Expand" {
+        return expanded(node, &operand_at(node, shapes, 0), known, schema, owed);
+    }
     if is_reduction(&op) {
         let x = operand_at(node, shapes, 0);
         let reduced = reduced_axes(node, known, x.rank())?;
@@ -1242,6 +1259,221 @@ fn filled(
         axes.push(layout_axis(node, schema, i, &extents, "is filled")?);
     }
     return Result::Ok(Shape { axes });
+}
+
+/// An `Expand`: the operand broadcast against the target shape, aligned from
+/// the end, as arithmetic broadcasts two operands. An axis the operand stretches
+/// from 1, or lacks, is new, for the output's layout to name; one it keeps owes
+/// that the target's extent is 1 or its own.
+fn expanded(
+    node: &Node,
+    x: &Shape,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<Shape, InferError> {
+    let target = operand_polys(node, known, 1).map_err(|reason| refusal(node, reason))?;
+    let rank = i32::max(x.rank(), target.len());
+    let mut axes: List<Axis> = [];
+    for let i of 0..<rank {
+        let at_target = i - (rank - target.len());
+        let extent = if at_target >= 0 {
+            owe(node, owed, target[at_target], `the target's ${target[at_target]} must not be negative`)?;
+            counted(node, target[at_target])?;
+        } else {
+            Extent::Static(1);
+        };
+        let at_x = i - (rank - x.rank());
+        let stretched = at_x < 0 || x.axes[at_x].extent matches { Static(1) } && !extent matches { Static(1) };
+        if stretched {
+            axes.push(output_layout_axis(node, &node.outputs[0], schema, i, rank, extent, "is expanded")?);
+            continue;
+        }
+        let kept = x.axes[at_x];
+        if !extent matches { Static(1) } {
+            agree_at(node, &kept, &Axis { ..kept, extent }, owed)?;
+        }
+        axes.push(kept);
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// What a `GroupQueryAttention` computes beyond its operands, off its attributes.
+pub struct AttentionOptions {
+    pub heads: i32,
+    pub kv_heads: i32,
+    /// What the scores are multiplied by: the attribute, or 1/√head.
+    pub scale: Option<f32>,
+    /// Where above 0, each score `x` becomes `softcap · tanh(x / softcap)`.
+    pub softcap: f32,
+    /// Where above 0, a position reads only the `window` positions ending at itself.
+    pub window: i32,
+    pub causal: bool,
+    pub rotary: bool,
+}
+
+/// The operands `GroupQueryAttention` reads past its first seven: the rotary
+/// caches, then the position ids, then the bias.
+global ROTARY_COS: i32 = 7;
+global ROTARY_SIN: i32 = 8;
+global POSITION_IDS: i32 = 9;
+global ATTENTION_BIAS: i32 = 10;
+
+/// A `GroupQueryAttention`'s options, refusing an attribute that asks for what
+/// the kernel does not compute.
+pub fn attention_options(node: &Node) -> Result<AttentionOptions, InferError> {
+    for let [attr, neutral] of [
+        ["rotary_interleaved", 0],
+        ["smooth_softmax", 0],
+        ["qk_output", 0],
+        ["sliding_window_cache", 0],
+    ] as List<[String, i64]> {
+        if int_attr(node, attr, neutral)? != neutral {
+            return Result::Err(refusal(node, `${attr} is not supported`));
+        }
+    }
+    for let attr of ["k_quant_type", "v_quant_type"] {
+        if let Some(a) = node.attr(attr) && attr_read(node, a.string())? != "NONE" {
+            return Result::Err(refusal(node, `a quantized cache (${attr}) is not supported`));
+        }
+    }
+    let heads = attr_read(node, node.required_int_attr("num_heads"))?;
+    let kv_heads = attr_read(node, node.required_int_attr("kv_num_heads"))?;
+    if !(0 < kv_heads <= heads <= i32::MAX as i64) || heads % kv_heads != 0 {
+        return Result::Err(refusal(node, `${heads} heads do not share ${kv_heads} key heads evenly`));
+    }
+    let causal = int_attr(node, "causal", 1)? != 0;
+    let window = int_attr(node, "local_window_size", -1)?;
+    if window == 0 || window > i32::MAX as i64 {
+        return Result::Err(refusal(node, `local_window_size ${window} is no window`));
+    }
+    // A scale of 0, the attribute's default, asks for 1/√head.
+    let scale = float_attr(node, "scale", 0.0)?;
+    return Result::Ok(AttentionOptions {
+        heads: heads as i32,
+        kv_heads: kv_heads as i32,
+        scale: if scale == 0.0 { null } else { Option::Some(scale) },
+        softcap: float_attr(node, "softcap", 0.0)?,
+        window: i32::max(window as i32, -1),
+        causal,
+        rotary: int_attr(node, "do_rotary", 0)? != 0,
+    });
+}
+
+/// Whether `node` was given its operand `index`.
+fn has_operand(node: &Node, index: i32) -> bool {
+    return index < node.inputs.len() && node.inputs[index] != "";
+}
+
+/// A `GroupQueryAttention`'s outputs: the attended queries, of the queries'
+/// axes, then the present key and value, the past's axes with the new
+/// positions after the past ones, an axis the output layout names. The query,
+/// key and value are `[batch, sequence, heads × head]`, the past
+/// `[batch, key heads, past, head]`. The sequence lengths it is given must
+/// be the ones its shapes say, as must the rotary caches' and bias's extents.
+fn attention(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<List<Shape>, InferError> {
+    let options = attention_options(node)?;
+    for let index of [1, 2, 3, 4] {
+        if !has_operand(node, index) {
+            return Result::Err(refusal(node, `operand ${index} is absent, which only a packed or pastless form leaves`));
+        }
+    }
+    if has_operand(node, POSITION_IDS) || node.inputs.len() > ATTENTION_BIAS + 1 {
+        return Result::Err(refusal(node, "position ids, sinks, cache scales and norm weights are not supported"));
+    }
+    let ranked = |index: i32, rank: i32| -> Result<Shape, InferError> {
+        let shape = operand_at(node, shapes, index);
+        if shape.rank() != rank {
+            return Result::Err(operand_rank(node, index, shape.rank(), rank));
+        }
+        return Result::Ok(shape);
+    };
+    let [q, k, v, past_k, past_v] = [
+        ranked(0, 3)?,
+        ranked(1, 3)?,
+        ranked(2, 3)?,
+        ranked(3, 4)?,
+        ranked(4, 4)?,
+    ];
+    let Static(dim) = past_k.axes[3].extent else {
+        return Result::Err(refusal(node, "the head's extent must be a number"));
+    };
+    let stated = |axis: &Axis, extent: i32, into: &mut List<Condition>| agree_at(node, axis, &Axis { ..*axis, extent: Extent::Static(extent) }, into);
+    stated(&q.axes[2], options.heads * dim, owed)?;
+    stated(&k.axes[2], options.kv_heads * dim, owed)?;
+    stated(&past_k.axes[1], options.kv_heads, owed)?;
+    for let i of 0..<3 {
+        agree_at(node, &k.axes[i], &v.axes[i], owed)?;
+    }
+    for let i of 0..<4 {
+        agree_at(node, &past_k.axes[i], &past_v.axes[i], owed)?;
+    }
+    agree_at(node, &q.axes[0], &k.axes[0], owed)?;
+    agree_at(node, &q.axes[1], &k.axes[1], owed)?;
+    agree_at(node, &q.axes[0], &past_k.axes[0], owed)?;
+    let sequence = q.axes[1].extent.poly();
+    let Some(total) = past_k.axes[2].extent.poly().try_add(&sequence) else {
+        return Result::Err(refusal(node, "the past and the sequence are more than a length holds"));
+    };
+    let equal = |a: &Poly, b: &Poly, condition: String, into: &mut List<Condition>| -> Result<(), InferError> {
+        let [Some(above), Some(below)] = [
+            a.try_sub(b),
+            b.try_sub(a),
+        ] else {
+            return Result::Err(refusal(node, condition));
+        };
+        owe(node, into, above, condition)?;
+        return owe(node, into, below, condition);
+    };
+    let given = |index: i32| operand_polys(node, known, index).map_err(|reason| refusal(node, reason));
+    for let t of given(6)? {
+        equal(&t, &total, "total_sequence_length must be the past and the sequence", owed)?;
+    }
+    for let l of given(5)? {
+        equal(&l.try_add(&Poly::constant(1)).unwrap(), &total, "seqlens_k must be one short of the total", owed)?;
+    }
+    if options.rotary {
+        if !has_operand(node, ROTARY_COS) || !has_operand(node, ROTARY_SIN) {
+            return Result::Err(refusal(node, "do_rotary needs the cos and sin caches"));
+        }
+        for let index of [ROTARY_COS, ROTARY_SIN] {
+            let cache = ranked(index, 2)?;
+            stated(&cache.axes[1], dim / 2, owed)?;
+            let Some(slack) = cache.axes[0].extent.poly().try_sub(&total) else {
+                return Result::Err(refusal(node, "the rotary cache must reach every position"));
+            };
+            owe(node, owed, slack, "the rotary cache must reach every position")?;
+        }
+    }
+    if has_operand(node, ATTENTION_BIAS) {
+        let bias = ranked(ATTENTION_BIAS, 4)?;
+        equal(&bias.axes[2].extent.poly(), &sequence, "the bias must cover the sequence", owed)?;
+        equal(&bias.axes[3].extent.poly(), &total, "the bias must cover the past and the sequence", owed)?;
+        for let [i, along] of [
+            [0, q.axes[0].extent.poly()],
+            [1, Poly::constant(options.heads as i64)],
+        ] as List<[i32, Poly]> {
+            let extent = bias.axes[i].extent.poly();
+            if extent.as_constant() != Option::Some(1) {
+                equal(&extent, &along, "the bias's first two extents must be 1 or the batch's and heads'", owed)?;
+            }
+        }
+    }
+    let Some(total_extent) = Extent::of(total) else {
+        return Result::Err(refusal(node, "the past and the sequence are more than a list holds"));
+    };
+    let Some(present) = node.outputs[1..<node.outputs.len()].to_list().into_iter().find(|o| o != "") else {
+        return Result::Err(refusal(node, "neither present output is named, so no layout names the positions"));
+    };
+    let positions = output_layout_axis(node, &present, schema, 2, 4, total_extent, "holds the past and the new positions")?;
+    let cache = Shape { axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]] };
+    return Result::Ok([q, cache, cache]);
 }
 
 /// How many elements a `Range` the run computes yields. Its operands are one
@@ -1628,12 +1860,15 @@ fn required_operands(op: &String) -> Option<i32> {
     if is_binary_elementwise(op) {
         return Option::Some(2);
     }
+    if *op == GROUP_QUERY_ATTENTION {
+        return Option::Some(7);
+    }
     return match op.as_str_slice() {
         "Constant" => Option::Some(0),
         "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" => Option::Some(
             1,
         ),
-        "Gather" | "MatMul" | "Gemm" | "Conv" => Option::Some(2),
+        "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" => Option::Some(2),
         "If" => Option::Some(1),
         "Range" | "Where" => Option::Some(3),
         _ => null,
