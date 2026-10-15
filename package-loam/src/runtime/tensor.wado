@@ -238,17 +238,20 @@ pub fn matmul_by_transposed<..Bs, M, K, N>(
 
 /// The dot product of `n` contiguous elements of `a` from `a_at` and of `b`
 /// from `b_at`, over four running sums so that no addition waits on the last.
-fn row_dot(a: &List<f32>, a_at: i32, b: &List<f32>, b_at: i32, n: i32) -> f32 {
+fn row_dot(a: &List<f32>, a_at: i32, b: &List<f32>, b_at: i32, n: i32) -> f32
+    contract 0 <= a_at && a_at + n <= a.len() && 0 <= b_at && b_at + n <= b.len()
+{
     let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
     let quads = n - n % 4;
+    // The contract keeps every index below in range.
     for let mut k = 0; k < quads; k += 4 {
-        s0 += a[a_at + k] * b[b_at + k];
-        s1 += a[a_at + k + 1] * b[b_at + k + 1];
-        s2 += a[a_at + k + 2] * b[b_at + k + 2];
-        s3 += a[a_at + k + 3] * b[b_at + k + 3];
+        s0 += unchecked a[a_at + k] * unchecked b[b_at + k];
+        s1 += unchecked a[a_at + k + 1] * unchecked b[b_at + k + 1];
+        s2 += unchecked a[a_at + k + 2] * unchecked b[b_at + k + 2];
+        s3 += unchecked a[a_at + k + 3] * unchecked b[b_at + k + 3];
     }
     for let k of quads..<n {
-        s0 += a[a_at + k] * b[b_at + k];
+        s0 += unchecked a[a_at + k] * unchecked b[b_at + k];
     }
     return s0 + s1 + (s2 + s3);
 }
