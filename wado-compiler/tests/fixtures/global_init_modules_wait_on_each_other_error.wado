@@ -1,0 +1,19 @@
+// A module's initializers run together, so modules whose initializers need
+// each other's globals have no order, though the initializers alone would:
+// `A1` needs `B1` and `B2` needs `A2`. Ordering the modules used to pick one
+// regardless, and the other read a placeholder and trapped.
+
+use { println, Stdout } from "core:cli";
+use { B1, B2 } from "./sub/global_init_modules_wait_on_each_other_b.wado";
+
+pub global A1: String = `a${B1.len()}`;
+pub global A2: String = `a${builtin::black_box(5)}`;
+
+export fn run() with Stdout {
+    println(`${A1} ${B2}`);
+}
+
+__DATA__
+{
+    "compile_error": "the global initializers of these modules wait on each other"
+}

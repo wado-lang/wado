@@ -1,0 +1,17 @@
+// A cycle is a cycle across modules too. `A` reads `B` in the module this one
+// imports, whose initializer reads `A` back; ordering the modules could only
+// pick one to go first, and the other read a placeholder and trapped.
+
+use { println, Stdout } from "core:cli";
+use { B } from "./sub/global_init_cycle_across_modules_b.wado";
+
+pub global A: String = `a${B.len()}`;
+
+export fn run() with Stdout {
+    println(`${A} ${B}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializers form a cycle: B, A"
+}
