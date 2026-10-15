@@ -906,8 +906,7 @@ trait Pick {
 ```
 
 Mark a call `unchecked` where the code around it plainly keeps the contract,
-not where the call is hot. A hot call that nothing around it proves keeps its
-check.
+not where the call is hot.
 
 ```wado
 for let i of 0..<xs.len() {
