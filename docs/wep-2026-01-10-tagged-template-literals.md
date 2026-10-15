@@ -152,10 +152,10 @@ impl<T, V> TemplateHole<T, V> {
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool;
 
-    /// Renders the value through the trait method the
-    /// specifier's type selects (`Display::fmt` when it names none), on a
-    /// `Formatter` carrying the specifier's fill, alignment, sign, width and
-    /// precision over `f`'s buffer.
+    /// Renders the value through the trait method the specifier's type
+    /// selects (`Display::fmt` when it names none), on a `Formatter` carrying
+    /// the specifier's fill, alignment, sign, width and precision over `f`'s
+    /// buffer.
     pub fn fmt(&self, t: &T, f: &mut Formatter);
 }
 ```
@@ -598,15 +598,12 @@ An untagged template is sugar for `format`, but the compiler still lowers it on
 a path of its own, and three differences between the two forms remain. Each
 item below closes one, in this order.
 
-- [ ] Generic holes. A shape is generic over the enclosing item's type
-  parameters and instantiated with the item, so a hole of such a type reaches
-  any tag. Under `format`, both forms then check each hole's specifier trait
-  against the declared bounds: `` `${x}` `` over `x: X` is rejected without
-  `X: Display`, and `${x:x}` is rejected with only `X: Display`. Done when
-  `` format`${x}` `` and `` `${x}` `` each compile under `X: Display` and report
-  the same missing-bound error without it, a tag's pack bound is checked
-  against the declared bounds, and every package in the repository, the
-  stdlib included, compiles under the new check.
+- [ ] Generic holes, checked against the declared bounds as the Decision
+  states. Done when `` format`${x}` `` and `` `${x}` `` over `x: X` each
+  compile under `X: Display` and report the same missing-bound error without
+  it, `${x:x}` reports a missing `LowerHex` under `X: Display` alone, a tag's
+  pack bound is checked against the declared bounds, and every package in the
+  repository, the stdlib included, compiles under the new check.
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:
   - It sizes the buffer from the segment lengths (`String::with_capacity`).
