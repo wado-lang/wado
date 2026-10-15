@@ -100,7 +100,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `ty` can be a hole of a shape: decided, and free of the
-    /// enclosing item's type parameters (a known gap of the WEP).
+    /// enclosing item's type parameters, until WEP 2026-01-10's roadmap makes a
+    /// shape generic.
     fn hole_type_admissible(&mut self, ty: TypeId, span: Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;

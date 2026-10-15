@@ -281,7 +281,9 @@ A hole's specifier is part of the template, not of the tag, so every hole's
 type implements the trait its specifier selects (`Display` when it names none)
 under any tag, whether or not the tag renders it. A tag counting its holes
 rejects `${pt}` over a `Pt` with no `Display`, as `format` does. A template
-then means one thing to its type checker whichever tag reads it.
+then means one thing to its type checker whichever tag reads it. The cost falls
+on a tag that reads only `get`, such as `sql`: a hole whose type has no
+`Display` is written `${pt:?}` there.
 
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and the item's instantiation instantiates the
