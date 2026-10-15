@@ -10389,11 +10389,15 @@ fn call_with_params(
     type_table: &mut TypeTable,
 ) -> TirExpr {
     let span = callee.span;
+    // A method's own parameters are numbered after its impl's.
+    let offset = func.impl_type_params.len() as u32;
     let type_args: Vec<TypeId> = func
         .type_params
         .iter()
         .filter(|param| !param.is_effect)
-        .map(|param| type_table.make_declared_param(param.name.clone(), param.index, param.is_pack))
+        .map(|param| {
+            type_table.make_declared_param(param.name.clone(), offset + param.index, param.is_pack)
+        })
         .collect();
     assert_eq!(func.type_params.len(), callee.type_params.len());
     let args = func
