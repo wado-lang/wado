@@ -133,6 +133,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return *t;
         }
+        let _ = self.emit(TypeError::CannotInferType {
+            message: format!(
+                "cannot infer the type of closure parameter `{}`; annotate it",
+                param.name
+            ),
+            span: param.name_span,
+        });
         TypeTable::UNKNOWN
     }
 

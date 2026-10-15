@@ -517,9 +517,18 @@ struct AnonEntry {
     module: ModuleSource,
     shape: AnonShape,
     mangle: String,
-    /// The open shape a substitution made this one from, which no literal
-    /// wrote: its site is that shape's.
-    substituted_from: Option<AnonStructId>,
+    /// How a substitution made this shape, which no literal wrote.
+    substituted: Option<ShapeSubstitution>,
+}
+
+/// The written shape a substituted one was made from, and the substitution
+/// that makes it: what instantiating the written shape's methods applies.
+/// Binding the two shapes again cannot recover it where a field is a pack or a
+/// projection.
+#[derive(Debug, Clone)]
+struct ShapeSubstitution {
+    origin: AnonStructId,
+    params: IndexMap<u32, TypeId>,
 }
 
 /// What a struct type's head is.
@@ -1885,7 +1894,7 @@ impl TypeTable {
         &mut self,
         module_source: ModuleSource,
         shape: AnonShape,
-        substituted_from: Option<AnonStructId>,
+        substituted: Option<ShapeSubstitution>,
     ) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
@@ -1906,26 +1915,35 @@ impl TypeTable {
             module: key.0.clone(),
             shape: key.1.clone(),
             mangle,
-            substituted_from,
+            substituted,
         });
         self.anon_struct_index.insert(key, id);
         id
     }
 
-    /// The written shape `id` was substituted from, through every substitution
-    /// between; `id` itself where a literal wrote it.
+    /// The written shape `id` was substituted from; `id` itself where a
+    /// literal wrote it.
     #[must_use]
     pub fn anon_struct_written_origin(&self, id: AnonStructId) -> AnonStructId {
-        match self.anon_structs[id.0 as usize].substituted_from {
-            Some(from) => self.anon_struct_written_origin(from),
-            None => id,
-        }
+        self.anon_structs[id.0 as usize]
+            .substituted
+            .as_ref()
+            .map_or(id, |s| s.origin)
+    }
+
+    /// The substitution that makes shape `id` from its written origin.
+    #[must_use]
+    pub fn anon_struct_substitution(&self, id: AnonStructId) -> Option<&IndexMap<u32, TypeId>> {
+        self.anon_structs[id.0 as usize]
+            .substituted
+            .as_ref()
+            .map(|s| &s.params)
     }
 
     /// Whether a substitution, not a literal, made shape `id`.
     #[must_use]
     pub fn anon_struct_is_substituted(&self, id: AnonStructId) -> bool {
-        self.anon_structs[id.0 as usize].substituted_from.is_some()
+        self.anon_structs[id.0 as usize].substituted.is_some()
     }
 
     /// The closed shapes a substitution interned at registry index `from` or
@@ -1961,47 +1979,15 @@ impl TypeTable {
     /// substitution into it reaches a struct codegen can lay out.
     #[must_use]
     pub fn anon_shape_is_open(&self, id: AnonStructId) -> bool {
-        self.any_anon_shape_type(id, &mut |ty| self.contains_type_param(ty))
+        self.any_anon_shape_type(id, &mut |ty| self.mentions_rigid_param(ty))
     }
 
-    /// The types shapes `a` and `b` hold, lined up one per field or hole, where
-    /// those types are all that tells the two apart.
-    fn anon_shape_type_pairs(
-        &self,
-        a: AnonStructId,
-        b: AnonStructId,
-    ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
-        let (x, y) = (
-            &self.anon_structs[a.0 as usize],
-            &self.anon_structs[b.0 as usize],
-        );
-        if x.module != y.module {
-            return None;
-        }
-        match (&x.shape, &y.shape) {
-            (AnonShape::Fields(xs), AnonShape::Fields(ys))
-                if xs.len() == ys.len() && xs.iter().zip(ys).all(|(f, g)| f.0 == g.0) =>
-            {
-                Some((
-                    xs.iter().map(|f| f.1).collect(),
-                    ys.iter().map(|f| f.1).collect(),
-                ))
-            }
-            (AnonShape::Template(xs), AnonShape::Template(ys))
-                if xs.segments == ys.segments
-                    && xs.holes.len() == ys.holes.len()
-                    && xs
-                        .holes
-                        .iter()
-                        .zip(&ys.holes)
-                        .all(|(h, k)| h.spec == k.spec && h.source == k.source) =>
-            {
-                Some((
-                    xs.holes.iter().map(|h| h.ty).collect(),
-                    ys.holes.iter().map(|h| h.ty).collect(),
-                ))
-            }
-            _ => None,
+    /// Whether `id` mentions a type parameter or pack: what a substitution
+    /// answers, unlike an inference variable, which solving answers in place.
+    fn mentions_rigid_param(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
+            _ => self.any_constituent(id, &mut |t| self.mentions_rigid_param(t)),
         }
     }
 
@@ -2080,7 +2066,23 @@ impl TypeTable {
         if shape == self.anon_structs[id.0 as usize].shape {
             return type_id;
         }
-        let substituted = self.intern_shape_from(module, shape, Some(id));
+        // A shape substituted again composes: the origin's parameters map to
+        // what this substitution makes of their earlier answers.
+        let substitution = match self.anon_structs[id.0 as usize].substituted.clone() {
+            Some(earlier) => ShapeSubstitution {
+                origin: earlier.origin,
+                params: earlier
+                    .params
+                    .into_iter()
+                    .map(|(slot, ty)| (slot, self.subst_rec(ty, leaves)))
+                    .collect(),
+            },
+            None => ShapeSubstitution {
+                origin: id,
+                params: leaves.params.clone(),
+            },
+        };
+        let substituted = self.intern_shape_from(module, shape, Some(substitution));
         self.make_struct(StructDef::Anon(substituted))
     }
 
@@ -8768,19 +8770,6 @@ impl TypeTable {
                     && rows_agree(x_effects, y_effects)
                     && all(x_params, y_params)
                     && all(&[*x_ret], &[*y_ret]),
-            ),
-            (
-                ResolvedType::Struct {
-                    def: StructDef::Anon(x),
-                    ..
-                },
-                ResolvedType::Struct {
-                    def: StructDef::Anon(y),
-                    ..
-                },
-            ) => Some(
-                self.anon_shape_type_pairs(*x, *y)
-                    .is_some_and(|(xs, ys)| all(&xs, &ys)),
             ),
             _ => match (self.generic_type_args(a), self.generic_type_args(b)) {
                 (Some(x), Some(y)) => Some(

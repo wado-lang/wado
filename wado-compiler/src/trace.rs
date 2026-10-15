@@ -75,8 +75,10 @@ pub fn write(line: &str) {
     }
 }
 
-/// Write one trace line for `target`, which the caller found enabled.
+/// Write one trace line for `target`, which [`compiler_trace!`] found enabled.
+#[doc(hidden)]
 pub fn emit(target: &str, args: Arguments<'_>) {
+    debug_assert!(filter().enabled(target), "trace target `{target}` is off");
     write(&format!("[{target}] {args}"));
 }
 

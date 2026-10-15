@@ -167,8 +167,6 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
     }
 }
 
-/// The post-substitution values `resolve_method_call_substitution` computes
-/// before it branches on the receiver kind, handed to the per-kind resolver.
 /// What an instance is named and filed under, which the caller of
 /// [`Monomorphizer::instantiate_with`] settles.
 pub(super) struct InstanceIdentity {
@@ -178,6 +176,8 @@ pub(super) struct InstanceIdentity {
     method_info: Option<LocalMethodName>,
 }
 
+/// The post-substitution values `resolve_method_call_substitution` computes
+/// before it branches on the receiver kind, handed to the per-kind resolver.
 struct SubstitutedCall {
     /// The post-substitution method info (concrete receiver name).
     info: LocalMethodName,
@@ -961,8 +961,9 @@ impl Monomorphizer {
         let written = type_table.make_struct(StructDef::Anon(origin));
         let concrete = type_table.make_struct(StructDef::Anon(shape));
         let substitution = type_table
-            .bind_type_params(&[written], &[concrete])
-            .expect("a substituted shape instantiates its origin");
+            .anon_struct_substitution(shape)
+            .expect("a substituted shape records its substitution")
+            .clone();
         type_table.instantiate_assoc_types(written, concrete, &substitution);
         let param_key_by_name = type_table.anon_shape_type_params(origin);
         let subject = type_table.fq_struct_head(StructDef::Anon(shape));
