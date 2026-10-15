@@ -400,10 +400,19 @@ impl Interpreter<'_> {
 
     /// Run a call at statement position for the writes it performs. `None`
     /// when the expression is not a call the frame knows.
-    fn exec_call_stmt(&mut self, body: &Body, e: ExprId) -> Option<Flow> {
-        let (key, _) = self.call_target(body, e)?;
-        if !self.facts.callees.is_some_and(|c| c.contains_key(&key)) {
-            return None;
+    fn exec_call_stmt(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
+        let (key, args) = self.call_target(body, e)?;
+        let callee = self.facts.callees?.get(&key)?;
+        let by_value: Vec<bool> = {
+            let callee = callee.func.borrow();
+            callee
+                .params
+                .iter()
+                .map(|p| !p.is_mut_ref && !self.type_table.is_reference_shaped(p.type_id))
+                .collect()
+        };
+        if self.exec_block_args(body, &args, &by_value).is_none() {
+            return Some(Flow::Bail);
         }
         let Some(run) = self.run_call(body, e, true) else {
             return Some(Flow::Bail);
@@ -412,6 +421,45 @@ impl Interpreter<'_> {
             Some(()) => Some(Flow::Fallthrough(run.result)),
             None => Some(Flow::Bail),
         }
+    }
+
+    /// Run the block-shaped arguments, the shape inlining leaves in an argument
+    /// position, and record each one's value in `scratch_folds`, where
+    /// [`Interpreter::run_call`] reads it back. Arguments evaluate left to
+    /// right, so a by-value argument ahead of a block is taken before the block
+    /// writes what it reads. A reference argument is read through at the call,
+    /// as the callee reads it. `None` when an argument the call needs reaches
+    /// no constant.
+    fn exec_block_args(
+        &mut self,
+        body: &mut Body,
+        args: &[Operand],
+        by_value: &[bool],
+    ) -> Option<()> {
+        assert_eq!(
+            args.len(),
+            by_value.len(),
+            "a call binds one operand per parameter"
+        );
+        let is_block = |body: &Body, arg: &Operand| {
+            arg.as_expr()
+                .is_some_and(|e| matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }))
+        };
+        let Some(last_block) = args.iter().rposition(|arg| is_block(body, arg)) else {
+            return Some(());
+        };
+        for (arg, &by_value) in args[..=last_block].iter().zip(by_value) {
+            let Some(e) = arg.as_expr() else { continue };
+            let lattice = if is_block(body, arg) {
+                self.exec_value_block(body, e)
+            } else if by_value {
+                self.eval_operand(body, *arg)
+            } else {
+                continue;
+            };
+            self.frame.scratch_folds.insert(e, lattice.as_const()?);
+        }
+        Some(())
     }
 
     /// Bind what a materializing store names, so the read it serves resolves
@@ -684,8 +732,14 @@ impl Interpreter<'_> {
     /// reference cannot write, so the referent's own constant stands; one
     /// retained past the callee's return is refused. An alias local passes its
     /// place's value, as `&place` does: the parameter reads through what it
-    /// receives.
+    /// receives. What [`Self::exec_block_args`] took ahead of the call stands
+    /// over all of these.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
+        if let Some(e) = arg.as_expr()
+            && let Some(value) = self.frame.scratch_folds.get(&e)
+        {
+            return Some(value.clone());
+        }
         if let Some(e) = arg.as_expr()
             && let ExprKind::Unary {
                 op: NirUnaryOp::Ref,
