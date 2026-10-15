@@ -8,7 +8,6 @@ use crate::ast::{
     inner_attrs_allow, lint, walk_condition, walk_stmt,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::elaborator::liveness::is_user_authored;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -18,7 +17,7 @@ use crate::token::Span;
 pub fn float_literal_pattern_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, noted) in sem.inexact_float_patterns() {
-        if !is_user_authored(&src) {
+        if !src.is_user_authored() {
             continue;
         }
         let module = &sem.modules[&src];

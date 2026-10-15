@@ -12,7 +12,6 @@ use crate::const_eval::{int_bit_width, is_signed_int};
 use crate::elaborator::coercion::{
     NumericLiteral, NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
 };
-use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::util::parse_u128_literal;
 use crate::escape::unescape_byte;
 use crate::semantics::Semantics;
@@ -24,7 +23,7 @@ use crate::unparse::unparse_expr_source;
 pub fn constant_arithmetic_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
+        if !src.is_user_authored() {
             continue;
         }
         let waived = |name| inner_attrs_allow(&module.inner_attributes, name);

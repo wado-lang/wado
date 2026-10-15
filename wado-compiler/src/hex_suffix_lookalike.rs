@@ -6,7 +6,6 @@ use crate::ast::{
     AstVisitor, Attribute, Expr, Literal, attrs_allow, inner_attrs_allow, lint, walk_expr,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::elaborator::liveness::is_user_authored;
 use crate::lexer::{is_hex_literal, names_float_type};
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -16,7 +15,7 @@ use crate::token::Span;
 pub fn hex_suffix_lookalike_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !is_user_authored(src)
+        if !src.is_user_authored()
             || inner_attrs_allow(&module.inner_attributes, lint::HEX_SUFFIX_LOOKALIKE)
         {
             continue;

@@ -80,7 +80,7 @@ use crate::component_model::{
     try_for_each_signed_type,
 };
 use crate::defs::DefId;
-use crate::elaborator::liveness::{LivenessScope, PackageScope, is_user_authored};
+use crate::elaborator::liveness::{LivenessScope, PackageScope};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::name::entry_dir_of;
 use crate::resolve::Shadowed;
@@ -630,8 +630,21 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         })
         .ok()?;
 
-    let synthetic = load.entry_module_source.clone();
-    let members = imports_of(&mut load, &synthetic);
+    let sources: Vec<ModuleSource> = load.modules.keys().cloned().collect();
+    let imports: IndexMap<ModuleSource, Vec<ModuleSource>> = sources
+        .into_iter()
+        .map(|source| {
+            let imported = imports_of(&mut load, &source);
+            (source, imported)
+        })
+        .collect();
+    let mut importers: IndexMap<&ModuleSource, Vec<&ModuleSource>> = IndexMap::default();
+    for (source, imported) in &imports {
+        for target in imported {
+            importers.entry(target).or_default().push(source);
+        }
+    }
+    let members = &imports[&load.entry_module_source];
     assert_eq!(
         members.len(),
         package.members.len(),
@@ -643,44 +656,41 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         .filter(|(_, path)| package.entries.contains(path))
         .map(|(source, _)| source.clone())
         .collect();
-    let mut production = IndexSet::default();
-    let mut work: Vec<ModuleSource> = entries.iter().cloned().collect();
-    while let Some(source) = work.pop() {
-        if production.insert(source.clone()) {
-            work.extend(imports_of(&mut load, &source));
-        }
-    }
-    let mut importers: IndexMap<ModuleSource, Vec<ModuleSource>> = IndexMap::default();
-    let sources: Vec<ModuleSource> = load.modules.keys().cloned().collect();
-    for source in sources {
-        for imported in imports_of(&mut load, &source) {
-            importers.entry(imported).or_default().push(source.clone());
-        }
-    }
+    let production = reach(entries.iter(), |source| imports[source].iter().collect());
     // Generated modules hold no candidates, members or not.
-    let mut work: Vec<ModuleSource> = members
+    let reported = members
         .iter()
-        .filter(|source| !load.modules[*source].has_generated())
-        .cloned()
-        .collect();
-    let mut walked = IndexSet::default();
-    while let Some(source) = work.pop() {
-        if walked.insert(source.clone()) {
-            work.extend(importers.get(&source).into_iter().flatten().cloned());
-        }
-    }
+        .filter(|source| !load.modules[*source].has_generated());
+    let walked = reach(reported, |source| {
+        importers.get(source).cloned().unwrap_or_default()
+    });
     assert!(
         walked.is_disjoint(&load.skipped_bodies),
         "a module whose bodies are walked keeps them"
     );
     let scope = LivenessScope::Package(Box::new(PackageScope {
-        members: members.into_iter().collect(),
+        members: members.iter().cloned().collect(),
         entries,
         production,
         walked,
     }));
     let sem = semantics::semantics_with_logger(load, &logger, false, None, &scope);
     sem.is_complete().then(|| unused_diagnostics(&sem, false))
+}
+
+/// `from`, and every module `next` leads to from there.
+fn reach<'a>(
+    from: impl Iterator<Item = &'a ModuleSource>,
+    next: impl Fn(&ModuleSource) -> Vec<&'a ModuleSource>,
+) -> IndexSet<ModuleSource> {
+    let mut reached = IndexSet::default();
+    let mut work: Vec<&ModuleSource> = from.collect();
+    while let Some(source) = work.pop() {
+        if reached.insert(source.clone()) {
+            work.extend(next(source));
+        }
+    }
+    reached
 }
 
 /// The loaded modules `from` names in its `use` declarations, in order.
@@ -739,7 +749,7 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     resolutions
         .shadowings()
         .iter()
-        .filter(|s| is_user_authored(&s.module))
+        .filter(|s| s.module.is_user_authored())
         .map(|shadowing| {
             let what = match shadowing.shadowed {
                 Shadowed::Decl(def) => format!("the {} of the same name", defs.kind(def).label()),
@@ -767,7 +777,7 @@ fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
 fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !is_user_authored(src)
+        if !src.is_user_authored()
             || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
         {
             continue;

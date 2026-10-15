@@ -746,6 +746,27 @@ impl ModuleSource {
         !self.is_core() && !self.is_binding() && !self.is_wasm_asset()
     }
 
+    /// Whether a user wrote this module: the entry point and what it
+    /// transitively imports, as against the stdlib. Stdlib is the `Core` /
+    /// `Wasi` / `Wasm` variants plus the bundled `.wado` files the loader
+    /// registers as `Local` with a scheme-prefixed path.
+    #[must_use]
+    pub fn is_user_authored(&self) -> bool {
+        match self {
+            Self::EntryPoint { .. }
+            | Self::Remote { .. }
+            | Self::Dependency { .. }
+            | Self::Redirected { .. } => true,
+            Self::Local { path, .. } => {
+                let path = path.as_str();
+                !(path.starts_with("core:")
+                    || path.starts_with("wasm:")
+                    || CmNamespace::split_specifier(path).is_some())
+            }
+            _ => false,
+        }
+    }
+
     /// Whether the entry package owns this module: the entry point and the
     /// local modules it reaches. A dependency, `core:` / `wasi:`, a remote and
     /// a Kiln-generated module are all someone else's source.

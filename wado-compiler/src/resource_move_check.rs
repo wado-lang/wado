@@ -3,7 +3,6 @@ use crate::ast::{
     for_each_pattern_binding,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::elaborator::liveness::is_user_authored;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
@@ -113,7 +112,7 @@ impl From<ResourceMoveError> for Diagnostic {
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
+        if !src.is_user_authored() {
             continue;
         }
         for item in &module.items {

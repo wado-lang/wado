@@ -13,7 +13,7 @@ use crate::ast::{
     for_each_pattern_binding, type_head_name,
 };
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::{CmNamespace, ModuleSource};
+use crate::module_source::ModuleSource;
 use crate::token::Span;
 
 /// Result of the source-level liveness analysis. Two root sets run over one call
@@ -177,7 +177,7 @@ pub(crate) fn compute(
     }
 
     for (source, module) in modules {
-        let roots = scope.module_roots(source, is_user_authored(source));
+        let roots = scope.module_roots(source, source.is_user_authored());
         // `#![generated]` modules are machine-emitted (e.g. Gale's parser
         // output), not hand-edited source — linting them is pure noise, so they
         // are never report candidates. They still seed exports / edges below, so
@@ -1208,26 +1208,6 @@ impl Graph {
             }
         }
         reached
-    }
-}
-
-/// User-authored modules are the entry point and what it transitively imports;
-/// they alone are candidates for the unused-item diagnostics. Stdlib is the
-/// `Core` / `Wasi` / `Wasm` variants plus the bundled `.wado` files the loader
-/// registers as `Local` with a scheme-prefixed path.
-pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
-    match source {
-        ModuleSource::EntryPoint { .. }
-        | ModuleSource::Remote { .. }
-        | ModuleSource::Dependency { .. }
-        | ModuleSource::Redirected { .. } => true,
-        ModuleSource::Local { path, .. } => {
-            let path = path.as_str();
-            !(path.starts_with("core:")
-                || path.starts_with("wasm:")
-                || CmNamespace::split_specifier(path).is_some())
-        }
-        _ => false,
     }
 }
 

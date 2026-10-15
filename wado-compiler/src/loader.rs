@@ -16,7 +16,6 @@ use crate::compiler_host::{
     Severity, SourceError,
 };
 use crate::component_model::SourceInterfaceBatch;
-use crate::elaborator::liveness::is_user_authored;
 use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, lex};
 use crate::logger::Logger;
@@ -1451,7 +1450,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // Load and parse the module
             let source = self.get_source(&module_source, &from_module_source).await?;
             let skip_generated_bodies =
-                self.skip_generated_bodies && is_user_authored(&module_source);
+                self.skip_generated_bodies && module_source.is_user_authored();
             let (mut ast, skipped) = {
                 let _span = self.logger.span(&format!("parse {mod_name}"));
                 self.parse_source_with(&source, &module_source, skip_generated_bodies)?
@@ -1465,7 +1464,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if skipped {
                 if pending
                     .range(queued..)
-                    .any(|(_, imported)| is_user_authored(imported))
+                    .any(|(_, imported)| imported.is_user_authored())
                 {
                     ast = self.parse_source(&source, &module_source)?;
                 } else {

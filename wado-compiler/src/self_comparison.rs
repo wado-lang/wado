@@ -11,7 +11,6 @@ use crate::ast::{
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::effect_check::EffectProbe;
-use crate::elaborator::liveness::is_user_authored;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
 use crate::token::Span;
@@ -24,7 +23,7 @@ pub fn self_comparison_diagnostics(sem: &Semantics) -> Vec<Diagnostic> {
     let probe = OnceCell::new();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !is_user_authored(src)
+        if !src.is_user_authored()
             || inner_attrs_allow(&module.inner_attributes, lint::SELF_COMPARISON)
         {
             continue;
