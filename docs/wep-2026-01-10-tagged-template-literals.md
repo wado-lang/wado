@@ -620,8 +620,11 @@ below close that, in this order.
 
   Synthesis derives a shape's impls before monomorphization, so a substituted
   shape has none of its own. It instantiates the methods synthesis gave its
-  open origin, substituting what binding the origin against it answers, and
-  copies the origin's associated types the same way
+  open origin under the substitution that made it, which `subst_rec` records
+  on the shape (composed when a substituted shape is substituted again), and
+  copies the origin's associated types the same way. Binding the origin
+  against the shape cannot recover it: a pack field or a projection binds no
+  parameter
   (`Monomorphizer::instantiate_shape_methods`). Its field bridges are minted
   after monomorphization, as for an instantiated generic struct.
 
