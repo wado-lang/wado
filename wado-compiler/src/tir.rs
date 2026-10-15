@@ -1422,6 +1422,12 @@ impl TypeTable {
         )
     }
 
+    /// [`Self::type_key`] of each id, in order.
+    #[must_use]
+    pub fn type_keys(&self, ids: &[TypeId]) -> Vec<TypeKey> {
+        ids.iter().map(|&id| self.type_key(id)).collect()
+    }
+
     /// `ty` without its references and newtypes: the object a handle names.
     #[must_use]
     pub fn strip_handles(&self, mut ty: TypeId) -> TypeId {

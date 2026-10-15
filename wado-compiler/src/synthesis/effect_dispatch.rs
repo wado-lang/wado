@@ -52,7 +52,7 @@ pub struct InstantiationKey {
 
 impl InstantiationKey {
     fn new(effect: DeclaredHead, type_args: Vec<TypeId>, type_table: &TypeTable) -> Self {
-        let type_keys = type_keys(&type_args, type_table);
+        let type_keys = type_table.type_keys(&type_args);
         Self {
             effect,
             type_args,
@@ -83,10 +83,6 @@ impl std::hash::Hash for InstantiationKey {
         self.effect.hash(state);
         self.type_keys.hash(state);
     }
-}
-
-fn type_keys(type_args: &[TypeId], type_table: &TypeTable) -> Vec<TypeKey> {
-    type_args.iter().map(|&ty| type_table.type_key(ty)).collect()
 }
 
 /// Metadata for a single effect or resource, indexed by `EffectKey`.
@@ -1004,12 +1000,11 @@ fn build_resource_fallback_call(
     // The receiver is the resource type (`Stream<u8>`): the dispatch label
     // names the infrastructure, not the type.
     let type_name = instance_name(resource.name(), type_args, type_table);
-    let label_fq = FqTypeName::shape(resource.module(), &type_name);
-    let mangled_method_name = MethodName::format_local(&label_fq, None, &op.name);
+    let receiver = FqTypeName::shape(resource.module(), &type_name);
+    let mangled_method_name = MethodName::format_local(&receiver, None, &op.name);
 
-    // The label is the receiver: a rendered name has nowhere to be stored now,
-    // and `struct_name()` derives this exact spelling from it.
-    let mut method_info = LocalMethodName::new(label_fq, None, op.name.clone());
+    // `struct_name()` derives this exact spelling from the receiver.
+    let mut method_info = LocalMethodName::new(receiver, None, op.name.clone());
     method_info.cm_name = Some(cm_name);
 
     // Carry the instantiation's type args as `monomorph_info.impl_type_args`,
@@ -2585,7 +2580,7 @@ fn pick_resource_wrapper(
 ) -> Option<String> {
     let candidates = ctx.cm_to_wrappers.get(&(resource, cm_name.to_string()))?;
     // Exact instantiation match first.
-    let call_type_keys = type_keys(call_type_args, &ctx.type_table.borrow());
+    let call_type_keys = ctx.type_table.borrow().type_keys(call_type_args);
     if let Some((_, name)) = candidates.iter().find(|(keys, _)| *keys == call_type_keys) {
         return Some(name.clone());
     }

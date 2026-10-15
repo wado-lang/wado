@@ -328,10 +328,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_sig(impl_def)
                 .trait_type_args
                 .clone();
-            let type_keys = {
-                let tt = self.tysys.type_table.borrow();
-                type_args.iter().map(|&ty| tt.type_key(ty)).collect()
-            };
+            let type_keys = self.tysys.type_table.borrow().type_keys(&type_args);
             if seen.insert((trait_ref, type_keys)) {
                 out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
