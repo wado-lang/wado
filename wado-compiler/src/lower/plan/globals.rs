@@ -231,7 +231,7 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
 fn global_refs_by_function(
     functions: &[Rc<RefCell<TirFunction>>],
 ) -> IndexMap<String, IndexSet<GlobalKey>> {
-    let mut reads: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
+    let mut refs: IndexMap<String, IndexSet<GlobalKey>> = IndexMap::default();
     let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
     for func_rc in functions {
         let func = func_rc.borrow();
@@ -241,17 +241,17 @@ fn global_refs_by_function(
         let mut scan = BodyRefs::default();
         scan.visit_block(body);
         let key = FunctionRef::from_resolved(&func, func.module_source.clone()).full_name();
-        reads.entry(key.clone()).or_default().extend(scan.globals);
+        refs.entry(key.clone()).or_default().extend(scan.globals);
         callees.entry(key).or_default().extend(scan.callees);
     }
 
     loop {
         let mut grown: Vec<(String, IndexSet<GlobalKey>)> = Vec::new();
         for (name, called) in &callees {
-            let known = &reads[name];
+            let known = &refs[name];
             let fresh: IndexSet<GlobalKey> = called
                 .iter()
-                .filter_map(|callee| reads.get(callee))
+                .filter_map(|callee| refs.get(callee))
                 .flatten()
                 .filter(|global| !known.contains(*global))
                 .cloned()
@@ -261,10 +261,10 @@ fn global_refs_by_function(
             }
         }
         if grown.is_empty() {
-            return reads;
+            return refs;
         }
         for (name, fresh) in grown {
-            reads[&name].extend(fresh);
+            refs[&name].extend(fresh);
         }
     }
 }
@@ -422,15 +422,16 @@ fn module_order(
         Ok(order) => Ok(order.into_iter().map(|m| modules[m].clone()).collect()),
         Err(in_degree) => {
             let cycle = blocking_cycle(&module_deps, &in_degree);
-            let edges: Vec<String> = cycle
+            let edges: Vec<(usize, usize)> = cycle
                 .iter()
                 .zip(cycle.iter().cycle().skip(1))
-                .map(|(&from, &to)| {
-                    let (i, dep) = witness[&(from, to)];
-                    format!("`{}` needs `{}`", inits[i].global, inits[dep].global)
-                })
+                .map(|(&from, &to)| witness[&(from, to)])
                 .collect();
-            let first = &inits[witness[&(cycle[0], cycle[1 % cycle.len()])].0];
+            let first = &inits[edges[0].0];
+            let edges: Vec<String> = edges
+                .into_iter()
+                .map(|(i, dep)| format!("`{}` needs `{}`", inits[i].global, inits[dep].global))
+                .collect();
             Err(errors.fatal_in(
                 &first.module_source,
                 Diagnostic {
