@@ -1,0 +1,26 @@
+// A struct literal whose field mentions the enclosing item's type parameter:
+// its shape is open, and each instantiation interns the substituted shape
+// (WEP 2026-01-10's roadmap).
+use { println, Stdout } from "core:cli";
+
+fn pair<X: Display>(x: X) -> String {
+    let s = { a: x, b: 1 };
+    return `${s.a}/${s.b}`;
+}
+
+fn first<X>(x: X) -> X {
+    let s = { a: x };
+    return s.a;
+}
+
+export fn run() with Stdout {
+    println(pair(5));
+    println(pair("hi"));
+    assert first(7) == 7;
+    assert first("x") == "x";
+    let c = { a: 3, b: 1 };
+    assert c.a == first(3);
+}
+
+__DATA__
+{"stdout": "5/1\nhi/1\n"}

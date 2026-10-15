@@ -608,22 +608,22 @@ a path of its own that renders each hole before it evaluates the next, and a
 hole's specifier is checked only where something renders the hole. The items
 below close that, in this order.
 
-- [ ] Open anonymous shapes. A shape whose types mention a type parameter of
+- [x] Open anonymous shapes. A shape whose types mention a type parameter of
   the enclosing item is open. An anonymous shape's identity is its types, so
   substituting into an open shape interns the substituted shape: `{ a: X }` at
   `X = i32` is the `{ a: i32 }` a concrete body writes. `TypeTable::subst_rec`
   re-interns, and `any_constituent` looks into the shape, so
   `contains_type_param` reports it open. An open shape emits no `TirStruct`.
-  Monomorphization emits one for each concrete shape it interns, through the
-  builder `mint_anonymous_struct` uses.
+  Monomorphization emits one for each concrete shape it interns, through
+  `TirStruct::anonymous`, as elaboration does for a written shape.
 
   A generic struct per shape was the alternative. It would need a `DefId`, and
   the `DefTable` is fixed before elaboration mints a shape. It would also make
   `{ a: X }` at `X = i32` a type apart from `{ a: i32 }`.
 
-  Done when a struct literal whose field mentions a type parameter compiles and
-  runs at two instantiations. Today WIR build panics on it with
-  `unsubstituted TypeParam`.
+  Done: a struct literal whose field mentions a type parameter compiles and
+  runs at each instantiation (`anon_struct_type_param_field.wado`). WIR build
+  used to panic on one with `unsubstituted TypeParam`.
 
 - [ ] The specifier's trait checked at the template. `resolve_template_parts`
   asks `type_implements_trait` for each hole's trait, so the check reads the

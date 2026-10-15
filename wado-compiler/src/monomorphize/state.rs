@@ -11,7 +11,10 @@ use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
-use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable};
+use crate::tir::{
+    AnonStructId, InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable,
+};
+use crate::token::Span;
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -23,6 +26,8 @@ pub(super) struct StructInstState {
     pub type_substitutions: IndexMap<TypeId, TypeId>,
     /// Map from `GenericInstance` `TypeId` to mangled struct name
     pub type_to_mangled_name: IndexMap<TypeId, String>,
+    /// Each anonymous shape the module holds a struct for, at its site.
+    pub anon_sites: IndexMap<AnonStructId, Span>,
 }
 
 /// Tracks function monomorphization state
@@ -121,6 +126,7 @@ impl Monomorphizer {
                 pending: Vec::new(),
                 type_substitutions: IndexMap::default(),
                 type_to_mangled_name: IndexMap::default(),
+                anon_sites: IndexMap::default(),
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),

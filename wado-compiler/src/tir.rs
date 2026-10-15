@@ -517,6 +517,9 @@ struct AnonEntry {
     module: ModuleSource,
     shape: AnonShape,
     mangle: String,
+    /// The open shape a substitution made this one from, which no literal
+    /// wrote: its site is that shape's.
+    substituted_from: Option<AnonStructId>,
 }
 
 /// What a struct type's head is.
@@ -1875,6 +1878,15 @@ impl TypeTable {
     }
 
     fn intern_shape(&mut self, module_source: ModuleSource, shape: AnonShape) -> AnonStructId {
+        self.intern_shape_from(module_source, shape, None)
+    }
+
+    fn intern_shape_from(
+        &mut self,
+        module_source: ModuleSource,
+        shape: AnonShape,
+        substituted_from: Option<AnonStructId>,
+    ) -> AnonStructId {
         let key = (module_source, shape);
         if let Some(&id) = self.anon_struct_index.get(&key) {
             return id;
@@ -1894,9 +1906,84 @@ impl TypeTable {
             module: key.0.clone(),
             shape: key.1.clone(),
             mangle,
+            substituted_from,
         });
         self.anon_struct_index.insert(key, id);
         id
+    }
+
+    /// The written shape `id` was substituted from, through every substitution
+    /// between; `id` itself where a literal wrote it.
+    #[must_use]
+    pub fn anon_struct_written_origin(&self, id: AnonStructId) -> AnonStructId {
+        match self.anon_structs[id.0 as usize].substituted_from {
+            Some(from) => self.anon_struct_written_origin(from),
+            None => id,
+        }
+    }
+
+    /// The fields a struct of shape `id` holds: a literal's as written, a
+    /// template's one per hole typed by [`Self::hole_field_type`].
+    pub fn anon_shape_struct_fields(&mut self, id: AnonStructId) -> Vec<(String, TypeId)> {
+        match self.anon_structs[id.0 as usize].shape.clone() {
+            AnonShape::Fields(fields) => fields,
+            AnonShape::Template(shape) => shape
+                .holes
+                .iter()
+                .enumerate()
+                .map(|(k, hole)| (TemplateShape::field_name(k), self.hole_field_type(hole.ty)))
+                .collect(),
+            AnonShape::Synthetic(name) => {
+                unreachable!("synthetic shape `{name}` carries its fields itself")
+            }
+        }
+    }
+
+    /// Whether `f` holds of a type shape `id` is built over.
+    fn any_anon_shape_type(&self, id: AnonStructId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Fields(fields) => fields.iter().any(|&(_, ty)| f(ty)),
+            AnonShape::Template(shape) => shape.holes.iter().any(|hole| f(hole.ty)),
+            AnonShape::Synthetic(_) => false,
+        }
+    }
+
+    /// `type_id`, a struct of shape `id`, with `leaves` substituted into the
+    /// shape's types. A shape's identity is its types, so the result is the
+    /// struct of the substituted shape (WEP 2026-01-10, open shapes).
+    fn subst_anon_shape(
+        &mut self,
+        type_id: TypeId,
+        id: AnonStructId,
+        leaves: &Leaves<'_>,
+    ) -> TypeId {
+        let entry = &self.anon_structs[id.0 as usize];
+        let module = entry.module.clone();
+        let shape = match entry.shape.clone() {
+            AnonShape::Synthetic(_) => return type_id,
+            AnonShape::Fields(fields) => AnonShape::Fields(
+                fields
+                    .into_iter()
+                    .map(|(name, ty)| (name, self.subst_rec(ty, leaves)))
+                    .collect(),
+            ),
+            AnonShape::Template(shape) => AnonShape::Template(TemplateShape {
+                holes: shape
+                    .holes
+                    .into_iter()
+                    .map(|hole| TemplateHole {
+                        ty: self.subst_rec(hole.ty, leaves),
+                        ..hole
+                    })
+                    .collect(),
+                ..shape
+            }),
+        };
+        if shape == self.anon_structs[id.0 as usize].shape {
+            return type_id;
+        }
+        let substituted = self.intern_shape_from(module, shape, Some(id));
+        self.make_struct(StructDef::Anon(substituted))
     }
 
     /// The fields of an anonymous struct shape; empty for a synthetic one.
@@ -4977,8 +5064,13 @@ impl TypeTable {
                     self.make_newtype_instance(def, new_args, new_base)
                 }
             }
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.subst_anon_shape(type_id, id, leaves),
             // Primitives, Unit, Never, Unknown, Error, Enum, Variant, Resource,
-            // Flags name no parameter; a `Struct` is a monomorphized instance.
+            // Flags name no parameter; a declared `Struct` is a monomorphized
+            // instance.
             _ => type_id,
         }
     }
@@ -5621,6 +5713,10 @@ impl TypeTable {
                     || projection_arguments(args, trait_args).any(&mut *f)
                     || assoc_type_bindings.iter().any(|(_, t)| f(*t))
             }
+            ResolvedType::Struct {
+                def: StructDef::Anon(id),
+                ..
+            } => self.any_anon_shape_type(*id, f),
             _ => false,
         }
     }
@@ -9557,6 +9653,36 @@ pub struct TirStruct {
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
     pub wire_name_policy: Option<NamePolicy>,
+}
+
+impl TirStruct {
+    /// The struct of anonymous shape `shape`, holding `fields`.
+    pub fn anonymous(
+        shape: AnonStructId,
+        name: String,
+        module_source: ModuleSource,
+        fields: &[(String, TypeId)],
+        span: Span,
+    ) -> Self {
+        Self {
+            def: StructDef::Anon(shape),
+            type_args: Vec::new(),
+            name,
+            module_source,
+            visibility: Visibility::Private,
+            type_params: Vec::new(),
+            monomorph_info: None,
+            fields: fields
+                .iter()
+                .enumerate()
+                .map(|(i, (name, ty))| {
+                    TirField::plain(name.clone(), Visibility::Public, *ty, i as u32, span)
+                })
+                .collect(),
+            span,
+            wire_name_policy: None,
+        }
+    }
 }
 
 /// Each reified struct's fields, keyed as `ResolvedType::Struct` names it.

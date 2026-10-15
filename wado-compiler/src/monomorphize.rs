@@ -22,7 +22,8 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::FreeFunctionName;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, TemplateId, TirFunction, TirModule, TirStruct, TypeId, TypeTable,
+    AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
+    TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -238,7 +239,43 @@ impl Monomorphizer {
                 }
             }
         }
+        new_structs.extend(self.substituted_anon_structs(&mut type_table.borrow_mut()));
         new_structs
+    }
+
+    /// A struct for each closed anonymous shape the module lacks one for:
+    /// substituting into an open shape interns one no literal wrote.
+    fn substituted_anon_structs(&mut self, tt: &mut TypeTable) -> Vec<TirStruct> {
+        let shapes: Vec<AnonStructId> = tt
+            .iter_type_ids()
+            .filter_map(|id| match tt.get(id) {
+                ResolvedType::Struct {
+                    def: StructDef::Anon(shape),
+                    ..
+                } if !self.structs.anon_sites.contains_key(shape)
+                    && !tt.anon_struct_is_synthetic(*shape)
+                    && !tt.contains_type_param(id) =>
+                {
+                    Some(*shape)
+                }
+                _ => None,
+            })
+            .collect();
+        shapes
+            .into_iter()
+            .map(|shape| {
+                let span = self.structs.anon_sites[&tt.anon_struct_written_origin(shape)];
+                self.structs.anon_sites.insert(shape, span);
+                let fields = tt.anon_shape_struct_fields(shape);
+                TirStruct::anonymous(
+                    shape,
+                    tt.anon_struct_mangle(shape),
+                    tt.anon_struct_module(shape).clone(),
+                    &fields,
+                    span,
+                )
+            })
+            .collect()
     }
 
     /// Monomorphize `module` against templates a previous run already holds,
@@ -270,15 +307,25 @@ impl Monomorphizer {
         // Phase 1: Collect all generic struct definitions
         let mut generic_structs = external_generic_structs.clone();
         generic_structs.extend(generic_structs_in(&module.structs));
+        for s in &module.structs {
+            if let StructDef::Anon(shape) = s.def {
+                self.structs.anon_sites.insert(shape, s.span);
+            }
+        }
 
         // Phase 2-4: a struct's fields may name further instances, hence a fixpoint.
         let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
         module.structs.extend(new_structs);
 
-        // Phase 5: Remove generic structs from the concrete struct list
-        module
-            .structs
-            .retain(|s| s.type_params.is_empty() || s.monomorph_info.is_some());
+        // Phase 5: Remove generic structs and open shapes from the concrete
+        // struct list
+        {
+            let tt = module.type_table.borrow();
+            module.structs.retain(|s| match s.def {
+                StructDef::Anon(_) => !s.fields.iter().any(|f| tt.contains_type_param(f.type_id)),
+                StructDef::Decl(_) => s.type_params.is_empty() || s.monomorph_info.is_some(),
+            });
+        }
 
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
         self.rewrite_types_in_module(&mut module);
