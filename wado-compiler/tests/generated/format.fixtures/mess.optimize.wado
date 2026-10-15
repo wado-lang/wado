@@ -7,16 +7,22 @@
 
 global mut heap_offset: u32 = 8;
 
-global mut $modules_initialized: bool = false;
-
 flags Access {
     Read,  // 0x1
     Write,  // 0x2
     Execute,  // 0x4
 }
 
+fn memory_bytes() -> u64 {
+    return (core::builtin::memory_size() as u64 * 65536);
+}
+
+fn pages(bytes: u64) -> i32 {
+    return (((bytes + 65536) - 1) / 65536) as i32;
+}
+
 fn grow_memory(end: u64) {
-    let current_bytes: u64 = (core::builtin::memory_size() as u64 * 65536);
+    let current_bytes: u64 = core::allocator::memory_bytes();
     let deficit: u64 = (end - current_bytes);
     let normal_grow: u64 = core::builtin::select::<u64>((current_bytes < 16777216), current_bytes, 16777216);
     let grow_bytes: u64 = if (deficit > normal_grow) {
@@ -24,8 +30,8 @@ fn grow_memory(end: u64) {
     } else {
         normal_grow;
     };
-    if (core::builtin::memory_grow((((grow_bytes + 65536) - 1) / 65536) as i32) < 0) {
-        if (core::builtin::memory_grow((((deficit + 65536) - 1) / 65536) as i32) < 0) {
+    if (core::builtin::memory_grow(core::allocator::pages(grow_bytes)) < 0) {
+        if (core::builtin::memory_grow(core::allocator::pages(deficit)) < 0) {
             core::builtin::cold_path();
             core::builtin::unreachable();
         }
@@ -266,25 +272,7 @@ pub fn unreachable() -> !;
 pub fn cold_path();
 
 export fn "$cm_export__run"() {
-    $inline__initialize_modules_0: {
-        if mess_dirty.wado::$modules_initialized {
-            break $inline__initialize_modules_0;
-        }
-        core::builtin::cold_path();
-        "mess_dirty.wado::$initialize_modules$cold0"();
-    };
-    $inline__initialize_modules_2: {
-        if mess_dirty.wado::$modules_initialized {
-            break $inline__initialize_modules_2;
-        }
-        core::builtin::cold_path();
-        "mess_dirty.wado::$initialize_modules$cold0"();
-    };
     cm_raw_call task-return(0);
-}
-
-fn "$initialize_modules$cold0"() {
-    mess_dirty.wado::$modules_initialized = true;
 }
 
 fn array_fill();

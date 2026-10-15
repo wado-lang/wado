@@ -191,7 +191,7 @@ fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
         };
         match &body.exprs[e].kind {
             ExprKind::Assign { target, .. } => {
-                written.extend(write_root_local(body, (*target).into()))
+                written.extend(write_root_local(body, (*target).into()));
             }
             ExprKind::Unary {
                 op: NirUnaryOp::MutRef,
