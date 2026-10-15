@@ -1153,6 +1153,17 @@ impl Backend for WebGpuBackend {
         return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, b, &then);
     }
 
+    /// The product over the transpose as a view, which strides say.
+    fn matmul_by_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Placed<f32, [..Bs, M, K]>,
+        b: &Placed<f32, [N, K]>,
+        then: Option<Epilogue<PlacedRead<[..Bs, M, N]>>>,
+    ) -> Placed<f32, [..Bs, M, N]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        let transposed = self.transpose2(b);
+        return self.product::<[..Bs, M, K], [K, N], [..Bs, M, N]>(a, &transposed, &then);
+    }
+
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Placed<f32, A>,

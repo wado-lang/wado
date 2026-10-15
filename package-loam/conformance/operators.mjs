@@ -74,6 +74,14 @@ add('MatMulShared', binary('MatMul', [2, 2, 3], [3, 4], { A: ['Batch', 'Row', 'K
 add('MatMulRowVector', binary('MatMul', [3], [3, 4], { A: ['K'], B: ['K', 'Col'] }));
 add('MatMulColumnVector', binary('MatMul', [2, 3], [3], { A: ['Row', 'K'], B: ['K'] }));
 add('MatMulBroadcastBatch', binary('MatMul', [1, 2, 3], [2, 3, 4], { A: ['Batch', 'Row', 'K'], B: ['Batch', 'K', 'Col'] }));
+// A language model's head: the product by a weight's transpose, which Loam
+// reads as the weight is stored, with an operator after it to join.
+add('MatMulTransposedWeight', {
+  inputs: { A: float([2, 2, 5]) },
+  inits: { E: float([6, 5], halves(30).map((v) => v - 0.3)) },
+  nodes: [node('Transpose', ['E'], 'T'), node('MatMul', ['A', 'T'], 'P'), node('Relu', ['P'], 'Y')],
+  layout: { A: ['Batch', 'Row', 'K'], E: ['Col', 'K'] },
+});
 
 add('Gemm', {
   inputs: { A: float([2, 3]), B: float([3, 4]), C: float([4]) },

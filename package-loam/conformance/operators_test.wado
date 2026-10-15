@@ -520,6 +520,13 @@ test "Gelu through erf" {
     assert_agrees(#include_bytes("./operators/GeluErf.onnx"), #include_str("./operators/GeluErf.txt"));
 }
 
+test "MatMul by a weight's transpose reads the weight as stored" {
+    assert_agrees(
+        #include_bytes("./operators/MatMulTransposedWeight.onnx"),
+        #include_str("./operators/MatMulTransposedWeight.txt"),
+    );
+}
+
 test "Expand stretches an axis of 1" {
     assert_agrees(#include_bytes("./operators/ExpandUnit.onnx"), #include_str("./operators/ExpandUnit.txt"));
 }

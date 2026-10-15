@@ -67,6 +67,7 @@ pub enum Lowered {
     Branch,
     Flattened,
     Restored,
+    Viewed,
 }
 
 /// A `Reason` without what it names, which `NodeReport.detail` carries.
@@ -123,7 +124,7 @@ pub fn render_dump(graph: &Graph, checked: &Checked, fuse: bool) -> String {
     write_scope(&mut w, &r.scope, &mut tally);
     w.blank();
     w.line(
-        `${tally.kernels} kernels, ${tally.fused} fused, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.spread} reshapes spread`,
+        `${tally.kernels} kernels, ${tally.fused} fused, ${tally.folded} folded, ${tally.aliases} aliases, ${tally.branches} branches, ${tally.spread} reshapes spread, ${tally.viewed} transposes viewed`,
     );
     return w.to_string();
 }
@@ -261,6 +262,7 @@ fn lowered(lowering: Lowering) -> Lowered {
         Kernel => Lowered::Kernel,
         Flattened => Lowered::Flattened,
         Restored => Lowered::Restored,
+        Transposed => Lowered::Viewed,
     };
 }
 
@@ -274,6 +276,7 @@ fn label(lowering: &Lowered) -> String {
         Branch => "branch",
         Flattened => "flattened",
         Restored => "restored",
+        Viewed => "viewed",
     };
 }
 
@@ -335,6 +338,8 @@ struct Tally {
     branches: i32 = 0,
     /// The `Reshape`s a spread product reads and writes past, two each.
     spread: i32 = 0,
+    /// The `Transpose`s a product reads past, by the weight as stored.
+    viewed: i32 = 0,
 }
 
 fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
@@ -350,6 +355,7 @@ fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
             Alias => tally.aliases += 1,
             Branch => tally.branches += 1,
             Flattened | Restored => tally.spread += 1,
+            Viewed => tally.viewed += 1,
         }
         let outputs: List<String> = node.outputs.into_iter().map(|t| t.name).collect();
         // As wide as `flattened`, the longest label.

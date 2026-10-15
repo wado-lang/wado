@@ -568,3 +568,42 @@ g (float[N, 4] X) => (float[N, 4] Y)
     assert p.of(&"A") == fused("Y");
     assert p.of(&"B") == fused("Y");
 }
+
+/// A language model's head: the hidden states by the token embedding's
+/// transpose. The embedding is a weight unless `input`, and the scope returns
+/// the transpose too where `returned`.
+fn head_plan(input: bool, returned: bool) -> Plan {
+    let embedding = "float[6, 4] E";
+    let inputs = if input { `float[1, 2, 4] X, ${embedding}` } else { "float[1, 2, 4] X" };
+    let outputs = if returned { "float[1, 2, 6] Y, float[4, 6] T" } else { "float[1, 2, 6] Y" };
+    let weights = if input { "" } else { `<${embedding}>` };
+    let source = `
+head (${inputs}) => (${outputs})
+${weights}
+{
+    T = Transpose(E)
+    Y = MatMul(X, T)
+}
+`;
+    return plan_of(source, [
+        [
+            "X",
+            ["Batch", "Seq", "Embed"],
+        ],
+        [
+            "E",
+            ["Vocab", "Embed"],
+        ],
+    ]);
+}
+
+test "a weight's transpose only a product reads is read as the weight is stored" {
+    let p = head_plan(false, false);
+    assert p.lowering(0) matches { Transposed };
+    assert p.lowering(1) matches { Kernel };
+}
+
+test "a transpose of an input, or one read again, is written" {
+    assert head_plan(true, false).lowering(0) matches { Kernel };
+    assert head_plan(false, true).lowering(0) matches { Kernel };
+}

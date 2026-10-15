@@ -698,6 +698,9 @@ struct Operands {
     /// What a kernel `Plan` fuses into the kernel after it computes, not yet
     /// written.
     pending: TreeMap<String, Term> = TreeMap::new(),
+    /// The weight each `Transposed` lowering's output is the transpose of,
+    /// which the product reading it reads as stored.
+    transposed: TreeMap<String, String> = TreeMap::new(),
 }
 
 /// The lengths only the run knows, each bound in `forward` from the first input
@@ -1003,6 +1006,7 @@ fn scope_body(
         match decided.lowering(at) {
             Folded | Flattened => {
             },
+            Transposed => exprs.transposed[node.outputs[0]] = node.inputs[0],
             // A restored product is the product, computed over its axes.
             Alias | Restored => {
                 // An alias of a value a later kernel computes stays pending.
@@ -1591,6 +1595,11 @@ fn node_term(
         return Result::Ok(Option::Some(condition.select(&then, &otherwise)));
     }
     if op == "MatMul" {
+        if let Some(weight) = exprs.transposed.get(node.inputs[1]) {
+            let a = exprs.reference(&node.inputs[0]);
+            let head = `backend.matmul_by_transposed(${a}, ${exprs.reference(&weight)}`;
+            return Result::Ok(Option::Some(Term::after(head, out)));
+        }
         let [a, b, left, right] = binary_call(node, shapes, exprs);
         let head = if exprs.rhs.contains_key(node.inputs[1]) {
             rhs_product_head(&a, &b);

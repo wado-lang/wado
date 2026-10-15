@@ -203,6 +203,56 @@ pub fn matmul_shared<..Bs, M, K, N>(
     return matmul_broadcast(a, b, then);
 }
 
+/// `matmul_shared` by the transpose of `b`, read as it is stored: each output
+/// element is a row of `a` against a row of `b`, both contiguous, so the
+/// transpose is never written. A language model's head multiplies by its
+/// token embedding this way.
+pub fn matmul_by_transposed<..Bs, M, K, N>(
+    a: &Tensor<f32, [..Bs, M, K]>,
+    b: &Tensor<f32, [N, K]>,
+    then: &Option<Epilogue<Read<[..Bs, M, N]>>>,
+) -> Tensor<f32, [..Bs, M, N]> {
+    let rank = a.extents.len();
+    let inner = a.extents[rank - 1];
+    assert inner == b.extents[1];
+    let cols = b.extents[0];
+    let mut extents = a.extents;
+    extents[rank - 1] = cols;
+    let rows = a.extents[rank - 2];
+    let mut out = List::<f32>::filled(element_count(&extents), 0.0);
+    let finishing = finish(then, &extents);
+    for let s of 0..<element_count(&a.extents[0..<rank - 2].to_list()) {
+        let out_base = s * rows * cols;
+        for let r of 0..<rows {
+            let a_at = (s * rows + r) * inner;
+            for let c of 0..<cols {
+                out[out_base + r * cols + c] = row_dot(&a.data, a_at, &b.data, c * inner, inner);
+            }
+        }
+        if let Some(f) = &finishing {
+            f.apply(&mut out, out_base, rows * cols);
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
+/// The dot product of `n` contiguous elements of `a` from `a_at` and of `b`
+/// from `b_at`, over four running sums so that no addition waits on the last.
+fn row_dot(a: &List<f32>, a_at: i32, b: &List<f32>, b_at: i32, n: i32) -> f32 {
+    let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
+    let quads = n - n % 4;
+    for let mut k = 0; k < quads; k += 4 {
+        s0 += a[a_at + k] * b[b_at + k];
+        s1 += a[a_at + k + 1] * b[b_at + k + 1];
+        s2 += a[a_at + k + 2] * b[b_at + k + 2];
+        s3 += a[a_at + k + 3] * b[b_at + k + 3];
+    }
+    for let k of quads..<n {
+        s0 += a[a_at + k] * b[b_at + k];
+    }
+    return s0 + s1 + (s2 + s3);
+}
+
 /// ONNX's `MatMul` in full, which is numpy's: a rank-1 operand is a row on the
 /// left or a column on the right, whose axis the result drops, and the batch
 /// axes broadcast. The caller spells `Out`. `then` is applied to each batch
@@ -1997,6 +2047,13 @@ pub trait Backend with _ {
         b: &Self::Tensor<f32, [K, N]>,
         then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
     ) -> Self::Tensor<f32, [..Bs, M, N]>;
+    /// `matmul_shared` by the transpose of `b`, which is never written.
+    fn matmul_by_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Self::Tensor<f32, [..Bs, M, K]>,
+        b: &Self::Tensor<f32, [N, K]>,
+        then: Option<Epilogue<Self::Operand<[..Bs, M, N]>>>,
+    ) -> Self::Tensor<f32, [..Bs, M, N]>;
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Self::Tensor<f32, A>,
@@ -2192,6 +2249,15 @@ impl Backend for Cpu {
         then: Option<Epilogue<Read<[..Bs, M, N]>>>,
     ) -> Tensor<f32, [..Bs, M, N]> {
         return matmul_shared(a, b, &then);
+    }
+
+    fn matmul_by_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Tensor<f32, [..Bs, M, K]>,
+        b: &Tensor<f32, [N, K]>,
+        then: Option<Epilogue<Read<[..Bs, M, N]>>>,
+    ) -> Tensor<f32, [..Bs, M, N]> {
+        return matmul_by_transposed(a, b, &then);
     }
 
     fn matmul_broadcast<A, B, Out>(

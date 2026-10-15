@@ -184,6 +184,16 @@ impl Backend for Opaque {
         return handle(self.cpu.matmul_shared(&a.held, &b.held, read));
     }
 
+    fn matmul_by_transposed<..Bs, M, K, N>(
+        &mut self,
+        a: &Handle<f32, [..Bs, M, K]>,
+        b: &Handle<f32, [N, K]>,
+        then: Option<Epilogue<Handle<f32, [..Bs, M, N]>>>,
+    ) -> Handle<f32, [..Bs, M, N]> {
+        let read = opened(&mut self.cpu, &then);
+        return handle(self.cpu.matmul_by_transposed(&a.held, &b.held, read));
+    }
+
     fn matmul_broadcast<A, B, Out>(
         &mut self,
         a: &Handle<f32, A>,
