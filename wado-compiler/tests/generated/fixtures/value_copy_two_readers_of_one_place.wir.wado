@@ -25,7 +25,11 @@ type "functype//value_copy_two_readers_of_one_place.wado/$cm_export__$test_3_the
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(8)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
+type "functype//core:prelude/array.wado/Array<i32>::len" = fn(ref Array<i32>) -> i32;  // TypeId(9)
+
+type "functype//core:prelude/primitive.wado/i32::max$spec1$dae[b]" = fn(i32) -> i32;  // TypeId(10)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(11)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
@@ -73,11 +77,17 @@ fn "value_copy_two_readers_of_one_place.wado/$cm_export__$test_3_the_place_move_
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
-    let $load_0: ref Array<i32>;
     let new_repr: ref Array<i32>;
-    let a: i32;
-    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    builtin::array_copy<i32>(local.tee new_repr(builtin::array_new<i32>("core:prelude/primitive.wado/i32::max$spec1$dae[b]"("core:prelude/array.wado/Array<i32>::len"(self.repr) * 2))), 0, self.repr, 0, self.used);
     self.repr = new_repr;
+}
+
+fn "core:prelude/array.wado/Array<i32>::len"(self) {
+    return builtin::array_len(self);
+}
+
+fn "core:prelude/primitive.wado/i32::max$spec1$dae[b]"(a) {
+    return select i32(a > 4, a, 4);
 }
 
 export fn "value_copy_two_readers_of_one_place.wado/$cm_export__$test_0_two_reads_of_one_place" as "$test_0_two_reads_of_one_place"
