@@ -2707,7 +2707,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `FunctionRef` on `index_assign_dispatch[index.id]`;
                 // reify replays the same method-call shape.
                 if let ast::Expr::Index(index_expr) = &assign.target
-                    && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+                    && let Some(dispatch) = self.index_write_dispatch(index_expr)
                 {
                     let receiver = self.reify_expr(&index_expr.expr, ctx, None);
                     let receiver = adjust_receiver_for_self_kind(
@@ -5174,6 +5174,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// The method the subscript `index` reads its element through.
+    fn index_read_dispatch(&self, index: &ast::IndexExpr) -> Option<OperatorDispatch> {
+        self.ann_operator_dispatch(index.id)
+            .map(|dispatch| unchecked_subscript(index, dispatch))
+    }
+
+    /// The `IndexAssign` method the subscript `index` is written through.
+    fn index_write_dispatch(&self, index: &ast::IndexExpr) -> Option<OperatorDispatch> {
+        self.ann_index_assign_dispatch(index.id)
+            .map(|dispatch| unchecked_subscript(index, dispatch))
+    }
+
     /// The compound-assign read side of `recv[idx]`, reusing the same
     /// once-evaluated receiver / subscript the write side gets.
     fn build_index_trait_read(
@@ -5183,7 +5195,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         index_expr: &ast::IndexExpr,
         span: Span,
     ) -> TirExpr {
-        let Some(dispatch) = self.ann_operator_dispatch(index_expr.id) else {
+        let Some(dispatch) = self.index_read_dispatch(index_expr) else {
             // Write-only `IndexAssign` type — annotate diagnosed the missing
             // read; match its recovery shape.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
@@ -5258,7 +5270,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (`*recv.index(idx)`) and the write (`recv.index_assign(idx, …)`) are
         // different methods built from the same reified receiver / subscript.
         if let ast::Expr::Index(index_expr) = &compound.target
-            && let Some(assign_dispatch) = self.ann_index_assign_dispatch(index_expr.id)
+            && let Some(assign_dispatch) = self.index_write_dispatch(index_expr)
         {
             let recv = self.reify_expr(&index_expr.expr, ctx, None);
             let idx = self.reify_expr(&index_expr.index, ctx, None);
@@ -5740,7 +5752,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Operator-dispatch path: `operator_dispatch[index.id]` carries the
         // resolved Index / IndexValue method and `needs_deref`. Shared with the
         // compound-assign read via `build_index_read_from_dispatch`.
-        if let Some(dispatch) = self.ann_operator_dispatch(index.id) {
+        if let Some(dispatch) = self.index_read_dispatch(index) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
             return self.tysys.build_index_read_from_dispatch(
@@ -7578,7 +7590,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let inner_dispatch = self
-            .ann_operator_dispatch(index_expr.id)
+            .index_read_dispatch(index_expr)
             .expect(
                 "reify_index_mut_method_call: inner IndexMut dispatch missing — annotate should have recorded it alongside the IndexMutMethodCall desugar tag",
             );
@@ -10259,7 +10271,8 @@ fn contract_check(check: Vec<TirStmt>, span: Span) -> TirStmt {
 }
 
 /// Retarget the call `unchecked` marks, spanning `call_span`, to its callee's
-/// twin, which the check of `unchecked`'s operand established it has.
+/// twin, which the check of `unchecked`'s operand established it has. A
+/// marked subscript goes through [`unchecked_subscript`] instead.
 /// Reify may wrap that call (a default argument naming another parameter
 /// hoists the arguments into a block around it), so the call is found by the
 /// span of the operand it was reified from.
@@ -10288,6 +10301,15 @@ fn retarget_to_unchecked_twin(expr: &mut TirExpr, call_span: Span) {
     };
     marked.visit_expr(expr);
     assert!(marked.found, "`unchecked` marks a call: {:?}", expr.kind);
+}
+
+/// `dispatch`, aimed at its callee's `unchecked` twin where `index` is marked,
+/// which the check of the mark established it has.
+fn unchecked_subscript(index: &ast::IndexExpr, mut dispatch: OperatorDispatch) -> OperatorDispatch {
+    if index.unchecked.is_some() {
+        dispatch.function_ref.retarget_to_unchecked_twin();
+    }
+    dispatch
 }
 
 /// The `unchecked` twin of `func`, reified from `decl`, where `decl` writes a

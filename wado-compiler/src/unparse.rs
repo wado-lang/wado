@@ -2315,6 +2315,9 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_index(&mut self, i: &IndexExpr) {
+        if i.unchecked.is_some() {
+            self.output.push_str(unary_op_str(UnaryOp::Unchecked));
+        }
         self.unparse_postfix_base(&i.expr);
         self.output.push('[');
         self.unparse_expr(&i.index);
@@ -3444,23 +3447,26 @@ enum OperandSlot {
 /// `(p as Point).x` lost its parens and re-parsed the field access into the
 /// cast's type, and `(a < b < c).to_string()` read the call off `c`.
 fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
-    let postfix = matches!(
-        expr,
-        Expr::Ident(_)
-            | Expr::Literal(_)
-            | Expr::Call(_)
-            | Expr::MethodCall(_)
-            | Expr::StaticMethodCall(_)
-            | Expr::FieldAccess(_)
-            | Expr::Index(_)
-            | Expr::TryOp(_)
-            | Expr::TemplateString(_)
-            | Expr::TaggedTemplate(_)
-            | Expr::StructLiteral(_)
-            | Expr::TupleLiteral(_)
-            | Expr::TupleComprehension(_)
-            | Expr::Error(_)
-    );
+    // A marked subscript opens with the prefix `unchecked`.
+    let marked = matches!(expr, Expr::Index(i) if i.unchecked.is_some());
+    let postfix = !marked
+        && matches!(
+            expr,
+            Expr::Ident(_)
+                | Expr::Literal(_)
+                | Expr::Call(_)
+                | Expr::MethodCall(_)
+                | Expr::StaticMethodCall(_)
+                | Expr::FieldAccess(_)
+                | Expr::Index(_)
+                | Expr::TryOp(_)
+                | Expr::TemplateString(_)
+                | Expr::TaggedTemplate(_)
+                | Expr::StructLiteral(_)
+                | Expr::TupleLiteral(_)
+                | Expr::TupleComprehension(_)
+                | Expr::Error(_)
+        );
     // A block form — `{…}`, `LABEL: {…}`, `if`, `match` — is off that list by
     // its *opening*, not its closing `}`: starting a statement, the keyword or
     // brace reads as the statement itself and the postfix behind it has nothing
@@ -3474,6 +3480,7 @@ fn binds_tighter_than(expr: &Expr, slot: OperandSlot) -> bool {
         // `!x as i32` reads as `!(x as i32)` and the operand keeps its parens.
         OperandSlot::Cast => {
             postfix
+                || marked
                 || matches!(expr, Expr::Cast(_))
                 || matches!(expr, Expr::Unary(u) if u.op != UnaryOp::Not)
         }

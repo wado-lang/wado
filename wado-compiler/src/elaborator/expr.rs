@@ -342,7 +342,7 @@ fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
     );
     if target == TypeTable::CHAR && source != TypeTable::CHAR && source != TypeTable::U8 {
         return Some(
-            "use char::from_u32() for a scalar value, or char::try_from() for one that may not be"
+            "convert to u32, then use char::from_u32() for a scalar value, or char::try_from() for one that may not be"
                 .to_string(),
         );
     }

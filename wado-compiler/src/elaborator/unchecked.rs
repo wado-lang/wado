@@ -45,10 +45,12 @@ struct Finder<'a> {
 }
 
 impl Finder<'_> {
-    /// The declarations the call `expr` reaches, one per walk that reached it.
-    fn callees(&self, expr: &Expr) -> Vec<DefId> {
+    /// The declarations the call `expr` reaches, one per walk that reached it,
+    /// or `None` where `expr` is no call. A call reaching none (a closure, a
+    /// dispatched interface operation) is `Some` of nothing.
+    fn callees(&self, expr: &Expr) -> Option<Vec<DefId>> {
         let types = &self.sem.types;
-        match expr {
+        let defs = match expr {
             Expr::MethodCall(call) => types
                 .all(|facts| &facts.method_dispatch, call.id)
                 .filter_map(|dispatch| dispatch.method_def)
@@ -57,8 +59,10 @@ impl Finder<'_> {
                 .all(|facts| &facts.static_method_dispatch, call.id)
                 .filter_map(|dispatch| dispatch.method_def)
                 .collect(),
+            // A subscript written to calls `IndexAssign` where its type has one.
             Expr::Index(index) => types
                 .all(|facts| &facts.operator_dispatch, index.id)
+                .chain(types.all(|facts| &facts.index_assign_dispatch, index.id))
                 .filter_map(|dispatch| dispatch.method_def)
                 .collect(),
             Expr::Call(call) => {
@@ -66,33 +70,27 @@ impl Finder<'_> {
                     .all(|facts| &facts.static_method_dispatch, call.id)
                     .filter_map(|dispatch| dispatch.method_def)
                     .collect();
-                if !statics.is_empty() {
-                    return statics;
+                match &call.callee {
+                    Expr::Ident(ident) if statics.is_empty() => self
+                        .sem
+                        .bindings
+                        .references
+                        .get(&ident.id)
+                        .and_then(|&declared| self.contracts.resolutions.defs().of_ast_id(declared))
+                        .into_iter()
+                        .collect(),
+                    _ => statics,
                 }
-                let Expr::Ident(ident) = &call.callee else {
-                    return Vec::new();
-                };
-                self.sem
-                    .bindings
-                    .references
-                    .get(&ident.id)
-                    .and_then(|&declared| self.contracts.resolutions.defs().of_ast_id(declared))
-                    .into_iter()
-                    .collect()
             }
-            _ => Vec::new(),
-        }
-    }
-
-    /// Whether `expr` is a call, and `holds` of every declaration it reaches.
-    fn every_callee(&self, expr: &Expr, holds: impl Fn(DefId) -> bool) -> bool {
-        let callees = self.callees(expr);
-        !callees.is_empty() && callees.into_iter().all(holds)
+            _ => return None,
+        };
+        Some(defs)
     }
 
     /// Whether `expr` reaches a call a `contract` clause binds.
     fn binds(&self, expr: &Expr) -> bool {
-        self.every_callee(expr, |def| self.contracts.binds(def))
+        self.callees(expr)
+            .is_some_and(|callees| every(&callees, |def| self.contracts.binds(def)))
     }
 
     /// Whether a postfix operand inside `expr`'s chain is a call a `contract`
@@ -111,32 +109,59 @@ impl Finder<'_> {
 
 impl AstVisitor for Finder<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
-        if let Expr::Unary(unary) = expr
-            && unary.op == UnaryOp::Unchecked
-        {
-            let message = if self.binds(&unary.expr) {
-                None
-            } else if self.binds_inside_chain(&unary.expr) {
-                Some(INNER_CALL)
-            } else if self.callees(&unary.expr).is_empty() {
-                Some(NOT_A_CALL)
-            } else if self.every_callee(&unary.expr, |def| self.contracts.unbound_trait_method(def))
-            {
-                Some(TRAIT_NO_CONTRACT)
-            } else {
-                Some(NO_CONTRACT)
-            };
-            if let Some(message) = message {
-                self.found.push(Diagnostic {
-                    severity: Severity::Error,
-                    code: Code::UncheckedInvalid,
-                    message: message.to_string(),
-                    span: Some(DiagnosticSpan::from_span(&unary.span, None)),
-                });
-            }
+        let verdict = match expr {
+            // The parser folds `unchecked` into a subscript it marks, so a
+            // subscript under one was marked already.
+            Expr::Unary(unary) if unary.op == UnaryOp::Unchecked => Some((
+                match &unary.expr {
+                    Expr::Index(_) => Some(NOT_A_CALL),
+                    operand => self.misplaced(operand),
+                },
+                unary.span,
+            )),
+            Expr::Index(index) => index.unchecked.map(|span| (self.misplaced(expr), span)),
+            _ => None,
+        };
+        if let Some((Some(message), span)) = verdict {
+            self.found.push(Diagnostic {
+                severity: Severity::Error,
+                code: Code::UncheckedInvalid,
+                message: message.to_string(),
+                span: Some(DiagnosticSpan::from_span(&span, None)),
+            });
         }
         ast::walk_expr(self, expr);
     }
+}
+
+impl Finder<'_> {
+    /// Why `unchecked` cannot mark `operand`, or `None` where it can.
+    fn misplaced(&self, operand: &Expr) -> Option<&'static str> {
+        let callees = self.callees(operand);
+        if let Some(callees) = &callees
+            && every(callees, |def| self.contracts.binds(def))
+        {
+            return None;
+        }
+        Some(if self.binds_inside_chain(operand) {
+            INNER_CALL
+        } else {
+            match callees {
+                None => NOT_A_CALL,
+                Some(callees)
+                    if every(&callees, |def| self.contracts.unbound_trait_method(def)) =>
+                {
+                    TRAIT_NO_CONTRACT
+                }
+                Some(_) => NO_CONTRACT,
+            }
+        })
+    }
+}
+
+/// Whether `callees` names a declaration and `holds` of each.
+fn every(callees: &[DefId], holds: impl Fn(DefId) -> bool) -> bool {
+    !callees.is_empty() && callees.iter().all(|&def| holds(def))
 }
 
 /// Which declarations a `contract` clause binds, read off the AST.

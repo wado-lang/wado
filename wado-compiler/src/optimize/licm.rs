@@ -567,7 +567,10 @@ fn licm_loop(
             });
         }
 
-        // Step 5: Replace field accesses in the loop body with the hoisted locals.
+        // Step 5: Replace field accesses in the loop body with the hoisted
+        // locals. A read served by a preheader hoist changes the body too,
+        // though it adds no statement.
+        changed = true;
         replace_hoisted(
             engine,
             NodeRef::Block(loop_body),

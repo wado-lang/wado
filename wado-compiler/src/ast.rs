@@ -3181,7 +3181,7 @@ impl Expr {
             Expr::MethodCall(e) => e.span,
             Expr::StaticMethodCall(e) => e.span,
             Expr::FieldAccess(e) => e.span,
-            Expr::Index(e) => e.span,
+            Expr::Index(e) => e.unchecked.unwrap_or(e.span),
             Expr::Block(e) => e.span,
             Expr::If(e) => e.span,
             Expr::Match(e) => e.span,
@@ -3677,7 +3677,8 @@ pub enum UnaryOp {
     MutRef,
     Deref,
     /// `unchecked call`: the caller vouches for the callee's contract, so only
-    /// a build under `-f contract-checks` checks it.
+    /// a build under `-f contract-checks` checks it. A marked subscript is
+    /// [`IndexExpr::unchecked`] instead.
     Unchecked,
 }
 
@@ -3749,6 +3750,10 @@ pub struct IndexExpr {
     pub expr: Expr,
     pub index: Expr,
     pub span: Span,
+    /// The span of `unchecked c[i]` where the subscript is marked. The mark
+    /// sits on the subscript rather than around it, so the marked subscript is
+    /// still the place `c[i]` to every rule that reads one.
+    pub unchecked: Option<Span>,
 }
 
 #[derive(Debug, Clone)]

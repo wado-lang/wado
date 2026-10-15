@@ -464,16 +464,6 @@ impl CaptureScanner {
         true
     }
 
-    /// Scan what an `unchecked` operand evaluates ahead of itself, when it is a
-    /// call or a subscript, the two shapes that reach a contract.
-    fn scan_marked_operands(&mut self, expr: &Expr) -> bool {
-        if let Expr::Index(_) = expr {
-            self.scan_place_operands(expr);
-            return true;
-        }
-        self.scan_call_operands(expr)
-    }
-
     /// The operands that compute a place without reading it: each subscript's
     /// index, down a chain of subscripts, fields and derefs.
     fn scan_place_operands(&mut self, place: &Expr) {
@@ -501,9 +491,9 @@ impl CaptureScanner {
                 self.conditional = conditional;
                 self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
             }
-            // Bound whole, marker and all: a binding of the call or subscript
-            // alone would leave the marker nothing to retarget.
-            Expr::Unary(u) if u.op == UnaryOp::Unchecked && self.scan_marked_operands(&u.expr) => {
+            // Bound whole, marker and all: a binding of the call alone would
+            // leave the marker nothing to retarget.
+            Expr::Unary(u) if u.op == UnaryOp::Unchecked && self.scan_call_operands(&u.expr) => {
                 self.add(unparse_expr_source(expr), ast_id, false, pos);
             }
             Expr::Unary(u) => {

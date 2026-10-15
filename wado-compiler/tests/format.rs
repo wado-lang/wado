@@ -4044,6 +4044,9 @@ fn test_format_unchecked_operator() {
         "    let a = unchecked s.get_byte(0);\n",
         "    let b = (unchecked s.slice(0, 1)).len();\n",
         "    let c = unchecked xs[0] + 1;\n",
+        "    let d = (unchecked xs[0]).to_string();\n",
+        "    let e = unchecked xs[0] as i64;\n",
+        "    let f = &mut unchecked ps[0];\n",
         "}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");

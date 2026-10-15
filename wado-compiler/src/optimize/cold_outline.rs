@@ -305,7 +305,7 @@ fn free_vars(
         &[],
     );
     let outer = LocalRefs::collect(body, vec![NodeRef::Block(body.root())], region);
-    let bound_ahead = bound_ahead_of(body, region);
+    let mut bound_ahead = None;
     let mut args = Vec::new();
     for idx in inside.mentioned.iter().copied() {
         let crossing = if idx < param_count {
@@ -344,7 +344,9 @@ fn free_vars(
         // evaluates them, and one the guard would have skipped hands a null
         // across a non-null parameter.
         if !matches!(type_table.get(type_id), ResolvedType::Primitive(_))
-            && !bound_ahead.contains(&idx)
+            && !bound_ahead
+                .get_or_insert_with(|| bound_ahead_of(body, region))
+                .contains(&idx)
         {
             compiler_trace!(
                 "cold_outline",

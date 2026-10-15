@@ -1,4 +1,5 @@
-// `unchecked` marks a read: an index assignment takes no marker.
+// A marked subscript written to vouches for `IndexAssign`, and `List`'s
+// declares no contract.
 export fn run() {
     let mut xs: List<i32> = [1, 2];
     unchecked xs[0] = 3;
@@ -6,5 +7,5 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": ":4:5: analysis error: cannot assign to an expression that is not a place"
+  "compile_error": ":5:5: analysis error: the callee has no `contract` clause for `unchecked` to vouch for"
 }

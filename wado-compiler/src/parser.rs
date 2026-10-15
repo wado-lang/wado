@@ -4069,9 +4069,16 @@ impl Parser {
         if let Some(op) = op {
             let start_span = self.peek().span;
             self.advance();
-            let expr = self.parse_unary_expr()?;
+            let mut expr = self.parse_unary_expr()?;
             // Span covers from operator to end of inner expression
             let span = start_span.merge(&expr.span());
+            if op == UnaryOp::Unchecked
+                && let Expr::Index(index) = &mut expr
+                && index.unchecked.is_none()
+            {
+                index.unchecked = Some(span);
+                return Ok(expr);
+            }
             let id = self.alloc_ast_id();
             return Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })));
         }
@@ -4330,6 +4337,7 @@ impl Parser {
                         expr,
                         index,
                         span: merged_span,
+                        unchecked: None,
                     }));
                 }
                 TokenKind::Question => {

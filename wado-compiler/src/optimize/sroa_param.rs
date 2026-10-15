@@ -29,7 +29,7 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
+use super::arena_query::{is_local_operand, is_pure_operand, operand_local, place_root_local};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
@@ -252,17 +252,17 @@ fn collect_and_validate(
     // Phase 2: resolve each param to the one field it reads, dropping the ones
     // that escape or disagree — one fixpoint, since a param forwarded to another
     // candidate position takes its answer from there.
-    let forwards: IndexMap<(FnKey, usize), Vec<(FnKey, usize)>> = candidates
-        .keys()
-        .map(|&(key, pi)| {
+    let mut forwards: IndexMap<FnKey, IndexMap<u32, Vec<(FnKey, usize)>>> = IndexMap::default();
+    for &(key, _) in candidates.keys() {
+        forwards.entry(key).or_insert_with(|| {
             let func = project.functions[key.index()].borrow();
-            let body = func
-                .body
-                .as_ref()
-                .expect("is_eligible rejects a body-less function");
-            ((key, pi), whole_forwards(body, func.params[pi].local_index))
-        })
-        .collect();
+            whole_forwards(
+                func.body
+                    .as_ref()
+                    .expect("is_eligible rejects a body-less function"),
+            )
+        });
+    }
     loop {
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
@@ -279,10 +279,12 @@ fn collect_and_validate(
             // same way: held by value it is a copy, and the callee's writes land
             // on the copy.
             if info.form == FieldForm::Value
-                && forwards[&(*key, *pi)].iter().any(|position| {
-                    candidates
-                        .get(position)
-                        .is_some_and(|target| target.form == FieldForm::Mutable)
+                && forwards[key].get(&local_index).is_some_and(|positions| {
+                    positions.iter().any(|position| {
+                        candidates
+                            .get(position)
+                            .is_some_and(|target| target.form == FieldForm::Mutable)
+                    })
                 })
             {
                 widened.push((*key, *pi));
@@ -927,21 +929,20 @@ fn check_call_arg(
     check_expr(body, arg, idx, candidates)
 }
 
-/// The call positions param `idx` is handed to whole.
-fn whole_forwards(body: &Body, idx: u32) -> Vec<(FnKey, usize)> {
-    reachable_exprs(body)
-        .into_iter()
-        .filter_map(|e| match &body.exprs[e].kind {
-            ExprKind::Call { func_id, args, .. } => Some((*func_id, args)),
-            _ => None,
-        })
-        .flat_map(|(func_id, args)| {
-            args.iter()
-                .enumerate()
-                .filter(|(_, arg)| is_local_operand(body, arg.expr, idx))
-                .map(move |(pos, _)| (func_id, pos))
-        })
-        .collect()
+/// The call positions each local is handed to whole.
+fn whole_forwards(body: &Body) -> IndexMap<u32, Vec<(FnKey, usize)>> {
+    let mut forwards: IndexMap<u32, Vec<(FnKey, usize)>> = IndexMap::default();
+    for e in reachable_exprs(body) {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            continue;
+        };
+        for (pos, arg) in args.iter().enumerate() {
+            if let Some(local) = operand_local(body, arg.expr) {
+                forwards.entry(local).or_default().push((*func_id, pos));
+            }
+        }
+    }
+    forwards
 }
 
 /// Whether scalarizing this parameter would strand the call: a sibling position
