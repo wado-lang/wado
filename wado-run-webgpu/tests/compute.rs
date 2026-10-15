@@ -180,6 +180,28 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     }
 }
 
+/// Grouped query attention runs on the device, with a past and without, turned
+/// in whole or in part, biased, capped and windowed.
+#[test]
+fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
+    let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../package-loam/conformance/webgpu_attention.wado");
+    let output = run(&[program.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 3, "stdout: {stdout}");
+    for line in lines {
+        let deviation: f32 = line
+            .rsplit(' ')
+            .next()
+            .and_then(|d| d.parse().ok())
+            .unwrap_or_else(|| panic!("no deviation in {line:?}"));
+        assert!(deviation <= LOAM_TOLERANCE, "{line}");
+    }
+}
+
 /// A whole model's pass stays on the device: each sequence length reads back
 /// once, for the logits `forward` returns, in as many dispatches as the plan
 /// leaves kernels.

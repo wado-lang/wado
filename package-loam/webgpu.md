@@ -65,8 +65,12 @@ runs.
   host, since WGSL stores none. Indices are small, and a gather uploads them as
   `u32` when it runs.
 - The convolutions and `max_pool` stay on the CPU. No model step 14 targets
-  has them. So does `group_query_attention`, which Gemma 3 has and GPT-2 does
-  not. `expand` is a view, each stretched axis read through a stride of 0.
+  has them. `expand` is a view, each stretched axis read through a stride of 0.
+- `group_query_attention`, which Gemma 3 has and GPT-2 does not, is two
+  dispatches. One writes the present keys and values into one buffer, the new
+  keys turned by the rotary tables. The other attends each query row in a
+  workgroup of its own: the turned query, its scores, their softmax and the
+  values they weigh. `conformance/webgpu_attention.wado` holds it to `Cpu`.
 - The device's limits are requested at the adapter's own, and a dispatch binds
   only the span of a buffer its views reach. GPT-2's token embedding is 154 MB,
   past WebGPU's default binding of 128 MiB, which is all llvmpipe offers. A
