@@ -609,7 +609,7 @@ fn build_repeat(
 /// time instead of truncating silently. Only the tiny state/transition kind
 /// enums use this width.
 fn push_u8(bytes: &mut ByteList, v: i32)
-    contract 0 <= v <= 255, `ATN blob: value ${v} exceeds u8 range`
+    contract 0 <= v <= 255
 {
     bytes.push(v as u8);
 }
@@ -617,7 +617,7 @@ fn push_u8(bytes: &mut ByteList, v: i32)
 /// Little-endian; same overflow contract as `push_u8`, widened to `u16`
 /// (0..=65535). Every count and state/rule/token index uses this width.
 fn push_u16(bytes: &mut ByteList, v: i32)
-    contract 0 <= v <= 65535, `ATN blob: value ${v} exceeds u16 range`
+    contract 0 <= v <= 65535
 {
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
@@ -630,7 +630,7 @@ fn push_u16(bytes: &mut ByteList, v: i32)
 /// up to `CHAR_MAX` = `0x10FFFF`) — one shared decoder, so the field must
 /// fit its widest use.
 fn push_u24(bytes: &mut ByteList, v: i32)
-    contract 0 <= v <= 16777215, `ATN blob: value ${v} exceeds u24 range`
+    contract 0 <= v <= 16777215
 {
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
@@ -642,7 +642,7 @@ fn push_u24(bytes: &mut ByteList, v: i32)
 /// branch needed. Only the lower bound is required — `push_u16` itself
 /// catches `v + 1` overflowing `u16`.
 fn push_u16_biased(bytes: &mut ByteList, v: i32)
-    contract v >= -1, `ATN blob: biased value ${v} below sentinel -1`
+    contract v >= -1
 {
     push_u16(bytes, v + 1);
 }
@@ -650,7 +650,7 @@ fn push_u16_biased(bytes: &mut ByteList, v: i32)
 /// `label`/`follow` counterpart to `push_u16_biased`; `push_u24` catches
 /// `v + 1` overflow.
 fn push_u24_biased(bytes: &mut ByteList, v: i32)
-    contract v >= -1, `ATN blob: biased value ${v} below sentinel -1`
+    contract v >= -1
 {
     push_u24(bytes, v + 1);
 }

@@ -28,7 +28,7 @@ pub fn ident_words<S: AsStrSlice>(text: S) -> List<String> {
 
 /// `chars[start..end]` as its own `String`.
 pub fn collect_range(chars: &List<char>, start: i32, end: i32) -> String
-    contract end >= start, `${start}..${end} runs backwards`
+    contract end >= start
 {
     let mut s = String::with_capacity(end - start);
     push_range(&mut s, chars, start, end);
@@ -37,7 +37,7 @@ pub fn collect_range(chars: &List<char>, start: i32, end: i32) -> String
 
 /// Append `chars[start..end]` to `out`.
 pub fn push_range(out: &mut String, chars: &List<char>, start: i32, end: i32)
-    contract end >= start, `${start}..${end} runs backwards`
+    contract end >= start
 {
     for let mut i = start; i < end; i += 1 {
         out.push(chars[i]);

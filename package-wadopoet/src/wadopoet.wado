@@ -299,7 +299,7 @@ impl CodeWriter {
 
     /// Splice in what `other` wrote, indented to the current depth.
     pub fn append(&mut self, other: &CodeWriter)
-        contract other.depth() == 0, `CodeWriter: appending an unbalanced writer (level=${other.depth()})`
+        contract other.depth() == 0
         contract !other.has_pending_hoisted(), "CodeWriter: an appended writer holds a hoisted definition never written"
     {
         self.flush_text();
@@ -449,7 +449,7 @@ impl CodeWriter {
 
     /// Return the generated code.
     pub fn to_string(&self) -> String
-        contract self.depth() == 0, `CodeWriter: unbalanced indentation (level=${self.depth()})`
+        contract self.depth() == 0
         contract !self.has_pending_hoisted(), "CodeWriter: a hoisted definition was never written"
     {
         if self.segs.is_empty() && self.cur.text_start == 0 {
@@ -729,7 +729,7 @@ impl CodeWriter {
 
     /// The default of the function `head` opens' parameter `i`; empty for none.
     fn default_of(&self, head: &Seg, i: i32) -> StrSlice
-        contract i < head.param_count, `parameter ${i} of ${head.param_count}`
+        contract i < head.param_count
     {
         let mut start = head.defaults_start;
         let mut n = 0;

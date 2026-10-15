@@ -473,8 +473,8 @@ fn atn_node_pair_key(a: i32, b: i32) -> i64 {
 }
 
 fn atn_state_pr_key(state: i32, pr: i32) -> i64
-    contract pr + 2 < CFG_KEY_PR_SLOT, `ATN config precedence ${pr} exceeds packed-key slot`
-    contract state + 2 < CFG_KEY_STATE_SLOT, `ATN config state ${state} exceeds packed-key slot`
+    contract pr + 2 < CFG_KEY_PR_SLOT
+    contract state + 2 < CFG_KEY_STATE_SLOT
 {
     return (state + 2) as i64 * CFG_KEY_PR_SLOT as i64 + (pr + 2) as i64;
 }
@@ -523,7 +523,7 @@ impl CfgSet {
     }
 
     fn add(&mut self, arena: &mut CtxArena, state: i32, alt: i32, pr: i32, pctx: i32) -> [i32, bool]
-        contract alt + 1 < CFG_KEY_ALT_SLOT, `ATN config alt ${alt} exceeds packed-key slot`
+        contract alt + 1 < CFG_KEY_ALT_SLOT
     {
         let k = atn_state_pr_key(state, pr) * CFG_KEY_ALT_SLOT as i64 + (alt + 1) as i64;
         let found = self.index.get(k);
