@@ -45,10 +45,10 @@ struct SroaCandidate {
     local_name: String,
     /// The `StructLiteral` / `TupleLiteral` / `ArrayLiteral` the `Let` binds.
     literal: ExprId,
-    /// The `Let` binds a borrow of the literal, `&Lit` or `&mut Lit`: a fresh
+    /// The `Let` binds a reference to the literal, `&Lit` or `&mut Lit`: a fresh
     /// place only this local reaches. A use the slots cannot answer needs the
     /// reference, which no reconstructed literal is.
-    borrowed: bool,
+    referenced: bool,
     /// Per-field info: (`field_name`, `field_type_id`).
     fields: Vec<(String, TypeId)>,
     is_mut: bool,
@@ -203,9 +203,9 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         }
         if !uses.escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
-        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array && !c.borrowed {
+        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array && !c.referenced {
             // An array's reads are not the shape `reconstruct_aggregate` rebuilds,
-            // and a borrowed literal's escape needs the reference, which no
+            // and a referenced literal's escape needs the reference, which no
             // reconstructed literal is; either escape leaves it whole.
             decomposed.insert(c.local_index);
             reconstruct_set.insert(c.local_index);
@@ -409,7 +409,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
     let Some(bound) = value.as_expr() else {
         return;
     };
-    let (value_e, borrowed, is_mut) = match borrowed_projected_literal(body, bound) {
+    let (value_e, referenced, is_mut) = match referenced_projected_literal(body, bound) {
         Some((literal, is_mut_ref)) => (literal, true, is_mut_ref),
         None => (bound, false, is_mut),
     };
@@ -441,7 +441,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
                 local_index,
                 local_name: name,
                 literal: value_e,
-                borrowed,
+                referenced,
                 fields: field_info,
                 is_mut,
                 aggregate_type_id,
@@ -463,7 +463,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
                 local_index,
                 local_name: name,
                 literal: value_e,
-                borrowed,
+                referenced,
                 fields: field_info,
                 is_mut,
                 aggregate_type_id,
@@ -476,10 +476,10 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
 }
 
 /// `&Lit` / `&mut Lit` over a struct or tuple literal: the literal and whether
-/// the borrow is mutable, which is whether its fields may be written. What
+/// the reference is mutable, which is whether its fields may be written. What
 /// passing `&mut S { … }` to an inlined callee binds its parameter to.
-fn borrowed_projected_literal(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
-    let (literal, is_mut_ref) = borrow_of(body, expr)?;
+fn referenced_projected_literal(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
+    let (literal, is_mut_ref) = ref_of(body, expr)?;
     matches!(
         body.exprs[literal].kind,
         ExprKind::StructLiteral { .. } | ExprKind::TupleLiteral { .. }
@@ -487,8 +487,8 @@ fn borrowed_projected_literal(body: &Body, expr: ExprId) -> Option<(ExprId, bool
     .then_some((literal, is_mut_ref))
 }
 
-/// `&E` / `&mut E`: `E` and whether the borrow is mutable.
-fn borrow_of(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
+/// `&E` / `&mut E`: `E` and whether the reference is mutable.
+fn ref_of(body: &Body, expr: ExprId) -> Option<(ExprId, bool)> {
     let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind else {
         return None;
     };
@@ -593,14 +593,14 @@ fn ref_to_candidate_local(
     expr: ExprId,
     candidates: &IndexSet<u32>,
 ) -> Option<(u32, bool)> {
-    let (ie, is_mut) = borrow_of(body, expr)?;
+    let (ie, is_mut) = ref_of(body, expr)?;
     let ExprKind::Local { index, .. } = &body.exprs[ie].kind else {
         return None;
     };
     candidates.contains(index).then_some((*index, is_mut))
 }
 
-/// `let r = &array_candidate` — the borrow an inlined sequence read binds its
+/// `let r = &array_candidate` — the reference an inlined sequence read binds its
 /// parameter to (`core:simd`'s `lane(&lanes, k)`), mapped to the candidate it
 /// names. A local this binds more than once, or binds to anything else too,
 /// names more than one thing and is no alias.
@@ -633,7 +633,7 @@ fn collect_array_aliases(body: &Body, arrays: &IndexSet<u32>) -> IndexMap<u32, u
 }
 
 /// The array candidate one sequence read names and what it reads, or `None` for
-/// anything else. The array operand is the candidate itself, a borrow of it, or
+/// anything else. The array operand is the candidate itself, a reference to it, or
 /// an alias bound to one.
 fn array_read_of_candidate(
     body: &Body,
@@ -726,8 +726,8 @@ struct UseWalk<'a> {
 
 impl UseWalk<'_> {
     fn node(&self, body: &Body, node: NodeRef, out: &mut CandidateUses) {
-        // An alias binds `&candidate`, the borrow the read it stands for needs.
-        // That borrow is the read's, not an escape.
+        // An alias binds `&candidate`, the reference the read it stands for
+        // needs. That reference is the read's, not an escape.
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
             && self.aliases.contains_key(local_index)
@@ -855,7 +855,7 @@ struct SoftCtx<'a> {
     type_table: &'a TypeTable,
     /// Inside a block that ends unseen ([`Body::ends_unseen`]): the candidates
     /// [`candidates_pinned_under`] it. Nothing after the block runs, so a call
-    /// there may keep a borrow of any other candidate: the rebuilt literal it
+    /// there may keep a reference to any other candidate: the rebuilt literal it
     /// keeps and the scalars agree for as long as anything runs.
     unseen: Option<&'a IndexSet<u32>>,
 }
@@ -948,9 +948,9 @@ impl SoftCtx<'_> {
                 let callee_id = *func_id;
                 let arg_ops: Vec<(Operand, bool)> =
                     args.iter().map(|a| (a.expr, a.is_mut)).collect();
-                // Each borrow is rebuilt as its own literal, so a callee handed
-                // one candidate twice could tell the two apart (`ref_eq`).
-                let mut lent: IndexSet<u32> = IndexSet::default();
+                // Each reference is rebuilt as its own literal, so a callee
+                // handed one candidate twice could tell the two apart (`ref_eq`).
+                let mut handed: IndexSet<u32> = IndexSet::default();
                 // The rebuilt literal is taken where the `&` stands, while
                 // the callee reads its referent after every argument has run.
                 let mut written_by_later = vec![IndexSet::default(); arg_ops.len()];
@@ -967,7 +967,7 @@ impl SoftCtx<'_> {
                 }
                 for (i, (arg, is_mut)) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
-                    let lent_candidate = immut_ref_to_candidate(body, arg, self.candidates)
+                    let handed_candidate =immut_ref_to_candidate(body, arg, self.candidates)
                         .filter(|index| {
                             self.unseen.is_some_and(|pinned| !pinned.contains(index))
                                 || !callee_stores_param_at(callee_id, i, self.stores_lookup)
@@ -981,8 +981,8 @@ impl SoftCtx<'_> {
                             (self.unseen.is_some() && !is_mut && self.candidates.contains(&index))
                                 .then_some(index)
                         });
-                    if let Some(index) = lent_candidate {
-                        if !lent.insert(index) || written_by_later[i].contains(&index) {
+                    if let Some(index) = handed_candidate {
+                        if !handed.insert(index) || written_by_later[i].contains(&index) {
                             hard_escaped.insert(index);
                         }
                         continue;
@@ -995,9 +995,9 @@ impl SoftCtx<'_> {
     }
 }
 
-/// The candidates a borrow kept under `block` could tell from its rebuilt
+/// The candidates a reference kept under `block` could tell from its rebuilt
 /// literal: one something there writes a field of or assigns whole, or one
-/// borrowed there more than once, since each borrow is rebuilt as its own
+/// referenced there more than once, since each reference is rebuilt as its own
 /// literal and `ref_eq` tells two kept ones apart.
 fn candidates_pinned_under(
     body: &Body,
@@ -1005,11 +1005,11 @@ fn candidates_pinned_under(
     candidates: &IndexSet<u32>,
 ) -> IndexSet<u32> {
     let mut pinned = candidates_written_under(body, NodeRef::Block(block), candidates);
-    let mut borrowed = IndexSet::default();
+    let mut referenced = IndexSet::default();
     body.find_in_nodes_under(NodeRef::Block(block), |node| {
         if let NodeRef::Expr(e) = node
             && let Some((index, _)) = ref_to_candidate_local(body, e, candidates)
-            && !borrowed.insert(index)
+            && !referenced.insert(index)
         {
             pinned.insert(index);
         }
@@ -1069,7 +1069,7 @@ struct Rewrite<'a> {
     field_map: &'a IndexMap<(u32, u32), FieldSlot>,
     decomposed_lets: &'a IndexMap<u32, DecomposedLet>,
     reconstruct_info: &'a IndexMap<u32, ReconstructInfo>,
-    /// The array candidates, their borrow aliases, and the length slot each
+    /// The array candidates, their reference aliases, and the length slot each
     /// `array_len` read becomes.
     arrays: &'a IndexSet<u32>,
     aliases: &'a IndexMap<u32, u32>,
@@ -1101,7 +1101,7 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
     let old_stmts = engine.body.blocks[block].stmts.clone();
     let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old_stmts.len());
     for stmt in old_stmts {
-        // The borrow a decomposed array's reads went through: they read slots
+        // The reference a decomposed array's reads went through: they read slots
         // now, so the binding goes with the literal.
         if let StmtKind::Let { local_index, .. } = &engine.body.stmts[stmt].kind
             && ctx

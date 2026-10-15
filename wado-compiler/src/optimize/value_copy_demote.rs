@@ -763,7 +763,7 @@ impl ElementClean<'_, '_> {
                         // Receiver is the handle itself: `x.method()`.
                         let safe = match self.analyzer.callee_mutates_self(callee) {
                             Some(false) => true, // &self
-                            // A method handing back a mutable borrow lets the
+                            // A method handing back a `&mut` lets the
                             // caller write an element whatever its own body
                             // writes, so what it returns decides too.
                             Some(true) => {
@@ -1264,7 +1264,7 @@ impl ElementImmutable<'_, '_, '_> {
     }
 
     /// A self-derived value handed to an opaque (non-spine-builtin) call may
-    /// only flow through an immutable `&` borrow.
+    /// only flow through a `&` reference.
     fn visit_call_arg(&mut self, body: &Body, arg: ExprId) {
         if let ExprKind::Unary {
             op: NirUnaryOp::Ref,
@@ -1339,17 +1339,17 @@ fn is_self_derived(
         }
         ExprKind::Call { func_id, args, .. } => {
             // An element accessor yields an element of the spine, and any
-            // callee returning a borrow hands back one into what it was given
+            // callee returning a reference hands back one into what it was given
             // — how a container's `index_ref_mut` reaches an element before
             // `container_sroa` rewrites it to the builtin. Other array
             // builtins (`array_clone`, `array_new`) and every by-value return
             // (`$value_copy$T`) produce fresh storage.
-            let hands_back_borrow = element_accessors.contains(func_id)
+            let hands_back_ref = element_accessors.contains(func_id)
                 || matches!(
                     tt.get(body.exprs[id].type_id),
                     ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 );
-            hands_back_borrow
+            hands_back_ref
                 && args
                     .iter()
                     .any(|a| is_self_derived_op(body, a.expr, tainted, tt, element_accessors))

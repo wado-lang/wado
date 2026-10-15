@@ -1158,7 +1158,7 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 }
 
 /// Whether an argument reaches the callee as a compile-time constant — the
-/// shapes `const_folding` reads as one, plus the `&` a borrowed literal wears
+/// shapes `const_folding` reads as one, plus the `&` a referenced literal wears
 /// and the local it may be bound to first.
 fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
     match op {

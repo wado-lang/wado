@@ -1904,7 +1904,7 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
 }
 
 /// Locals some reachable node mentions, skeleton and value pool alike. A
-/// binding absent here is never read: an assignment target, a borrow and a
+/// binding absent here is never read: an assignment target, a reference and a
 /// capture all mention their local, so the census over-approximates and only
 /// ever keeps a statement alive.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {

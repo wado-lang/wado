@@ -213,7 +213,7 @@ fn collect_and_validate(
             info.form = func.body.as_ref().map_or(FieldForm::Value, |body| {
                 param_field_form(body, param.local_index)
             });
-            // A shared borrow of the field would make the call site pass
+            // A `&` of the field would make the call site pass
             // `&place.f`, and `sroa` mishandles that shape: it decomposes the
             // caller's struct, rewrites the argument, and leaves the reads the
             // inliner had already planted behind — dropping the binding while
@@ -780,7 +780,7 @@ impl FieldForm {
         }
     }
 
-    fn borrow_op(self) -> Option<NirUnaryOp> {
+    fn ref_op(self) -> Option<NirUnaryOp> {
         match self {
             Self::Value => None,
             Self::Shared => Some(NirUnaryOp::Ref),
@@ -792,11 +792,11 @@ impl FieldForm {
 /// The form in which the body holds param `idx`'s field — the scalar
 /// parameter's type, so `niri` reads the same signature codegen lowers.
 ///
-/// Only a borrow of the field *itself* counts, `&p.f` and not `&p.f.g`, and it
-/// must agree exactly with what [`borrow_of_scalarized`] absorbs: a form
-/// claiming a borrow the rewrite cannot find types the parameter as a reference
-/// the body still reads as a value. Hence the reachable tree, which
-/// [`param_field_use`] and [`rewrite_param_reads`] walk too — a borrow only one
+/// Only a reference to the field *itself* counts, `&p.f` and not `&p.f.g`, and
+/// it must agree exactly with what [`ref_of_scalarized`] absorbs: a form
+/// claiming a reference the rewrite cannot find types the parameter as a
+/// reference the body still reads as a value. Hence the reachable tree, which
+/// [`param_field_use`] and [`rewrite_param_reads`] walk too — a reference only one
 /// of the three sees is that disagreement.
 fn param_field_form(body: &Body, idx: u32) -> FieldForm {
     let mut form = FieldForm::Value;
@@ -805,11 +805,11 @@ fn param_field_form(body: &Body, idx: u32) -> FieldForm {
         let ExprKind::Unary { op, expr: inner } = &node.kind else {
             continue;
         };
-        let borrows_field = inner.as_expr().is_some_and(|e| {
+        let refs_field = inner.as_expr().is_some_and(|e| {
             matches!(&body.exprs[e].kind, ExprKind::FieldAccess { expr: recv, .. }
                 if is_local_operand(body, *recv, idx))
         });
-        if !borrows_field {
+        if !refs_field {
             continue;
         }
         match op {
@@ -853,7 +853,7 @@ fn check_expr(
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> FieldUse {
     match &body.exprs[id].kind {
-        // Bare local read reaching here (not consumed by a borrowing parent)
+        // Bare local read reaching here (not consumed by a `&` parent)
         // is an unwrapped use → invalid.
         ExprKind::Local { index, .. } if *index == idx => FieldUse::Invalid,
         ExprKind::FieldAccess {
@@ -966,7 +966,7 @@ fn forwarding_traps_call(
 }
 
 /// [`check_expr`] for an operand. Reaching the candidate local here means it was
-/// read whole without a borrowing parent consuming it — the same unwrapped use
+/// read whole without a `&` parent consuming it — the same unwrapped use
 /// the `Local` arm rejects, in the promoted form. Any other promoted value
 /// cannot reference it, so it constrains nothing.
 fn check_operand(
@@ -1078,7 +1078,7 @@ fn mint_scalarized_clones(
                 scalar_type_id: info.scalar_type_id,
                 field_index: info.field_index,
                 name: clone.params[*pi].name.clone(),
-                borrow: info.form.borrow_op(),
+                ref_op: info.form.ref_op(),
             });
             clone.params[*pi].type_id = info.scalar_type_id;
             if let Some(local) = clone.locals.get_mut(local_index as usize) {
@@ -1133,18 +1133,18 @@ struct Scalarized {
     scalar_type_id: TypeId,
     field_index: u32,
     name: String,
-    /// The borrow the param's type already carries, if any.
-    borrow: Option<NirUnaryOp>,
+    /// The reference the param's type already carries, if any.
+    ref_op: Option<NirUnaryOp>,
 }
 
-/// The affected param a `&`/`&mut` of a scalarized field access borrows, when
+/// The affected param a `&`/`&mut` of a scalarized field access refers to, when
 /// the param already holds that field by reference.
 ///
 /// `&mut self.repr` on a `repr: &mut Array<u8>` param is `&mut (&mut …)`. The
-/// extra borrow is not just noise: it makes the local address-taken, which
+/// extra reference is not just noise: it makes the local address-taken, which
 /// stops `copy_prop` folding it back into the call and leaves a temporary per
 /// call site where the field read used to sit inline.
-fn borrow_of_scalarized<'a>(
+fn ref_of_scalarized<'a>(
     body: &Body,
     id: ExprId,
     affected: &'a [Scalarized],
@@ -1166,7 +1166,7 @@ fn borrow_of_scalarized<'a>(
     };
     let (op, recv, field_index) = (*op, *recv, *field_index);
     affected.iter().find(|s| {
-        s.borrow == Some(op)
+        s.ref_op == Some(op)
             && s.field_index == field_index
             && is_local_operand(body, recv, s.local)
     })
@@ -1180,9 +1180,9 @@ fn borrow_of_scalarized<'a>(
 /// `x.repr` off a stale wrapper type, emitting a field the field does not carry.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
-        // `&mut self.f` where the param is already `&mut F`: the whole borrow
+        // `&mut self.f` where the param is already `&mut F`: the whole reference
         // becomes the param, not just its operand.
-        if let Some(s) = borrow_of_scalarized(body, id, affected) {
+        if let Some(s) = ref_of_scalarized(body, id, affected) {
             body.exprs[id].kind = ExprKind::Local {
                 index: s.local,
                 name: s.name.clone(),
@@ -1612,7 +1612,7 @@ fn rewrite_arg(
 }
 
 /// The field a call site hands over in place of the wrapper: `source.f`,
-/// re-borrowed when the scalar parameter takes it by reference.
+/// re-referenced when the scalar parameter takes it by reference.
 fn project_field(body: &mut Body, source: Operand, info: &SroaInfo, span: Span) -> ExprId {
     let field = body.exprs.push(ExprNode {
         kind: ExprKind::FieldAccess {
@@ -1623,7 +1623,7 @@ fn project_field(body: &mut Body, source: Operand, info: &SroaInfo, span: Span) 
         type_id: info.inner_type_id,
         span,
     });
-    let Some(op) = info.form.borrow_op() else {
+    let Some(op) = info.form.ref_op() else {
         return field;
     };
     body.exprs.push(ExprNode {
