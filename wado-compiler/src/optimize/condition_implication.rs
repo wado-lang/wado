@@ -1191,12 +1191,17 @@ fn structural_loop_guard(
         return false;
     };
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    let Some(inner) = negated_operand(engine, binds, gcond) else {
-        return false;
-    };
+    // What holds past the guard: the operand of `!(…)`, or a comparison
+    // `if var >= bound { break }` turned round.
+    let inner = negated_operand(engine, binds, gcond);
+    let cmp = break_guard_cmp(engine, binds, gcond);
     // A floor guard `var >= C` proves the lower half of a range check, and no
     // upper half.
-    if let Some(floor) = guard_floor(engine, binds, inner) {
+    let floor = match inner {
+        Some(inner) => guard_floor(engine, binds, inner),
+        None => cmp.and_then(cmp_floor),
+    };
+    if let Some(floor) = floor {
         let mut changed = false;
         for &s in stmts.iter().skip(guard_idx + 1) {
             if modifies_any_root(engine, NodeRef::Stmt(s), &[floor.var]) {
@@ -1212,7 +1217,7 @@ fn structural_loop_guard(
         }
         return changed;
     }
-    let Some((var, goff, bound, gop)) = parse_cmp(engine, binds, inner) else {
+    let Some((var, goff, bound, gop)) = cmp else {
         return false;
     };
     // Walk the statements after the guard in order, eliminating dominated checks
@@ -1579,23 +1584,57 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
 /// The floor a guard conjunct `c` puts under a variable itself, written either
 /// way round: `f <= var`, `f - 1 < var`, `var >= f` or `var > f - 1`.
 fn guard_floor(engine: &Engine, binds: &Binds, c: Operand) -> Option<Floor> {
-    let (var, lo) = match classify_conjunct(engine, binds, c) {
-        Some(Conjunct::AtLeast(v, 0, f)) => (v, f),
-        _ => {
-            let (v, 0, BoundKey::Const(c), op) = parse_cmp(engine, binds, c)? else {
-                return None;
-            };
-            match op {
-                NirBinaryOp::GtEq => (v, c),
-                NirBinaryOp::Gt => (v, c.checked_add(1)?),
-                _ => return None,
-            }
-        }
+    match classify_conjunct(engine, binds, c) {
+        Some(Conjunct::AtLeast(var, 0, lo)) => Some(Floor {
+            var,
+            lo,
+            alone: true,
+        }),
+        _ => cmp_floor(parse_cmp(engine, binds, c)?),
+    }
+}
+
+/// The floor a comparison `var >= C` or `var > C - 1` puts under `var`.
+fn cmp_floor((var, off, bound, op): (u32, i64, BoundKey, NirBinaryOp)) -> Option<Floor> {
+    let (0, BoundKey::Const(c)) = (off, bound) else {
+        return None;
+    };
+    let lo = match op {
+        NirBinaryOp::GtEq => c,
+        NirBinaryOp::Gt => c.checked_add(1)?,
+        _ => return None,
     };
     Some(Floor {
         var,
         lo,
         alone: true,
+    })
+}
+
+/// The comparison that holds past a guard `if cond { break }`: the operand of
+/// `cond = !(…)`, or `cond` turned round.
+pub(super) fn break_guard_cmp(
+    engine: &Engine,
+    binds: &Binds,
+    cond: Operand,
+) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
+    match negated_operand(engine, binds, cond) {
+        Some(inner) => parse_cmp(engine, binds, inner),
+        None => {
+            let (var, off, bound, op) = parse_cmp(engine, binds, cond)?;
+            Some((var, off, bound, negated_cmp_op(op)?))
+        }
+    }
+}
+
+/// The comparison that holds where `op` does not.
+fn negated_cmp_op(op: NirBinaryOp) -> Option<NirBinaryOp> {
+    Some(match op {
+        NirBinaryOp::GtEq => NirBinaryOp::Lt,
+        NirBinaryOp::Gt => NirBinaryOp::LtEq,
+        NirBinaryOp::Lt => NirBinaryOp::GtEq,
+        NirBinaryOp::LtEq => NirBinaryOp::Gt,
+        _ => return None,
     })
 }
 
