@@ -12,71 +12,71 @@ use sqlite_hl from "./grammars/SQLite.g4"
 
 test "highlight SELECT keyword" {
     let html = sqlite_hl::highlight("SELECT 1");
-    assert html.contains("<span class=\"keyword\">SELECT</span>"), `missing keyword SELECT in: ${html}`;
+    assert html.contains("<span class=\"keyword\">SELECT</span>"), "missing keyword SELECT";
 }
 
 test "highlight CREATE TABLE keywords" {
     let html = sqlite_hl::highlight("CREATE TABLE t (id INTEGER)");
-    assert html.contains("<span class=\"keyword\">CREATE</span>"), `missing keyword CREATE in: ${html}`;
-    assert html.contains("<span class=\"keyword\">TABLE</span>"), `missing keyword TABLE in: ${html}`;
+    assert html.contains("<span class=\"keyword\">CREATE</span>"), "missing keyword CREATE";
+    assert html.contains("<span class=\"keyword\">TABLE</span>"), "missing keyword TABLE";
 }
 
 test "highlight a keyword used as a name" {
     // `any_name : IDENTIFIER | keyword | ...`: `key` names a column here, and
     // the same word in `PRIMARY KEY` is a keyword.
     let html = sqlite_hl::highlight("SELECT key FROM t");
-    assert html.contains("<span class=\"variable\">key</span>"), `key is a name here: ${html}`;
-    assert html.contains("<span class=\"keyword\">SELECT</span>"), `missing keyword SELECT in: ${html}`;
+    assert html.contains("<span class=\"variable\">key</span>"), "key is a name here";
+    assert html.contains("<span class=\"keyword\">SELECT</span>"), "missing keyword SELECT";
     let decl = sqlite_hl::highlight("CREATE TABLE t (id INTEGER PRIMARY KEY)");
-    assert decl.contains("<span class=\"keyword\">KEY</span>"), `KEY is a keyword here: ${decl}`;
+    assert decl.contains("<span class=\"keyword\">KEY</span>"), "KEY is a keyword here";
 }
 
 test "highlight string literal" {
     let html = sqlite_hl::highlight("SELECT 'hello'");
-    assert html.contains("class=\"string\""), `missing string class in: ${html}`;
+    assert html.contains("class=\"string\""), "missing string class";
 }
 
 test "highlight number literal" {
     let html = sqlite_hl::highlight("SELECT 42");
-    assert html.contains("class=\"number\""), `missing number class in: ${html}`;
+    assert html.contains("class=\"number\""), "missing number class";
 }
 
 test "highlight comment" {
     let html = sqlite_hl::highlight("-- comment\nSELECT 1");
-    assert html.contains("class=\"comment\""), `missing comment class in: ${html}`;
+    assert html.contains("class=\"comment\""), "missing comment class";
 }
 
 test "highlight punctuation" {
     let html = sqlite_hl::highlight("SELECT (1, 2)");
-    assert html.contains("class=\"punctuation bracket\""), `missing bracket class in: ${html}`;
-    assert html.contains("class=\"punctuation delimiter\""), `missing delimiter class in: ${html}`;
+    assert html.contains("class=\"punctuation bracket\""), "missing bracket class";
+    assert html.contains("class=\"punctuation delimiter\""), "missing delimiter class";
 }
 
 test "highlight operator" {
     let html = sqlite_hl::highlight("SELECT 1 + 2");
-    assert html.contains("class=\"operator\""), `missing operator class in: ${html}`;
+    assert html.contains("class=\"operator\""), "missing operator class";
 }
 
 test "highlight with unicode string literal" {
     let html = sqlite_hl::highlight("SELECT '日本語'");
-    assert html.contains("日本語"), `missing unicode text in: ${html}`;
-    assert html.contains("class=\"string\""), `missing string class in: ${html}`;
-    assert html.contains("<span class=\"keyword\">SELECT</span>"), `missing keyword in: ${html}`;
+    assert html.contains("日本語"), "missing unicode text";
+    assert html.contains("class=\"string\""), "missing string class";
+    assert html.contains("<span class=\"keyword\">SELECT</span>");
 }
 
 test "highlight with emoji in string literal" {
     let html = sqlite_hl::highlight("SELECT '🎉🚀'");
-    assert html.contains("🎉🚀"), `missing emoji in: ${html}`;
-    assert html.contains("class=\"keyword\">SELECT</span>"), `missing keyword in: ${html}`;
+    assert html.contains("🎉🚀");
+    assert html.contains("class=\"keyword\">SELECT</span>");
 }
 
 test "highlight with mixed unicode and operators" {
     let html = sqlite_hl::highlight("SELECT '日本' || '語'");
-    assert html.contains("日本"), `missing unicode 1 in: ${html}`;
-    assert html.contains("語"), `missing unicode 2 in: ${html}`;
+    assert html.contains("日本");
+    assert html.contains("語");
 }
 
 test "highlight with HTML special chars in unicode context" {
     let html = sqlite_hl::highlight("SELECT '<日本語>'");
-    assert html.contains("&lt;日本語&gt;"), `missing escaped unicode in: ${html}`;
+    assert html.contains("&lt;日本語&gt;"), "missing escaped unicode";
 }

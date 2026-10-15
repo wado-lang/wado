@@ -39,13 +39,13 @@ test "the winner's actions replay, the losing candidate's stay silent" {
     with SaBase => &mut base do {
         // AB + EOF.
         let toks = sa::tokenize("ab");
-        assert toks.len() == 2, `expected 2 tokens, got ${toks.len()}`;
+        assert toks.len() == 2;
         let name = sa::token_kind_name(toks.kinds[0]);
-        assert name == "AB", `expected AB, got ${name}`;
+        assert name == "AB";
     };
     // `try_A` also matched 'a', so a base that ran every candidate's actions
     // would log `mark` twice.
-    assert joined(&base.log) == "mark@1,done@2:ab", `got ${joined(&base.log)}`;
+    assert joined(&base.log) == "mark@1,done@2:ab";
 }
 
 test "the shorter rule's action runs when it is the winner" {
@@ -53,11 +53,11 @@ test "the shorter rule's action runs when it is the winner" {
     with SaBase => &mut base do {
         // A + EOF.
         let toks = sa::tokenize("a");
-        assert toks.len() == 2, `expected 2 tokens, got ${toks.len()}`;
+        assert toks.len() == 2;
         let name = sa::token_kind_name(toks.kinds[0]);
-        assert name == "A", `expected A, got ${name}`;
+        assert name == "A";
     };
-    assert joined(&base.log) == "mark@1", `got ${joined(&base.log)}`;
+    assert joined(&base.log) == "mark@1";
 }
 
 test "actions replay once per token, in match order" {
@@ -65,9 +65,9 @@ test "actions replay once per token, in match order" {
     with SaBase => &mut base do {
         // AB + A + EOF.
         let toks = sa::tokenize("ab a");
-        assert toks.len() == 3, `expected 3 tokens, got ${toks.len()}`;
+        assert toks.len() == 3;
     };
-    assert joined(&base.log) == "mark@1,done@2:ab,mark@4", `got ${joined(&base.log)}`;
+    assert joined(&base.log) == "mark@1,done@2:ab,mark@4";
 }
 
 test "a predicate op shares the interface with the action ops" {
@@ -75,12 +75,12 @@ test "a predicate op shares the interface with the action ops" {
     with SaBase => &mut base do {
         let toks = sa::tokenize("xyz");
         let name = sa::token_kind_name(toks.kinds[0]);
-        assert name == "KW", `expected KW, got ${name}`;
+        assert name == "KW";
     };
     let mut off = SaBaseImpl { on: false, log: [] };
     with SaBase => &mut off do {
         let toks = sa::tokenize("xyz");
         let name = sa::token_kind_name(toks.kinds[0]);
-        assert name == "ID", `expected ID, got ${name}`;
+        assert name == "ID";
     };
 }

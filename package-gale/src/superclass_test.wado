@@ -127,42 +127,42 @@ test "call sites agreeing on literal arguments give the operation its signature"
         args: ["\"in\""],
     }, &ActionKind::Predicate);
     assert ops.len() == 1;
-    assert ops[0].params == ["String"], `params: ${ops[0].params}`;
+    assert ops[0].params == ["String"];
     assert super_ops_without_signature(&ops).is_empty(), "an inferred signature is not a refusal";
 }
 
 test "a Wado template argument is one String argument" {
     let calls = find_this_calls("this.log(`a,b`)");
-    assert calls.len() == 1, `calls: ${calls.len()}`;
-    assert calls[0].args == ["`a,b`"], `args: ${calls[0].args}`;
+    assert calls.len() == 1;
+    assert calls[0].args == ["`a,b`"];
 
     let mut ops: List<SuperOp> = [];
     add_super_op(&mut ops, &calls[0], &ActionKind::Action);
-    assert ops[0].params == ["String"], `params: ${ops[0].params}`;
+    assert ops[0].params == ["String"];
     assert super_ops_without_signature(&ops).is_empty(), "a template has an evident type";
 }
 
 test "a delimiter inside a template does not close the call" {
     let calls = find_this_calls("this.p(`)`) && this.q(1)");
-    assert calls.len() == 2, `calls: ${calls.len()}`;
-    assert calls[0].args == ["`)`"], `args: ${calls[0].args}`;
-    assert calls[1].name == "q", `second call: ${calls[1].name}`;
+    assert calls.len() == 2;
+    assert calls[0].args == ["`)`"];
+    assert calls[1].name == "q";
 }
 
 test "a template's interpolation holds its own commas and quotes" {
     let calls = find_this_calls("this.log(`${f(1, 2)},x`, 3)");
-    assert calls.len() == 1, `calls: ${calls.len()}`;
-    assert calls[0].args == ["`${f(1, 2)},x`", "3"], `args: ${calls[0].args}`;
+    assert calls.len() == 1;
+    assert calls[0].args == ["`${f(1, 2)},x`", "3"];
 }
 
 test "a call nested in an argument gets its own operation and rewrite" {
     let calls = find_this_calls("this.p(`${this.q()}`)");
-    assert calls.len() == 2, `calls: ${calls.len()}`;
-    assert calls[0].name == "q", `inner: ${calls[0].name}`;
-    assert calls[1].name == "p", `outer: ${calls[1].name}`;
+    assert calls.len() == 2;
+    assert calls[0].name == "q";
+    assert calls[1].name == "p";
 
     let out = rewrite_this_calls("this.p(`${this.q()}`)", "Base", SuperSite::ParserPredicate);
-    assert !body_names_this(&out), `a rewritten body keeps no receiver: ${out}`;
+    assert !body_names_this(&out), "a rewritten body keeps no receiver";
 }
 
 test "an integer argument types as i32 only inside the range" {
@@ -172,7 +172,7 @@ test "an integer argument types as i32 only inside the range" {
             name: "m",
             args: [*arg],
         }, &ActionKind::Action);
-        assert ops[0].params == ["i32"], `${*arg}: params ${ops[0].params}`;
+        assert ops[0].params == ["i32"];
     }
     // Splicing one of these into an `i32` parameter would not compile, so it has
     // no evident type either.
@@ -182,7 +182,7 @@ test "an integer argument types as i32 only inside the range" {
             name: "m",
             args: [*arg],
         }, &ActionKind::Action);
-        assert super_ops_without_signature(&ops) == ["m"], `${*arg} must be refused`;
+        assert super_ops_without_signature(&ops) == ["m"];
     }
 }
 
@@ -368,6 +368,6 @@ test "an operation's inferred arguments reach its interface and its call sites" 
     ];
     let mut w = CodeWriter::new();
     gen_parser_super_interface(&mut w, "TsBase", &ops);
-    assert w.to_string().contains("fn p(p: &Parser, a0: String) -> bool;"), `interface: ${w.to_string()}`;
+    assert w.to_string().contains("fn p(p: &Parser, a0: String) -> bool;");
     assert rewrite_this_calls("this.p(\"of\")", "TsBase", SuperSite::ParserPredicate) == "TsBase::p(p, \"of\")";
 }

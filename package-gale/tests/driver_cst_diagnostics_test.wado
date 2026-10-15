@@ -13,8 +13,8 @@ test "diagnostic carries a 1-based line and 0-based column" {
     let r = json::parse("{\"a\": }");
     assert !r.ok(), "expected a diagnostic";
     let d = &r.diagnostics[0];
-    assert d.line == 1, `line ${d.line}`;
-    assert d.col == 6, `col ${d.col}`;
+    assert d.line == 1;
+    assert d.col == 6;
 }
 
 test "diagnostic reports the active rule chain" {
@@ -22,21 +22,21 @@ test "diagnostic reports the active rule chain" {
     let d = &r.diagnostics[0];
     assert !d.rule_stack.is_empty(), "rule_stack empty";
     // Innermost rule first, start rule last.
-    assert d.rule_stack[d.rule_stack.len() - 1] == "json", `outer ${d.rule_stack[d.rule_stack.len() - 1]}`;
-    assert d.rule_stack[0] == "value", `inner ${d.rule_stack[0]}`;
+    assert d.rule_stack[d.rule_stack.len() - 1] == "json";
+    assert d.rule_stack[0] == "value";
 }
 
 test "diagnostic Display includes position and message" {
     let r = json::parse("{\"a\": }");
     let text = `${r.diagnostics[0]}`;
-    assert text.contains("at 1:6:"), text;
+    assert text.contains("at 1:6:");
 }
 
 test "line and column advance across newlines" {
     let r = json::parse("{\n  \"a\":\n}");
     let d = &r.diagnostics[0];
-    assert d.line == 3, `line ${d.line}`;
-    assert d.col == 0, `col ${d.col}`;
+    assert d.line == 3;
+    assert d.col == 0;
 }
 
 test "a valid parse reports no diagnostics" {
@@ -47,9 +47,9 @@ test "a valid parse reports no diagnostics" {
 test "a character no lexer rule matches is a LexError diagnostic" {
     let r = json::parse("{\"a\": 1 #}");
     let d = &r.diagnostics[0];
-    assert d.code matches { LexError }, `code ${d.code.name()}`;
-    assert d.message == "token recognition error at: '#'", d.message;
-    assert d.line == 1 && d.col == 8, `at ${d.line}:${d.col}`;
+    assert d.code matches { LexError };
+    assert d.message == "token recognition error at: '#'";
+    assert d.line == 1 && d.col == 8;
     let mut flagged = 0;
     for let mut i = 0; i < r.tokens.len(); i += 1 {
         if r.tokens.is_lex_error(i) {
@@ -62,10 +62,10 @@ test "a character no lexer rule matches is a LexError diagnostic" {
 test "a later lex error neither takes the error budget nor jumps the order" {
     let capped = json::parse("{\"a\" 1} #", 1);
     assert capped.diagnostics.len() == 1;
-    assert !capped.diagnostics[0].code matches { LexError }, `${capped.diagnostics[0]}`;
+    assert !capped.diagnostics[0].code matches { LexError };
 
     let r = json::parse("{\"a\" 1} #");
-    assert !r.diagnostics[0].code matches { LexError }, `${r.diagnostics[0]}`;
+    assert !r.diagnostics[0].code matches { LexError };
     let mut lex_errors = 0;
     for let mut i = 0; i < r.diagnostics.len(); i += 1 {
         if r.diagnostics[i].code matches { LexError } {
@@ -81,14 +81,14 @@ test "a later lex error neither takes the error budget nor jumps the order" {
 test "input ending inside a construct is an unterminated construct" {
     let r = json::parse("[1, 2");
     let d = &r.diagnostics[r.diagnostics.len() - 1];
-    assert d.code matches { UnterminatedConstruct }, `${d}`;
-    assert d.found == json::TK_EOF, `${d}`;
-    assert d.expected.len() == 1, `${d}`;
+    assert d.code matches { UnterminatedConstruct };
+    assert d.found == json::TK_EOF;
+    assert d.expected.len() == 1;
 }
 
 test "no viable alternative carries the NoViableAlternative code" {
     // `}` starts no `value` alternative, so the dispatch falls through to the
     // no-viable fallback.
     let r = json::parse("{\"a\": }");
-    assert r.diagnostics[0].code matches { NoViableAlternative }, `code ${r.diagnostics[0].code.name()}`;
+    assert r.diagnostics[0].code matches { NoViableAlternative };
 }

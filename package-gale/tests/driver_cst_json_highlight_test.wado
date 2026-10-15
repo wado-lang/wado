@@ -37,35 +37,35 @@ test "highlight produces HTML" {
 }
 test "highlight contains string span" {
     let html = json_hl::highlight("{\"key\": 42}");
-    assert html.contains("class=\"string\""), `missing string class in: ${html}`;
+    assert html.contains("class=\"string\""), "missing string class";
 }
 test "highlight contains number span" {
     let html = json_hl::highlight("{\"key\": 42}");
-    assert html.contains("class=\"number\""), `missing number class in: ${html}`;
+    assert html.contains("class=\"number\""), "missing number class";
 }
 test "highlight contains bracket span" {
     let html = json_hl::highlight("[1, 2]");
-    assert html.contains("class=\"punctuation bracket\""), `missing bracket class in: ${html}`;
+    assert html.contains("class=\"punctuation bracket\""), "missing bracket class";
 }
 test "highlight contains keyword span for true" {
     let html = json_hl::highlight("true");
-    assert html.contains("class=\"constant builtin\""), `missing constant.builtin class in: ${html}`;
+    assert html.contains("class=\"constant builtin\""), "missing constant.builtin class";
 }
 test "highlight applies a rule-context capture" {
     // `(arr (NUMBER) @constant)` — only the CST walk supplies the rule stack
     // this override reads, so a grammar carrying one keeps the walk.
     let html = json_hl::highlight("[1, 2]");
-    assert html.contains("class=\"constant\""), `missing rule-context class in: ${html}`;
-    assert !html.contains("class=\"number\""), `array number kept the default class: ${html}`;
+    assert html.contains("class=\"constant\""), "missing rule-context class";
+    assert !html.contains("class=\"number\""), "array number kept the default class";
 }
 test "highlight keeps the default capture outside the override's rule" {
     let html = json_hl::highlight("{\"key\": 42}");
-    assert html.contains("class=\"number\""), `missing number class in: ${html}`;
-    assert !html.contains("class=\"constant\""), `non-array number took the override: ${html}`;
+    assert html.contains("class=\"number\""), "missing number class";
+    assert !html.contains("class=\"constant\""), "non-array number took the override";
 }
 test "highlight escapes HTML entities" {
     let html = json_hl::highlight("\"<script>\"");
-    assert html.contains("&lt;"), `missing escaped < in: ${html}`;
+    assert html.contains("&lt;");
 }
 test "highlight broken input keeps default classes and text" {
     // A truncated object: the resilient parser yields a partial tree, so the
@@ -73,16 +73,16 @@ test "highlight broken input keeps default classes and text" {
     // stays highlighted and the text round-trips (spans stripped).
     let src = "{\"key\": 42, \"x\":";
     let html = json_hl::highlight(&src);
-    assert html.contains("class=\"number\""), `broken input lost number class: ${html}`;
+    assert html.contains("class=\"number\""), "broken input lost number class";
     let restored = plain_text(&html);
-    assert restored == src, `broken input not text-preserving: ${restored}`;
+    assert restored == src, "broken input not text-preserving";
 }
 test "highlight preserves multi-byte text" {
     // The escaper walks bytes and advances the character position on a UTF-8
     // lead byte only, so a wrong width would slice a character in two.
     let src = "{\"café\": 42, \"日本\": \"<🎉>\"}";
     let html = json_hl::highlight(&src);
-    assert html.contains("&lt;🎉&gt;"), `escape run lost a multi-byte character: ${html}`;
+    assert html.contains("&lt;🎉&gt;"), "escape run lost a multi-byte character";
     let restored = plain_text(&html);
-    assert restored == src, `multi-byte input not text-preserving: ${restored}`;
+    assert restored == src, "multi-byte input not text-preserving";
 }

@@ -13,36 +13,36 @@ use ap from "./grammars/wado_atn_pred.g4"
 test "a true predicate leaves the ATN-selected longer alt" {
     let r = ap::parse_takes("abcc");
     assert r.ok(), "clean parse";
-    assert r.output == "abc", `expected the longer alt to run: '${r.output}'`;
+    assert r.output == "abc", "expected the longer alt to run";
 }
 
 test "a false predicate on the only viable ATN alt leaves no alternative" {
     let r = ap::parse_rejects("abcc");
     assert !r.ok(), "the predicate drops the only viable alt";
-    assert r.output == "", `no alt action should run: '${r.output}'`;
+    assert r.output == "", "no alt action should run";
 }
 
 test "all-false predicates at an ATN decision fail no-viable" {
     let r = ap::parse_allfalse("abcc");
     assert !r.ok(), "no alternative is viable when every predicate is false";
-    assert r.output == "", `no alt action should run: '${r.output}'`;
+    assert r.output == "", "no alt action should run";
 }
 
 test "a scan excludes the gated alt from the ATN decision as the parse does" {
     let r = ap::parse_scanned("abckx");
     assert r.ok(), "clean parse";
-    assert r.output == "abcx", `expected the ungated alt under the first caller alt: '${r.output}'`;
+    assert r.output == "abcx", "expected the ungated alt under the first caller alt";
 }
 
 test "a context-dependent predicate is honoured at the ATN decision" {
     // `$mode` (seeded to 1 by @init) is in scope at the ATN dispatch, so the
     // condition is evaluated there — not silently dropped.
     let keep = ap::parse_ctxkeep("abcc");
-    assert keep.output == "abc", `expected the longer alt ($mode == 1): '${keep.output}'`;
+    assert keep.output == "abc", "expected the longer alt ($mode == 1)";
 }
 
 test "a false context-dependent predicate on the only viable ATN alt leaves no alternative" {
     let drop = ap::parse_ctxdrop("abcc");
     assert !drop.ok(), "$mode == 0 is false, which drops the only viable alt";
-    assert drop.output == "", `no alt action should run: '${drop.output}'`;
+    assert drop.output == "", "no alt action should run";
 }

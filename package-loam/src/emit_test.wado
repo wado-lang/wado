@@ -141,7 +141,7 @@ test "each input is uploaded after the checks that read the host's and the pass 
     let begun = body.find("backend.begin();").unwrap();
     assert body.find("refuse(input_mismatch(X,").unwrap() < begun < upload;
     let forward = body.find("pub fn forward").unwrap();
-    assert !body.substr_bytes(forward, body.len()).contains("upload(&weights"), body;
+    assert !body.substr_bytes(forward, body.len()).contains("upload(&weights");
 }
 
 test "the weights become the backend's for every pass where they are prepared" {
@@ -152,7 +152,7 @@ test "the weights become the backend's for every pass where they are prepared" {
     assert out.contains(
         "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_rhs(&self.W1),\n",
     );
-    assert out.contains("backend.matmul_rhs(&X, &weights.W1"), out;
+    assert out.contains("backend.matmul_rhs(&X, &weights.W1");
 }
 
 test "the forward pass checks each input against the graph before any kernel" {
@@ -391,7 +391,7 @@ test "a tensor named as a method of a generated struct is renamed" {
         Y = Add(X, new)
     }`;
     let out = generate(source, [rule("*", ["Embed"])]).unwrap();
-    assert out.contains("new_: kept.new_,"), out;
+    assert out.contains("new_: kept.new_,");
 }
 
 test "a weight a branch yields stays a tensor, though products read it too" {
@@ -405,7 +405,7 @@ test "a weight a branch yields stays a tensor, though products read it too" {
         rule("W", ["Col", "Col"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("W: backend.keep(&self.W),"), out;
+    assert out.contains("W: backend.keep(&self.W),");
 }
 
 test "a graph that returns its own input downloads it" {
@@ -766,7 +766,7 @@ g (float[4, 2, 8] X) => (float[4, 6] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains("pub W: Tensor<f32, [Merged<[Head, Dim]>, Out]>,");
-    assert out.contains("pub W: Bk::Rhs<Merged<[Head, Dim]>, Out>,"), out;
+    assert out.contains("pub W: Bk::Rhs<Merged<[Head, Dim]>, Out>,");
     assert out.contains("let Y = backend.matmul_rhs(&R, &weights.W, null);");
 }
 
@@ -1031,7 +1031,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
         rule("prepare", ["Unit"]),
     ]).unwrap();
 
-    assert out.contains("    pub prepare_: Tensor<f32, [Unit]>,\n"), out;
+    assert out.contains("    pub prepare_: Tensor<f32, [Unit]>,\n");
     assert out.contains("pub fn prepare<Bk: Backend>(&self");
 }
 
@@ -1415,9 +1415,9 @@ test "a weight read past a product is kept whole, one read only by products as t
         rule("V", ["Hidden", "Hidden"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("W: backend.keep(&self.W),"), out;
-    assert out.contains("V: backend.keep_rhs(&self.V),"), out;
-    assert out.contains("let Y = backend.matmul_rhs(&E, &weights.V, null);"), out;
+    assert out.contains("W: backend.keep(&self.W),");
+    assert out.contains("V: backend.keep_rhs(&self.V),");
+    assert out.contains("let Y = backend.matmul_rhs(&E, &weights.V, null);");
 }
 
 test "a Gemm's transposed weight is prepared transposed, so no pass transposes it" {
@@ -1429,10 +1429,10 @@ test "a Gemm's transposed weight is prepared transposed, so no pass transposes i
         rule("B", ["Out", "In"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("    pub B: Bk::Rhs<In, Out>,\n"), out;
-    assert out.contains("B: backend.keep_rhs_transposed(&self.B),"), out;
-    assert out.contains("let Y = backend.matmul_rhs(&A, &weights.B, null);"), out;
-    assert !out.contains("transpose2"), out;
+    assert out.contains("    pub B: Bk::Rhs<In, Out>,\n");
+    assert out.contains("B: backend.keep_rhs_transposed(&self.B),");
+    assert out.contains("let Y = backend.matmul_rhs(&A, &weights.B, null);");
+    assert !out.contains("transpose2");
 }
 
 test "a weight two products read in two orientations, or one beside a vector, stays a tensor" {
@@ -1446,8 +1446,8 @@ test "a weight two products read in two orientations, or one beside a vector, st
         rule("B", ["Out", "In"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("B: backend.keep(&self.B),"), out;
-    assert !out.contains("matmul_rhs"), out;
+    assert out.contains("B: backend.keep(&self.B),");
+    assert !out.contains("matmul_rhs");
 }
 
 test "a branch multiplies by a prepared weight as the graph around it holds it" {
@@ -1460,8 +1460,8 @@ test "a branch multiplies by a prepared weight as the graph around it holds it" 
         rule("W", ["Col", "Col"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("    pub W: Bk::Rhs<Col, Col>,\n"), out;
-    assert out.contains("backend.matmul_rhs(&X, &weights.W, null)"), out;
+    assert out.contains("    pub W: Bk::Rhs<Col, Col>,\n");
+    assert out.contains("backend.matmul_rhs(&X, &weights.W, null)");
 }
 test "Gather along any axis but the first lowers to gather, the axes spelled" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {

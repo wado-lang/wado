@@ -377,7 +377,7 @@ test "LR loop-entry prediction terminates (no naive left recursion)" {
         mk(0),
     ];
     let alt = adaptive_predict(&sim, d, &to_kinds(&toks), 0, eof);
-    assert alt >= 0 && alt < 3, `LR loop-entry prediction out of range: ${alt}`;
+    assert alt >= 0 && alt < 3, "LR loop-entry prediction out of range";
 }
 
 // P4.3: the loop-entry precedence predicate `{prec_i >= pr}?` prunes
@@ -400,11 +400,11 @@ test "precedence pruning gates LR loop-entry enter alts by min_prec" {
     let empty: List<i32> = [];
     // pr=0: the '+' alt (own_prec 1) is enabled and matches → enter it (1).
     let lo = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&toks), 0, eof, 0);
-    assert lo == 1, `min_prec 0 should enter the '+' alt (1), got ${lo}`;
+    assert lo == 1, "min_prec 0 should enter the '+' alt (1)";
     // pr=2: the '+' alt is pruned (1 < 2) and '*' does not match '+', so only
     // the exit edge survives → exit alt (2).
     let hi = atn_predict_with_stack(&sim, d, &empty, &to_kinds(&toks), 0, eof, 2);
-    assert hi == 2, `min_prec 2 should prune '+' and exit (2), got ${hi}`;
+    assert hi == 2, "min_prec 2 should prune '+' and exit (2)";
 }
 
 // A frame's restore precedence is the ATN's, not an LR-only table's: a

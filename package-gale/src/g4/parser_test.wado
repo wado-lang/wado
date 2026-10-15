@@ -207,7 +207,7 @@ EMOJI : [\\u{1F600}] ;";
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.ranges.len() == 1;
-        assert cc.ranges[0].start == '\u{1F600}', `start=${cc.ranges[0].start as i32}`;
+        assert cc.ranges[0].start == '\u{1F600}';
     } else {
         panic("expected CharClass");
     }
@@ -219,10 +219,10 @@ C : [\\u0041\\b\\f] ;";
     let g = parse(input).unwrap();
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
-        assert cc.ranges.len() == 3, `len=${cc.ranges.len()}`;
-        assert cc.ranges[0].start == 'A', `0=${cc.ranges[0].start as i32}`;
-        assert cc.ranges[1].start == '\u0008', `1=${cc.ranges[1].start as i32}`;
-        assert cc.ranges[2].start == '\u000C', `2=${cc.ranges[2].start as i32}`;
+        assert cc.ranges.len() == 3;
+        assert cc.ranges[0].start == 'A';
+        assert cc.ranges[1].start == '\u0008';
+        assert cc.ranges[2].start == '\u000C';
     } else {
         panic("expected CharClass");
     }
@@ -233,7 +233,7 @@ test "multi-char range endpoint is rejected, not silently truncated" {
     assert parse("grammar Test;\nR : 'a' .. '' ;") matches { Err(_) }, "empty range end should be rejected, not panic";
     // ANTLR4 error(144) names the start endpoint the same way.
     let start = parse("grammar Test;\nR : 'ab' .. 'c' ;");
-    assert start matches { Err(e) && e.message == "range endpoint must be a single character" && e.span.start == 18 }, `${start:?}`;
+    assert start matches { Err(e) && e.message == "range endpoint must be a single character" && e.span.start == 18 };
 }
 
 test "char class \\uXXXX range endpoint" {
@@ -243,7 +243,7 @@ R : [\\u0041-\\u005A] ;";
     let body = &g.lexer_rules[0].body;
     if let CharClass(cc) = body[0].elements[0] {
         assert cc.ranges.len() == 1;
-        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z', `${cc.ranges[0].start as i32}-${cc.ranges[0].end as i32}`;
+        assert cc.ranges[0].start == 'A' && cc.ranges[0].end == 'Z';
     } else {
         panic("expected CharClass");
     }
@@ -500,13 +500,13 @@ test "unsupported unicode property is rejected, not silently empty" {
 test "surrogate char range matches nothing instead of U+FFFD" {
     let cc = class_of("grammar Test;
 X : [\\uD800-\\uDFFF] ;");
-    assert cc.ranges.is_empty(), `expected no scalar ranges, got ${cc.ranges.len()}`;
+    assert cc.ranges.is_empty(), "expected no scalar ranges";
 }
 
 test "a char range with a surrogate endpoint keeps only its scalar part" {
     let cc = class_of("grammar Test;
 X : [\\uD700-\\uDFFF] ;");
-    assert cc.ranges.len() == 1, `expected 1 range, got ${cc.ranges.len()}`;
+    assert cc.ranges.len() == 1;
     assert cc.ranges[0].start == '\uD700' && cc.ranges[0].end == '\uD7FF';
     assert !class_admits(&cc, '\u{FFFD}'), "a surrogate endpoint must not become U+FFFD";
 }
@@ -515,7 +515,7 @@ test "a scalar-endpoint range spanning the surrogate block stays one range" {
     // `char` cannot hold a surrogate, so the split would be cosmetic.
     let cc = class_of("grammar Test;
 X : [\\u0100-\\uFFFC] ;");
-    assert cc.ranges.len() == 1, `expected 1 range, got ${cc.ranges.len()}`;
+    assert cc.ranges.len() == 1;
     assert cc.ranges[0].start == '\u0100' && cc.ranges[0].end == '\uFFFC';
 }
 
@@ -523,7 +523,7 @@ test "surrogate range endpoints in the '..' form match nothing" {
     let g = parse("grammar Test;
 X : '\\uD800' .. '\\uDBFF' ;").unwrap();
     if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
-        assert cc.ranges.is_empty(), `expected no scalar ranges, got ${cc.ranges.len()}`;
+        assert cc.ranges.is_empty(), "expected no scalar ranges";
     } else {
         panic("expected a surrogate-only range to collapse to an empty CharClass");
     }
@@ -578,15 +578,15 @@ test "spaced dots in a lexer rule are two wildcards, not a range" {
 A : 'a' . . 'b' ;
 B : . . 'x' ;").unwrap();
     let a = &g.lexer_rules[0].body[0].elements;
-    assert a.len() == 4 && a[1] matches { AnyChar } && a[2] matches { AnyChar }, `${a:?}`;
+    assert a.len() == 4 && a[1] matches { AnyChar } && a[2] matches { AnyChar };
     let b = &g.lexer_rules[1].body[0].elements;
-    assert b.len() == 3 && b[0] matches { AnyChar } && b[1] matches { AnyChar }, `${b:?}`;
+    assert b.len() == 3 && b[0] matches { AnyChar } && b[1] matches { AnyChar };
 }
 
 test "a token range in a parser rule is rejected" {
     // ANTLR4 error(181): token ranges not allowed in parser.
     let res = parse("grammar T;\nr : 'a'..'z' ;");
-    assert res matches { Err(e) && e.message == "got \"..\"" }, `${res:?}`;
+    assert res matches { Err(e) && e.message == "got \"..\"" };
 }
 
 test "grammar with import single" {
@@ -682,8 +682,8 @@ test "a channel declared twice is one channel" {
 channels { X, X, Y }
 A : 'a' -> channel(Y) ;";
     let g = parse(input).unwrap();
-    assert g.channels.len() == 2, `${g.channels:?}`;
-    assert g.lexer_rules[0].channel == 3, `A channel ${g.lexer_rules[0].channel}`;
+    assert g.channels.len() == 2;
+    assert g.lexer_rules[0].channel == 3;
 }
 
 test "lexer rule with undeclared channel name is rejected" {
@@ -702,10 +702,10 @@ DOC : '///' -> channel(DOCS) ;";
     assert g.lexer_rules.len() == 2;
     for let r of &g.lexer_rules {
         if r.name == "COMMENT" {
-            assert r.channel == 2, `COMMENT channel ${r.channel}`;
+            assert r.channel == 2;
         }
         if r.name == "DOC" {
-            assert r.channel == 3, `DOC channel ${r.channel}`;
+            assert r.channel == 3;
         }
     }
 }
@@ -810,12 +810,12 @@ test "prequel args / returns / locals retained as AttrDecls" {
 expr[int _p, String name] returns [int v, List<String> ignored] locals [int i] : ID ;";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.args.len() == 2, `args: ${r.args.len()}`;
-    assert r.args[0].type_text == "int" && r.args[0].name == "_p", `arg0: ${r.args[0].type_text}/${r.args[0].name}`;
-    assert r.args[1].type_text == "String" && r.args[1].name == "name", `arg1: ${r.args[1].type_text}/${r.args[1].name}`;
-    assert r.returns_decls.len() == 2, `returns: ${r.returns_decls.len()}`;
+    assert r.args.len() == 2;
+    assert r.args[0].type_text == "int" && r.args[0].name == "_p";
+    assert r.args[1].type_text == "String" && r.args[1].name == "name";
+    assert r.returns_decls.len() == 2;
     assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "v";
-    assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored", `ret1: ${r.returns_decls[1].type_text}/${r.returns_decls[1].name}`;
+    assert r.returns_decls[1].type_text == "List<String>" && r.returns_decls[1].name == "ignored";
     assert r.locals_decls.len() == 1 && r.locals_decls[0].name == "i";
     assert r.throws.len() == 0;
 }
@@ -825,11 +825,11 @@ test "prequel attr decls with initializers" {
 r returns [int i = 0, String s = \"x\"] locals [int n = f(1, 2)] : ID ;";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.returns_decls.len() == 2, `returns: ${r.returns_decls.len()}`;
-    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i", `ret0: ${r.returns_decls[0].type_text}/${r.returns_decls[0].name}`;
-    assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s", `ret1: ${r.returns_decls[1].type_text}/${r.returns_decls[1].name}`;
-    assert r.locals_decls.len() == 1, `locals: ${r.locals_decls.len()}`;
-    assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n", `loc0: ${r.locals_decls[0].type_text}/${r.locals_decls[0].name}`;
+    assert r.returns_decls.len() == 2;
+    assert r.returns_decls[0].type_text == "int" && r.returns_decls[0].name == "i";
+    assert r.returns_decls[1].type_text == "String" && r.returns_decls[1].name == "s";
+    assert r.locals_decls.len() == 1;
+    assert r.locals_decls[0].type_text == "int" && r.locals_decls[0].name == "n";
 }
 
 test "action language from string-literal option value" {
@@ -847,8 +847,8 @@ test "prequel throws list retained" {
 expr throws E1, pkg.E2 : ID ;";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.throws.len() == 2, `throws: ${r.throws.len()}`;
-    assert r.throws[0] == "E1" && r.throws[1] == "pkg.E2", `throws: ${r.throws[0]}, ${r.throws[1]}`;
+    assert r.throws.len() == 2;
+    assert r.throws[0] == "E1" && r.throws[1] == "pkg.E2";
 }
 
 test "prequel @init / @after bodies retained" {
@@ -859,7 +859,7 @@ expr @init { int x = 0; } @after { print(x); } : ID ;";
     assert r.init_action matches { Some(_) }, "init missing";
     assert r.after_action matches { Some(_) }, "after missing";
     if let Some(a) = &r.init_action {
-        assert a.text == " int x = 0; ", `init body: '${a.text}'`;
+        assert a.text == " int x = 0; ";
     }
 }
 
@@ -868,9 +868,9 @@ test "catch / finally clauses retained on the rule" {
 expr : ID ; catch [E1 e] { h1(e); } catch [E2 e] { h2(e); } finally { done(); }";
     let g = parse(input).unwrap();
     let r = &g.parser_rules[0];
-    assert r.catches.len() == 2, `catches: ${r.catches.len()}`;
-    assert r.catches[0].decl_text == "E1 e", `decl0: '${r.catches[0].decl_text}'`;
-    assert r.catches[0].body.text == " h1(e); ", `body0: '${r.catches[0].body.text}'`;
+    assert r.catches.len() == 2;
+    assert r.catches[0].decl_text == "E1 e";
+    assert r.catches[0].body.text == " h1(e); ";
     assert r.finally_action matches { Some(_) }, "finally missing";
 }
 
@@ -883,7 +883,7 @@ a[int i] : ID ;";
     if let RuleRef(rr) = &s.alternatives[0].elements[0] {
         assert rr.arg_action matches { Some(_) }, "arg_action missing";
         if let Some(a) = &rr.arg_action {
-            assert a.text == "$i", `arg: '${a.text}'`;
+            assert a.text == "$i";
         }
     } else {
         panic("expected a rule ref");
@@ -895,13 +895,13 @@ test "alternative actions retained in sidecar with positions" {
 r : A {act1();} B {p()}? C ;";
     let g = parse(input).unwrap();
     let alt = &g.parser_rules[0].alternatives[0];
-    assert alt.elements.len() == 3, `elements: ${alt.elements.len()}`;
-    assert alt.actions.len() == 2, `actions: ${alt.actions.len()}`;
+    assert alt.elements.len() == 3;
+    assert alt.actions.len() == 2;
     assert alt.actions[0].kind matches { Action }, "act1 kind";
-    assert alt.actions[0].before_index == 1, `act1 pos: ${alt.actions[0].before_index}`;
-    assert alt.actions[0].source.text == "act1();", `act1 body: '${alt.actions[0].source.text}'`;
+    assert alt.actions[0].before_index == 1;
+    assert alt.actions[0].source.text == "act1();";
     assert alt.actions[1].kind matches { Predicate }, "p kind";
-    assert alt.actions[1].before_index == 2, `p pos: ${alt.actions[1].before_index}`;
+    assert alt.actions[1].before_index == 2;
 }
 
 test "alt-initial predicate is before_index 0" {
@@ -912,7 +912,7 @@ r : {isOk()}? A | B ;";
     assert alt.elements.len() == 1;
     assert alt.actions.len() == 1;
     assert alt.actions[0].kind matches { Predicate };
-    assert alt.actions[0].before_index == 0, `pos: ${alt.actions[0].before_index}`;
+    assert alt.actions[0].before_index == 0;
 }
 
 test "lexer alternative actions retained in sidecar" {
@@ -920,10 +920,10 @@ test "lexer alternative actions retained in sidecar" {
 TOK : 'a' {more();} 'b' ;";
     let g = parse(input).unwrap();
     let alt = &g.lexer_rules[0].body[0];
-    assert alt.elements.len() == 2, `elements: ${alt.elements.len()}`;
-    assert alt.actions.len() == 1, `actions: ${alt.actions.len()}`;
-    assert alt.actions[0].before_index == 1, `pos: ${alt.actions[0].before_index}`;
-    assert alt.actions[0].source.text == "more();", `body: '${alt.actions[0].source.text}'`;
+    assert alt.elements.len() == 2;
+    assert alt.actions.len() == 1;
+    assert alt.actions[0].before_index == 1;
+    assert alt.actions[0].source.text == "more();";
 }
 
 test "a lexer predicate's option block is skipped, the predicate kept" {
@@ -933,9 +933,9 @@ test "a lexer predicate's option block is skipped, the predicate kept" {
 A : 'a' {true}?<fail={\"a<b>\"}> ;
 B : 'b' <assoc=right> 'c' ;").unwrap();
     let a = &g.lexer_rules[0].body[0];
-    assert a.elements.len() == 1 && a.actions.len() == 1, `${a:?}`;
-    assert a.actions[0].kind matches { Predicate } && a.actions[0].source.text == "true", `${a.actions[0]:?}`;
-    assert g.lexer_rules[1].body[0].elements.len() == 2, `${g.lexer_rules[1].body[0]:?}`;
+    assert a.elements.len() == 1 && a.actions.len() == 1;
+    assert a.actions[0].kind matches { Predicate } && a.actions[0].source.text == "true";
+    assert g.lexer_rules[1].body[0].elements.len() == 2;
 }
 
 test "named action bodies retained" {
@@ -945,7 +945,7 @@ start : 'a' ;";
     let g = parse(input).unwrap();
     assert g.named_actions.len() == 1;
     assert g.named_actions[0].name == "members";
-    assert g.named_actions[0].body.text == " int count = 0; ", `body: '${g.named_actions[0].body.text}'`;
+    assert g.named_actions[0].body.text == " int count = 0; ";
 }
 
 test "action language defaults to Java" {
@@ -1040,7 +1040,7 @@ options {
 }
 rule : ID ;";
     let g = parse(input).unwrap();
-    assert g.options.len() == 3, `got ${g.options.len()} options`;
+    assert g.options.len() == 3;
     assert g.options[0].name == "caseInsensitive";
     assert_option_ident(&g.options[0], "true");
     assert g.options[1].name == "language";
@@ -1117,7 +1117,7 @@ rule : ID ;";
     let g = parse(input).unwrap();
     assert g.options.len() == 1;
     if let Action(body) = &g.options[0].value {
-        assert body.text == "some code;", `got action body: '${body.text}'`;
+        assert body.text == "some code;", "got action body";
     } else {
         panic("expected Action option value");
     }
@@ -1130,7 +1130,7 @@ test "grammar level named actions recorded" {
 @parser::members { /* parser-specific */ }
 rule : ID ;";
     let g = parse(input).unwrap();
-    assert g.named_actions.len() == 3, `got ${g.named_actions.len()} actions`;
+    assert g.named_actions.len() == 3;
     assert g.named_actions[0].name == "header";
     if let Some(_) = g.named_actions[0].scope {
         panic("@header should have no scope");
@@ -1321,7 +1321,7 @@ B : 'b' -> channel(DEFAULT_TOKEN_CHANNEL) ;";
     assert g.lexer_rules.len() == 2;
     assert g.lexer_rules[0].channel == 1;
     assert g.lexer_rules[0].skip == false;
-    assert g.lexer_rules[1].channel == 0, `B channel ${g.lexer_rules[1].channel}`;
+    assert g.lexer_rules[1].channel == 0;
 }
 
 test "lexer command type override" {
@@ -1497,7 +1497,7 @@ test "an action or predicate inside a `~` set is rejected" {
         "lexer grammar Test;\nL : ~( {true}? 'a' | 'b' ) ;", "lexer grammar Test;\nL : ~( {int x = 1;} 'a' | 'b' ) ;",
     ] as List<String> {
         let message = parse(&src).unwrap_err().message;
-        assert message.contains("an action or predicate inside a `~` set"), `${src}: ${message}`;
+        assert message.contains("an action or predicate inside a `~` set");
     }
 }
 
@@ -1524,7 +1524,7 @@ test "a malformed lexer command argument is rejected" {
     for let cmd of &cases {
         let input = `lexer grammar Test;\nA : 'a' -> ${*cmd} ;`;
         let result = parse(input);
-        assert result matches { Err(_) }, `expected ${*cmd} to be rejected`;
+        assert result matches { Err(_) };
     }
 }
 
@@ -1538,10 +1538,10 @@ A : 'a' -> ;";
     } else {
         panic("expected `-> ;` to be rejected");
     };
-    assert !err.message.contains("unknown lexer command"), err.message;
+    assert !err.message.contains("unknown lexer command");
     // The `;` is what was found; the commands are what was wanted.
-    assert err.message == `got ";"`, err.message;
-    assert err.expected.contains(&"pushMode"), `${err.expected:?}`;
+    assert err.message == `got ";"`;
+    assert err.expected.contains(&"pushMode");
 }
 
 test "unknown lexer command in combined grammar is rejected" {
@@ -1670,7 +1670,7 @@ test "a missing structural token names what was wanted" {
     ];
     for let [src, wanted] of cases {
         let res = parse(src);
-        assert res matches { Err(e) && e.expected.len() == 1 && e.expected[0] == wanted }, `${src}: ${res:?}`;
+        assert res matches { Err(e) && e.expected.len() == 1 && e.expected[0] == wanted };
     }
 }
 
@@ -1683,14 +1683,14 @@ test "a token the lexer could not form is reported by its problem" {
     ];
     for let [src, message] of cases {
         let res = parse(src);
-        assert res matches { Err(e) && e.message == message }, `${src}: ${res:?}`;
+        assert res matches { Err(e) && e.message == message };
     }
 }
 
 test "a prequel keyword cannot name a rule" {
     // ANTLR4 lexes `tokens {` as one keyword, so `tokens :` is a syntax error.
     let res = parse("grammar T;\ntokens : A ;\nA : 'a' ;");
-    assert res matches { Err(e) && e.message == "expected `{` after `tokens`" }, `${res:?}`;
+    assert res matches { Err(e) && e.message == "expected `{` after `tokens`" };
 }
 
 test "block label single-value" {
@@ -1816,7 +1816,7 @@ test "a bare angle option names no value and is not kept" {
     let g = parse("grammar Test;
 r : ID<Foo, assoc=right> ;").unwrap();
     if let TokenRef(t) = &g.parser_rules[0].alternatives[0].elements[0] {
-        assert t.options.len() == 1 && t.options[0].name == "assoc", `${t.options:?}`;
+        assert t.options.len() == 1 && t.options[0].name == "assoc";
     } else {
         panic("expected TokenRef");
     }
@@ -2127,7 +2127,7 @@ CMT : '//' .*? '\\n' CMT?? ;";
 
 fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Ident(v) = &opt.value {
-        assert expected == *v, `option '${opt.name}': expected Ident('${expected}'), got Ident('${*v}')`;
+        assert expected == *v;
     } else {
         panic(`option '${opt.name}': expected Ident, got other`);
     }
@@ -2135,7 +2135,7 @@ fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
 
 fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Str(v) = &opt.value {
-        assert expected == *v, `option '${opt.name}': expected Str('${expected}'), got Str('${*v}')`;
+        assert expected == *v;
     } else {
         panic(`option '${opt.name}': expected Str, got other`);
     }
@@ -2143,7 +2143,7 @@ fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
 
 fn assert_option_int(opt: &GrammarOption, expected: i64) {
     if let Int(n) = &opt.value {
-        assert *n == expected, `option '${opt.name}': expected Int(${expected}), got Int(${*n})`;
+        assert *n == expected;
     } else {
         panic(`option '${opt.name}': expected Int, got other`);
     }
@@ -2151,9 +2151,9 @@ fn assert_option_int(opt: &GrammarOption, expected: i64) {
 
 fn assert_option_qualified(opt: &GrammarOption, expected: List<String>) {
     if let Qualified(parts) = &opt.value {
-        assert parts.len() == expected.len(), `option '${opt.name}': expected ${expected.len()} parts, got ${parts.len()}`;
+        assert parts.len() == expected.len();
         for let mut i = 0; i < parts.len(); i += 1 {
-            assert parts[i] == expected[i], `option '${opt.name}': part ${i}: expected '${expected[i]}', got '${parts[i]}'`;
+            assert parts[i] == expected[i];
         }
     } else {
         panic(`option '${opt.name}': expected Qualified, got other`);
@@ -2433,7 +2433,7 @@ X : [\\p{sc=Zzzz}] ;");
 test "an unknown enumerated property or value is still rejected" {
     let bad: List<String> = ["grammar Test;\nX : [\\p{lb=Bogus}] ;", "grammar Test;\nX : [\\p{Bogus_Property=AL}] ;"];
     for let g of &bad {
-        assert parse(*g) matches { Err(_) }, `expected a parse error for ${*g}`;
+        assert parse(*g) matches { Err(_) };
     }
 }
 
@@ -2446,7 +2446,7 @@ test "a property escape cannot be a bound of a character range" {
     ];
     for let src of &bad {
         let result = parse(*src);
-        assert result matches { Err(_) }, `expected a rejection for ${*src}`;
+        assert result matches { Err(_) };
     }
 }
 
@@ -2461,7 +2461,7 @@ test "a label on a block ANTLR4 calls no set is rejected" {
         "grammar Test;\ns : A ;\nr : x+=(A|B { }) ;",
     ];
     for let src of &bad {
-        assert parse(*src) matches { Err(_) }, `expected a rejection for ${*src}`;
+        assert parse(*src) matches { Err(_) };
     }
 }
 
@@ -2472,7 +2472,7 @@ test "a label on a set, and on an atom, is still accepted" {
         "grammar Test;\nr : x+=A* ;", "grammar Test;\nr : (x=A B)* ;", "grammar Test;\nr : x+=~A ;",
     ];
     for let src of &good {
-        assert parse(*src) matches { Ok(_) }, `expected acceptance for ${*src}`;
+        assert parse(*src) matches { Ok(_) };
     }
 }
 
@@ -2483,9 +2483,9 @@ fn assert_escape_errors(cases: &List<[String, String]>) {
         let src = cases[i].0;
         let esc = cases[i].1;
         let err = parse(src).unwrap_err();
-        assert err.message == `invalid escape sequence ${esc}`, err.message;
+        assert err.message == `invalid escape sequence ${esc}`;
         let at = src.as_str_slice().slice(err.span.start, err.span.end).to_string();
-        assert at == esc, `${err.span.start}..${err.span.end} is "${at}", not "${esc}"`;
+        assert at == esc;
     }
 }
 
@@ -2520,7 +2520,7 @@ test "a char set rejects a malformed unicode escape" {
 test "the escapes a char set does define still read as themselves" {
     let cc = class_of("grammar Test;\nX : [\\-\\]\\\\\\n\\u0041\\u{1F600}] ;");
     for let c of &['-', ']', '\\', '\n', 'A', '\u{1F600}'] {
-        assert class_admits(&cc, *c), `the set must admit ${*c}`;
+        assert class_admits(&cc, *c);
     }
 }
 

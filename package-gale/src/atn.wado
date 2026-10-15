@@ -423,8 +423,9 @@ fn build_alternation(
     rule_index: &HashMap<String, i32>,
     site: i32,
     operand_precs: &List<i32> = &[],
-) -> [i32, i32] {
-    assert operand_precs.is_empty() || operand_precs.len() == alts.len(), "one operand precedence per alternative";
+) -> [i32, i32]
+    contract operand_precs.is_empty() || operand_precs.len() == alts.len(), "one operand precedence per alternative"
+{
     let start = b.new_state(ATN_BLOCK_START, rule);
     let end = b.new_state(ATN_BLOCK_END, rule);
     if alts.len() > 1 {
@@ -604,18 +605,20 @@ fn build_repeat(
     };
 }
 
-/// Asserts `v` fits `u8` (0..=255) so an overflow fails loudly at generation
+/// Requires `v` to fit `u8` (0..=255) so an overflow fails loudly at generation
 /// time instead of truncating silently. Only the tiny state/transition kind
 /// enums use this width.
-fn push_u8(bytes: &mut ByteList, v: i32) {
-    assert 0 <= v <= 255, `ATN blob: value ${v} exceeds u8 range`;
+fn push_u8(bytes: &mut ByteList, v: i32)
+    contract 0 <= v <= 255
+{
     bytes.push(v as u8);
 }
 
-/// Little-endian; same overflow assert as `push_u8`, widened to `u16`
+/// Little-endian; same overflow contract as `push_u8`, widened to `u16`
 /// (0..=65535). Every count and state/rule/token index uses this width.
-fn push_u16(bytes: &mut ByteList, v: i32) {
-    assert 0 <= v <= 65535, `ATN blob: value ${v} exceeds u16 range`;
+fn push_u16(bytes: &mut ByteList, v: i32)
+    contract 0 <= v <= 65535
+{
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
 }
@@ -626,8 +629,9 @@ fn push_u16(bytes: &mut ByteList, v: i32) {
 /// same fields for a Unicode scalar range (`label` = low, `follow` = high,
 /// up to `CHAR_MAX` = `0x10FFFF`) — one shared decoder, so the field must
 /// fit its widest use.
-fn push_u24(bytes: &mut ByteList, v: i32) {
-    assert 0 <= v <= 16777215, `ATN blob: value ${v} exceeds u24 range`;
+fn push_u24(bytes: &mut ByteList, v: i32)
+    contract 0 <= v <= 16777215
+{
     bytes.push((v & 0xff) as u8);
     bytes.push((v >> 8 & 0xff) as u8);
     bytes.push((v >> 16 & 0xff) as u8);
@@ -635,17 +639,19 @@ fn push_u24(bytes: &mut ByteList, v: i32) {
 
 /// Biases `target` by +1 so the sentinel -1 (unset) survives the unsigned
 /// `u16` encoding; `atn_decode` reverses it with an unconditional `- 1`, no
-/// branch needed. Only the lower bound is asserted — `push_u16` itself
+/// branch needed. Only the lower bound is required — `push_u16` itself
 /// catches `v + 1` overflowing `u16`.
-fn push_u16_biased(bytes: &mut ByteList, v: i32) {
-    assert v >= -1, `ATN blob: biased value ${v} below sentinel -1`;
+fn push_u16_biased(bytes: &mut ByteList, v: i32)
+    contract v >= -1
+{
     push_u16(bytes, v + 1);
 }
 
 /// `label`/`follow` counterpart to `push_u16_biased`; `push_u24` catches
 /// `v + 1` overflow.
-fn push_u24_biased(bytes: &mut ByteList, v: i32) {
-    assert v >= -1, `ATN blob: biased value ${v} below sentinel -1`;
+fn push_u24_biased(bytes: &mut ByteList, v: i32)
+    contract v >= -1
+{
     push_u24(bytes, v + 1);
 }
 

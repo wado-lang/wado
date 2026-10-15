@@ -261,7 +261,7 @@ marked call would spell `unchecked s.as_bytes()[i]` at every byte scan.
 build. A build under `-f contract-checks` still checks a marked call. The word
 was kept despite that because it continues the `_unchecked` names it replaces.
 
-### A trait method's contract belongs to the trait
+### Who states a trait method's contract
 
 A trait method's clauses are written on the trait's declaration, a signature
 without a body included, and bind every impl, as its default arguments do. An

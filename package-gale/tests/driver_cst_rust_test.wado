@@ -26,61 +26,61 @@ fn rlex_prs<S: AsStrSlice>(input: S) -> rust::ParseResult {
 
 test "tokenize fn declaration" {
     let tokens = rlex_tok("fn main() {}");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_FN", `expected KW_FN, got ${first}`;
+    assert first == "KW_FN", "expected KW_FN";
 }
 
 test "tokenize struct" {
     let tokens = rlex_tok("struct Point { x: i32, y: i32 }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 8, "expected at least 8 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_STRUCT", `expected KW_STRUCT, got ${first}`;
+    assert first == "KW_STRUCT", "expected KW_STRUCT";
 }
 
 test "tokenize enum" {
     let tokens = rlex_tok("enum Color { Red, Green, Blue }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 8, "expected at least 8 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_ENUM", `expected KW_ENUM, got ${first}`;
+    assert first == "KW_ENUM", "expected KW_ENUM";
 }
 
 test "tokenize impl block" {
     let tokens = rlex_tok("impl Point { fn new() -> Self { Self { x: 0, y: 0 } } }");
-    assert tokens.len() >= 15, `expected at least 15 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 15, "expected at least 15 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_IMPL", `expected KW_IMPL, got ${first}`;
+    assert first == "KW_IMPL", "expected KW_IMPL";
 }
 
 test "tokenize use statement" {
     let tokens = rlex_tok("use std::collections::HashMap;");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_USE", `expected KW_USE, got ${first}`;
+    assert first == "KW_USE", "expected KW_USE";
 }
 
 test "tokenize trait" {
     let tokens = rlex_tok("trait Foo { fn bar(&self); }");
-    assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 8, "expected at least 8 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_TRAIT", `expected KW_TRAIT, got ${first}`;
+    assert first == "KW_TRAIT", "expected KW_TRAIT";
 }
 
 test "tokenize match expression" {
     let tokens = rlex_tok("match x { 1 => true, _ => false }");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 10, "expected at least 10 tokens";
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "KW_MATCH", `expected KW_MATCH, got ${first}`;
+    assert first == "KW_MATCH", "expected KW_MATCH";
 }
 
 test "tokenize lifetime" {
     let tokens = rlex_tok("fn foo<'a>(x: &'a str) -> &'a str { x }");
-    assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 10, "expected at least 10 tokens";
 }
 
 test "tokenize closure" {
     let tokens = rlex_tok("|x: i32| x + 1");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
 // `INTEGER_LITERAL: (DEC_LITERAL | BIN_LITERAL | OCT_LITERAL | HEX_LITERAL)
@@ -92,12 +92,12 @@ test "tokenize closure" {
 test "tokenize hex literal" {
     let tokens = rlex_tok("0x1f");
     let first = rust::token_kind_name(tokens.kinds[0]);
-    assert first == "INTEGER_LITERAL", `expected INTEGER_LITERAL, got ${first}`;
+    assert first == "INTEGER_LITERAL", "expected INTEGER_LITERAL";
 }
 
 test "tokenize macro invocation" {
     let tokens = rlex_tok("println!(\"hello {}\", name);");
-    assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
+    assert tokens.len() >= 5, "expected at least 5 tokens";
 }
 
 
@@ -113,12 +113,12 @@ test "parse empty crate" {
 // `visibility` reference. This used to fail with `expected Eof, got "fn"`.
 test "top-level fn item routes through the nullable visibility rule" {
     let r = rlex_prs("fn main() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 test "a visible top-level fn item still parses" {
     let r = rlex_prs("pub fn main() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 // Multi-token tail-greedy caller-FOLLOW gate (parse-side + scan-side).
@@ -159,7 +159,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = rlex_prs(input);
     let actual = rust::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm;
 }
 
 test "tree: operator precedence" {
@@ -695,7 +695,7 @@ test "tree: nested generics" {
 // `a > > b`.
 test "shift: an adjacent pair is one operator" {
     let r = rlex_prs("const X: i32 = 1 >> 2;");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 test "shift: a separated pair is not a shift" {
@@ -705,20 +705,20 @@ test "shift: a separated pair is not a shift" {
 
 test "comparison: a bare > is not a shift" {
     let r = rlex_prs("const X: bool = 1 > 2;");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 test "comparison: a bare < is not a shift" {
     let r = rlex_prs("const X: bool = 1 < 2;");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 // `NextLT` follows a token, so it is invisible to prediction: the jar also
 // commits to `shl` for `< <T as Tr>::C` and fails the predicate at 1:20.
 test "shift: a mid-alt predicate does not steer prediction" {
     let r = rlex_prs("fn f(){ let b = x < <T as Tr>::C; }");
-    assert r.diagnostics.len() == 1, `diagnostics: ${r.diagnostics:?}`;
-    assert r.diagnostics[0].message.contains("failed semantic predicate"), `diagnostics: ${r.diagnostics:?}`;
+    assert r.diagnostics.len() == 1;
+    assert r.diagnostics[0].message.contains("failed semantic predicate");
 }
 
 // A shebang is stripped only when what follows `#!` is not `[`, which is what
@@ -727,39 +727,39 @@ test "shift: a mid-alt predicate does not steer prediction" {
 // vanished without a diagnostic and one across two lines left `)]` behind.
 test "shebang: a crate-level inner attribute is not a shebang" {
     let r = rlex_prs("#![allow(dead_code)]\nfn main() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
     let actual = rust::to_string_tree(&r);
-    assert actual.contains("innerAttribute"), `the attribute went to the hidden channel: ${actual}`;
+    assert actual.contains("innerAttribute"), "the attribute went to the hidden channel";
 }
 
 test "shebang: an inner attribute spanning lines keeps its closing bracket" {
     let r = rlex_prs("#![allow(\n    dead_code\n)]\nfn main() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 // The rejection case: a real shebang is still stripped.
 test "shebang: a real one is still hidden" {
     let r = rlex_prs("#!/usr/bin/env run-cargo-script\nfn main() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
     let actual = rust::to_string_tree(&r);
-    assert !actual.contains("innerAttribute"), `a real shebang is not an attribute: ${actual}`;
+    assert !actual.contains("innerAttribute"), "a real shebang is not an attribute";
 }
 
 // `#[unsafe(...)]` wraps the attributes that were always unsafe (Rust 2024).
 // `unsafe` is a keyword, so `attr`'s `simplePath` cannot start with it.
 test "attr: the unsafe attribute wrapper" {
     let r = rlex_prs("#[unsafe(no_mangle)]\npub extern \"C\" fn f() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 test "attr: an unsafe attribute with a value" {
     let r = rlex_prs("#[unsafe(export_name = \"g\")]\npub fn f() {}");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert r.ok();
 }
 
 // Precise capturing (Rust 2024): `use<..>` in a bound is a capture list.
 test "bound: a precise capture list" {
     let r = rlex_prs("fn f<'a, T>(t: &'a T) -> impl Sized + use<'a, T, Self,> { t }");
-    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
-    assert rust::to_string_tree(&r).contains("(useBound use <"), rust::to_string_tree(&r);
+    assert r.ok();
+    assert rust::to_string_tree(&r).contains("(useBound use <");
 }

@@ -13,14 +13,14 @@ use oera from "./grammars/open_ended_rule_alt.g4"
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = oera::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input}`;
+    assert result.ok();
     let actual = oera::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string();
 }
 
 fn assert_rejected<S: AsStrSlice>(input: S) {
     let result = oera::parse(input);
-    assert !result.ok(), `expected diagnostics for ${input}, got ${oera::to_string_tree(&result)}`;
+    assert !result.ok();
 }
 
 test "open-ended rule alt: the alternatives after it are still reachable" {

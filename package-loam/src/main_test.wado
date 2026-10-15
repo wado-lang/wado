@@ -189,7 +189,7 @@ outputs
     Z: f32 [Batch=N, Out=3]
 
 1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches, 0 reshapes spread
-", report;
+";
 }
 
 test "dump reports each branch of an If as a scope of its own, with what it owes" {
@@ -216,29 +216,29 @@ test "dump reports each branch of an If as a scope of its own, with what it owes
                 kernel    T = Concat(P, X)
                     T: f32 [Total=M + N, Embed=2]
                     written: a regrouping takes in no operator after it
-"), report;
+");
     assert report.contains("
                 kernel    TZ = Mul(SK, W)
                     TZ: f32 [Seq=N, Embed=2]
                     written: the scope returns it
                     takes in S, SK, keeping 16 * N bytes out of memory
-"), report;
+");
     assert report.contains("
             owed
                 Add: axis Seq is N on the left and L on the right, and the two must be one length (where -L + N >= 0)
-"), report;
+");
     assert report.contains("
         else_branch
             nodes
                 kernel    E = Relu(X)
-"), report;
-    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches, 0 reshapes spread\n"), report;
+");
+    assert report.ends_with("\n4 kernels, 2 fused, 1 folded, 0 aliases, 1 branches, 0 reshapes spread\n");
 }
 
 test "dump reports as JSON, every kernel with where its output goes" {
     let dir = scratch("dump-json");
     let json = on_graph("dump", &dir, ["--format", "json"]).unwrap();
-    assert json.contains("\"lowering\":\"fused\"") && json.contains("\"written\":\"returned\""), json;
+    assert json.contains("\"lowering\":\"fused\"") && json.contains("\"written\":\"returned\"");
     let nodes = from_string::<Report>(&json).unwrap().scope.nodes;
     assert nodes[0].lowering matches { Fused } && nodes[0].into == Option::Some("Y");
     assert nodes[1].lowering matches { Kernel } && nodes[1].written matches { Some(Returned) };
@@ -250,17 +250,17 @@ test "dump reports as JSON, every kernel with where its output goes" {
 test "dump's format is text or json" {
     let dir = scratch("dump-format");
     let refused = on_graph("dump", &dir, ["--format", "yaml"]).unwrap_err();
-    assert refused.starts_with("loam dump: --format is text or json\n"), refused;
+    assert refused.starts_with("loam dump: --format is text or json\n");
 }
 
 test "a graph's type is required, and names the types there are" {
     let refused = loam(["dump", "g.onnxtext"]).unwrap_err();
-    assert refused.starts_with("loam dump: --type is onnx or onnxtext for a graph\nUsage: "), refused;
+    assert refused.starts_with("loam dump: --type is onnx or onnxtext for a graph\nUsage: ");
 }
 
 test "one file is named" {
     let refused = loam(["gen", "--type", "onnx", "a.onnx", "b.onnx"]).unwrap_err();
-    assert refused.starts_with("loam gen: name one file, and 2 are given\n"), refused;
+    assert refused.starts_with("loam gen: name one file, and 2 are given\n");
 }
 
 test "a tokenizer takes no options" {
@@ -270,15 +270,15 @@ test "a tokenizer takes no options" {
 
 test "an argument error names the subcommand and shows the usage" {
     let refused = loam(["dump", "--frobnicate"]).unwrap_err();
-    assert refused.starts_with("loam dump: "), refused;
-    assert refused.contains("\nUsage: loam gen "), refused;
+    assert refused.starts_with("loam dump: ");
+    assert refused.contains("\nUsage: loam gen ");
 }
 
 test "an options file that is not the options' JSON names the file" {
     let dir = scratch("bad-options");
     fs::write(`${dir}/options.json`, &"{\"layout\": 3}").unwrap();
     let refused = on_graph("dump", &dir, []).unwrap_err();
-    assert refused.starts_with(`loam: '${dir}/options.json': `), refused;
+    assert refused.starts_with(`loam: '${dir}/options.json': `);
 }
 
 test "a missing checkpoint is reported with its path and why" {
@@ -289,5 +289,5 @@ test "a missing checkpoint is reported with its path and why" {
 
 test "a missing file is reported with its path" {
     let refused = loam(["dump", "--type", "onnx", "target/loam-main-test/absent.onnx"]).unwrap_err();
-    assert refused.contains("target/loam-main-test/absent.onnx"), refused;
+    assert refused.contains("target/loam-main-test/absent.onnx");
 }

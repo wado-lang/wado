@@ -20,8 +20,8 @@ use token_assoc from "./grammars/lr_token_assoc_ignored.g4"
     };
 
 fn assert_tree(input: String, ok: bool, actual: String, expected: String) {
-    assert ok, `unexpected diagnostics for ${input}: ${actual}`;
-    assert actual == expected, `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
+    assert ok;
+    assert actual == expected;
 }
 
 // antlr/antlr4#4911
@@ -63,9 +63,9 @@ test "a list rule anchored by EOF rejects what follows its last clause" {
         ["agent.skill ASC, (agent.chat.tasks + agent.email.tasks) ASC - agent.voice.tasks", 60],
     ] as List<[String, i32]> {
         let result = order_by::parse(input);
-        assert !result.ok(), `accepted ${input}: ${order_by::to_string_tree(&result)}`;
+        assert !result.ok();
         let d = &result.diagnostics[0];
-        assert d.line == 1 && d.col == col, `${input}: first diagnostic at ${d.line}:${d.col}, expected 1:${col}`;
+        assert d.line == 1 && d.col == col;
     }
 }
 
@@ -85,7 +85,7 @@ test "a lexer loop leaves the character the next set needs" {
 test "a lexer loop does not let the next set match nothing" {
     for let input of ["- [] x\n", "- [xx] y\n"] as List<String> {
         let result = checklist::parse(input);
-        assert !result.ok(), `accepted ${input}: ${checklist::to_string_tree(&result)}`;
+        assert !result.ok();
     }
 }
 

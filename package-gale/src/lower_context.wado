@@ -104,9 +104,15 @@ impl LowerContext {
         self.current_rule_index = idx;
     }
 
+    /// Whether a rule is being lowered.
+    pub fn has_current_rule(&self) -> bool {
+        return self.current_rule_index >= 0;
+    }
+
     /// The index of the rule being lowered.
-    pub fn current_rule_index(&self) -> i32 {
-        assert self.current_rule_index >= 0, "lowering makes each rule current before walking its body";
+    pub fn current_rule_index(&self) -> i32
+        contract self.has_current_rule(), "lowering makes each rule current before walking its body"
+    {
         return self.current_rule_index;
     }
 

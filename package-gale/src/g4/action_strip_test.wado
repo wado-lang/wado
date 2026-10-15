@@ -3,69 +3,69 @@ use { strip_action_bodies } from "./action_strip.wado";
 test "strip: removes simple inline action body" {
     let g = "myRule : 'a' { writeln(\"x\"); } 'b' ;";
     let result = strip_action_bodies(&g);
-    assert result == "myRule : 'a'  'b' ;", `got '${result}'`;
+    assert result == "myRule : 'a'  'b' ;";
 }
 
 test "strip: removes semantic predicate including the '?' suffix" {
     let g = "myRule : { isOk() }? 'a' ;";
     let result = strip_action_bodies(&g);
-    assert result == "myRule :  'a' ;", `got '${result}'`;
+    assert result == "myRule :  'a' ;";
 }
 
 test "strip: removes @header / @members named actions" {
     let g = "grammar T;\n@header { import java.util.*; }\n@members { int x = 0; }\nstart : 'a' ;";
     let result = strip_action_bodies(&g);
     let expected = "grammar T;\n\n\nstart : 'a' ;";
-    assert result == expected, `got '${result}'`;
+    assert result == expected;
 }
 
 test "strip: removes @scope::name actions" {
     let g = "@parser::members { void foo() {} }\nstart : 'a' ;";
     let result = strip_action_bodies(&g);
     let expected = "\nstart : 'a' ;";
-    assert result == expected, `got '${result}'`;
+    assert result == expected;
 }
 
 test "strip: keeps tokens { ... } grammar prequel" {
     let g = "grammar T;\ntokens { TK_A, TK_B }\nstart : TK_A ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `tokens block was modified: '${result}'`;
+    assert result == g, "tokens block was modified";
 }
 
 test "strip: keeps options { ... } grammar prequel" {
     let g = "grammar T;\noptions { caseInsensitive = true; }\nstart : 'a' ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `options block was modified: '${result}'`;
+    assert result == g, "options block was modified";
 }
 
 test "strip: keeps channels { ... } grammar prequel" {
     let g = "grammar T;\nchannels { COMMENTS, WHITESPACE }\nstart : 'a' ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `channels block was modified: '${result}'`;
+    assert result == g, "channels block was modified";
 }
 
 test "strip: preserves brace inside string literal" {
     let g = "BRACE : '{' ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `string-literal brace was treated as action: '${result}'`;
+    assert result == g, "string-literal brace was treated as action";
 }
 
 test "strip: preserves brace inside character class" {
     let g = "WS : [ \\t\\n{}]+ ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `char-class braces were treated as action: '${result}'`;
+    assert result == g, "char-class braces were treated as action";
 }
 
 test "strip: preserves brace inside line comment" {
     let g = "// comment with { brace }\nstart : 'a' ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `line-comment was modified: '${result}'`;
+    assert result == g, "line-comment was modified";
 }
 
 test "strip: preserves brace inside block comment" {
     let g = "/* { not an action } */\nstart : 'a' ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `block-comment was modified: '${result}'`;
+    assert result == g, "block-comment was modified";
 }
 
 test "strip: char class with a literal '[' ends at the first unescaped ']'" {
@@ -76,7 +76,7 @@ test "strip: char class with a literal '[' ends at the first unescaped ']'" {
     // action `{ ... }` so it was never stripped (corrupting the oracle).
     let g = "REGEX : ~[/[] ; r : 'a' { act(); } ;";
     let result = strip_action_bodies(&g);
-    assert result == "REGEX : ~[/[] ; r : 'a'  ;", `got '${result}'`;
+    assert result == "REGEX : ~[/[] ; r : 'a'  ;";
 }
 
 // The stripper is the classifier's second consumer, and the one whose failure
@@ -85,44 +85,44 @@ test "strip: char class with a literal '[' ends at the first unescaped ']'" {
 test "strip: a rule name outside ASCII still picks the char-class scan" {
     let g = "ÀBC : ~[/[] ; r : 'a' { act(); } ;";
     let result = strip_action_bodies(&g);
-    assert result == "ÀBC : ~[/[] ; r : 'a'  ;", `got '${result}'`;
+    assert result == "ÀBC : ~[/[] ; r : 'a'  ;";
 }
 
 test "strip: removes catch [...] { ... } handlers" {
     let g = "start : 'a' ; catch [Exception e] { handle(e); }";
     let result = strip_action_bodies(&g);
-    assert result == "start : 'a' ; ", `got '${result}'`;
+    assert result == "start : 'a' ; ";
 }
 
 test "strip: removes finally { ... } handlers" {
     let g = "start : 'a' ; finally { cleanup(); }";
     let result = strip_action_bodies(&g);
-    assert result == "start : 'a' ; ", `got '${result}'`;
+    assert result == "start : 'a' ; ";
 }
 
 test "strip: balances nested braces inside an action body" {
     let g = "myRule : 'a' { if (x) { foo(); } } 'b' ;";
     let result = strip_action_bodies(&g);
-    assert result == "myRule : 'a'  'b' ;", `got '${result}'`;
+    assert result == "myRule : 'a'  'b' ;";
 }
 
 test "strip: respects string literals inside an action body" {
     let g = "myRule : 'a' { String s = \"}\"; } 'b' ;";
     let result = strip_action_bodies(&g);
-    assert result == "myRule : 'a'  'b' ;", `got '${result}'`;
+    assert result == "myRule : 'a'  'b' ;";
 }
 
 test "strip: IfIfElseNonGreedyBinding1 — the descriptor that motivated this" {
     let g = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? {\n<writeln(\"$text\")>\n};\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
     let result = strip_action_bodies(&g);
     let expected = "grammar T;\nstart : statement+ ;\nstatement : 'x' | ifStatement;\nifStatement : 'if' 'y' statement ('else' statement)?? ;\nID : 'a'..'z'+ ;\nWS : (' '|'\\n') -> channel(HIDDEN);\n";
-    assert result == expected, `got '${result}'`;
+    assert result == expected;
 }
 
 test "strip: a parser rule's argument list balances a `[]` host type" {
     let g = "r[int[] arr] : 'a' { act(arr); } ;";
     let result = strip_action_bodies(&g);
-    assert result == "r[int[] arr] : 'a'  ;", `got '${result}'`;
+    assert result == "r[int[] arr] : 'a'  ;";
 }
 
 test "strip: a `[]` host type does not expose an initializer to the action stripper" {
@@ -130,23 +130,23 @@ test "strip: a `[]` host type does not expose an initializer to the action strip
     // level, where `{1, 2}` reads as an action body and is stripped.
     let g = "r locals [int[] a = {1, 2}] : 'x' ;";
     let result = strip_action_bodies(&g);
-    assert result == g, `got '${result}'`;
+    assert result == g;
 }
 
 test "strip: a lexer rule's char set is not balanced as an argument list" {
     let g = "fragment REGEX : ~[/[] ; r[int[] a] : 'x' { act(); } ;";
     let result = strip_action_bodies(&g);
-    assert result == "fragment REGEX : ~[/[] ; r[int[] a] : 'x'  ;", `got '${result}'`;
+    assert result == "fragment REGEX : ~[/[] ; r[int[] a] : 'x'  ;";
 }
 
 test "strip: a `tokens` prequel does not fix the rule type for the rules after it" {
     let g = "grammar T;\ntokens { A, B }\nr[int[] a] : 'x' { act(); } ;";
     let result = strip_action_bodies(&g);
-    assert result == "grammar T;\ntokens { A, B }\nr[int[] a] : 'x'  ;", `got '${result}'`;
+    assert result == "grammar T;\ntokens { A, B }\nr[int[] a] : 'x'  ;";
 }
 
 test "strip: a line comment ending in `tokens` does not make the next action a prequel" {
     let g = "r : 'a' // tokens\n { act(); } ;";
     let result = strip_action_bodies(&g);
-    assert result == "r : 'a' // tokens\n  ;", `got '${result}'`;
+    assert result == "r : 'a' // tokens\n  ;";
 }

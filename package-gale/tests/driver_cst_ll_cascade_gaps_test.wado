@@ -10,9 +10,9 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(entry: fn(&String, i32) -> g::Pars
     let text = input.to_string();
     let want = expected.to_string();
     let result = entry(&text, i32::MAX);
-    assert result.ok(), `unexpected diagnostics for ${text}`;
+    assert result.ok();
     let actual = g::to_string_tree(&result);
-    assert actual == want, `\ninput:    ${text}\nexpected: ${want}\nactual:   ${actual}`;
+    assert actual == want;
 }
 
 // `X` alone is alt 0 with `Y?` empty — a token the FIRST-derived cascade never
@@ -45,7 +45,7 @@ test "no alt matches: the rule's error path reports it" {
     let result = g::parse_m("X W Z", i32::MAX);
     assert !result.ok(), "expected a diagnostic";
     let d = &result.diagnostics[0];
-    assert d.message == "expected X; no alternative of m matches", `unexpected message: ${d.message}`;
+    assert d.message == "expected X; no alternative of m matches";
 }
 
 // The prediction read past `X W` before giving up; the rule recovers from where

@@ -114,7 +114,7 @@ fn assert_agrees(model: ByteList, oracle: String) {
     let got = computed(model, &case);
     let fields: List<String> = got.split_whitespace().map(|f| f.to_string()).collect();
     // A refusal or a trap is no output line, and shows as it stands.
-    assert fields.len() == 4 && fields[0] == "output", got;
+    assert fields.len() == 4 && fields[0] == "output";
     let found = Spelled::of(&fields);
     assert found.element == want.element && found.extents == want.extents;
     if want.element == "f32" {

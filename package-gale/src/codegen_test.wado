@@ -94,7 +94,7 @@ ${items}
 export fn run() with Stdout {
 ${body}}
 `).unwrap();
-    assert out.status matches { Exited(0) }, `${out.status}\n${out.stderr}`;
+    assert out.status matches { Exited(0) };
     return out;
 }
 
@@ -236,7 +236,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
     println(`${s} => ${parse_e(s).cst.e_alt(0):?}`);
 }
 ");
-    assert got == "1+2 => Option::Some(EAlt::Bin)\n1-2 => Option::Some(EAlt::Bin)\n3 => Option::Some(EAlt::Num)\n", got;
+    assert got == "1+2 => Option::Some(EAlt::Bin)\n1-2 => Option::Some(EAlt::Bin)\n3 => Option::Some(EAlt::Num)\n";
 }
 
 test "reserved-word alt labels are escaped to valid identifiers" {
@@ -257,7 +257,7 @@ D : 'd' ;
 b => Option::Some(RAlt::loop_)
 c => Option::Some(RAlt::Keep)
 d => Option::Some(RAlt::Add)
-", got;
+";
 }
 
 test "generate parser not element" {
@@ -266,21 +266,21 @@ a : ~COMMA EOF ;
 COMMA : ',' ;
 X : 'x' ;
 ", "a", ["x", ","]);
-    assert got == "x => (a x)\n, => error\n", got;
+    assert got == "x => (a x)\n, => error\n";
 }
 
 test "generate scalar-labeled group `t=(a | b)`" {
     // Sets/ParserSet.txt: the op is a Group while the element is still
     // `Label(Group)`, so the walker peels the label before `gen_op_group`.
     let got = parses("grammar T; a : t=('x' | 'y') ; B : 'b' ;", "a", ["x", "y", "b"]);
-    assert got == "x => (a x)\ny => (a y)\nb => error\n", got;
+    assert got == "x => (a x)\ny => (a y)\nb => error\n";
 }
 
 test "generate scalar-labeled wildcard repeat `t=.*`" {
     // A suffix binds outside the label, so this is Repeat(Label(Wildcard)):
     // the walker peels the Label inside the body, not at the Repeat itself.
     let got = parses("grammar T; a : t=.* ; A : 'a' ;", "a", ["", "a", "aa"]);
-    assert got == " => a\na => (a a)\naa => (a a a)\n", got;
+    assert got == " => a\na => (a a)\naa => (a a a)\n";
 }
 
 test "LR scan loop saves pos and backs off on a suffix failure" {
@@ -296,7 +296,7 @@ letterA : 'a' ;
     assert got == "ax => (prog (statement (letterA a)) x)
 aaby => (prog (statement (statement (letterA a)) (letterA a) b) y)
 aax => error
-", got;
+";
 }
 
 test "generate emits pub fn parse_<rule>(input) per parser rule" {
@@ -341,7 +341,7 @@ TRACE gale.trace:     enter b @3 'z' rule=b pos=3
 TRACE gale.trace:     FAIL b: expected 'y'; got \"z\" rule=b reason=expected 'y'; got \"z\"
 TRACE gale.trace:   FAIL a: expected 'y'; got \"z\" rule=a reason=expected 'y'; got \"z\"
 TRACE gale.trace: FAIL c: expected 'y'; got \"z\" rule=c reason=expected 'y'; got \"z\"
-", log;
+";
 
     // Default generation (trace off) must contain none of it — the feature
     // is strictly opt-in and adds zero instrumentation otherwise.
@@ -407,8 +407,8 @@ Y : 'Y' ;
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn scan_a(");
     assert body.contains("while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA");
-    assert !body.contains("tokens[pos] != TK_LIT_COMMA"), `the loop guard proved ','\n${body}`;
-    assert !body.contains("_best"), `a single-token alternation is a set test, not a tournament\n${body}`;
+    assert !body.contains("tokens[pos] != TK_LIT_COMMA"), "the loop guard proved ','";
+    assert !body.contains("_best"), "a single-token alternation is a set test, not a tournament";
 }
 
 test "a token the dispatch decided is taken, not expected" {
@@ -424,12 +424,12 @@ C2 : 'c' ;
 ";
     let output = gen_source(input);
     let r = extract_fn_body(&output, "fn _parse_r__inner(");
-    assert r.contains("p.take();"), r;
-    assert !r.contains("p.expect(TK_A,"), `the dispatch proved A\n${r}`;
-    assert r.contains("p.expect(TK_B,"), r;
+    assert r.contains("p.take();");
+    assert !r.contains("p.expect(TK_A,"), "the dispatch proved A";
+    assert r.contains("p.expect(TK_B,");
     let t = extract_fn_body(&output, "fn _parse_t__inner(");
-    assert t.contains("p.take();"), t;
-    assert !t.contains("p.expect(kind"), `the dispatch proved the token\n${t}`;
+    assert t.contains("p.take();");
+    assert !t.contains("p.expect(kind"), "the dispatch proved the token";
 }
 
 test "a loop scans its body only where the token it enters on may also exit it" {
@@ -444,11 +444,11 @@ Y : 'Y' ;
 ";
     let output = gen_source(input);
     let e = extract_fn_body(&output, "fn _parse_e__inner(");
-    assert e.contains("while !p.recovering && _kind_set_0(p.peek_kind())"), e;
-    assert e.contains("p.take();"), `the loop guard proved the operator\n${e}`;
-    assert !e.contains("sync_alts"), `the loop guard proved the operator\n${e}`;
+    assert e.contains("while !p.recovering && _kind_set_0(p.peek_kind())");
+    assert e.contains("p.take();"), "the loop guard proved the operator";
+    assert !e.contains("sync_alts"), "the loop guard proved the operator";
     let fs = extract_fn_body(&output, "fn _parse_fs__inner(");
-    assert fs.contains("loop {"), fs;
+    assert fs.contains("loop {");
 }
 
 test "a dispatch never re-tests the token its arm tested" {
@@ -467,7 +467,7 @@ ID : [a-w]+ ;
     let mut prev = "";
     for let line of output.split("\n") {
         let t = line.trim().to_string();
-        assert !(t.starts_with("if ") && t.ends_with("{") && t == prev), `nested re-test: ${t}`;
+        assert !(t.starts_with("if ") && t.ends_with("{") && t == prev);
         prev = t;
     }
 }
@@ -484,9 +484,9 @@ K2 : 'J' ;
 ";
     let output = gen_source(input);
     let a = extract_fn_body(&output, "fn scan_a(");
-    assert !a.contains("scan_k("), `the partition proved k's token\n${a}`;
+    assert !a.contains("scan_k("), "the partition proved k's token";
     let n = extract_fn_body(&output, "fn scan_n(");
-    assert !n.contains("scan_start"), `scan_a never matches empty\n${n}`;
+    assert !n.contains("scan_start"), "scan_a never matches empty";
 }
 
 test "a scan candidate that runs first does not rewind to where it is" {
@@ -498,8 +498,8 @@ X : 'x' ; Y : 'y' ; Z : 'z' ;
 ";
     let output = gen_source(input);
     let a = extract_fn_body(&output, "fn scan_a(");
-    assert a.contains("scan_m("), a;
-    assert !a.contains("pos = start;"), a;
+    assert a.contains("scan_m(");
+    assert !a.contains("pos = start;");
 }
 
 test "a scan calls through a rule that only forwards to another" {
@@ -512,8 +512,8 @@ X : 'x' ; Y : 'y' ; Z : 'z' ;
 ";
     let output = gen_source(input);
     let t = extract_fn_body(&output, "fn scan_t(");
-    assert t.contains("scan_a("), t;
-    assert !output.contains("fn scan_n("), output;
+    assert t.contains("scan_a(");
+    assert !output.contains("fn scan_n(");
 }
 
 test "a decline check names each continuing token once" {
@@ -529,11 +529,11 @@ X : 'x' ;
 ID : [a-w]+ ;
 ";
     let output = gen_source(input);
-    assert output.contains("decline_kind"), output;
+    assert output.contains("decline_kind");
     for let line of output.split("\n") {
         let terms: List<String> = line.split(" || ").map(|t| t.trim().to_string()).collect();
         for let i of 1..<terms.len() {
-            assert terms[i] != terms[i - 1] || terms[i].contains("{"), `a repeated term: ${line}`;
+            assert terms[i] != terms[i - 1] || terms[i].contains("{");
         }
     }
 }
@@ -547,8 +547,8 @@ c : W+ ;
 X : 'x' ; Y : 'y' ; Z : 'z' ; W : 'w' ;
 ";
     let output = gen_source(input);
-    assert !output.contains("fn scan_a("), output;
-    assert output.contains("fn scan_c("), output;
+    assert !output.contains("fn scan_a(");
+    assert output.contains("fn scan_c(");
 }
 
 // Generating SQLite alone takes about the default five seconds.
@@ -562,7 +562,7 @@ test "every emitted FOLLOW mask is named by a call" {
         }
         masks += 1;
         let name = line.split(":").next().unwrap().to_string().split(" ").last().unwrap().to_string();
-        assert output.contains(`${name},`) || output.contains(`${name})`) || output.contains(`${name} `), `${name} is never named`;
+        assert output.contains(`${name},`) || output.contains(`${name})`) || output.contains(`${name} `);
     }
     assert masks > 0, "SQLite interns FOLLOW masks";
 }
@@ -574,10 +574,10 @@ A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; E : 'e' ; F : 'f' ; G : 'g' ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    assert !body.contains("p.expect(TK_B"), body;
-    assert !body.contains("p.expect(TK_C"), body;
-    assert !body.contains("p.expect_set("), body;
-    assert body.contains("p.expect(TK_D"), body;
+    assert !body.contains("p.expect(TK_B");
+    assert !body.contains("p.expect(TK_C");
+    assert !body.contains("p.expect_set(");
+    assert body.contains("p.expect(TK_D");
 }
 
 test "an LR suffix takes the operator its arm tested" {
@@ -588,8 +588,8 @@ ID : [a-z]+ ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_e__inner(");
-    assert !body.contains("p.expect(TK_LIT_PLUS"), body;
-    assert !body.contains("p.expect(TK_LIT_DOT"), body;
+    assert !body.contains("p.expect(TK_LIT_PLUS");
+    assert !body.contains("p.expect(TK_LIT_DOT");
 }
 
 test "a prefix operator set takes the token its arm tested" {
@@ -600,7 +600,7 @@ ID : [a-z]+ ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_e__inner_atom(");
-    assert !body.contains("p.expect_set("), body;
+    assert !body.contains("p.expect_set(");
 }
 
 test "a function that only forwards is not emitted" {
@@ -613,7 +613,7 @@ A : 'a' ; B : 'b' ; X : 'x' ; Y : 'y' ;
 ";
     let output = gen_source(input);
     for let name of ["fn _parse_r__inner_alt_0(", "fn scan_r_alt_0(", "fn _parse_z__inner("] {
-        assert !output.contains(name), output;
+        assert !output.contains(name);
     }
 }
 
@@ -631,7 +631,7 @@ s : A+ ;
 A : 'a' ; B : 'b' ; C : 'c' ;
 ";
     let output = gen_source(input);
-    assert count_occurrences(&output, "p.emit(`a${") == 1, output;
+    assert count_occurrences(&output, "p.emit(`a${") == 1;
 }
 
 test "arms that emit the same body are one arm" {
@@ -645,10 +645,10 @@ ID : [e-k]+ ;
     let output = gen_source(input);
     for let f of ["fn scan_l(", "fn _parse_l__inner("] {
         let body = extract_fn_body(&output, f);
-        assert !body.contains("if kind == TK_A {"), body;
+        assert !body.contains("if kind == TK_A {");
     }
     for let arm of ["suffix_kind == TK_L", "_sk == TK_L"] {
-        assert !output.contains(arm), output;
+        assert !output.contains(arm);
     }
 }
 
@@ -661,7 +661,7 @@ ID : [e-p]+ ;
 ";
     let output = gen_source(input);
     for let kind of ["TK_A", "TK_C", "TK_Y", "TK_Q"] {
-        assert !output.contains(`p.expect(${kind},`), output;
+        assert !output.contains(`p.expect(${kind},`);
     }
 }
 
@@ -674,8 +674,8 @@ B : 'B' ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_s__inner(");
-    assert body.contains("let x = p.expect(TK_A"), body;
-    assert body.contains("    p.expect(TK_B"), `nothing reads B\n${body}`;
+    assert body.contains("let x = p.expect(TK_A");
+    assert body.contains("    p.expect(TK_B");
 }
 
 test "trace option instruments the scan tournament and alt picks" {
@@ -695,7 +695,7 @@ Z : 'Z' ;
     assert log.contains("scan a alt#0: fail rule=a alt=0 end=-1
 TRACE gale.trace:       scan a alt#1: -> @3 rule=a alt=1 end=3
 TRACE gale.trace:       pick a alt#1 rule=a alt=1
-"), log;
+");
 
     // Default generation (trace off) emits none of the decision-point hooks.
     let plain = gen_source(input);
@@ -717,8 +717,8 @@ B : 'b' ;
 C : 'c' ;
 ";
     let log = traced(input, "parse_r(\"baa\")");
-    assert !log.contains("pick tok"), log;
-    assert log.contains("pick sub alt#0"), log;
+    assert !log.contains("pick tok");
+    assert log.contains("pick sub alt#0");
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
@@ -748,7 +748,7 @@ fn extract_fn_body<S: AsStrSlice, S1: AsStrSlice>(output: S, header: S1) -> Stri
 fn assert_in_order<S: AsStrSlice, S1: AsStrSlice, W: AsStrSlice>(body: &String, first: S, then: S1, why: W) {
     let first_at = body.find(&first).expect(`no \`${first.as_str_slice()}\`: ${body}`);
     let then_at = body.find(&then).expect(`no \`${then.as_str_slice()}\`: ${body}`);
-    assert first_at < then_at, `${why.as_str_slice()}: ${body}`;
+    assert first_at < then_at;
 }
 
 test "lexer rule caseInsensitive=false overrides grammar-level true" {
@@ -758,7 +758,7 @@ IF : 'if' ;
 STRICT options { caseInsensitive = false; } : 'x' ;
 WS : [ \\t]+ -> skip ;";
     let got = lexes(input, ["if IF iF x", "X"]);
-    assert got == "if IF iF x => IF:if IF:IF IF:iF STRICT:x\nX => error:X\n", got;
+    assert got == "if IF iF x => IF:if IF:IF IF:iF STRICT:x\nX => error:X\n";
 }
 
 test "a first-char dispatch whose arms claim every char compiles without a `_` arm" {
@@ -766,7 +766,7 @@ test "a first-char dispatch whose arms claim every char compiles without a `_` a
 A : 'a' ;
 ANY : [\\u0000-\\uD7FF\\uE000-\\u{10FFFF}] ;";
     let got = lexes(input, ["ab"]);
-    assert got == "ab => A:a ANY:b\n", got;
+    assert got == "ab => A:a ANY:b\n";
 }
 
 test "a first-char arm spanning the surrogate block claims every char" {
@@ -774,7 +774,7 @@ test "a first-char arm spanning the surrogate block claims every char" {
 A : 'a' ;
 ANY : [\\u0000-\\u{10FFFF}] ;";
     let got = lexes(input, ["ab"]);
-    assert got == "ab => A:a ANY:b\n", got;
+    assert got == "ab => A:a ANY:b\n";
 }
 
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
@@ -783,7 +783,7 @@ KW options { caseInsensitive = true; } : 'go' ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;";
     let got = lexes(input, ["go GO Go ab", "AB"]);
-    assert got == "go GO Go ab => KW:go KW:GO KW:Go ID:ab\nAB => error:A error:B\n", got;
+    assert got == "go GO Go ab => KW:go KW:GO KW:Go ID:ab\nAB => error:A error:B\n";
 }
 
 test "virtual tokens are marked and not match-generated" {
@@ -996,16 +996,16 @@ WS : (' '|'\\n') -> skip ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_b__inner(");
-    assert body.contains("while !p.recovering && _kind_set_0(p.peek_kind())"), body;
-    assert body.contains("p.take();"), body;
-    assert !body.contains("expect_set"), body;
+    assert body.contains("while !p.recovering && _kind_set_0(p.peek_kind())");
+    assert body.contains("p.take();");
+    assert !body.contains("expect_set");
 }
 
 test "a sync set is tested as bits, and listed only where a diagnostic names it" {
     let output = gen_source("grammar T;\ns : A B C EOF ;\nA : 'a' ;\nB : 'b' ;\nC : 'c' ;\n");
-    assert output.contains("global SYNC_0: List<i32> = [2];"), output;
-    assert !output.contains("global EXPECTED_"), output;
-    assert !output.contains("fn in_set("), output;
+    assert output.contains("global SYNC_0: List<i32> = [2];");
+    assert !output.contains("global EXPECTED_");
+    assert !output.contains("fn in_set(");
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {
@@ -1049,9 +1049,9 @@ B : 'b' ;
 C : 'c' ;
 ";
     let generated = gen(input);
-    assert generated.diagnostics.len() == 1, `expected 1 diagnostic, got ${generated.diagnostics.len()}`;
+    assert generated.diagnostics.len() == 1;
     let d = &generated.diagnostics[0];
-    assert d.owner.rule == "r", `expected the diagnostic to own rule "r", got "${d.owner.rule}"`;
+    assert d.owner.rule == "r", "expected the diagnostic to own rule \"r\"";
     if let OverlapTournament = &d.kind {
     } else {
         panic("expected DiagnosticKind::OverlapTournament");
@@ -1064,7 +1064,7 @@ e : e '+' A | . ;
 A : 'a' ;
 ";
     let generated = gen(input);
-    assert generated.diagnostics.is_empty(), `a lone alternative has nothing to overlap: ${generated.diagnostics[0].message}`;
+    assert generated.diagnostics.is_empty(), "a lone alternative has nothing to overlap";
 }
 
 test "generate raises no diagnostics for disjoint alts" {
@@ -1074,7 +1074,7 @@ A : 'a' ;
 B : 'b' ;
 ";
     let generated = gen(input);
-    assert generated.diagnostics.is_empty(), `expected no diagnostics, got ${generated.diagnostics.len()}`;
+    assert generated.diagnostics.is_empty(), "expected no diagnostics";
 }
 
 test "an optional group's entry guard is the scan its dispatch decides on" {
@@ -1091,8 +1091,8 @@ B : 'b' ;
     let body = extract_fn_body(&output, "fn _parse_stmt__inner(");
     let scans_a = count_occurrences(&body, "scan_a(");
     let scans_b = count_occurrences(&body, "scan_b(");
-    assert scans_a == 2, `alts 0 and 2 name 'a' once each; scanned it ${scans_a} times`;
-    assert scans_b == 2, `alts 1 and 2 name 'b' once each; scanned it ${scans_b} times`;
+    assert scans_a == 2, "alts 0 and 2 name 'a' once each";
+    assert scans_b == 2, "alts 1 and 2 name 'b' once each";
 }
 
 // `??` in an LR atom: its ATN prediction runs under the live `min_prec`, so an
@@ -1147,7 +1147,7 @@ WS : ' ' -> skip ;
 test "a wildcard after the call leaves an at-end conflict to the token after it" {
     // Only the token after `x`'s longer alternative tells them apart.
     let got = parses(AT_END_WILDCARD_FOLLOW_G4, "s", ["a b c", "a b c a", "a b a"]);
-    assert got == "a b c => (s (x a b) c)\na b c a => (s (x a b c) a)\na b a => (s (x a b) a)\n", got;
+    assert got == "a b c => (s (x a b) c)\na b c a => (s (x a b c) a)\na b a => (s (x a b) a)\n";
 }
 
 global LOOP_AFTER_NULLABLE_CALL_G4: String = "
@@ -1164,7 +1164,7 @@ test "a nullable callee yields a token to the caller loop that follows it" {
     // css3's `selector`: the `SP` after `x` is the descendant combinator, which
     // only another iteration of the caller's loop takes.
     let got = parses(LOOP_AFTER_NULLABLE_CALL_G4, "s", ["x y{", "x .y {", "x > y {", "x {"]);
-    assert got == "x y{ => (s (a x) ws (c   ws) (a y) ws {)\nx .y { => (s (a x) ws (c   ws) (a . y) (ws  ) {)\nx > y { => (s (a x) (ws  ) (c > (ws  )) (a y) (ws  ) {)\nx { => (s (a x) (ws  ) {)\n", got;
+    assert got == "x y{ => (s (a x) ws (c   ws) (a y) ws {)\nx .y { => (s (a x) ws (c   ws) (a . y) (ws  ) {)\nx > y { => (s (a x) (ws  ) (c > (ws  )) (a y) (ws  ) {)\nx { => (s (a x) (ws  ) {)\n";
 }
 
 global OPTIONAL_TOKEN_ALSO_NAME_G4: String = "
@@ -1182,7 +1182,7 @@ test "an optional token that can also start what follows it is taken on the seco
     let got = parses(OPTIONAL_TOKEN_ALSO_NAME_G4, "s", [
         "{readonly id: x}", "{readonly: x}", "{readonly}", "{readonly id}", "{readonly readonly}", "{a; readonly b: x}",
     ]);
-    assert got == "{readonly id: x} => (s { (m readonly (name id) : x) })\n{readonly: x} => (s { (m (name readonly) : x) })\n{readonly} => (s { (m (name readonly)) })\n{readonly id} => (s { (m readonly (name id)) })\n{readonly readonly} => (s { (m readonly (name readonly)) })\n{a; readonly b: x} => (s { (m (name a)) ; (m readonly (name b) : x) })\n", got;
+    assert got == "{readonly id: x} => (s { (m readonly (name id) : x) })\n{readonly: x} => (s { (m (name readonly) : x) })\n{readonly} => (s { (m (name readonly)) })\n{readonly id} => (s { (m readonly (name id)) })\n{readonly readonly} => (s { (m readonly (name readonly)) })\n{a; readonly b: x} => (s { (m (name a)) ; (m readonly (name b) : x) })\n";
 }
 
 global OPTIONAL_SEPARATOR_AFTER_LIST_G4: String = "
@@ -1203,7 +1203,7 @@ test "a probe accepts a token an optional suffix of its caller can take" {
     let got = parses(OPTIONAL_SEPARATOR_AFTER_LIST_G4, "s", [
         "{readonly id: x;}", "{readonly id: x}", "{a; readonly b;}", "{readonly;}",
     ]);
-    assert got == "{readonly id: x;} => (s { (body (list (m readonly (name id) : x)) ;) })\n{readonly id: x} => (s { (body (list (m readonly (name id) : x))) })\n{a; readonly b;} => (s { (body (list (m (name a)) ; (m readonly (name b))) ;) })\n{readonly;} => (s { (body (list (m (name readonly))) ;) })\n", got;
+    assert got == "{readonly id: x;} => (s { (body (list (m readonly (name id) : x)) ;) })\n{readonly id: x} => (s { (body (list (m readonly (name id) : x))) })\n{a; readonly b;} => (s { (body (list (m (name a)) ; (m readonly (name b))) ;) })\n{readonly;} => (s { (body (list (m (name readonly))) ;) })\n";
 }
 
 global TAIL_OPTIONAL_RECURSION_G4: String = "
@@ -1218,7 +1218,7 @@ test "a tail optional enters only where its body can match" {
     // TypeScript's `identifierName singleExpression?`: `(` may begin an arrow
     // function, and in `f()` it begins the call's arguments instead.
     let got = parses(TAIL_OPTIONAL_RECURSION_G4, "s", ["f();", "f () => x;", "f g;", "f g();"]);
-    assert got == "f(); => (s (e (e f) ( )) ;)\nf () => x; => (s (e f (e ( ) => x)) ;)\nf g; => (s (e f (e g)) ;)\nf g(); => (s (e f (e (e g) ( ))) ;)\n", got;
+    assert got == "f(); => (s (e (e f) ( )) ;)\nf () => x; => (s (e f (e ( ) => x)) ;)\nf g; => (s (e f (e g)) ;)\nf g(); => (s (e f (e (e g) ( ))) ;)\n";
 }
 
 test "an optional probe that scans the rest of an alternative ends its scan" {
@@ -1230,7 +1230,7 @@ c : 'b'* 'c' 'c' ;
 WS : ' ' -> skip ;
 ");
     let body = extract_fn_body(&output, "fn scan_a__alt_0(");
-    assert body.contains("cont_done_"), `a probe that holds scans \`c\` once: ${body}`;
+    assert body.contains("cont_done_"), "a probe that holds scans `c` once";
 }
 
 global TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4: String = "
@@ -1247,7 +1247,7 @@ test "a tail optional in a contested atom alternative sees the suffix loop" {
     let got = parses(TAIL_OPTIONAL_IN_TOURNAMENT_ATOM_G4, "s", [
         "x = f();", "x = f () => y;", "x = a.b();", "x = f g();",
     ]);
-    assert got == "x = f(); => (s x = (e (e f) ( )) ;)\nx = f () => y; => (s x = (e f (e ( ) => y)) ;)\nx = a.b(); => (s x = (e (e a . b) ( )) ;)\nx = f g(); => (s x = (e f (e (e g) ( ))) ;)\n", got;
+    assert got == "x = f(); => (s x = (e (e f) ( )) ;)\nx = f () => y; => (s x = (e f (e ( ) => y)) ;)\nx = a.b(); => (s x = (e (e a . b) ( )) ;)\nx = f g(); => (s x = (e f (e (e g) ( ))) ;)\n";
 }
 
 global TAIL_OPTIONAL_BEFORE_ITS_FOLLOW_G4: String = "
@@ -1262,7 +1262,7 @@ test "a tail optional whose follow also matches enters while entering stays viab
     // TypeScript's `for (const x of list)`: `x of` starts the continuation
     // `identifier expressionSequence`, and ANTLR4 still enters at `x`.
     let got = parses(TAIL_OPTIONAL_BEFORE_ITS_FOLLOW_G4, "s", ["(a b c)", "(a b c d)", "(a b c d e)"]);
-    assert got == "(a b c) => (s ( (e a) b (e c) ))\n(a b c d) => (s ( (e a (e b)) c (e d) ))\n(a b c d e) => (s ( (e a (e b (e c))) d (e e) ))\n", got;
+    assert got == "(a b c) => (s ( (e a) b (e c) ))\n(a b c d) => (s ( (e a (e b)) c (e d) ))\n(a b c d e) => (s ( (e a (e b (e c))) d (e e) ))\n";
 }
 
 global LOOP_BODY_CALL_G4: String = "
@@ -1281,7 +1281,7 @@ test "a rule that is a loop's whole body hears the loop's next iteration" {
     let got = parses(LOOP_BODY_CALL_G4, "s", [
         "{ case a: x; case b: y; }", "{ case a: case b: y; default: case c: z; }", "{ case a: case b x; }",
     ]);
-    assert got == "{ case a: x; case b: y; } => (s { (cs (c case a : (st x ;)) (c case b : (st y ;))) })\n{ case a: case b: y; default: case c: z; } => (s { (cs (c case a :) (c case b : (st y ;))) default : (cs (c case c : (st z ;))) })\n{ case a: case b x; } => (s { (cs (c case a : (st case b) (st x ;))) })\n", got;
+    assert got == "{ case a: x; case b: y; } => (s { (cs (c case a : (st x ;)) (c case b : (st y ;))) })\n{ case a: case b: y; default: case c: z; } => (s { (cs (c case a :) (c case b : (st y ;))) default : (cs (c case c : (st z ;))) })\n{ case a: case b x; } => (s { (cs (c case a : (st case b) (st x ;))) })\n";
 }
 
 global LOOP_ENDING_RULE_G4: String = "
@@ -1302,7 +1302,7 @@ test "a loop ending its rule declines an iteration its caller's token would stra
     let got = parses(LOOP_ENDING_RULE_G4, "s", [
         "{ case a: x; default: y; }", "{ case a: default; }", "{ case a: x default: y }", "{ case a: default }",
     ]);
-    assert got == "{ case a: x; default: y; } => (s { (cs (c case a : (sl (st (e x) ;)))) default : (st (e y) ;) })\n{ case a: default; } => (s { (cs (c case a : (sl (st (e default) ;)))) })\n{ case a: x default: y } => (s { (cs (c case a : (sl (st (e x))))) default : (st (e y)) })\n{ case a: default } => (s { (cs (c case a : (sl (st (e default))))) })\n", got;
+    assert got == "{ case a: x; default: y; } => (s { (cs (c case a : (sl (st (e x) ;)))) default : (st (e y) ;) })\n{ case a: default; } => (s { (cs (c case a : (sl (st (e default) ;)))) })\n{ case a: x default: y } => (s { (cs (c case a : (sl (st (e x))))) default : (st (e y)) })\n{ case a: default } => (s { (cs (c case a : (sl (st (e default))))) })\n";
 }
 
 global TAIL_TOKEN_OPTIONAL_G4: String = "
@@ -1322,7 +1322,7 @@ test "a tail token optional enters while entering stays viable" {
         "m",
         ["readonly x;", "readonly;", "static readonly;", "static readonly x;"],
     );
-    assert got == "readonly x; => (m (base readonly) (name x) ;)\nreadonly; => (m base (name readonly) ;)\nstatic readonly; => (m (base static) (name readonly) ;)\nstatic readonly x; => (m (base static readonly) (name x) ;)\n", got;
+    assert got == "readonly x; => (m (base readonly) (name x) ;)\nreadonly; => (m base (name readonly) ;)\nstatic readonly; => (m (base static) (name readonly) ;)\nstatic readonly x; => (m (base static readonly) (name x) ;)\n";
 }
 
 global TAIL_TOKEN_UNKNOWN_CALLER_G4: String = "
@@ -1348,7 +1348,7 @@ test "a tail token optional yields to a definite continuation its unknown caller
     let got = parses(TAIL_TOKEN_UNKNOWN_CALLER_G4, "s", [
         "fn f -> a::T {}", "fn f -> a::T;", "fn f -> ::a::T<X> {}", "fn f -> a:: T where T: a::b {}",
     ]);
-    assert got == "fn f -> a::T {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (blk { })))\nfn f -> a::T; => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) ;))\nfn f -> ::a::T<X> {} => (s (f fn f (ret -> (ty (tnb (tp :: (seg a) :: (seg T < (ty (tnb (tp (seg X)))) >))))) (blk { })))\nfn f -> a:: T where T: a::b {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (w where T : (ty (tnb (tp (seg a) :: (seg b))))) (blk { })))\n", got;
+    assert got == "fn f -> a::T {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (blk { })))\nfn f -> a::T; => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) ;))\nfn f -> ::a::T<X> {} => (s (f fn f (ret -> (ty (tnb (tp :: (seg a) :: (seg T < (ty (tnb (tp (seg X)))) >))))) (blk { })))\nfn f -> a:: T where T: a::b {} => (s (f fn f (ret -> (ty (tnb (tp (seg a) :: (seg T))))) (w where T : (ty (tnb (tp (seg a) :: (seg b))))) (blk { })))\n";
 }
 
 // The two parenthesised atoms share `'(' e`, so the tournament scans the inner
@@ -1367,7 +1367,7 @@ ID : [a-z]+ ;
         tree = `(e ( ${tree} ))`;
     }
     let got = parses(grammar, "s", [input]);
-    assert got == `${input} => (s ${tree})\n`, got;
+    assert got == `${input} => (s ${tree})\n`;
 }
 
 global LR_ATOM_OPERAND_G4: String = "
@@ -1388,7 +1388,7 @@ test "an operand inside an atom climbs only while its own continuation stays via
     // TypeScript's `New singleExpression typeArguments? arguments`: the
     // operand's call suffix would take the arguments the `new` still owes.
     let got = parses(LR_ATOM_OPERAND_G4, "s", ["new a();", "new a;", "new a.b();", "new a()();"]);
-    assert got == "new a(); => (s (e new (e a) (args ( ))) ;)\nnew a; => (s (e new (e a)) ;)\nnew a.b(); => (s (e new (e (e a) . b) (args ( ))) ;)\nnew a()(); => (s (e new (e (e a) (args ( ))) (args ( ))) ;)\n", got;
+    assert got == "new a(); => (s (e new (e a) (args ( ))) ;)\nnew a; => (s (e new (e a)) ;)\nnew a.b(); => (s (e new (e (e a) . b) (args ( ))) ;)\nnew a()(); => (s (e new (e (e a) (args ( ))) (args ( ))) ;)\n";
 }
 
 // The prefix atom's trailing operand is the atom's own, not a suffix's, and it
@@ -1403,7 +1403,7 @@ ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ";
     let got = parses(grammar, "s", ["new -a();", "-a();"]);
-    assert got == "new -a(); => (s (e new (e - (e a)) (args ( ))) ;)\n-a(); => (s (e - (e (e a) (args ( )))) ;)\n", got;
+    assert got == "new -a(); => (s (e new (e - (e a)) (args ( ))) ;)\n-a(); => (s (e - (e (e a) (args ( )))) ;)\n";
 }
 
 global OPEN_READING_BEHIND_PREFIX_G4: String = "
@@ -1423,7 +1423,7 @@ test "an open reading behind a prefix admits only what the prefix starts with" {
     // follows: the list's `]` comes first, so the `,` before `c` is the next
     // element's, not a trailing one.
     let got = parses(OPEN_READING_BEHIND_PREFIX_G4, "s", ["x = [b, c];", "x = [b,, c,];", "x = [b] ! y;"]);
-    assert got == "x = [b, c]; => (s (d x = (e (a [ (l (el (e b)) , (el (e c))) ]))) ;)\nx = [b,, c,]; => (s (d x = (e (a [ (l (el (e b) ,) , (el (e c) ,)) ]))) ;)\nx = [b] ! y; => (s (d x = (e (a [ (l (el (e b))) ])) ! y) ;)\n", got;
+    assert got == "x = [b, c]; => (s (d x = (e (a [ (l (el (e b)) , (el (e c))) ]))) ;)\nx = [b,, c,]; => (s (d x = (e (a [ (l (el (e b) ,) , (el (e c) ,)) ]))) ;)\nx = [b] ! y; => (s (d x = (e (a [ (l (el (e b))) ])) ! y) ;)\n";
 }
 
 test "a rule entry claims its call site's return state before returning early" {
@@ -1431,7 +1431,7 @@ test "a rule entry claims its call site's return state before returning early" {
     // call from a site that stamps none.
     let output = gen_source(AT_END_CONFLICT_G4);
     let body = extract_fn_body(&output, "fn _parse_x(");
-    assert body.find("p.atn_ret_pending = -1;").unwrap() < body.find("if p.recovering").unwrap(), body;
+    assert body.find("p.atn_ret_pending = -1;").unwrap() < body.find("if p.recovering").unwrap();
 }
 
 test "non-LR ATN grammar carries prediction without the LR tables" {
@@ -1589,21 +1589,21 @@ test "an empty alternative keeps its fallback where the follow set is a prefix" 
     // A follow set the caller's FOLLOW still extends names only part of what selects
     // the empty alternative; as the whole set it rejects `;`, a legal parse.
     let got = parses(INEXACT_FOLLOW_EMPTY_ALT_G4, "s", [";", "c;", "a;", "bc;"]);
-    assert got == "; => (s r ;)\nc; => (s (r c) ;)\na; => (s (r a) ;)\nbc; => (s (r b c) ;)\n", got;
+    assert got == "; => (s r ;)\nc; => (s (r c) ;)\na; => (s (r a) ;)\nbc; => (s (r b c) ;)\n";
 }
 
 test "the overlap rule dispatch orders its fallback last too" {
     // The follow set is exact, so the empty alternative is also tested by name;
     // its unconditional arm is still the last.
     let got = parses(RULE_OVERLAP_EMPTY_ALT_G4, "x", ["", "a", "ab"]);
-    assert got == " => x\na => (x a)\nab => (x a b)\n", got;
+    assert got == " => x\na => (x a)\nab => (x a b)\n";
 }
 
 test "a wildcard behind a nullable prefix still makes its alternative open-ended" {
     // Having a first set does not settle it: `A? .` is selected by `a` and also
     // by every other token, so partitioning by `{A}` leaves `c` no alternative.
     let got = parses(PREFIXED_WILDCARD_ALT_G4, "s", ["c", "ac", "a", "b"]);
-    assert got == "c => (s c)\nac => (s a c)\na => (s a)\nb => (s b)\n", got;
+    assert got == "c => (s c)\nac => (s a c)\na => (s a)\nb => (s b)\n";
 }
 
 test "an epsilon alternative earns its follow set however it is spelled" {
@@ -1614,14 +1614,14 @@ test "an epsilon alternative earns its follow set however it is spelled" {
 ka => (s k a)
 kb => (s k b)
 kc => error
-", got;
+";
 }
 
 test "an alternative that derives only epsilon through a rule is selected by its follow" {
     // `x` matches nothing, so what follows selects it, as for a written-empty one.
     // ANTLR4 parses `b` as `(s x b)` and `a b` as `(s a b)`.
     let got = parses(INDIRECT_EPSILON_ALT_G4, "s", ["b", "ab"]);
-    assert got == "b => (s x b)\nab => (s a b)\n", got;
+    assert got == "b => (s x b)\nab => (s a b)\n";
 }
 
 
@@ -1635,14 +1635,14 @@ test "an alternative open-ended through a rule keeps its index too" {
     // An empty first set does not say which element produced it: reading the
     // elements catches a `.` written in place but not one reached through `w`.
     let got = printed(INDIRECT_WILDCARD_ALT_G4, ROOT_ALT);
-    assert got == "(s (w a)) Option::Some(SAlt::Wild)\n", got;
+    assert got == "(s (w a)) Option::Some(SAlt::Wild)\n";
 }
 
 test "a wildcard alternative keeps its index against a narrower one" {
     // It admits everything, `a` included, so it competes wherever the narrower
     // alternative does and the tie is its — lowest viable alternative wins.
     let got = printed(WILDCARD_FIRST_ALT_G4, ROOT_ALT);
-    assert got == "(s a) Option::Some(SAlt::Wild)\n", got;
+    assert got == "(s a) Option::Some(SAlt::Wild)\n";
 }
 
 // `A? .` admits every token yet still has the first set `{A}`, which the unions
@@ -1660,30 +1660,30 @@ test "an open-ended alternative still contributes the first set it does have" {
     // the group's classes, so both must include an open-ended alternative's tokens.
     let output = gen_source(OPEN_ENDED_WITH_FIRST_G4);
     let both = ": List<i32> = [TK_A, TK_B];";
-    assert output.contains(both), `expected ${both}, got: ${output}`;
+    assert output.contains(both);
 }
 
 test "a rule's empty alternative does not shadow the ones after it" {
     // A rule's arms are guarded `if`s that return, so an unconditional one shadows
     // the rest unless it comes after every arm a lookahead can select.
     let got = parses(RULE_LEVEL_EMPTY_ALT_G4, "x", ["a", "b", ""]);
-    assert got == "a => (x a)\nb => (x b)\n => x\n", got;
+    assert got == "a => (x a)\nb => (x b)\n => x\n";
 }
 
 test "the op walker's undecided chain keeps every alternative reachable" {
     // The op walker reads lower's baked branches, where an alternative no
     // lookahead selects has an empty token set, which would become `true` again.
     let got = parses(OP_WALKER_EMPTY_ALT_G4, "e", ["c", "cac", "cbc"]);
-    assert got == "c => (e c)\ncac => (e (e c) a (x c))\ncbc => (e (e c) b (x c))\n", got;
+    assert got == "c => (e c)\ncac => (e (e c) a (x c))\ncbc => (e (e c) b (x c))\n";
 }
 
 test "dispatch branches sharing a sub-dispatch are emitted once" {
     let output = gen_source(SHARED_SUBDISPATCH_G4);
     let body = extract_fn_body(&output, "fn _parse_tp__inner(");
     let copies = count_occurrences(&body, "p.peek_at(1)");
-    assert copies > 0, `expected a depth-1 sub-dispatch in tp: ${body}`;
-    assert copies <= 2, `sub-dispatch duplicated once per first token (${copies} copies): ${body}`;
-    assert !body.contains("if p.peek_kind() == TK_A"), `A got its own branch: ${body}`;
+    assert copies > 0, "expected a depth-1 sub-dispatch in tp";
+    assert copies <= 2;
+    assert !body.contains("if p.peek_kind() == TK_A"), "A got its own branch";
 }
 
 // Alts 0 and 1 share `A` and `B`, which the token after them tells apart. `s`
@@ -1706,9 +1706,9 @@ WS : [ \\t\\r\\n]+ -> skip ;
 test "a scan decides by the parse's lookahead, not by scanning every candidate" {
     let output = gen_source(REPEATED_SCAN_ALT_G4);
     let scan_e = extract_fn_body(&output, "fn scan_e(");
-    assert scan_e.contains("if la_1 == TK_LIT_LPAREN {"), scan_e;
-    assert scan_e.contains("return scan_e__alt_0(tokens, start"), scan_e;
-    assert scan_e.contains("return scan_e__alt_1(tokens, start"), scan_e;
+    assert scan_e.contains("if la_1 == TK_LIT_LPAREN {");
+    assert scan_e.contains("return scan_e__alt_0(tokens, start");
+    assert scan_e.contains("return scan_e__alt_1(tokens, start");
 }
 
 test "a gate the scan cannot evaluate does not put its untested arm first" {
@@ -1720,12 +1720,12 @@ s : r A B EOF | r A C EOF ;
 r : { p.pos > 0 }? | A ;
 A : 'a' ; B : 'b' ; C : 'c' ;
 ", "s", ["aab", "aac", "ab"]);
-    assert got == "aab => (s (r a) a b)\naac => (s (r a) a c)\nab => error\n", got;
+    assert got == "aab => (s (r a) a b)\naac => (s (r a) a c)\nab => error\n";
 }
 
 test "an uncontested alternative is scanned in place" {
     let output = gen_source(REPEATED_SCAN_ALT_G4);
-    assert !output.contains("fn scan_e__alt_2("), output;
+    assert !output.contains("fn scan_e__alt_2(");
 }
 
 // `RustParser.g4`'s `crate : innerAttribute* item* EOF`: the reserve walks the
@@ -1766,7 +1766,7 @@ WS : (' '|'\\n') -> skip ;
     assert got == "(1) => (e ( (e 1) )) [1]
 1*2 => (e (e 1) * (e 2))
 (1)/2 => (e (e ( (e 1) )) / (e 2)) [1]
-", got;
+";
 }
 
 test "an element whose name is the recognizer handle does not shadow it" {
@@ -1779,7 +1779,7 @@ P : 'p' ;
 WS : ' ' -> skip ;
 ";
     let got = parses(g4, "r", ["p"]);
-    assert got == "p => (r p) [p]\n", got;
+    assert got == "p => (r p) [p]\n";
 }
 
 test "an element named after any generated parse-fn local does not shadow it" {
@@ -1793,7 +1793,7 @@ VALS : 'v' ;
 WS : ' ' -> skip ;
 ";
     let got = parses(g4, "r", ["k v", "v"]);
-    assert got == "k v => (r k v) [kv]\nv => (r v)\n", got;
+    assert got == "k v => (r k v) [kv]\nv => (r v)\n";
 }
 
 // "a prebound LR suffix scan is neither re-tested nor re-seeded" pins the guard's
@@ -1815,7 +1815,7 @@ ${rest}`;
     assert got == "1* => (s (e 1) *)
 1** => (s (e (e 1) (x *)) *)
 1*! => (s (e (e 1) (x *)) !)
-", got;
+";
     let atn_lr = `grammar T;
 s : e '*' EOF | e '!' EOF ;
 e : e x | e '+' e '+' | e '+' e | '(' e ')' | INT ;
@@ -1825,7 +1825,7 @@ ${rest}`;
 1+2! => (s (e (e 1) + (e 2)) !)
 1+2+* => (s (e (e 1) + (e 2) +) *)
 1+2** => (s (e (e 1) + (e (e 2) (x *))) *)
-", atn_got;
+";
     // The first token admits `(A B)?`, which then matches nothing: recovery skips
     // the `a` rather than wrapping an empty `e`.
     let stranded = printed("grammar T;
@@ -1835,7 +1835,7 @@ A : 'a' ; B : 'b' ;
 INT : '0'..'9'+ ;
 WS : ' ' -> skip ;
 ", "println(to_string_tree(&parse_s(\"1 a\")));");
-    assert stranded == "(s (e 1) <skip a>)\n", stranded;
+    assert stranded == "(s (e 1) <skip a>)\n";
 }
 
 // An action or predicate nested inside a group must never vanish: it either
@@ -1851,7 +1851,7 @@ A : 'a' ;
 ";
     assert unsupported_count(&gen(src)) == 0, "a gated empty alternative must not warn";
     let got = parses(src, "r", ["aa", "a"]);
-    assert got == "aa => (r a a)\na => error\n", got;
+    assert got == "aa => (r a a)\na => error\n";
 }
 
 test "a plain action on an empty alternative does not cost it its follow set" {
@@ -1870,7 +1870,7 @@ C : 'c' ;
 ka => (s k a)
 kb => (s k b)
 kc => error [x]
-", got;
+";
 }
 
 // A predicate in a host language Gale does not emit renders nothing, so it must not
@@ -1884,7 +1884,7 @@ B : 'b' ;
 C : 'c' ;
 ";
     let got = parses(gated, "s", ["k", "ka", "kc"]);
-    assert got == "k => (s k)\nka => (s k a)\nkc => error\n", got;
+    assert got == "k => (s k)\nka => (s k a)\nkc => error\n";
 }
 
 // The rejection case: the same shape in a language Gale does emit is selected
@@ -1897,7 +1897,7 @@ A : 'a' ;
 B : 'b' ;
 ";
     let got = parses(gated, "s", ["k", "ka"]);
-    assert got == "k => error\nka => (s k a)\n", got;
+    assert got == "k => error\nka => (s k a)\n";
 }
 
 // Parser-side `superClass` (Stage C): a `{this.m()}?` predicate in a parser
@@ -1917,7 +1917,7 @@ export fn run() {
 `) else {
         panic("a caller that installs no handler must fail to compile");
     };
-    assert failure.rendered.contains("missing effect 'PBase' required by 'parse'"), failure.rendered;
+    assert failure.rendered.contains("missing effect 'PBase' required by 'parse'");
 }
 
 test "the parser action-context API is public under a parser base" {
@@ -1942,10 +1942,10 @@ A : 'a' ;
     assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
     // The recognizer surface turns public only for a base that is wired, so it
     // and the interface emit cannot drift apart.
-    assert !out.contains("pub struct Parser"), out;
-    assert !out.contains("pub fn la("), out;
+    assert !out.contains("pub struct Parser");
+    assert !out.contains("pub fn la(");
     // The rewrite never ran, so the body still names `this`.
-    assert !out.contains("this."), out;
+    assert !out.contains("this.");
 }
 
 test "a parser base reached from an action body is refused" {
@@ -1960,7 +1960,7 @@ A : 'a' ;
     assert unsupported_count(&generated) == 1, "the refusal is reported once";
     let out = generated.source;
     assert !out.contains("pub interface PBase"), "and nothing reaching the base is emitted";
-    assert !out.contains("this."), out;
+    assert !out.contains("this.");
 }
 
 test "an alt-initial predicate on a refused base is not extracted either" {
@@ -1975,7 +1975,7 @@ B : 'b' ;
     // The refusal, then the un-gated predicate the alt dispatch is left with.
     let out = gen(src);
     assert unsupported_count(&out) == 2, "both the refusal and the dropped gate are reported";
-    assert !out.source.contains("this."), out.source;
+    assert !out.source.contains("this.");
 }
 
 test "a grammar with no parser base is unaffected" {
@@ -2016,8 +2016,8 @@ shr : GT { this.next_gt() }? GT ;
 ").unwrap();
     let mut merged = merge_grammars([lexer_g, parser_g]);
     let src = generate(&mut merged, &DEFAULT_OPTIONS).source;
-    assert src.contains("//   option superClass = LBase (lexer)"), src;
-    assert src.contains("//   option superClass = PBase (parser)"), src;
+    assert src.contains("//   option superClass = LBase (lexer)");
+    assert src.contains("//   option superClass = PBase (parser)");
 }
 
 test "a this-call with no parser base declared is reported, not emitted" {
@@ -2029,7 +2029,7 @@ A : 'a' ;
 ";
     let out = gen(src);
     assert unsupported_count(&out) == 1, "the stray receiver is reported";
-    assert !out.source.contains("this."), out.source;
+    assert !out.source.contains("this.");
 }
 
 test "a lexer this-call in a combined grammar is reported, not emitted" {
@@ -2042,7 +2042,7 @@ X : { this.ok() }? [a-z]+ ;
 ";
     let out = gen(src);
     assert unsupported_count(&out) == 1, "the stray lexer receiver is reported";
-    assert !out.source.contains("this."), out.source;
+    assert !out.source.contains("this.");
 }
 
 test "a parser superClass does not carve out java members" {
@@ -2057,7 +2057,7 @@ shr : GT { this.NextGT() }? GT ;
 GT : '>' ;
 ");
     assert src.contains("PBase::next_gt(p)"), "the base predicate still runs";
-    assert src.contains("calls: i32 = 0"), src;
+    assert src.contains("calls: i32 = 0");
 }
 
 test "fragment recovery reaches the base through expect" {
@@ -2083,7 +2083,7 @@ impl PsBase for Always {
     }
 }
 ").stdout;
-    assert got == "(prog (shr > >))\nfalse\n", got;
+    assert got == "(prog (shr > >))\nfalse\n";
 }
 
 test "a this field read with no parser base is reported, not emitted" {
@@ -2094,7 +2094,7 @@ A : 'a' ;
 ";
     let out = gen(src);
     assert unsupported_count(&out) == 1, "a receiver-less `this` is reported whatever follows it";
-    assert !out.source.contains("this"), out.source;
+    assert !out.source.contains("this");
 }
 
 // A lexer action runs at the tournament commit for the winning rule only, through
@@ -2142,7 +2142,7 @@ B : 'b' ;
 WS : ' ' -> skip ;
 ";
     let output = gen_source(grammar);
-    assert count_occurrences(&output, "fn pred_") == 2, output;
+    assert count_occurrences(&output, "fn pred_") == 2;
     assert parses(grammar, "s", ["a b", "b a"]) == "a b => (s (x a b))\nb a => (s (y b a))\n";
 }
 
@@ -2156,7 +2156,7 @@ A : 'a' ;
 B : 'b' ;
 ";
     let pred = extract_fn_body(&gen_source(grammar), "fn pred_");
-    assert !pred.contains("// always;"), pred;
+    assert !pred.contains("// always;");
     assert parses(grammar, "s", ["a"]) == "a => (s (x a))\n";
 }
 
@@ -2235,7 +2235,7 @@ B : 'b' ;
 ",
     ];
     for let g4 of grammars {
-        assert unsupported_count(&gen(g4)) == 0, g4;
+        assert unsupported_count(&gen(g4)) == 0;
     }
 }
 
@@ -2343,7 +2343,7 @@ test "a Java lexer body can declare and read its own local" {
 A : 'a'+ { int n = 1; System.out.println(\"n=\" + n); } ;
 WS : ' ' -> skip ;
 ", ["aa"]);
-    assert got == "aa => A:aa [n=1\n]\n", got;
+    assert got == "aa => A:aa [n=1\n]\n";
 }
 
 test "a lexer rule called from another matches through its later alternatives" {
@@ -2356,7 +2356,7 @@ E : 'x' N ;
 N : [0-9]+ | [0-9]* '.' [0-9]+ ;
 DOT : '.' ;
 ", ["0.25rem", "12px", ".5rem", "3.", "1.5", "x1.5", "x3."]);
-    assert got == "0.25rem => D:0.25rem\n12px => D:12px\n.5rem => D:.5rem\n3. => N:3 DOT:.\n1.5 => N:1.5\nx1.5 => E:x1.5\nx3. => E:x3 DOT:.\n", got;
+    assert got == "0.25rem => D:0.25rem\n12px => D:12px\n.5rem => D:.5rem\n3. => N:3 DOT:.\n1.5 => N:1.5\nx1.5 => E:x1.5\nx3. => E:x3 DOT:.\n";
 }
 
 test "a chain of optionals lexes the longest match in a matcher linear in its length" {
@@ -2370,7 +2370,7 @@ Q : '?' ;
     // One peek, saved and restored, per optional with another after it.
     assert count_occurrences(&gen_source(src), "peek_save_") == 8;
     let got = lexes(src, ["u+", "u+??", "u+?????", "u+??????"]);
-    assert got == "u+ => U:u+\nu+?? => U:u+??\nu+????? => U:u+?????\nu+?????? => U:u+????? Q:?\n", got;
+    assert got == "u+ => U:u+\nu+?? => U:u+??\nu+????? => U:u+?????\nu+?????? => U:u+????? Q:?\n";
 }
 
 test "a called lexer rule keeps its own case folding" {
@@ -2378,7 +2378,7 @@ test "a called lexer rule keeps its own case folding" {
 A : B 'z' ;
 B options { caseInsensitive = true; } : 'a' | 'ab' ;
 ", ["Az", "A"]);
-    assert got == "Az => A:Az\nA => B:A\n", got;
+    assert got == "Az => A:Az\nA => B:A\n";
 }
 
 test "a called lexer rule runs its actions only for a token of its own" {
@@ -2386,7 +2386,7 @@ test "a called lexer rule runs its actions only for a token of its own" {
 A : B 'z' ;
 B : 'a' { System.out.println(\"x\"); } | 'ab' ;
 ", ["az", "abz", "a"]);
-    assert got == "az => A:az\nabz => A:abz\na => B:a [x\n]\n", got;
+    assert got == "az => A:az\nabz => A:abz\na => B:a [x\n]\n";
 }
 
 test "an unmodelled ANTLR lexer field is a loud diagnostic, not broken code" {
@@ -2488,7 +2488,7 @@ A : 'A' { lx.emit(\"!\") } ;
 ID : [a-zA-Z]+ ;
 WS : [ \\t\\n\\r]+ -> skip ;
 ", ["A Ab A"]);
-    assert with_action == "A Ab A => A:A ID:Ab A:A [!!]\n", with_action;
+    assert with_action == "A Ab A => A:A ID:Ab A:A [!!]\n";
 
     let with_pred = lexes("grammar T;
 options { language = Wado; }
@@ -2497,7 +2497,7 @@ A : 'A' { start == 0 }? ;
 ID : [a-zA-Z]+ ;
 WS : [ \\t\\n\\r]+ -> skip ;
 ", ["A A"]);
-    assert with_pred == "A A => A:A ID:A\n", with_pred;
+    assert with_pred == "A A => A:A ID:A\n";
 
     // The shortcut still applies to the plain shape it was written for.
     let plain = gen_source("grammar T;
@@ -2648,7 +2648,7 @@ impl B for Count {
     }
 }
 ").stdout;
-    assert got == "3\n", got;
+    assert got == "3\n";
 }
 
 test "a grammar with no base has no emit hook" {
@@ -2719,7 +2719,7 @@ impl B for Seen {
     }
 }
 ").stdout;
-    assert got == "[2, 2]\n", got;
+    assert got == "[2, 2]\n";
 }
 
 test "a superClass call whose argument has no evident type is refused" {
@@ -2769,15 +2769,15 @@ test "a members block the translator refuses leaves the gate unsimulated" {
     let out = gen_source(&members_grammar(
         "    java.util.Map<String, Integer> seen = new java.util.HashMap<>();\n    int n = 0;",
     ));
-    assert !out.contains("struct ScanGate"), `a field no member declares must not reach the scan gate: ${out}`;
+    assert !out.contains("struct ScanGate"), "a field no member declares must not reach the scan gate";
 }
 
 // The rejection case for the test above: without it, that assertion would also
 // hold for a grammar that simulates nothing.
 test "the same action with a translatable members block reaches the gate" {
     let out = gen_source(&members_grammar("    int n = 0;"));
-    assert out.contains("struct ScanGate"), `a declared field stays simulable: ${out}`;
-    assert out.contains("n: i32 = 0"), `the gate copies the member's own type and initialiser: ${out}`;
+    assert out.contains("struct ScanGate"), "a declared field stays simulable";
+    assert out.contains("n: i32 = 0"), "the gate copies the member's own type and initialiser";
 }
 
 // The gate is parser state that every scan walks by reference, never a global.
@@ -2792,9 +2792,9 @@ r : A { n = 1; } A+ ;
 A : 'a' ;
 B : 'b' ;
 ");
-    assert out.contains("scan_gate: ScanGate = ScanGate {}"), out;
-    assert out.contains("fn scan_r(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,"), out;
-    assert !out.contains("global mut"), out;
+    assert out.contains("scan_gate: ScanGate = ScanGate {}");
+    assert out.contains("fn scan_r(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate,");
+    assert !out.contains("global mut");
 }
 
 // The LR dispatch launches a scan three ways (branch call, prebound fallback, ATN
@@ -2816,7 +2816,7 @@ c : C ;
 OP : '+' ; A : 'a' ; B : 'b' ; C : 'c' ; ID : 'x' ; LB : '(' ; RB : ')' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ");
-    assert out.contains("let _lr_scan_"), `the grammar must reach the pre-bound fallbacks: ${out}`;
+    assert out.contains("let _lr_scan_"), "the grammar must reach the pre-bound fallbacks";
     let mut calls = 0;
     let mut seeded = 0;
     let mut after_seed = false;
@@ -2830,8 +2830,8 @@ WS : [ \\t\\r\\n]+ -> skip ;
         }
         after_seed = l.starts_with("p.scan_gate.") && l.contains(" = p.");
     }
-    assert calls > 0, `the grammar must reach a parse-launched LR scan: ${out}`;
-    assert seeded == calls, `${calls - seeded} of ${calls} parse-launched LR scans start from a stale gate: ${out}`;
+    assert calls > 0, "the grammar must reach a parse-launched LR scan";
+    assert seeded == calls;
 }
 
 test "a prebound LR suffix scan is neither re-tested nor re-seeded" {
@@ -2851,14 +2851,14 @@ c : C ;
 OP : '+' ; A : 'a' ; B : 'b' ; C : 'c' ; ID : 'x' ; LB : '(' ; RB : ')' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ");
-    assert out.contains("let _lr_scan_"), `the grammar must reach the pre-bound fallbacks: ${out}`;
-    assert !out.contains("_lr_pos0"), `every suffix opens on OP, so the loop always advances: ${out}`;
+    assert out.contains("let _lr_scan_"), "the grammar must reach the pre-bound fallbacks";
+    assert !out.contains("_lr_pos0"), "every suffix opens on OP, so the loop always advances";
     let mut prev = "";
     for let line of out.split("\n") {
         let l = line.trim().to_string();
-        assert !(l.starts_with("if _lr_scan_") && l.ends_with("< 0 {")), `a matched prebound scan is re-tested: ${out}`;
-        assert !(l.starts_with("let _lr_scan_") && l.contains("_gate = p.scan_gate")), `the parse keeps a gate it never reads: ${out}`;
-        assert !(prev.starts_with("let lr_pre") && l.starts_with("*gate = lr_pre")), `the gate is restored to itself: ${out}`;
+        assert !(l.starts_with("if _lr_scan_") && l.ends_with("< 0 {")), "a matched prebound scan is re-tested";
+        assert !(l.starts_with("let _lr_scan_") && l.contains("_gate = p.scan_gate")), "the parse keeps a gate it never reads";
+        assert !(prev.starts_with("let lr_pre") && l.starts_with("*gate = lr_pre")), "the gate is restored to itself";
         prev = l;
     }
 }
@@ -2877,9 +2877,9 @@ xs : LB+ ;
 ID : 'x' ; LB : '(' ; RB : ')' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ");
-    assert out.contains("let _sd_p_0 = "), `the grammar must reach a tournament: ${out}`;
-    assert !out.contains("else { -1 }"), `the gate is tested twice: ${out}`;
-    assert out.contains("if gate.no_struct != 0 { return -1; }"), `the candidate scan tests the gate: ${out}`;
+    assert out.contains("let _sd_p_0 = "), "the grammar must reach a tournament";
+    assert !out.contains("else { -1 }"), "the gate is tested twice";
+    assert out.contains("if gate.no_struct != 0 { return -1; }"), "the candidate scan tests the gate";
 }
 
 test "a single-token rule with a gated alternative keeps the gate in its scan" {
@@ -2896,7 +2896,7 @@ xs : LB+ ;
 ID : 'x' ; LB : '(' ; RB : ')' ;
 WS : [ \\t\\r\\n]+ -> skip ;
 ", "start", ["(x()", "x()"]);
-    assert got == "(x() => (start ( (body x (xs ()) ))\nx() => (start (body (r x) (xs () )))\n", got;
+    assert got == "(x() => (start ( (body x (xs ()) ))\nx() => (start (body (r x) (xs () )))\n";
 }
 
 /// The report `gale dump --lexer` prints for `input`.
@@ -2949,7 +2949,7 @@ test "every strategy the dump reports is one the emitter emitted" {
         for let m of &STRATEGY_MARKERS {
             let reported = count_occurrences(&report, &m.reported);
             let emitted = count_occurrences(&code, &m.emitted);
-            assert reported == emitted, `'${m.reported}': the dump reports ${reported}, the emitter emitted ${emitted} — for ${*src}`;
+            assert reported == emitted;
         }
     }
 }
@@ -2990,7 +2990,7 @@ e[int x, int y] returns [int v] : ID { $v = $x + $y; System.out.print($v + \" \"
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a b"]);
-    assert got == "a b => (s (e a) (e b)) [3 13 ]\n", got;
+    assert got == "a b => (s (e a) (e b)) [3 13 ]\n";
 }
 
 // `args` scopes the gate for its own extent (`locals` + `@init` / `@after`), so
@@ -3018,7 +3018,7 @@ WS : [ \\t]+ -> skip ;
     assert got == "if f(x) || a { b } => (start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))
 if f(a { b }) { c } => (start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))
 a { b } ; => (start (stmt (expr a { b }) ;))
-", got;
+";
 }
 
 global LR_SUFFIX_LOOPS: String = "grammar T;
@@ -3039,7 +3039,7 @@ x{a,b,} => (s (e (e x) { a , b , }))
 x<a b> => (s (e (e x) < a b >))
 x<> => (s (e (e x) < >))
 x(y)[z]{w,}<> => (s (e (e (e (e (e x) ( y )) [ z ]) { w , }) < >))
-", got;
+";
 }
 
 test "a non-greedy wildcard in a left-recursive suffix exits only where the rest can match" {
@@ -3047,7 +3047,7 @@ test "a non-greedy wildcard in a left-recursive suffix exits only where the rest
     assert got == "x(a ) b) => (s (e (e x) ( a ) b )))
 x(a)(b) => (s (e (e (e x) ( a )) ( b )))
 x(a ) [b]) => (s (e (e x) ( a ) [ b ] )))
-", got;
+";
 }
 
 // The atom's alternatives share `(`, so each one gets a function of its own,
@@ -3061,7 +3061,7 @@ WS : [ \\t]+ -> skip ;
 ", "s", ["(a b) + (c)", "(a ) b ) + c"]);
     assert got == "(a b) + (c) => (s (e (e ( a b )) + (e ( c ))))
 (a ) b ) + c => (s (e (e ( a ) b )) + (e c)))
-", got;
+";
 }
 
 // Both alternatives of `a` scan `e` at one position, and `t` inside it decides
@@ -3081,7 +3081,7 @@ WS : [ \\t]+ -> skip ;
 a ! ; ; => (s (a (e (t a !)) ; ;))
 a + b ! ; ; => (s (a (e (e (t a)) + (e (t b !))) ; ;))
 a + b ! ; => (s (a (e (e (t a)) + (e (t b))) ! ;))
-", got;
+";
 }
 
 test "a non-greedy optional in a contested alternative skips where the rest can match" {
@@ -3103,7 +3103,7 @@ WS : [ \\t]+ -> skip ;
 (a)+(a b) => (s (e (e ( a )) + (e ( a b ))))
 (a) => (s (e ( a )))
 (a b) => (s (e ( a b )))
-", got;
+";
 }
 
 test "a non-greedy wildcard exits only where the whole rest of the input can match" {
@@ -3130,7 +3130,7 @@ WS : [ \\t]+ -> skip ;
 x ; => (s x ;)
 ( a ) b ) b c => (s (e ( a ) b )) b c)
 ( a ) b c => (s (e ( a )) b c)
-", got;
+";
 }
 
 test "a redundant group around a loop body keeps the loop's decision" {
@@ -3155,7 +3155,7 @@ e x y z; => (s e x y z ;)
 e x; => error
 f x y; => (s f x y ;)
 f; => (s f ;)
-", got;
+";
 }
 
 test "a loop in a left-recursive suffix scans where its body overlaps what follows" {
@@ -3178,7 +3178,7 @@ x(a b c,) => (s (e (e x) ( a b c , )))
 x() => (s (e (e x) ( )))
 x<a b> => (s (e (e x) < a b >))
 x<> => error
-", got;
+";
 }
 
 test "a shape-lookahead optional in a left-recursive suffix is decided per shape" {
@@ -3192,7 +3192,7 @@ WS : [ \\t]+ -> skip ;
 x in a b a => (s (e (e x) in a b a))
 x in b a => (s (e (e x) in b a))
 x in a a => error
-", got;
+";
 }
 
 test "a non-greedy optional in a left-recursive suffix leaves the else to its caller" {
@@ -3205,7 +3205,7 @@ WS : [ \\t]+ -> skip ;
     assert got == "a else c => (s (e a) else c)
 a if b else c => (s (e (e a) if (e b)) else c)
 a if b else c else d => (s (e (e a) if (e b) else (e c)) else d)
-", got;
+";
 }
 
 test "interchangeable alternatives are picked by their predicates in grammar order" {
@@ -3217,7 +3217,7 @@ a : {false}? ID ID {System.out.print(\"one\");}
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a b"]);
-    assert got == "a b => (s (a a b)) [two]\n", got;
+    assert got == "a b => (s (a a b)) [two]\n";
 }
 
 test "interchangeable alternatives whose predicates all fail have no viable alternative" {
@@ -3227,7 +3227,7 @@ a : {false}? ID ID | {false}? ID ID ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a b"]);
-    assert got == "a b => error\n", got;
+    assert got == "a b => error\n";
 }
 
 test "a left-recursive rule runs @after once per invocation, after its whole climb" {
@@ -3239,7 +3239,7 @@ e
 INT : [0-9]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["1", "1+2+3"]);
-    assert got == "1 => (s (e 1)) [done;]\n1+2+3 => (s (e (e (e 1) + (e 2)) + (e 3))) [done;done;done;]\n", got;
+    assert got == "1 => (s (e 1)) [done;]\n1+2+3 => (s (e (e (e 1) + (e 2)) + (e 3))) [done;done;done;]\n";
 }
 
 test "a left-recursive rule's @after reads the value its whole climb computed" {
@@ -3255,7 +3255,7 @@ e returns [i32 v]
 INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ", "s", ["5", "5 + 3"]);
-    assert got == "5 => (s (e 5)) [[after=1005]v=1005 ]\n5 + 3 => (s (e (e 5) + (e 3))) [[after=1003][after=2008]v=2008 ]\n", got;
+    assert got == "5 => (s (e 5)) [[after=1005]v=1005 ]\n5 + 3 => (s (e (e 5) + (e 3))) [[after=1003][after=2008]v=2008 ]\n";
 }
 
 test "a group in a left-recursive suffix picks the longest of its overlapping alternatives" {
@@ -3271,7 +3271,7 @@ a.b => (s (e (e a) . b))
 a.b[] => (s (e (e a) . b [ ]))
 a.* => (s (e (e a) . *))
 a.b.c().d[].* => (s (e (e (e (e (e a) . b) . c ( )) . d [ ]) . *))
-", got;
+";
 }
 
 test "a decided group loop leaves its rule the tail it needs" {
@@ -3285,7 +3285,7 @@ WS : [ \\t]+ -> skip ;
 b y a z => (start (body b y a z))
 a z a z a z => (start (body a z a z a z))
 a z => (start (body a z))
-", got;
+";
 }
 
 test "a scanned loop over a complement stops at the excluded tokens" {
@@ -3301,7 +3301,7 @@ WS : [ \\t]+ -> skip ;
 (a b)y => (s (b ( a b ) y))
 ()y => (s (b ( ) y))
 (a;b)y => error
-", got;
+";
 }
 
 test "a list label outside a loop takes a token and a set" {
@@ -3311,7 +3311,7 @@ A : '+' ; B : '-' ;
 ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["a,b+-", "a,b"]);
-    assert got == "a,b+- => (s a , b + -)\na,b => error\n", got;
+    assert got == "a,b+- => (s a , b + -)\na,b => error\n";
 }
 
 test "left-recursive suffixes sharing an operator split on the token after it" {
@@ -3325,7 +3325,7 @@ WS : [ \\t]+ -> skip ;
 a + + => (s (e (e a) + +))
 a + + - b => (s (e (e (e a) + +) - (e b)))
 a - b + + => (s (e (e (e a) - (e b)) + +))
-", got;
+";
 }
 
 test "a group undecided past the static lookahead depth asks the runtime ATN" {
@@ -3337,7 +3337,7 @@ WS : [ \\t]+ -> skip ;
     assert got == "k a a a a a a b => (s k a a a a a a b)
 k a a a a a a c => (s k a a a a a a c)
 k a a a a a a a => error
-", got;
+";
 }
 
 test "prediction follows a loop body back out to the token after the loop" {
@@ -3346,7 +3346,7 @@ s : a EOF ;
 a : ('x' 'y')* 'z' | ('x' 'y')* 'w' ;
 WS : [ \\t]+ -> skip ;
 ", "s", ["x y z", "x y x y w", "w", "x y"]);
-    assert got == "x y z => (s (a x y z))\nx y x y w => (s (a x y x y w))\nw => (s (a w))\nx y => error\n", got;
+    assert got == "x y z => (s (a x y z))\nx y x y w => (s (a x y x y w))\nw => (s (a w))\nx y => error\n";
 }
 
 // `xt` and its twins have `'a' 'b'` prefixing `'a' 'b' 'c'`, which the runtime
@@ -3399,7 +3399,7 @@ abc => (ctxdrop (cd a b) c) [ab]
 abcc => error
 abckx => (scanned (xg a b c) k x) [abcx]
 abcky => (scanned (xg a b c) k y) [abcy]
-", got;
+";
 }
 
 test "a non-greedy loop in a left-recursive suffix stops where the rest of the suffix matches" {
@@ -3414,7 +3414,7 @@ x<a> => (s (e (e x) < a >))
 x(a b) => (s (e (e x) ( a b )))
 x(a) => error
 x<> => error
-", got;
+";
 }
 
 test "a group of rule calls undecided past the static lookahead depth asks the runtime ATN, in the parse and the scan" {
@@ -3429,7 +3429,7 @@ WS : [ \\t]+ -> skip ;
     assert got == "k a a a a a a b x => (s (r k (a a a a a a a b)) x)
 k a a a a a a c y => (s (r k (b a a a a a a c)) y)
 k a a a a a a a x => error
-", got;
+";
 }
 
 /// `show_with(ok, input)` shows `parse_s(input)` under a `PBase` whose `ok()`
@@ -3459,7 +3459,7 @@ options { superClass = PBase; }
 s : ( {this.ok()}? A | B )* EOF ;
 A : 'a' ; B : 'b' ;
 ", "show_with(true, \"ab\");\nshow_with(false, \"ab\");\nshow_with(false, \"b\");\n", SHOW_WITH_PBASE);
-    assert got == "true ab => (s a b)\nfalse ab => error\nfalse b => (s b)\n", got;
+    assert got == "true ab => (s a b)\nfalse ab => error\nfalse b => (s b)\n";
 }
 
 test "past a shared first token, the next tokens pick the alternative through groups, loops, labels, optionals, sets and rule calls" {
@@ -3530,7 +3530,7 @@ b => (q b)
 k => error
 abxd => (m a b x d)
 aexc => (m a e x c)
-", got;
+";
 }
 
 test "a lexer base predicate gates its alternative inside a group, a loop and a fragment" {
@@ -3564,7 +3564,7 @@ WS : ' ' -> skip ;
 ", "lex_with(true, \"ab xy 11 qz\");\nlex_with(false, \"ab xy 11 qz\");\n", items);
     assert got == "true => KW:ab KW:xy NUM:11 FR:qz
 false => ID:ab KW:xy INT:11 ID:qz
-", got;
+";
 }
 
 test "a greedy loop keeps a token its caller could also take, entered directly or not" {
@@ -3582,7 +3582,7 @@ WS : ' ' -> skip ;
         ["s", "{x;x}"],
         ["s", "{x;;x}"],
     ]);
-    assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n", got;
+    assert got == "x;x => (list x ; x)\nx; => (list x ;)\n{x;x} => (s { (list x ; x) })\n{x;;x} => (s { (list x ; ; x) })\n";
 }
 
 test "a greedy loop leaves its last token to a caller that ends the input with it" {
@@ -3601,7 +3601,7 @@ WS : ' ' -> skip ;
         ["list", "x;"],
         ["s", "x;x;"],
     ]);
-    assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n", got;
+    assert got == "x; => (s (list x) ;)\nx; => (t (list x) ;)\nx; => (list x)\nx;x; => (s (list x ; x) ;)\n";
 }
 
 test "a greedy loop leaves a longer last iteration to a caller that ends the input with it" {
@@ -3621,7 +3621,7 @@ WS : ' ' -> skip ;
         ["t", "a x y"],
         ["list", "a x y"],
     ]);
-    assert ends == "a x y => (s (list a) x y)\na x y => (t (list a) x y)\na x y => (list a)\n", ends;
+    assert ends == "a x y => (s (list a) x y)\na x y => (t (list a) x y)\na x y => (list a)\n";
     let goes_on = parses("grammar N;
 u : '{' (list | X Y)* '}' ;
 list : A (X Y)* ;
@@ -3630,7 +3630,7 @@ X : 'x' ;
 Y : 'y' ;
 WS : ' ' -> skip ;
 ", "list", ["a x y"]);
-    assert goes_on == "a x y => (list a x y)\n", goes_on;
+    assert goes_on == "a x y => (list a x y)\n";
 }
 
 test "a single-token optional EOF does not outrank an earlier alternative" {
@@ -3645,7 +3645,7 @@ X : 'x' ;
 Y : 'y' ;
 WS : ' ' -> skip ;
 ", "prog", ["x y"]);
-    assert got == "x y => (prog (stmt (decl x y)))\n", got;
+    assert got == "x y => (prog (stmt (decl x y)))\n";
 }
 
 test "an alternative that also matches EOF does not outrank an earlier one covering the same input" {
@@ -3664,7 +3664,7 @@ block : '{' stmt* '}' ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ", "prog", ["function f() {}", "function f() {} x;"]);
-    assert got == "function f() {} => (prog (stmt (decl function f ( ) (block { }))))\nfunction f() {} x; => (prog (stmt (decl function f ( ) (block { }))) (stmt (exprStmt (expr x) (eos ;))))\n", got;
+    assert got == "function f() {} => (prog (stmt (decl function f ( ) (block { }))))\nfunction f() {} x; => (prog (stmt (decl function f ( ) (block { }))) (stmt (exprStmt (expr x) (eos ;))))\n";
 }
 
 test "unclosed elements scan in time linear in their number" {
@@ -3684,7 +3684,7 @@ e : '<' ID '>' (c '<' '/' ID '>')? ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ", "s", [input]);
-    assert got == `${input} => ${tree}))\n`, got;
+    assert got == `${input} => ${tree}))\n`;
 }
 
 test "an optional group yields a token its continuation needs" {
@@ -3695,7 +3695,7 @@ S : 'static' ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ", "s", ["f()", "g f()", "static f()"]);
-    assert got == "f() => (s (m f ( )))\ng f() => (s g (m f ( )))\nstatic f() => (s static (m f ( )))\n", got;
+    assert got == "f() => (s (m f ( )))\ng f() => (s g (m f ( )))\nstatic f() => (s static (m f ( )))\n";
 }
 
 test "a false predicate in an optional prefix skips the prefix rather than the alternative" {
@@ -3714,7 +3714,7 @@ WS : ' ' -> skip ;
         "show_with(false, \"f()\");\nshow_with(true, \"f()\");\nshow_with(true, \"g f()\");\nshow_with(false, \"g f()\");\n",
         SHOW_WITH_PBASE,
     );
-    assert got == "false f() => (s (m f ( )))\ntrue f() => (s (m f ( )))\ntrue g f() => (s g (m f ( )))\nfalse g f() => error\n", got;
+    assert got == "false f() => (s (m f ( )))\ntrue f() => (s (m f ( )))\ntrue g f() => (s g (m f ( )))\nfalse g f() => error\n";
 }
 
 test "a parser base call gates alternatives whose first tokens tie" {
@@ -3727,7 +3727,7 @@ a : X ;
 b : X ;
 X : 'x' ;
 ", "show_with(true, \"x\");\nshow_with(false, \"x\");\n", SHOW_WITH_PBASE);
-    assert got == "true x => (s (a x))\nfalse x => (s (b x))\n", got;
+    assert got == "true x => (s (a x))\nfalse x => (s (b x))\n";
 }
 
 test "a parser base decides the tree a superClass grammar's highlighter walks" {
@@ -3759,7 +3759,7 @@ fn highlight_with(ok: bool) with Stdout {
 }
 ";
     let got = run_beside(out.source, "highlight_with(true);\nhighlight_with(false);\n", items).stdout;
-    assert got == "<span class=\"keyword\">x</span>\n<span class=\"string\">x</span>\n", got;
+    assert got == "<span class=\"keyword\">x</span>\n<span class=\"string\">x</span>\n";
 }
 
 test "a lexer base decides the tokens a lexer grammar's highlighter classifies" {
@@ -3787,7 +3787,7 @@ fn highlight_with(on: bool) with Stdout {
 }
 ";
     let got = run_beside(out.source, "highlight_with(true);\nhighlight_with(false);\n", items).stdout;
-    assert got == "<span class=\"keyword\">ab</span>\nab\n", got;
+    assert got == "<span class=\"keyword\">ab</span>\nab\n";
 }
 
 test "a parser base call runs in a grammar whose action language has no translator" {
@@ -3796,7 +3796,7 @@ options { superClass = PBase; language = Cpp; }
 s : {this.ok()}? A | B ;
 A : 'a' ; B : 'b' ;
 ", "show_with(true, \"a\");\nshow_with(false, \"a\");\nshow_with(false, \"b\");\n", SHOW_WITH_PBASE);
-    assert got == "true a => (s a)\nfalse a => error\nfalse b => (s b)\n", got;
+    assert got == "true a => (s a)\nfalse a => error\nfalse b => (s b)\n";
 }
 
 test "a parser base is refused where an untranslatable @init carries host code" {
@@ -3816,14 +3816,14 @@ s : e[\"x,y\", 2] EOF ;
 e[String t, int n] : ID { System.out.print($t); System.out.print($n); } ;
 ID : [a-z]+ ;
 ", "s", ["a"]);
-    assert in_java == "a => (s (e a)) [x,y2]\n", in_java;
+    assert in_java == "a => (s (e a)) [x,y2]\n";
     let in_wado = parses("grammar T;
 options { language = Wado; }
 s : e[\"x,y\", 2] EOF ;
 e[String t, i32 n] : ID { p.emit(`${$t}${$n}`); } ;
 ID : [a-z]+ ;
 ", "s", ["a"]);
-    assert in_wado == "a => (s (e a)) [x,y2]\n", in_wado;
+    assert in_wado == "a => (s (e a)) [x,y2]\n";
 }
 
 test "a Java action concatenating a string and an int prints both" {
@@ -3832,7 +3832,7 @@ s : e[\"x\", 2] EOF ;
 e[String t, int n] : ID { System.out.print($t + $n); } ;
 ID : [a-z]+ ;
 ", "s", ["a"]);
-    assert got == "a => (s (e a)) [x2]\n", got;
+    assert got == "a => (s (e a)) [x2]\n";
 }
 
 test "a Java action steps a member field declared without an initializer" {
@@ -3842,7 +3842,7 @@ s : (ID { n++; })+ EOF { System.out.print(n); } ;
 ID : [a-z]+ ;
 WS : ' ' -> skip ;
 ", "s", ["a b c"]);
-    assert got == "a b c => (s a b c) [3]\n", got;
+    assert got == "a b c => (s a b c) [3]\n";
 }
 
 test "list labels on left-recursive operands keep each operand's precedence" {
@@ -3864,7 +3864,7 @@ a?b:c+d => (s (e (e a) ? (e b) : (e (e c) + (e d))))
 f(a+b) => (s (e (e f) ( (e (e a) + (e b)) )))
 a?b?c:d:e => (s (e (e a) ? (e (e b) ? (e c) : (e d)) : (e e)))
 -f(a) => (s (e - (e (e f) ( (e a) ))))
-", got;
+";
 }
 
 test "a label on a negated token or set binds the token it matched" {
@@ -3872,7 +3872,7 @@ test "a label on a negated token or set binds the token it matched" {
 s : x=~A y=~(A|B) z=. EOF { System.out.print($x.text + $y.text + $z.text); } ;
 A : 'a' ; B : 'b' ; C : 'c' ;
 ", "s", ["ccc", "cca"]);
-    assert got == "ccc => (s c c c) [ccc]\ncca => (s c c a) [cca]\n", got;
+    assert got == "ccc => (s c c c) [ccc]\ncca => (s c c a) [cca]\n";
 }
 
 test "a fragment two rules share matches in each" {
@@ -3882,7 +3882,7 @@ INT : DIGITS ;
 fragment DIGITS : [0-9]+ ;
 WS : ' ' -> skip ;
 ", ["3.14 42 7.", "1.2.3"]);
-    assert got == "3.14 42 7. => FLOAT:3.14 INT:42 FLOAT:7.\n1.2.3 => FLOAT:1.2 error:. INT:3\n", got;
+    assert got == "3.14 42 7. => FLOAT:3.14 INT:42 FLOAT:7.\n1.2.3 => FLOAT:1.2 error:. INT:3\n";
 }
 
 test "a fragment's alternation takes its longest arm at the end of a rule, and before a suffix the arm the suffix can follow" {
@@ -3891,7 +3891,7 @@ X : AB ;
 Y : AB 'c' { System.out.println(\"y\"); } ;
 fragment AB : 'a' | 'ab' ;
 ", ["ab", "abc", "ac", "a"]);
-    assert got == "ab => X:ab\nabc => Y:abc [y\n]\nac => Y:ac [y\n]\na => X:a\n", got;
+    assert got == "ab => X:ab\nabc => Y:abc [y\n]\nac => Y:ac [y\n]\na => X:a\n";
 }
 
 test "a number's radix prefix is matched before its digits" {
@@ -3901,7 +3901,7 @@ BIN : ('0b') [01]+ ;
 INT : [0-9]+ ;
 WS : ' ' -> skip ;
 ", ["0x1F 0b101 0X2 0 0b2"]);
-    assert got == "0x1F 0b101 0X2 0 0b2 => HEX:0x1F BIN:0b101 HEX:0X2 INT:0 INT:0 error:b INT:2\n", got;
+    assert got == "0x1F 0b101 0X2 0 0b2 => HEX:0x1F BIN:0b101 HEX:0X2 INT:0 INT:0 error:b INT:2\n";
 }
 
 test "an exponent's empty sign arm lets the digits follow the e" {
@@ -3909,7 +3909,7 @@ test "an exponent's empty sign arm lets the digits follow the e" {
 NUM : [0-9]+ ('e' ('+' | '-' | ) [0-9]+)? ;
 WS : ' ' -> skip ;
 ", ["1e5 2e-3 4e"]);
-    assert got == "1e5 2e-3 4e => NUM:1e5 NUM:2e-3 NUM:4 error:e\n", got;
+    assert got == "1e5 2e-3 4e => NUM:1e5 NUM:2e-3 NUM:4 error:e\n";
 }
 
 test "an alternation before an optional suffix takes the arm that reaches furthest" {
@@ -3917,7 +3917,7 @@ test "an alternation before an optional suffix takes the arm that reaches furthe
 INT : ('0' | [0-9]+) 'L'? ;
 WS : ' ' -> skip ;
 ", ["0L 007 12L 0"]);
-    assert got == "0L 007 12L 0 => INT:0L INT:007 INT:12L INT:0\n", got;
+    assert got == "0L 007 12L 0 => INT:0L INT:007 INT:12L INT:0\n";
 }
 
 test "text up to a tag is one token, and a tag's names another mode's" {
@@ -3928,7 +3928,7 @@ mode TAG;
 NAME : [a-z]+ ;
 CLOSE : '>' -> popMode ;
 ", ["a<b>c d", "<x>"]);
-    assert got == "a<b>c d => TEXT:a OPEN:< NAME:b CLOSE:> TEXT:c d\n<x> => OPEN:< NAME:x CLOSE:>\n", got;
+    assert got == "a<b>c d => TEXT:a OPEN:< NAME:b CLOSE:> TEXT:c d\n<x> => OPEN:< NAME:x CLOSE:>\n";
 }
 
 test "a lexer member keeps its state across the parser's literal tokens" {
@@ -3938,7 +3938,7 @@ r : '(' ID+ ')' ;
 ID : [a-z]+ { ids = ids + 1; System.out.println(ids); } ;
 WS : ' ' -> skip ;
 ", ["(a b)"]);
-    assert got == "(a b) => '(':( ID:a ID:b ')':) [1\n2\n]\n", got;
+    assert got == "(a b) => '(':( ID:a ID:b ')':) [1\n2\n]\n";
 }
 
 test "a caseInsensitive keyword is told apart from an identifier of ranges" {
@@ -3948,7 +3948,7 @@ SELECT : 'select' ;
 ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
 ", ["Select FOO selects"]);
-    assert got == "Select FOO selects => SELECT:Select ID:FOO ID:selects\n", got;
+    assert got == "Select FOO selects => SELECT:Select ID:FOO ID:selects\n";
 }
 
 // The jar's tokens, over the same rules with `getText().equals(…)`: a predicate
@@ -3970,7 +3970,7 @@ czzzz => TAIL:czz X:z X:z
 dz => OPT:d X:z
 ezz => ARM:ez X:z
 fz => LAST:fz
-", got;
+";
 }
 
 test "an optional leaves the char the rest of the rule needs" {
@@ -3978,7 +3978,7 @@ test "an optional leaves the char the rest of the rule needs" {
 OVER : 'g' 'z'? 'z' ;
 X : . ;
 ", ["gz", "gzz"]);
-    assert got == "gz => OVER:gz\ngzz => OVER:gzz\n", got;
+    assert got == "gz => OVER:gz\ngzz => OVER:gzz\n";
 }
 
 // The jar's tokens; its predicates read `getText().equals(…)`.
@@ -3995,7 +3995,7 @@ X : . ;
 yababq => LOOP:yababq
 bxy => PRED_OPT:b X:x X:y
 cxyxy => PRED_LOOP:cxy X:x X:y
-", got;
+";
 }
 
 test "a greedy loop hands back the chars a predicate-carrying suffix needs" {
@@ -4004,7 +4004,7 @@ options { language = Wado; }
 S : 'a' .+ END ;
 fragment END : { true }? 'z' ;
 ", ["abz"]);
-    assert got == "abz => S:abz\n", got;
+    assert got == "abz => S:abz\n";
 }
 
 test "an alternation before a predicate takes the arm the rest of the rule needs" {
@@ -4017,8 +4017,8 @@ options { language = Wado; }
 I : ('a' | 'ab') END ;
 fragment END : { true }? 'bc' ;
 ", ["abbc"]);
-    assert after == "abbc => I:abbc\n", after;
-    assert inside == "abbc => I:abbc\n", inside;
+    assert after == "abbc => I:abbc\n";
+    assert inside == "abbc => I:abbc\n";
 }
 
 test "an identifier made of another token's chars takes the longest match and the first rule on a tie" {
@@ -4027,7 +4027,7 @@ ID : (LETTER | '_')+ ;
 LETTER : [a-z] ;
 WS : ' ' -> skip ;
 ", ["ab a _"]);
-    assert got == "ab a _ => ID:ab ID:a ID:_\n", got;
+    assert got == "ab a _ => ID:ab ID:a ID:_\n";
 }
 
 test "a keyword declared after the identifier rule never wins" {
@@ -4038,7 +4038,7 @@ ID : [a-z]+ ;
 IF : 'if' ;
 WS : ' ' -> skip ;
 ", ["if x"]);
-    assert got == "if x => ID:if ID:x\n", got;
+    assert got == "if x => ID:if ID:x\n";
 }
 
 test "a mode whose only rule starts with any char still lexes" {
@@ -4048,14 +4048,14 @@ ID : [a-z]+ ;
 mode LINE;
 REST : ~[;]+ -> popMode ;
 ", ["#include foo", "ab#x"]);
-    assert got == "#include foo => HASH:# REST:include foo\nab#x => ID:ab HASH:# REST:x\n", got;
+    assert got == "#include foo => HASH:# REST:include foo\nab#x => ID:ab HASH:# REST:x\n";
 }
 
 test "a greedy star hands back the chars its suffix needs" {
     let got = lexes("lexer grammar L;
 S : 'a' .* 'c' ;
 ", ["abcbc", "ac", "abcb"]);
-    assert got == "abcbc => S:abcbc\nac => S:ac\nabcb => S:abc error:b\n", got;
+    assert got == "abcbc => S:abcbc\nac => S:ac\nabcb => S:abc error:b\n";
 }
 
 test "a greedy plus stops where a fragment suffix can still match" {
@@ -4063,14 +4063,14 @@ test "a greedy plus stops where a fragment suffix can still match" {
 S : 'a' .+ END ;
 fragment END : 'z' 'z' ;
 ", ["abzzczz", "azzz", "azz"]);
-    assert got == "abzzczz => S:abzzczz\nazzz => S:azzz\nazz => error:a error:z error:z\n", got;
+    assert got == "abzzczz => S:abzzczz\nazzz => S:azzz\nazz => error:a error:z error:z\n";
 }
 
 test "a greedy star before an alternation ending in EOF runs to the last match" {
     let got = lexes("lexer grammar L;
 LINE : '#' .* (';' | EOF) ;
 ", ["#a;b;#c", "#a;"]);
-    assert got == "#a;b;#c => LINE:#a;b;#c\n#a; => LINE:#a;\n", got;
+    assert got == "#a;b;#c => LINE:#a;b;#c\n#a; => LINE:#a;\n";
 }
 
 test "a non-greedy plus consumes one char before it tries to exit" {
@@ -4079,14 +4079,14 @@ CMT : '/*' .+? '*/' ;
 SL : '/' ;
 ST : '*' ;
 ", ["/**/", "/***/", "/*a*/*/"]);
-    assert got == "/**/ => SL:/ ST:* ST:* SL:/\n/***/ => CMT:/***/\n/*a*/*/ => CMT:/*a*/ ST:* SL:/\n", got;
+    assert got == "/**/ => SL:/ ST:* ST:* SL:/\n/***/ => CMT:/***/\n/*a*/*/ => CMT:/*a*/ ST:* SL:/\n";
 }
 
 test "a scored alternation runs only the winning arm's action" {
     let got = lexes("lexer grammar L;
 I : ('a' { System.out.println(\"short\"); } | 'ab' { System.out.println(\"long\"); }) 'bc' ;
 ", ["abc", "abbc"]);
-    assert got == "abc => I:abc [short\n]\nabbc => I:abbc [long\n]\n", got;
+    assert got == "abc => I:abc [short\n]\nabbc => I:abbc [long\n]\n";
 }
 
 test "a keyword is told apart from an identifier built of fragments and ranges" {
@@ -4096,7 +4096,7 @@ ID : LETTER (LETTER | '0'..'9')* ;
 fragment LETTER : 'a'..'z' | '_' ;
 WS : ' ' -> skip ;
 ", ["if iff x_1 if1 _if"]);
-    assert got == "if iff x_1 if1 _if => IF:if ID:iff ID:x_1 ID:if1 ID:_if\n", got;
+    assert got == "if iff x_1 if1 _if => IF:if ID:iff ID:x_1 ID:if1 ID:_if\n";
 }
 
 test "a keyword is recognized only in the default mode" {
@@ -4114,7 +4114,7 @@ ATTR : [a-z]+ -> type(ID) ;
 GT : '>' -> popMode ;
 TAG_WS : ' ' -> skip ;
 ", ["end ends NIL NILS <end x> end"]);
-    assert got == "end ends NIL NILS <end x> end => END:end ID:ends NIL:NIL CONST:NILS LT:< ID:end ID:x GT:> END:end\n", got;
+    assert got == "end ends NIL NILS <end x> end => END:end ID:ends NIL:NIL CONST:NILS LT:< ID:end ID:x GT:> END:end\n";
 }
 
 test "a keyword reclassified out of its carrier does not run the carrier's action" {
@@ -4124,7 +4124,7 @@ ID : [a-z]+ { System.out.println(\"id\"); } ;
 NUM : [0-9]+ { System.out.println(\"num\"); } ;
 WS : ' ' -> skip ;
 ", ["if x 1"]);
-    assert got == "if x 1 => IF:if ID:x NUM:1 [id\nnum\n]\n", got;
+    assert got == "if x 1 => IF:if ID:x NUM:1 [id\nnum\n]\n";
 }
 
 test "a hidden-channel token between two tokens does not reach the parser" {
@@ -4134,7 +4134,7 @@ ID : [a-z]+ ;
 CMT : '#' [a-z]* -> channel(HIDDEN) ;
 WS : ' ' -> skip ;
 ", "r", ["a #bc d", "a#b"]);
-    assert got == "a #bc d => (r a d)\na#b => (r a)\n", got;
+    assert got == "a #bc d => (r a d)\na#b => (r a)\n";
 }
 
 test "a more rule's text joins the token its mode switch leads to" {
@@ -4146,7 +4146,7 @@ WS : ' ' -> skip ;
 mode NUM;
 NUMBER : [0-9]+ -> mode(DEFAULT_MODE) ;
 ", ["ab #12 cd", "ab.cd"]);
-    assert got == "ab #12 cd => TEXT:ab NUMBER:#12 TEXT:cd\nab.cd => TEXT:ab TEXT:cd\n", got;
+    assert got == "ab #12 cd => TEXT:ab NUMBER:#12 TEXT:cd\nab.cd => TEXT:ab TEXT:cd\n";
 }
 
 test "a string whose escapes share a lead char is lexed by the lexer ATN" {
@@ -4154,7 +4154,7 @@ test "a string whose escapes share a lead char is lexed by the lexer ATN" {
 STR : '\"' (~('\\\\' | '\"') | '\\\\' . | '\\\\x' HEX HEX? | '\\\\u{' HEX+ '}')* '\"' ;
 fragment HEX : '0'..'9' | 'a'..'f' ;
 ", ["\"a\\x41\"", "\"\\\"\"", "\"\\x\"", "\"\\u{1f600}\""]);
-    assert got == "\"a\\x41\" => STR:\"a\\x41\"\n\"\\\"\" => STR:\"\\\"\"\n\"\\x\" => STR:\"\\x\"\n\"\\u{1f600}\" => STR:\"\\u{1f600}\"\n", got;
+    assert got == "\"a\\x41\" => STR:\"a\\x41\"\n\"\\\"\" => STR:\"\\\"\"\n\"\\x\" => STR:\"\\x\"\n\"\\u{1f600}\" => STR:\"\\u{1f600}\"\n";
 }
 
 // Each alternative that competes with a loop agrees with two of its
@@ -4176,7 +4176,7 @@ a a a p => (t (s (u a a a p)))
 b c b d q => (t (s (v b c b d q)))
 b c b w => (t (s (v b c b w)))
 b d q => (t (s (v b d q)))
-", got;
+";
 }
 
 test "an optional nullable rule is entered, as the lower alternative, on what follows it too" {
@@ -4186,7 +4186,7 @@ b : Y | ;
 Y : 'y' ; Z : 'z' ;
 WS : ' ' -> skip ;
 ", "s", ["", "z", "y z"]);
-    assert got == " => (s b)\nz => (s b z)\ny z => (s (b y) z)\n", got;
+    assert got == " => (s b)\nz => (s b z)\ny z => (s (b y) z)\n";
 }
 
 test "an optional rule whose only empty alternative is predicated is entered on what follows it as the predicate says" {
@@ -4200,7 +4200,7 @@ b : {${pred}}? | Y ;
 Y : 'y' ; Z : 'z' ;
 WS : ' ' -> skip ;
 `, "s", ["z"]);
-        assert got == `z => ${tree}\n`, `${pred}: ${got}`;
+        assert got == `z => ${tree}\n`;
     }
 }
 
@@ -4210,5 +4210,5 @@ OTHER : . ;
 WS : ' ' -> skip ;
 B : 'b' ;
 ", ["a b"]);
-    assert got == "a b => OTHER:a OTHER:  OTHER:b\n", got;
+    assert got == "a b => OTHER:a OTHER:  OTHER:b\n";
 }
