@@ -690,20 +690,6 @@ impl HeldTypes for TypeSystem {
                 }
             }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,
-            ResolvedType::Struct {
-                def: StructDef::Anon(shape),
-                ..
-            } => Held::Members {
-                decl: None,
-                args: Vec::new(),
-                members: self
-                    .type_table
-                    .borrow()
-                    .anon_struct_fields(shape)
-                    .iter()
-                    .map(|(_, field_type)| *field_type)
-                    .collect(),
-            },
             _ => {
                 if let Some(elements) = self.type_table.borrow().as_tuple(base) {
                     return Held::Members {
@@ -712,9 +698,6 @@ impl HeldTypes for TypeSystem {
                         members: elements,
                     };
                 }
-                let Some(decl) = self.type_def(base) else {
-                    return Held::Nothing;
-                };
                 let args = self
                     .type_table
                     .borrow()
@@ -722,12 +705,7 @@ impl HeldTypes for TypeSystem {
                     .unwrap_or_default();
                 // A generic struct's instance is a `GenericInstance`, as a
                 // generic variant's is.
-                let members = if let Some(info) = self.data.struct_fields.get(&decl) {
-                    let templates: Vec<TypeId> = info
-                        .fields
-                        .iter()
-                        .map(|(_, field_type, _)| *field_type)
-                        .collect();
+                let members = if let Some(templates) = self.struct_field_type_ids_of(base) {
                     templates
                         .into_iter()
                         .map(|field_type| self.substitute_type_params(field_type, &args))
@@ -738,7 +716,7 @@ impl HeldTypes for TypeSystem {
                     return Held::Nothing;
                 };
                 Held::Members {
-                    decl: Some(decl),
+                    decl: self.type_def(base),
                     args,
                     members,
                 }
