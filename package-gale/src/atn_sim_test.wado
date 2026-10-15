@@ -8,7 +8,7 @@
 //! closing tests).
 
 use { atn_blob_bytes, Atn } from "./atn.wado";
-use { build_atn } from "./atn_testing.wado";
+use { build_atn, NON_GREEDY_G4, GREEDY_G4, LR_G4 } from "../tests/support/fixtures.wado";
 use { TokenKinds } from "./token_kinds.wado";
 use { atn_decode, AtnSim, ATN_BLOCK_START, ATN_BLOCK_END, ATN_STAR_LOOP_ENTRY, ATN_TR_RULE } from "./runtime/atn.wado";
 use { AtnPredictor, atn_invocation_prec, atn_predict_once, atn_predict_with_stack } from "./runtime/atn_predict.wado";
@@ -94,35 +94,6 @@ ID : 'a'..'z'+ ;
 WS : ' ' -> skip ;
 ";
 
-// Directly left-recursive operator grammar — the P4.1 walkability case.
-// Built naively (pre-rewrite) the simulator would left-recurse forever on
-// `expr -> RuleRef(expr) ...`; the rewritten loop-entry form is finite.
-global LR_G4: String = "
-grammar E;
-expr : expr '*' expr
-     | expr '+' expr
-     | INT ;
-INT : '0'..'9'+ ;
-WS : ' ' -> channel(HIDDEN);
-";
-
-global NG_G4: String = "
-grammar T;
-start : statement+ ;
-statement : 'x' | ifStatement;
-ifStatement : 'if' 'y' statement ('else' statement)?? ;
-ID : 'a'..'z'+ ;
-WS : (' '|'\\n') -> channel(HIDDEN);
-";
-
-global GR_G4: String = "
-grammar T;
-start : statement+ ;
-statement : 'x' | ifStatement;
-ifStatement : 'if' 'y' statement ('else' statement)? ;
-ID : 'a'..'z'+ ;
-WS : (' '|'\\n') -> channel(HIDDEN);
-";
 
 test "predict resolves a two-token shared-prefix decision" {
     let g = parse(K2_G4).unwrap();
@@ -210,7 +181,7 @@ test "a disabled alternative covering the others does not settle the decision" {
 }
 
 test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
-    let g = parse(NG_G4).unwrap();
+    let g = parse(NON_GREEDY_G4).unwrap();
     let atn = build_atn(&g);
     let tk = TokenKinds::build(&g);
     let eof = tk.id_of("TK_EOF");
@@ -228,7 +199,7 @@ test "non-greedy ?? picks the exit alt on the dangling-else conflict" {
 }
 
 test "greedy ? picks the enter alt on the same conflict" {
-    let g = parse(GR_G4).unwrap();
+    let g = parse(GREEDY_G4).unwrap();
     let atn = build_atn(&g);
     let tk = TokenKinds::build(&g);
     let eof = tk.id_of("TK_EOF");
@@ -256,7 +227,7 @@ test "greedy ? picks the enter alt on the same conflict" {
 //   cs3 = ifStatement -> statement   (inside `('else' statement)??`)
 
 test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
-    let mut g = parse(NG_G4).unwrap();
+    let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = TokenKinds::build(&g).id_of("TK_EOF");
@@ -275,7 +246,7 @@ test "full-context: inner ifStatement ?? skips the else (binds to outer)" {
 }
 
 test "full-context: outer ifStatement ?? consumes the else" {
-    let mut g = parse(NG_G4).unwrap();
+    let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = TokenKinds::build(&g).id_of("TK_EOF");
@@ -295,7 +266,7 @@ test "full-context: outer ifStatement ?? consumes the else" {
 // A recorded verdict answers only the caller stack it was asked under: the two
 // tests above, asked at one position through one `AtnPredictor`.
 test "a recorded verdict is keyed by the caller stack" {
-    let mut g = parse(NG_G4).unwrap();
+    let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = TokenKinds::build(&g).id_of("TK_EOF");
@@ -320,7 +291,7 @@ test "a recorded verdict is keyed by the caller stack" {
 // A scan whose result is kept for other callers hides the callers it has: a
 // prediction that needs one reads the whole stack, and says so.
 test "a prediction that needs a hidden caller reads the whole stack and says so" {
-    let mut g = parse(NG_G4).unwrap();
+    let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let eof = TokenKinds::build(&g).id_of("TK_EOF");
@@ -343,7 +314,7 @@ test "a prediction that needs a hidden caller reads the whole stack and says so"
 }
 
 test "a prediction settled inside the visible frames reads no hidden caller" {
-    let mut g = parse(NG_G4).unwrap();
+    let mut g = parse(NON_GREEDY_G4).unwrap();
     assign_atn_call_sites(&mut g);
     let atn = build_atn(&g);
     let tk = TokenKinds::build(&g);

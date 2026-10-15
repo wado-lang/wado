@@ -27,6 +27,7 @@ use { GrammarAnalysis } from "./grammar_analysis.wado";
 use { GenSettings } from "./gen_settings.wado";
 use { assert_canonical_shape, assign_atn_call_sites, canonicalize_empty_alt_groups } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
+use { empty_grammar, alt } from "../tests/support/fixtures.wado";
 use {
     LoweredGrammar,
     Rule,
@@ -46,21 +47,6 @@ use {
     AltClass,
 } from "./gir.wado";
 
-fn empty_grammar<S: AsStrSlice>(name: S) -> Grammar {
-    return Grammar {
-        name: name.to_string(),
-        kind: GrammarKind::Combined,
-        parser_rules: [],
-        lexer_rules: [],
-        mode_names: ["DEFAULT_MODE"],
-        channels: [],
-        options: [],
-        named_actions: [],
-        pending_refs: [],
-        source_files: [],
-    };
-}
-
 /// Lowers `g` without literal tokens, with the analysis whose table names the
 /// kinds the lowering minted.
 fn lower_keeping_kinds(g: &Grammar) -> [LoweredGrammar, GrammarAnalysis] {
@@ -71,14 +57,6 @@ fn lower_keeping_kinds(g: &Grammar) -> [LoweredGrammar, GrammarAnalysis] {
 
 fn first_names(an: &GrammarAnalysis, class: &AltClass) -> List<String> {
     return an.token_names_of(&alt_class_first_set(class));
-}
-
-fn alt_of(elements: List<Element>) -> Alternative {
-    return Alternative {
-        label: null,
-        options: [],
-        elements,
-    };
 }
 
 test "lower passes through grammar metadata" {
@@ -99,7 +77,7 @@ test "lower simple rule with single TokenRef" {
             "value",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
     ];
 
@@ -133,7 +111,7 @@ test "lower simple rule with Literal" {
             "punc",
             Visibility::Default,
             [],
-            [alt_of([Element::Literal(LiteralElement::new("+"))])],
+            [alt([Element::Literal(LiteralElement::new("+"))])],
         ),
     ];
 
@@ -157,9 +135,9 @@ test "lower simple rule with RuleRef" {
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::RuleRef(RuleRefElement::new("expr"))])],
+            [alt([Element::RuleRef(RuleRefElement::new("expr"))])],
         ),
-        ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
+        ParserRule::new("expr", Visibility::Default, [], [alt([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
     let lowered = lower(&g, &[]);
@@ -184,7 +162,7 @@ test "lower simple rule with Wildcard" {
             "any",
             Visibility::Default,
             [],
-            [alt_of([Element::Wildcard(WildcardElement::new())])],
+            [alt([Element::Wildcard(WildcardElement::new())])],
         ),
     ];
 
@@ -208,7 +186,7 @@ test "lower simple rule with Not" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Not(NotElement {
                         element: Element::TokenRef(TokenRefElement::new("INT")),
                     }),
@@ -242,11 +220,11 @@ test "lower simple rule with Not over multi-token Group" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Not(NotElement {
                         element: Element::Group(GroupElement::new([
-                            alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
-                            alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
+                            alt([Element::TokenRef(TokenRefElement::new("INT"))]),
+                            alt([Element::TokenRef(TokenRefElement::new("FLOAT"))]),
                         ])),
                     }),
                 ]),
@@ -276,7 +254,7 @@ test "lower dedupes same-name fields" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("INT")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
@@ -310,9 +288,9 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
-                alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]),
-                alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
+                alt([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt([Element::TokenRef(TokenRefElement::new("STRING"))]),
+                alt([Element::TokenRef(TokenRefElement::new("ID"))]),
             ],
         ),
     ];
@@ -352,9 +330,9 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
 test "lower multi-alt rule with labeled alts uses label as case name" {
     let mut g = empty_grammar("T");
     // `expr : INT #IntLit | STRING #StrLit ;` (each alt labeled).
-    let mut int_alt = alt_of([Element::TokenRef(TokenRefElement::new("INT"))]);
+    let mut int_alt = alt([Element::TokenRef(TokenRefElement::new("INT"))]);
     int_alt.label = Option::<String>::Some("IntLit");
-    let mut str_alt = alt_of([Element::TokenRef(TokenRefElement::new("STRING"))]);
+    let mut str_alt = alt([Element::TokenRef(TokenRefElement::new("STRING"))]);
     str_alt.label = Option::<String>::Some("StrLit");
     g.parser_rules = [
         ParserRule::new(
@@ -389,7 +367,7 @@ test "lower transparent Group wraps single leaf element" {
             "wrapped",
             Visibility::Default,
             [],
-            [alt_of([Element::Group(GroupElement::new([alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]))])],
+            [alt([Element::Group(GroupElement::new([alt([Element::TokenRef(TokenRefElement::new("INT"))])]))])],
         ),
     ];
 
@@ -439,9 +417,9 @@ test "lower transparent Group dedupes against surrounding scope" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("INT")),
-                    Element::Group(GroupElement::new([alt_of([Element::TokenRef(TokenRefElement::new("INT"))])])),
+                    Element::Group(GroupElement::new([alt([Element::TokenRef(TokenRefElement::new("INT"))])])),
                 ]),
             ],
         ),
@@ -481,9 +459,9 @@ test "lower single-alt Group with two leaves produces SingleAlt shape" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::TokenRef(TokenRefElement::new("ID")),
                             Element::Literal(LiteralElement::new("=")),
                             Element::TokenRef(TokenRefElement::new("INT")),
@@ -533,10 +511,10 @@ test "lower single-alt Group uses fresh name table for inner ops" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::TokenRef(TokenRefElement::new("ID")),
                             Element::TokenRef(TokenRefElement::new("INT")),
                         ]),
@@ -591,14 +569,14 @@ test "lower single-alt Group field name dedupes against outer scope" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "id_int",
                         false,
                         Element::TokenRef(TokenRefElement::new("ID")),
                     )),
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::TokenRef(TokenRefElement::new("ID")),
                             Element::TokenRef(TokenRefElement::new("INT")),
                         ]),
@@ -633,10 +611,10 @@ test "lower token-only Group produces TokenOnly shape with single field" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::TokenRef(TokenRefElement::new("K_INSERT"))]),
-                        alt_of([Element::TokenRef(TokenRefElement::new("K_REPLACE"))]),
+                        alt([Element::TokenRef(TokenRefElement::new("K_INSERT"))]),
+                        alt([Element::TokenRef(TokenRefElement::new("K_REPLACE"))]),
                     ])),
                 ]),
             ],
@@ -685,10 +663,10 @@ test "lower token-only Group accepts Literal alts" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::Literal(LiteralElement::new("+"))]),
-                        alt_of([Element::Literal(LiteralElement::new("-"))]),
+                        alt([Element::Literal(LiteralElement::new("+"))]),
+                        alt([Element::Literal(LiteralElement::new("-"))]),
                     ])),
                 ]),
             ],
@@ -729,15 +707,15 @@ test "lower token-only Group field dedupes against outer scope" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "k_a_or_k_b",
                         false,
                         Element::TokenRef(TokenRefElement::new("ID")),
                     )),
                     Element::Group(GroupElement::new([
-                        alt_of([Element::TokenRef(TokenRefElement::new("K_A"))]),
-                        alt_of([Element::TokenRef(TokenRefElement::new("K_B"))]),
+                        alt([Element::TokenRef(TokenRefElement::new("K_A"))]),
+                        alt([Element::TokenRef(TokenRefElement::new("K_B"))]),
                     ])),
                 ]),
             ],
@@ -773,10 +751,10 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                        alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                        alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                        alt([Element::RuleRef(RuleRefElement::new("expr"))]),
                     ])),
                 ]),
             ],
@@ -785,13 +763,13 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("ID"))])],
         ),
         ParserRule::new(
             "expr",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
     ];
 
@@ -843,15 +821,15 @@ test "lower SimpleCst Group field dedupes against outer scope" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "stmt_or_expr",
                         false,
                         Element::TokenRef(TokenRefElement::new("ID")),
                     )),
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                        alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                        alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                        alt([Element::RuleRef(RuleRefElement::new("expr"))]),
                     ])),
                 ]),
             ],
@@ -860,13 +838,13 @@ test "lower SimpleCst Group field dedupes against outer scope" {
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
         ParserRule::new(
             "expr",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("FLOAT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("FLOAT"))])],
         ),
     ];
 
@@ -898,10 +876,10 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                        alt_of([
+                        alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                        alt([
                             Element::TokenRef(TokenRefElement::new("INT")),
                             Element::TokenRef(TokenRefElement::new("INT")),
                         ]),
@@ -913,7 +891,7 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("ID"))])],
         ),
     ];
 
@@ -963,17 +941,17 @@ test "lower General Group group_index is per-rule cumulative" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                        alt_of([
+                        alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                        alt([
                             Element::TokenRef(TokenRefElement::new("INT")),
                             Element::TokenRef(TokenRefElement::new("INT")),
                         ]),
                     ])),
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("other"))]),
-                        alt_of([
+                        alt([Element::RuleRef(RuleRefElement::new("other"))]),
+                        alt([
                             Element::TokenRef(TokenRefElement::new("FLOAT")),
                             Element::TokenRef(TokenRefElement::new("FLOAT")),
                         ]),
@@ -985,13 +963,13 @@ test "lower General Group group_index is per-rule cumulative" {
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("ID"))])],
         ),
         ParserRule::new(
             "other",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("K_OTHER"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("K_OTHER"))])],
         ),
     ];
 
@@ -1035,11 +1013,11 @@ test "lower Repeat with nested SingleAlt Group inner" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::Group(GroupElement::new([
-                            alt_of([
+                            alt([
                                 Element::TokenRef(TokenRefElement::new("A")),
                                 Element::TokenRef(TokenRefElement::new("B")),
                             ]),
@@ -1083,12 +1061,12 @@ test "lower SingleAlt Group containing nested Group" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::TokenRef(TokenRefElement::new("A")),
                             Element::Group(GroupElement::new([
-                                alt_of([
+                                alt([
                                     Element::TokenRef(TokenRefElement::new("B")),
                                     Element::TokenRef(TokenRefElement::new("C")),
                                 ]),
@@ -1138,9 +1116,9 @@ test "lower Transparent Group wrapping Repeat" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::Repeat(RepeatElement {
                                 kind: RepeatKind::Star,
                                 element: Element::TokenRef(TokenRefElement::new("A")),
@@ -1185,7 +1163,7 @@ test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Optional,
                         element: Element::TokenRef(TokenRefElement::new("INT")),
@@ -1231,7 +1209,7 @@ test "lower greedy Star Repeat with TokenRef inner" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::TokenRef(TokenRefElement::new("INT")),
@@ -1284,7 +1262,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Plus,
                         element: Element::RuleRef(RuleRefElement::new("expr")),
@@ -1293,7 +1271,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
                 ]),
             ],
         ),
-        ParserRule::new("expr", Visibility::Default, [], [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]),
+        ParserRule::new("expr", Visibility::Default, [], [alt([Element::TokenRef(TokenRefElement::new("INT"))])]),
     ];
 
     let lowered = lower(&g, &[]);
@@ -1328,7 +1306,7 @@ test "lower Repeat scan body mirrors parse body" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::TokenRef(TokenRefElement::new("INT")),
@@ -1371,7 +1349,7 @@ test "lower simple rule produces scan body mirroring leaf ops" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::Literal(LiteralElement::new("=")),
                     Element::RuleRef(RuleRefElement::new("expr")),
@@ -1426,7 +1404,7 @@ test "lower scan element flattens scalar Label" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "lhs",
                         false,
@@ -1458,7 +1436,7 @@ test "lower scalar Label rebinds inner field name" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "lhs",
                         false,
@@ -1493,7 +1471,7 @@ test "lower Label dedupes against surrounding alt names" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "lhs",
                         false,
@@ -1534,7 +1512,7 @@ test "lower carries every leaf op in order" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::Literal(LiteralElement::new(":")),
                     Element::RuleRef(RuleRefElement::new("expr")),
@@ -1582,7 +1560,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::Literal(LiteralElement::new(":")),
                     Element::RuleRef(RuleRefElement::new("expr")),
@@ -1593,7 +1571,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
             "expr",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
     ];
 
@@ -1632,7 +1610,7 @@ test "lower enumerates Repeat field decls with List/Optional kinds" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::TokenRef(TokenRefElement::new("INT")),
@@ -1682,12 +1660,12 @@ test "lower SingleAlt Group body enumerates list-label inner as List field" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::Group(GroupElement::new([
-                            alt_of([
+                            alt([
                                 Element::TokenRef(TokenRefElement::new("COMMA")),
                                 Element::Label(LabelElement::new(
                                     "b",
@@ -1753,9 +1731,9 @@ test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::TokenRef(TokenRefElement::new("ID")),
                             Element::Literal(LiteralElement::new("=")),
                             Element::TokenRef(TokenRefElement::new("INT")),
@@ -1808,10 +1786,10 @@ test "lower General Group inner alts enumerate per-alt FieldDecls without span" 
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                        alt_of([
+                        alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                        alt([
                             Element::Literal(LiteralElement::new("go")),
                             Element::RuleRef(RuleRefElement::new("expr")),
                         ]),
@@ -1823,13 +1801,13 @@ test "lower General Group inner alts enumerate per-alt FieldDecls without span" 
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("ID"))])],
         ),
         ParserRule::new(
             "expr",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
     ];
 
@@ -1872,7 +1850,7 @@ test "lower Repeat field name dedupes against outer scope" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Label(LabelElement::new(
                         "int_list",
                         false,
@@ -1917,17 +1895,17 @@ test "lower Group field decls match shape's outer field/type" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Group(GroupElement::new([
-                        alt_of([Element::TokenRef(TokenRefElement::new("K_A"))]),
-                        alt_of([Element::TokenRef(TokenRefElement::new("K_B"))]),
+                        alt([Element::TokenRef(TokenRefElement::new("K_A"))]),
+                        alt([Element::TokenRef(TokenRefElement::new("K_B"))]),
                     ])),
                     Element::Group(GroupElement::new([
-                        alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                        alt_of([Element::RuleRef(RuleRefElement::new("expr"))]),
+                        alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                        alt([Element::RuleRef(RuleRefElement::new("expr"))]),
                     ])),
                     Element::Group(GroupElement::new([
-                        alt_of([
+                        alt([
                             Element::TokenRef(TokenRefElement::new("A")),
                             Element::TokenRef(TokenRefElement::new("B")),
                         ]),
@@ -1939,13 +1917,13 @@ test "lower Group field decls match shape's outer field/type" {
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("ID"))])],
         ),
         ParserRule::new(
             "expr",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("INT"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("INT"))])],
         ),
     ];
 
@@ -1979,13 +1957,13 @@ test "lower LR rule splits atom and lr_alts and assigns precedence" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
-                alt_of([
+                alt([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt([
                     Element::RuleRef(RuleRefElement::new("expr")),
                     Element::Literal(LiteralElement::new("+")),
                     Element::RuleRef(RuleRefElement::new("expr")),
                 ]),
-                alt_of([
+                alt([
                     Element::RuleRef(RuleRefElement::new("expr")),
                     Element::Literal(LiteralElement::new("*")),
                     Element::RuleRef(RuleRefElement::new("expr")),
@@ -2038,7 +2016,7 @@ test "lower LR rule respects right-associative conflict_min" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt([Element::TokenRef(TokenRefElement::new("INT"))]),
                 Alternative {
                     label: null,
                     options: [
@@ -2079,8 +2057,8 @@ test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
-                alt_of([
+                alt([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt([
                     Element::RuleRef(RuleRefElement::new("expr")),
                     Element::Literal(LiteralElement::new("++")),
                 ]),
@@ -2107,7 +2085,7 @@ test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Literal(LiteralElement::new("/*")),
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
@@ -2152,11 +2130,11 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::Group(
-                            GroupElement::new([alt_of([Element::Wildcard(WildcardElement::new())])]),
+                            GroupElement::new([alt([Element::Wildcard(WildcardElement::new())])]),
                         ),
                         non_greedy: true,
                     }),
@@ -2202,7 +2180,7 @@ test "lower non-greedy TokenRef Repeat carries outer_follow as exit_first" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::TokenRef(TokenRefElement::new("ID")),
@@ -2243,11 +2221,11 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::Group(GroupElement::new([
-                            alt_of([
+                            alt([
                                 Element::Literal(LiteralElement::new(",")),
                                 Element::TokenRef(TokenRefElement::new("INT")),
                             ]),
@@ -2305,11 +2283,11 @@ test "lower multi-alt rule with overlapping first sets emits Tournament dispatch
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("STRING")),
                 ]),
@@ -2344,11 +2322,11 @@ test "lower warns once when overlapping alts fall back to a tournament" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("STRING")),
                 ]),
@@ -2380,8 +2358,8 @@ test "lower raises no diagnostics for disjoint alts" {
             Visibility::Default,
             [],
             [
-                alt_of([Element::TokenRef(TokenRefElement::new("ID"))]),
-                alt_of([Element::TokenRef(TokenRefElement::new("INT"))]),
+                alt([Element::TokenRef(TokenRefElement::new("ID"))]),
+                alt([Element::TokenRef(TokenRefElement::new("INT"))]),
             ],
         ),
     ];
@@ -2434,12 +2412,12 @@ test "lower Tournament sorts longer alt first" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                     Element::TokenRef(TokenRefElement::new("STRING")),
                 ]),
-                alt_of([
+                alt([
                     Element::TokenRef(TokenRefElement::new("ID")),
                     Element::TokenRef(TokenRefElement::new("INT")),
                 ]),
@@ -2474,13 +2452,13 @@ test "lower: RuleCall before a token gets a Combined FollowArg; callee tail Repe
     let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new("r", Visibility::Default, [], [
-            alt_of([
+            alt([
                 Element::RuleRef(RuleRefElement::new("a")),
                 Element::TokenRef(TokenRefElement::new("X")),
             ]),
         ]),
         ParserRule::new("a", Visibility::Default, [], [
-            alt_of([
+            alt([
                 Element::Repeat(RepeatElement {
                     kind: RepeatKind::Star,
                     element: Element::TokenRef(TokenRefElement::new("X")),
@@ -2520,9 +2498,9 @@ test "lower: RuleCall at the rule tail forwards the runtime follow" {
     // continuation is whatever `r` was itself called with → Forward.
     let mut g = empty_grammar("T");
     g.parser_rules = [
-        ParserRule::new("r", Visibility::Default, [], [alt_of([Element::RuleRef(RuleRefElement::new("a"))])]),
+        ParserRule::new("r", Visibility::Default, [], [alt([Element::RuleRef(RuleRefElement::new("a"))])]),
         ParserRule::new("a", Visibility::Default, [], [
-            alt_of([
+            alt([
                 Element::Repeat(RepeatElement {
                     kind: RepeatKind::Star,
                     element: Element::TokenRef(TokenRefElement::new("X")),
@@ -2556,11 +2534,11 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Optional,
                         element: Element::Group(GroupElement::new([
-                            alt_of([
+                            alt([
                                 Element::Literal(LiteralElement::new("-")),
                                 Element::Literal(LiteralElement::new(">")),
                             ]),
@@ -2631,7 +2609,7 @@ test "lower Optional Repeat with single-token inner stays Plain" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Optional,
                         element: Element::TokenRef(TokenRefElement::new("INT")),
@@ -2672,11 +2650,11 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Optional,
                         element: Element::Group(GroupElement::new([
-                            alt_of([
+                            alt([
                                 Element::RuleRef(RuleRefElement::new("a")),
                                 Element::TokenRef(TokenRefElement::new("X")),
                             ]),
@@ -2690,7 +2668,7 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
             "a",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("Y"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("Y"))])],
         ),
     ];
 
@@ -2817,10 +2795,10 @@ test "lower Optional Repeat with many optionals does not enumerate 2^n shapes" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Optional,
-                        element: Element::Group(GroupElement::new([alt_of(inner_elems)])),
+                        element: Element::Group(GroupElement::new([alt(inner_elems)])),
                         non_greedy: false,
                     }),
                 ]),
@@ -2857,12 +2835,12 @@ test "lower Repeat over General Group inner uses speculative group_counter id" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Plus,
                         element: Element::Group(GroupElement::new([
-                            alt_of([Element::RuleRef(RuleRefElement::new("stmt"))]),
-                            alt_of([
+                            alt([Element::RuleRef(RuleRefElement::new("stmt"))]),
+                            alt([
                                 Element::TokenRef(TokenRefElement::new("INT")),
                                 Element::TokenRef(TokenRefElement::new("INT")),
                             ]),
@@ -2876,7 +2854,7 @@ test "lower Repeat over General Group inner uses speculative group_counter id" {
             "stmt",
             Visibility::Default,
             [],
-            [alt_of([Element::TokenRef(TokenRefElement::new("ID"))])],
+            [alt([Element::TokenRef(TokenRefElement::new("ID"))])],
         ),
     ];
 
@@ -2916,7 +2894,7 @@ test "lower Repeat with list-label inner uses label name as outer field" {
             Visibility::Default,
             [],
             [
-                alt_of([
+                alt([
                     Element::Repeat(RepeatElement {
                         kind: RepeatKind::Star,
                         element: Element::Label(LabelElement::new(
@@ -2955,7 +2933,7 @@ test "lower Transparent Group does not contribute a CST field" {
             "r",
             Visibility::Default,
             [],
-            [alt_of([Element::Group(GroupElement::new([alt_of([Element::TokenRef(TokenRefElement::new("INT"))])]))])],
+            [alt([Element::Group(GroupElement::new([alt([Element::TokenRef(TokenRefElement::new("INT"))])]))])],
         ),
     ];
 

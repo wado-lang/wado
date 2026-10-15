@@ -1,0 +1,145 @@
+//! Builders the package's unit tests share: grammars, IR, ATNs and token
+//! streams. None reaches `generate`, so a test importing this stays cheap.
+
+use {
+    Grammar,
+    GrammarKind,
+    ParserRule,
+    Alternative,
+    Element,
+    RuleRefElement,
+    TokenRefElement,
+    RepeatElement,
+    RepeatKind,
+    GroupElement,
+    Visibility,
+} from "../../src/ir.wado";
+use { parse, assemble_grammar } from "../../src/g4/parser.wado";
+use { Atn, build_atn_with } from "../../src/atn.wado";
+use { lower } from "../../src/lower.wado";
+use { collect_literal_tokens } from "../../src/lexer_gen.wado";
+use { TokenKinds, resolve_kind_ids } from "../../src/token_kinds.wado";
+use { LowerContext } from "../../src/lower_context.wado";
+use { GrammarAnalysis } from "../../src/grammar_analysis.wado";
+use { GenSettings } from "../../src/gen_settings.wado";
+use { render_lexer_dump } from "../../src/lexer_dump.wado";
+use { TokenStream } from "../../src/runtime/lex.wado";
+
+/// A dangling `else` behind a non-greedy `??`, which binds it to the outer
+/// rule.
+pub global NON_GREEDY_G4: String = "
+grammar T;
+start : statement+ ;
+statement : 'x' | ifStatement;
+ifStatement : 'if' 'y' statement ('else' statement)?? ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\\n') -> channel(HIDDEN);
+";
+
+/// [`NON_GREEDY_G4`] behind a greedy `?`.
+pub global GREEDY_G4: String = "
+grammar T;
+start : statement+ ;
+statement : 'x' | ifStatement;
+ifStatement : 'if' 'y' statement ('else' statement)? ;
+ID : 'a'..'z'+ ;
+WS : (' '|'\\n') -> channel(HIDDEN);
+";
+
+/// A directly left-recursive binary-operator rule. `expr`'s two LR alts
+/// ('*' then '+') get descending `own_prec` (2, 1) by source order, and
+/// left-associative `conflict_min` = own_prec + 1 (3, 2). `INT` is the
+/// single non-LR atom alt. Built naively (pre-rewrite) the simulator would
+/// left-recurse forever on `expr -> RuleRef(expr) ...`; the rewritten
+/// loop-entry form is finite.
+pub global LR_G4: String = "
+grammar E;
+expr : expr '*' expr
+     | expr '+' expr
+     | INT ;
+INT : '0'..'9'+ ;
+WS : ' ' -> channel(HIDDEN);
+";
+
+/// `input` parsed, with a source file to name in what it reports.
+pub fn parse_grammar<S: AsStrSlice>(input: S) -> Grammar {
+    let mut g = parse(input).unwrap();
+    g.source_files.push("(test)");
+    return g;
+}
+
+pub fn empty_grammar<S: AsStrSlice>(name: S) -> Grammar {
+    return Grammar {
+        name: name.to_string(),
+        kind: GrammarKind::Combined,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: [],
+    };
+}
+
+pub fn tk<S: AsStrSlice>(name: S) -> Element {
+    return Element::TokenRef(TokenRefElement::new(name));
+}
+
+pub fn rr<S: AsStrSlice>(name: S) -> Element {
+    return Element::RuleRef(RuleRefElement::new(name));
+}
+
+pub fn opt(elem: Element) -> Element {
+    return Element::Repeat(RepeatElement {
+        kind: RepeatKind::Optional,
+        element: elem,
+        non_greedy: false,
+    });
+}
+
+pub fn group(alts: List<Alternative>) -> Element {
+    return Element::Group(GroupElement::new(alts));
+}
+
+pub fn alt(elements: List<Element>) -> Alternative {
+    return Alternative::new(elements);
+}
+
+pub fn mk_rule<S: AsStrSlice>(name: S, alts: List<Alternative>) -> ParserRule {
+    return ParserRule::new(name, Visibility::Private, [], alts);
+}
+
+/// The whole-grammar parser ATN, stamping and lowering the grammar on demand.
+/// Codegen calls `build_atn_with` instead, to reuse the `LoweredGrammar` it
+/// has already computed.
+pub fn build_atn(grammar: &Grammar) -> Atn {
+    let mut stamped = *grammar;
+    let kinds = TokenKinds::build(&stamped);
+    resolve_kind_ids(&mut stamped, &kinds);
+    let num_tokens = kinds.len();
+    let mut ctx = LowerContext::new(GrammarAnalysis::new(&stamped.parser_rules, kinds), GenSettings {});
+    let lowered = lower(&stamped, &collect_literal_tokens(&stamped.parser_rules), &mut ctx);
+    return build_atn_with(&stamped, &lowered, num_tokens);
+}
+
+/// `gale dump --lexer` of the one-file grammar `input`.
+pub fn lexer_dump<S: AsStrSlice>(input: S) -> String {
+    let inputs: List<[String, String]> = [
+        ["test.g4", input.to_string()],
+    ];
+    return render_lexer_dump(&assemble_grammar(&inputs).unwrap());
+}
+
+/// A TokenStream over `src` from `[kind, start, end]` token specs (no
+/// trivia). The returned stream borrows a fresh char list; GC keeps it alive.
+pub fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
+    let chars: List<char> = src.chars().collect();
+    let mut ts = TokenStream::new(&chars);
+    for let s of &specs {
+        let lo = ts.trivia_mark();
+        ts.push_token(s.0, s.1, s.2, lo, ts.trivia_mark());
+    }
+    return ts;
+}
