@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792069781204,
+  "lastUpdate": 1792077669442,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67397,6 +67397,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 340396,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48220137a95af0ddeb4ea6312fc44e59f1067f9e",
+          "message": "Merge pull request #2359 from wado-lang/perf-cold-function-inlining\n\nperf(compiler): stop inlining into code only cold paths reach",
+          "timestamp": "2026-10-16T00:01:09+09:00",
+          "tree_id": "c60e4e92577ed2a347e78c55bae94c7c6c536f39",
+          "url": "https://github.com/wado-lang/wado/commit/48220137a95af0ddeb4ea6312fc44e59f1067f9e"
+        },
+        "date": 1792077668580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2955,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7350,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19942,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 337123,
             "unit": "bytes"
           }
         ]
