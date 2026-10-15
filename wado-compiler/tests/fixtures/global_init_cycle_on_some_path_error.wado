@@ -1,0 +1,24 @@
+// A cycle only some executions take is still a cycle. `pick` reads `B` only
+// when its flag is set, which the compiler cannot decide, so `A` may wait on
+// `B` as `B` waits on `A`.
+
+use { println, Stdout } from "core:cli";
+
+global A: i32 = pick(builtin::black_box(false));
+global B: i32 = A + 1;
+
+fn pick(flag: bool) -> i32 {
+    if flag {
+        return B;
+    }
+    return 0;
+}
+
+export fn run() with Stdout {
+    println(`${A} ${B}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializers form a cycle: A, B"
+}

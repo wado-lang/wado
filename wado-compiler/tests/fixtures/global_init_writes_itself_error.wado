@@ -1,0 +1,20 @@
+// A write is a dependency as a read is: `reset` writes `A`, so the initializer
+// of `A` uses `A` before it has a value, and nothing reads it.
+
+use { println, Stdout } from "core:cli";
+
+global mut A: i32 = reset();
+
+fn reset() -> i32 {
+    A = 0;
+    return 1;
+}
+
+export fn run() with Stdout {
+    println(`${A}`);
+}
+
+__DATA__
+{
+    "compile_error": "the initializer of `A` may use `A` before it has been given a value."
+}
