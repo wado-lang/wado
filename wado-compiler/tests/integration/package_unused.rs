@@ -158,6 +158,45 @@ fn a_test_helper_a_test_reaches_is_not_reported() {
 }
 
 #[test]
+fn a_generated_module_keeps_what_it_calls_used() {
+    let diags = package_unused(&[
+        (
+            "lib.wado",
+            r#"use { parse } from "./parser.wado"; pub fn api() -> i32 { return parse(); }"#,
+        ),
+        (
+            "parser.wado",
+            r#"#![generated(by = "test")]
+use { shift } from "./runtime.wado";
+pub fn parse() -> i32 { return shift(); }"#,
+        ),
+        ("runtime.wado", "internal fn shift() -> i32 { return 1; }"),
+    ]);
+    assert!(diags.is_empty(), "{diags:?}");
+}
+
+#[test]
+fn a_generated_module_importing_only_the_stdlib_keeps_its_declarations() {
+    let diags = package_unused(&[
+        (
+            "lib.wado",
+            r#"use { parse } from "./parser.wado"; pub fn api() -> i32 { return parse(); }"#,
+        ),
+        (
+            "parser.wado",
+            r#"#![generated(by = "test")]
+use { TreeMap } from "core:collections";
+pub fn parse() -> i32 {
+    let braces = `{${"}"}`;
+    if braces.len() > 0 && '{' != '}' { return TreeMap::<i32, i32>::new().len(); }
+    return 0;
+}"#,
+        ),
+    ]);
+    assert!(diags.is_empty(), "{diags:?}");
+}
+
+#[test]
 fn a_test_helper_nothing_reaches_is_never_used() {
     let diags = diagnostics();
     assert!(

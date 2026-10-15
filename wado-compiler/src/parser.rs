@@ -22,7 +22,7 @@ use crate::ast::{
     UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
     WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
-use crate::attribute::{CANONICAL, CM, TODO};
+use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
@@ -97,6 +97,17 @@ pub struct Parser {
     /// Inside a trait whose head is not `with ()`, where a method's own
     /// `with ()` says it is pure rather than nothing.
     pure_override_allowed: bool,
+    bodies: Bodies,
+}
+
+/// Whether the parser reads function bodies.
+#[derive(Clone, Copy, PartialEq)]
+enum Bodies {
+    Read,
+    /// Skipped once the module turns out `#![generated]`.
+    SkipIfGenerated,
+    /// Each one an empty block, its tokens skipped to the matching `}`.
+    Skipped,
 }
 
 /// Why a read of a condition's operands rolled back.
@@ -292,7 +303,22 @@ impl Parser {
             recovering: false,
             effect_hole: EffectHole::Outside,
             pure_override_allowed: false,
+            bodies: Bodies::Read,
         }
+    }
+
+    /// Skip the function bodies of a `#![generated]` module: each parses as an
+    /// empty block, for a caller that reads only declarations. A generated
+    /// module is megabytes of bodies.
+    #[must_use]
+    pub fn skipping_generated_bodies(mut self) -> Self {
+        self.bodies = Bodies::SkipIfGenerated;
+        self
+    }
+
+    /// Whether [`Self::skipping_generated_bodies`] took effect.
+    pub fn skipped_bodies(&self) -> bool {
+        self.bodies == Bodies::Skipped
     }
 
     /// Drain the syntax errors collected during error recovery.
@@ -486,6 +512,13 @@ impl Parser {
             self.errors.push(e);
         }
         let inner_attributes = self.parsed_inner_attributes.clone();
+        if self.bodies == Bodies::SkipIfGenerated {
+            self.bodies = if inner_attributes.iter().any(|a| a.name == GENERATED) {
+                Bodies::Skipped
+            } else {
+                Bodies::Read
+            };
+        }
 
         let mut items = Vec::new();
 
@@ -2152,6 +2185,8 @@ impl Parser {
             // via the block span below.
             decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
             None
+        } else if self.bodies == Bodies::Skipped {
+            Some(self.skip_block()?)
         } else {
             Some(self.parse_block()?)
         };
@@ -2661,6 +2696,31 @@ impl Parser {
             id,
             stmts,
             span: start_span.merge(&end_span),
+        })
+    }
+
+    /// A block read as empty: `{`, then every token through its matching `}`.
+    /// An interpolation's braces live inside its template token, so the
+    /// braces in `tokens` balance in any well-formed body.
+    fn skip_block(&mut self) -> ParseResult<Block> {
+        let id = self.alloc_ast_id();
+        let start_span = self.peek().span;
+        self.expect(&TokenKind::LBrace)?;
+        let mut depth = 1;
+        while depth > 0 {
+            if self.is_at_end() {
+                return Err(self.error_at_span(self.peek().span, "expected `}`"));
+            }
+            match self.advance().kind {
+                TokenKind::LBrace => depth += 1,
+                TokenKind::RBrace => depth -= 1,
+                _ => {}
+            }
+        }
+        Ok(Block {
+            id,
+            stmts: Vec::new(),
+            span: start_span.merge(&self.previous().span),
         })
     }
 

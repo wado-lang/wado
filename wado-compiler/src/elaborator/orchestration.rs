@@ -1541,7 +1541,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // sole TIR source. Liveness
         // runs between the two phases so reify can gate on it.
         for module_source in &sorted_sources {
-            if is_stdlib_snapshot_hit(snapshot, module_source) {
+            if is_stdlib_snapshot_hit(snapshot, module_source)
+                || !liveness_scope.walks_bodies_of(module_source)
+            {
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
@@ -1610,6 +1612,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &trait_method_impls(&state.tysys),
                 liveness_scope,
             );
+            // Lowering alone reads the last uses, to elide copies.
+            if build_tir {
+                liveness::compute_last_uses(modules, &direct, &mut state.liveness);
+            }
         }
 
         // The plan reads which callee names `core:rt`'s `unreachable`, so it

@@ -16,6 +16,7 @@ use crate::compiler_host::{
     Severity, SourceError,
 };
 use crate::component_model::SourceInterfaceBatch;
+use crate::elaborator::liveness::is_user_authored;
 use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, lex};
 use crate::logger::Logger;
@@ -462,6 +463,9 @@ pub struct LoadResult {
     /// canonicalize any `ModuleSource` they construct so that ptr-eq
     /// remains a valid identity check across phases.
     pub interner: ModuleSourceInterner,
+    /// The modules whose function bodies were read as empty blocks
+    /// ([`ModuleLoader::with_generated_bodies_skipped`]).
+    pub skipped_bodies: IndexSet<ModuleSource>,
 }
 
 use crate::compiler_host::LogLevel;
@@ -1275,6 +1279,9 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// module path. Consulted by `resolve_import` so a bare `use { X } from
     /// "<schema>"` picks up the generator's output.
     invocations: InvocationIndex,
+    /// Set by [`Self::with_generated_bodies_skipped`].
+    skip_generated_bodies: bool,
+    skipped_bodies: IndexSet<ModuleSource>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1301,7 +1308,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             pending_component_stdlib_deps: IndexSet::default(),
             entry_module_source: None,
             invocations: InvocationIndex::new(),
+            skip_generated_bodies: false,
+            skipped_bodies: IndexSet::default(),
         }
+    }
+
+    /// Skip the function bodies of every `#![generated]` user module that
+    /// imports only the standard library, for a caller that walks no body
+    /// such a module holds ([`LoadResult::skipped_bodies`] names them).
+    #[must_use]
+    pub(crate) fn with_generated_bodies_skipped(mut self) -> Self {
+        self.skip_generated_bodies = true;
+        self
     }
 
     /// Borrow the loader's interner mutably. Used by downstream phases
@@ -1432,13 +1450,28 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Load and parse the module
             let source = self.get_source(&module_source, &from_module_source).await?;
-            let ast = {
+            let skip_generated_bodies =
+                self.skip_generated_bodies && is_user_authored(&module_source);
+            let (mut ast, skipped) = {
                 let _span = self.logger.span(&format!("parse {mod_name}"));
-                self.parse_source(&source, &module_source)?
+                self.parse_source_with(&source, &module_source, skip_generated_bodies)?
             };
 
             // Collect its imports (before bind)
+            let queued = pending.len();
             self.collect_imports(&ast, &module_source, &mut pending, &mut wasm_imports)?;
+            // Only the standard library imported, nothing the module reaches
+            // is user code, so no caller walks its bodies. Past it, one might.
+            if skipped {
+                if pending
+                    .range(queued..)
+                    .any(|(_, imported)| is_user_authored(imported))
+                {
+                    ast = self.parse_source(&source, &module_source)?;
+                } else {
+                    self.skipped_bodies.insert(module_source.clone());
+                }
+            }
 
             {
                 let _span = self.logger.span(&format!("bind {mod_name}"));
@@ -1506,6 +1539,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             cm_source_interfaces: self.cm_source_interfaces,
             invocations: self.invocations,
             interner: self.interner,
+            skipped_bodies: self.skipped_bodies,
         })
     }
 
@@ -1998,19 +2032,33 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &str,
         module_source: &ModuleSource,
     ) -> Result<Module, LoadError> {
+        Ok(self.parse_source_with(source, module_source, false)?.0)
+    }
+
+    /// Parse `source`, skipping a generated module's function bodies when
+    /// `skip_generated_bodies`. The flag says whether they were skipped.
+    fn parse_source_with(
+        &self,
+        source: &str,
+        module_source: &ModuleSource,
+        skip_generated_bodies: bool,
+    ) -> Result<(Module, bool), LoadError> {
         let lex_result = lex(source);
         if let Some(e) = lex_result.errors.first() {
             return Err(LoadError::from_lex_error(e, module_source.clone()));
         }
 
         let mut parser = Parser::from_lex_no_trivia(lex_result);
+        if skip_generated_bodies {
+            parser = parser.skipping_generated_bodies();
+        }
         // Batch loading is fail-fast: report the first recovered syntax error
         // as a load error so compilation never proceeds on a partial AST.
         let ast = parser.parse();
         if let Some(e) = parser.take_errors().first() {
             return Err(LoadError::from_parse_error(e, module_source.clone()));
         }
-        Ok(ast)
+        Ok((ast, parser.skipped_bodies()))
     }
 
     /// Bind a module (local name resolution and scope checking)

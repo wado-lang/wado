@@ -35,8 +35,9 @@ pub(crate) struct Liveness {
     pub(crate) test_only_items: Vec<AstId>,
     /// Local last-use liveness (WEP 2026-05-21, value-copy client). Each entry
     /// is the `AstId` of an identifier *use* that is the final use, on every
-    /// path, of a move-eligible local binding. The canonical `AstId`-keyed
-    /// output — reusable by the LSP and the future affine-resource client.
+    /// path, of a move-eligible local binding, filled only where TIR is built
+    /// ([`compute_last_uses`]). The canonical `AstId`-keyed output — reusable
+    /// by the future affine-resource client.
     /// Sound by construction: a use is recorded only when the analysis proves
     /// the local dead afterward *and* the binding owns what it names, so an
     /// unrecorded use always falls back to a copy.
@@ -56,7 +57,7 @@ pub(crate) enum LivenessScope {
     #[default]
     Compilation,
     /// A whole package, loaded together.
-    Package(PackageScope),
+    Package(Box<PackageScope>),
 }
 
 /// One package's modules, sorted by what they are for.
@@ -69,6 +70,11 @@ pub(crate) struct PackageScope {
     /// What the entries reach by `use`: production code. A member outside it
     /// is test code.
     pub(crate) production: IndexSet<ModuleSource>,
+    /// The modules that reach a reported one by `use`, itself included. A
+    /// module outside it names no candidate, and impl methods are roots, so
+    /// its bodies decide nothing and go unwalked: Gale's generated parsers,
+    /// most of what its tests load, import only the standard library.
+    pub(crate) walked: IndexSet<ModuleSource>,
 }
 
 /// What one module's visibility modifiers mean for liveness, under a scope.
@@ -94,6 +100,14 @@ impl ModuleRoots {
 }
 
 impl LivenessScope {
+    /// Whether the body walk of `source` can change what liveness reports.
+    pub(crate) fn walks_bodies_of(&self, source: &ModuleSource) -> bool {
+        match self {
+            Self::Compilation => true,
+            Self::Package(package) => package.walked.contains(source),
+        }
+    }
+
     fn module_roots(&self, source: &ModuleSource, user_authored: bool) -> ModuleRoots {
         match self {
             Self::Compilation => ModuleRoots {
@@ -328,14 +342,7 @@ pub(crate) fn compute(
         }
     }
 
-    let mut liveness = graph.finish();
-    compute_last_uses(
-        modules,
-        references.direct,
-        &mut liveness.last_uses,
-        &mut liveness.moved_spans,
-    );
-    liveness
+    graph.finish()
 }
 
 /// Where a declared method's only call comes from.
@@ -389,12 +396,16 @@ pub(crate) struct References<'a> {
 /// `moved_spans` (the span projection). Analyzed over all modules —
 /// stdlib bodies benefit from copy elision too. Reads only the single-definition
 /// edges: a trait default body's locals are per-impl, so not decidable here.
-fn compute_last_uses(
+pub(crate) fn compute_last_uses(
     modules: &IndexMap<ModuleSource, Module>,
     references: &IndexMap<AstId, AstId>,
-    last_uses: &mut IndexSet<AstId>,
-    spans: &mut IndexSet<Span>,
+    liveness: &mut Liveness,
 ) {
+    let Liveness {
+        last_uses,
+        moved_spans: spans,
+        ..
+    } = liveness;
     for module in modules.values() {
         for item in &module.items {
             match item {

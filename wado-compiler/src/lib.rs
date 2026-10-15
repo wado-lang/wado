@@ -622,6 +622,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
     let logger = Logger::new(host, log_level);
     let mut load = loader::ModuleLoader::new(host, log_level)
         .with_invocations(invocations)
+        .with_generated_bodies_skipped()
         .load_all(&package.entry_source(), Some(&package.entry_name()))
         .await
         .map_err(|e| {
@@ -649,11 +650,35 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
             work.extend(imports_of(&mut load, &source));
         }
     }
-    let scope = LivenessScope::Package(PackageScope {
+    let mut importers: IndexMap<ModuleSource, Vec<ModuleSource>> = IndexMap::default();
+    let sources: Vec<ModuleSource> = load.modules.keys().cloned().collect();
+    for source in sources {
+        for imported in imports_of(&mut load, &source) {
+            importers.entry(imported).or_default().push(source.clone());
+        }
+    }
+    // Generated modules hold no candidates, members or not.
+    let mut work: Vec<ModuleSource> = members
+        .iter()
+        .filter(|source| !load.modules[*source].has_generated())
+        .cloned()
+        .collect();
+    let mut walked = IndexSet::default();
+    while let Some(source) = work.pop() {
+        if walked.insert(source.clone()) {
+            work.extend(importers.get(&source).into_iter().flatten().cloned());
+        }
+    }
+    assert!(
+        walked.is_disjoint(&load.skipped_bodies),
+        "a module whose bodies are walked keeps them"
+    );
+    let scope = LivenessScope::Package(Box::new(PackageScope {
         members: members.into_iter().collect(),
         entries,
         production,
-    });
+        walked,
+    }));
     let sem = semantics::semantics_with_logger(load, &logger, false, None, &scope);
     sem.is_complete().then(|| unused_diagnostics(&sem, false))
 }

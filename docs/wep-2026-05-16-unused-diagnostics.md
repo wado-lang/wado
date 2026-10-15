@@ -179,6 +179,14 @@ keyed by the package's module identities
 package would reject two members that generate one schema under different
 options, which Gale's descriptor corpus does.
 
+Only the modules that reach a reported member by `use` have their bodies
+walked. Any other module can name no candidate, and the impl methods its calls
+dispatch to are roots anyway, so its walk would change no verdict. Gale's
+generated parsers import only the standard library, and they are most of what
+its tests load. The loader goes one step further for a `#![generated]` module
+that imports nothing else: it skips its function bodies at parse time, so they
+cost no AST either.
+
 A single-file compile and the editor keep the compilation rules above, so
 `pub` and `internal` items stay roots there.
 
@@ -631,6 +639,6 @@ through the diagnostics path.
   reaches. A single-file compile and the editor do not load the whole package.
 - A namespace re-export (`pub use ns from "./m.wado"`) seeds nothing in package
   mode, so what it offers reports as unused.
-- Package mode elaborates every member on one thread, generated parsers
-  included, and runs every member's Kiln pipeline one at a time. On Gale it
-  takes about four times as long as checking the declared entries alone.
+- Package mode elaborates every member on one thread, and runs every member's
+  Kiln pipeline one at a time. On Gale it takes under twice as long as
+  checking the declared entries alone.
