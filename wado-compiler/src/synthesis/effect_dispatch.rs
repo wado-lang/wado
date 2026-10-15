@@ -25,7 +25,7 @@ use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
     TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
-    TypeTable, positional_substitution,
+    TypeKey, TypeTable, positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
@@ -36,11 +36,58 @@ use crate::{Span, hashmap, tir, token};
 /// instantiates once per type argument.
 type EffectKey = DeclaredHead;
 
-/// A per-monomorphisation dispatch instantiation: `(declaration, type_args)`.
-/// Each distinct argument tuple gets its own dispatch struct / global / wrapper
-/// triple, with the declaration's operation types substituted. A non-generic
-/// effect has empty `type_args` and so keeps one set per declaration.
-pub type InstantiationKey = (DeclaredHead, Vec<TypeId>);
+/// A per-monomorphisation dispatch instantiation: a declaration and its type
+/// arguments. Each distinct argument tuple gets its own dispatch struct /
+/// global / wrapper triple, with the declaration's operation types substituted.
+/// A non-generic effect has empty `type_args` and so keeps one set per
+/// declaration.
+#[derive(Debug, Clone)]
+pub struct InstantiationKey {
+    pub effect: DeclaredHead,
+    /// What substitution and naming read.
+    pub type_args: Vec<TypeId>,
+    /// What the key compares: two ids may resolve to one type.
+    type_keys: Vec<TypeKey>,
+}
+
+impl InstantiationKey {
+    fn new(effect: DeclaredHead, type_args: Vec<TypeId>, type_table: &TypeTable) -> Self {
+        let type_keys = type_keys(&type_args, type_table);
+        Self {
+            effect,
+            type_args,
+            type_keys,
+        }
+    }
+
+    /// A non-generic declaration's one instantiation.
+    fn monomorphic(effect: DeclaredHead) -> Self {
+        Self {
+            effect,
+            type_args: Vec::new(),
+            type_keys: Vec::new(),
+        }
+    }
+}
+
+impl PartialEq for InstantiationKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.effect == other.effect && self.type_keys == other.type_keys
+    }
+}
+
+impl Eq for InstantiationKey {}
+
+impl std::hash::Hash for InstantiationKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.effect.hash(state);
+        self.type_keys.hash(state);
+    }
+}
+
+fn type_keys(type_args: &[TypeId], type_table: &TypeTable) -> Vec<TypeKey> {
+    type_args.iter().map(|&ty| type_table.type_key(ty)).collect()
+}
 
 /// Metadata for a single effect or resource, indexed by `EffectKey`.
 #[derive(Debug, Clone)]
@@ -99,7 +146,7 @@ fn identify_active_effects(
 ) -> IndexSet<InstantiationKey> {
     impl_index
         .keys()
-        .map(|(_struct, effect, type_args)| (effect.clone(), type_args.clone()))
+        .map(|(_struct, instantiation)| instantiation.clone())
         .collect()
 }
 
@@ -123,7 +170,7 @@ fn identify_uncovered_effects(
         .filter(|(effect, meta)| {
             !meta.is_resource
                 && meta.operations.iter().any(|op| op.cm_name.is_none())
-                && !active.contains(&((*effect).clone(), Vec::new()))
+                && !active.contains(&InstantiationKey::monomorphic((*effect).clone()))
         })
         .map(|(key, _)| key.clone())
         .collect();
@@ -158,7 +205,8 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
             && let Some(effect) = func.module_source.effect_interface()
             && self.uncovered.contains(effect)
         {
-            self.called.insert((effect.clone(), Vec::new()));
+            self.called
+                .insert(InstantiationKey::monomorphic(effect.clone()));
         }
         self.walk_expr(expr);
     }
@@ -295,7 +343,9 @@ fn synthesize_dispatch_struct(
     key: &InstantiationKey,
     meta: &EffectMeta,
 ) -> DispatchPlan {
-    let (effect, type_args) = key;
+    let InstantiationKey {
+        effect, type_args, ..
+    } = key;
 
     let entry_module = project
         .tir_modules
@@ -444,7 +494,9 @@ fn synthesize_dispatch_wrappers(
     plan: &mut DispatchPlan,
     open_effects: &IndexSet<DeclaredHead>,
 ) {
-    let (effect, type_args) = key;
+    let InstantiationKey {
+        effect, type_args, ..
+    } = key;
     let is_resource = meta.is_resource;
     // Route to the CM import only when the effect is open AND actually
     // registered as one: a non-lib build registers no guest imports, so its
@@ -1441,7 +1493,11 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         let effect = &binding.effect;
         let interface_name = effect.name();
         let trait_type_args = binding.trait_type_args.clone();
-        let key: InstantiationKey = (effect.clone(), trait_type_args.clone());
+        let key = InstantiationKey::new(
+            effect.clone(),
+            trait_type_args.clone(),
+            &env.type_table.borrow(),
+        );
         let plan = env.plans.get(&key).unwrap_or_else(|| {
             panic!(
                 "effect-dispatch synthesis: no DispatchPlan for \
@@ -1460,11 +1516,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             .type_table
             .borrow()
             .mangle_type_arg_for_generic(handler_underlying);
-        let impl_key: HandlerImplKey = (
-            handler_type_name.clone(),
-            effect.clone(),
-            trait_type_args.clone(),
-        );
+        let impl_key: HandlerImplKey = (handler_type_name.clone(), key.clone());
         // Exact match first, then the generic-template fallback: a generic
         // impl `impl<T> E for Holder<T>` registers under the bare head `Holder`
         // (see `build_handler_impl_index`), which `Holder<i32>` never equals.
@@ -1475,8 +1527,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 .type_table
                 .borrow()
                 .fq_base_type_name(handler_underlying);
-            env.impl_index
-                .get(&(head.into_string(), effect.clone(), trait_type_args.clone()))
+            env.impl_index.get(&(head.into_string(), key.clone()))
         });
         let impl_info = impl_info.unwrap_or_else(|| {
             panic!(
@@ -2446,7 +2497,7 @@ fn rewrite_calls_in_functions(
 
 /// `(resource, cm_name) → [(type_args, wrapper_name)]`.
 /// Outlives its pass: an instance minted later routes through the same wrappers.
-pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeId>, String)>>;
+pub type ResourceWrapperIndex = IndexMap<(DefId, String), Vec<(Vec<TypeKey>, String)>>;
 
 /// `(interface, op) → wrapper_name` for user-effect calls (e.g.
 /// `Counter::next()`).
@@ -2461,7 +2512,8 @@ fn build_wrapper_indexes(
     let effect_index = build_effect_index(project);
     let mut user_to_wrapper = EffectOpWrappers::default();
     let mut cm_to_wrappers: ResourceWrapperIndex = IndexMap::default();
-    for ((effect, type_args), plan) in plans {
+    for (key, plan) in plans {
+        let effect = &key.effect;
         let is_resource = effect_index[effect].is_resource;
         for op in &plan.operations {
             let wrapper_name = plan
@@ -2473,7 +2525,7 @@ fn build_wrapper_indexes(
                     cm_to_wrappers
                         .entry((effect.def(), cm_name.clone()))
                         .or_default()
-                        .push((type_args.clone(), wrapper_name.clone()));
+                        .push((key.type_keys.clone(), wrapper_name.clone()));
                 }
                 // Resource ops without `cm_name` aren't reachable from
                 // user-side calls (no canonical attribute → no
@@ -2533,7 +2585,8 @@ fn pick_resource_wrapper(
 ) -> Option<String> {
     let candidates = ctx.cm_to_wrappers.get(&(resource, cm_name.to_string()))?;
     // Exact instantiation match first.
-    if let Some((_, name)) = candidates.iter().find(|(args, _)| args == call_type_args) {
+    let call_type_keys = type_keys(call_type_args, &ctx.type_table.borrow());
+    if let Some((_, name)) = candidates.iter().find(|(keys, _)| *keys == call_type_keys) {
         return Some(name.clone());
     }
     // Single-instantiation fallback: when the call site couldn't
@@ -2957,13 +3010,12 @@ fn synthesize_dispatch_infrastructure(
     let type_table_rc = entry_module.type_table.clone();
     let mut substituted_metas: IndexMap<InstantiationKey, EffectMeta> = IndexMap::default();
     for key in active_instantiations {
-        let (effect, type_args) = key;
         let template = effect_index
-            .get(effect)
+            .get(&key.effect)
             .expect("active instantiation must have a declaration template in the effect index");
         let operations = substitute_operations(
             &template.operations,
-            type_args,
+            &key.type_args,
             &mut type_table_rc.borrow_mut(),
         );
         substituted_metas.insert(
@@ -2993,10 +3045,10 @@ fn synthesize_dispatch_infrastructure(
 }
 
 /// Canonical identity of an `impl <Effect> for <Type>` block:
-/// `(handler_type_name, effect, trait_type_args)`. The trait-side type args
-/// keep `impl Stream<u8> for MockCM` and `impl Stream<i32> for MockCM` at
-/// distinct keys, so each gets its own dispatch infrastructure.
-type HandlerImplKey = (String, DeclaredHead, Vec<TypeId>);
+/// `(handler_type_name, instantiation)`. The trait-side type args keep
+/// `impl Stream<u8> for MockCM` and `impl Stream<i32> for MockCM` at distinct
+/// keys, so each gets its own dispatch infrastructure.
+type HandlerImplKey = (String, InstantiationKey);
 
 #[derive(Debug, Clone)]
 struct HandlerImplInfo {
@@ -3051,8 +3103,11 @@ fn build_handler_impl_index(
             }
             let key: HandlerImplKey = (
                 method_info.struct_name().clone(),
-                effect.clone(),
-                method_info.trait_type_args.clone(),
+                InstantiationKey::new(
+                    effect.clone(),
+                    method_info.trait_type_args.clone(),
+                    &module.type_table.borrow(),
+                ),
             );
             let entry = out.entry(key).or_insert_with(|| HandlerImplInfo {
                 impl_module: module_source.clone(),
@@ -3083,8 +3138,11 @@ fn build_handler_impl_index(
             }
             let key: HandlerImplKey = (
                 tir_impl.struct_name.clone(),
-                effect.clone(),
-                tir_impl.trait_type_args.clone(),
+                InstantiationKey::new(
+                    effect.clone(),
+                    tir_impl.trait_type_args.clone(),
+                    &module.type_table.borrow(),
+                ),
             );
             out.entry(key)
                 .or_insert_with(|| HandlerImplInfo {
