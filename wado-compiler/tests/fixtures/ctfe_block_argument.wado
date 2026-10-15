@@ -1,7 +1,8 @@
 // A call whose argument is a block, the shape inlining leaves when it splices a
 // callee into an argument position, still runs at compile time: the frame runs
 // the block, then the call. Arguments evaluate left to right, so `pair` reads
-// `x` before the block assigns it, and prints 15, not 55. At O2 both calls fold
+// `x` before the block assigns it, and prints 15, not 55: the frame declines a
+// block that writes what an argument ahead of it reads. At O2 both calls fold
 // away.
 
 use { println, Stdout } from "core:cli";

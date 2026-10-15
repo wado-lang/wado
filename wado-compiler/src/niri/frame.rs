@@ -5,6 +5,7 @@
 //! abandons the evaluation rather than stepping past an unperformed write.
 
 use crate::const_eval::Value;
+use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
@@ -13,7 +14,9 @@ use crate::nir_visitor::NirRefVisitor;
 use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
-use super::place::{borrowed_place_operand, named_local, place_aliased_by_another, place_of};
+use super::place::{
+    borrowed_place_operand, named_local, place_aliased_by_another, place_of, write_root_local,
+};
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;
 use super::trackability::Trackability;
@@ -173,6 +176,53 @@ fn aliased_write_targets(targets: &[(u32, u32, Vec<u32>)], places: &[(u32, Vec<u
     targets
         .iter()
         .any(|(_, root, path)| place_aliased_by_another(places, *root, path))
+}
+
+/// The locals something under `e` writes, through the channels
+/// [`clobbered_locals`] reads: an assignment, a mutable borrow, an argument
+/// reaching storage.
+///
+/// [`clobbered_locals`]: super::trackability::clobbered_locals
+fn locals_written_under(body: &Body, e: ExprId) -> IndexSet<u32> {
+    let mut written = IndexSet::default();
+    body.find_in_nodes_under(NodeRef::Expr(e), |node| {
+        let NodeRef::Expr(e) = node else {
+            return None::<()>;
+        };
+        match &body.exprs[e].kind {
+            ExprKind::Assign { target, .. } => {
+                written.extend(write_root_local(body, (*target).into()))
+            }
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef,
+                expr,
+            } => written.extend(write_root_local(body, *expr)),
+            ExprKind::Call { args, .. } => {
+                for (arg, reaches_storage) in args.with_storage_reach(true) {
+                    if reaches_storage {
+                        written.extend(write_root_local(body, arg.expr));
+                    }
+                }
+            }
+            _ => {}
+        }
+        None
+    });
+    written
+}
+
+/// Every local `e` names, read or written.
+fn locals_mentioned_under(body: &Body, e: ExprId) -> impl Iterator<Item = u32> {
+    let mut mentioned = Vec::new();
+    body.find_in_nodes_under(NodeRef::Expr(e), |node| {
+        if let NodeRef::Expr(e) = node
+            && let ExprKind::Local { index, .. } = body.exprs[e].kind
+        {
+            mentioned.push(index);
+        }
+        None::<()>
+    });
+    mentioned.into_iter()
 }
 
 impl Interpreter<'_> {
@@ -402,16 +452,10 @@ impl Interpreter<'_> {
     /// when the expression is not a call the frame knows.
     fn exec_call_stmt(&mut self, body: &mut Body, e: ExprId) -> Option<Flow> {
         let (key, args) = self.call_target(body, e)?;
-        let callee = self.facts.callees?.get(&key)?;
-        let by_value: Vec<bool> = {
-            let callee = callee.func.borrow();
-            callee
-                .params
-                .iter()
-                .map(|p| !p.is_mut_ref && !self.type_table.is_reference_shaped(p.type_id))
-                .collect()
-        };
-        if self.exec_block_args(body, &args, &by_value).is_none() {
+        if !self.facts.callees.is_some_and(|c| c.contains_key(&key)) {
+            return None;
+        }
+        if self.exec_block_args(body, &args).is_none() {
             return Some(Flow::Bail);
         }
         let Some(run) = self.run_call(body, e, true) else {
@@ -425,34 +469,36 @@ impl Interpreter<'_> {
 
     /// Run the block-shaped arguments, the shape inlining leaves in an argument
     /// position, and record each one's value in `scratch_folds`, where
-    /// [`Interpreter::run_call`] reads it back. Arguments evaluate left to
-    /// right, so a by-value argument ahead of a block is taken before the block
-    /// writes what it reads. A reference argument is read through at the call,
-    /// as the callee reads it. `None` when an argument the call needs reaches
-    /// no constant. An arity mismatch is left to `run_call`, which declines it.
-    fn exec_block_args(
-        &mut self,
-        body: &mut Body,
-        args: &[Operand],
-        by_value: &[bool],
-    ) -> Option<()> {
-        let is_block = |body: &Body, arg: &Operand| {
-            arg.as_expr()
-                .is_some_and(|e| matches!(body.exprs[e].kind, ExprKind::LabeledBlock { .. }))
-        };
-        let Some(last_block) = args.iter().rposition(|arg| is_block(body, arg)) else {
-            return Some(());
-        };
-        for (arg, &by_value) in args[..=last_block].iter().zip(by_value) {
-            let Some(e) = arg.as_expr() else { continue };
-            let lattice = if is_block(body, arg) {
-                self.exec_value_block(body, e)
-            } else if by_value {
-                self.eval_operand(body, *arg)
-            } else {
-                continue;
-            };
-            self.frame.scratch_folds.insert(e, lattice.as_const()?);
+    /// [`Interpreter::run_call`] reads it back with the other arguments.
+    ///
+    /// The program runs each argument in turn, while the frame runs the blocks
+    /// first and reads the rest at the call. The two agree only where no block
+    /// writes a local an argument ahead of it mentions, so a call that breaks
+    /// this is declined: a borrow of a boxed primitive reads as a value, so the
+    /// operand's shape cannot say which earlier argument would see the write.
+    /// `None` on a decline, or when a block reaches no constant.
+    fn exec_block_args(&mut self, body: &mut Body, args: &[Operand]) -> Option<()> {
+        let blocks: Vec<(usize, ExprId)> = args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, arg)| {
+                let e = arg.as_expr()?;
+                block_shape(body, e).map(|_| (i, e))
+            })
+            .collect();
+        for &(i, e) in &blocks {
+            let written = locals_written_under(body, e);
+            let ahead_reads = args[..i]
+                .iter()
+                .filter_map(|arg| arg.as_expr())
+                .any(|ahead| locals_mentioned_under(body, ahead).any(|l| written.contains(&l)));
+            if ahead_reads {
+                return None;
+            }
+        }
+        for (_, e) in blocks {
+            let value = self.eval_operand(body, e.into()).as_const()?;
+            self.frame.scratch_folds.insert(e, value);
         }
         Some(())
     }
@@ -727,8 +773,8 @@ impl Interpreter<'_> {
     /// reference cannot write, so the referent's own constant stands; one
     /// retained past the callee's return is refused. An alias local passes its
     /// place's value, as `&place` does: the parameter reads through what it
-    /// receives. What [`Self::exec_block_args`] took ahead of the call stands
-    /// over all of these.
+    /// receives. A block argument reads as the value
+    /// [`Self::exec_block_args`] ran it to.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
         if let Some(e) = arg.as_expr()
             && let Some(value) = self.frame.scratch_folds.get(&e)
