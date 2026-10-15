@@ -397,13 +397,24 @@ API waits for a program outside the standard library that needs one.
    - [x] `Sequence::get_unchecked` becomes `unchecked xs.at(i)`, and
      `ByteList::get_byte_unchecked` becomes `unchecked xs[i]`.
 8. The generated WIT carries an `export fn`'s contract as a comment.
+9. A failed check reports the call's position. Done. Reify splits a function
+   with a contract in two rather than copying its body: the `$unchecked` twin
+   holds the body, and the function itself checks the clauses and forwards to
+   the twin. A trait method's impl gets the holder call as its one clause, so
+   the holder needs no twin. A function value and an export reach the
+   function itself. After monomorphization, ahead of the plan,
+   `lower/contract_checks.rs` expands each direct call: the arguments bound in
+   order, a copy of the clauses reading them, then a call to the twin. A copy
+   reports its call's position through the `$contract_site` intrinsic, which
+   the function's own clauses fall back from to the clause's. Under
+   `-f contract-checks` a marked call goes back to the function before
+   monomorphization, and so is expanded as an unmarked one is.
 
 ## Known gaps
 
-- A failed check reports the clause's position inside the function, not the
-  call that broke the contract.
-- A function reached by both a marked and an unmarked call is emitted twice,
-  once for each.
+- A call inside a closure, or in a global's initializer, is not expanded: it
+  reaches the function itself, and a failure reports the clause's position. So
+  is every call to a function whose clause holds a closure.
 - A contract on a declaration with no body, outside a trait, is a compile
   error.
 - A call through a function value has no callee known statically, so it has no

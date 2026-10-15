@@ -112,7 +112,19 @@ fn non_negative_at(xs: &List<i32>, i: i32) -> i32
 ```
 
 A call traps when it is outside the contract, as a failed assertion does,
-message included. A caller that guarantees the contract itself marks the call
+message included. The report names the function and the call's position, since
+the call is what broke the contract. A call through a function value reports
+the clause's position instead, as the function cannot know who called it.
+
+<!-- {"fixture":"contract_call_site.wado", "assert": false} -->
+
+```wado
+fn pick_through<P: Pick>(p: &P, i: i32) -> i32 {
+    return p.pick(i);
+}
+```
+
+A caller that guarantees the contract itself marks the call
 with the prefix operator `unchecked`, and a marked call is checked only where
 the build checks contracts. A call without the marker is checked in every
 build. The operand of `unchecked` is a call to a function with a contract, or

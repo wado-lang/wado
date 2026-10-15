@@ -1858,6 +1858,11 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
     {
         let _span = logger.span("monomorphize");
+        // Ahead of monomorphization, which instantiates the checked function
+        // a call turned back reaches.
+        if flat.codegen_flags.contract_checks {
+            lower::contract_checks::check_marked_calls(&flat);
+        }
         let mut mono = monomorphize(&mut flat);
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
@@ -2328,6 +2333,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // instances just made concrete (mirrors `compile_with_options`).
             {
                 let _span = logger.span("monomorphize");
+                if flat.codegen_flags.contract_checks {
+                    lower::contract_checks::check_marked_calls(&flat);
+                }
                 let mut mono = monomorphize(&mut flat);
                 let validated =
                     synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)

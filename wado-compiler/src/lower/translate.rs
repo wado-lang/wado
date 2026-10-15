@@ -335,7 +335,7 @@ impl Interner {
 /// The canonical `FunctionId` of a TIR function — the same identity its
 /// converted `NirFunction` yields (`FunctionRef::function_id`), so the
 /// pre-built id map agrees with every call site's `convert_function_ref`.
-fn tir_function_key(f: &TirFunction) -> FunctionId {
+pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
     nir::FunctionRef {
         module_source: f.module_source.clone(),
         name: f.name.clone(),
@@ -3103,7 +3103,7 @@ fn convert_monomorph_info(info: &MonomorphInfo) -> nir::MonomorphInfo {
     }
 }
 
-fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
+pub(super) fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
     nir::FunctionRef {
         module_source: func.module_source.clone(),
         name: func.name.clone(),

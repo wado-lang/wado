@@ -515,6 +515,12 @@ fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
                     .first()
                     .is_some_and(|a| place_walk(&a.expr, source_forms))
         }),
+        // An expanded contract call: its clauses, then the call in the place.
+        TirExprKind::Block(block) => source_forms.is_some_and(|_| {
+            block.stmts.last().is_some_and(|last| {
+                matches!(&last.kind, TirStmtKind::Expr(tail) if place_walk(tail, source_forms))
+            })
+        }),
         _ => projection_base(expr).is_some_and(|inner| place_walk(inner, source_forms)),
     }
 }
@@ -561,7 +567,7 @@ fn collect_subscripts<'e>(
 
 /// Whether this callee is what `a[i]` dispatches to: the `Index*` trait method,
 /// or the `array_get_*` builtin under it. Both take the container as `args[0]`.
-fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
+pub fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
     if let Some(intrinsic) = func.intrinsic() {
         return matches!(
             intrinsic,

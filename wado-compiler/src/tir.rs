@@ -24,7 +24,7 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclaredHead, FqTraitName, FqTypeName, INTERNAL_PREFIX, LocalMethodName, NEVER_TYPE_NAME,
-    Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME,
+    Receiver, RefKind, TEMPLATE_SHAPE_PREFIX, TypeHead, TypeNameInfo, UNIT_TYPE_NAME, checked_name,
     format_type_name, mangle_builtin_array_type, mangle_generic_name, mangle_local_item_name,
     mangle_tuple_type, unchecked_twin_name,
 };
@@ -6577,6 +6577,19 @@ impl FunctionRef {
         self.template = self.template.as_ref().map(TemplateId::unchecked_twin);
     }
 
+    /// Point this call, aimed at an `unchecked` twin, back at the function it
+    /// is the twin of.
+    pub fn retarget_to_checked(&mut self) {
+        self.name = checked_name(&self.name).to_string();
+        if let Some(info) = &mut self.method_info {
+            info.mark_checked();
+        }
+        if let Some(mono) = &mut self.monomorph_info {
+            mono.generic_name = checked_name(&mono.generic_name).to_string();
+        }
+        self.template = self.template.as_ref().and_then(TemplateId::checked);
+    }
+
     /// Get the module path (for backwards compatibility)
     pub fn module_path(&self) -> Vec<String> {
         self.module_source.to_path()
@@ -7911,6 +7924,17 @@ impl TemplateId {
             Self::Unchecked { .. } | Self::Synthesized { .. } => {
                 panic!("only a declaration has an unchecked twin: {self:?}")
             }
+        }
+    }
+
+    /// The declaration whose `unchecked` twin this one is, if it is one.
+    pub fn checked(&self) -> Option<Self> {
+        match self {
+            Self::Unchecked { def, block } => Some(Self::Declared {
+                def: *def,
+                block: *block,
+            }),
+            Self::Declared { .. } | Self::Synthesized { .. } => None,
         }
     }
 

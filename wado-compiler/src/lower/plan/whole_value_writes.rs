@@ -251,6 +251,10 @@ impl<'a> WriteWalker<'a> {
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => self.carried(p),
+            TirExprKind::Block(block) => block
+                .tail_expr()
+                .map(|tail| self.carried(tail))
+                .unwrap_or_default(),
             // What a call routes to its result is read off a body, which this
             // walk does not have. A result whose type cannot hold a reference
             // hands on nothing whatever the body does; one that can is read as
