@@ -98,23 +98,31 @@ pub fn input_mismatch<E, Axes>(
     axes: List<String>,
     stated: List<i32>,
 ) -> Option<String> {
-    if t.extents.len() != axes.len() {
-        return Option::Some(`${tensor}: the tensor gives ${t.extents.len()} axes, and the graph [${axes.join(", ")}]`);
-    }
-    for let [i, axis] of axes.into_iter().enumerate() {
-        let extent = t.extents[i];
-        if extent < 0 {
-            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor`);
-        }
-        if stated[i] >= 0 && extent != stated[i] {
-            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${stated[i]} in the graph`);
-        }
+    if let Some(why) = extents_mismatch(&t.extents, tensor, axes, stated) {
+        return Option::Some(why);
     }
     let Some(count) = checked_element_count(&t.extents) else {
         return Option::Some(`${tensor}: extents ${t.extents} multiply past what a list can hold`);
     };
     if count != t.data.len() {
         return Option::Some(`${tensor}: extents ${t.extents} hold ${count} elements, and the data ${t.data.len()}`);
+    }
+    return null;
+}
+
+/// [`input_mismatch`] of a tensor a backend holds, read through its extents.
+pub fn extents_mismatch(extents: &List<i32>, tensor: String, axes: List<String>, stated: List<i32>) -> Option<String> {
+    if extents.len() != axes.len() {
+        return Option::Some(`${tensor}: the tensor gives ${extents.len()} axes, and the graph [${axes.join(", ")}]`);
+    }
+    for let [i, axis] of axes.into_iter().enumerate() {
+        let extent = extents[i];
+        if extent < 0 {
+            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor`);
+        }
+        if stated[i] >= 0 && extent != stated[i] {
+            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${stated[i]} in the graph`);
+        }
     }
     return null;
 }
@@ -2051,10 +2059,20 @@ pub trait Backend with _ {
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
         return self.keep(&widen(t));
     }
-    /// The start of a forward pass. What the pass before computed is dead: a
-    /// caller of `pass` reads its outputs before the next pass, and `forward`
-    /// has downloaded them, so a backend may release it.
+    /// `t`'s extents.
+    fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
+    /// The start of a forward pass. What the pass before computed is dead,
+    /// but for what it retained: a caller of `pass` reads its outputs before
+    /// the next pass, and `forward` has downloaded them, so a backend may
+    /// release it.
     fn begin(&mut self) {
+    }
+    /// Keeps `t` alive through the next [`Self::begin`], for the pass after
+    /// this one to read, as a model reads the attention cache its last pass
+    /// wrote. The begin after that releases it, unless that pass retains it
+    /// again.
+    fn retain<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) {
+        let _ = t;
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
@@ -2248,6 +2266,10 @@ impl Backend for Cpu {
 
     fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
+    }
+
+    fn extents_of<E: Element, Axes>(&self, t: &Tensor<E, Axes>) -> List<i32> {
+        return t.extents;
     }
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {

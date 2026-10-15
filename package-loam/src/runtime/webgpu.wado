@@ -25,7 +25,7 @@ use {
     operand,
     row_extents,
 } from "./tensor.wado";
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use {
     Webgpu,
     Gpu,
@@ -92,6 +92,12 @@ struct Slot {
     buffer: GpuBuffer,
 }
 
+/// A buffer an earlier pass retained, at the slot it was made at.
+struct Carried {
+    slot: i32,
+    buffer: GpuBuffer,
+}
+
 /// A compiled shader, held as `Slot` holds a buffer.
 struct Pipeline {
     compiled: GpuComputePipeline,
@@ -121,6 +127,11 @@ pub struct WebGpuBackend {
     /// The slot of `pass[0]`. Each pass numbers its buffers after the last
     /// one's, so a slot never names two buffers.
     pass_start: i32,
+    /// The slots of this pass's buffers, and of those carried into it, that
+    /// `retain` keeps through the next `begin`.
+    retaining: TreeSet<i32>,
+    /// The buffers of earlier passes that the pass before this one retained.
+    carried: List<Carried>,
     /// The commands recorded and not yet submitted: none, or one encoder.
     recording: List<Recording>,
     bound: List<Bound>,
@@ -203,6 +214,8 @@ impl WebGpuBackend {
             kept: [],
             pass: [],
             pass_start: 0,
+            retaining: TreeSet::new(),
+            carried: [],
             recording: [],
             bound: [],
             max_operands: saturated(buffers as u64) - 2,
@@ -246,8 +259,15 @@ impl WebGpuBackend {
         if slot < 0 {
             return &self.kept[-slot - 1].buffer;
         }
-        assert slot >= self.pass_start, "loam: a tensor of an earlier pass is read after `begin`";
-        return &self.pass[slot - self.pass_start].buffer;
+        if slot >= self.pass_start {
+            return &self.pass[slot - self.pass_start].buffer;
+        }
+        for let c of &self.carried {
+            if c.slot == slot {
+                return &c.buffer;
+            }
+        }
+        panic("loam: a tensor of an earlier pass is read after `begin`, and that pass did not retain it");
     }
 
     /// A new buffer of `count` f32 elements, and its slot.
@@ -1139,12 +1159,39 @@ impl Backend for WebGpuBackend {
     }
 
     /// Submits what the pass before recorded and releases its buffers, so a
-    /// tensor of that pass is no longer one to read.
+    /// tensor of that pass is no longer one to read, but for those it
+    /// retained, which live through this pass.
     fn begin(&mut self) with (GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBindGroup, GpuBuffer) {
         self.flush();
+        let mut carried: List<Carried> = [];
+        let start = self.pass_start;
         self.pass_start += self.pass.len();
-        while let Some(_) = self.pass.pop() {
+        while let Some(s) = self.pass.pop() {
+            let slot = start + self.pass.len();
+            if self.retaining.contains(slot) {
+                carried.push(Carried { slot, buffer: s.buffer });
+            }
         }
+        while let Some(c) = self.carried.pop() {
+            if self.retaining.contains(c.slot) {
+                carried.push(c);
+            }
+        }
+        self.carried = carried;
+        self.retaining = TreeSet::new();
+    }
+
+    fn retain<E: Element, Axes>(&mut self, t: &Placed<E, Axes>) {
+        if let Device(d) = t && d.slot >= 0 {
+            self.retaining.insert(d.slot);
+        }
+    }
+
+    fn extents_of<E: Element, Axes>(&self, t: &Placed<E, Axes>) -> List<i32> {
+        return match t {
+            Host(h) => h.extents,
+            Device(d) => d.extents,
+        };
     }
 
     fn download<E: Element, Axes>(
@@ -2063,8 +2110,8 @@ ${indent}}
 /// heads, total, head]`, the past's length, the turned half's, then the views
 /// of the past keys, past values, new keys, new values, cosines and sines.
 fn present_shader(bindings: &List<i32>, rotary: bool) -> String {
-    let past_at = |operand: i32, at: i32| view_wgsl(bindings, operand, at, ["b", "h", "t", "e"]);
-    let new_at = |operand: i32, at: i32, col: String| view_wgsl(bindings, operand, at, ["b", "s", col]);
+    let past_at = |k: i32, at: i32| view_wgsl(bindings, k, at, ["b", "h", "t", "e"]);
+    let new_at = |k: i32, at: i32, col: String| view_wgsl(bindings, k, at, ["b", "s", col]);
     let key = if rotary {
         turned_wgsl(bindings, 4, 26, "t", |c| new_at(2, 18, `h * d + ${c}`), "    ");
     } else {

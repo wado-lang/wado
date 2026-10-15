@@ -85,26 +85,27 @@ test "unfused, the forward pass is one kernel call per operator, each on the bac
     assert out.contains(
         "pub fn forward<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Tensor<f32, [Batch, Out]> with _ {",
     );
-    assert out.contains("let H = backend.matmul_rhs(&X, &weights.W1, null);");
+    assert out.contains("let H = backend.matmul_rhs(X, &weights.W1, null);");
     assert out.contains(
         `let HB = backend.fused::<[Batch, Hidden]>([backend.read(&H), backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], &${sum(
         )});`,
     );
     assert out.contains(`let A = backend.fused::<[Batch, Hidden]>([backend.read(&HB)], &${unary(UnaryOp::Relu)});`);
     assert out.contains("let T = backend.matmul_rhs(&A, &weights.W2, null);");
-    // `pass` leaves the output on the backend, and `forward` reads it back.
+    // `pass` takes the input and leaves the output on the backend, and
+    // `forward` uploads the one and reads the other back.
     assert out.contains(
-        "pub fn pass<Bk: Backend>(backend: &mut Bk, X: &Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
+        "pub fn pass<Bk: Backend>(backend: &mut Bk, X: &Bk::Tensor<f32, [Batch, In]>, weights: &Prepared<Bk>) -> Bk::Tensor<f32, [Batch, Out]> with _ {",
     );
     assert out.contains("    return Y;\n");
-    assert out.contains("    return backend.download(&pass(backend, X, weights));\n");
+    assert out.contains("    return backend.download(&pass(backend, &X, weights));\n");
 }
 
 test "a product takes the elementwise operators after it as its epilogue" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert out.contains(
-        `let A = backend.matmul_rhs(&X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: ${src(
+        `let A = backend.matmul_rhs(X, &weights.W1, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Hidden]>(&weights.B1)], op: ${src(
             operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )} }));`,
     );
@@ -128,7 +129,7 @@ g (float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source, [rule("*", ["Batch", "Feat"])]).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Feat]>([backend.read(&X), backend.read(&Z)], &${src(
+        `let Y = backend.fused::<[Batch, Feat]>([backend.read(X), backend.read(Z)], &${src(
             operand(0).binary(BinaryOp::Mul, &operand(0)).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )});`,
     );
@@ -152,15 +153,17 @@ test "the weights become the backend's for every pass where they are prepared" {
     assert out.contains(
         "    pub fn prepare<Bk: Backend>(&self, backend: &mut Bk) -> Prepared<Bk> with _ {\n        return Prepared {\n            W1: backend.keep_rhs(&self.W1),\n",
     );
-    assert out.contains("backend.matmul_rhs(&X, &weights.W1");
+    assert out.contains("backend.matmul_rhs(X, &weights.W1");
 }
 
-test "the forward pass checks each input against the graph before any kernel" {
+test "the pass checks each input against the graph before any kernel, and forward its data first" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
-    let body = out;
-    let check = body.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
-    assert check < body.find("matmul_rhs(").unwrap();
+    let held = out.find("refuse(extents_mismatch(&backend.extents_of(X), \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
+    assert held < out.find("matmul_rhs(").unwrap();
+    let forward = out.find("pub fn forward").unwrap();
+    let host = out.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
+    assert forward < host < out.find("backend.upload(X)").unwrap();
 }
 
 test "an axis the boundary and the weights fix to one length carries it as a constant" {
@@ -201,7 +204,9 @@ pair (float[N, 2] A, float[N, 2] B) => (float[N, 2] Y)
         rule("B", ["Batch", "In"]),
     ]).unwrap();
 
-    assert out.contains("refuse(axis_mismatch(\"N\", \"B\", \"Batch\", B.extents[0], \"A\", A.extents[0]));");
+    assert out.contains(
+        "refuse(axis_mismatch(\"N\", \"B\", \"Batch\", backend.extents_of(B)[0], \"A\", backend.extents_of(A)[0]));",
+    );
     assert !out.contains("axis_mismatch(\"2\"");
 }
 
@@ -216,7 +221,9 @@ outer (float[S, 4] A, float[4, ${b_cols}] B) => (float[S, ${b_cols}] Y)
         rule("A", ["Row", "Inner"]),
         rule("B", ["Inner", "Col"]),
     ]).unwrap();
-    assert same_symbol.contains("refuse(axis_mismatch(\"S\", \"B\", \"Col\", B.extents[1], \"A\", A.extents[0]));");
+    assert same_symbol.contains(
+        "refuse(axis_mismatch(\"S\", \"B\", \"Col\", backend.extents_of(B)[1], \"A\", backend.extents_of(A)[0]));",
+    );
 
     let same_name = generate(graph("T"), [
         rule("A", ["Row", "Inner"]),
@@ -239,9 +246,11 @@ cache (float[1, T, 8] P, float[1, 1, 8] N, int64[1, "T + 1"] M) => (float[1, U, 
         rule("Y", ["Batch", "Total", "Dim"]),
     ]).unwrap();
 
-    assert out.contains("refuse(input_mismatch(M, \"M\", [\"Batch\", \"Total\"], [1, -1]));");
-    let bound = out.find("let dim_T = P.extents[1] as i64;").unwrap();
-    let check = out.find("refuse(extent_mismatch(\"M\", \"Total\", M.extents[1], \"T + 1\", dim_T + 1));").unwrap();
+    assert out.contains("refuse(extents_mismatch(&backend.extents_of(M), \"M\", [\"Batch\", \"Total\"], [1, -1]));");
+    let bound = out.find("let dim_T = backend.extents_of(P)[1] as i64;").unwrap();
+    let check = out.find(
+        "refuse(extent_mismatch(\"M\", \"Total\", backend.extents_of(M)[1], \"T + 1\", dim_T + 1));",
+    ).unwrap();
     assert bound < check && check < out.find("concat::<").unwrap();
 }
 
@@ -265,7 +274,7 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
         "pub struct Passed<Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [Batch, In]>,\n    pub Y: Bk::Tensor<f32, [Batch, In]>,\n}",
     );
     assert out.contains("return Passed { Z: Z, Y: Y };");
-    assert out.contains("let Passed { Z, Y } = pass(backend, A, weights);");
+    assert out.contains("let Passed { Z, Y } = pass(backend, &A, weights);");
     assert out.contains("return Outputs { Z: backend.download(&Z), Y: backend.download(&Y) };");
 }
 
@@ -278,7 +287,7 @@ pass (float[N, 2] A) => (float[N, 2] A, float[N, 2] Y)
 `;
     let out = generate(source, [rule("*", ["Batch", "In"])]).unwrap();
 
-    assert out.contains("return Passed { A: A, Y: Y };");
+    assert out.contains("return Passed { A: *A, Y: Y };");
     assert out.contains("return Outputs { A: backend.download(&A), Y: backend.download(&Y) };");
 }
 
@@ -379,7 +388,7 @@ g (float[N, 2] "/model/input.0") => (float[N, 2] out)
 
     assert out.contains("backend: &mut Bk, _model_input_0: &Tensor<f32, [Batch, Unit]>");
     // `forward` binds no name of its own, so a tensor keeps any it can spell.
-    assert out.contains(`let out = backend.fused::<[Batch, Unit]>([backend.read(&_model_input_0)], &${unary(
+    assert out.contains(`let out = backend.fused::<[Batch, Unit]>([backend.read(_model_input_0)], &${unary(
         UnaryOp::Relu,
     )});`);
 }
@@ -417,8 +426,8 @@ g (float[N, 2] X) => (float[N, 2] X)
 `;
     let out = generate(source, [rule("X", ["Batch", "Unit"])]).unwrap();
 
-    assert out.contains("    return X;\n");
-    assert out.contains("return backend.download(&pass(backend, X, weights));");
+    assert out.contains("    return *X;\n");
+    assert out.contains("return backend.download(&pass(backend, &X, weights));");
 }
 
 test "folded tensors of one source keep their own elements, a Cast between them" {
@@ -470,7 +479,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
 `;
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert out.contains(`backend.fused::<[Batch, Unit]>([backend.read(&X)], &${unary(UnaryOp::Erf)})`);
+    assert out.contains(`backend.fused::<[Batch, Unit]>([backend.read(X)], &${unary(UnaryOp::Erf)})`);
 }
 
 test "an axis of 1 named apart from the one it stretches over is read under the result's axes" {
@@ -489,7 +498,7 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(&X, 2)), backend.read(&Z)], &${sum(
+        `let Y = backend.fused::<[Batch, Wide]>([backend.read(&backend.lift::<f32, [Batch, One], [Batch, Wide]>(X, 2)), backend.read(Z)], &${sum(
         )});`,
     );
 }
@@ -510,7 +519,7 @@ g (float[N, 1] M, float[N, 4] X, float[N, 4] Z) => (float[N, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(&X), backend.read(&Z)], &${select(
+        `let Y = backend.fused::<[Batch, Wide]>([backend.read_condition(&backend.lift::<bool, [Batch, One], [Batch, Wide]>(&C, 2)), backend.read(X), backend.read(Z)], &${select(
         )});`,
     );
 }
@@ -530,7 +539,7 @@ g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        `backend.fused::<[Batch, Chan, Row, Col]>([backend.read(&X), backend.read_suffix::<[Batch], [Chan, Row, Col]>(&weights.B)], &${sum(
+        `backend.fused::<[Batch, Chan, Row, Col]>([backend.read(X), backend.read_suffix::<[Batch], [Chan, Row, Col]>(&weights.B)], &${sum(
         )})`,
     );
 }
@@ -546,7 +555,7 @@ g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
     let out = generate(source, [rule("X", ["Batch", "Chan", "Row", "Col"])]).unwrap();
 
     assert out.contains(
-        "let Y = backend.reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(&X, [1, 256]);",
+        "let Y = backend.reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);",
     );
     assert out.contains("-> Tensor<f32, [Batch, Merged<[Chan, Row, Col]>]> with _ {");
     // A merged axis is spelled with its parts' markers, never declared itself.
@@ -588,7 +597,7 @@ g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.conv_grouped::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(&X, &weights.W, 2, &Window {",
+        "let Y = backend.conv_grouped::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, 2, &Window {",
     );
 }
 
@@ -609,7 +618,7 @@ g (float[1, 4, 3, 3] X) => (float[1, 2, 2, 2] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.conv_grouped_bias::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(&X, &weights.W, &weights.B, 2, &Window {",
+        "let Y = backend.conv_grouped_bias::<Batch, Chan, Share, Out, [Row, Col], [KRow, KCol], [ORow, OCol]>(X, &weights.W, &weights.B, 2, &Window {",
     );
 }
 
@@ -632,7 +641,7 @@ g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let C = backend.conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [Row, Col]>(&X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] }, null);",
+        "let C = backend.conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [Row, Col]>(X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] }, null);",
     );
     assert out.contains(
         "let Y = backend.max_pool::<Batch, Out, [Row, Col], [PRow, PCol]>(&C, &Window { kernel: [2, 2], strides: [2, 2], dilations: [1, 1], pads: [0, 0, 0, 0], output: [14, 14] });",
@@ -656,7 +665,7 @@ g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        `let Y = backend.matmul(&A, &backend.transpose2(&B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(&C)], op: ${src(
+        `let Y = backend.matmul(A, &backend.transpose2(B), Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch], [Out]>(C)], op: ${src(
             operand(0).binary(BinaryOp::Mul, &constant(0.5)).binary(BinaryOp::Add, &operand(1).binary(
                 BinaryOp::Mul,
                 &constant(2.0),
@@ -680,7 +689,7 @@ g (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.matmul(&A, &B, null);");
+    assert out.contains("let Y = backend.matmul(A, B, null);");
 }
 
 test "a rank-2 Transpose lowers to the kernel" {
@@ -693,7 +702,7 @@ g (float[2, 3] X) => (float[3, 2] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert out.contains("let Y = backend.permute::<f32, [A, B], [B, A]>(&X, [1, 0]);");
+    assert out.contains("let Y = backend.permute::<f32, [A, B], [B, A]>(X, [1, 0]);");
 }
 
 test "a Transpose that moves no axis is its operand" {
@@ -708,7 +717,7 @@ g (float[2, 3] X) => (float[2, 3] Y)
 
     assert !out.contains("permute");
     // Every node result is bound as a value, so the operand is read as one.
-    assert out.contains("let Y = X;");
+    assert out.contains("let Y = *X;");
 }
 
 test "Where over floats is a kernel's select, a lower-rank operand repeated across the output" {
@@ -727,7 +736,7 @@ g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&C), backend.read(&X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &${select(
+        `let Y = backend.fused::<[Batch, Head, Query, Key]>([backend.read_condition(&C), backend.read(X), backend.read_suffix::<[Batch, Head, Query, Key], []>(&weights.S)], &${select(
         )});`,
     );
 }
@@ -745,7 +754,7 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
 
     assert out.contains("S: backend.keep(&Tensor::<f32, []> { data: [-1 as f32], extents: [] }),");
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&weights.S), backend.read(&X)], &${select(
+        `let Y = backend.fused::<[Batch, Key]>([backend.read_condition(&C), backend.read_suffix::<[Batch, Key], []>(&weights.S), backend.read(X)], &${select(
         )});`,
     );
 }
@@ -784,9 +793,9 @@ g (float[1, 4, 24] X) => (float[1, 4, 8] K)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Q = backend.slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(&X, 2, 0, 8, 1);");
-    assert out.contains("let K = backend.slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(&X, 2, 8, 8, 1);");
-    assert out.contains("let V = backend.slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(&X, 2, 16, 8, 1);");
+    assert out.contains("let Q = backend.slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8, 1);");
+    assert out.contains("let K = backend.slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8, 1);");
+    assert out.contains("let V = backend.slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8, 1);");
 }
 
 test "Concat joins its operands pairwise, each join naming the output's axis" {
@@ -804,7 +813,7 @@ g (float[1, T, 8] P, float[1, 1, 8] N) => (float[1, U, 8] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.concat::<f32, [Batch], Total, Seq, Total, [Dim]>(&backend.concat::<f32, [Batch], Past, Seq, Total, [Dim]>(&P, &N, 1), &N, 1);",
+        "let Y = backend.concat::<f32, [Batch], Total, Seq, Total, [Dim]>(&backend.concat::<f32, [Batch], Past, Seq, Total, [Dim]>(P, N, 1), N, 1);",
     );
 }
 
@@ -818,7 +827,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
     assert out.contains(
-        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &${src(
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(X)], &${src(
             operand(0).row_softmax(),
         )}, 1, false);`,
     );
@@ -833,7 +842,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert out.contains("let Y = backend.softmax(&X, 1);");
+    assert out.contains("let Y = backend.softmax(X, 1);");
 }
 
 test "Softmax before opset 13 lowers to the kernel over the axes from its own on" {
@@ -847,7 +856,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
         return generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
     };
 
-    assert lowered("").contains("let Y = backend.softmax_flattened(&X, 1);");
+    assert lowered("").contains("let Y = backend.softmax_flattened(X, 1);");
     // From the last axis on is the last axis alone, a row.
     assert lowered("<axis = 2>").contains("let Y = backend.rows::<");
 }
@@ -865,7 +874,7 @@ g (float[2, 4, 8] X, float[4] B) => (float[2, 4, 8] Y)
     ]).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read_at::<[Batch], [Seq], [Embed]>(&B, 1)], &${sum(
+        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_at::<[Batch], [Seq], [Embed]>(B, 1)], &${sum(
         )});`,
     );
 }
@@ -883,7 +892,7 @@ g (float[2, 4, 8] X, float[8] B) => (float[2, 4, 8] Y)
     ]).unwrap();
 
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(&X), backend.read_suffix::<[Batch, Seq], [Embed]>(&B)], &${sum(
+        `let Y = backend.fused::<[Batch, Seq, Embed]>([backend.read(X), backend.read_suffix::<[Batch, Seq], [Embed]>(B)], &${sum(
         )});`,
     );
 }
@@ -899,7 +908,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
     assert out.contains(
-        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &${src(
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(X)], &${src(
             operand(0).binary(BinaryOp::Sub, &operand(0).row_sum(Option::Some(8.0))),
         )}, 1, false);`,
     );
@@ -927,7 +936,7 @@ lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
 
     assert !out.contains("let F =") && !out.contains("let R =");
     assert out.contains(
-        `let Y = backend.matmul_shared(&X, &W, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch, Seq], [Out]>(&B)], op: ${src(
+        `let Y = backend.matmul_shared(X, W, Option::Some(Epilogue { operands: [backend.read_suffix::<[Batch, Seq], [Out]>(B)], op: ${src(
             operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
         )} }));`,
     );
@@ -944,7 +953,7 @@ g (float[2, 4, 8] X) => (float[2, 4, 1] Y)
 
     // The output keeps the axis it reduced, at extent 1.
     assert out.contains(
-        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(&X)], &${src(operand(0).row_sum(
+        `let Y = backend.rows::<[Batch, Seq, Embed], [Batch, Seq, Embed]>([backend.read(X)], &${src(operand(0).row_sum(
             Option::Some(8.0),
         ))}, 1, true);`,
     );
@@ -959,7 +968,7 @@ g (float[2, 4, 8] X) => (float[1, 4, 1] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert out.contains("let Y = backend.reduce_sum(&X, [0, 2]);");
+    assert out.contains("let Y = backend.reduce_sum(X, [0, 2]);");
 }
 
 test "a reduction that drops its axes reshapes the kept ones away" {
@@ -972,7 +981,7 @@ g (float[2, 4, 8] X) => (float[2, 4] Y)
     let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
     assert out.contains(
-        "let Y = backend.reshape::<f32, [Batch, Seq, Embed], [Batch, Seq]>(&backend.reduce_mean(&X, [2]), [2, 4]);",
+        "let Y = backend.reshape::<f32, [Batch, Seq, Embed], [Batch, Seq]>(&backend.reduce_mean(X, [2]), [2, 4]);",
     );
 }
 
@@ -996,7 +1005,7 @@ g (float[1, 4, 2, 3] X) => (float[1, 2, 3, 4] Y)
     let out = generate(source, [rule("X", ["Batch", "Seq", "Head", "Dim"])]).unwrap();
 
     assert out.contains(
-        "let Y = backend.permute::<f32, [Batch, Seq, Head, Dim], [Batch, Head, Dim, Seq]>(&X, [0, 2, 3, 1]);",
+        "let Y = backend.permute::<f32, [Batch, Seq, Head, Dim], [Batch, Head, Dim, Seq]>(X, [0, 2, 3, 1]);",
     );
 }
 
@@ -1011,9 +1020,7 @@ g (float[N, 2] weights, float[N, 2] narrow) => (float[N, 2] Tensor)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains("backend: &mut Bk, weights_: &Tensor<f32, [Batch, Unit]>, narrow_: ");
-    assert out.contains(
-        "let Tensor_ = backend.fused::<[Batch, Unit]>([backend.read(&weights_), backend.read(&narrow_)],",
-    );
+    assert out.contains("let Tensor_ = backend.fused::<[Batch, Unit]>([backend.read(weights_), backend.read(narrow_)],");
     assert out.contains("    return Tensor_;\n");
 }
 
@@ -1045,7 +1052,7 @@ g (float[N, 2] map) => (float[N, 2] Y)
 `;
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(&map)],");
+    assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(map)],");
 }
 
 test "a renamed tensor steps past a tensor already named as the renaming would" {
@@ -1062,7 +1069,7 @@ g (float[N, 2] ${first}, float[N, 2] ${second}) => (float[N, 2] Y)
 `;
         let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-        assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(&refuse__), backend.read(&refuse_)],");
+        assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(refuse__), backend.read(refuse_)],");
     }
 }
 
@@ -1093,7 +1100,7 @@ g (float[N, 2] Batch) => (float[N, 2] Y)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains("pub struct Batch {}");
-    assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(&Batch_)],");
+    assert out.contains("let Y = backend.fused::<[Batch, Unit]>([backend.read(Batch_)],");
 }
 
 test "an axis named as the generated module names something stops the build" {
@@ -1127,7 +1134,7 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
     let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
     assert out.contains(
-        `backend.fused::<[Batch, Unit]>([backend.read(&X), backend.read(&Z)], &${sum()})`,
+        `backend.fused::<[Batch, Unit]>([backend.read(X), backend.read(Z)], &${sum()})`,
     );
 }
 
@@ -1144,7 +1151,7 @@ g (float[1, 4, 8] X, float[8, 16] W) => (float[1, 4, 16] Y)
     ];
     let out = generate(source, layout).unwrap();
 
-    assert out.contains("let Y = backend.matmul_shared(&X, &W, null);");
+    assert out.contains("let Y = backend.matmul_shared(X, W, null);");
 }
 
 test "a MatMul batch axis that stretches lowers to matmul_broadcast, the result spelled" {
@@ -1161,7 +1168,7 @@ g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains(
-        "let Y = backend.matmul_broadcast::<[Batch, Row, K], [Batch, K, Col], [Batch, Row, Col]>(&X, &Z, null);",
+        "let Y = backend.matmul_broadcast::<[Batch, Row, K], [Batch, K, Col], [Batch, Row, Col]>(X, Z, null);",
     );
 }
 
@@ -1177,7 +1184,7 @@ g (float[3] X, float[3, 5] Z) => (float[5] Y)
         rule("Z", ["K", "Col"]),
     ]).unwrap();
 
-    assert out.contains("let Y = backend.matmul_broadcast::<[K], [K, Col], [Col]>(&X, &Z, null);");
+    assert out.contains("let Y = backend.matmul_broadcast::<[K], [K, Col], [Col]>(X, Z, null);");
 }
 
 fn refused_dtype(dtype: String) -> String {
@@ -1212,8 +1219,8 @@ test "a half precision boundary is prepared into the f32 the kernels compute in"
     assert out.contains("    pub W1: Bk::Rhs<In, Hidden>,\n");
     assert out.contains("W1: backend.prepare_rhs(&self.W1),");
     assert out.contains("let X = backend.prepare(X);");
-    assert out.contains("let A = backend.matmul_rhs(&X, &weights.W1, Option::Some(Epilogue {");
-    assert out.contains("return narrow(&backend.download(&pass(backend, X, weights)));");
+    assert out.contains("let A = backend.matmul_rhs(X, &weights.W1, Option::Some(Epilogue {");
+    assert out.contains("return narrow(&backend.download(&pass(backend, &X, weights)));");
 }
 
 test "bfloat16 is the same boundary with the other primitive" {
@@ -1221,7 +1228,7 @@ test "bfloat16 is the same boundary with the other primitive" {
 
     assert out.contains("backend: &mut Bk, X: &Tensor<bf16, [Batch, In]>");
     assert out.contains("let X = backend.prepare(X);");
-    assert out.contains("return narrow(&backend.download(&pass(backend, X, weights)));");
+    assert out.contains("return narrow(&backend.download(&pass(backend, &X, weights)));");
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is
@@ -1300,8 +1307,8 @@ test "a symbol is bound from the input axis carrying it, and spelled where an ex
         rule("Y", ["Seq", "Row", "Col"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("let dim_N = X.extents[0] as i64;");
-    assert out.contains("let Y = backend.reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(&X, [to_extent(dim_N), 2, 2]);");
+    assert out.contains("let dim_N = backend.extents_of(X)[0] as i64;");
+    assert out.contains("let Y = backend.reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(X, [to_extent(dim_N), 2, 2]);");
 }
 
 test "a symbol nothing spells is not bound" {
@@ -1334,7 +1341,7 @@ test "a clamp the run computes, read as its operand, is checked before any kerne
     ];
     let out = generate(source, layout).unwrap();
     let check = out.find("refuse(unmet(-dim_N + 8, \"A = Slice: N must be at most 8\"));").unwrap();
-    let call = "let A = backend.slice_axis::<f32, [], Pos, Seq, []>(&M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);";
+    let call = "let A = backend.slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(i64::min(dim_N, 8)), 1);";
     let slice = out.find(call).unwrap();
     assert check < slice;
 }
@@ -1349,7 +1356,7 @@ test "a Reshape -1 the build rounds is checked to divide before the kernel runs"
     ];
     let out = generate(source, layout).unwrap();
     let check = out.find("refuse(unmet(-dim_N + 2 * dim_N.div_floor(2), ").unwrap();
-    let call = "let Y = backend.reshape::<f32, [Seq], [Pair, Two]>(&X, [to_extent(dim_N.div_floor(2)), 2]);";
+    let call = "let Y = backend.reshape::<f32, [Seq], [Pair, Two]>(X, [to_extent(dim_N.div_floor(2)), 2]);";
     let reshape = out.find(call).unwrap();
     assert check < reshape;
 }
@@ -1363,7 +1370,7 @@ test "a Slice by a negative step walks back from its start" {
         rule("Y", ["Rev"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("let Y = backend.slice_axis::<f32, [], Seq, Rev, []>(&X, 0, dim_N - 1, to_extent(dim_N), -1);");
+    assert out.contains("let Y = backend.slice_axis::<f32, [], Seq, Rev, []>(X, 0, dim_N - 1, to_extent(dim_N), -1);");
 }
 
 test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
@@ -1379,7 +1386,7 @@ test "an int64 input is held as i64 through the layout kernels and Cast converts
     let out = generate(source, layout).unwrap();
     assert out.contains("M: &Tensor<i64, [Batch, Key]>");
     assert !out.contains("widen(");
-    assert out.contains("let U = backend.reshape::<i64, [Batch, Key], [Batch, Head, Key]>(&M, [1, 1, 4]);");
+    assert out.contains("let U = backend.reshape::<i64, [Batch, Key], [Batch, Head, Key]>(M, [1, 1, 4]);");
     assert out.contains("let Y = backend.cast::<i64, f32, [Batch, Head, Key]>(&U);");
 }
 
@@ -1397,7 +1404,7 @@ test "an embedding lookup is a row gather, and a folded index tensor is a litera
     ];
     let out = generate(source, layout).unwrap();
     assert out.contains("W: backend.keep_rhs(&self.W),");
-    assert out.contains("let E = backend.gather_rhs_rows(&weights.W, &I);");
+    assert out.contains("let E = backend.gather_rhs_rows(&weights.W, I);");
     assert out.contains(
         "Q: backend.keep(&Tensor::<i64, [Batch, Seq]> { data: [0, 1, 2, 3], extents: [1, 4] }),",
     );
@@ -1434,7 +1441,7 @@ test "an embedding the head multiplies by its transpose is held once, as rows bo
     ];
     let out = generate(source, layout).unwrap();
     assert out.contains("W: backend.keep_rhs(&self.W),");
-    assert out.contains("let E = backend.gather_rhs_rows(&weights.W, &I);");
+    assert out.contains("let E = backend.gather_rhs_rows(&weights.W, I);");
     assert out.contains("let Y = backend.matmul_by_rhs_transposed(&E, &weights.W, null);");
 }
 
@@ -1449,7 +1456,7 @@ test "a Gemm's transposed weight is prepared transposed, so no pass transposes i
     let out = generate(source, layout).unwrap();
     assert out.contains("    pub B: Bk::Rhs<In, Out>,\n");
     assert out.contains("B: backend.keep_rhs_transposed(&self.B),");
-    assert out.contains("let Y = backend.matmul_rhs(&A, &weights.B, null);");
+    assert out.contains("let Y = backend.matmul_rhs(A, &weights.B, null);");
     assert !out.contains("transpose2");
 }
 
@@ -1479,7 +1486,7 @@ test "a branch multiplies by a prepared weight as the graph around it holds it" 
     ];
     let out = generate(source, layout).unwrap();
     assert out.contains("    pub W: Bk::Rhs<Col, Col>,\n");
-    assert out.contains("backend.matmul_rhs(&X, &weights.W, null)");
+    assert out.contains("backend.matmul_rhs(X, &weights.W, null)");
 }
 test "Gather along any axis but the first lowers to gather, the axes spelled" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
@@ -1490,7 +1497,7 @@ test "Gather along any axis but the first lowers to gather, the axes spelled" {
         rule("W", ["Vocab", "Hidden"]),
     ];
     let out = generate(source, layout).unwrap();
-    assert out.contains("let Y = backend.gather::<f32, [Vocab], Hidden, [], [Pick]>(&weights.W, &I, 1);");
+    assert out.contains("let Y = backend.gather::<f32, [Vocab], Hidden, [], [Pick]>(&weights.W, I, 1);");
 }
 
 test "a Cast to the element a tensor already has computes nothing" {
@@ -1500,7 +1507,7 @@ test "a Cast to the element a tensor already has computes nothing" {
     }`;
     let out = generate(source, [rule("*", ["Feat"])]).unwrap();
     assert !out.contains("let C");
-    assert out.contains(`let Y = backend.fused::<[Feat]>([backend.read(&X)], &${unary(UnaryOp::Relu)});`);
+    assert out.contains(`let Y = backend.fused::<[Feat]>([backend.read(X)], &${unary(UnaryOp::Relu)});`);
 }
 
 test "a Cast that truncates is spelled apart from the constant it reads" {
@@ -1523,7 +1530,7 @@ test "Identity names its operand again and computes nothing" {
     }`;
     let out = generate(source, [rule("*", ["Feat"])]).unwrap();
     assert out.contains(
-        `let Y = backend.fused::<[Feat]>([backend.read(&X), backend.read(&weights.W)], &${sum()});`,
+        `let Y = backend.fused::<[Feat]>([backend.read(X), backend.read(&weights.W)], &${sum()});`,
     );
     assert !out.contains("let V");
 }
@@ -1541,7 +1548,7 @@ test "a scale the graph computes from a shape folds to a literal" {
     }`;
     let out = generate(source, [rule("X", ["Batch", "Feat"])]).unwrap();
     assert out.contains(
-        `let Y = backend.fused::<[Batch, Feat]>([backend.read(&X)], &${src(operand(0).binary(BinaryOp::Div, &constant(
+        `let Y = backend.fused::<[Batch, Feat]>([backend.read(X)], &${src(operand(0).binary(BinaryOp::Div, &constant(
             2.0,
         )))});`,
     );
@@ -1563,7 +1570,7 @@ test "a Cast of a length only the run knows converts it at run time" {
 
 test "a constant folds into the operator that reads it" {
     assert folded_add(0.5).unwrap().contains(
-        `let Y = backend.fused::<[Batch, Unit]>([backend.read(&X)], &${src(operand(0).binary(BinaryOp::Add, &constant(
+        `let Y = backend.fused::<[Batch, Unit]>([backend.read(X)], &${src(operand(0).binary(BinaryOp::Add, &constant(
             0.5,
         )))});`,
     );
@@ -1597,7 +1604,7 @@ test "a one-element constant that raises the output's rank is a tensor, not a fo
 
     assert out.contains("C: backend.keep(&Tensor::<f32, [One, A]> { data: [0 as f32], extents: [1, 1] }),");
     assert out.contains(
-        `let Y = backend.fused::<[One, A]>([backend.read_suffix::<[One], [A]>(&X), backend.read(&weights.C)], &${sum()});`,
+        `let Y = backend.fused::<[One, A]>([backend.read_suffix::<[One], [A]>(X), backend.read(&weights.C)], &${sum()});`,
     );
 }
 
@@ -1674,8 +1681,8 @@ test "a name only arithmetic spells is read back from its length, after the name
         rule("X", ["Seq"]),
     ];
     let body = generate(source, layout).unwrap();
-    let n = body.find("let dim_n = to_extent((X.extents[0] as i64 - (1))) as i64;").unwrap();
-    let m = body.find("let dim_m = to_extent((V.extents[0] as i64 - (dim_n)) / 2) as i64;").unwrap();
+    let n = body.find("let dim_n = to_extent((backend.extents_of(X)[0] as i64 - (1))) as i64;").unwrap();
+    let m = body.find("let dim_m = to_extent((backend.extents_of(V)[0] as i64 - (dim_n)) / 2) as i64;").unwrap();
     assert n < m;
 }
 
@@ -1698,7 +1705,7 @@ test "a branch reads a constant around it under the axes the branch names" {
     ];
     let body = generate(source, layout).unwrap();
     assert body.contains(
-        `let Z = backend.fused::<[Hidden]>([backend.read(&H), backend.read(&backend.lift::<f32, [Embed], [Hidden]>(&weights.K, 1))], &${src(
+        `let Z = backend.fused::<[Hidden]>([backend.read(H), backend.read(&backend.lift::<f32, [Embed], [Hidden]>(&weights.K, 1))], &${src(
             operand(0).binary(BinaryOp::Mul, &operand(1)),
         )});`,
     );
@@ -1714,6 +1721,6 @@ test "a constant one branch folds is spelled in that branch" {
         rule("K", ["Embed"]),
     ];
     let body = generate(source, layout).unwrap();
-    assert body.find("let K = ").unwrap() > body.find("let Y = if backend.download(&C).data[0] {").unwrap();
+    assert body.find("let K = ").unwrap() > body.find("let Y = if backend.download(C).data[0] {").unwrap();
     assert body.find("let K = ").unwrap() < body.find("} else {").unwrap();
 }

@@ -96,6 +96,10 @@ impl Backend for Opaque {
         return t.held;
     }
 
+    fn extents_of<E: Element, Axes>(&self, t: &Handle<E, Axes>) -> List<i32> {
+        return t.held.extents;
+    }
+
     fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<f32, Axes> {
         self.prepared += 1;
         return handle(widen(t));
