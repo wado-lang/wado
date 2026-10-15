@@ -607,3 +607,24 @@ test "a transpose of an input, or one read again, is written" {
     assert head_plan(true, false).lowering(0) matches { Kernel };
     assert head_plan(false, true).lowering(0) matches { Kernel };
 }
+
+test "a product by an attention key's transpose, of rank 3, is written" {
+    let source = `
+scores (float[1, 2, 4] Q, float[1, 3, 4] K) => (float[1, 2, 3] Y)
+{
+    T = Transpose<perm = [0, 2, 1]>(K)
+    Y = MatMul(Q, T)
+}
+`;
+    let p = plan_of(source, [
+        [
+            "Q",
+            ["Batch", "Seq", "Embed"],
+        ],
+        [
+            "K",
+            ["Batch", "Past", "Embed"],
+        ],
+    ]);
+    assert p.lowering(0) matches { Kernel };
+}

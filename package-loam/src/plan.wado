@@ -123,9 +123,9 @@ fn lowerings(graph: &Graph, checked: &Checked, fuse: bool) -> [List<Lowering>, T
         let transpose = &graph.nodes[t];
         let weight = &transpose.inputs[0];
         if transpose.op == "Transpose"
-            && settled(transpose_perm(transpose, 2)) == [1, 0] as List<i32>
             && lowered[t] matches { Kernel }
             && checked.shapes[*weight].rank() == 2
+            && settled(transpose_perm(transpose, 2)) == [1, 0] as List<i32>
             && is_initializer(graph, weight)
             && only_reader(&transpose.outputs[0]) == Option::Some(at) {
             lowered[t] = Lowering::Transposed;
