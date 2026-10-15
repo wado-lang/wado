@@ -277,15 +277,19 @@ fn regex<T: ReflectTemplate<Holes = []>>(t: T) -> Regex {
 under. A concrete tuple (`Holes = [List<i32>]`) binds no pack, and the call is
 an error naming the binding it needs.
 
-A hole's type may not mention a type parameter of the enclosing item: the shape
-would have to be generic over it, and a shape is minted once. A generic body
-reaches a tag by taking the rendered value, or a concrete one, from its caller.
-The untagged template has no shape, so `` `${v}` `` over a `v: X` is fine where
-`` format`${v}` `` is not.
+A hole's type may mention a type parameter of the enclosing item. The shape is
+then generic over that parameter, and the item's instantiation instantiates the
+tag with it. Whatever the hole's type must implement, it implements through the
+bounds the item declares: a bound the tag places on its pack, and the trait
+`fmt` renders the hole through. So `` `${x}` `` over `x: X` asks for
+`X: Display`, as a call of `push_display(&x)` would. A generic body that cannot
+name the bound passes its tag a concrete value instead.
 
 ### The untagged template is a tag
 
-An untagged template means what the prelude's `format` tag means:
+An untagged template is sugar for a call of the prelude's `format` tag, which a
+program may also call by name. It names the prelude's `format` wherever it
+stands, even where another `format` is in scope or the module has no prelude:
 
 ```wado
 fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
@@ -299,9 +303,12 @@ fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
 }
 ```
 
-The compiler keeps its direct lowering for the untagged case
-([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md));
-the equivalence is a property the fixtures hold it to, not a path it takes.
+So what a template string compiles to is written in Wado, where a reader can
+see it, and the per-hole rendering is the one piece the compiler synthesizes
+(`TemplateHole::fmt`). Until the roadmap below lands, the compiler keeps a
+direct lowering for the untagged case
+([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)),
+and the fixtures hold the two forms to the same output.
 
 ### Cost
 
@@ -584,8 +591,56 @@ then the reflect resolution, since the call-site bound check needs the kind
 before any tag call can be typed; then parser, annotate and reify; then
 synthesis and the fold; then the prelude tags and fixtures.
 
+## Roadmap
+
+An untagged template is sugar for `format`, but the compiler still lowers it on
+a path of its own, and three differences between the two forms remain. Each
+item below closes one, in this order.
+
+- [ ] Generic holes. A shape is generic over the enclosing item's type
+  parameters and instantiated with the item, so a hole of such a type reaches
+  any tag. Both forms then check the hole against the declared bounds:
+  `` `${x}` `` over `x: X` is rejected without `X: Display`, and `${x:x}`
+  is rejected with only `X: Display`. Done when
+  `tagged_template_type_param_error.wado` reports the missing bound instead
+  of the type parameter, and the untagged form reports the same error.
+- [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
+  direct lowering does four things a `format` site does not:
+  - It sizes the buffer from the segment lengths (`String::with_capacity`).
+    `format` starts from `""` and grows.
+  - It appends a `String` hole with no specifier directly. `format` goes
+    through `Display::fmt` and `Formatter::pad`.
+  - It inlines a radix renderer (`${i:#x}`) at the site. `format` calls
+    `u64::fmt_base`, building the radix prefix as a `String` on each call.
+  - `optimize::tmpl_hoist` reuses its buffer across loop iterations, and
+    recognizes only the direct lowering's `$tmpl` block.
+
+  Done when a `wir_expect` fixture holds a `format` site to what the direct
+  lowering emits for the same template, and the measurement below shows no
+  gap.
+
+- [ ] One path. An untagged template reifies as the `format` call, and the
+  direct lowering (`synthesis::template::build_template_block`) is deleted.
+  Done when no code path builds a `$tmpl` block.
+
+The cost gap, measured by one program per form: a loop building
+`` `i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end` `` 2,000,000
+times, the `format` program writing the same template under the tag. Each ran
+six times under `wado run -O2`, the two alternated, with the build cache warm.
+The time is wall-clock for the whole command, each `format` run taken against
+the untagged run beside it.
+
+| Form            | Run time, untagged = 1 |
+| --------------- | ---------------------- |
+| untagged        | 1                      |
+| `` format`…` `` | 1.5 to 1.8             |
+
 ## Known gaps
 
+- A tag that never calls `fmt` on a hole asks nothing of the hole's type
+  through its specifier: a tag counting its holes accepts `${pt}` over a `Pt`
+  with no `Display`. Whether a generic hole under such a tag still needs the
+  specifier's bound is open.
 - A tag that carries a state across holes by scanning the literal segments
   folds to the per-hole decision only while that scan fits the inliner's
   budget. That is the `html` example's shape, and the one a code generator
@@ -594,10 +649,6 @@ synthesis and the fold; then the prelude tags and fixtures.
   any state count, so the tag author has a shape to know. The gap is the
   optimizer's, and [the optimizer guide](./optimizer.md#not-yet-implemented)
   carries it.
-- A hole whose type mentions the enclosing function's type parameter. The
-  shape would have to be generic over that parameter and instantiated with the
-  function, which an anonymous struct is not today; until then the site is a
-  diagnostic, and a generic body reaches a tag by passing a concrete value.
 - A shape is interned per module, as struct literals are, so two modules
   writing one template instantiate the tag twice. Cross-module sharing is a
   size optimization the interner's key can take later.

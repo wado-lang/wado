@@ -586,9 +586,14 @@ let s = "\uDE00";
 
 ## Template Strings
 
-A template string is written in backticks and has the type `String`. `${expr}`
-interpolates the value of `expr`, and everything else is literal text. A bare
-`{` or `}` is literal, so JSON-like content needs no escaping:
+A template string is written in backticks. It is sugar for a call of the
+prelude's `format` tag, so `` `x=${x}` `` means `` format`x=${x}` `` and has the
+type `String` (see [Tagged Template Literals](#tagged-template-literals)). It
+names the prelude's `format` even where another item named `format` is in scope,
+and in a module without the prelude.
+
+`${expr}` interpolates the value of `expr`, and everything else is literal text.
+A bare `{` or `}` is literal, so JSON-like content needs no escaping:
 
 <!-- {"fixture":"spec_literals_format.wado"} -->
 
@@ -662,6 +667,17 @@ printf-style `${x:08d}` is rejected rather than rendered as `${x:08}`:
 
 The type character selects the trait the value renders through. A value whose
 type does not implement that trait is a compile error.
+
+A value whose type mentions a type parameter of the enclosing item implements
+the trait only through a bound that item declares, as for any call. `${x}` over
+`x: X` needs `X: Display`, and `${x:x}` needs `X: LowerHex`; `X: Display` does
+not stand in for it. `Inspect` is implemented for every type, so `${x:?}` needs
+no bound.
+
+> Not yet implemented: an untagged template checks the trait only once the
+> item is instantiated, so it asks for no bound, and the error names the
+> instantiated type at the hole. A tagged template rejects such a hole outright
+> (see [Tagged Template Literals](#tagged-template-literals)).
 
 | Type   | Trait      | Applies to             | Example                   |
 | ------ | ---------- | ---------------------- | ------------------------- |
@@ -1060,7 +1076,8 @@ test "the tag sees each hole in its own type" {
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit()` / `raw()` (the preceding segment, escapes processed or preserved),
 `get(&t)` (the value, `V`), `source()` (the expression text), `has_spec()`, and
-`fmt(&t, f)` (rendering as the untagged template would).
+`fmt(&t, f)` (rendering the value through the trait its specifier selects, as
+[Format Types](#format-types) states).
 `ReflectTemplate::<T>::tail()` and `raw_tail()` give the segment after the last
 hole. Every answer but `get` and `fmt` is a constant. A hole handle is minted
 only by `members()`.
@@ -1071,10 +1088,14 @@ empty tuple (`[]`, for a tag that reads only `tail()`). A concrete tuple
 (`..V: ToSqlParam`) makes a hole whose type lacks it an error at the call,
 naming that type.
 
-A hole's type may not mention a type parameter of the enclosing item, since the
-shape is minted once rather than per instantiation. A generic body passes its
-tag a concrete value from its caller. The untagged template makes no shape, so
-`` `${v}` `` over a `v: X` is accepted where `` format`${v}` `` is not.
+A hole's type may mention a type parameter of the enclosing item. The shape is
+then generic over that parameter, and each instantiation of the item
+instantiates the tag with it. A bound the tag places on its pack, and the trait
+`fmt` renders the hole through, are met only through the bounds the item
+declares (see [Format Types](#format-types)).
+
+> Not yet implemented: a hole whose type mentions a type parameter is rejected
+> as a tag's argument, `format`'s included.
 
 Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its
@@ -1082,8 +1103,9 @@ storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
 renders what `` `${a} ${bump(&mut a)}` `` renders. A tag may carry effects,
 which the caller declares as for any call, and return any type.
 
-An untagged template means what the prelude's `format` tag means: each hole
-rendered through its specifier into one buffer.
+The prelude's `format` tag renders each hole through its specifier into one
+buffer, and returns it. An untagged template is sugar for it (see
+[Template Strings](#template-strings)), and a program may call it by name.
 
 Rationale: [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md).
 
