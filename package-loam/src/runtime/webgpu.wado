@@ -208,10 +208,17 @@ impl WebGpuBackend {
         });
     }
 
+    /// The device's storage buffer offset alignment, in f32 elements: where a
+    /// binding may start.
+    pub fn alignment(&self) -> i32 {
+        return self.alignment;
+    }
+
     /// Binds at most `elements` f32 elements to one shader, as a device with a
     /// smaller limit would: a kernel past it splits, or runs on the CPU.
-    pub fn limit_binding(&mut self, elements: i32) {
-        assert elements >= self.alignment;
+    pub fn limit_binding(&mut self, elements: i32)
+        contract elements >= self.alignment()
+    {
         self.max_binding = i32::min(self.max_binding, elements);
     }
 

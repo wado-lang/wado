@@ -251,8 +251,9 @@ impl ParserPlan {
     }
 
     /// What a rule's own alternative block expects on entry.
-    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<i32>> {
-        assert rule >= 0 && rule < self.recovery.rule_entry.len(), `rule_entry_expect: rule ${rule} has no entry set`;
+    pub fn rule_entry_expect(&self, rule: i32) -> Option<List<i32>>
+        contract 0 <= rule < self.recovery_sets().rule_entry.len(), `rule ${rule} has no entry set`
+    {
         return expect_ids(&self.recovery.rule_entry, rule);
     }
 
@@ -264,9 +265,16 @@ impl ParserPlan {
         return &NO_CAPTURES;
     }
 
+    /// Whether the plan records which bindings each rule's actions read: only
+    /// a plan made with actions on does.
+    pub fn tracks_bindings(&self) -> bool {
+        return !self.binding_reads.is_empty();
+    }
+
     /// Whether an action of rule `rule` reads the binding `base`.
-    pub fn reads_binding<S: AsStrSlice>(&self, rule: i32, base: S) -> bool {
-        assert rule < self.binding_reads.len(), "an emit that reads bindings runs with actions on";
+    pub fn reads_binding<S: AsStrSlice>(&self, rule: i32, base: S) -> bool
+        contract self.tracks_bindings(), "an emit that reads bindings runs with actions on"
+    {
         return match &self.binding_reads[rule] {
             Some(reads) => reads.contains_str(base),
             None => true,
