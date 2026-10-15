@@ -1,9 +1,10 @@
 //! Regression test (issue #1415): an imported (non-entry) module that returns a
 //! cross-module struct (an imported Gale parser's `CstNode`) by value, then
-//! references + recurses on it, used to type the binding's local as `i32` instead
-//! of a GC ref ("expected i32, found (ref $type)"). `lookup_function_return_type`
-//! now resolves a same-module callee's signature in the live scope instead of a
-//! reconstructed one that dropped namespace imports.
+//! takes `&` of it and recurses on it, used to type the binding's local as
+//! `i32` instead of a GC ref ("expected i32, found (ref $type)").
+//! `lookup_function_return_type` now resolves a same-module callee's signature
+//! in the live scope instead of a reconstructed one that dropped namespace
+//! imports.
 
 use { depth } from "./sub/wir_xmodule_return_eval.wado";
 

@@ -172,7 +172,7 @@ impl<'a> WriteWalker<'a> {
     }
 
     /// The storage `expr` names, if it names one directly, seeing through the
-    /// `&mut *x` re-reference that forwarding a reference argument spells and the
+    /// `&mut *x` that forwarding a reference argument spells and the
     /// `&mut` bindings that carry one on. A reference reached out of something
     /// that holds it is [`WriteWalker::carried`]'s question instead.
     fn root_of(&self, expr: &TirExpr) -> Option<Root> {

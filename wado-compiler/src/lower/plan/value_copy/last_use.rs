@@ -524,8 +524,9 @@ impl<'a> Analyzer<'a> {
         let moved_out =
             self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
         path.root != local
-            // A source reached through a reference is written through whoever holds it, at a root the
-            // scan above never sees, as is a root a `&mut` outlives.
+            // A source reached through a reference is written by whatever owns
+            // its referent, at a root the scan above never sees, as is a root a
+            // `&mut` outlives.
             && !path.through_ref
             && !self.written_through_escape.contains(&path.root)
             // A reference to the binding kept out of this body's sight reads its
@@ -1663,8 +1664,8 @@ impl Analyzer<'_> {
                 .collect();
             // A reference naming no field may be one taken through a call
             // (`&hs[0].p`, an iterator) that holds any field, so it counts for
-            // every place under the root. An element of a `List` the caller
-            // passes by reference may be held by the caller.
+            // every place under the root. An element of a `List` this body
+            // received by reference may be held by its caller.
             let in_place = match site.top {
                 None => !held.is_empty(),
                 Some(top) => held.contains(&Some(top)) || held.contains(&None),

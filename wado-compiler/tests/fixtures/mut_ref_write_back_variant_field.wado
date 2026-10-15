@@ -102,12 +102,12 @@ struct View {
 }
 
 #[inline("never")]
-fn re_references_a_reference(r: &mut Payload) {
+fn forwards_a_reference(r: &mut Payload) {
     replace(&mut *r);
 }
 
 #[inline("never")]
-fn re_references_through_a_field(v: &mut View) {
+fn forwards_a_reference_field(v: &mut View) {
     replace(&mut *v.slot);
 }
 
@@ -234,19 +234,19 @@ test "a whole-value write through a capture lands" {
     assert replaces_through_a_capture() matches { Text(t) && t == `xyz` };
 }
 
-// `&mut *p` re-boxes what `p` points at, whatever `p` is, so a re-reference is as
+// `&mut *p` re-boxes what `p` points at, whatever `p` is, so it is as
 // detached as `&mut b.item` and needs the same write-back — to `*p`, which
 // names the storage the temp was read from.
-test "a re-reference of a mutable reference writes back" {
+test "`&mut *r` over a mutable reference writes back" {
     let mut p = Payload::Text(`ab`);
-    re_references_a_reference(&mut p);
+    forwards_a_reference(&mut p);
     assert p matches { Text(t) && t == `xyz` };
 }
 
-test "a re-reference through a reference field writes back" {
+test "`&mut *v.slot` through a reference field writes back" {
     let mut p = Payload::Text(`ab`);
     let mut v = View { slot: &mut p };
-    re_references_through_a_field(&mut v);
+    forwards_a_reference_field(&mut v);
     assert p matches { Text(t) && t == `xyz` };
 }
 

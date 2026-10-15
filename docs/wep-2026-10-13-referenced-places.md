@@ -289,9 +289,9 @@ a `List` reached through a reference writes in place wherever some body's
 reference through the field holding the list is observed (`observed.rs`), and
 always where the reference is to the list itself.
 
-### A destructured field's path is assumed to be referenced
+### A destructured field's path is assumed to hold a reference
 
-A pattern-destructured field's path is marked as referenced, because the
-pattern carries no type saying whether that field is, and the mark refuses
-those paths a share outright. Every WIR golden is byte-identical with the mark
-removed, so nothing measured pays for it.
+A pattern-destructured field's path is marked as reached through a reference,
+because the pattern carries no type saying whether that field holds one, and
+the mark refuses those paths a share outright. Every WIR golden is
+byte-identical with the mark removed, so nothing measured pays for it.

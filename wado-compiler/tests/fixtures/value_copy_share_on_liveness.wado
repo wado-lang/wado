@@ -56,9 +56,9 @@ struct Cell {
     v: i32,
 }
 
-// An index step off a referenced root defers its whole-root write until the callee
-// it is handed to is known to write. `read_only` writes nothing, so `touch`
-// costs the array's share nothing.
+// An index step off a root handed to a callee by `&mut` defers its whole-root
+// write until that callee is known to write. `read_only` writes nothing, so
+// `touch` costs the array's share nothing.
 fn read_only(c: &mut Cell) -> i32 {
     return c.v;
 }

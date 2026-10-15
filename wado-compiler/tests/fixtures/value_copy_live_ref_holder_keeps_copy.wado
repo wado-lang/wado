@@ -1,6 +1,7 @@
 // A reference bound to a local pins its referent wherever something holding
-// that reference is still readable: the local itself, a copy of it, a call result or a
-// branch it flowed into, an iterator over it, or a value it was handed away in.
+// that reference is still readable: the local itself, a copy of it, a call
+// result or a branch it flowed into, an iterator over it, or a value it was
+// handed away in.
 // Each function moves `a` into `b` and writes `b` while a holder is still live,
 // so value semantics say the holder sees `a` unchanged.
 //
@@ -104,7 +105,7 @@ struct H {
     p: P,
 }
 
-// `&hs[0].p` references through `index_value`, whose result is a projection of
+// `&hs[0].p` reaches `p` through `index_value`, whose result is a projection of
 // `hs` rather than a value of its own.
 fn element_field_ref() -> i32 {
     let hs: List<H> = [H { p: P { a: 1, b: 1 } }];

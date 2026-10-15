@@ -1,6 +1,6 @@
 // A `&mut` stored into an aggregate outlives the expression that took it, and
 // the mod/ref walk cannot follow where it is written — so taking one counts as
-// a write to what it refers to. Unrecorded, `bump`'s writes are invisible to its
+// a write to its referent. Unrecorded, `bump`'s writes are invisible to its
 // caller, and `r` is shared across them.
 struct View {
     repr: &mut List<i32>,

@@ -496,7 +496,7 @@ struct FrameState {
     /// itself, which a different body does not carry at that id.
     ref_global_aliases: IndexMap<u32, (StmtId, GlobalKey)>,
     /// Locals a frame's `let` bound to a reference to a local place, resolved
-    /// to the place referenced — flattened at record time, so a chain never
+    /// to that place — flattened at record time, so a chain never
     /// needs chasing. Reads through one project the place's current value and
     /// writes land in it, which is what keeps a reference from copying its
     /// referent.
@@ -962,8 +962,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// Record what `index` refers into, clearing the entry where the binding
-    /// is not a reference.
+    /// Record the local holding what `index` refers to, clearing the entry
+    /// where the binding is not a reference.
     pub fn record_ref_root(&mut self, index: u32, root: RefRoot) {
         match root {
             RefRoot::NotARef => self.frame.ref_roots.swap_remove(&index),
@@ -981,8 +981,9 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-/// What a `let` binding refers into, as [`Interpreter::record_ref_root`] reads
-/// it. Also a lattice: two answers that differ join to `Unrooted`.
+/// The local holding what a `let` binding refers to, as
+/// [`Interpreter::record_ref_root`] reads it. Also a lattice: two answers that
+/// differ join to `Unrooted`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RefRoot {
     NotARef,

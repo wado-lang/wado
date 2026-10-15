@@ -205,14 +205,14 @@ fix to conform; none should be preserved.
 
   The same operations on a value-type _local_ all work, wherever the
   reference goes; nothing else is the storage itself, since `&mut` of any other
-  place re-boxes what it names — a capture and a `&mut *p` re-reference
-  included. `variant` is exempt from the reference-site refusal because mutation through its
+  place re-boxes what it names — a capture and a `&mut *p` included. `variant`
+  is exempt from the reference-site refusal because mutation through its
   payload lands. A rewritten call reads its callee and each of its arguments in
   source order, so a preceding one's write is not read past.
 
   Both halves follow the reference, not its spelling: a variable bound to one
   carries it to whatever sink it reaches, and a whole-value write names its
-  storage through a `&mut *r` re-reference, through a capture, through the `&mut`
+  storage through a `&mut *r`, through a capture, through the `&mut`
   bindings that carry a parameter on (`let q = p; *q = v`), and through
   whatever holds the reference in between. A reference put into a value comes
   back out of any reference to that value, so a struct field, a list element
@@ -227,7 +227,7 @@ fix to conform; none should be preserved.
   What still drops:
 
 - `&mut *p` for every replace type but `variant`. The reference-site refusal keys
-  on a `FieldAccess` / `Index` operand, so a re-reference slips past it. `variant`
+  on a `FieldAccess` / `Index` operand, so `&mut *p` slips past it. `variant`
   is covered from the other side by the write-back; the rest are not.
 - A `variant` element as a call argument, where the callee neither replaces
   nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its

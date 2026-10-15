@@ -131,7 +131,7 @@ impl Scan<'_> {
                 self.field_steps(expr, out);
                 out.push((field_owner(expr.type_id, self.type_table), *field_index));
             }
-            // A re-reference `&*&place` names `place`.
+            // `&*&place` names `place`.
             TirExprKind::Index { expr, .. }
             | TirExprKind::Cast { expr, .. }
             | TirExprKind::VariantPayload { expr, .. }

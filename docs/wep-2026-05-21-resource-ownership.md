@@ -307,7 +307,7 @@ where it cannot prove move / share / fresh; no elision pass):
   own members assumed owned and the ones a walk refutes dropped. Grown from
   nothing, a cycle whose members return each other's result (`lower_element`
   yields `lower_group`'s value and `lower_group` yields `lower_element`'s) has
-  each reading the other's unproven "not owned", and every result the family
+  each reading the other's unproven "shared", and every result the family
   builds is deep-copied.
 - Transient references — a referent is pinned only at a move where a holder of a
   reference to it is still readable. When a holder is readable is stated in
@@ -344,7 +344,7 @@ helper), replacing an identity fallback that silently shared storage.
 
 A function that calls itself is assumed to return owned while that is being
 proved: the fixpoint only adds, so its own call would otherwise read back the
-verdict being computed and pin it at not owned. The returns that do not go through
+verdict being computed and pin it at shared. The returns that do not go through
 the recursive call are still checked on their own, and those base cases are what
 a recursive result is built from.
 

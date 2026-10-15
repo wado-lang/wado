@@ -1102,7 +1102,7 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, owned: &mut Owned, cx: &mut Cx
         | TirExprKind::VariantPayload { expr: inner, .. } => {
             elab_expr(inner, consuming, owned, cx);
         }
-        // Reading a field that owns nothing only reads the aggregate.
+        // Reading a field that owns nothing leaves the aggregate unconsumed.
         TirExprKind::FieldAccess { expr: inner, .. } => {
             let moves_out = consuming && cx.carries_resource(type_id);
             elab_expr(inner, moves_out, owned, cx);

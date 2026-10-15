@@ -1,11 +1,11 @@
 //! Repro lib for a WIR miscompile (issue #1415; see ../wir_xmodule_return.wado).
 //!
 //! `first_node_child` returns the imported parser's `CstNode` *by value*. When
-//! this lives in an imported (non-entry) module and the result is referenced and
-//! recursed on, `lookup_function_return_type` re-resolves the return type via
-//! the loaded-module path and yields a non-canonical `TypeId` for the
-//! cross-module struct, so the binding's local is lowered as `i32` instead of a
-//! GC ref ("expected i32, found (ref $type)"). Putting the same code in the
+//! this lives in an imported (non-entry) module and the caller takes `&` of the
+//! result and recurses on it, `lookup_function_return_type` re-resolves the
+//! return type via the loaded-module path and yields a non-canonical `TypeId`
+//! for the cross-module struct, so the binding's local is lowered as `i32`
+//! instead of a GC ref ("expected i32, found (ref $type)"). Putting the same code in the
 //! entry uses the pre-resolved cache instead and compiles fine.
 
 use mini from "./wir_xmodule_return_parser.wado";

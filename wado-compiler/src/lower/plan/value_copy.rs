@@ -135,8 +135,8 @@ pub struct ValueCopyPlan {
     pub builtins: BuiltinDeclarations,
     /// Per-call retention: which argument positions a direct call may persist a
     /// reference to, and where a bounded one lands. A local whose `&`/`&mut` is
-    /// passed at a *retained* position is reference-escaped and cannot be moved;
-    /// passed anywhere else it is a transient reference. Position 0 is the
+    /// passed at a *retained* position has a reference escape and cannot be
+    /// moved; passed anywhere else the reference is transient. Position 0 is the
     /// receiver.
     pub retention: retention::CallRetention,
     /// Per-functor-type retention: what a call through a function value of that
@@ -159,8 +159,8 @@ pub struct ValueCopyPlan {
     /// mutate a shared by-value argument during the call. A confined by-value
     /// argument keeps its copy only when it aliases such a sibling.
     pub mut_ref_params: FuncKeyMap<Vec<bool>>,
-    /// Methods whose receiver is a reference (`&self` / `&mut self`) — a
-    /// referencing, not consuming, receiver. Used by the read-only-share analysis.
+    /// Methods whose receiver is a reference (`&self` / `&mut self`), so the
+    /// call does not consume it. Used by the read-only-share analysis.
     pub ref_receiver_methods: FuncKeySet,
     /// Functions whose result aliases their receiver's storage (a shared
     /// projection / element read). Because it admits shared projections it

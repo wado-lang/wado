@@ -37,7 +37,7 @@ fn bound_to_a_variable(b: &mut Bag) {
 
 // Handing the reference on is spelled `&mut *r`, which names `r` no less than
 // `*r = …` does.
-fn forwarded_by_a_re_reference(b: &mut Bag) {
+fn forwarded_through_a_deref(b: &mut Bag) {
     let r = &mut b.item;
     replace(&mut *r);
 }
@@ -52,7 +52,7 @@ fn written_through_a_capture(b: &mut Bag) {
     write();
 }
 
-// The reference reaches the `return` through a variable, which is the same escape
+// The `&mut` reaches the `return` through a variable, which is the same escape
 // as returning it there.
 fn returned_through_a_variable(b: &mut Bag) -> &mut Payload {
     let r = &mut b.item;
@@ -107,7 +107,7 @@ fn the_closures_result(b: &mut Bag) {
 test "unreachable" {
     let mut b = Bag { item: Payload::Empty };
     bound_to_a_variable(&mut b);
-    forwarded_by_a_re_reference(&mut b);
+    forwarded_through_a_deref(&mut b);
     written_through_a_capture(&mut b);
     let _ = returned_through_a_variable(&mut b);
     bound_through_a_branch(&mut b, true);

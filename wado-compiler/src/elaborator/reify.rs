@@ -2624,8 +2624,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     ctx.address_taken_locals.insert(*index);
                 }
-                // A re-reference names the storage its operand already
-                // references; taking `&` of the deref would box a copy of a scalar.
+                // `&*r` / `&mut *r` names the storage `r` already refers to;
+                // taking `&` of the deref would box a copy of a scalar.
                 if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                     && let TirExprKind::Unary {
                         op: TirUnaryOp::Deref,
@@ -6969,8 +6969,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |this| {
                     this.with_module_perspective(callee_module, |this| {
                         ctx.with_caller_bindings_hidden(|ctx| {
-                            // Every argument binds ahead of the defaults, in call order. A `&mut`
-                            // place stays in the call, and a default re-references it unless captured.
+                            // Every argument binds ahead of the defaults, in call order. A
+                            // `&mut` place stays in the call, and a default takes `&mut` of it
+                            // again unless captured.
                             if named.contains(&true) {
                                 for ((arg, (name, _)), named) in
                                     args.iter_mut().zip(func_params).zip(&named)

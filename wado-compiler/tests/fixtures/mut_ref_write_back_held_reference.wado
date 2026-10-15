@@ -1,9 +1,10 @@
 // A `&mut` parameter reaches a write target through whatever holds it, not only
 // through the `&mut` bindings that name it directly. Held in a local aggregate
 // it neither escapes the callee nor forms an alias chain, so both the retention
-// walk and the direct-alias reading answer "nothing" and the caller of a
-// detached reference neither refuses the call nor stores the temp back — the write
-// is lost. What a local may hand a reference to is the reading that covers it.
+// walk and the direct-alias reading answer "nothing", and the caller passing a
+// detached `&mut` neither refuses the call nor stores the temp back — the
+// write is lost. What a local may hand a reference to is the reading that
+// covers it.
 
 variant Payload {
     Text(String),

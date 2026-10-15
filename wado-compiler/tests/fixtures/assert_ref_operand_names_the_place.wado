@@ -1,7 +1,7 @@
 // `&place` in an assert condition names the place, as it does anywhere else.
-// The capture used to bind the place's value first and take `&` of the binding, so
-// `ref_eq` compared a copy and failed where the same expression outside an
-// assert held.
+// The capture used to bind the place's value first and take `&` of that
+// binding, so `ref_eq` compared a copy and failed where the same expression
+// outside an assert held.
 
 struct P {
     a: i32,
@@ -24,7 +24,7 @@ test "a reference to a field" {
 }
 
 #[expect_trap]
-test "a failing reference still renders" {
+test "a failing `ref_eq` still renders" {
     let xs: List<P> = [P { a: 1 }, P { a: 1 }];
     let r = &xs[0];
     assert ref_eq(r, &xs[1]);

@@ -1611,8 +1611,8 @@ fn rewrite_arg(
     become_expr(body, arg, projected);
 }
 
-/// The field a call site hands over in place of the wrapper: `source.f`,
-/// re-referenced when the scalar parameter takes it by reference.
+/// The field a call site hands over in place of the wrapper: `source.f`, under
+/// a fresh `&` / `&mut` when the scalar parameter takes it by reference.
 fn project_field(body: &mut Body, source: Operand, info: &SroaInfo, span: Span) -> ExprId {
     let field = body.exprs.push(ExprNode {
         kind: ExprKind::FieldAccess {

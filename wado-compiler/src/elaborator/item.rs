@@ -1346,7 +1346,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// A by-value `self` transfers ownership, so it is legal on a resource
     /// and on a concrete aggregate that transitively owns one (the consuming
-    /// method hands that resource off). A plain value type must take
+    /// method hands that resource off). A plain value type's method must take
     /// `&self`. Generic aggregates resolve to `GenericInstance` rather than a
     /// concrete value type, so they are already permitted.
     fn check_self_by_value(&mut self, self_ty: TypeId, span: Span) {

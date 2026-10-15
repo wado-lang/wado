@@ -1,10 +1,11 @@
-// Test: a cast inside a reference chain names the storage it converts.
+// Test: a cast under a `&` names the storage it converts.
 //
-// `referent_root` walks a cast the way it walks a field access, so `&(G.n as i32)`
-// roots at `G`. A value-producing cast interposes a fresh temporary, which only
-// removes write paths — the reference snapshots the converted value, and the later
-// write to `G.n` cannot reach it. The `&G.items` view beside it takes the other
-// answer: it names the global itself, so it grows with it.
+// `referent_root` walks a cast the way it walks a field access, so
+// `&(G.n as i32)` roots at `G`. A value-producing cast interposes a fresh
+// temporary, which only removes write paths — the reference sees the converted
+// value, and the later write to `G.n` cannot reach it. The `&G.items` view
+// beside it takes the other answer: it names the global itself, so it grows
+// with it.
 
 use { println, Stdout } from "core:cli";
 

@@ -216,7 +216,8 @@ fn function_returns_receiver_alias(
 ///
 /// A deref may peel only the parameter's own reference, the rule
 /// [`is_projection_of_param`] follows. Deeper in the chain it reads a reference
-/// *stored in* that storage and lands on what it points to, a different place.
+/// *stored in* that storage and lands on that reference's referent, a
+/// different place.
 /// Answering the wrong place is not the safe side. `last_use::source_path`
 /// makes a binding a share candidate gated on the place this names, so a place
 /// nothing writes reads as no conflict and the copy is dropped.

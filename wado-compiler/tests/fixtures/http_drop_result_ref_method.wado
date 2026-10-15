@@ -1,7 +1,7 @@
 // Regression test: a `&self` method call on a `Result<Fields, E>` must not be
-// treated as consuming the aggregate. `is_ok(&self)` only references the Result;
-// it does not extract the inner `Fields`, so that handle still needs a
-// structural `resource.drop` at end of scope.
+// treated as consuming the aggregate. `is_ok(&self)` only reads the Result
+// through a reference; it does not extract the inner `Fields`, so that handle
+// still needs a structural `resource.drop` at end of scope.
 //
 // The resource-cleanup heuristic used to consume the receiver on ANY method
 // call on a resource-carrying aggregate (`is_resource_aggregate`), which
@@ -15,7 +15,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
     let value: List<u8> = [118 as u8];
     let entries: List<[FieldName, FieldValue]> = [[name, value as FieldValue]];
     let built = Fields::from_list(entries);
-    // `is_ok` references `built`; it does not move the inner `Fields` out.
+    // `is_ok` reads `built` through `&self`; it does not move the inner
+    // `Fields` out.
     // `built` is never destructured, so its `Fields` must be dropped here.
     assert built.is_ok();
 

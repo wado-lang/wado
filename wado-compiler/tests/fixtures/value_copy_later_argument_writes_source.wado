@@ -3,9 +3,9 @@
 // before the callee reads it, so a parameter that keeps nothing of its argument
 // still needs the copy: whether the write goes through a `&mut` taken on the
 // spot, an assignment, a `&mut` some local or struct keeps, a closure that
-// captured the value, another reference to storage the caller handed in, a reference
-// into a list's element, a `&mut` a global keeps, or a global,
-// and whether the argument is a local or a call handing back part of one.
+// captured the value, a second reference parameter naming the same storage, a
+// reference into a list's element, a `&mut` a global keeps, or a global, and
+// whether the argument is a local or a call handing back part of one.
 
 struct Pair {
     a: i32,
@@ -57,7 +57,7 @@ fn held_by_callee(p: Pair, h: Holder) -> i32 {
 }
 
 #[inline("never")]
-fn handed_in(a: &mut Pair, b: &mut Pair) -> i32 {
+fn aliased_params(a: &mut Pair, b: &mut Pair) -> i32 {
     return two(*a, then: { bump_a(b); *a });
 }
 
@@ -103,7 +103,7 @@ export fn run() {
     assert held_by_callee(k, kept) == 1;
     let mut l = pair();
     let rl = &mut l;
-    assert handed_in(rl, rl) == 1011;
+    assert aliased_params(rl, rl) == 1011;
     assert two(G, then: { bump_global(); G }) == 1011;
     let mut g = pair();
     GH.w = &mut g;

@@ -1005,7 +1005,7 @@ impl ConstFoldVisitor<'_> {
         self.interpreter.bind_local(local_index, lat);
     }
 
-    /// What a `let r = &place` binding refers into.
+    /// The local holding what a `let r = &place` binding refers to.
     fn ref_root_of(body: &Body, op: Operand) -> RefRoot {
         let Some(e) = op.as_expr() else {
             return RefRoot::NotARef;
