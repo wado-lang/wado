@@ -1961,6 +1961,74 @@ impl TypeTable {
         self.any_anon_shape_type(id, &mut |ty| self.contains_type_param(ty))
     }
 
+    /// The types shapes `a` and `b` hold, lined up one per field or hole, where
+    /// those types are all that tells the two apart.
+    fn anon_shape_type_pairs(
+        &self,
+        a: AnonStructId,
+        b: AnonStructId,
+    ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
+        let (x, y) = (
+            &self.anon_structs[a.0 as usize],
+            &self.anon_structs[b.0 as usize],
+        );
+        if x.module != y.module {
+            return None;
+        }
+        match (&x.shape, &y.shape) {
+            (AnonShape::Fields(xs), AnonShape::Fields(ys))
+                if xs.len() == ys.len() && xs.iter().zip(ys).all(|(f, g)| f.0 == g.0) =>
+            {
+                Some((
+                    xs.iter().map(|f| f.1).collect(),
+                    ys.iter().map(|f| f.1).collect(),
+                ))
+            }
+            (AnonShape::Template(xs), AnonShape::Template(ys))
+                if xs.segments == ys.segments
+                    && xs.holes.len() == ys.holes.len()
+                    && xs
+                        .holes
+                        .iter()
+                        .zip(&ys.holes)
+                        .all(|(h, k)| h.spec == k.spec && h.source == k.source) =>
+            {
+                Some((
+                    xs.holes.iter().map(|h| h.ty).collect(),
+                    ys.holes.iter().map(|h| h.ty).collect(),
+                ))
+            }
+            _ => None,
+        }
+    }
+
+    /// The type parameters shape `id` mentions, by name: the frame its
+    /// synthesized methods are instantiated in at a substituted shape.
+    #[must_use]
+    pub fn anon_shape_type_params(&self, id: AnonStructId) -> IndexMap<String, u32> {
+        let mut found = IndexMap::default();
+        self.any_anon_shape_type(id, &mut |ty| {
+            self.collect_type_params(ty, &mut found);
+            false
+        });
+        found
+    }
+
+    fn collect_type_params(&self, id: TypeId, found: &mut IndexMap<String, u32>) {
+        match self.get(id) {
+            ResolvedType::TypeParam { name, index }
+            | ResolvedType::TypePack { name, index, .. } => {
+                found.insert(name.clone(), *index);
+            }
+            _ => {
+                self.any_constituent(id, &mut |t| {
+                    self.collect_type_params(t, found);
+                    false
+                });
+            }
+        }
+    }
+
     /// Whether `f` holds of a type shape `id` is built over.
     fn any_anon_shape_type(&self, id: AnonStructId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
         match &self.anon_structs[id.0 as usize].shape {
@@ -4053,6 +4121,43 @@ impl TypeTable {
             })
             .or_default()
             .insert(trait_ref.args, filled, resolved_id, None);
+    }
+
+    /// Register for `instance` each associated type `origin` answers, under
+    /// `substitution`: what synthesis registered for an open shape, at the
+    /// closed shape a substitution interned from it.
+    pub fn instantiate_assoc_types(
+        &mut self,
+        origin: TypeId,
+        instance: TypeId,
+        substitution: &IndexMap<u32, TypeId>,
+    ) {
+        let from = self.instance_key(origin);
+        let to = self.instance_key(instance);
+        let entries: Vec<(AssocTypeKey, AssocAnswers)> = self
+            .assoc_type_resolutions
+            .iter()
+            .filter(|(key, _)| key.receiver == from)
+            .map(|(key, answers)| (key.clone(), answers.clone()))
+            .collect();
+        for (key, answers) in entries {
+            let mut subst = |ty: TypeId| self.substitute_type_params(ty, substitution);
+            let mut instantiated = AssocAnswers::default();
+            for entry in answers.0 {
+                let written = entry.written.into_iter().map(&mut subst).collect();
+                let filled = entry
+                    .filled
+                    .map(|args| args.into_iter().map(&mut subst).collect());
+                instantiated.insert(written, filled, subst(entry.answer), entry.impl_def);
+            }
+            self.assoc_type_resolutions.insert(
+                AssocTypeKey {
+                    receiver: to.clone(),
+                    ..key
+                },
+                instantiated,
+            );
+        }
     }
 
     /// `trait_ref`'s arguments with the trait's defaults filled where it
@@ -8660,6 +8765,19 @@ impl TypeTable {
                     && rows_agree(x_effects, y_effects)
                     && all(x_params, y_params)
                     && all(&[*x_ret], &[*y_ret]),
+            ),
+            (
+                ResolvedType::Struct {
+                    def: StructDef::Anon(x),
+                    ..
+                },
+                ResolvedType::Struct {
+                    def: StructDef::Anon(y),
+                    ..
+                },
+            ) => Some(
+                self.anon_shape_type_pairs(*x, *y)
+                    .is_some_and(|(xs, ys)| all(&xs, &ys)),
             ),
             _ => match (self.generic_type_args(a), self.generic_type_args(b)) {
                 (Some(x), Some(y)) => Some(

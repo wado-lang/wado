@@ -32,6 +32,11 @@ pub(super) struct StructInstState {
     /// How many anonymous shapes the type table held when the last batch was
     /// read for substituted ones.
     pub anon_scanned: usize,
+    /// Substituted shapes whose origin's methods are yet to be instantiated.
+    pub pending_shapes: Vec<AnonStructId>,
+    /// Each open shape by the receiver its synthesized methods name. Kept
+    /// across runs: a run drops the open shapes' structs, not their methods.
+    pub open_shape_heads: IndexMap<FqTypeName, AnonStructId>,
 }
 
 /// Tracks function monomorphization state
@@ -132,6 +137,8 @@ impl Monomorphizer {
                 type_to_mangled_name: IndexMap::default(),
                 anon_sites: IndexMap::default(),
                 anon_scanned: 0,
+                pending_shapes: Vec::new(),
+                open_shape_heads: IndexMap::default(),
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),

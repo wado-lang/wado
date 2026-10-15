@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TirFunction, TypeId};
+use crate::tir::{ResolvedType, StructDef, TirFunction, TypeId};
 
 use super::traits::{
     REFLECT_MEMBERS_ASSOC, generate_case_bridge_helpers, generate_field_bridge_helpers,
@@ -37,12 +37,20 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
         flat.structs
             .iter()
             .enumerate()
-            .filter_map(|(i, s)| {
-                s.monomorph_info.as_ref()?;
-                let base_decl = tt.defs().ast_id(s.def.decl()?);
-                tt.has_generic_assoc_type_def_for_decl(base_decl, REFLECT_MEMBERS_ASSOC)
-                    .then_some(i)
+            .filter(|(_, s)| match s.def {
+                StructDef::Anon(shape) => {
+                    tt.anon_struct_written_origin(shape) != shape
+                        && tt.template_shape(shape).is_none()
+                }
+                StructDef::Decl(decl) => {
+                    s.monomorph_info.is_some()
+                        && tt.has_generic_assoc_type_def_for_decl(
+                            tt.defs().ast_id(decl),
+                            REFLECT_MEMBERS_ASSOC,
+                        )
+                }
             })
+            .map(|(i, _)| i)
             .collect()
     };
 

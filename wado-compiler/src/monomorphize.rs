@@ -20,10 +20,10 @@ use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::FreeFunctionName;
+use crate::name::{FreeFunctionName, LocalMethodName};
 use crate::tir::{
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
-    TypeTable,
+    AnonStructId, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
+    TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -245,9 +245,11 @@ impl Monomorphizer {
 
     /// A struct for each closed anonymous shape substitution interned since the
     /// last call: substituting into an open shape interns one no literal wrote.
+    /// Each shape also awaits its origin's methods.
     fn substituted_anon_structs(&mut self, tt: &mut TypeTable) -> Vec<TirStruct> {
         let (shapes, end) = tt.closed_substituted_shapes_since(self.structs.anon_scanned);
         self.structs.anon_scanned = end;
+        self.structs.pending_shapes.extend(&shapes);
         shapes
             .into_iter()
             .map(|shape| {
@@ -296,6 +298,12 @@ impl Monomorphizer {
         for s in &module.structs {
             if let StructDef::Anon(shape) = s.def {
                 self.structs.anon_sites.insert(shape, s.span);
+                let tt = module.type_table.borrow();
+                if tt.anon_shape_is_open(shape) {
+                    self.structs
+                        .open_shape_heads
+                        .insert(tt.fq_struct_head(s.def), shape);
+                }
             }
         }
 
@@ -327,6 +335,24 @@ impl Monomorphizer {
 
         let generic_functions = Rc::new(generic_functions);
         self.functions.templates = Rc::clone(&generic_functions);
+
+        // The methods synthesis gave each open shape, which every shape
+        // substituted from it instantiates.
+        let mut shape_methods: IndexMap<AnonStructId, Vec<Rc<RefCell<TirFunction>>>> =
+            IndexMap::default();
+        for func_rc in &module.functions {
+            let head = func_rc
+                .borrow()
+                .method_info
+                .as_ref()
+                .map(LocalMethodName::fq_base_struct_name);
+            if let Some(&shape) = head.and_then(|head| self.structs.open_shape_heads.get(&head)) {
+                shape_methods
+                    .entry(shape)
+                    .or_default()
+                    .push(Rc::clone(func_rc));
+            }
+        }
 
         // Phase 7.5: expand the packs their own site settled, before Phase 8
         // collects the calls that produces.
@@ -375,6 +401,17 @@ impl Monomorphizer {
                 self.alias_canonical_keys(&mut module.type_table.borrow_mut());
             }
             module.structs.extend(new_structs);
+            for shape in std::mem::take(&mut self.structs.pending_shapes) {
+                let origin = module.type_table.borrow().anon_struct_written_origin(shape);
+                if let Some(methods) = shape_methods.get(&origin) {
+                    batch.extend(self.instantiate_shape_methods(
+                        shape,
+                        methods,
+                        &mut module.type_table.borrow_mut(),
+                    ));
+                    made_progress = true;
+                }
+            }
 
             for mut concrete in batch {
                 self.rewrite_types_in_function(&mut concrete, &mut module.type_table.borrow_mut());

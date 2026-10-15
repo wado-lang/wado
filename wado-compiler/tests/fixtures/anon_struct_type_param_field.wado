@@ -1,7 +1,12 @@
 // A struct literal whose field mentions the enclosing item's type parameter:
-// its shape is open, and each instantiation interns the substituted shape
-// (WEP 2026-01-10's roadmap).
+// its shape is open, and each instantiation interns the substituted shape,
+// which instantiates the methods synthesis gave the open one (WEP 2026-01-10's
+// roadmap).
 use { println, Stdout } from "core:cli";
+use { to_string, from_string } from "core:json";
+use { Serialize, Deserialize } from "core:serde";
+
+struct P<T> { v: T }
 
 fn pair<X: Display>(x: X) -> String {
     let s = { a: x, b: 1 };
@@ -13,6 +18,43 @@ fn first<X>(x: X) -> X {
     return s.a;
 }
 
+fn inspect<X, Y>(x: X, y: Y) -> String {
+    let s = { a: { b: x }, c: P { v: y } };
+    return `${s:?}`;
+}
+
+fn compare<X: Ord>(x: X, y: X) -> String {
+    let s = { a: x };
+    let t = { a: y };
+    return `${s == t} ${s < t}`;
+}
+
+fn back<T: Deserialize>(text: String, _like: &T) -> T {
+    return from_string::<T>(text).unwrap();
+}
+
+fn round<X: Serialize + Deserialize + Display>(x: X) -> String {
+    let s = { a: x, n: [x, x] as List<X> };
+    let text = to_string(&s).unwrap();
+    return `${text} ${back(text, &s).a}`;
+}
+
+fn names<T: ReflectStruct<FieldTypes = [..F]>, ..F>(_t: &T) -> String {
+    let mut out = "";
+    for let m of ReflectStruct::<T>::members() {
+        out.push_str(m.name());
+    }
+    return out;
+}
+
+fn reflect<X>(x: X) -> String {
+    return names(&{ a: x, bb: 2 });
+}
+
+fn outer<X>(x: X) -> String {
+    return inspect(x, { a: x });
+}
+
 export fn run() with Stdout {
     println(pair(5));
     println(pair("hi"));
@@ -20,7 +62,14 @@ export fn run() with Stdout {
     assert first("x") == "x";
     let c = { a: 3, b: 1 };
     assert c.a == first(3);
+    println(inspect(1, "y"));
+    println(compare(1, 2));
+    println(compare("b", "a"));
+    println(round(4));
+    println(round("q"));
+    println(reflect(1.5));
+    println(outer(6));
 }
 
 __DATA__
-{"stdout": "5/1\nhi/1\n"}
+{"stdout": "5/1\nhi/1\n{ a: { b: 1 }, c: P { v: \"y\" } }\nfalse true\nfalse false\n{\"a\":4,\"n\":[4,4]} 4\n{\"a\":\"q\",\"n\":[\"q\",\"q\"]} q\nabb\n{ a: { b: 6 }, c: P { v: { a: 6 } } }\n"}

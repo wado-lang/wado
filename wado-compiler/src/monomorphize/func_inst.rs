@@ -11,10 +11,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Projected, RefKind, mangle_generic_name};
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
-    TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
-    method_param_offset, transpose_tuple_expr,
+    AnonStructId, CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo,
+    ResolvedType, StructDef, TemplateId, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp,
+    TypeId, TypeTable, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -169,6 +169,15 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
 
 /// The post-substitution values `resolve_method_call_substitution` computes
 /// before it branches on the receiver kind, handed to the per-kind resolver.
+/// What an instance is named and filed under, which the caller of
+/// [`Monomorphizer::instantiate_with`] settles.
+pub(super) struct InstanceIdentity {
+    name: String,
+    module_source: ModuleSource,
+    monomorph_info: Option<MonomorphInfo>,
+    method_info: Option<LocalMethodName>,
+}
+
 struct SubstitutedCall {
     /// The post-substitution method info (concrete receiver name).
     info: LocalMethodName,
@@ -939,6 +948,50 @@ impl Monomorphizer {
         .is_some()
     }
 
+    /// The methods synthesized for open shape `origin`, instantiated at the
+    /// closed shape `shape` a substitution interned from it: the impls a
+    /// written shape gets from synthesis, which no literal wrote for `shape`.
+    pub(super) fn instantiate_shape_methods(
+        &mut self,
+        shape: AnonStructId,
+        methods: &[Rc<RefCell<TirFunction>>],
+        type_table: &mut TypeTable,
+    ) -> Vec<TirFunction> {
+        let origin = type_table.anon_struct_written_origin(shape);
+        let written = type_table.make_struct(StructDef::Anon(origin));
+        let concrete = type_table.make_struct(StructDef::Anon(shape));
+        let substitution = type_table
+            .bind_type_params(&[written], &[concrete])
+            .expect("a substituted shape instantiates its origin");
+        type_table.instantiate_assoc_types(written, concrete, &substitution);
+        let param_key_by_name = type_table.anon_shape_type_params(origin);
+        let subject = type_table.fq_struct_head(StructDef::Anon(shape));
+        methods
+            .iter()
+            .map(|method| {
+                let method = method.borrow();
+                let info = method
+                    .method_info
+                    .as_ref()
+                    .expect("a shape's synthesized method names its receiver")
+                    .with_substituted_struct_name(&subject);
+                let identity = InstanceIdentity {
+                    name: info.to_mangled_name(),
+                    module_source: method.module_source.clone(),
+                    monomorph_info: None,
+                    method_info: Some(info),
+                };
+                self.instantiate_with(
+                    &method,
+                    &substitution,
+                    param_key_by_name.clone(),
+                    identity,
+                    type_table,
+                )
+            })
+            .collect()
+    }
+
     /// Instantiate a generic function with concrete type arguments
     ///
     /// Note: `instantiate_function` is separate from `instantiate_method`
@@ -949,9 +1002,6 @@ impl Monomorphizer {
         type_table: &mut TypeTable,
     ) -> Option<TirFunction> {
         let mangled_name = self.lookup_function_instantiation(key)?.clone();
-        // Claims are per instantiation: this function gets its own `locals`
-        // table, so no slot it unrolls into is shared with another's.
-        self.unrolled_local_claims.borrow_mut().clear();
 
         // Build substitution map: type param index -> concrete type
         // Include both method-level type params AND impl block type params
@@ -1028,6 +1078,68 @@ impl Monomorphizer {
         for param in &generic.type_params {
             param_key_by_name.insert(param.name.clone(), offset + param.index);
         }
+
+        // Mangle through `mangle_type_arg_for_generic` so the definition-side
+        // struct name matches what call-site rewrites produce. With
+        // `mangle_type_name` the definition said `Node<String>` and the call
+        // site `Node<core:prelude/string.wado/String>`; the inliner then lost
+        // the self-call link and `-O3` recursed into a stack overflow.
+        let method_info = generic.method_info.as_ref().map(|info| {
+            let impl_type_arg_names: Vec<FqTypeName> = key
+                .impl_type_args
+                .iter()
+                .map(|&t| type_table.fq_type_name(t))
+                .collect();
+            let method_type_arg_names: Vec<FqTypeName> = key
+                .method_type_args
+                .iter()
+                .map(|&t| type_table.fq_type_name(t))
+                .collect();
+            // A blanket impl's receiver IS one of its type params (e.g.
+            // "I"): substitute the concrete name instead of appending args.
+            let is_blanket = info
+                .receiver()
+                .is_declared_binder_of(generic.impl_type_params.iter().map(|p| p.name.as_str()));
+            if is_blanket && !impl_type_arg_names.is_empty() {
+                info.with_substituted_struct_name(&impl_type_arg_names[0])
+            } else {
+                info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
+            }
+        });
+        let identity = InstanceIdentity {
+            name: mangled_name,
+            module_source: key.module_source.clone(),
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: generic.name.clone(),
+                impl_type_args: key.impl_type_args.clone(),
+                method_type_args: key.method_type_args.clone(),
+                is_blanket: false,
+            }),
+            method_info,
+        };
+        Some(self.instantiate_with(
+            generic,
+            &substitution,
+            param_key_by_name,
+            identity,
+            type_table,
+        ))
+    }
+
+    /// `generic` with `substitution` applied throughout, under the identity the
+    /// caller gives the instance. `param_key_by_name` resolves a
+    /// `T^Trait::method` receiver to its slot by the parameter's name.
+    pub fn instantiate_with(
+        &mut self,
+        generic: &TirFunction,
+        substitution: &IndexMap<u32, TypeId>,
+        param_key_by_name: IndexMap<String, u32>,
+        identity: InstanceIdentity,
+        type_table: &mut TypeTable,
+    ) -> TirFunction {
+        // Claims are per instantiation: this function gets its own `locals`
+        // table, so no slot it unrolls into is shared with another's.
+        self.unrolled_local_claims.borrow_mut().clear();
         self.current_param_substitution_key = param_key_by_name;
 
         // Substitute types in parameters
@@ -1036,7 +1148,7 @@ impl Monomorphizer {
             .iter()
             .map(|param| TirParam {
                 name: param.name.clone(),
-                type_id: self.substitute_type(param.type_id, &substitution, type_table),
+                type_id: self.substitute_type(param.type_id, substitution, type_table),
                 local_index: param.local_index,
                 is_mut: param.is_mut,
                 is_mut_ref: false,
@@ -1045,7 +1157,7 @@ impl Monomorphizer {
             .collect();
 
         // Substitute return type
-        let return_type = self.substitute_type(generic.return_type, &substitution, type_table);
+        let return_type = self.substitute_type(generic.return_type, substitution, type_table);
 
         // Substitute types in `locals`
         let mut locals: Vec<TirLocal> = generic
@@ -1053,7 +1165,7 @@ impl Monomorphizer {
             .iter()
             .map(|local| TirLocal {
                 name: local.name.clone(),
-                type_id: self.substitute_type(local.type_id, &substitution, type_table),
+                type_id: self.substitute_type(local.type_id, substitution, type_table),
                 is_mut: local.is_mut,
                 span: local.span,
             })
@@ -1070,7 +1182,7 @@ impl Monomorphizer {
             let mut new_body = b.clone();
             self.substitute_types_in_block(
                 &mut new_body,
-                &substitution,
+                substitution,
                 type_table,
                 &mut local_count,
                 &mut locals,
@@ -1084,49 +1196,18 @@ impl Monomorphizer {
             new_body
         });
 
-        Some(TirFunction {
-            module_source: key.module_source.clone(),
+        TirFunction {
+            module_source: identity.module_source,
             def_id: generic.def_id,
             is_async: generic.is_async,
-            name: mangled_name,
+            name: identity.name,
             visibility: generic.visibility,
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params
             impl_origin: None,
-            monomorph_info: Some(MonomorphInfo {
-                generic_name: generic.name.clone(),
-                impl_type_args: key.impl_type_args.clone(),
-                method_type_args: key.method_type_args.clone(),
-                is_blanket: false,
-            }),
-            // Mangle through `mangle_type_arg_for_generic` so the definition-side
-            // struct name matches what call-site rewrites produce. With
-            // `mangle_type_name` the definition said `Node<String>` and the call
-            // site `Node<core:prelude/string.wado/String>`; the inliner then lost
-            // the self-call link and `-O3` recursed into a stack overflow.
-            method_info: generic.method_info.as_ref().map(|info| {
-                let impl_type_arg_names: Vec<FqTypeName> = key
-                    .impl_type_args
-                    .iter()
-                    .map(|&t| type_table.fq_type_name(t))
-                    .collect();
-                let method_type_arg_names: Vec<FqTypeName> = key
-                    .method_type_args
-                    .iter()
-                    .map(|&t| type_table.fq_type_name(t))
-                    .collect();
-                // A blanket impl's receiver IS one of its type params (e.g.
-                // "I"): substitute the concrete name instead of appending args.
-                let is_blanket = info.receiver().is_declared_binder_of(
-                    generic.impl_type_params.iter().map(|p| p.name.as_str()),
-                );
-                if is_blanket && !impl_type_arg_names.is_empty() {
-                    info.with_substituted_struct_name(&impl_type_arg_names[0])
-                } else {
-                    info.with_type_args(&impl_type_arg_names, &method_type_arg_names)
-                }
-            }),
+            monomorph_info: identity.monomorph_info,
+            method_info: identity.method_info,
             params,
             return_type,
             task_return_type: None,
@@ -1151,7 +1232,7 @@ impl Monomorphizer {
             kind: FunctionKind::Regular,
 
             return_abi: tir::ReturnAbi::default(),
-        })
+        }
     }
 
     /// Substitute type parameters in a block
