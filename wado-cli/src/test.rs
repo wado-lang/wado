@@ -5,7 +5,6 @@ use std::future::Future;
 use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -31,7 +30,7 @@ use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, Runti
 use crate::manifest::package_root;
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
-use crate::runtime::{self, ProfileMode, WasiState};
+use crate::runtime::{self, ProfileMode, Ticker, WasiState};
 use crate::sync::lock;
 use crate::test_cache::{self, Tally, TestCache};
 use crate::test_report::{
@@ -1530,17 +1529,13 @@ struct PipelineOutcome {
     timings: StageTimings,
 }
 
-/// Background thread that increments the wasmtime epoch on every
-/// registered engine. The registry holds `Weak<Engine>`, so once the
-/// last `LoadedModule` for an engine drops the engine is freed and the
-/// ticker stops ticking it (and lazily prunes the dead entry on the
-/// next tick). This avoids the monotonic growth the previous
-/// `Vec<Arc<Engine>>` design suffered when many modules loaded over the
-/// course of one package run.
+/// Increments the wasmtime epoch on every registered engine. The registry
+/// holds `Weak<Engine>`, so an engine is freed once the last `LoadedModule`
+/// for it drops, and the next tick prunes its entry: a package run loading
+/// many modules does not accumulate engines.
 struct EpochTicker {
     engines: Arc<Mutex<Vec<Weak<Engine>>>>,
-    stop: Arc<AtomicBool>,
-    handle: Option<std::thread::JoinHandle<()>>,
+    _ticker: Ticker,
 }
 
 impl EpochTicker {
@@ -1548,19 +1543,13 @@ impl EpochTicker {
     /// sampling period under `--profile`, the two sharing one epoch.
     fn start(interval: Duration) -> Self {
         let engines: Arc<Mutex<Vec<Weak<Engine>>>> = Arc::new(Mutex::new(Vec::new()));
-        let stop = Arc::new(AtomicBool::new(false));
-        let stop_clone = stop.clone();
-        let engines_clone = engines.clone();
-        let handle = std::thread::spawn(move || {
-            while !stop_clone.load(Ordering::Relaxed) {
-                std::thread::sleep(interval);
-                // Clone the Arcs we still need, then release the lock
-                // before doing the actual epoch increments. Keeps the
-                // critical section short — the lock is also taken by
-                // `register`, which must not block the load stage on
-                // per-engine work.
+        let ticker = Ticker::start(interval, {
+            let engines = Arc::clone(&engines);
+            move || {
+                // Increment outside the lock: `register` takes it too, and
+                // must not block the load stage on per-engine work.
                 let live: Vec<Arc<Engine>> = {
-                    let mut guard = lock(&engines_clone);
+                    let mut guard = lock(&engines);
                     guard.retain(|w| w.strong_count() > 0);
                     guard.iter().filter_map(Weak::upgrade).collect()
                 };
@@ -1571,22 +1560,12 @@ impl EpochTicker {
         });
         Self {
             engines,
-            stop,
-            handle: Some(handle),
+            _ticker: ticker,
         }
     }
 
     fn register(&self, engine: &Arc<Engine>) {
         lock(&self.engines).push(Arc::downgrade(engine));
-    }
-}
-
-impl Drop for EpochTicker {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        if let Some(h) = self.handle.take() {
-            let _ = h.join();
-        }
     }
 }
 
