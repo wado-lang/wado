@@ -75,24 +75,28 @@ pub fn write(line: &str) {
     }
 }
 
-/// Write a developer trace when `WADO_TRACE` selects `target`. Prefer
-/// [`compiler_trace!`], which keeps the formatting lazy.
+/// Write one trace line for `target`, which the caller found enabled.
 pub fn emit(target: &str, args: Arguments<'_>) {
-    if filter().enabled(target) {
-        write(&format!("[{target}] {args}"));
-    }
+    write(&format!("[{target}] {args}"));
 }
 
 /// Emit a developer trace if the given target is enabled by `WADO_TRACE`.
+///
+/// The filter is asked before the arguments are evaluated: `format_args!`
+/// evaluates them where it is written, and an argument that renders a type
+/// would otherwise run on every compile.
 ///
 /// ```ignore
 /// compiler_trace!("sroa_variant_return", "rewrite return at {span:?}");
 /// ```
 #[macro_export]
 macro_rules! compiler_trace {
-    ($target:expr, $($arg:tt)*) => {
-        $crate::trace::emit($target, format_args!($($arg)*))
-    };
+    ($target:expr, $($arg:tt)*) => {{
+        let target = $target;
+        if $crate::trace::filter().enabled(target) {
+            $crate::trace::emit(target, format_args!($($arg)*));
+        }
+    }};
 }
 
 #[cfg(test)]
