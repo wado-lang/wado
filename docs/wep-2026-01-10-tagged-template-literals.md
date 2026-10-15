@@ -152,7 +152,7 @@ impl<T, V> TemplateHole<T, V> {
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool;
 
-    /// Renders the value as the untagged template would: the trait method the
+    /// Renders the value through the trait method the
     /// specifier's type selects (`Display::fmt` when it names none), on a
     /// `Formatter` carrying the specifier's fill, alignment, sign, width and
     /// precision over `f`'s buffer.
@@ -279,11 +279,11 @@ an error naming the binding it needs.
 
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and the item's instantiation instantiates the
-tag with it. Whatever the hole's type must implement, it implements through the
-bounds the item declares: a bound the tag places on its pack, and the trait
-`fmt` renders the hole through. So `` `${x}` `` over `x: X` asks for
-`X: Display`, as a call of `push_display(&x)` would. A generic body that cannot
-name the bound passes its tag a concrete value instead.
+tag with it. A bound the tag places on its pack is met through the bounds the
+item declares, as for any call. Under `format`, so is the trait each hole's
+specifier selects: `` `${x}` `` over `x: X` asks for `X: Display`, as a call of
+`push_display(&x)` would. A generic body that cannot name the bound passes its
+tag a concrete value instead.
 
 ### The untagged template is a tag
 
@@ -303,9 +303,9 @@ fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
 }
 ```
 
-So what a template string compiles to is written in Wado, where a reader can
-see it, and the per-hole rendering is the one piece the compiler synthesizes
-(`TemplateHole::fmt`). Until the roadmap below lands, the compiler keeps a
+Once the roadmap below lands, what a template string compiles to is written in
+Wado, where a reader can see it, and the per-hole rendering is the one piece
+the compiler synthesizes (`TemplateHole::fmt`). Until then the compiler keeps a
 direct lowering for the untagged case
 ([String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)),
 and the fixtures hold the two forms to the same output.
@@ -388,7 +388,8 @@ solved better. Kept as an optimization opportunity, dropped as a promise.
 ## Consequences
 
 - A tagged template costs what an untagged one costs: constant appends and
-  typed operations, no runtime segment table, no value copies.
+  typed operations, no runtime segment table, no value copies. `format` does
+  not hold to this yet; the [roadmap](#roadmap) carries it.
 - Tag authors write one generic function, in Wado, against traits the language
   already has. SQL, HTML with contextual escaping, structured logging, URL
   building and raw strings are library code.
@@ -599,11 +600,13 @@ item below closes one, in this order.
 
 - [ ] Generic holes. A shape is generic over the enclosing item's type
   parameters and instantiated with the item, so a hole of such a type reaches
-  any tag. Both forms then check the hole against the declared bounds:
-  `` `${x}` `` over `x: X` is rejected without `X: Display`, and `${x:x}`
-  is rejected with only `X: Display`. Done when
-  `tagged_template_type_param_error.wado` reports the missing bound instead
-  of the type parameter, and the untagged form reports the same error.
+  any tag. Under `format`, both forms then check each hole's specifier trait
+  against the declared bounds: `` `${x}` `` over `x: X` is rejected without
+  `X: Display`, and `${x:x}` is rejected with only `X: Display`. Done when
+  `` format`${x}` `` and `` `${x}` `` each compile under `X: Display` and report
+  the same missing-bound error without it, a tag's pack bound is checked
+  against the declared bounds, and every package in the repository, the
+  stdlib included, compiles under the new check.
 - [ ] `format` at the direct lowering's cost. Read off `wado dump -O2`, the
   direct lowering does four things a `format` site does not:
   - It sizes the buffer from the segment lengths (`String::with_capacity`).
@@ -623,12 +626,34 @@ item below closes one, in this order.
   direct lowering (`synthesis::template::build_template_block`) is deleted.
   Done when no code path builds a `$tmpl` block.
 
-The cost gap, measured by one program per form: a loop building
-`` `i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end` `` 2,000,000
-times, the `format` program writing the same template under the tag. Each ran
-six times under `wado run -O2`, the two alternated, with the build cache warm.
-The time is wall-clock for the whole command, each `format` run taken against
-the untagged run beside it.
+The cost gap is measured by this program, saved as `untagged.wado`, and its
+copy `format.wado` with the template written under the `format` tag:
+
+```wado
+use { println, Stdout } from "core:cli";
+
+struct Pt { x: i32, y: i32 }
+
+export fn run() with Stdout {
+    let mut total = 0;
+    for let i of 0..<2000000 {
+        let p = Pt { x: i, y: i * 2 };
+        let s = `i=${i:05} f=${(i as f64) / 3.0:.2} h=${i:#x} p=${p:?} end`;
+        total += s.len();
+    }
+    println(`${total}`);
+}
+```
+
+Run each once to warm the build cache, then alternate them six times each,
+taking each `format` run's wall-clock time against the untagged run beside it:
+
+```sh
+TIMEFORMAT=%R
+for n in 1 2 3 4 5 6; do
+  for f in untagged format; do time wado run -O2 $f.wado >/dev/null; done
+done
+```
 
 | Form            | Run time, untagged = 1 |
 | --------------- | ---------------------- |

@@ -668,16 +668,6 @@ printf-style `${x:08d}` is rejected rather than rendered as `${x:08}`:
 The type character selects the trait the value renders through. A value whose
 type does not implement that trait is a compile error.
 
-A value whose type mentions a type parameter of the enclosing item implements
-the trait only through a bound that item declares, as for any call. `${x}` over
-`x: X` needs `X: Display`, and `${x:x}` needs `X: LowerHex`, which `X: Display`
-does not supply. `Inspect` is implemented for every type, so `${x:?}` needs no
-bound.
-
-> Not yet implemented: an untagged template checks the trait only once the
-> item is instantiated, so it asks for no bound, and the error names the
-> instantiated type at the hole.
-
 | Type   | Trait      | Applies to             | Example                   |
 | ------ | ---------- | ---------------------- | ------------------------- |
 | (none) | `Display`  | types with an impl     | `${42}` → `42`            |
@@ -696,6 +686,16 @@ float format for the reader. There is no adaptive `g` and no pointer `p`.
 
 Which types implement `Display` is stated in
 [Format Traits](./spec-traits.md#format-traits).
+
+A hole whose type mentions a type parameter of the enclosing item implements
+the trait only through a bound that item declares, as for any call. `${x}` over
+`x: X` needs `X: Display`, and `${x:x}` needs `X: LowerHex`, which `X: Display`
+does not supply. `Inspect` is implemented for every type, so `${x:?}` needs no
+bound.
+
+> Not yet implemented: a template string checks the trait only once the item
+> is instantiated, so it asks for no bound, and the error names the
+> instantiated type at the hole. A `format` call rejects such a hole outright.
 
 `b`, `o`, `x` and `X` render a negative signed integer as the two's complement
 bit pattern of its own width: `${-1 as i32:x}` renders `ffffffff`.
@@ -1089,12 +1089,12 @@ naming that type.
 
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and each instantiation of the item
-instantiates the tag with it. A bound the tag places on its pack, and the trait
-`fmt` renders the hole through, are met only through the bounds the item
-declares (see [Format Types](#format-types)).
+instantiates the tag with it. A bound the tag places on its pack is met only
+through the bounds the item declares, as for any call. Under `format`, so is the
+trait each hole's specifier selects (see [Format Types](#format-types)).
 
 > Not yet implemented: a hole whose type mentions a type parameter is rejected
-> as a tag's argument, `format`'s included.
+> as a tag's argument.
 
 Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its
