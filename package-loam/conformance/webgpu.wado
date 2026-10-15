@@ -217,7 +217,48 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         println(`${pass}GA ${on_gpu.GA.extents:?} ${deviation(&on_gpu.GA.data, &on_cpu.GA.data)}`);
     }
     arg_maxes();
+    narrow_products();
 }
+
+/// Products of a few rows, as a model's step over one token makes, by a
+/// matrix read along either axis, whole and in chunks of its inner axis.
+fn narrow_products() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let one = tensor::<[Row, Inner, Col]>([2, 1, 300], 22);
+    let three = tensor::<[Row, Inner, Col]>([2, 3, 300], 23);
+    let stored = tensor::<[Long, Col]>([700, 300], 24);
+    let on_cpu = Cpu {}.matmul_by_transposed(&one, &stored, null);
+    let wide = tensor::<[Col, Long]>([300, 700], 25);
+    let shared_on_cpu = Cpu {}.matmul_shared(&three, &wide, null);
+    for let limit of [null, Option::Some(NARROW_SPLIT)] as List<Option<i32>> {
+        let Some(mut gpu) = WebGpuBackend::new() else {
+            return;
+        };
+        let mut pass = "";
+        if let Some(elements) = limit {
+            gpu.limit_binding(elements);
+            pass = "split ";
+        }
+        let b = gpu.keep(&stored);
+        let across = gpu.matmul_by_transposed(&gpu.upload(&one), &b, null);
+        let along = gpu.matmul_shared(&gpu.upload(&three), &gpu.keep(&wide), null);
+        let [across, along] = [
+            gpu.download(&across),
+            gpu.download(&along),
+        ];
+        println(`${pass}narrow across ${across.extents:?} ${deviation(&across.data, &on_cpu.data)}`);
+        println(`${pass}narrow along ${along.extents:?} ${deviation(&along.data, &shared_on_cpu.data)}`);
+    }
+}
+
+struct Inner {
+}
+struct Long {
+}
+
+/// A binding that holds 160 of the 300 rows of `narrow_products`' `wide`, so
+/// its product runs in two chunks. The transposed `stored` binds no chunk, so
+/// its product runs on the CPU.
+global NARROW_SPLIT: i32 = 112_000;
 
 /// `arg_max` along either axis, over a tie, a NaN, and a lane as long as a
 /// vocabulary, each index printed as how far it is from `Cpu`'s.

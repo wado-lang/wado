@@ -71,6 +71,11 @@ runs.
   keys turned by the rotary tables. The other attends each query row in a
   workgroup of its own: the turned query, its scores, their softmax and the
   values they weigh. `conformance/webgpu_attention.wado` holds it to `Cpu`.
+- A product of at most four rows, as a step over one token makes, does not
+  run in 16 by 16 tiles, which would leave 15 of 16 lanes idle. Each workgroup
+  computes a run of columns, its lanes splitting the inner axis. The lanes
+  that read the weight together read where it is contiguous: one row's run of
+  columns, or one column of a transposed weight, such as Gemma's head.
 - `arg_max` ranks each lane in a workgroup of its own and reads back one index
   per lane, as an f32, which holds a vocabulary's indices exactly. A language
   model picking its next token then reads back one index, not the vocabulary's
@@ -80,8 +85,8 @@ runs.
   past WebGPU's default binding of 128 MiB, which is all llvmpipe offers. A
   gather whose rows still outgrow a binding runs over halves of its indices,
   and a copy over halves of an axis. A product runs over chunks of its inner
-  axis, whole tiles each, every chunk continuing the sums the one before left,
-  so it adds what one dispatch would, in the same order.
+  axis, whole tiles each, every chunk continuing the sums the one before left.
+  A tiled product so adds what one dispatch would, in the same order.
 
 Every dispatch of one `forward` goes into one compute pass of one command
 encoder, which is submitted when a tensor is read back. Each dispatch's
@@ -229,23 +234,24 @@ greedy tokens on each backend, and picks the tokens onnxruntime picks on the
 device. It runs the whole sequence each token, having no attention cache.
 `example/gemma3-270m/webgpu.wado` continues two prompts with eight greedy
 tokens each, one token a pass against the attention cache, and picks
-onnxruntime's tokens. The device is an RTX 4060 Ti under Vulkan. `Cpu` runs
-under `wado run-webgpu`'s wasmtime, and onnxruntime is each example's
-`generate.mjs` on `onnxruntime-node`, on the CPU.
+onnxruntime's tokens. The device is an RTX 4060 Ti under Vulkan. GPT-2's `Cpu`
+runs under `wado run-webgpu`'s wasmtime, and Gemma's is
+`example/gemma3-270m/gemma3.wado` under `wado run`. onnxruntime is each
+example's `generate.mjs` on `onnxruntime-node`, on the CPU.
 
 | Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
 | ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend` | 5.3                              | 127                | 1                  |
-| GPT-2 (124M) | `Cpu`           | 19                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.65                             | 275                | 1                  |
+| GPT-2 (124M) | `WebGpuBackend` | 4.1                              | 127                | 1                  |
+| GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
+| Gemma 3 270M | `WebGpuBackend` | 0.45                             | 275                | 1                  |
 | Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
 | either       | onnxruntime     | 1                                |                    |                    |
 
-Each pass's dispatches are the kernels the layer table predicts and one
-`arg_max`. On llvmpipe, which binds 128 MiB at most, GPT-2's head runs in two
+GPT-2's dispatches are the 126 kernels the layer table predicts and one
+`arg_max`. On llvmpipe, which binds 128 MiB at most, its head runs in two
 chunks, its weight being the 154 MB embedding.
 
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and
 wgpu-core optimized, and `arg_max` replaced reading back the logits. Each
-roughly halved it.
+roughly halved it. The products of a few rows then took it from 0.65 to 0.45.
