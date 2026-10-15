@@ -276,7 +276,9 @@ impl<'a> Resolver<'a> {
     /// caller's storage.
     #[must_use]
     pub fn caller_position(&self, local: u32) -> Option<u32> {
-        self.caller_storage.get(&local).map(|(position, _)| *position)
+        self.caller_storage
+            .get(&local)
+            .map(|(position, _)| *position)
     }
 
     /// Whether `expr` is a call handing back the storage of an argument it was

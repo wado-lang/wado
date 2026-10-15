@@ -343,7 +343,7 @@ fn origin() -> Point { ... }
 fn translate(p: Point, dx: i32, dy: i32) -> Point { ... }
 
 export interface Geometry { origin }      // owns Point (first referencer)
-export interface Transforms { translate } // borrows it
+export interface Transforms { translate } // uses it
 ```
 
 ```wit

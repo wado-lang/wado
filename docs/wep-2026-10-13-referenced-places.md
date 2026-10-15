@@ -1,4 +1,4 @@
-# WEP: Borrow Liveness and Assignment to a Borrowed Place
+# WEP: Reference Liveness and Assignment to a Referenced Place
 
 ## Context
 
@@ -46,7 +46,7 @@ is stated.
 
 ## Decision
 
-### An assignment to a borrowed place writes in place
+### An assignment to a referenced place writes in place
 
 The semantics are the spec's: a reference names a place, and an assignment to
 the place reaches every reference to it. Nothing in the spec changes.
@@ -67,47 +67,47 @@ lowering expands what it marked, in whatever position the assignment sits. The
 walk counts the assignment as a write into the old storage and not as a
 rebinding, so every decision it makes past the assignment already sees the
 write. An answer the analysis cannot give is "readable", so imprecision costs a
-repoint, never correctness: a borrow naming no field may hold any, and a place
-no local roots writes in place. A function the walk does not analyze decides
-without liveness: in place through a borrowed or captured local, and through a
-reference as the observed fields say.
+repoint, never correctness: a reference naming no field may hold any, and a
+place no local roots writes in place. A function the walk does not analyze
+decides without liveness: in place through a referenced or captured local, and
+through a reference as the observed fields say.
 
 A body answers for its own holders from its liveness. What it cannot see is a
-borrow another body holds while it runs, so a field assignment also writes in
-place where some body's borrow through that field (`observed.rs`):
+reference another body holds while it runs, so a field assignment also writes
+in place where some body's reference through that field (`observed.rs`):
 
-- outlives the borrowing body: returned, stored, or kept by a callee;
-- is held in one of the borrowing body's locals while it calls something that
-  may write the field;
-- is lent to a call that may write the field.
+- outlives the referencing body: returned, stored, or kept by a callee;
+- is held in one of the referencing body's locals while it calls something
+  that may write the field;
+- is handed to a call that may write the field.
 
 What a call may write is the callee's own answer (`modref.rs`).
 
 An element assignment `xs[i] = v` reaches the element through
 `List::index_assign`, a call. The walk notes each such call whose elements are of
-an in-place type and decides it as it decides a field. An element is borrowed
+an in-place type and decides it as it decides a field. An element is referenced
 through a call (`index_ref`, an iterator's `next`), which names no field, so a
-borrow of the whole list counts as one of the element. In bounds, lowering
+reference to the whole list counts as one to the element. In bounds, lowering
 writes the value into the element as above. Out of bounds it calls
 `index_assign`, which traps with its message. `List`'s own code assigns its
 backing array's slots, not a `List` element, so it keeps repointing them.
 
-### What a call keeps of a borrow
+### What a call keeps of a reference
 
 Retention says which argument positions a call keeps and where. Whether what it
-keeps can reach the storage a borrow names is read off the types
+keeps can reach the storage a reference names is read off the types
 (`reach.rs`):
 
-- A result that cannot hold the storage keeps no borrow of it.
+- A result that cannot hold the storage keeps no reference to it.
   `rmsnorm(g, &x) -> List<&mut Value>` holds none of `x`'s storage.
-- A reference reaches the borrowed storage only through an object of that
+- A reference reaches the referenced storage only through an object of that
   storage's kind. What the object owns by value is its own: a `Value` owns a
   `List<&mut Value>`, which is not `x`'s. A sharing the walk made is the alias
   chains' to answer.
-- A result that reaches only what the borrow's references lead to holds what
+- A result that reaches only what the argument's references lead to holds what
   the argument holds, not the argument. An iterator's `next` hands back an
-  element of the list the iterator borrows, so whoever holds the element holds
-  the list, and the iterator itself is free.
+  element of the list the iterator references, so whoever holds the element
+  holds the list, and the iterator itself is free.
 
 Retention records the types of what an escaping position hands out of sight. An
 unknown callee keeps at most what its argument reaches, so `f(item)` in a
@@ -120,11 +120,11 @@ assignment, so its first assignment cannot write in place. A local that a later
 assignment writes in place carries a flag: the assignment repoints while the
 flag is unset and writes in place once it is set.
 
-### A borrow lasts while its holder is readable
+### A reference lasts while its holder is readable
 
-A borrow that ends before the move does not pin its referent. A `&` call
+A reference that ends before the move does not pin its referent. A `&` call
 argument to a non-storing callee does not. A `match` / `if let` over a `&place`
-scrutinee is the same borrow and reads the same way, so
+scrutinee is the same reference and reads the same way, so
 `if let Repeat(r) = &op { … }; ops.push(op)` moves `op` instead of deep-copying
 it. What the arms bind names the scrutinee's storage, so an escape recorded
 against a binding closes back over the binding's referent
@@ -133,8 +133,8 @@ scrutinee exactly as `&op` itself would wherever it outlives the match: a
 retaining callee, an aggregate literal, a global, a write through a place, the
 result.
 
-A borrow stored in a local lasts as long as that local's value can be read.
-This covers `let r = &a`, a call result a callee hands the borrow back in
+A reference stored in a local lasts as long as that local's value can be read.
+This covers `let r = &a`, a call result a callee hands the reference back in
 (`let it = (&a).into_iter()`), and a binding of a `&a` scrutinee. A holder is
 readable where it is live, where a copy read out of it is live, or anywhere once
 its value has gone where no alias chain follows it, such as a literal, a result,
@@ -143,9 +143,9 @@ storage, so `P { a: r.a }` hands nothing on. So a double buffer that iterates
 `&a` and then swaps `a` and `b` moves both lists every step.
 
 A call result that is not stored is kept by whatever takes it. Passed straight
-to another call, or borrowed for one, it lasts as long as that call keeps it, so
-`view.chars().count()` pins nothing past the count. What a callee keeps is its
-retention, inferred from its body
+to another call, or referenced for one, it lasts as long as that call keeps it,
+so `view.chars().count()` pins nothing past the count. What a callee keeps is
+its retention, inferred from its body
 ([WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)).
 
 The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
@@ -159,9 +159,9 @@ Every rule asks who owns the storage a place names, and answers from the place's
 root local. A `&` / `&mut` local is not that owner: its immutability says
 nothing about whether the storage is written, its death frees nothing, and a
 write the owner makes never mentions it. A root reached through a reference
-resolves to the place it borrows (`let r = &a.b` answers at `a.b`). One this body
-cannot resolve, a parameter or a reference a call returned, names storage the
-body does not own and answers nothing.
+resolves to the place it refers to (`let r = &a.b` answers at `a.b`). One this
+body cannot resolve, a parameter or a reference a call returned, names storage
+the body does not own and answers nothing.
 
 ### What is live at a point
 
@@ -186,8 +186,8 @@ that read the place.
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read
 out of `*p` sees it. An assignment written in place is one of these.
-Only a boxed borrow replaces a slot, and one predicate decides which of the two
-an assignment is.
+Only a boxed reference replaces a slot, and one predicate decides which of the
+two an assignment is.
 
 ### What a call writes
 
@@ -217,13 +217,13 @@ field, payload or element reaches whatever the reference was taken from.
 
 An `Index` or a `Variant` step names no type of its own, so a `Field` past one
 answers for the element rather than for the container the caller holds. A path
-reached through either writes the whole of what its root was lent. Keying it by
-the element's field alone leaves a caller holding the container nothing to
+reached through either writes the whole of what its root was handed. Keying it
+by the element's field alone leaves a caller holding the container nothing to
 match, and it shares storage the call goes on to write.
 
 A path through a reference-typed field places nothing: it ends at storage its
-root only borrows, so the root names the holder rather than the storage. A read
-taken through one copies: the write that reaches its storage is rooted
+root only refers to, so the root names the holder rather than the storage. A
+read taken through one copies: the write that reaches its storage is rooted
 elsewhere, where the root-keyed scan never looks. Two reference fields of one
 root may name one storage as well, so splitting a read and a write at them
 proves nothing. A write made through one is placed no better, and conflicts
@@ -244,7 +244,7 @@ The clients are:
 
 - Move and share in value-copy elision
   ([WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md#value-copy-elision-the-second-client)).
-- An assignment to a borrowed place, above.
+- An assignment to a referenced place, above.
 
 ## Roadmap
 
@@ -271,27 +271,27 @@ The clients are:
 
 ## Known gaps
 
-### An unanalyzed function writes in place on any borrow
+### An unanalyzed function writes in place on any reference
 
 A function the ownership walk does not analyze (`has_unsupported_form`, or no
 local that needs a copy) reads no liveness. It writes in place through every
-borrowed or captured local, even where the holder is already dead. That costs a
-leaf-by-leaf store where a repoint would do.
+referenced or captured local, even where the holder is already dead. That costs
+a leaf-by-leaf store where a repoint would do.
 
 ### An in-place write writes every leaf
 
-A borrow is recorded by the first field it takes, or by none, so what it reaches
-below that is not known. An assignment that writes in place writes every leaf of
-the value, where the leaves under the borrowed part would do. A borrow naming
-no field (a whole-root `&h` among them) counts as one of every field, and a
-borrow of the whole list as one of every element. An element of a `List`
-reached through a reference writes in place wherever some body's borrow through
-the field holding the list is observed (`observed.rs`), and always where the
-reference is to the list itself.
+A reference is recorded by the first field it takes, or by none, so what it
+reaches below that is not known. An assignment that writes in place writes every
+leaf of the value, where the leaves under the referenced part would do. A
+reference naming no field (a whole-root `&h` among them) counts as one to every
+field, and a reference to the whole list as one to every element. An element of
+a `List` reached through a reference writes in place wherever some body's
+reference through the field holding the list is observed (`observed.rs`), and
+always where the reference is to the list itself.
 
-### A destructured field's path is assumed to borrow
+### A destructured field's path is assumed to be referenced
 
-A pattern-destructured field's path is marked as borrowing, because the pattern
-carries no type saying whether that field does, and the mark refuses those paths
-a share outright. Every WIR golden is byte-identical with the mark removed, so
-nothing measured pays for it.
+A pattern-destructured field's path is marked as referenced, because the
+pattern carries no type saying whether that field is, and the mark refuses
+those paths a share outright. Every WIR golden is byte-identical with the mark
+removed, so nothing measured pays for it.

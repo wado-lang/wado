@@ -203,7 +203,8 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         }
         if !uses.escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
-        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array && !c.referenced {
+        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array && !c.referenced
+        {
             // An array's reads are not the shape `reconstruct_aggregate` rebuilds,
             // and a referenced literal's escape needs the reference, which no
             // reconstructed literal is; either escape leaves it whole.
@@ -967,7 +968,7 @@ impl SoftCtx<'_> {
                 }
                 for (i, (arg, is_mut)) in arg_ops.into_iter().enumerate() {
                     let Some(arg) = arg.as_expr() else { continue };
-                    let handed_candidate =immut_ref_to_candidate(body, arg, self.candidates)
+                    let handed_candidate = immut_ref_to_candidate(body, arg, self.candidates)
                         .filter(|index| {
                             self.unseen.is_some_and(|pinned| !pinned.contains(index))
                                 || !callee_stores_param_at(callee_id, i, self.stores_lookup)

@@ -15,8 +15,7 @@ use crate::tir::TypeTable;
 
 use super::callee::{CallSite, CalleeKey};
 use super::place::{
-    named_local, place_aliased_by_another, place_of, referenced_place_operand,
-    write_root_local,
+    named_local, place_aliased_by_another, place_of, referenced_place_operand, write_root_local,
 };
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::rewrite::is_discardable_operand;

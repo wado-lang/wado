@@ -879,7 +879,7 @@ pub fn compute(flat: &FlatPackage, fields: &StructFields, functors: &[ClosureFun
             .params
             .iter()
             .map(|p| Slot {
-                by_ref:type_table.is_reference_shaped(p.type_id),
+                by_ref: type_table.is_reference_shaped(p.type_id),
                 writes: p.is_mut_ref || could_write_through(p.type_id, &type_table),
             })
             .collect();
@@ -1107,7 +1107,7 @@ impl Builder<'_> {
     /// value where its type holds a writable handle, and its own storage where
     /// the slot is a `&mut`.
     fn hand(&mut self, arg: &TirExpr, slot: Slot) -> Option<u32> {
-        let (value, own) = if slot.by_ref &&!self.type_table.is_reference_shaped(arg.type_id) {
+        let (value, own) = if slot.by_ref && !self.type_table.is_reference_shaped(arg.type_id) {
             self.operand(arg)
         } else {
             (self.eval(arg), None)
@@ -1166,7 +1166,7 @@ impl Builder<'_> {
         params
             .iter()
             .map(|&p| Slot {
-                by_ref:tt.is_reference_shaped(p),
+                by_ref: tt.is_reference_shaped(p),
                 writes: could_write_through(p, tt),
             })
             .collect()
@@ -1212,7 +1212,7 @@ impl Builder<'_> {
                 self.hand(
                     arg,
                     Slot {
-                        by_ref:decl.reference_params.contains(&i),
+                        by_ref: decl.reference_params.contains(&i),
                         writes: decl.mut_params.contains(&i),
                     },
                 )
@@ -1470,7 +1470,7 @@ impl Builder<'_> {
                     .hand(
                         callee,
                         Slot {
-                            by_ref:false,
+                            by_ref: false,
                             writes: false,
                         },
                     )

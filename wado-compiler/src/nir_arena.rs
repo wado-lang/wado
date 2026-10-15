@@ -886,9 +886,9 @@ impl Body {
                 expr: inner,
             } => self.referent_root(*inner),
             // The `{ G = v; G }` a globalized constant is read through.
-            ExprKind::LabeledBlock { .. } => {
-                self.block_yield(e).and_then(|tail| self.referent_root(tail))
-            }
+            ExprKind::LabeledBlock { .. } => self
+                .block_yield(e)
+                .and_then(|tail| self.referent_root(tail)),
             _ => None,
         }
     }

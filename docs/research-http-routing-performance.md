@@ -107,7 +107,7 @@ All four are avoidable without changing what the benchmark measures. Items 1 and
    allocation in `String::substring`, the per-parameter path-capture cost.
 3. `resp.body` copied on last use: `body_tx.write(resp.body)` compiled to an
    `array_new` + `array_copy` of the body even though `resp` is dead afterwards.
-   Two freshness gaps caused it — an indirect (closure) call counted as borrowed,
+   Two freshness gaps caused it — an indirect (closure) call counted as keeping a reference,
    and so did the value of an `if` / `if let` expression — and `resp` is bound
    from exactly that shape. Both are fixed; the body now reaches
    `cm_lower_list_u8` straight out of the handler's struct.

@@ -1322,12 +1322,7 @@ impl Analyzer<'_> {
 
     /// A `&place` / `&mut place`. The referent stays live, but a reference takes no
     /// value, so it never ends the local's final use. Returns the referent.
-    fn ref_read(
-        &mut self,
-        place: &TirExpr,
-        live: &mut IndexSet<u32>,
-        record: bool,
-    ) -> Option<u32> {
+    fn ref_read(&mut self, place: &TirExpr, live: &mut IndexSet<u32>, record: bool) -> Option<u32> {
         match &place.kind {
             TirExprKind::Local { index, .. } => {
                 live.insert(*index);
@@ -2225,7 +2220,8 @@ impl Analyzer<'_> {
             return None;
         };
         let retained = self.retained_by(func, args.len(), call);
-        if clean_root(referent) != Some(place.root) || retained.keeps(u32::try_from(param).unwrap()) {
+        if clean_root(referent) != Some(place.root) || retained.keeps(u32::try_from(param).unwrap())
+        {
             return None;
         }
         for (pos, a) in args.iter().enumerate() {

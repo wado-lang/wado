@@ -943,7 +943,12 @@ impl MutRefAliases {
     /// Record the storage a `&mut place` (or `mut`-flagged argument) may
     /// alias: a plain local root goes into `mut_referenced`; a chain through a ref
     /// local defers to that local's resolved roots (`mut_ref_locals`).
-    fn record_mut_ref_target(&mut self, body: &Body, e: ExprId, mut_ref_locals: &mut IndexSet<u32>) {
+    fn record_mut_ref_target(
+        &mut self,
+        body: &Body,
+        e: ExprId,
+        mut_ref_locals: &mut IndexSet<u32>,
+    ) {
         if let WriteRoot::Local(root) = write_root(body, e, false) {
             if self.entries.contains_key(&root) {
                 mut_ref_locals.insert(root);

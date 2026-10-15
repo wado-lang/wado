@@ -405,10 +405,13 @@ impl Walker<'_> {
         // was matched out of — cannot be trusted to carry its own type: the
         // type of the caller's storage the root names is authoritative
         // whenever it names one.
-        let whole = self.resolver.caller_type(place.root).or_else(|| match whole {
-            WholeOf::CallerStorage => None,
-            WholeOf::Handed(ty) => Some(field_owner(ty, self.type_table)),
-        });
+        let whole = self
+            .resolver
+            .caller_type(place.root)
+            .or_else(|| match whole {
+                WholeOf::CallerStorage => None,
+                WholeOf::Handed(ty) => Some(field_owner(ty, self.type_table)),
+            });
         if let Some(whole) = whole
             && let Some(origin) = self.origin_of(names)
         {

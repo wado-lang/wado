@@ -176,7 +176,7 @@ resolution states:
 
 - A `variant` case, an `enum` case and a `flags` member shadow an inherited
   static of the same name, by that same rule: they are written on the type,
-  and the static is only borrowed. This matches Rust, where `V::A(5)` is the
+  and the static is only inherited. This matches Rust, where `V::A(5)` is the
   case and `<V as Tagged>::A(5)` reaches the trait's. It does not extend to an
   inherent static of the same name, which is a type declaring one name twice.
 - A trait impl's declaration is mangled with its trait. Taken as inherent it

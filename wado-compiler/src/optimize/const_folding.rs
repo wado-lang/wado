@@ -24,9 +24,9 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{
-    AggregateShapes, RefRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
-    GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
-    build_ctfe_builtin_map, guard_declares_locals, materializing_globals,
+    AggregateShapes, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv, GlobalKey,
+    Interpreter, Lattice, MaterializingGlobals, RefRoot, build_callee_map, build_ctfe_builtin_map,
+    guard_declares_locals, materializing_globals,
 };
 use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;

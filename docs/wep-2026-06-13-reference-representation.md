@@ -112,16 +112,16 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   and `FieldAccess` operands and generalizes (replaces) the existing partial
   primitive-struct-field guard.
 - `variant` is the exception, because it is the one replace type whose _interior_
-  can still be mutated through the borrow: a payload write lands on the shared
-  payload object. Taking the borrow is therefore allowed, and the refusal moves
-  to where the borrow is put into storage outliving the expression that took it
+  can still be mutated through the reference: a payload write lands on the
+  shared payload object. Taking the reference is therefore allowed, and the
+  refusal moves to where the reference is put into storage outliving the expression that took it
   — a variable, an aggregate, a `return` — which is exactly where no write-back
   point exists.
 - `&` (immutable, read-only) to such a place is permitted: it reads a snapshot
   copy, and there is no write to lose. This holds for a replace-on-assign field
   or element only. A reference to a place of an in-place type names the place,
   and an assignment to it is stated in
-  [WEP: Borrow Liveness and Assignment to a Borrowed Place](./wep-2026-10-13-borrowed-places.md).
+  [WEP: Reference Liveness and Assignment to a Referenced Place](./wep-2026-10-13-referenced-places.md).
 - Carve-out: when the `&mut <place>` is a call argument to a parameter the
   callee does not retain, the
   reference provably cannot outlive the call, so it is desugared to a temp +
@@ -147,14 +147,14 @@ In-place places — `&mut <local>` of any type, and `&mut` of a struct / `List` 
 What the two rules above rest on:
 
 - `Option<T>` is a variant, so `if let Some(e) = &mut self.f` is a detached
-  borrow, and payload mutation through it is how the language is written: every
-  gale-generated parser, `normalize_element(&mut lab.element)` at 5
-  `package-gale` sites, and the `value_copy_*` fixtures. A borrow-site refusal
+  reference, and payload mutation through it is how the language is written:
+  every gale-generated parser, `normalize_element(&mut lab.element)` at 5
+  `package-gale` sites, and the `value_copy_*` fixtures. A reference-site refusal
   for `variant` deletes all of it, which is why that refusal fits the other
   replace types and not this one.
-- The rule keys on the place being non-local, not on the borrow escaping. A
+- The rule keys on the place being non-local, not on the reference escaping. A
   `&mut` rooted at a local _is_ that local's box, so a whole-value write through
-  it lands even when the borrow is stored in an aggregate and written much
+  it lands even when the reference is stored in an aggregate and written much
   later: `ValueSerializer { out: &mut v }` in `core:value`, written through by
   `SerializeSeq::end`, is load-bearing across `core:value` / `core:json` /
   `wasi:http`. Only a non-local root detaches.
@@ -166,11 +166,11 @@ What the two rules above rest on:
 - [ ] Extract the boxed-as-value classification into one predicate shared by
   boxing / forbid / carve-out.
 - [x] Forbid `&mut` to a non-local place of `primitive` / `enum` / `flags` /
-  `fn` at the borrow itself, over both `Index` and `FieldAccess` operands,
+  `fn` at the reference itself, over both `Index` and `FieldAccess` operands,
   subsuming the partial primitive-struct-field guard.
-- [x] For `variant`, forbid only where the borrow is put into storage outliving
-  the expression that took it — a variable, an aggregate, a `return`. The
-  borrow itself stays legal, since payload mutation through it lands.
+- [x] For `variant`, forbid only where the reference is put into storage
+  outliving the expression that took it — a variable, an aggregate, a
+  `return`. The reference itself stays legal, since payload mutation through it lands.
 - [ ] Ship the remaining `compile_error` fixtures: `primitive` / `enum` /
   `flags` list element. Covered today: `fn` list element, `primitive` /
   `enum` struct field, and the `variant` storing positions.
@@ -192,27 +192,27 @@ fix to conform; none should be preserved.
   behind `&mut *p` for every replace type but `variant`, and for two
   `variant` shapes is refused rather than written back. Probe (HEAD):
 
-  | place, by referent and by where the borrow goes                   | result                |
-  | ----------------------------------------------------------------- | --------------------- |
-  | primitive / enum / flags / `fn` field or element, anywhere        | refused at the borrow |
-  | primitive / enum / flags / `fn` behind `&mut *p`                  | dropped               |
-  | `variant`, into a variable / aggregate / payload / `return`       | refused               |
-  | `variant`, reaching one of those through a variable               | refused               |
-  | `variant` field / `&mut *p`, call argument                        | written back          |
-  | `variant`, call argument at a retained position                   | refused               |
-  | `variant` element / whole capture / branch, at a written position | refused               |
-  | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | refused               |
+  | place, by referent and by where the reference goes                | result                   |
+  | ----------------------------------------------------------------- | ------------------------ |
+  | primitive / enum / flags / `fn` field or element, anywhere        | refused at the reference |
+  | primitive / enum / flags / `fn` behind `&mut *p`                  | dropped                  |
+  | `variant`, into a variable / aggregate / payload / `return`       | refused                  |
+  | `variant`, reaching one of those through a variable               | refused                  |
+  | `variant` field / `&mut *p`, call argument                        | written back             |
+  | `variant`, call argument at a retained position                   | refused                  |
+  | `variant` element / whole capture / branch, at a written position | refused                  |
+  | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | refused                  |
 
-  The same operations on a value-type _local_ all work, wherever the borrow
-  goes; nothing else is the storage itself, since `&mut` of any other place
-  re-boxes what it names — a capture and a `&mut *p` reborrow included.
-  `variant` is exempt from the borrow-site refusal because mutation through its
+  The same operations on a value-type _local_ all work, wherever the
+  reference goes; nothing else is the storage itself, since `&mut` of any other
+  place re-boxes what it names — a capture and a `&mut *p` re-reference
+  included. `variant` is exempt from the reference-site refusal because mutation through its
   payload lands. A rewritten call reads its callee and each of its arguments in
   source order, so a preceding one's write is not read past.
 
-  Both halves follow the borrow, not its spelling: a variable bound to one
+  Both halves follow the reference, not its spelling: a variable bound to one
   carries it to whatever sink it reaches, and a whole-value write names its
-  storage through a `&mut *r` reborrow, through a capture, through the `&mut`
+  storage through a `&mut *r` re-reference, through a capture, through the `&mut`
   bindings that carry a parameter on (`let q = p; *q = v`), and through
   whatever holds the reference in between. A reference put into a value comes
   back out of any reference to that value, so a struct field, a list element
@@ -226,8 +226,8 @@ fix to conform; none should be preserved.
 
   What still drops:
 
-- `&mut *p` for every replace type but `variant`. The borrow-site refusal keys
-  on a `FieldAccess` / `Index` operand, so a reborrow slips past it. `variant`
+- `&mut *p` for every replace type but `variant`. The reference-site refusal keys
+  on a `FieldAccess` / `Index` operand, so a re-reference slips past it. `variant`
   is covered from the other side by the write-back; the rest are not.
 - A `variant` element as a call argument, where the callee neither replaces
   nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
@@ -236,11 +236,11 @@ fix to conform; none should be preserved.
   reaching it would repeat trait resolution, which is why the carve-out lists
   index-element and struct-field separately. Refusing the whole shape is not
   an option either, since `normalize_element(&mut alt.elements[ei])` lands.
-  A `&mut self` receiver takes the same borrow, so it waits on the same
+  A `&mut self` receiver takes the same reference, so it waits on the same
   write-back: `xs[i].m()` is refused where `m` replaces the element, and the
   call the carve-out unblocks is spelled either way.
-- A call argument that _yields_ a borrow (`f(if c { &mut b.l } else { &mut b.r })`), for the mirrored reason: which place it borrowed is not
-  known until it runs. Both want the write-back to follow the borrow to
+- A call argument that _yields_ a reference (`f(if c { &mut b.l } else { &mut b.r })`), for the mirrored reason: which place it referenced is not
+  known until it runs. Both want the write-back to follow the reference to
   whichever place it named — the points-to answer neither half has.
 - A whole capture, where a store back would land in the closure's environment:
   closure lowering filled that with a copy of the enclosing slot, and the
@@ -266,8 +266,8 @@ A store back is still late for a route the callee takes after replacing.
 Until the store back runs, the new value is in the temp alone, so another
 route reads the old value and has its own write undone. So a call whose
 callee replaces the temp is refused where another argument reaches the same
-storage. That argument may be a borrow on the same root, the root itself
-where the root is a reference, or any reference once the root is borrowed
+storage. That argument may be a reference on the same root, the root itself
+where the root is a reference, or any reference once the root is referenced
 anywhere in the body. Two reference
 parameters the caller passed the same storage through are not seen:
 `f(a, &mut b.opt)` inside `g(a: &mut S, b: &mut S)`, reached as
@@ -276,7 +276,7 @@ parameters the caller passed the same storage through are not seen:
 Two costs come with running the refusal after monomorphization, where the
 types are concrete enough to see a `variant` behind a type parameter:
 
-- Liveness drops unreachable functions first, so a detached borrow in dead
+- Liveness drops unreachable functions first, so a detached reference in dead
   code is not reported. It cannot execute, so nothing miscompiles.
 - The refusals reach `wado check`, which lowers, but not
   `wado query diagnostics`, which does not; and only the first per function is
@@ -284,7 +284,7 @@ types are concrete enough to see a `variant` behind a type parameter:
   retains at the call site, which only `lower::plan` computes.
 
 - [ ] D2 — the boxed set is `TypeTable::is_boxed_reference_target`, which boxing
-  and the implicit `&mut self` receiver borrow both read. The forbid rule
+  and the implicit `&mut self` receiver reference both read. The forbid rule
   still carries its own list, since it excludes `variant`; stating it as
   that predicate minus `variant` is what keeps the two from drifting.
 - [ ] D3 — `fn` coverage. The implementation boxes `fn` / `fn mut`, but issue

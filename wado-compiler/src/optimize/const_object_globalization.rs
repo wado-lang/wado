@@ -517,12 +517,7 @@ enum RefShape {
 }
 
 /// [`refs_local`] over an operand. A promoted argument is still an argument.
-fn operand_refs_local(
-    body: &Body,
-    op: Operand,
-    idx: u32,
-    gate: &Gate<'_>,
-) -> Option<RefShape> {
+fn operand_refs_local(body: &Body, op: Operand, idx: u32, gate: &Gate<'_>) -> Option<RefShape> {
     match op.as_expr() {
         Some(e) => refs_local(body, e, idx, gate),
         // Only the shape that fills the slot whole: a value that merely reads
