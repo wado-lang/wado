@@ -1035,22 +1035,16 @@ fn revisit_moved_reads(
     scans: &[BodyScan],
     gate: &mut FunctionGate,
 ) {
-    let moved = |i: usize, admission: bool| {
-        before.get(i).is_some_and(|b| {
-            let a = &after[i];
-            if admission {
-                (b.reach, b.shrinks) != (a.reach, a.shrinks)
-            } else {
-                b.cold != a.cold
-            }
-        })
-    };
+    let pair = |i: usize| before.get(i).map(|b| (b, &after[i]));
+    let turned = |i: usize| pair(i).is_some_and(|(b, a)| b.cold != a.cold);
+    let readmitted =
+        |i: usize| pair(i).is_some_and(|(b, a)| (b.reach, b.shrinks) != (a.reach, a.shrinks));
     for (caller, scan) in scans.iter().enumerate() {
-        if moved(caller, false)
+        if turned(caller)
             || scan
                 .calls
                 .iter()
-                .any(|(callee, _)| moved(callee.index(), true))
+                .any(|(callee, _)| readmitted(callee.index()))
         {
             gate.revisit(GatedPass::Inline, FuncId::new(caller));
         }
