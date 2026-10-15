@@ -1297,7 +1297,7 @@ So a `T: Display` bound certifies a real string representation, and
 [alternate form](./spec-literals.md#alternate-form).
 
 A hole of a generic type meets the trait its specifier selects only through the
-bounds its item declares, under any tag. A type character asks for its own
+bounds its item declares. A type character asks for its own
 trait the same way: `${x:x}` over `x: T` needs `T: LowerHex`, which
 `T: Display` does not supply.
 

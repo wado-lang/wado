@@ -287,8 +287,8 @@ on a tag that reads only `get`, such as `sql`: a hole whose type has no
 
 A hole's type may mention a type parameter of the enclosing item. The shape is
 then generic over that parameter, and the item's instantiation instantiates the
-tag with it. The specifier's trait, and any bound the tag places on its pack, is met
-through the bounds the item declares, as for any call: `` `${x}` `` over `x: X`
+tag with it. The specifier's trait, and any bound the tag places on its pack,
+is met through the bounds the item declares, as for any call: `` `${x}` `` over `x: X`
 asks for `X: Display`, as a call of `push_display(&x)` would. A generic body
 that cannot name the bound passes its tag a concrete value instead.
 
