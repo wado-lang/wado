@@ -13,9 +13,7 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::{
-    is_index_accessor, is_source_place, source_place_subscripts_mut,
-};
+use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
@@ -27,10 +25,14 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 
-/// Point every call `unchecked` marks back at its checked function, so that it
-/// is checked as an unmarked call is. Runs ahead of monomorphization, which
-/// then instantiates the checked function the call reaches.
+/// Under `-f contract-checks`, point every call `unchecked` marks back at its
+/// checked function, so that it is checked as an unmarked call is. Runs ahead
+/// of monomorphization, which then instantiates the checked function the call
+/// reaches.
 pub fn check_marked_calls(flat: &FlatPackage) {
+    if !flat.codegen_flags.contract_checks {
+        return;
+    }
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
         let own = func.def_id;
@@ -172,7 +174,7 @@ fn holds_closure(stmt: &TirStmt) -> bool {
     find.0
 }
 
-fn is_contract_clause(stmt: &TirStmt) -> bool {
+pub fn is_contract_clause(stmt: &TirStmt) -> bool {
     matches!(
         &stmt.kind,
         TirStmtKind::If { condition, else_block: None, .. } if is_intrinsic_call(condition, CONTRACT_CLAUSE_INTRINSIC)
@@ -304,7 +306,6 @@ impl Expander<'_> {
         param_type: TypeId,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
-        self.anchor_derefs(&mut arg.expr, stmts);
         let borrowed_place = matches!(
             &arg.expr.kind,
             TirExprKind::Unary { op: TirUnaryOp::Ref | TirUnaryOp::MutRef, expr } if is_source_place(expr, self.items)
@@ -348,40 +349,6 @@ impl Expander<'_> {
                 )
             }
             _ => arg.expr.clone(),
-        }
-    }
-
-    /// Bind each reference a place derefs, unless it is itself a place, so the
-    /// place survives a nested call that expansion turned into a block: `m[i]`
-    /// reads `*m.index_ref_mut(i)`, and binding the place's value instead would
-    /// write to a copy.
-    fn anchor_derefs(&mut self, expr: &mut TirExpr, stmts: &mut Vec<TirStmt>) {
-        match &mut expr.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: inner,
-            } => {
-                if is_source_place(inner, self.items) {
-                    self.anchor_derefs(inner, stmts);
-                } else {
-                    let reference = take(inner);
-                    **inner = self.bind(reference, stmts);
-                }
-            }
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                expr: inner,
-            } => self.anchor_derefs(inner, stmts),
-            TirExprKind::Call { func, args, .. } if is_index_accessor(func, self.items) => {
-                if let Some(container) = args.iter_mut().next() {
-                    self.anchor_derefs(&mut container.expr, stmts);
-                }
-            }
-            _ => {}
         }
     }
 

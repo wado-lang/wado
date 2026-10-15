@@ -20,6 +20,7 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
+use crate::lower::contract_checks::is_contract_clause;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
@@ -3239,20 +3240,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             vec![
                 TirTemplatePart::Literal("Assertion failed in ".to_string()),
                 TirTemplatePart::Interpolation {
-                    expr: Box::new(TirExpr::new(
-                        TirExprKind::StringLiteral(ctx.function_name.clone()),
-                        string_type,
-                        span,
-                    )),
+                    expr: string_literal(ctx.function_name.clone()),
                     format_spec: None,
                 },
                 TirTemplatePart::Literal(" at ".to_string()),
                 TirTemplatePart::Interpolation {
-                    expr: Box::new(TirExpr::new(
-                        TirExprKind::StringLiteral(self.current_module_source.to_string()),
-                        string_type,
-                        span,
-                    )),
+                    expr: string_literal(self.current_module_source.to_string()),
                     format_spec: None,
                 },
                 TirTemplatePart::Literal(":".to_string()),
@@ -10300,7 +10293,7 @@ fn split_unchecked_twin(
     // What runs ahead of the clauses, a coverage probe, counts the body run.
     let (checks, rest): (Vec<TirStmt>, Vec<TirStmt>) = std::mem::take(&mut body.stmts)
         .into_iter()
-        .partition(is_contract_check);
+        .partition(is_contract_clause);
     assert_eq!(
         checks.len(),
         clauses,
@@ -10337,14 +10330,6 @@ fn split_unchecked_twin(
     twin
 }
 
-fn is_contract_check(stmt: &TirStmt) -> bool {
-    matches!(
-        &stmt.kind,
-        TirStmtKind::If { condition, else_block: None, .. }
-            if matches!(&condition.kind, TirExprKind::Call { func, .. } if func.is_builtin_named(CONTRACT_CLAUSE_INTRINSIC))
-    )
-}
-
 /// Bind an impl's `methods` to the `contract` clauses their trait declares.
 /// The method a clause holder holds the clauses of splits as one writing its
 /// own clauses does, with a call to the holder as its one clause.
@@ -10372,7 +10357,7 @@ fn bind_trait_contracts(
                 .body
                 .iter()
                 .flat_map(|body| &body.stmts)
-                .any(is_contract_check)
+                .any(is_contract_clause)
             {
                 continue;
             }
