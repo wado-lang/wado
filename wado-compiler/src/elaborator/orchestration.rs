@@ -1235,6 +1235,31 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Replace the program's statically resolved fields and cases with what
+    /// each declaring module's decl pass resolved in the declaration's frame,
+    /// so every module reads one type for one field. The static resolver builds
+    /// a projection without the trait arguments and bindings the frame reads,
+    /// and a projection interns by them: `Q::T` read from another module's
+    /// `Passed<Q>` would otherwise never be the `B::T` a signature names.
+    fn publish_data_decls(state: &mut AnnotateState, sorted_sources: &[ModuleSource]) {
+        let data = Rc::make_mut(&mut state.tysys.data);
+        for module_source in sorted_sources {
+            let Some(sem) = state.module_semantics.get(module_source) else {
+                continue;
+            };
+            let local = &sem.decls.local;
+            for (def, info) in &local.struct_fields {
+                data.struct_fields.insert(*def, info.clone());
+            }
+            for (def, info) in &local.variant_cases {
+                data.variant_cases.insert(*def, info.clone());
+            }
+            for (def, base) in &local.newtypes {
+                data.newtypes.insert(*def, *base);
+            }
+        }
+    }
+
     /// Take a module's facts out of `state` for a pass to own, leaving the
     /// module absent until the pass puts them back.
     fn take_module_semantics(
@@ -1425,6 +1450,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             Self::publish_impl_sigs(state, module_source);
         }
+        Self::publish_data_decls(state, &sorted_sources);
 
         {
             let mut signatures = sig::Signatures {
