@@ -403,8 +403,15 @@ API waits for a program outside the standard library that needs one.
    the twin. A trait method's impl gets the holder call as its one clause, so
    the holder needs no twin. A function value and an export reach the
    function itself. After monomorphization, ahead of the plan,
-   `lower/contract_checks.rs` expands each direct call: the arguments bound in
-   order, a copy of the clauses reading them, then a call to the twin. A copy
+   `lower/contract_checks.rs` expands each direct call into a call to the
+   twin whose last argument evaluates the clauses once every argument is
+   evaluated, so the call stays the place an index names. An argument that is a
+   place stays in the call, its subscripts bound. Another is bound where it is
+   evaluated: the last argument's by a `let` in its own block, which the clauses
+   after it share, an earlier one's by assignment to a local of the function. A
+   `let` there would scope the local out of the clauses' reach. Where the last
+   parameter borrows, or no twin follows a trait's clauses, the arguments are
+   bound ahead instead, and the clauses then the call form a block. A copy
    reports its call's position through the `$contract_site` intrinsic, which
    the function's own clauses fall back from to the clause's. Under
    `-f contract-checks` a marked call goes back to the function before

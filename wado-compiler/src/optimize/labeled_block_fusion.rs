@@ -82,9 +82,11 @@ impl Rule for LabeledBlockFusionRule {
             if body_uses(engine, info.temp_local) != consumer_uses {
                 continue;
             }
-            // As the block's tail, a `match` hands its value on: each exit
-            // breaks out of the fused block with the value of its arm.
-            let tail = yields && i + 2 == stmts.len();
+            // As the block's tail, or bound by a `let`, a `match` hands its
+            // value on: each exit breaks out of the fused block with the value
+            // of its arm.
+            let bound = matches!(engine.body.stmts[stmts[i + 1]].kind, StmtKind::Let { .. });
+            let tail = bound || (yields && i + 2 == stmts.len());
             if tail && !yields_match_value(engine.body, stmts[i + 1]) {
                 continue;
             }
@@ -103,10 +105,20 @@ impl Rule for LabeledBlockFusionRule {
 /// Whether `consumer` is a `match` with a value of its own. A unit one, or an
 /// `if`, leaves the block's value to the block.
 fn yields_match_value(body: &Body, consumer: StmtId) -> bool {
-    let StmtKind::Expr(Operand::Expr(e)) = body.stmts[consumer].kind else {
-        return false;
+    consumer_match(body, consumer).is_some_and(|e| body.exprs[e].type_id != TypeTable::UNIT)
+}
+
+/// The `match` a consumer statement evaluates, as a statement of its own or as
+/// the value a `let` binds: `let_block_flatten` hoists `let t = LB` out of the
+/// block `let x = { let t = LB; match t.0 { … } }` before a later inline round
+/// can give `LB` its exits.
+fn consumer_match(body: &Body, consumer: StmtId) -> Option<ExprId> {
+    let (StmtKind::Expr(Operand::Expr(e)) | StmtKind::Let { value: Operand::Expr(e), .. }) =
+        body.stmts[consumer].kind
+    else {
+        return None;
     };
-    matches!(body.exprs[e].kind, ExprKind::Match { .. }) && body.exprs[e].type_id != TypeTable::UNIT
+    matches!(body.exprs[e].kind, ExprKind::Match { .. }).then_some(e)
 }
 
 // ---------------------------------------------------------------------------
@@ -292,10 +304,7 @@ fn check_fusion_preconditions_match(
     }
 
     // --- Stmt 2: Expr(Match { scrut: Local(temp), arms: [Variant, Wildcard] }) ---
-    let StmtKind::Expr(Operand::Expr(match_expr)) = &body.stmts[if_s].kind else {
-        return None;
-    };
-    let ExprKind::Match { expr: scrut, arms } = &body.exprs[*match_expr].kind else {
+    let ExprKind::Match { expr: scrut, arms } = &body.exprs[consumer_match(body, if_s)?].kind else {
         return None;
     };
     if arms.len() != 2 {
@@ -413,10 +422,7 @@ fn check_fusion_preconditions_slot_match(
         return None;
     }
 
-    let StmtKind::Expr(Operand::Expr(match_expr)) = &body.stmts[if_s].kind else {
-        return None;
-    };
-    let ExprKind::Match { expr: scrut, arms } = &body.exprs[*match_expr].kind else {
+    let ExprKind::Match { expr: scrut, arms } = &body.exprs[consumer_match(body, if_s)?].kind else {
         return None;
     };
     if tag_slot_of(body, scrut.as_expr()?) != Some((temp_local, TAG_SLOT)) {
@@ -1244,10 +1250,9 @@ fn perform_fusion(
             else_block,
             ..
         } => (vec![Some(*then_block), *else_block], TypeTable::UNIT),
-        StmtKind::Expr(match_expr) => {
-            let match_expr = match_expr
-                .as_expr()
-                .expect("match scrutinee is a skeleton expr");
+        _ => {
+            let match_expr =
+                consumer_match(engine.body, if_s).expect("guarded by check_fusion_preconditions");
             let ExprKind::Match { arms, .. } = &engine.body.exprs[match_expr].kind else {
                 unreachable!()
             };
@@ -1266,7 +1271,6 @@ fn perform_fusion(
                 .collect();
             (arms, result_type)
         }
-        _ => unreachable!(),
     };
 
     let value = bind_value(engine, info.value);
@@ -1301,7 +1305,25 @@ fn perform_fusion(
             result_type,
             span,
         );
-        engine.alloc_stmt(StmtKind::Expr(Operand::Expr(fused)), span)
+        let kind = match &engine.body.stmts[if_s].kind {
+            StmtKind::Let {
+                name,
+                local_index,
+                is_mut,
+                type_id,
+                skip_value_copy,
+                ..
+            } => StmtKind::Let {
+                name: name.clone(),
+                local_index: *local_index,
+                is_mut: *is_mut,
+                type_id: *type_id,
+                value: Operand::Expr(fused),
+                skip_value_copy: *skip_value_copy,
+            },
+            _ => StmtKind::Expr(Operand::Expr(fused)),
+        };
+        engine.alloc_stmt(kind, span)
     } else {
         engine.alloc_stmt(
             StmtKind::LabeledBlock {

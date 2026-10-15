@@ -242,12 +242,16 @@ impl Expander<'_> {
                 .params
                 .last()
                 .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none());
+        // The last argument's own bindings are `let`s in its block, which the
+        // clauses after them share; only an earlier argument's are assigned.
         let mut stmts = Vec::new();
+        let last_index = args.len().saturating_sub(1);
         let substitutes: Vec<TirExpr> = args
             .iter_mut()
             .zip(&contract.params)
-            .map(|(arg, &param_type)| {
-                let sink = if in_last_arg {
+            .enumerate()
+            .map(|(i, (arg, &param_type))| {
+                let sink = if in_last_arg && i < last_index {
                     Sink::InPlace
                 } else {
                     Sink::Ahead(&mut stmts)
@@ -325,25 +329,10 @@ impl Expander<'_> {
             .expect("the clauses ride the last argument");
         let value = take(&mut last.expr);
         let (type_id, value_span) = (value.type_id, value.span);
-        let checked = match value.kind {
-            // An argument bound in place: its assignment, then the clauses, then its read.
-            TirExprKind::Block(TirBlock { mut stmts, .. }) if self.binds(&stmts) => {
-                let read = stmts.pop().expect("a binding ends in its read");
-                stmts.extend(copied.stmts);
-                stmts.push(read);
-                stmts
-            }
-            kind => {
-                let mut stmts = copied.stmts;
-                stmts.push(TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(kind, type_id, value_span)),
-                    value_span,
-                ));
-                stmts
-            }
-        };
+        stmts.extend(copied.stmts);
+        stmts.push(TirStmt::new(TirStmtKind::Expr(value), value_span));
         last.expr = TirExpr::new(
-            TirExprKind::Block(TirBlock::new(checked, value_span)),
+            TirExprKind::Block(TirBlock::new(stmts, value_span)),
             type_id,
             value_span,
         );

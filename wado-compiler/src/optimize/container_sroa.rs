@@ -1671,14 +1671,6 @@ impl WhitelistChecker<'_> {
                 if !layouts_compatible(expected_layout, &other_shape.layout) {
                     return false;
                 }
-                // The rewrite clones the index expression N times (once per
-                // field). A promoted constant index is trivially duplicable.
-                if !arg0.as_expr().is_none_or(|e| is_duplicable_expr(body, e)) {
-                    // Fall through to a normal visit so `other` gets marked
-                    // escaped via the bare `index_value` branch in `visit_expr`.
-                    self.visit_expr(body, e);
-                    return false;
-                }
                 // Index expression must be visited as a normal expression.
                 if let Some(e) = arg0.as_expr() {
                     self.visit_expr(body, e);
@@ -1734,13 +1726,6 @@ impl WhitelistChecker<'_> {
                     let shape = self.shape(rec_local);
                     let (arity, layout, all_scalar) =
                         (shape.arity, shape.layout.clone(), shape.all_scalar);
-                    // The rewrite clones the destination index N times.
-                    if !is_duplicable_operand(body, arg_ops[0]) {
-                        self.mark(rec_local);
-                        self.visit_operand(body, arg_ops[0]);
-                        self.visit_operand(body, arg_ops[1]);
-                        return;
-                    }
                     // index argument visited normally
                     self.visit_operand(body, arg_ops[0]);
                     if self.check_source_operand(body, arg_ops[1], arity, &layout, all_scalar) {
@@ -1990,15 +1975,16 @@ impl Rewriter<'_, '_> {
         match (kind, arg_ids.len()) {
             // Case 1: v.ElementWriter(source) — e.g. push
             (Some(ListMethodKind::ElementWriter), 1) => {
+                let mut out = Vec::with_capacity(arity);
                 let per_field = self.decompose_source(
                     engine,
                     arg_ids[0].as_expr()?,
                     arity,
                     &layout,
                     all_scalar,
+                    &mut out,
                 )?;
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
-                let mut out = Vec::with_capacity(arity);
                 let per_field = if self.elements_observe_writes(engine, rec_local, &per_field) {
                     self.spill_elements(engine, rec_local, per_field, span, &mut out)
                 } else {
@@ -2016,14 +2002,20 @@ impl Rewriter<'_, '_> {
             // Case 2: v.IndexWriter(i, source) — e.g. index_assign
             (Some(ListMethodKind::IndexWriter), 2) => {
                 let idx = arg_ids[0];
-                let src = arg_ids[1];
-                if !is_duplicable_operand(engine.body, idx) {
-                    return None;
-                }
-                let per_field =
-                    self.decompose_source(engine, src.as_expr()?, arity, &layout, all_scalar)?;
-                let sig = sig_key_of_id(ctx.sig, func_id)?;
+                let src = arg_ids[1].as_expr()?;
                 let mut out = Vec::with_capacity(arity);
+                // Each field's write reads the index again, so one that is not a
+                // pure leaf is evaluated once, ahead of the source, as it was.
+                let idx = if is_duplicable_operand(engine.body, idx)
+                    && !self.source_spills_index(engine.body, src, all_scalar)
+                {
+                    idx
+                } else {
+                    self.spill_index(engine, idx, span, &mut out)
+                };
+                let per_field =
+                    self.decompose_source(engine, src, arity, &layout, all_scalar, &mut out)?;
+                let sig = sig_key_of_id(ctx.sig, func_id)?;
                 let (idx, per_field) =
                     if self.elements_observe_writes(engine, rec_local, &per_field) {
                         let idx_type = engine.body.operand_type(idx);
@@ -2083,6 +2075,41 @@ impl Rewriter<'_, '_> {
             .collect()
     }
 
+    /// Evaluate an index once into a temporary, rewritten as any expression is,
+    /// leaving the original in the call this expansion replaces.
+    fn spill_index(
+        &self,
+        engine: &mut Engine,
+        idx: Operand,
+        span: Span,
+        out: &mut Vec<StmtId>,
+    ) -> Operand {
+        let idx_type = engine.body.operand_type(idx);
+        let idx = clone_or_dup(engine, idx);
+        if let Some(e) = idx.as_expr() {
+            self.rewrite_expr(engine, e);
+        }
+        spill(engine, idx, idx_type, span, out)
+    }
+
+    /// Whether [`Self::decompose_source`] evaluates `src`'s index into a
+    /// temporary, ahead of any index read again per field.
+    fn source_spills_index(&self, body: &Body, src: ExprId, src_all_scalar: bool) -> bool {
+        let src = if src_all_scalar {
+            strip_one_value_copy(body, src, self.ctx.value_copy_ids).unwrap_or(src)
+        } else {
+            src
+        };
+        body.exprs[src]
+            .kind
+            .as_method_call()
+            .is_some_and(|(_, f, args)| {
+                list_method_kind(f, self.ctx.sig) == Some(ListMethodKind::IndexReader)
+                    && args.len() == 1
+                    && !is_duplicable_operand(body, args[0].expr)
+            })
+    }
+
     /// Decompose a source expression into N per-field value operands.
     /// `src_all_scalar` mirrors the analysis-side gate: only then is a
     /// `$value_copy$T` wrapper seen through (the per-field scalar assignments
@@ -2094,6 +2121,7 @@ impl Rewriter<'_, '_> {
         expected_arity: usize,
         expected_layout: &ElementLayout,
         src_all_scalar: bool,
+        out: &mut Vec<StmtId>,
     ) -> Option<Vec<Operand>> {
         let ctx = self.ctx;
         // See through a defensive slot copy `$value_copy$T(src)` — matches
@@ -2107,6 +2135,7 @@ impl Rewriter<'_, '_> {
                 expected_arity,
                 expected_layout,
                 src_all_scalar,
+                out,
             );
         }
         // Classify the source shape from a read-only inspection first.
@@ -2166,12 +2195,6 @@ impl Rewriter<'_, '_> {
                     return None;
                 }
                 let idx_expr = args[0].expr;
-                if !idx_expr
-                    .as_expr()
-                    .is_none_or(|e| is_duplicable_expr(engine.body, e))
-                {
-                    return None;
-                }
                 let sig = sig_key_of_id(ctx.sig, func_id)?;
                 Source::IndexRead {
                     other,
@@ -2223,14 +2246,19 @@ impl Rewriter<'_, '_> {
                 sig,
                 span,
             } => {
-                let mut out = Vec::with_capacity(expected_arity);
+                let idx = if is_duplicable_operand(engine.body, idx) {
+                    idx
+                } else {
+                    self.spill_index(engine, idx, span, out)
+                };
+                let mut fields = Vec::with_capacity(expected_arity);
                 for k in 0..expected_arity {
                     let field = ctx.field_map[&(other, k as u32)].clone();
                     let idx_clone = clone_or_dup(engine, idx);
                     let call = build_index_reader_call(engine, &field, idx_clone, &sig, span, ctx);
-                    out.push(Operand::Expr(call));
+                    fields.push(Operand::Expr(call));
                 }
-                Some(out)
+                Some(fields)
             }
         }
     }
