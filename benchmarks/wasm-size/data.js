@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792042272112,
+  "lastUpdate": 1792068564472,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -67289,6 +67289,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/feeff18dada363dc3f4011822cdde7642c08db15"
         },
         "date": 1792042271459,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2940,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7317,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21705,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 340396,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5e3b10b2a4d292d8d1995ad9b39e04a5fff51e43",
+          "message": "Merge pull request #2360 from wado-lang/ccr-7303c848-13cd9g\n\nrefactor(packages): state caller obligations as contracts",
+          "timestamp": "2026-10-15T21:33:02+09:00",
+          "tree_id": "27645f28f0597cb2c845e6e40ed9df9b256c7b21",
+          "url": "https://github.com/wado-lang/wado/commit/5e3b10b2a4d292d8d1995ad9b39e04a5fff51e43"
+        },
+        "date": 1792068563735,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
