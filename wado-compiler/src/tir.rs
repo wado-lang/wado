@@ -2479,6 +2479,15 @@ impl TypeTable {
             }
             if let Some(ty) = self.types.get(id) {
                 match ty {
+                    ResolvedType::Struct {
+                        def: StructDef::Anon(shape),
+                        ..
+                    } => {
+                        self.any_anon_shape_type(*shape, &mut |t| {
+                            components.push(t);
+                            false
+                        });
+                    }
                     ResolvedType::Struct { type_args, .. }
                     | ResolvedType::GenericInstance { type_args, .. }
                     | ResolvedType::GenericResource { type_args, .. } => {
@@ -10246,6 +10255,7 @@ impl TirProgram {
 mod tests {
     use super::*;
     use crate::ast::{AstId, AstIdSpace};
+    use crate::intern::StringInterner;
     use std::assert_matches;
 
     #[test]
@@ -10327,6 +10337,24 @@ mod tests {
 
         assert_eq!(table.type_key(redefined), table.type_key(TypeTable::I32));
         assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
+    }
+
+    /// A surviving anonymous struct spells itself with its field types, which
+    /// nothing else may keep alive once the optimizer has split the value.
+    #[test]
+    fn retain_keeps_an_anonymous_shapes_field_types() {
+        let mut table = TypeTable::new();
+        let field = table.intern(ResolvedType::Ref(TypeTable::I64));
+        let module = ModuleSource::Core {
+            name: StringInterner::new().intern("test"),
+        };
+        let shape = table.intern_anon_struct(module, vec![("a".to_string(), field)]);
+        let anon = table.make_struct(StructDef::Anon(shape));
+        let mut keep = IndexSet::default();
+        keep.insert(anon);
+        table.retain(&keep);
+
+        assert_eq!(table.type_name(anon), "{ a: &i64 }");
     }
 
     #[test]

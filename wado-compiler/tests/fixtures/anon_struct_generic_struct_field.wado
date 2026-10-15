@@ -1,0 +1,16 @@
+// An anonymous shape whose field is an instance of a generic struct.
+use { println, Stdout } from "core:cli";
+
+struct P<T> { v: T }
+
+fn wp(x: i32) -> i32 {
+    let s = { a: P { v: x } };
+    return s.a.v;
+}
+
+export fn run() with Stdout {
+    println(`${wp(4)}`);
+}
+
+__DATA__
+{"stdout": "4\n"}
