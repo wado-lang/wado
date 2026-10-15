@@ -1922,6 +1922,12 @@ impl TypeTable {
         }
     }
 
+    /// Whether a substitution, not a literal, made shape `id`.
+    #[must_use]
+    pub fn anon_struct_is_substituted(&self, id: AnonStructId) -> bool {
+        self.anon_structs[id.0 as usize].substituted_from.is_some()
+    }
+
     /// The closed shapes a substitution interned at registry index `from` or
     /// later, and the index the registry ends at, to ask from next time.
     #[must_use]
@@ -1929,10 +1935,7 @@ impl TypeTable {
         let end = self.anon_structs.len();
         let shapes = (from..end)
             .map(|i| AnonStructId(u32::try_from(i).expect("anon struct space")))
-            .filter(|&id| {
-                self.anon_structs[id.0 as usize].substituted_from.is_some()
-                    && !self.anon_shape_is_open(id)
-            })
+            .filter(|&id| self.anon_struct_is_substituted(id) && !self.anon_shape_is_open(id))
             .collect();
         (shapes, end)
     }
@@ -2055,7 +2058,7 @@ impl TypeTable {
         let entry = &self.anon_structs[id.0 as usize];
         let module = entry.module.clone();
         let shape = match entry.shape.clone() {
-            AnonShape::Synthetic(_) => return type_id,
+            AnonShape::Synthetic(name) => unreachable!("synthetic shape `{name}` is never open"),
             AnonShape::Fields(fields) => AnonShape::Fields(
                 fields
                     .into_iter()

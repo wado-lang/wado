@@ -295,10 +295,10 @@ impl Monomorphizer {
         // Phase 1: Collect all generic struct definitions
         let mut generic_structs = external_generic_structs.clone();
         generic_structs.extend(generic_structs_in(&module.structs));
+        let tt = module.type_table.borrow();
         for s in &module.structs {
             if let StructDef::Anon(shape) = s.def {
                 self.structs.anon_sites.insert(shape, s.span);
-                let tt = module.type_table.borrow();
                 if tt.anon_shape_is_open(shape) {
                     self.structs
                         .open_shape_heads
@@ -306,6 +306,7 @@ impl Monomorphizer {
                 }
             }
         }
+        drop(tt);
 
         // Phase 2-4: a struct's fields may name further instances, hence a fixpoint.
         let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);

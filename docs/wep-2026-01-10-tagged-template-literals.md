@@ -613,17 +613,27 @@ below close that, in this order.
   substituting into an open shape interns the substituted shape: `{ a: X }` at
   `X = i32` is the `{ a: i32 }` a concrete body writes. `TypeTable::subst_rec`
   re-interns, and `any_constituent` looks into the shape, so
-  `contains_type_param` reports it open. An open shape emits no `TirStruct`.
+  `contains_type_param` reports it open. A closed shape is never re-interned:
+  erasing an effect row changes no layout. An open shape emits no `TirStruct`.
   Monomorphization emits one for each concrete shape it interns, through
   `TirStruct::anonymous`, as elaboration does for a written shape.
+
+  Synthesis derives a shape's impls before monomorphization, so a substituted
+  shape has none of its own. It instantiates the methods synthesis gave its
+  open origin, substituting what binding the origin against it answers, and
+  copies the origin's associated types the same way
+  (`Monomorphizer::instantiate_shape_methods`). Its field bridges are minted
+  after monomorphization, as for an instantiated generic struct.
 
   A generic struct per shape was the alternative. It would need a `DefId`, and
   the `DefTable` is fixed before elaboration mints a shape. It would also make
   `{ a: X }` at `X = i32` a type apart from `{ a: i32 }`.
 
   Done: a struct literal whose field mentions a type parameter compiles and
-  runs at each instantiation (`anon_struct_type_param_field.wado`). WIR build
-  used to panic on one with `unsubstituted TypeParam`.
+  runs at each instantiation, and its derived `Inspect`, `Eq`, `Ord`,
+  `Serialize`, `Deserialize` and `ReflectStruct` serve each one
+  (`anon_struct_type_param_field.wado`). WIR build used to panic on one with
+  `unsubstituted TypeParam`.
 
 - [ ] The specifier's trait checked at the template. `resolve_template_parts`
   asks `type_implements_trait` for each hole's trait, so the check reads the
@@ -639,9 +649,11 @@ below close that, in this order.
 
 - [ ] Generic template shapes. `TemplateHoleGeneric` goes, and a template shape
   is open as the first item makes any shape. Each concrete template shape that
-  monomorphization interns gets its `ReflectTemplate` impl, `$hole_get` and
-  `$hole_fmt` from the builders synthesis runs for a written shape. They run
-  inside the fixpoint, so what their bodies call is instantiated in turn.
+  monomorphization interns instantiates its origin's `ReflectTemplate` impl as
+  the first item instantiates any shape's methods. `$hole_get` and `$hole_fmt`
+  are named after the shape rather than filed under it as methods, so they are
+  instantiated the same way by name. Both happen inside the fixpoint, so what
+  their bodies call is instantiated in turn.
 
   Done when `` tag`${x}` `` over `x: X` reaches the tag at each instantiation,
   and a tag's pack bound is checked against the declared bounds.
