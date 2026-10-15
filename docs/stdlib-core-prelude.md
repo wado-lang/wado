@@ -597,12 +597,11 @@ Returns an adapter that discards the first `n` elements before yielding the rest
 
 #### `fn step_by(&self, step: i32) -> IterStepBy<Self> with ()`
 
+- `contract step > 0`
+
 Returns an adapter that yields the first element, then every `step`-th after it.
-Panics unless `step` is positive.
 
 #### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> with ()`
-
-Returns an adapter that yields all elements of `self`, then all elements of `other`.
 
 #### `fn zip<J: Iterator>(&self, other: J) -> IterZip<Self, J> with ()`
 
@@ -739,18 +738,23 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 
 Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
 
-Implementors supply `len` and `get_unchecked`; everything else is a default
-body over those two, so no default constructs a `Slice`. Methods needing an
-`Elem` bound (`contains`, `binary_search`, …) cannot live here — an
-associated type carries no bound — and stay bounded inherent impls.
+Implementors supply `len` and `at`; everything else is a default body over
+those two, so no default constructs a `Slice`. Methods needing an `Elem`
+bound (`contains`, `binary_search`, …) cannot live here — an associated
+type carries no bound — and stay bounded inherent impls.
 
 #### `fn len(&self) -> i32`
 
-#### `fn get_unchecked(&self, index: i32) -> Self::Elem`
+#### `fn at(&self, index: i32) -> Self::Elem`
 
-The caller must guarantee `0 <= index < len()`. Any other `index` is a
-contract violation, and the result is unspecified: some valid `Elem`,
-or a trap.
+- `contract 0 <= index < self.len()`
+
+The element at `index`. `get` answers for an index that may be out of
+range.
+
+#### `fn get_unchecked(&self)`
+
+``#[unavailable("write `unchecked xs.at(i)`")]``
 
 #### `fn is_empty(&self) -> bool`
 
@@ -780,13 +784,13 @@ Sub-view over `[start, end)`, clamped to this sequence.
 
 #### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem>`
 
-Overlapping windows of `size` consecutive elements. Panics if `size` is
-not positive.
+- `contract size > 0`
+
+Overlapping windows of `size` consecutive elements.
 
 #### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
 
-Non-overlapping chunks of up to `size` elements; the last may be
-shorter. Panics if `size` is not positive.
+- `contract size > 0`
 
 ### `pub trait AsStrSlice: Eq<String> with ()`
 
@@ -806,17 +810,24 @@ literals stops folding to one.
 
 #### `fn is_empty(&self) -> bool`
 
-#### `fn get_byte_unchecked(&self, index: i32) -> u8`
+#### `fn byte_at(&self, index: i32) -> u8`
+
+- `contract 0 <= index < self.len()`
 
 #### `fn is_char_boundary(&self, index: i32) -> bool`
 
 #### `fn floor_char_boundary(&self, index: i32) -> i32`
 
+- `contract index >= 0`
+
 #### `fn ceil_char_boundary(&self, index: i32) -> i32`
+
+- `contract index >= 0`
 
 #### `fn slice(&self, start: i32, end: i32) -> StrSlice`
 
-#### `fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
+- `contract 0 <= start <= end <= self.len()`
+- `contract self.is_char_boundary(start) && self.is_char_boundary(end)`
 
 #### `fn as_bytes(&self) -> ByteSlice`
 
@@ -846,7 +857,9 @@ literals stops folding to one.
 
 #### `fn eq_ignore_ascii_case<P: AsStrSlice>(&self, other: P) -> bool`
 
-#### `fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+#### `fn char_at_byte(&self, byte_index: i32) -> char`
+
+- `contract 0 <= byte_index < self.len() && self.is_char_boundary(byte_index)`
 
 #### `fn trim_ascii_start(&self) -> StrSlice`
 
@@ -876,15 +889,14 @@ literals stops folding to one.
 
 #### `fn to_chars(&self) -> List<char>`
 
-#### `fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
-
 #### `fn to_ascii_lowercase(&self) -> String`
 
 #### `fn to_ascii_uppercase(&self) -> String`
 
 #### `fn substr_bytes(&self, start: i32, end: i32) -> String`
 
-#### `fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
+- `contract 0 <= start <= end <= self.len()`
+- `contract self.is_char_boundary(start) && self.is_char_boundary(end)`
 
 #### `fn contains_char(&self, ch: char) -> bool`
 
@@ -1201,16 +1213,6 @@ An owned, fixed-length byte buffer.
 
 ### `pub type ByteList = List<u8>`
 
-#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
-
-Byte at `index` without bounds checking — the `ByteList` parallel to
-`String::get_byte_unchecked`.
-
-The caller must guarantee `0 <= index < len()`. Any other `index` is a
-contract violation, and the result is unspecified: a byte of the
-backing array past the buffer, or a trap. Intended for hot byte-scanning loops
-that have already range-checked `index`.
-
 #### `pub fn to_hex(&self) -> String`
 
 Renders the bytes as a lowercase hexadecimal string, two digits per
@@ -1345,8 +1347,10 @@ IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
 
 #### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
 
+- `contract !high.is_nan() && low <= high`
+
 `x` confined to `low..=high` by the order, except that a NaN `x` stays
-NaN. A NaN bound traps, as `low > high` does.
+NaN.
 
 #### `pub fn copysign(x: f32, y: f32) -> f32`
 
@@ -1704,8 +1708,10 @@ IEEE 754-2019 `maximum`: NaN when either value is, and `-0.0` below
 
 #### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
 
+- `contract !high.is_nan() && low <= high`
+
 `x` confined to `low..=high` by the order, except that a NaN `x` stays
-NaN. A NaN bound traps, as `low > high` does.
+NaN.
 
 #### `pub fn copysign(x: f64, y: f64) -> f64`
 
@@ -2208,7 +2214,9 @@ IEEE 754's `>=`, on the values widened to f32.
 
 #### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i64) -> i64`
 
@@ -2240,6 +2248,8 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl TryFrom<u128> for i64`
 
@@ -2357,7 +2367,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u64`
 
@@ -2372,6 +2384,8 @@ The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl TryFrom<u128> for u64`
 
@@ -2477,7 +2491,9 @@ The negation modulo 2^64: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn clamp(value: i8, low: i8, high: i8) -> i8`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i8) -> i8`
 
@@ -2497,6 +2513,8 @@ as negating it does.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl FromStr for i8`
 
@@ -2590,7 +2608,9 @@ as negating it does.
 
 #### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i16) -> i16`
 
@@ -2610,6 +2630,8 @@ as negating it does.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl FromStr for i16`
 
@@ -2707,7 +2729,9 @@ as negating it does.
 
 #### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i32) -> i32`
 
@@ -2739,6 +2763,8 @@ Counts the number of set bits (population count).
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl FromStr for i32`
 
@@ -2844,7 +2870,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn clamp(value: u8, low: u8, high: u8) -> u8`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u8`
 
@@ -2901,6 +2929,8 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl FromStr for u8`
 
@@ -2990,7 +3020,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn clamp(value: u16, low: u16, high: u16) -> u16`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u16`
 
@@ -3005,6 +3037,8 @@ The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl FromStr for u16`
 
@@ -3094,7 +3128,9 @@ The negation modulo 2^16: `0` for `0`, `MAX - self + 1` otherwise.
 
 #### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u32`
 
@@ -3109,6 +3145,8 @@ The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 #### `impl FromStr for u32`
 
@@ -3234,23 +3272,28 @@ The negation modulo 2^32: `0` for `0`, `MAX - self + 1` otherwise.
 
 ### `char`
 
-#### `pub fn from_u32(value: u32) -> Option<char>`
+#### `pub fn from_u32(value: u32) -> char`
 
-Converts a Unicode scalar value (u32) to a char.
-Returns null if the value is not a valid Unicode scalar value
-(i.e., surrogates 0xD800..=0xDFFF or values > 0x10FFFF).
+- `contract char::is_scalar_value(value)`
 
-#### `pub fn from_i32(value: i32) -> Option<char>`
+The char whose scalar value is `value`. `char::try_from` answers for a
+value that may not be one.
 
-Converts a signed integer to a char.
-Returns null if the value is negative or not a valid Unicode scalar value.
+#### `pub fn from_i32(value: i32) -> char`
 
-#### `pub fn from_u32_unchecked(value: u32) -> char`
+- `contract value >= 0 && char::is_scalar_value(value as u32)`
 
-Converts a u32 to a char without validation.
-The caller must ensure the value is a valid Unicode scalar value
-(0..=0xD7FF or 0xE000..=0x10FFFF). Passing any other value is a
-contract violation, and the behavior is unconstrained.
+The char whose scalar value is `value`. `char::try_from(value as u32)`
+answers for a value that may not be one.
+
+#### `pub fn from_u32_unchecked(value: u32)`
+
+``#[unavailable("write `unchecked char::from_u32(value)`")]``
+
+#### `pub fn is_scalar_value(value: u32) -> bool`
+
+Whether `value` is a Unicode scalar value: in `0..=0x10FFFF` and not a
+surrogate.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -3304,8 +3347,9 @@ Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
 
 #### `pub fn hex_digit_value(&self) -> i32`
 
+- `contract self.is_hexdigit()`
+
 Returns the numeric value of an ASCII hexadecimal digit (0–15).
-Panics if the character is not a valid hex digit.
 
 #### `pub fn len_utf8(&self) -> i32`
 
@@ -3346,6 +3390,10 @@ Encodes this character as UTF-8, returning the bytes.
 #### `impl Default for char`
 
 ##### `pub fn default() -> char`
+
+#### `impl TryFrom<u32> for char`
+
+##### `pub fn try_from(value: u32) -> Result<char, ConvertError>`
 
 #### `impl Step for char`
 
@@ -3898,9 +3946,13 @@ Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u128, ParseIntError>`
 
-Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
+- `contract 2 <= radix <= 36`
+
+Parse a `u128` from a string in the given radix.
 
 #### `pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<u128, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 Parse the view as a `u128` in the given radix, allocating no substring.
 
@@ -3922,7 +3974,9 @@ The smaller of two values.
 
 #### `pub fn clamp(value: u128, low: u128, high: u128) -> u128`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn wrapping_neg(&self) -> u128`
 
@@ -4141,9 +4195,13 @@ Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 #### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i128, ParseIntError>`
 
-Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
+- `contract 2 <= radix <= 36`
+
+Parse an `i128` from a string in the given radix.
 
 #### `pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<i128, ParseIntError>`
+
+- `contract 2 <= radix <= 36`
 
 Parse the view as an `i128` in the given radix, allocating no substring.
 
@@ -4165,7 +4223,9 @@ The smaller of two values.
 
 #### `pub fn clamp(value: i128, low: i128, high: i128) -> i128`
 
-`value` confined to `low..=high`. Traps when `low > high`.
+- `contract low <= high`
+
+`value` confined to `low..=high`.
 
 #### `pub fn abs(x: i128) -> i128`
 
@@ -4514,15 +4574,6 @@ Also the byte-length anchor for the synthesised `FieldSchema::lookup`
 (on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
 cannot silently break code generation.
 
-#### `pub fn get_unchecked(&self, index: i32) -> T`
-
-`#[compiler_item("byte_slice_get_unchecked")]`
-
-The caller must guarantee `0 <= index < len()`. Any other `index` is a
-contract violation, and the result is unspecified: an element of the
-backing array outside the view, or a trap. Also the byte-read
-anchor for `FieldSchema::lookup`, as `len` is for byte length.
-
 #### `pub fn slice(&self, start: i32, end: i32) -> Slice<T>`
 
 Sub-slice over `[start, end)` relative to this one, clamped to its
@@ -4534,13 +4585,16 @@ bounds.
 
 #### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
 
-Overlapping windows of `size` consecutive elements. Panics if `size` is
-not positive.
+- `contract size > 0`
+
+Overlapping windows of `size` consecutive elements.
 
 #### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
 
+- `contract size > 0`
+
 Non-overlapping chunks of up to `size` elements; the last may be
-shorter. Panics if `size` is not positive.
+shorter.
 
 #### `pub fn to_array(&self) -> Array<T>`
 
@@ -4552,7 +4606,9 @@ shorter. Panics if `size` is not positive.
 
 ##### `fn len(&self) -> i32`
 
-##### `fn get_unchecked(&self, index: i32) -> T`
+##### `fn at(&self, index: i32) -> T`
+
+- `contract 0 <= index < self.len()`
 
 #### `impl AsSlice for Slice<T>`
 
@@ -4561,6 +4617,11 @@ shorter. Panics if `size` is not positive.
 #### `impl IndexValue<i32> for Slice<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
+
+`#[compiler_item("byte_slice_index_value")]`
+
+Also the byte-read anchor for the synthesised `FieldSchema::lookup`
+(on `Slice<u8>`), as `len` is for byte length.
 
 #### `impl IndexRef<i32> for Slice<T>`
 
@@ -4674,6 +4735,8 @@ _Fields are private._
 
 #### `pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error`
 
+- `contract 1 <= len <= 3`
+
 A sequence no further byte could complete, `len` bytes long.
 
 #### `pub fn incomplete(valid_up_to: i32) -> Utf8Error`
@@ -4731,18 +4794,11 @@ Get the length of the string in bytes
 
 Check if the string is empty
 
-#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
+#### `pub fn byte_at(&self, index: i32) -> u8`
 
-`#[compiler_item("string_get_byte_unchecked")]`
+- `contract 0 <= index < self.len()`
 
-Read the byte at `index` without bounds checks. For safe access use `bytes()`.
-
-# Contract
-
-- `0 <= index < self.len()`.
-
-Any other `index` is a contract violation, and the result is
-unspecified: a byte of the backing array past `len()`, or a trap.
+The byte at `index`.
 
 #### `pub fn as_bytes(&self) -> ByteSlice`
 
@@ -4764,25 +4820,13 @@ Append any `AsStrSlice` text to this one.
 
 #### `pub fn push_bytes<S: AsByteSlice>(&mut self, bytes: &S)`
 
-- `contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"`
+- `contract String::is_valid_utf8(bytes.as_byte_slice())`
 
 Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
 `ByteSlice`, or a `String`), which must be valid UTF-8 on their own.
 
 A marked call that breaks the contract leaves the string invalid, and
 the behavior is unconstrained.
-
-#### `pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32)`
-
-Append the byte range `[start, end)` of `s` to this string.
-
-# Contract
-
-- `0 <= start <= end <= s.len()`.
-- `start` and `end` must lie on UTF-8 character boundaries of `s`.
-- The resulting byte sequence must remain valid UTF-8.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
@@ -4800,24 +4844,11 @@ Returns an iterator over characters with their byte indices.
 
 Decode the whole string into a `List<char>`.
 
-#### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+#### `pub fn char_at_byte(&self, byte_index: i32) -> char`
 
-Decodes the UTF-8 character starting at the given byte index.
-Returns None if `byte_index` is past the end of the string or there
-aren't enough bytes to form a full UTF-8 sequence.
-Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
+- `contract 0 <= byte_index < self.len() && self.is_char_boundary(byte_index)`
 
-#### `pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
-
-Decodes the UTF-8 character starting at `byte_index` without bounds checks.
-
-# Contract
-
-- `byte_index` lies on a UTF-8 character boundary.
-- The full multi-byte sequence (1–4 bytes) starting at `byte_index`
-  is in range `[0, self.len())`.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
+The character starting at `byte_index`.
 
 #### `pub fn push(&mut self, c: char)`
 
@@ -4825,33 +4856,19 @@ Breaking it is a contract violation, and the behavior is unconstrained.
 
 Appends a Unicode scalar value (char) to this string.
 
-#### `pub fn push_ascii_unchecked(&mut self, byte: u8)`
+#### `pub fn push_ascii(&mut self, byte: u8)`
 
-`#[compiler_item("string_push_ascii")]`
+- `contract byte < 0x80`
 
-Appends a single byte, assumed to be a complete one-byte UTF-8 sequence
-(`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant: a
-contract violation, and the behavior is unconstrained.
-
-`push` routes its ASCII fast path here, and the optimizer's
-`nir/const_ascii_push` rewrite retargets `push(<const char < 0x80>)`
-here directly, skipping `encode_char`'s width dispatch.
+Appends an ASCII byte, a complete one-byte UTF-8 sequence.
 
 #### `pub fn truncate(&mut self, byte_len: i32)`
 
-Truncates the string to the given byte length. Panics if `byte_len` is
-negative or off a character boundary; round a budget with `floor_char_boundary`.
+- `contract byte_len >= 0`
+- `contract byte_len >= self.len() || self.is_char_boundary(byte_len)`
 
-#### `pub fn truncate_unchecked(&mut self, byte_len: i32)`
-
-Truncate without bounds or UTF-8 boundary checks.
-
-# Contract
-
-- `0 <= byte_len <= self.len()`.
-- `byte_len` lies on a UTF-8 character boundary.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
+Truncates the string to the given byte length. Round a byte budget with
+`floor_char_boundary` first.
 
 #### `pub fn truncate_chars(&mut self, char_count: i32)`
 
@@ -4865,13 +4882,16 @@ UTF-8 character in this string.
 
 #### `pub fn floor_char_boundary(&self, byte_index: i32) -> i32`
 
+- `contract byte_index >= 0`
+
 The largest character boundary `<= byte_index`, or `len()` beyond it:
-cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
+cuts to a byte budget with `truncate` or `substr_bytes`.
 
 #### `pub fn ceil_char_boundary(&self, byte_index: i32) -> i32`
 
+- `contract byte_index >= 0`
+
 The smallest character boundary `>= byte_index`, or `len()` beyond it.
-Panics if `byte_index` is negative.
 
 #### `pub fn pop(&mut self) -> Option<char>`
 
@@ -4910,20 +4930,11 @@ Non-ASCII bytes are compared exactly.
 
 #### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
 
-Extract a substring by byte range `[start, end)`. Panics if the range is out
-of bounds or off a character boundary; round a budget with `floor_char_boundary`.
+- `contract 0 <= start <= end <= self.len()`
+- `contract self.is_char_boundary(start) && self.is_char_boundary(end)`
 
-#### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
-
-Extract a substring by byte range `[start, end)` without bounds or
-UTF-8 boundary checks.
-
-# Contract
-
-- `0 <= start <= end <= self.len()`.
-- `start` and `end` lie on UTF-8 character boundaries.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
+Extract a substring by byte range `[start, end)`. Round a byte budget
+with `floor_char_boundary` first.
 
 #### `pub fn contains<S: AsStrSlice>(&self, pat: S) -> bool`
 
@@ -4955,52 +4966,22 @@ Returns the byte index of the first character matching the predicate, or None.
 
 #### `pub fn insert(&mut self, byte_index: i32, ch: char)`
 
+- `contract self.is_char_boundary(byte_index)`
+
 Inserts a character at the given byte index.
-Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
-
-#### `pub fn insert_unchecked(&mut self, byte_index: i32, ch: char)`
-
-Inserts a character at `byte_index` without bounds or UTF-8 boundary checks.
-
-# Contract
-
-- `0 <= byte_index <= self.len()`.
-- `byte_index` lies on a UTF-8 character boundary.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S)`
 
+- `contract self.is_char_boundary(byte_index)`
+
 Inserts a string at the given byte index.
-Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
-
-#### `pub fn insert_str_unchecked<S: AsStrSlice>(&mut self, byte_index: i32, s: S)`
-
-Inserts a string at `byte_index` without bounds or UTF-8 boundary checks.
-
-# Contract
-
-- `0 <= byte_index <= self.len()`.
-- `byte_index` lies on a UTF-8 character boundary.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn remove(&mut self, byte_index: i32) -> char`
 
+- `contract 0 <= byte_index < self.len()`
+- `contract self.is_char_boundary(byte_index)`
+
 Removes and returns the character at the given byte index.
-Panics if the index is out of bounds or not on a UTF-8 character boundary.
-
-#### `pub fn remove_unchecked(&mut self, byte_index: i32) -> char`
-
-Removes and returns the character at `byte_index` without bounds or
-UTF-8 boundary checks.
-
-# Contract
-
-- `0 <= byte_index < self.len()`.
-- `byte_index` lies on a UTF-8 character boundary.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn repeat(&self, n: i32) -> String`
 
@@ -5026,7 +5007,7 @@ A sequence cut short at the end fails too, with `error_len() == None`.
 
 #### `pub fn from_utf8<S: AsByteSlice>(bytes: S) -> String`
 
-- `contract String::is_valid_utf8(bytes.as_byte_slice()), "bytes are not valid UTF-8"`
+- `contract String::is_valid_utf8(bytes.as_byte_slice())`
 
 Copy bytes that must be valid UTF-8 into a `String`.
 
@@ -5130,7 +5111,9 @@ view per call, which a scan over a generic body's text pays per byte.
 
 ##### `fn is_empty(&self) -> bool`
 
-##### `fn get_byte_unchecked(&self, index: i32) -> u8`
+##### `fn byte_at(&self, index: i32) -> u8`
+
+- `contract 0 <= index < self.len()`
 
 ##### `fn to_string(&self) -> String`
 
@@ -5224,17 +5207,11 @@ Length in bytes.
 
 #### `pub fn is_empty(&self) -> bool`
 
-#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
+#### `pub fn byte_at(&self, index: i32) -> u8`
 
-Read the byte at `index`, counted from the view's start, without bounds
-checks.
+- `contract 0 <= index < self.len()`
 
-# Contract
-
-- `0 <= index < self.len()`.
-
-Any other `index` is a contract violation, and the result is
-unspecified: a byte of the backing array outside the view, or a trap.
+The byte at `index`, counted from the view's start.
 
 #### `pub fn is_char_boundary(&self, index: i32) -> bool`
 
@@ -5243,30 +5220,22 @@ or the start of a character.
 
 #### `pub fn floor_char_boundary(&self, index: i32) -> i32`
 
+- `contract index >= 0`
+
 The largest character boundary `<= index`, or `len()` beyond it.
-Panics if `index` is negative.
 
 #### `pub fn ceil_char_boundary(&self, index: i32) -> i32`
 
+- `contract index >= 0`
+
 The smallest character boundary `>= index`, or `len()` beyond it.
-Panics if `index` is negative.
 
 #### `pub fn slice(&self, start: i32, end: i32) -> StrSlice`
 
+- `contract 0 <= start <= end <= self.len()`
+- `contract self.is_char_boundary(start) && self.is_char_boundary(end)`
+
 A sub-view over `[start, end)`, counted from this view's start.
-Panics if the range is out of bounds or either end is off a character
-boundary.
-
-#### `pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
-
-A sub-view without bounds or UTF-8 boundary checks.
-
-# Contract
-
-- `0 <= start <= end <= self.len()`.
-- `start` and `end` lie on UTF-8 character boundaries.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn as_bytes(&self) -> ByteSlice`
 
@@ -5331,11 +5300,6 @@ Byte equality against any text. `==` reaches a `String` and another
 Checks that two views are an ASCII case-insensitive match.
 Non-ASCII bytes are compared exactly.
 
-#### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
-
-The character starting at `byte_index`, counted from the view's start,
-or None past the end.
-
 #### `pub fn trim_ascii_start(&self) -> StrSlice`
 
 The view with leading ASCII whitespace removed.
@@ -5379,17 +5343,11 @@ occur. Both parts view this one; `to_string` copies whichever is kept.
 
 #### `pub fn to_chars(&self) -> List<char>`
 
-#### `pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
+#### `pub fn char_at_byte(&self, byte_index: i32) -> char`
 
-Decodes the UTF-8 character starting at `byte_index`, counted from the
-view's start, without checks.
+- `contract 0 <= byte_index < self.len() && self.is_char_boundary(byte_index)`
 
-# Contract
-
-- `byte_index` lies on a UTF-8 character boundary.
-- The full sequence starting at `byte_index` lies in `[0, self.len())`.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
+The character starting at `byte_index`, counted from the view's start.
 
 #### `pub fn to_ascii_lowercase(&self) -> String`
 
@@ -5397,16 +5355,8 @@ Breaking it is a contract violation, and the behavior is unconstrained.
 
 #### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
 
-#### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
-
-Copies out the byte range `[start, end)` of the view without checks.
-
-# Contract
-
-- `0 <= start <= end <= self.len()`.
-- `start` and `end` lie on UTF-8 character boundaries.
-
-Breaking it is a contract violation, and the behavior is unconstrained.
+- `contract 0 <= start <= end <= self.len()`
+- `contract self.is_char_boundary(start) && self.is_char_boundary(end)`
 
 #### `pub fn contains_char(&self, ch: char) -> bool`
 
@@ -5487,11 +5437,14 @@ Appends a single element to the end.
 
 #### `pub fn push_within_capacity(&mut self, value: T)`
 
+- `contract self.len() < self.capacity(), "capacity must be reserved before the push"`
+
 Appends a single element assuming the capacity was already reserved
 (see `reserve`). Skips the grow check `push` performs on every call, so
 a burst of appends after one `reserve` pays a single capacity check
-instead of one per element. The Wasm array bounds check still guards the
-store, so an under-reserved call traps rather than corrupting memory.
+instead of one per element, when the call is marked `unchecked`. The
+Wasm array bounds check still guards the store, so an under-reserved call
+traps rather than corrupting memory.
 
 #### `pub fn pop(&mut self) -> Option<T>`
 
@@ -5505,24 +5458,29 @@ generated parser over a fixed token stream) avoid that per-access cost.
 
 #### `pub fn insert(&mut self, index: i32, value: T)`
 
+- `contract 0 <= index <= self.len()`
+
 Inserts an element at the given index, shifting all elements after it to the right.
-Panics if `index > len()`.
 
 #### `pub fn remove(&mut self, index: i32) -> T`
 
+- `contract 0 <= index < self.len()`
+
 Removes and returns the element at the given index, shifting all elements after it to the left.
-Panics if `index >= len()`. Releases the last slot, under the contract on `List`.
+Releases the last slot, under the contract on `List`.
 
 #### `pub fn swap(&mut self, a: i32, b: i32)`
 
+- `contract 0 <= a < self.len() && 0 <= b < self.len()`
+
 Swaps two elements by index.
-Panics if either index is out of bounds.
 
 #### `pub fn truncate(&mut self, len: i32)`
 
+- `contract len >= 0`
+
 Shortens the list to `len` elements; a longer `len` changes nothing.
-Panics if `len` is negative. Releases the dropped slots, under the
-contract on `List`.
+Releases the dropped slots, under the contract on `List`.
 
 #### `pub fn clear(&mut self)`
 
@@ -5567,8 +5525,10 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 `#[compiler_item("list_from_le_bytes")]`
 
-The `T`s `bytes` holds, little-endian and back to back; panics on a partial
-`T`. A literal argument folds to a constant, with no decode loop.
+- `contract bytes.as_byte_slice().len() % (T::bits() / 8) == 0`
+
+The `T`s `bytes` holds, little-endian and back to back. A literal
+argument folds to a constant, with no decode loop.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
@@ -5620,7 +5580,9 @@ Joins elements into a string with the given separator.
 
 ##### `fn len(&self) -> i32`
 
-##### `fn get_unchecked(&self, index: i32) -> T`
+##### `fn at(&self, index: i32) -> T`
+
+- `contract 0 <= index < self.len()`
 
 #### `impl AsSlice for List<T>`
 

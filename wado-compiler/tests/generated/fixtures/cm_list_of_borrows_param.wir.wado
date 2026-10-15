@@ -77,7 +77,7 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
     let $items_i: i32;
     let $items_addr: i32;
     let $items_elem: i32;
-    let $licm_repr_18: ref "Array<&cm_list_of_borrows_param.wado/Item>";
+    let $licm_repr_17: ref "Array<&cm_list_of_borrows_param.wado/Item>";
     if @unlikely((local.tee $items_len(items.used) < 0) | ($items_len > 536870911)) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), 68);
@@ -85,12 +85,12 @@ fn "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(items) with Api {
     }
     $items_base = "mem/realloc"(0, 0, 4, $items_len * 4);
     $items_i = 0;
-    $licm_repr_18 = items.repr;
+    $licm_repr_17 = items.repr;
     b1: block {
         l2: loop {
             break_if b1 $items_i >= $items_len;
             $items_addr = $items_base + ($items_i * 4);
-            $items_elem = builtin::array_get_value<i32>($licm_repr_18, $items_i);
+            $items_elem = builtin::array_get_value<i32>($licm_repr_17, $items_i);
             builtin::store_i32($items_addr, $items_elem);
             $items_i = $items_i + 1;
             continue l2;

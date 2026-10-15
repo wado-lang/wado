@@ -498,6 +498,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 &base.value_copy.returns_owned,
                 &base.value_copy.returns_projection,
                 &base.value_copy.builtins,
+                &base.value_copy.retention,
             )
             .with_indirect(&base.value_copy.indirect_owned_returns);
             (
@@ -842,6 +843,7 @@ impl FunctionTranslator<'_, '_> {
             &self.base.value_copy.returns_owned,
             &self.base.value_copy.returns_projection,
             &self.base.value_copy.builtins,
+            &self.base.value_copy.retention,
         )
         .with_indirect(&self.base.value_copy.indirect_owned_returns);
         let type_table = self.base.type_table.borrow();

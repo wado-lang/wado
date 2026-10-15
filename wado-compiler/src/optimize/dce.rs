@@ -347,7 +347,7 @@ fn extend_reachable_for_optimizer_passes(
     // reads a run out of a block rather than a single recognisable call, and a
     // later DCE drops the four again when no run fused.
     //
-    // `push_ascii_unchecked` needs no root: both rules only recognise it, and
+    // `push_ascii_byte` needs no root: both rules only recognise it, and
     // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
     // place.
     if append_ids.iter().any(|id| reachable.contains(id)) {

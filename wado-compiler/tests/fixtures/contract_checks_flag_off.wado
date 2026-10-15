@@ -1,0 +1,18 @@
+// `-f no-contract-checks` leaves the contract of a call marked `unchecked` to
+// its caller at every optimization level. An unmarked call still checks.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let view = "abcdef".as_str_slice().slice(0, 3);
+    let past = unchecked view.slice(0, builtin::black_box(5));
+    println(`${past.len()}`);
+    let _ = view.slice(0, builtin::black_box(5));
+}
+
+__DATA__
+{
+    "codegen_flags": ["no-contract-checks"],
+    "stdout": "5\n",
+    "trapped": true
+}

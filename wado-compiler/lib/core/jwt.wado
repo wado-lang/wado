@@ -117,8 +117,9 @@ impl RegisteredClaims {
     /// The time is an argument rather than a clock read, so verifying a token
     /// gains no `SystemClock` effect. Pass `Instant::now().seconds` where you
     /// do have one.
-    pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError> {
-        assert leeway >= 0, `leeway widens the window, so it is never negative: ${leeway}`;
+    pub fn validate_time(&self, now: i64, leeway: i64 = 0) -> Result<(), JwtError>
+        contract leeway >= 0, "leeway must widen the window, never narrow it"
+    {
         // Clamp `now` before widening it: `now + leeway` past the ceiling would
         // wrap to the floor and report the opposite verdict.
         let earliest = i64::max(now, i64::MIN + leeway) - leeway;

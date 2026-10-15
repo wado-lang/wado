@@ -34,7 +34,6 @@ let i = 99;
 assert i < list.len() && list[i] == 1;
 // condition: i < list.len() && list[i] == 1
 // i: 99
-// list: [1, 2, 3]
 // list.len(): 3
 // i < list.len(): false
 // i: <not evaluated>
@@ -43,6 +42,12 @@ assert i < list.len() && list[i] == 1;
 ```
 
 ## The Failure Message
+
+The receiver of a method call or a subscript is not captured; the call's result
+is. `list` in `list.len()` or `list[i]` may be a whole container, and rendering
+it would cost more than the check, and keep the optimizer from taking the
+container apart for a message that only a failure prints. What computes the
+receiver's place, such as `i` in `rows[i].len()`, is still captured.
 
 Each captured operand is rendered with `Inspect` (`:?`), so a long `String` or
 `List` operand is cut at `Inspect`'s default length and marked where it was cut
@@ -96,8 +101,12 @@ A call traps when it is outside the contract, as a failed assertion does,
 message included. A caller that guarantees the contract itself marks the call
 with the prefix operator `unchecked`, and a marked call is checked only where
 the build checks contracts. A call without the marker is checked in every
-build. The operand of `unchecked` is a call to a function with a contract;
-anything else is a compile error. Postfix operators bind tighter, so
+build. The operand of `unchecked` is a call to a function with a contract, or
+an index `c[i]` whose index method has one (see
+[Indexing Traits](./spec-standard-traits.md#indexing-traits)); anything else is
+a compile error. A marked index is the place `c[i]` names, borrowed or written
+through only where `c[i]` could be, but an index assignment takes no marker.
+Postfix operators bind tighter, so
 `unchecked f(x)?` marks the `?`, an error, and `(unchecked f(x))?` marks the
 call.
 
@@ -116,13 +125,10 @@ gives it (see [Behavior Classes](./spec-overview.md#behavior-classes)). A call
 from another component carries no marker, so a contract on an `export fn` is
 always checked.
 
-A function may also state a check of its own with `builtin::contract_checks()`,
-as the whole condition of an `if` statement with no `else`. Its body runs only
-where the build checks contracts.
-
-`-f contract-checks` and `-f no-contract-checks` choose. Without either, the
-test world checks at every optimization level, and any other world checks at
-`-O0` only:
+Whether a build checks a marked call is set by `-f contract-checks` and
+`-f no-contract-checks`, and by nothing a program writes. Without either flag,
+the test world checks at every optimization level, and any other world checks
+at `-O0` only:
 
 ```sh
 wado test app.wado                              # checks
@@ -134,8 +140,27 @@ wado compile -O2 -f contract-checks app.wado    # checks
 
 A trait method's clauses are written on the trait's declaration, one without a
 body included, and bind every impl of the method and the trait's default body.
-An impl writes no clause; one that does is a compile error. A call through a
-bound checks the trait's clauses, and `unchecked` vouches for them.
+An impl of such a method writes no clause; one that does is a compile error. A
+call through a bound checks the trait's clauses, and `unchecked` vouches for
+them.
+
+An impl of a trait method that declares no clause may state its own. A call
+checks them however it reaches the impl, through a bound included. `unchecked`
+vouches for them only where the impl is the callee the call names. Through a
+bound the caller sees the trait's declaration alone, so `unchecked` there is a
+compile error: it would vouch for clauses the caller never saw.
+
+<!-- {"fixture":"contract_impl_clause.wado", "assert": false} -->
+
+```wado
+impl Get for Small {
+    fn get(&self, i: i32) -> i32
+        contract i < 10
+    {
+        return self.value + i;
+    }
+}
+```
 
 <!-- {"fixture":"contract_trait_method.wado", "assert": false} -->
 
@@ -144,7 +169,7 @@ trait Pick with () {
     fn size(&self) -> i32;
 
     fn pick(&self, i: i32) -> i32
-        contract 0 <= i < self.size(), "index out of range";
+        contract 0 <= i < self.size();
 
     fn first(&self) -> i32
         contract self.size() > 0

@@ -74,38 +74,38 @@ fn "opt_match_thread_qmark.wado/run"() with Stdout {
     let i_16: i32;
     let b_22: u8;
     let packed: i64;
-    let $sroa_slot_66: i32;
-    let $sroa_slot_67: i32;
-    let $licm_repr_76: ref Array<u8>;
-    let $sroa_r_pos_81: i32;
-    $sroa_r_pos_81 = 0;
-    $sroa_slot_66 = 0;
-    $sroa_slot_67 = 0;
+    let $sroa_slot_64: i32;
+    let $sroa_slot_65: i32;
+    let $licm_repr_74: ref Array<u8>;
+    let $sroa_r_pos_79: i32;
+    $sroa_r_pos_79 = 0;
+    $sroa_slot_64 = 0;
+    $sroa_slot_65 = 0;
     $inline_sum_sroa_return__2: block {
         total_15 = 0;
         i_16 = 0;
-        $licm_repr_76 = global:opt_match_thread_qmark.wado::$const_obj_6;
+        $licm_repr_74 = global:opt_match_thread_qmark.wado::$const_obj_6;
         b0: block {
             l1: loop {
                 break_if b0 i_16 >= 4;
-                if @unlikely($sroa_r_pos_81 >= 4) {
+                if @unlikely($sroa_r_pos_79 >= 4) {
                     cold_path;
-                    $sroa_slot_66 = 1;
-                    $sroa_slot_67 = 0;
+                    $sroa_slot_64 = 1;
+                    $sroa_slot_65 = 0;
                     break $inline_sum_sroa_return__2;
                 }
-                b_22 = builtin::array_get_value<u8>($licm_repr_76, $sroa_r_pos_81);
-                $sroa_r_pos_81 = $sroa_r_pos_81 + 1;
+                b_22 = builtin::array_get_value<u8>($licm_repr_74, $sroa_r_pos_79);
+                $sroa_r_pos_79 = $sroa_r_pos_79 + 1;
                 total_15 = total_15 + b_22;
                 i_16 = i_16 + 1;
                 continue l1;
             };
         };
-        $sroa_slot_66 = 0;
-        $sroa_slot_67 = total_15;
+        $sroa_slot_64 = 0;
+        $sroa_slot_65 = total_15;
         break $inline_sum_sroa_return__2;
     };
-    if @unlikely(local.tee $sroa_slot_67((if ($sroa_slot_66 == 0) & ($sroa_slot_67 == 256) -> bool {
+    if @unlikely(local.tee $sroa_slot_65((if ($sroa_slot_64 == 0) & ($sroa_slot_65 == 256) -> bool {
         1;
     } else {
         0;
@@ -114,32 +114,32 @@ fn "opt_match_thread_qmark.wado/run"() with Stdout {
         "opt_match_thread_qmark.wado/run$cold1"();
         unreachable;
     }
-    $sroa_slot_67 = 0;
-    $sroa_slot_66 = 0;
+    $sroa_slot_65 = 0;
+    $sroa_slot_64 = 0;
     total_15 = 0;
     $inline_sum_sroa_return__8: block {
         i_16 = 0;
-        $licm_repr_76 = global:opt_match_thread_qmark.wado::$const_obj_5;
+        $licm_repr_74 = global:opt_match_thread_qmark.wado::$const_obj_5;
         b5: block {
             l6: loop {
                 break_if b5 i_16 >= 2;
-                if @unlikely($sroa_slot_67 >= 1) {
+                if @unlikely($sroa_slot_65 >= 1) {
                     cold_path;
-                    $sroa_slot_66 = 1;
+                    $sroa_slot_64 = 1;
                     total_15 = 1;
                     break $inline_sum_sroa_return__8;
                 }
-                drop(builtin::array_get_value<u8>($licm_repr_76, $sroa_slot_67));
-                $sroa_slot_67 = $sroa_slot_67 + 1;
+                drop(builtin::array_get_value<u8>($licm_repr_74, $sroa_slot_65));
+                $sroa_slot_65 = $sroa_slot_65 + 1;
                 i_16 = i_16 + 1;
                 continue l6;
             };
         };
-        $sroa_slot_66 = 0;
+        $sroa_slot_64 = 0;
         total_15 = 0;
         break $inline_sum_sroa_return__8;
     };
-    if @unlikely(local.tee total_15((if ($sroa_slot_66 == 1) & (total_15 == 1) -> bool {
+    if @unlikely(local.tee total_15((if ($sroa_slot_64 == 1) & (total_15 == 1) -> bool {
         1;
     } else {
         0;
@@ -149,11 +149,11 @@ fn "opt_match_thread_qmark.wado/run"() with Stdout {
         unreachable;
     }
     total_15 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    $sroa_slot_66 = builtin::i32_wrap_i64(packed >> 32_i64);
+    $sroa_slot_64 = builtin::i32_wrap_i64(packed >> 32_i64);
     total_15 = "opt_match_thread_qmark.wado/$cm_binding__Stdout_write_via_stream"(total_15);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:opt_match_thread_qmark.wado::$const_obj_4;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_66, $mv_arg_2.repr, $mv_arg_2.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_64, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(total_15);
 }
 

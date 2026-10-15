@@ -7,13 +7,13 @@ trait Sized2 with () {
     type Elem;
 
     fn count(&self) -> i32;
-    fn at(&self, index: i32) -> Self::Elem;
+    fn item(&self, index: i32) -> Self::Elem;
 
     fn head(&self) -> Option<Self::Elem> {
         if self.count() == 0 {
             return null;
         }
-        return Option::Some(self.at(0));
+        return Option::Some(self.item(0));
     }
 }
 
@@ -24,7 +24,7 @@ impl<T> Sized2 for Array<T> {
         return self.len();
     }
 
-    fn at(&self, index: i32) -> T {
+    fn item(&self, index: i32) -> T {
         return builtin::array_get_value(self, index);
     }
 }
@@ -134,7 +134,7 @@ test "pretty-print an Array" {
 test "an Array implements a trait with an associated type" {
     let a: Array<i32> = Array::filled(3, 7);
     assert a.count() == 3;
-    assert a.at(1) == 7;
+    assert a.item(1) == 7;
     assert a.head() matches { Some(v) && v == 7 };
 }
 

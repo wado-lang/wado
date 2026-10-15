@@ -1,0 +1,27 @@
+// `for let c of text.chars()` binds `$iter_0 = text.chars().into_iter()`. The
+// blanket `into_iter(&self)` returns `*self`, a projection of its argument,
+// and the argument is the auto-ref'd call result: storage nothing else reaches.
+// The iterator is therefore as fresh as `chars()`'s struct literal, and needs
+// no defensive copy before `next(&mut)` advances it.
+
+use { println, Stdout } from "core:cli";
+
+fn count_quotes(text: String) -> i32 {
+    let mut n = 0;
+    for let c of text.chars() {
+        if c == '"' {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${count_quotes("a\"b\"c")}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_not_expect:O0": ["$value_copy$"]
+}

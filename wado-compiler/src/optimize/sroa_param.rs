@@ -29,7 +29,7 @@ use crate::token::Span;
 
 use cranelift_entity::EntityRef;
 
-use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
+use super::arena_query::{is_local_operand, is_pure_operand, operand_local, place_root_local};
 use super::body_memo::BodyMemo;
 use super::gate::{FunctionGate, GatedPass};
 use crate::ast::Visibility;
@@ -252,9 +252,21 @@ fn collect_and_validate(
     // Phase 2: resolve each param to the one field it reads, dropping the ones
     // that escape or disagree — one fixpoint, since a param forwarded to another
     // candidate position takes its answer from there.
+    let mut forwards: IndexMap<FnKey, IndexMap<u32, Vec<(FnKey, usize)>>> = IndexMap::default();
+    for &(key, _) in candidates.keys() {
+        forwards.entry(key).or_insert_with(|| {
+            let func = project.functions[key.index()].borrow();
+            whole_forwards(
+                func.body
+                    .as_ref()
+                    .expect("is_eligible rejects a body-less function"),
+            )
+        });
+    }
     loop {
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
+        let mut widened: Vec<(FnKey, usize)> = Vec::new();
         for ((key, pi), info) in &candidates {
             let func = project.functions[key.index()].borrow();
             let local_index = func.params[*pi].local_index;
@@ -262,6 +274,21 @@ fn collect_and_validate(
                 .body
                 .as_ref()
                 .expect("is_eligible rejects a body-less function");
+            // Handed whole to a position taking its field as `&mut`, the param
+            // becomes that argument as it stands, so it must hold the field the
+            // same way: held by value it is a copy, and the callee's writes land
+            // on the copy.
+            if info.form == FieldForm::Value
+                && forwards[key].get(&local_index).is_some_and(|positions| {
+                    positions.iter().any(|position| {
+                        candidates
+                            .get(position)
+                            .is_some_and(|target| target.form == FieldForm::Mutable)
+                    })
+                })
+            {
+                widened.push((*key, *pi));
+            }
             match param_field_use(body, local_index, &candidates) {
                 FieldUse::Invalid => {
                     invalid.insert((*key, *pi));
@@ -273,9 +300,7 @@ fn collect_and_validate(
             }
         }
         for (k, fi) in &resolved {
-            let Some(info) = candidates.get_mut(k) else {
-                continue;
-            };
+            let info = &mut candidates[k];
             let Some(fields) = field_table.get(&info.struct_key) else {
                 invalid.insert(*k);
                 continue;
@@ -288,7 +313,10 @@ fn collect_and_validate(
             info.field_name = name;
             info.inner_type_id = ty;
         }
-        if invalid.is_empty() && resolved.is_empty() {
+        for k in &widened {
+            candidates[k].form = FieldForm::Mutable;
+        }
+        if invalid.is_empty() && resolved.is_empty() && widened.is_empty() {
             // Converged, so a param still holding no field never names one, and
             // a field the rewrite cannot make a parameter is out too. Both are
             // dropped inside the loop, not after it: a param that forwards to a
@@ -899,6 +927,22 @@ fn check_call_arg(
         return FieldUse::Unresolved;
     };
     check_expr(body, arg, idx, candidates)
+}
+
+/// The call positions each local is handed to whole.
+fn whole_forwards(body: &Body) -> IndexMap<u32, Vec<(FnKey, usize)>> {
+    let mut forwards: IndexMap<u32, Vec<(FnKey, usize)>> = IndexMap::default();
+    for e in reachable_exprs(body) {
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            continue;
+        };
+        for (pos, arg) in args.iter().enumerate() {
+            if let Some(local) = operand_local(body, arg.expr) {
+                forwards.entry(local).or_default().push((*func_id, pos));
+            }
+        }
+    }
+    forwards
 }
 
 /// Whether scalarizing this parameter would strand the call: a sibling position

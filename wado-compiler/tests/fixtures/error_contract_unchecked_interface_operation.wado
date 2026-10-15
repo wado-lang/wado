@@ -1,0 +1,28 @@
+// A dispatched operation reaches its handler's clauses only through the
+// interface, which declares none, so `unchecked` has nothing to vouch for.
+interface Counter {
+    fn next(step: i32) -> i32;
+}
+
+struct C { v: i32 }
+
+impl Counter for C {
+    fn next(&mut self, step: i32) -> i32
+        contract step > 0
+    {
+        self.v += step;
+        resume self.v
+    }
+}
+
+export fn run() {
+    let mut c = C { v: 0 };
+    with Counter => &mut c do {
+        let _ = unchecked Counter::next(-5);
+    }
+}
+
+__DATA__
+{
+  "compile_error": ":21:17: analysis error: the callee has no `contract` clause for `unchecked` to vouch for"
+}

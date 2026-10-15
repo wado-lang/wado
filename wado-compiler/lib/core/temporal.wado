@@ -350,7 +350,7 @@ impl Instant {
         if comma < 0 {
             return parse_asctime(&view);
         }
-        if comma + 4 < view.len() && view.get_byte_unchecked(comma + 4) == b'-' {
+        if comma + 4 < view.len() && unchecked view.byte_at(comma + 4) == b'-' {
             return parse_rfc850_date(&view, comma);
         }
         return parse_imf_fixdate(&view, comma);
@@ -970,7 +970,7 @@ fn time_zone_identifier(text: &StrSlice) -> Result<String, DeserializeError> {
 fn is_iana_name(text: &StrSlice) -> bool {
     let mut component_start = true;
     for let mut i = 0; i < text.len(); i += 1 {
-        let b = text.get_byte_unchecked(i);
+        let b = unchecked text.byte_at(i);
         if b == b'/' {
             if component_start {
                 return false;
@@ -1005,13 +1005,13 @@ fn zone_offset_seconds(zone: &String) -> i64 {
     if view == "UTC" {
         return 0;
     }
-    if view.len() == 6 && view.get_byte_unchecked(3) == b':' {
-        let sign = view.get_byte_unchecked(0);
+    if view.len() == 6 && unchecked view.byte_at(3) == b':' {
+        let sign = unchecked view.byte_at(0);
         let digits = [
-            view.get_byte_unchecked(1),
-            view.get_byte_unchecked(2),
-            view.get_byte_unchecked(4),
-            view.get_byte_unchecked(5),
+            unchecked view.byte_at(1),
+            unchecked view.byte_at(2),
+            unchecked view.byte_at(4),
+            unchecked view.byte_at(5),
         ];
         let all_digits = digits.0.is_ascii_digit()
             && digits.1.is_ascii_digit()
@@ -2383,7 +2383,7 @@ fn format_fraction(nanoseconds: i64, precision: i32) -> String {
     let mut length = precision;
     if precision < 0 {
         length = 9;
-        while digits.get_byte_unchecked(length - 1) == b'0' {
+        while unchecked digits.byte_at(length - 1) == b'0' {
             length -= 1;
         }
     }
@@ -2414,13 +2414,13 @@ fn byte_at(text: &StrSlice, i: i32) -> u8 {
     if i < 0 || i >= text.len() {
         return 0;
     }
-    return text.get_byte_unchecked(i);
+    return unchecked text.byte_at(i);
 }
 
 /// Index of the first `byte` in `text` at or after `from`, or `-1`.
 fn index_of_byte(text: &StrSlice, byte: u8, from: i32) -> i32 {
     for let mut i = from; i < text.len(); i += 1 {
-        if text.get_byte_unchecked(i) == byte {
+        if unchecked text.byte_at(i) == byte {
             return i;
         }
     }
@@ -2718,7 +2718,7 @@ fn is_annotation_key(key: &StrSlice) -> bool {
         return false;
     }
     for let mut i = 0; i < key.len(); i += 1 {
-        let b = key.get_byte_unchecked(i);
+        let b = unchecked key.byte_at(i);
         let leading = b.is_ascii_lowercase() || b == b'_';
         if !(leading || i > 0 && (b.is_ascii_digit() || b == b'-')) {
             return false;
@@ -2731,7 +2731,7 @@ fn is_annotation_key(key: &StrSlice) -> bool {
 fn is_annotation_value(value: &StrSlice) -> bool {
     let mut component_length = 0;
     for let mut i = 0; i < value.len(); i += 1 {
-        let b = value.get_byte_unchecked(i);
+        let b = unchecked value.byte_at(i);
         if b == b'-' {
             if component_length == 0 {
                 return false;

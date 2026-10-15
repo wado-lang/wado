@@ -82,8 +82,9 @@ pub fn holds_with_args(
 }
 
 /// `requests` with every body they owe in turn: a structural body calls its
-/// trait on each member, so it owes each member's body at the instance. A
-/// recursive type owes its own body once.
+/// trait on each member, so it owes each member's body at the instance, and an
+/// impl owes one of each supertrait beside it, as `Ord` owes `Eq`. A recursive
+/// type owes its own body once.
 #[must_use]
 pub fn owed(
     program: &Program,
@@ -105,6 +106,24 @@ pub fn owed(
                 // A marker's bounds are written, so a member may not hold;
                 // that is the marker's error, reported where it is written.
                 if let Some(held) = holds(program, env, &member, request.trait_, scope) {
+                    requests.extend(held.requests);
+                }
+            }
+        }
+        if let Some(def) = program.traits.get(&request.trait_) {
+            // A derived body answers its trait at the defaults.
+            let args = program.per_param(Some(request.trait_), &[]);
+            for clause in &def.supertraits {
+                if let Some(clause) = program.clause_at(clause, request.trait_, &args, &request.ty)
+                    && let Some(held) = holds_with_args(
+                        program,
+                        env,
+                        &request.ty,
+                        clause.trait_,
+                        scope,
+                        &clause.args,
+                    )
+                {
                     requests.extend(held.requests);
                 }
             }
@@ -1316,6 +1335,28 @@ mod tests {
                 ..Holds::default()
             })
         );
+    }
+
+    /// A derived `Sub` body owes the derived `Base` body beside it, so a
+    /// generic body bound by `Sub` finds `Base` there too.
+    #[test]
+    fn an_owed_body_owes_its_supertraits_body() {
+        let derived = |trait_| ImplDef {
+            origin: ImplOrigin::Derived,
+            ..concrete(trait_, decl(POINT))
+        };
+        let p = Builder::default()
+            .supertrait(SUB, BASE)
+            .impl_(derived(SUB))
+            .impl_(derived(BASE))
+            .build();
+        let env = Env::default();
+        let held = holds(&p, &env, &decl(POINT), SUB, HERE).expect("`Sub` holds");
+        let owed: Vec<TraitDeclId> = owed(&p, &env, HERE, held.requests)
+            .into_iter()
+            .map(|request| request.trait_)
+            .collect();
+        assert_eq!(owed, [SUB, BASE]);
     }
 
     /// `Inspect` holds of everything before any body exists. The unbounded

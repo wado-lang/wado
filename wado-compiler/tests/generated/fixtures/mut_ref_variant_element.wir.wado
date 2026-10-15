@@ -21,47 +21,52 @@ struct mut_ref_variant_element.wado//Named {  // TypeId(4)
 
 array Array<mut_ref_variant_element.wado/Element> (mut ref null "mut_ref_variant_element.wado//Named");  // TypeId(5)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
+struct core:prelude//List<mut_ref_variant_element.wado/Element> {  // TypeId(6)
+    mut repr: ref "Array<mut_ref_variant_element.wado/Element>",
+    mut used: i32,
+}
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(8)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(9)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//mut_ref_variant_element.wado/run" = fn();  // TypeId(14)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//mut_ref_variant_element.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//mut_ref_variant_element.wado/run" = fn();  // TypeId(15)
 
-type "functype//mut_ref_variant_element.wado/$cm_export__run" = fn();  // TypeId(16)
+type "functype//mut_ref_variant_element.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//mut_ref_variant_element.wado/run$cold0" = fn();  // TypeId(17)
+type "functype//mut_ref_variant_element.wado/$cm_export__run" = fn();  // TypeId(17)
 
-type "functype//mut_ref_variant_element.wado/run$cold1" = fn();  // TypeId(18)
+type "functype//mut_ref_variant_element.wado/run$cold0" = fn();  // TypeId(18)
 
-type "functype//mut_ref_variant_element.wado/run$cold2" = fn();  // TypeId(19)
+type "functype//mut_ref_variant_element.wado/run$cold1" = fn();  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
+type "functype//mut_ref_variant_element.wado/run$cold2" = fn();  // TypeId(20)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(21)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(22)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -81,40 +86,40 @@ global global:mut_ref_variant_element.wado::$const_obj_4: ref "core:prelude/stri
 global global:mut_ref_variant_element.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(114, 101, 110, 97, 109, 101, 100);
 
 fn "mut_ref_variant_element.wado/run"() with Stdout {
-    let $load_0: ref "core:prelude/string.wado//String";
+    let $load_0: ref "Array<mut_ref_variant_element.wado/Element>";
+    let $load_1: ref "core:prelude/string.wado//String";
     let elem_16: ref null "mut_ref_variant_element.wado//Named";
     let r_17: ref "mut_ref_variant_element.wado//Named";
     let packed: i64;
-    let a_73: ref Array<u8>;
-    let a_end_75: i32;
-    let b_76: ref Array<u8>;
-    let i_80: i32;
-    let $sroa_items_repr_91: ref "Array<mut_ref_variant_element.wado/Element>";
-    if ref.is_null(local.tee elem_16(struct.new "core:prelude/types.wado//Box<mut_ref_variant_element.wado/Element>" { value: builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">(local.tee $sroa_items_repr_91(array.new_fixed<ref null "mut_ref_variant_element.wado//Named">(struct.new "mut_ref_variant_element.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } })), 0) }.value)) == 0 {
+    let a_72: ref Array<u8>;
+    let a_end_74: i32;
+    let b_75: ref Array<u8>;
+    let i_79: i32;
+    if ref.is_null(local.tee elem_16(struct.new "core:prelude/types.wado//Box<mut_ref_variant_element.wado/Element>" { value: builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">(local.tee $load_0(struct.new "core:prelude//List<mut_ref_variant_element.wado/Element>" { repr: array.new_fixed<ref null "mut_ref_variant_element.wado//Named">(struct.new "mut_ref_variant_element.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } }), used: 1 }.repr), 0) }.value)) == 0 {
         local.tee r_17(ref.as_non_null(elem_16)).name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("renamed"), used: 7 };
     } else {
     }
-    if @unlikely(local.tee i_80((if ref.is_null(local.tee elem_16(builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">($sroa_items_repr_91, 0))) == 0 -> bool {
+    if @unlikely(local.tee i_79((if ref.is_null(local.tee elem_16(builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">($load_0, 0))) == 0 -> bool {
         r_17 = ref.as_non_null(elem_16);
-        $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
-            a_73 = local.tee $load_0(r_17.name).repr;
-            a_end_75 = $load_0.used;
-            b_76 = global:mut_ref_variant_element.wado::$const_obj_5;
-            if a_end_75 != 7 {
-                break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a_72 = local.tee $load_1(r_17.name).repr;
+            a_end_74 = $load_1.used;
+            b_75 = global:mut_ref_variant_element.wado::$const_obj_5;
+            if a_end_74 != 7 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            i_80 = 0;
+            i_79 = 0;
             b4: block {
                 l5: loop {
-                    break_if b4 i_80 >= a_end_75;
-                    if builtin::array_get_value<u8>(a_73, i_80) != builtin::array_get_value<u8>(b_76, i_80) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                    break_if b4 i_79 >= a_end_74;
+                    if builtin::array_get_value<u8>(a_72, i_79) != builtin::array_get_value<u8>(b_75, i_79) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
-                    i_80 = i_80 + 1;
+                    i_79 = i_79 + 1;
                     continue l5;
                 };
             };
-            break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
     } else {
         0;
@@ -123,36 +128,36 @@ fn "mut_ref_variant_element.wado/run"() with Stdout {
         "mut_ref_variant_element.wado/run$cold2"();
         unreachable;
     }
-    if ref.is_null(local.tee elem_16(struct.new "core:prelude/types.wado//Box<mut_ref_variant_element.wado/Element>" { value: builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">(local.tee $sroa_items_repr_91(array.new_fixed<ref null "mut_ref_variant_element.wado//Named">(ref.null none, struct.new "mut_ref_variant_element.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } })), 1) }.value)) == 0 {
+    if ref.is_null(local.tee elem_16(struct.new "core:prelude/types.wado//Box<mut_ref_variant_element.wado/Element>" { value: builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">(local.tee $load_0(struct.new "core:prelude//List<mut_ref_variant_element.wado/Element>" { repr: array.new_fixed<ref null "mut_ref_variant_element.wado//Named">(ref.null none, struct.new "mut_ref_variant_element.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } }), used: 2 }.repr), 1) }.value)) == 0 {
         local.tee r_17(ref.as_non_null(elem_16)).name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("renamed"), used: 7 };
     } else {
     }
-    if @unlikely(local.tee i_80(ref.is_null(local.tee elem_16(builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">($sroa_items_repr_91, 0)))) == 0) {
+    if @unlikely(local.tee i_79(ref.is_null(local.tee elem_16(builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">($load_0, 0)))) == 0) {
         cold_path;
         "mut_ref_variant_element.wado/run$cold1"();
         unreachable;
     }
-    if @unlikely(local.tee i_80((if ref.is_null(local.tee elem_16(builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">($sroa_items_repr_91, 1))) == 0 -> bool {
+    if @unlikely(local.tee i_79((if ref.is_null(local.tee elem_16(builtin::array_get_value<ref null "mut_ref_variant_element.wado//Named">($load_0, 1))) == 0 -> bool {
         r_17 = ref.as_non_null(elem_16);
-        $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
-            b_76 = local.tee $load_0(r_17.name).repr;
-            i_80 = $load_0.used;
-            a_73 = global:mut_ref_variant_element.wado::$const_obj_5;
-            if i_80 != 7 {
-                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+            b_75 = local.tee $load_1(r_17.name).repr;
+            i_79 = $load_1.used;
+            a_72 = global:mut_ref_variant_element.wado::$const_obj_5;
+            if i_79 != 7 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
             }
-            a_end_75 = 0;
+            a_end_74 = 0;
             b12: block {
                 l13: loop {
-                    break_if b12 a_end_75 >= i_80;
-                    if builtin::array_get_value<u8>(b_76, a_end_75) != builtin::array_get_value<u8>(a_73, a_end_75) {
-                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    break_if b12 a_end_74 >= i_79;
+                    if builtin::array_get_value<u8>(b_75, a_end_74) != builtin::array_get_value<u8>(a_72, a_end_74) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                     }
-                    a_end_75 = a_end_75 + 1;
+                    a_end_74 = a_end_74 + 1;
                     continue l13;
                 };
             };
-            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
         };
     } else {
         0;
@@ -161,12 +166,12 @@ fn "mut_ref_variant_element.wado/run"() with Stdout {
         "mut_ref_variant_element.wado/run$cold0"();
         unreachable;
     }
-    i_80 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    a_end_75 = builtin::i32_wrap_i64(packed >> 32_i64);
-    i_80 = "mut_ref_variant_element.wado/$cm_binding__Stdout_write_via_stream"(i_80);
-    $load_0 = global:mut_ref_variant_element.wado::$const_obj_4;
-    "core:rt/write_string_to_stream$dae[add_newline]"(a_end_75, $load_0.repr, $load_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i_80);
+    i_79 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    a_end_74 = builtin::i32_wrap_i64(packed >> 32_i64);
+    i_79 = "mut_ref_variant_element.wado/$cm_binding__Stdout_write_via_stream"(i_79);
+    $load_1 = global:mut_ref_variant_element.wado::$const_obj_4;
+    "core:rt/write_string_to_stream$dae[add_newline]"(a_end_74, $load_1.repr, $load_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(i_79);
 }
 
 fn "mut_ref_variant_element.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

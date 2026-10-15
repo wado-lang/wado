@@ -1205,6 +1205,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An impl writes a `contract` clause on a method its trait's clauses
+    /// bind: a caller through a bound vouches for the trait's alone.
+    ImplContractUnderTraitContract {
+        span: Span,
+    },
+
     /// `impl X for T` where `X` resolves to no trait, effect or resource in
     /// the impl's frame.
     UnknownTraitImpl {
@@ -2587,6 +2593,11 @@ impl TypeError {
             } => (
                 Code::TraitDeclInvalid,
                 format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
+                *span,
+            ),
+            TypeError::ImplContractUnderTraitContract { span } => (
+                Code::TraitDeclInvalid,
+                "an impl writes no `contract` on a method its trait's clauses bind".to_string(),
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (

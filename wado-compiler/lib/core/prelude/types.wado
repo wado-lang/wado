@@ -390,8 +390,9 @@ internal global CM_SUBTASK_STARTED: u32 = 1;
 ///
 /// `waitable-set.wait` is lowered with `cancellable = 0`, so `TASK_CANCELLED`
 /// cannot arrive; settling on it would drop a subtask still in flight.
-internal fn cm_subtask_settled(event: WaitEvent) -> bool {
-    assert event.code == CM_EVENT_SUBTASK;
+internal fn cm_subtask_settled(event: WaitEvent) -> bool
+    contract event.code == CM_EVENT_SUBTASK
+{
     return event.payload > CM_SUBTASK_STARTED;
 }
 

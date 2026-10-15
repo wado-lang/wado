@@ -9,7 +9,6 @@ use {
     parse_u128_digits,
     split_sign,
     split_plus,
-    assert_radix,
     lenient_int_preprocess,
 } from "core:prelude/intparse.wado";
 use { count_digits_u64, write_decimal_digits } from "core:prelude/primitive.wado";
@@ -109,21 +108,24 @@ impl u128 {
         return u128::from_str_radix(s, 16);
     }
 
-    /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u128, ParseIntError> {
-        return u128::from_str_radix_slice(&s.as_str_slice(), radix);
+    /// Parse a `u128` from a string in the given radix.
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u128, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return unchecked u128::from_str_radix_slice(&s.as_str_slice(), radix);
     }
 
     /// Parse the view as a `u128` in the given radix, allocating no substring.
-    pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<u128, ParseIntError> {
-        assert_radix(radix);
+    pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<u128, ParseIntError>
+        contract 2 <= radix <= 36
+    {
         let digits = match split_plus(s) {
             Ok(v) => v,
             Err(k) => {
                 return Result::Err(ParseIntError::new(k));
             },
         };
-        return match parse_u128_digits(&digits, radix) {
+        return match unchecked parse_u128_digits(&digits, radix) {
             Ok(v) => Result::Ok(v),
             Err(k) => Result::Err(ParseIntError::new(k)),
         };
@@ -155,9 +157,10 @@ impl u128 {
         return b;
     }
 
-    /// `value` confined to `low..=high`. Traps when `low > high`.
-    pub fn clamp(value: u128, low: u128, high: u128) -> u128 {
-        assert low <= high;
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: u128, low: u128, high: u128) -> u128
+        contract low <= high
+    {
         return u128::min(u128::max(value, low), high);
     }
 
@@ -196,8 +199,9 @@ impl u128 {
     /// a `mant_bits`-bit mantissa rounded to nearest with ties to even,
     /// plus the exponent of the value's leading bit. Shared core of the
     /// float conversions; mirrors compiler-rt's `__floatuntidf`.
-    fn round_to_mantissa(&self, mant_bits: i32) -> [u64, i64] {
-        assert self.high != 0;
+    fn round_to_mantissa(&self, mant_bits: i32) -> [u64, i64]
+        contract self.high != 0
+    {
         let hbits = u64_bit_len(self.high) as i64;  // 1..=64
         // Shift down to mant_bits + 2 bits: the mantissa, a guard bit,
         // and one bit for the rest.
@@ -283,8 +287,9 @@ impl u128 {
 
     /// Divide `[hi, lo]` by `d`, returning (quotient, remainder): the 128÷64
     /// step Wasm lacks, by Knuth Algorithm D over 32-bit limbs.
-    fn div_rem_wide(hi: u64, lo: u64, d: u64) -> [u64, u64] {
-        assert hi < d;
+    fn div_rem_wide(hi: u64, lo: u64, d: u64) -> [u64, u64]
+        contract hi < d, "the quotient must fit in 64 bits"
+    {
         if hi == 0 {
             return [lo / d, lo % d];
         }
@@ -564,10 +569,10 @@ fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, uppe
     } else if f.sign_plus {
         f.write_char('+');
     }
-    f.write_char(digits.char_at_byte_unchecked(0));
+    f.write_char(unchecked digits.char_at_byte(0));
     if precision > 0 || precision < 0 && fraction_len > 0 {
         f.write_char('.');
-        f.buf.push_str_range_unchecked(&digits, 1, digits.len());
+        f.buf.push_str(unchecked digits.slice(1, digits.len()));
         for let mut i = fraction_len; i < precision; i += 1 {
             f.write_char('0');
         }
@@ -905,14 +910,17 @@ impl i128 {
         return i128::from_str_radix(s, 16);
     }
 
-    /// Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i128, ParseIntError> {
-        return i128::from_str_radix_slice(&s.as_str_slice(), radix);
+    /// Parse an `i128` from a string in the given radix.
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i128, ParseIntError>
+        contract 2 <= radix <= 36
+    {
+        return unchecked i128::from_str_radix_slice(&s.as_str_slice(), radix);
     }
 
     /// Parse the view as an `i128` in the given radix, allocating no substring.
-    pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<i128, ParseIntError> {
-        assert_radix(radix);
+    pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<i128, ParseIntError>
+        contract 2 <= radix <= 36
+    {
         let [is_negative, digits] = match split_sign(s) {
             Ok(p) => p,
             Err(k) => {
@@ -921,7 +929,7 @@ impl i128 {
         };
         let max_pos = i128::MAX as u128;
         let max_neg_abs = max_pos + u128::from_u64(1);
-        return match parse_u128_digits(&digits, radix) {
+        return match unchecked parse_u128_digits(&digits, radix) {
             Ok(v) => if is_negative {
                 if v > max_neg_abs {
                     Result::Err(ParseIntError::new(IntErrorKind::NegOverflow));
@@ -966,9 +974,10 @@ impl i128 {
         return b;
     }
 
-    /// `value` confined to `low..=high`. Traps when `low > high`.
-    pub fn clamp(value: i128, low: i128, high: i128) -> i128 {
-        assert low <= high;
+    /// `value` confined to `low..=high`.
+    pub fn clamp(value: i128, low: i128, high: i128) -> i128
+        contract low <= high
+    {
         return i128::min(i128::max(value, low), high);
     }
 

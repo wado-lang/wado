@@ -87,8 +87,14 @@ impl Step for u64 {
 
 impl Step for char {
     fn next_step(&self) -> Option<char> {
-        let code = *self as u32 + 1 as u32;
-        return char::from_u32(code);
+        let code = match *self as u32 {
+            0xD7FF => 0xE000 as u32,
+            0x10FFFF => {
+                return null;
+            },
+            c => c + 1,
+        };
+        return Option::Some(unchecked char::from_u32(code));
     }
 }
 

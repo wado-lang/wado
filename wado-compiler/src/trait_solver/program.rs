@@ -571,7 +571,7 @@ impl Program {
     /// writes for each of `sub`'s parameters. `None` where the clause names a
     /// parameter that bound neither writes nor defaults: the edge then answers
     /// nothing rather than a guess.
-    fn clause_at(
+    pub(super) fn clause_at(
         &self,
         clause: &ParamBound,
         sub: TraitDeclId,

@@ -326,26 +326,32 @@ fn generate_field_schema(
     schema
 }
 
-/// Build a `key.get_unchecked(index_expr) as i32` expression on a
-/// `ByteSlice` (`Slice<u8>`) key, with a computed index.
-///
-/// The method is looked up via [`CompilerItem::ByteSliceGetUnchecked`] —
-/// renaming the underlying Wado declaration cannot break this site as
-/// long as its `#[compiler_item("byte_slice_get_unchecked")]` annotation
-/// stays put. See issue #1077 for the rationale.
+/// Build an `unchecked key[index_expr] as i32` expression on a `ByteSlice`
+/// (`Slice<u8>`) key, whose length the caller has already tested.
 fn key_get_byte_as_i32_expr(
     key_ref: TirExpr,
     index_expr: TirExpr,
     span: Span,
     compiler_items: &CompilerItems,
 ) -> TirExpr {
-    let get_byte_call = byte_slice_method_call(
-        CompilerItem::ByteSliceGetUnchecked,
-        key_ref,
-        vec![CallArg::new(index_expr, false)],
+    let index_value = compiler_items
+        .trait_fq(CompilerItem::IndexValue)
+        .with_args(vec![FqTypeName::builtin("i32")]);
+    let mut func = byte_slice_method(
+        CompilerItem::ByteSliceIndexValue,
+        Some(index_value),
+        compiler_items,
+    );
+    func.retarget_to_unchecked_twin();
+    let get_byte_call = TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(key_ref),
+            func,
+            vec![],
+            vec![CallArg::new(index_expr, false)],
+        ),
         TypeTable::U8,
         span,
-        compiler_items,
     );
     TirExpr::new(
         TirExprKind::Cast {
@@ -360,37 +366,31 @@ fn key_get_byte_as_i32_expr(
 /// Build a `key.len()` expression on a `ByteSlice` (`Slice<u8>`) key,
 /// returning the byte length as `i32`.
 fn byte_slice_len_expr(key_ref: TirExpr, span: Span, compiler_items: &CompilerItems) -> TirExpr {
-    byte_slice_method_call(
-        CompilerItem::ByteSliceLen,
-        key_ref,
-        vec![],
+    let func = byte_slice_method(CompilerItem::ByteSliceLen, None, compiler_items);
+    TirExpr::new(
+        TirExprKind::method_call(Box::new(key_ref), func, vec![], vec![]),
         TypeTable::I32,
         span,
-        compiler_items,
     )
 }
 
-/// Build a call to a generic `Slice<T>` method on a `ByteSlice`
-/// (`Slice<u8>`) receiver, monomorphized at `T = u8`.
+/// The generic `Slice<T>` method `item`, of the impl of `trait_` where it
+/// has one, on a `ByteSlice` (`Slice<u8>`) receiver, monomorphized at `T = u8`.
 ///
 /// The method is resolved via `#[compiler_item]` (rename-safe, per issue
 /// #1077) and called with `impl_type_args = [u8]` so the monomorphizer
 /// instantiates the `u8` specialization instead of inheriting the enclosing
 /// function's type parameters — the same shape as the generic `default()`
 /// call synthesised for field defaults.
-fn byte_slice_method_call(
+fn byte_slice_method(
     item: CompilerItem,
-    receiver: TirExpr,
-    args: Vec<CallArg>,
-    return_type: TypeId,
-    span: Span,
+    trait_: Option<FqTraitName>,
     compiler_items: &CompilerItems,
-) -> TirExpr {
+) -> FunctionRef {
     let (module_source, _, name) = compiler_items.require_method(item);
-    let module_source = module_source.clone();
     let method_info = LocalMethodName::new(
         compiler_items.require_method_owner(item).clone(),
-        None,
+        trait_,
         name.to_string(),
     )
     .with_struct_type_args(&[FqTypeName::builtin("u8")]);
@@ -400,22 +400,13 @@ fn byte_slice_method_call(
         method_type_args: vec![],
         is_blanket: false,
     };
-    TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source,
-                name: method_info.to_mangled_name(),
-                template: Some(compiler_items.require_template(item)),
-                monomorph_info: Some(monomorph_info),
-                method_info: Some(method_info),
-            },
-            vec![],
-            args,
-        ),
-        return_type,
-        span,
-    )
+    FunctionRef {
+        module_source: module_source.clone(),
+        name: method_info.to_mangled_name(),
+        template: Some(compiler_items.require_template(item)),
+        monomorph_info: Some(monomorph_info),
+        method_info: Some(method_info),
+    }
 }
 
 /// Build `left op right` over two `bool` operands.

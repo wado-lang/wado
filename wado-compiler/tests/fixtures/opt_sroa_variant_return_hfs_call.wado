@@ -28,7 +28,7 @@ impl Cursor {
             if self.pos >= self.data.len() {
                 return Result::Err(fail_at(self.pos));
             }
-            let b = self.data.get_byte_unchecked(self.pos) as i32;
+            let b = unchecked self.data.byte_at(self.pos) as i32;
             self.pos += 1;
             if b == ';' as i32 {
                 return Result::Ok(self.pos);

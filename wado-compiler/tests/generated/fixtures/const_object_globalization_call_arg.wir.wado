@@ -103,7 +103,7 @@ fn "const_object_globalization_call_arg.wado/run"() with Stdout {
     let $local_0: ref "core:prelude/string.wado//String";
     let is_negative_15: bool;
     let x: i64;
-    let start_69: i32;
+    let start_66: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     is_negative_15 = local.tee $arg_spill_2(block -> i32 {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
@@ -118,17 +118,17 @@ fn "const_object_globalization_call_arg.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, is_negative_15);
         }
-        start_69 = $local_0.used;
+        start_66 = $local_0.used;
         $local_0.used = is_negative_15;
-        builtin::array_set_u8($local_0.repr, start_69, 45);
+        builtin::array_set_u8($local_0.repr, start_66, 45);
     } else {
     }
-    if @unlikely(local.tee start_69($local_0.used + $arg_spill_2) > builtin::array_len($local_0.repr)) {
+    if @unlikely(local.tee start_66($local_0.used + $arg_spill_2) > builtin::array_len($local_0.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_69);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_0, start_66);
     }
     is_negative_15 = $local_0.used;
-    $local_0.used = start_69;
+    $local_0.used = start_66;
     "core:prelude/primitive.wado/write_decimal_digits"($local_0.repr, is_negative_15, x, $arg_spill_2);
     $arg_spill_2 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_15 = builtin::i32_wrap_i64(x >> 32_i64);

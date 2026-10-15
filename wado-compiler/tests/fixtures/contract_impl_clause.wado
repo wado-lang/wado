@@ -1,0 +1,36 @@
+// An impl states its own clauses on a method its trait leaves unbound. A call
+// checks them however it reaches the impl, through a bound included, and
+// `unchecked` vouches for them only where the impl is the callee it names.
+use { println, Stdout } from "core:cli";
+
+trait Get with () {
+    fn get(&self, i: i32) -> i32;
+}
+
+struct Small { value: i32 }
+
+impl Get for Small {
+    fn get(&self, i: i32) -> i32
+        contract i < 10
+    {
+        return self.value + i;
+    }
+}
+
+fn through<T: Get>(t: &T, i: i32) -> i32 {
+    return t.get(i);
+}
+
+export fn run() with Stdout {
+    let s = Small { value: 1 };
+    println(`${unchecked s.get(builtin::black_box(2))}`);
+    println(`${through(&s, builtin::black_box(3))}`);
+    println(`${through(&s, builtin::black_box(10))}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n4\n",
+    "stderr_contains": ["condition: i < 10"],
+    "trapped": true
+}

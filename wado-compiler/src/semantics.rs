@@ -13,7 +13,7 @@ use crate::ast::{
 use crate::ast_index::{AstIndex, FunctionLocation};
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
-use crate::coverage::{CoverageMap, CoverageRequest, plan_module, render_plan};
+use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
@@ -164,13 +164,12 @@ impl Semantics {
 
     /// The entry module's coverage plan, for `wado dump --coverage-plan`.
     /// `None` before annotate has run.
-    pub fn coverage_plan_text(&self, contract_checks: bool) -> Option<String> {
+    pub fn coverage_plan_text(&self) -> Option<String> {
         let state = self.state.as_ref()?;
         let module = self.modules.get(&self.entry_module_source)?;
         let (plan, ..) = plan_module(
             &self.entry_module_source,
             module,
-            contract_checks,
             &rt_unreachable_calls(state, &self.symbols),
         );
         Some(render_plan(&plan))
@@ -1260,7 +1259,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     mut load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
-    coverage: Option<CoverageRequest>,
+    coverage: Option<CoverageScope>,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
@@ -1288,7 +1287,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         let _span = logger.span("stdlib_snapshot");
         // A measured stdlib takes probes the plain snapshot lacks.
         get_or_init_snapshot()
-            .filter(|_| !coverage.is_some_and(|request| request.scope.stdlib))
+            .filter(|_| !coverage.is_some_and(|scope| scope.stdlib))
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 

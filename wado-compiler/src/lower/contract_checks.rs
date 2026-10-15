@@ -1,10 +1,12 @@
-//! Apply `-f contract-checks` to each `if builtin::contract_checks() { … }`
-//! before the plan: its condition becomes `true` where checks are on, and the
-//! statement is deleted outright where they are off. Left as an `if false`, its
-//! body would count toward the inliner's size estimate before any pass prunes
-//! it, and a disabled check must cost nothing.
+//! Apply `-f contract-checks` to each contract check an `unchecked` twin
+//! opens with, `if $contract_checks() { … }`, before the plan: its condition
+//! becomes `true` where checks are on, and the statement is deleted outright
+//! where they are off. Left as an `if false`, its body would count toward the
+//! inliner's size estimate before any pass prunes it, and a disabled check
+//! must cost nothing.
 
 use crate::flat_package::FlatPackage;
+use crate::name::CONTRACT_CHECKS_INTRINSIC;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::tir_visitor::TirMutVisitor;
 
@@ -19,28 +21,18 @@ struct ContractChecksLowering {
 }
 
 fn is_contract_checks_call(expr: &TirExpr) -> bool {
-    matches!(&expr.kind, TirExprKind::Call { func, .. } if func.is_builtin_named("contract_checks"))
+    matches!(&expr.kind, TirExprKind::Call { func, .. } if func.is_builtin_named(CONTRACT_CHECKS_INTRINSIC))
 }
 
-/// The condition of `stmt` when it is `if builtin::contract_checks() { … }`
-/// with no `else`.
+/// The condition of `stmt` when it is a contract check.
 fn check_condition(stmt: &mut TirStmt) -> Option<&mut TirExpr> {
-    let condition = match &mut stmt.kind {
-        TirStmtKind::If {
-            condition,
-            else_block: None,
-            ..
-        } => condition,
-        TirStmtKind::Expr(TirExpr {
-            kind:
-                TirExprKind::If {
-                    condition,
-                    else_branch: None,
-                    ..
-                },
-            ..
-        }) => condition.as_mut(),
-        _ => return None,
+    let TirStmtKind::If {
+        condition,
+        else_block: None,
+        ..
+    } = &mut stmt.kind
+    else {
+        return None;
     };
     is_contract_checks_call(condition).then_some(condition)
 }
@@ -59,10 +51,9 @@ impl TirMutVisitor for ContractChecksLowering {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        // Reify reports a call standing anywhere else.
         assert!(
             !is_contract_checks_call(expr),
-            "`builtin::contract_checks()` outside `if builtin::contract_checks() {{ … }}`"
+            "`{CONTRACT_CHECKS_INTRINSIC}()` outside the contract check reify opens a twin with"
         );
         self.walk_expr(expr);
     }

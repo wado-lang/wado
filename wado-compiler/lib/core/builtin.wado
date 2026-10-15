@@ -30,7 +30,7 @@ pub fn task_return(result: i32);
 
 /// Reinterprets an i32 value as a char (no validation, no-op at Wasm level).
 /// Used internally by the stdlib for trusted conversions (e.g., UTF-8 decoding).
-/// User code should use char::from_u32() or char::from_i32() instead.
+/// User code should use char::from_u32() or char::try_from() instead.
 #[storage(none)]
 #[side_effect(none)]
 pub fn i32_as_char(value: i32) -> char;
@@ -454,13 +454,6 @@ pub fn black_box<T>(value: T) -> T;
 #[storage(none)]
 #[side_effect(none)]
 pub fn is_uninitialized<T>(value: &T) -> bool;
-
-/// Whether this build checks contracts (`-f contract-checks`). It is only
-/// ever the whole condition of an `if builtin::contract_checks() { … }` with
-/// no `else`, which the compiler keeps or deletes before NIR.
-#[storage(none)]
-#[side_effect(none)]
-pub fn contract_checks() -> bool;
 
 /// Marks the enclosing code path as cold (rarely executed). `cold_path()` is a
 /// statement placed inside a branch body, so it works anywhere — an `if` /
