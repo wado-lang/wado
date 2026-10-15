@@ -13,9 +13,7 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::place::{
-    is_index_accessor, is_source_place, source_place_subscripts_mut,
-};
+use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
@@ -89,6 +87,7 @@ pub fn lower(flat: &FlatPackage) {
             site: None,
             site_module,
             expanding: Vec::new(),
+            bound: IndexSet::default(),
         };
         expander.visit_block(&mut body);
         Unwrap.visit_block(&mut body);
@@ -199,6 +198,8 @@ struct Expander<'a> {
     /// The functions whose clauses are being copied, outermost first. A clause
     /// calling its own function back is left to call it.
     expanding: Vec<FunctionId>,
+    /// The locals [`Self::bind`] made.
+    bound: IndexSet<u32>,
 }
 
 impl TirMutVisitor for Expander<'_> {
@@ -220,8 +221,11 @@ impl TirMutVisitor for Expander<'_> {
 }
 
 impl Expander<'_> {
-    /// Rewrite `call` to its callee's clauses over its arguments, then the
-    /// call to the twin.
+    /// Rewrite `call` to a call to the twin whose last argument checks the
+    /// callee's clauses once every argument is evaluated, so the call stays
+    /// the place an index call names. Where the last parameter borrows, or no
+    /// twin follows a trait's clauses, the clauses and then the call form a
+    /// block instead, its arguments bound ahead.
     fn expand(&mut self, call: &mut TirExpr, key: FunctionId) {
         let contracts = self.contracts;
         let contract = &contracts[&key];
@@ -233,11 +237,23 @@ impl Expander<'_> {
         let TirExprKind::Call { args, .. } = &mut call.kind else {
             unreachable!("only a call expands");
         };
+        let in_last_arg = contract.forward.is_some()
+            && contract
+                .params
+                .last()
+                .is_some_and(|&param| RefKind::from_resolved(self.type_table.get(param)).is_none());
         let mut stmts = Vec::new();
         let substitutes: Vec<TirExpr> = args
             .iter_mut()
             .zip(&contract.params)
-            .map(|(arg, &param_type)| self.bind_ahead(arg, param_type, &mut stmts))
+            .map(|(arg, &param_type)| {
+                let sink = if in_last_arg {
+                    Sink::InPlace
+                } else {
+                    Sink::Ahead(&mut stmts)
+                };
+                self.bind_ahead(arg, param_type, sink)
+            })
             .collect();
 
         let offset = self.func.locals.len() as u32;
@@ -268,47 +284,75 @@ impl Expander<'_> {
         self.visit_block(&mut copied);
         self.expanding.pop();
         self.site = outer_site;
-        stmts.extend(copied.stmts);
 
-        let value = match &contract.forward {
-            Some(forward) => {
-                let TirExprKind::Call {
-                    func, type_args, ..
-                } = &forward.kind
-                else {
-                    unreachable!("a function forwards its call to its twin");
-                };
-                let TirExprKind::Call { args, .. } =
-                    std::mem::replace(&mut call.kind, TirExprKind::Unit)
-                else {
-                    unreachable!("only a call expands");
-                };
-                TirExpr::new(
-                    TirExprKind::Call {
-                        func: func.clone(),
-                        type_args: type_args.clone(),
-                        args,
-                    },
-                    call.type_id,
-                    span,
-                )
-            }
-            None => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+        let Some(forward) = &contract.forward else {
+            stmts.extend(copied.stmts);
+            stmts.push(TirStmt::new(
+                TirStmtKind::Expr(TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span)),
+                span,
+            ));
+            call.kind = TirExprKind::Block(TirBlock::new(stmts, span));
+            return;
         };
-        stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
-        call.kind = TirExprKind::Block(TirBlock::new(stmts, span));
+        let TirExprKind::Call {
+            func: twin,
+            type_args,
+            ..
+        } = &forward.kind
+        else {
+            unreachable!("a function forwards its call to its twin");
+        };
+        let TirExprKind::Call {
+            func,
+            type_args: call_type_args,
+            args,
+        } = &mut call.kind
+        else {
+            unreachable!("only a call expands");
+        };
+        func.clone_from(twin);
+        call_type_args.clone_from(type_args);
+        if !in_last_arg {
+            let forwarded = TirExpr::new(take_kind(call), call.type_id, span);
+            stmts.extend(copied.stmts);
+            stmts.push(TirStmt::new(TirStmtKind::Expr(forwarded), span));
+            call.kind = TirExprKind::Block(TirBlock::new(stmts, span));
+            return;
+        }
+        let last = args
+            .iter_mut()
+            .last()
+            .expect("the clauses ride the last argument");
+        let value = take(&mut last.expr);
+        let (type_id, value_span) = (value.type_id, value.span);
+        let checked = match value.kind {
+            // An argument bound in place: its `let`, then the clauses, then its read.
+            TirExprKind::Block(TirBlock { mut stmts, .. }) if self.binds(&stmts) => {
+                let read = stmts.pop().expect("a binding ends in its read");
+                stmts.extend(copied.stmts);
+                stmts.push(read);
+                stmts
+            }
+            kind => {
+                let mut stmts = copied.stmts;
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(kind, type_id, value_span)),
+                    value_span,
+                ));
+                stmts
+            }
+        };
+        last.expr = TirExpr::new(
+            TirExprKind::Block(TirBlock::new(checked, value_span)),
+            type_id,
+            value_span,
+        );
     }
 
-    /// What the clauses read for the parameter `arg` passes: a place stays in
-    /// the call for a `&mut` parameter to write, with its subscripts bound
-    /// ahead; any other value is bound ahead and read from there.
-    fn bind_ahead(
-        &mut self,
-        arg: &mut CallArg,
-        param_type: TypeId,
-        stmts: &mut Vec<TirStmt>,
-    ) -> TirExpr {
-        self.bind_expanded(&mut arg.expr, stmts);
+    /// What the clauses read for the parameter `arg` passes, evaluating it
+    /// once: a place stays in the call for a `&mut` parameter to write, with
+    /// its subscripts bound; any other value is bound and read from there.
+    fn bind_ahead(&mut self, arg: &mut CallArg, param_type: TypeId, mut sink: Sink<'_>) -> TirExpr {
         let borrowed_place = matches!(
             &arg.expr.kind,
             TirExprKind::Unary { op: TirUnaryOp::Ref | TirUnaryOp::MutRef, expr } if is_source_place(expr, self.items)
@@ -321,71 +365,43 @@ impl Expander<'_> {
         } else if is_source_place(&arg.expr, self.items) {
             &mut arg.expr
         } else {
-            let value = take(&mut arg.expr);
-            arg.expr = self.bind(value, stmts);
-            return arg.expr.clone();
+            return self.bind(&mut arg.expr, sink.reborrow());
         };
         let items = self.items;
         for subscript in source_place_subscripts_mut(place, items) {
             if !matches!(subscript.kind, TirExprKind::Local { .. }) {
-                let value = take(subscript);
-                *subscript = self.bind(value, stmts);
+                self.bind(subscript, sink.reborrow());
             }
         }
+        let read = self.read_of(&arg.expr);
         // A receiver is passed as its place where the parameter borrows it.
         let borrow = RefKind::from_resolved(self.type_table.get(param_type));
         match borrow {
-            Some(kind)
-                if RefKind::from_resolved(self.type_table.get(arg.expr.type_id)).is_none() =>
-            {
+            Some(kind) if RefKind::from_resolved(self.type_table.get(read.type_id)).is_none() => {
                 let op = match kind {
                     RefKind::Shared => TirUnaryOp::Ref,
                     RefKind::Mut => TirUnaryOp::MutRef,
                 };
+                let span = read.span;
                 TirExpr::new(
                     TirExprKind::Unary {
                         op,
-                        expr: Box::new(arg.expr.clone()),
+                        expr: Box::new(read),
                     },
                     param_type,
-                    arg.expr.span,
+                    span,
                 )
             }
-            _ => arg.expr.clone(),
+            _ => read,
         }
     }
 
-    /// Bind the reference each call already expanded inside the place `expr`
-    /// hands out, so the clauses read the place without copying that call's
-    /// clauses again: `m[i][j]` reads `*m.index_ref_mut(i)`.
-    fn bind_expanded(&mut self, expr: &mut TirExpr, stmts: &mut Vec<TirStmt>) {
-        match &mut expr.kind {
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: inner,
-            } if matches!(inner.kind, TirExprKind::Block(_)) => {
-                let reference = take(inner);
-                **inner = self.bind(reference, stmts);
-            }
-            TirExprKind::FieldAccess { expr: inner, .. }
-            | TirExprKind::VariantPayload { expr: inner, .. }
-            | TirExprKind::Index { expr: inner, .. }
-            | TirExprKind::Cast { expr: inner, .. }
-            | TirExprKind::Unary { expr: inner, .. } => self.bind_expanded(inner, stmts),
-            TirExprKind::Call { func, args, .. } if is_index_accessor(func, self.items) => {
-                if let Some(container) = args.iter_mut().next() {
-                    self.bind_expanded(&mut container.expr, stmts);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// Bind `value` to a new local of the function, and answer the read of it.
-    fn bind(&mut self, value: TirExpr, stmts: &mut Vec<TirStmt>) -> TirExpr {
+    /// Bind what `slot` evaluates to a new local of the function, where `sink`
+    /// says, and answer the read of it.
+    fn bind(&mut self, slot: &mut TirExpr, sink: Sink<'_>) -> TirExpr {
         let index = self.func.locals.len() as u32;
         let name = minted_name("contract_arg", index);
-        let (type_id, span) = (value.type_id, value.span);
+        let (type_id, span) = (slot.type_id, slot.span);
         self.func.locals.push(TirLocal {
             name: name.clone(),
             type_id,
@@ -393,19 +409,97 @@ impl Expander<'_> {
             span,
         });
         self.func.local_count = self.func.locals.len() as u32;
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
+        self.bound.insert(index);
+        let read = TirExpr::new(
+            TirExprKind::Local {
+                index,
                 name: name.clone(),
+            },
+            type_id,
+            span,
+        );
+        let binding = TirStmt::new(
+            TirStmtKind::Let {
+                name,
                 local_index: index,
                 is_mut: false,
                 type_id,
-                value,
+                value: take(slot),
                 storage: LetStorage::Planned,
             },
             span,
-        ));
-        TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
+        );
+        *slot = match sink {
+            Sink::Ahead(stmts) => {
+                stmts.push(binding);
+                read.clone()
+            }
+            Sink::InPlace => TirExpr::new(
+                TirExprKind::Block(TirBlock::new(
+                    vec![binding, TirStmt::new(TirStmtKind::Expr(read.clone()), span)],
+                    span,
+                )),
+                type_id,
+                span,
+            ),
+        };
+        read
     }
+
+    /// Whether `stmts` is a binding [`Self::bind`] made in place.
+    fn binds(&self, stmts: &[TirStmt]) -> bool {
+        matches!(
+            stmts,
+            [
+                TirStmt { kind: TirStmtKind::Let { local_index, .. }, .. },
+                TirStmt { kind: TirStmtKind::Expr(TirExpr { kind: TirExprKind::Local { index, .. }, .. }), .. },
+            ] if local_index == index && self.bound.contains(index)
+        )
+    }
+
+    /// `expr` read again: each binding made in place in it is its local.
+    fn read_of(&self, expr: &TirExpr) -> TirExpr {
+        struct Reread<'a>(&'a Expander<'a>);
+        impl TirMutVisitor for Reread<'_> {
+            fn visit_expr(&mut self, expr: &mut TirExpr) {
+                if let TirExprKind::Block(block) = &mut expr.kind
+                    && self.0.binds(&block.stmts)
+                {
+                    let read = block.stmts.pop().expect("a binding ends in its read");
+                    let TirStmtKind::Expr(read) = read.kind else {
+                        unreachable!("matched by `binds`");
+                    };
+                    *expr = read;
+                    return;
+                }
+                self.walk_expr(expr);
+            }
+        }
+        let mut read = expr.clone();
+        Reread(self).visit_expr(&mut read);
+        read
+    }
+}
+
+/// Where [`Expander::bind`] puts a binding: ahead of the call, or where the
+/// value is evaluated.
+enum Sink<'s> {
+    Ahead(&'s mut Vec<TirStmt>),
+    InPlace,
+}
+
+impl Sink<'_> {
+    fn reborrow(&mut self) -> Sink<'_> {
+        match self {
+            Sink::Ahead(stmts) => Sink::Ahead(stmts),
+            Sink::InPlace => Sink::InPlace,
+        }
+    }
+}
+
+/// `expr`'s kind, leaving a unit in its place.
+fn take_kind(expr: &mut TirExpr) -> TirExprKind {
+    std::mem::replace(&mut expr.kind, TirExprKind::Unit)
 }
 
 /// Read each parameter of a copied clause as the call's argument, and report

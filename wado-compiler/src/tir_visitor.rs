@@ -884,6 +884,53 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
     }
 }
 
+/// Call `f` on each value the block `expr` evaluates to: its tail, and for a
+/// labeled block each `break` naming it. `false` where `expr` is no block.
+pub fn for_each_block_result(expr: &TirExpr, f: &mut dyn FnMut(&TirExpr)) -> bool {
+    let (block, label) = match &expr.kind {
+        TirExprKind::Block(block) => (block, None),
+        TirExprKind::LabeledBlock { label, block, .. } => (block, Some(label.as_str())),
+        _ => return false,
+    };
+    if let Some(tail) = block.tail_expr() {
+        f(tail);
+    }
+    if let Some(label) = label {
+        BreakValues { label, f }.visit_block(block);
+    }
+    true
+}
+
+struct BreakValues<'a> {
+    label: &'a str,
+    f: &'a mut dyn FnMut(&TirExpr),
+}
+
+impl TirRefVisitor for BreakValues<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Break {
+                label: Some(label),
+                value,
+            } if label == self.label => {
+                if let Some(value) = value {
+                    (self.f)(value);
+                }
+            }
+            // A nested block reusing the label takes its breaks.
+            TirStmtKind::LabeledBlock { label, .. } if label == self.label => {}
+            _ => self.walk_stmt(stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::LabeledBlock { label, .. } if label == self.label => {}
+            _ => self.walk_expr_in_frame(expr),
+        }
+    }
+}
+
 /// Shift every local index a namespace owns — reads, `Let`s and bindings — so
 /// its body fits a frame already holding `offset` locals.
 pub fn shift_locals(expr: &mut TirExpr, offset: u32) {
